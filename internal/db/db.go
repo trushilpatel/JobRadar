@@ -1,7 +1,7 @@
 package db
 
 import (
-	"github.com/trushilpatel/jobhunting/config"
+	"github.com/trushilpatel/jobradar/config"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"

@@ -1,4 +1,4 @@
-module github.com/trushilpatel/jobhunting
+module github.com/trushilpatel/jobradar
 
 go 1.25.0
 
