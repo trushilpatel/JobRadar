@@ -16,6 +16,7 @@ type JobWriter interface {
 	InsertJob(job *model.Job) error
 	UpdateJobStatus(id, status string) error
 	UpdateJobSaved(id string, saved bool) error
+	UpdateJobNotes(id, notes string) error
 }
 
 // JobStore composes both for contexts that need full access.
@@ -63,4 +64,10 @@ func (s *jobStore) UpdateJobSaved(id string, saved bool) error {
 	return s.db.Model(&model.Job{}).
 		Where("id = ?", id).
 		Update("saved", saved).Error
+}
+
+func (s *jobStore) UpdateJobNotes(id, notes string) error {
+	return s.db.Model(&model.Job{}).
+		Where("id = ?", id).
+		Update("notes", notes).Error
 }
