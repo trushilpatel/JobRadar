@@ -9,12 +9,15 @@ import (
 )
 
 type Config struct {
-	DBHost     string
-	DBPort     string
-	DBUser     string
-	DBPassword string
-	DBName     string
-	DBSSLMode  string
+	DBHost       string
+	DBPort       string
+	DBUser       string
+	DBPassword   string
+	DBName       string
+	DBSSLMode    string
+	KafkaBrokers  string
+	KafkaUser     string
+	KafkaPassword string
 }
 
 func Load() *Config {
@@ -28,7 +31,10 @@ func Load() *Config {
 		DBUser:     getEnv("DB_USER", "postgres"),
 		DBPassword: getEnv("DB_PASSWORD", "postgres"),
 		DBName:     getEnv("DB_NAME", "jobradar"),
-		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
+		DBSSLMode:    getEnv("DB_SSLMODE", "disable"),
+		KafkaBrokers:  getEnv("KAFKA_BROKERS", "localhost:9092"),
+		KafkaUser:     getEnv("KAFKA_USER", ""),
+		KafkaPassword: getEnv("KAFKA_PASSWORD", ""),
 	}
 }
 
