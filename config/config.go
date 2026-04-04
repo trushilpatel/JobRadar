@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -18,6 +20,10 @@ type Config struct {
 	KafkaBrokers  string
 	KafkaUser     string
 	KafkaPassword string
+	LLMProvider   string // anthropic | openai
+	LLMAPIKey     string
+	TargetRoles   []string // e.g. ["Backend Engineer", "Platform Engineer"]
+	YearsExp      int
 }
 
 func Load() *Config {
@@ -35,6 +41,10 @@ func Load() *Config {
 		KafkaBrokers:  getEnv("KAFKA_BROKERS", "localhost:9092"),
 		KafkaUser:     getEnv("KAFKA_USER", ""),
 		KafkaPassword: getEnv("KAFKA_PASSWORD", ""),
+		LLMProvider:   getEnv("LLM_PROVIDER", "anthropic"),
+		LLMAPIKey:     getEnv("LLM_API_KEY", ""),
+		TargetRoles:   splitCSV(getEnv("TARGET_ROLES", "Software Engineer")),
+		YearsExp:      getEnvInt("YEARS_EXP", 0),
 	}
 }
 
@@ -50,4 +60,24 @@ func getEnv(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	if val := os.Getenv(key); val != "" {
+		if n, err := strconv.Atoi(val); err == nil {
+			return n
+		}
+	}
+	return fallback
+}
+
+func splitCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
