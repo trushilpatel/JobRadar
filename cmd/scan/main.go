@@ -25,6 +25,14 @@ func main() {
 		log.Fatalf("db: %v", err)
 	}
 
+	// --- Kafka: ensure topics exist before producing ---
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	if err := kafka.EnsureTopics(ctx, cfg, kafka.TopicJobsRaw, kafka.TopicJobsRawDetail); err != nil {
+		log.Fatalf("kafka topics: %v", err)
+	}
+
 	// --- Kafka producer ---
 	producer, err := kafka.NewProducer(cfg)
 	if err != nil {
@@ -39,11 +47,6 @@ func main() {
 
 	// --- Engine ---
 	engine := scan.NewEngine(companies, ledger, scanLog, producer)
-
-	// --- Run loop ---
-	// Trap SIGINT/SIGTERM so a clean shutdown drains the current scan
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	log.Println("[scan] worker started")
 	engine.RunOnce(ctx) // run immediately on startup
