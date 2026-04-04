@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-type ScanLog struct {
+type JobScanLog struct {
 	ID          int64     `gorm:"primaryKey;autoIncrement"`
 	CompanyID   string    `gorm:"not null"`
 	ScannedAt   time.Time `gorm:"not null;autoCreateTime"`
@@ -14,6 +14,6 @@ type ScanLog struct {
 	Company Company `gorm:"foreignKey:CompanyID"`
 }
 
-func (ScanLog) TableName() string {
+func (JobScanLog) TableName() string {
 	return "job_scan_log"
 }
