@@ -37,7 +37,18 @@ func main() {
 	defer producer.Close()
 
 	// --- LLM ---
-	scorer_, err := llm.NewScorer(cfg.LLMProvider, cfg.LLMAPIKey, cfg.TargetRoles, cfg.YearsExp)
+	scorer_, err := llm.NewScorer(llm.ScorerOptions{
+		Provider:    cfg.LLMProvider,
+		APIKey:      cfg.LLMAPIKey,
+		Model:       cfg.LLMModel,
+		TargetRoles: cfg.TargetRoles,
+		YearsExp:    cfg.YearsExp,
+		Limits: llm.RateLimits{
+			RPM:   cfg.LLMRateLimits.RPM,
+			RPD:   cfg.LLMRateLimits.RPD,
+			TPMIn: cfg.LLMRateLimits.TPMIn,
+		},
+	})
 	if err != nil {
 		log.Fatalf("llm: %v", err)
 	}

@@ -15,7 +15,7 @@ import (
 	"github.com/trushilpatel/jobradar/internal/worker/scan"
 )
 
-const scanInterval = 30 * time.Minute
+const scanInterval = 24 * time.Hour
 
 func main() {
 	cfg := config.Load()

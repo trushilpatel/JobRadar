@@ -10,6 +10,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// LLMRateLimits holds the three quota dimensions for the active LLM model.
+// All values are 0 = unlimited. Set these to match your model's free/paid tier.
+type LLMRateLimits struct {
+	RPM  int // requests per minute
+	RPD  int // requests per day (resets at UTC midnight)
+	TPMIn int // input tokens per minute
+}
+
 type Config struct {
 	DBHost       string
 	DBPort       string
@@ -20,10 +28,13 @@ type Config struct {
 	KafkaBrokers  string
 	KafkaUser     string
 	KafkaPassword string
-	LLMProvider   string // anthropic | openai
+	LLMProvider   string // anthropic | gemini
 	LLMAPIKey     string
-	TargetRoles   []string // e.g. ["Backend Engineer", "Platform Engineer"]
-	YearsExp      int
+	LLMModel      string // e.g. "gemini-1.5-flash-8b", "claude-haiku-4-5-20251001"
+	LLMRateLimits LLMRateLimits
+
+	TargetRoles []string // e.g. ["Backend Engineer", "Platform Engineer"]
+	YearsExp    int
 }
 
 func Load() *Config {
@@ -41,10 +52,16 @@ func Load() *Config {
 		KafkaBrokers:  getEnv("KAFKA_BROKERS", "localhost:9092"),
 		KafkaUser:     getEnv("KAFKA_USER", ""),
 		KafkaPassword: getEnv("KAFKA_PASSWORD", ""),
-		LLMProvider:   getEnv("LLM_PROVIDER", "anthropic"),
-		LLMAPIKey:     getEnv("LLM_API_KEY", ""),
-		TargetRoles:   splitCSV(getEnv("TARGET_ROLES", "Software Engineer")),
-		YearsExp:      getEnvInt("YEARS_EXP", 0),
+		LLMProvider: getEnv("LLM_PROVIDER", "gemini"),
+		LLMAPIKey:   getEnv("LLM_API_KEY", ""),
+		LLMModel:    getEnv("LLM_MODEL", "gemini-1.5-flash-8b"),
+		LLMRateLimits: LLMRateLimits{
+			RPM:   getEnvInt("LLM_RPM", 15),
+			RPD:   getEnvInt("LLM_RPD", 500),
+			TPMIn: getEnvInt("LLM_TPM", 250000),
+		},
+		TargetRoles: splitCSV(getEnv("TARGET_ROLES", "Software Engineer")),
+		YearsExp:    getEnvInt("YEARS_EXP", 0),
 	}
 }
 

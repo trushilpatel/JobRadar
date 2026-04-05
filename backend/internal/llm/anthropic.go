@@ -10,20 +10,20 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
-const model = "claude-haiku-4-5-20251001" // fast + cheap for batch scoring
-
 type anthropicScorer struct {
 	client      *anthropic.Client
+	modelName   string
 	targetRoles []string
 	yearsExp    int
 }
 
-// NewAnthropicScorer creates an Anthropic-backed Scorer.
-// apiKey, targetRoles, and yearsExp come from config — never hardcoded.
-func NewAnthropicScorer(apiKey string, targetRoles []string, yearsExp int) Scorer {
+// newAnthropicScorer creates an Anthropic-backed Scorer.
+// modelName, targetRoles, and yearsExp come from ScorerOptions — never hardcoded.
+func newAnthropicScorer(apiKey, modelName string, targetRoles []string, yearsExp int) Scorer {
 	client := anthropic.NewClient(option.WithAPIKey(apiKey))
 	return &anthropicScorer{
 		client:      &client,
+		modelName:   modelName,
 		targetRoles: targetRoles,
 		yearsExp:    yearsExp,
 	}
@@ -63,7 +63,7 @@ Respond with ONLY the JSON array, no explanation. Example: ["greenhouse-123", "l
 	)
 
 	resp, err := s.client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.Model(model),
+		Model:     anthropic.Model(s.modelName),
 		MaxTokens: 1024,
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),
@@ -113,7 +113,7 @@ Respond with ONLY the JSON object, no explanation.`,
 	)
 
 	resp, err := s.client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.Model(model),
+		Model:     anthropic.Model(s.modelName),
 		MaxTokens: 1024,
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(prompt)),

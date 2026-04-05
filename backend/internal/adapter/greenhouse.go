@@ -5,21 +5,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/trushilpatel/jobradar/internal/model"
 )
 
 type Greenhouse struct{}
 
 type greenhouseResponse struct {
 	Jobs []struct {
-		ID         int    `json:"id"`
-		Title      string `json:"title"`
-		Location   struct {
+		Adapter string `json:"adapter"`
+		ID      int    `json:"id"`
+		// InternalJobID int    `json:"internal_job_id"`
+		Title string `json:"title"`
+		// RequisitionID int    `json:"requisition_id"`
+		Location struct {
 			Name string `json:"name"`
 		} `json:"location"`
 		AbsoluteURL string `json:"absolute_url"`
-		Departments []struct {
-			Name string `json:"name"`
-		} `json:"departments"`
 	} `json:"jobs"`
 }
 
@@ -46,17 +48,13 @@ func (g *Greenhouse) FetchJobs(ctx context.Context, companyURL string) ([]RawJob
 
 	jobs := make([]RawJob, 0, len(result.Jobs))
 	for _, j := range result.Jobs {
-		department := ""
-		if len(j.Departments) > 0 {
-			department = j.Departments[0].Name
-		}
 
 		jobs = append(jobs, RawJob{
-			ID:         fmt.Sprintf("greenhouse-%d", j.ID),
-			Title:      j.Title,
-			Location:   j.Location.Name,
-			URL:        j.AbsoluteURL,
-			Department: department,
+			Adapter:  model.AdapterGreenhouse,
+			ID:       fmt.Sprintf("%s-%d", model.AdapterGreenhouse, j.ID),
+			Title:    j.Title,
+			Location: j.Location.Name,
+			URL:      j.AbsoluteURL,
 		})
 	}
 
