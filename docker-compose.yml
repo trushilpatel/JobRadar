@@ -3,7 +3,7 @@ services:
     image: postgres:16
     container_name: jobradar_postgres
     env_file:
-      - .env
+      - ./backend/.env
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -19,7 +19,7 @@ services:
     ports:
       - "9092:9092"
     env_file:
-      - .env
+      - ./backend/.env
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -36,7 +36,7 @@ services:
       KAFKA_LOG_DIRS: /var/lib/kafka/data
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
     volumes:
-      - ./deploy/kafka/entrypoint.sh:/entrypoint.sh
+      - ./backend/deploy/kafka/entrypoint.sh:/entrypoint.sh
     entrypoint: ["/bin/bash", "/entrypoint.sh"]
 
 volumes:
