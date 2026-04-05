@@ -243,30 +243,35 @@ export function CompaniesPage() {
                     <button
                       onClick={() => handleToggleActive(company)}
                       className={cn(
-                        'relative w-9 h-5 rounded-full transition-colors',
-                        company.active ? 'bg-violet-600' : 'bg-white/10'
+                        'relative inline-flex w-10 h-6 rounded-full transition-colors duration-200 focus:outline-none shrink-0',
+                        company.active ? 'bg-violet-600' : 'bg-white/15'
                       )}
                     >
                       <span className={cn(
-                        'absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform',
-                        company.active ? 'translate-x-4' : 'translate-x-0.5'
+                        'absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200',
+                        company.active ? 'translate-x-5' : 'translate-x-1'
                       )} />
                     </button>
                   </td>
                   <td className="py-3">
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+                    <div className="flex items-center gap-1 justify-end">
                       <button
                         onClick={() => handleScan(company)}
                         disabled={scanning.has(company.id)}
-                        title="Scan now"
-                        className="p-1.5 text-slate-400 hover:text-violet-300 hover:bg-violet-500/10 rounded-md transition-colors disabled:opacity-40"
+                        title={scanning.has(company.id) ? 'Scanning…' : 'Scan now'}
+                        className={cn(
+                          'p-1.5 rounded-md transition-colors',
+                          scanning.has(company.id)
+                            ? 'text-violet-400 bg-violet-500/10'
+                            : 'text-slate-600 hover:text-violet-300 hover:bg-violet-500/10 opacity-0 group-hover:opacity-100'
+                        )}
                       >
                         <RefreshCw size={14} className={scanning.has(company.id) ? 'animate-spin' : ''} />
                       </button>
                       <button
                         onClick={() => handleDelete(company.id)}
                         title="Delete"
-                        className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                        className="p-1.5 text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors opacity-0 group-hover:opacity-100"
                       >
                         <Trash2 size={14} />
                       </button>

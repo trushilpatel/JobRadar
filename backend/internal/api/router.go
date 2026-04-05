@@ -19,44 +19,28 @@ func NewRouter(
 	r.Use(middleware.Logger)
 	r.Use(chimiddleware.Recoverer) // catches panics, returns 500 instead of crashing
 
-	r.Route("/jobs", func(r chi.Router) {
-		r.Get("/", jobs.List)
-
-		r.Route("/{id}", func(r chi.Router) {
-			r.Get("/", jobs.Get)
-			r.Delete("/", jobs.Dismiss)
-			r.Patch("/save", jobs.SetSaved)
-			r.Patch("/status", jobs.SetStatus)
-			r.Patch("/notes", jobs.SetNotes)
-
-			r.Get("/applications", apps.List)
-			r.Post("/applications", apps.Create)
-
-			r.Route("/applications/{app_id}", func(r chi.Router) {
-				r.Patch("/stage", apps.UpdateStage)
-				r.Patch("/note", apps.UpdateNote)
-			})
-		})
-	})
+	r.Get("/jobs", jobs.List)
+	r.Get("/jobs/{id}", jobs.Get)
+	r.Delete("/jobs/{id}", jobs.Dismiss)
+	r.Patch("/jobs/{id}/save", jobs.SetSaved)
+	r.Patch("/jobs/{id}/status", jobs.SetStatus)
+	r.Patch("/jobs/{id}/notes", jobs.SetNotes)
+	r.Get("/jobs/{id}/applications", apps.List)
+	r.Post("/jobs/{id}/applications", apps.Create)
+	r.Patch("/jobs/{id}/applications/{app_id}/stage", apps.UpdateStage)
+	r.Patch("/jobs/{id}/applications/{app_id}/note", apps.UpdateNote)
 
 	r.Get("/applications", apps.ListAll)
 
-	r.Route("/companies", func(r chi.Router) {
-		r.Get("/", companies.List)
-		r.Post("/", companies.Create)
+	r.Get("/companies", companies.List)
+	r.Post("/companies", companies.Create)
+	r.Patch("/companies/{id}", companies.Update)
+	r.Delete("/companies/{id}", companies.Delete)
+	r.Get("/companies/{id}/scan-stats", companies.ScanStats)
+	r.Post("/companies/{id}/scan", companies.TriggerScan)
 
-		r.Route("/{id}", func(r chi.Router) {
-			r.Patch("/", companies.Update)
-			r.Delete("/", companies.Delete)
-			r.Get("/scan-stats", companies.ScanStats)
-			r.Post("/scan", companies.TriggerScan)
-		})
-	})
-
-	r.Route("/dashboard", func(r chi.Router) {
-		r.Get("/stats", dashboard.Stats)
-		r.Get("/activity", dashboard.Activity)
-	})
+	r.Get("/dashboard/stats", dashboard.Stats)
+	r.Get("/dashboard/activity", dashboard.Activity)
 
 	return r
 }
