@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import {
-  Plus, Search, RefreshCw, Trash2, ChevronUp, ChevronDown,
+  Plus, Search, RefreshCw, Trash2, Pencil, ChevronUp, ChevronDown,
   CheckCircle2, XCircle, Clock, Minus, ExternalLink
 } from 'lucide-react'
 import type { Company } from '@/types'
@@ -20,6 +20,7 @@ export function CompaniesPage() {
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'name', dir: 'asc' })
   const [addOpen, setAddOpen] = useState(false)
+  const [editCompany, setEditCompany] = useState<Company | null>(null)
   const [drawerCompany, setDrawerCompany] = useState<Company | null>(null)
   const [scanning, setScanning] = useState<Set<string>>(new Set())
   const [toastMsg, setToastMsg] = useState('')
@@ -269,6 +270,13 @@ export function CompaniesPage() {
                         <RefreshCw size={14} className={scanning.has(company.id) ? 'animate-spin' : ''} />
                       </button>
                       <button
+                        onClick={() => setEditCompany(company)}
+                        title="Edit"
+                        className="p-1.5 text-slate-600 hover:text-white hover:bg-white/[0.06] rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
                         onClick={() => handleDelete(company.id)}
                         title="Delete"
                         className="p-1.5 text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors opacity-0 group-hover:opacity-100"
@@ -288,6 +296,16 @@ export function CompaniesPage() {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onCreated={c => setCompanies(cs => [...cs, c])}
+      />
+
+      <AddCompanyModal
+        open={!!editCompany}
+        initialData={editCompany ?? undefined}
+        onClose={() => setEditCompany(null)}
+        onUpdated={updated => {
+          setCompanies(cs => cs.map(c => c.id === updated.id ? updated : c))
+          toast('Company updated')
+        }}
       />
 
       <ScanStatsDrawer

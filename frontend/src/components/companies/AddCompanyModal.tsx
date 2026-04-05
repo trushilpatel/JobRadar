@@ -1,19 +1,21 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ADAPTER_TYPES } from '@/types'
 import type { Company } from '@/types'
-import { createCompany } from '@/api/companies'
+import { createCompany, updateCompany } from '@/api/companies'
 
 interface Props {
   open: boolean
   onClose: () => void
-  onCreated: (company: Company) => void
+  /** Pass a company to enter edit mode; omit for create mode. */
+  initialData?: Company
+  onCreated?: (company: Company) => void
+  onUpdated?: (company: Company) => void
 }
 
 // URL templates for adapters that have a known API pattern.
-// {id} is replaced with the company ID the user types.
 const URL_TEMPLATES: Partial<Record<string, (id: string) => string>> = {
   greenhouse: id => `https://boards-api.greenhouse.io/v1/boards/${id}/jobs`,
   lever:      id => `https://api.lever.co/v0/postings/${id}`,
@@ -35,32 +37,49 @@ function buildUrl(adapter: string, id: string): string {
   return tmpl && id ? tmpl(id) : ''
 }
 
-export function AddCompanyModal({ open, onClose, onCreated }: Props) {
-  const [form, setForm] = useState({
-    id: '',
-    name: '',
-    url: '',
-    adapter_type: 'greenhouse',
-    active: true,
-  })
-  // Track whether the user has manually edited the URL so we stop overwriting it
+const EMPTY_FORM = { id: '', name: '', url: '', adapter_type: 'greenhouse', active: true }
+
+export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdated }: Props) {
+  const isEdit = !!initialData
+
+  const [form, setForm] = useState(EMPTY_FORM)
   const [urlManuallyEdited, setUrlManuallyEdited] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Sync form when modal opens in edit mode
+  useEffect(() => {
+    if (open && initialData) {
+      setForm({
+        id:           initialData.id,
+        name:         initialData.name,
+        url:          initialData.url,
+        adapter_type: initialData.adapter_type,
+        active:       initialData.active,
+      })
+      setUrlManuallyEdited(true) // treat existing URL as manual — don't auto-overwrite
+    } else if (open && !initialData) {
+      setForm(EMPTY_FORM)
+      setUrlManuallyEdited(false)
+    }
+    setError('')
+  }, [open, initialData])
+
   function handleAdapterChange(adapter: string) {
-    setForm(f => {
-      const newUrl = !urlManuallyEdited ? buildUrl(adapter, f.id) : f.url
-      return { ...f, adapter_type: adapter, url: newUrl }
-    })
+    setForm(f => ({
+      ...f,
+      adapter_type: adapter,
+      url: !urlManuallyEdited ? buildUrl(adapter, f.id) : f.url,
+    }))
     setError('')
   }
 
   function handleIdChange(id: string) {
-    setForm(f => {
-      const newUrl = !urlManuallyEdited ? buildUrl(f.adapter_type, id) : f.url
-      return { ...f, id, url: newUrl }
-    })
+    setForm(f => ({
+      ...f,
+      id,
+      url: !urlManuallyEdited ? buildUrl(f.adapter_type, id) : f.url,
+    }))
     setError('')
   }
 
@@ -71,7 +90,7 @@ export function AddCompanyModal({ open, onClose, onCreated }: Props) {
   }
 
   function handleClose() {
-    setForm({ id: '', name: '', url: '', adapter_type: 'greenhouse', active: true })
+    setForm(EMPTY_FORM)
     setUrlManuallyEdited(false)
     setError('')
     onClose()
@@ -85,11 +104,21 @@ export function AddCompanyModal({ open, onClose, onCreated }: Props) {
     }
     setLoading(true)
     try {
-      const company = await createCompany(form)
-      onCreated(company)
+      if (isEdit && initialData) {
+        await updateCompany(initialData.id, {
+          name:         form.name,
+          url:          form.url,
+          adapter_type: form.adapter_type,
+          active:       form.active,
+        })
+        onUpdated?.({ ...initialData, ...form })
+      } else {
+        const company = await createCompany(form)
+        onCreated?.(company)
+      }
       handleClose()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create company')
+      setError(err instanceof Error ? err.message : `Failed to ${isEdit ? 'update' : 'create'} company`)
     } finally {
       setLoading(false)
     }
@@ -105,7 +134,7 @@ export function AddCompanyModal({ open, onClose, onCreated }: Props) {
         <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-[#13131a] border border-white/10 rounded-xl shadow-2xl p-6">
           <div className="flex items-center justify-between mb-6">
             <Dialog.Title className="text-lg font-semibold text-white">
-              Add Company
+              {isEdit ? 'Edit Company' : 'Add Company'}
             </Dialog.Title>
             <button onClick={handleClose} className="text-slate-400 hover:text-white transition-colors">
               <X size={18} />
@@ -126,12 +155,13 @@ export function AddCompanyModal({ open, onClose, onCreated }: Props) {
               </select>
             </Field>
 
-            <Field label="Company ID" hint="Unique slug, e.g. stripe">
+            <Field label="Company ID" hint={isEdit ? 'Cannot be changed' : 'Unique slug, e.g. stripe'}>
               <input
                 value={form.id}
-                onChange={e => handleIdChange(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                onChange={e => !isEdit && handleIdChange(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
                 placeholder="stripe"
-                className={inputClass}
+                disabled={isEdit}
+                className={cn(inputClass, isEdit && 'opacity-50 cursor-not-allowed')}
               />
             </Field>
 
@@ -144,19 +174,12 @@ export function AddCompanyModal({ open, onClose, onCreated }: Props) {
               />
             </Field>
 
-            <Field
-              label="Careers URL"
-              hint={urlHint}
-            >
+            <Field label="Careers URL" hint={urlHint}>
               <div className="relative">
                 <input
                   value={form.url}
                   onChange={e => handleUrlChange(e.target.value)}
-                  placeholder={
-                    hasTemplate
-                      ? `Auto-filled — enter Company ID above`
-                      : 'https://...'
-                  }
+                  placeholder={hasTemplate && !isEdit ? 'Auto-filled — enter Company ID above' : 'https://...'}
                   className={cn(
                     inputClass,
                     'pr-9',
@@ -164,7 +187,7 @@ export function AddCompanyModal({ open, onClose, onCreated }: Props) {
                   )}
                 />
                 <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                  {hasTemplate && urlManuallyEdited && (
+                  {hasTemplate && urlManuallyEdited && !isEdit && (
                     <button
                       type="button"
                       onClick={() => {
@@ -193,15 +216,23 @@ export function AddCompanyModal({ open, onClose, onCreated }: Props) {
               </div>
             </Field>
 
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="active"
-                checked={form.active}
-                onChange={e => setForm(f => ({ ...f, active: e.target.checked }))}
-                className="w-4 h-4 accent-violet-500"
-              />
-              <label htmlFor="active" className="text-sm text-slate-300">Active (start scanning)</label>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-300">Active (start scanning)</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.active}
+                onClick={() => setForm(f => ({ ...f, active: !f.active }))}
+                className={cn(
+                  'relative inline-flex w-10 h-6 rounded-full transition-colors duration-200 focus:outline-none shrink-0',
+                  form.active ? 'bg-violet-600' : 'bg-white/15'
+                )}
+              >
+                <span className={cn(
+                  'absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200',
+                  form.active ? 'translate-x-5' : 'translate-x-1'
+                )} />
+              </button>
             </div>
 
             {error && <p className="text-sm text-red-400">{error}</p>}
@@ -219,7 +250,7 @@ export function AddCompanyModal({ open, onClose, onCreated }: Props) {
                 disabled={loading}
                 className={cn(btnBase, 'flex-1 bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50')}
               >
-                {loading ? 'Adding…' : 'Add Company'}
+                {loading ? (isEdit ? 'Saving…' : 'Adding…') : (isEdit ? 'Save Changes' : 'Add Company')}
               </button>
             </div>
           </form>

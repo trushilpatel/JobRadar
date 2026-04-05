@@ -33,6 +33,8 @@ type Config struct {
 	LLMModel      string // e.g. "gemini-1.5-flash-8b", "claude-haiku-4-5-20251001"
 	LLMRateLimits LLMRateLimits
 
+	ScanIntervalMinutes int // how often the scan worker runs a full sweep
+
 	TargetRoles []string // e.g. ["Backend Engineer", "Platform Engineer"]
 	YearsExp    int
 }
@@ -60,6 +62,8 @@ func Load() *Config {
 			RPD:   getEnvInt("LLM_RPD", 500),
 			TPMIn: getEnvInt("LLM_TPM", 250000),
 		},
+		ScanIntervalMinutes: getEnvInt("SCAN_INTERVAL_MINUTES", 1440), // default: 24h
+
 		TargetRoles: splitCSV(getEnv("TARGET_ROLES", "Software Engineer")),
 		YearsExp:    getEnvInt("YEARS_EXP", 0),
 	}
