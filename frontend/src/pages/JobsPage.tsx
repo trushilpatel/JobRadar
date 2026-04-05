@@ -467,17 +467,15 @@ export function JobsPage() {
 
   async function handleSave(job: Job) {
     const next = !job.saved
-    setJobs(js => js.map(j => j.id === job.id ? { ...j, saved: next } : j))
-    if (drawerJob?.id === job.id) setDrawerJob(d => d ? { ...d, saved: next } : d)
+    const nextStatus = next ? 'saved' : 'new'
+    setJobs(js => js.map(j => j.id === job.id ? { ...j, saved: next, status: nextStatus } : j))
+    if (drawerJob?.id === job.id) setDrawerJob(d => d ? { ...d, saved: next, status: nextStatus } : d)
     try {
       await setJobSaved(job.id, next)
-      if (next && tab === 'new') {
-        await setJobStatus(job.id, 'saved')
-        setJobs(js => js.map(j => j.id === job.id ? { ...j, status: 'saved' } : j))
-      }
       toast(next ? 'Job saved' : 'Removed from saved')
     } catch {
-      setJobs(js => js.map(j => j.id === job.id ? { ...j, saved: !next } : j))
+      setJobs(js => js.map(j => j.id === job.id ? { ...j, saved: job.saved, status: job.status } : j))
+      if (drawerJob?.id === job.id) setDrawerJob(d => d ? { ...d, saved: job.saved, status: job.status } : d)
       toast('Failed to update job')
     }
   }

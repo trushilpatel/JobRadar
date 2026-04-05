@@ -42,15 +42,17 @@ func main() {
 	appStore := store.NewApplicationStore(database)
 	companyStore := store.NewCompanyStore(database)
 	scanLogStore := store.NewJobScanLogStore(database)
+	insightsStore := store.NewInsightsStore(database)
 
 	// --- Handlers ---
 	jobHandler := handler.NewJobHandler(jobStore, ledger, discardStore)
 	appHandler := handler.NewApplicationHandler(appStore, jobStore)
 	companyHandler := handler.NewCompanyHandler(companyStore, scanLogStore, producer)
 	dashboardHandler := handler.NewDashboardHandler(jobStore, scanLogStore)
+	insightsHandler := handler.NewInsightsHandler(insightsStore)
 
 	// --- Router ---
-	router := api.NewRouter(jobHandler, appHandler, companyHandler, dashboardHandler)
+	router := api.NewRouter(jobHandler, appHandler, companyHandler, dashboardHandler, insightsHandler)
 
 	// --- Server ---
 	srv := &http.Server{

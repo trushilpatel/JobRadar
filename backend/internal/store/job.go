@@ -43,9 +43,14 @@ func NewJobStore(db *gorm.DB) JobStore {
 
 func (s *jobStore) GetJobsByStatus(status string) ([]model.Job, error) {
 	var jobs []model.Job
-	err := s.db.Where("status = ?", status).
-		Order("added_at DESC").
-		Find(&jobs).Error
+	query := s.db.Order("added_at DESC")
+	// "saved" tab = all jobs where saved=true, regardless of exact status value
+	if status == model.JobStatusSaved {
+		query = query.Where("saved = ?", true)
+	} else {
+		query = query.Where("status = ?", status)
+	}
+	err := query.Find(&jobs).Error
 	return jobs, err
 }
 
@@ -69,9 +74,17 @@ func (s *jobStore) UpdateJobStatus(id, status string) error {
 }
 
 func (s *jobStore) UpdateJobSaved(id string, saved bool) error {
-	return s.db.Model(&model.Job{}).
-		Where("id = ?", id).
-		Update("saved", saved).Error
+	if saved {
+		// Advance status to 'saved' unless the job is already applied
+		return s.db.Model(&model.Job{}).
+			Where("id = ? AND status != ?", id, model.JobStatusApplied).
+			Updates(map[string]any{"saved": true, "status": model.JobStatusSaved}).Error
+	}
+	// Revert status to 'new' only if currently 'saved'; don't touch applied jobs
+	return s.db.Exec(
+		`UPDATE job SET saved = false, status = CASE WHEN status = ? THEN ? ELSE status END WHERE id = ?`,
+		model.JobStatusSaved, model.JobStatusNew, id,
+	).Error
 }
 
 func (s *jobStore) UpdateJobNotes(id, notes string) error {

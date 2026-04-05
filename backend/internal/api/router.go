@@ -12,6 +12,7 @@ func NewRouter(
 	apps *handler.ApplicationHandler,
 	companies *handler.CompanyHandler,
 	dashboard *handler.DashboardHandler,
+	insights *handler.InsightsHandler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -41,6 +42,9 @@ func NewRouter(
 
 	r.Get("/dashboard/stats", dashboard.Stats)
 	r.Get("/dashboard/activity", dashboard.Activity)
+
+	r.Get("/insights/tech-stack", insights.TechStack)
+	r.Get("/insights/company-activity", insights.CompanyActivity)
 
 	return r
 }
