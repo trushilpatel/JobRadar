@@ -55,7 +55,7 @@ func (s *anthropicScorer) ScoreBatch(ctx context.Context, jobs []ScorerInput) ([
 Here is a list of job titles with their IDs:
 %s
 Return ONLY a JSON array of the IDs that are a strong match for the target roles above.
-Exclude: internships, management-only roles, sales, marketing, design, data science, and any non-engineering roles.
+Exclude: internships, management-only roles, sales, marketing, design, and any non-engineering roles.
 Exclude roles requiring significantly more experience than specified.
 
 Respond with ONLY the JSON array, no explanation. Example: ["greenhouse-123", "lever-456"]`,

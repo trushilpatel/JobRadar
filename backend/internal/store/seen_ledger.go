@@ -14,6 +14,7 @@ type SeenLedgerReader interface {
 type SeenLedgerWriter interface {
 	MarkSeen(jobID, companyID, reason string) error
 	UpdateSeenReason(jobID, reason string) error
+	UpdateSeenReasonBatch(jobIDs []string, reason string) error
 }
 
 // SeenLedgerStore composes both for workers that need full access (e.g. scan engine).
@@ -50,5 +51,14 @@ func (s *seenLedgerStore) MarkSeen(jobID, companyID, reason string) error {
 func (s *seenLedgerStore) UpdateSeenReason(jobID, reason string) error {
 	return s.db.Model(&model.JobSeenLedger{}).
 		Where("job_id = ?", jobID).
+		Update("reason", reason).Error
+}
+
+func (s *seenLedgerStore) UpdateSeenReasonBatch(jobIDs []string, reason string) error {
+	if len(jobIDs) == 0 {
+		return nil
+	}
+	return s.db.Model(&model.JobSeenLedger{}).
+		Where("job_id IN ?", jobIDs).
 		Update("reason", reason).Error
 }

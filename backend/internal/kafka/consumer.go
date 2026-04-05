@@ -18,6 +18,11 @@ func NewConsumer(cfg *config.Config, groupID string, topics ...string) (*Consume
 		kgo.SeedBrokers(strings.Split(cfg.KafkaBrokers, ",")...),
 		kgo.ConsumerGroup(groupID),
 		kgo.ConsumeTopics(topics...),
+		// For a brand-new consumer group with no committed offsets, start from
+		// the end of the topic — not the beginning. Workers are event-driven and
+		// should not replay historical messages on first start.
+		// Existing groups with committed offsets are unaffected by this setting.
+		kgo.ConsumeResetOffset(kgo.NewOffset().AtEnd()),
 	}
 
 	if cfg.KafkaUser != "" && cfg.KafkaPassword != "" {

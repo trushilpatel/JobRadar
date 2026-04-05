@@ -24,6 +24,10 @@ func main() {
 	}
 
 	// --- Kafka ---
+	if err := kafka.EnsureTopics(context.Background(), cfg, kafka.TopicJobsRaw, kafka.TopicJobsRawDetail); err != nil {
+		log.Fatalf("kafka topics: %v", err)
+	}
+
 	consumer, err := kafka.NewConsumer(cfg, "scorer-group", kafka.TopicJobsRaw)
 	if err != nil {
 		log.Fatalf("kafka consumer: %v", err)
@@ -57,7 +61,8 @@ func main() {
 	ledger := store.NewSeenLedgerStore(database)
 
 	// --- Worker ---
-	worker := scorer.NewWorker(consumer, producer, scorer_, ledger)
+	worker := scorer.NewWorker(consumer, producer, scorer_, ledger,
+		cfg.ScorerBatchSize, cfg.ScorerFlushTimeoutSeconds)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

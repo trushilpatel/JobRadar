@@ -8,9 +8,9 @@ import (
 // ScorerOptions holds everything needed to build and configure a Scorer.
 // Using a struct keeps the factory signature stable as new fields are added.
 type ScorerOptions struct {
-	Provider    string     // "gemini" | "anthropic"
+	Provider    string // "gemini" | "anthropic"
 	APIKey      string
-	Model       string     // provider-specific model name, e.g. "gemini-1.5-flash-8b"
+	Model       string // provider-specific model name, e.g. "Gemini-3.1-Flash-Lite"
 	TargetRoles []string
 	YearsExp    int
 	Limits      RateLimits // zero value = no rate limiting

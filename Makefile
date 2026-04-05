@@ -40,6 +40,9 @@ run-scorer: ## Run LLM scorer worker
 run-enricher: ## Run enricher worker
 	cd backend && go run ./cmd/enricher
 
+run-scheduler: ## Run scan scheduler (enqueues due companies)
+	cd backend && go run ./cmd/scheduler
+
 # ── Database ──────────────────────────────────────────────────────────────────
 
 migrate: ## Run database migrations (goose up)

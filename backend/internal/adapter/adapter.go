@@ -5,8 +5,9 @@ import "context"
 // RawJob is the raw job payload fetched from a careers page.
 // This is what gets published to the jobs.raw Kafka topic.
 type RawJob struct {
-	ID         string `json:"id"`      // e.g. "greenhouse-12345"
-	Adapter    string `json:"adapter"` // the adapter type (e.g. "greenhouse", "lever", "ashby", "workday", "workable", "chromedp")
+	ID         string `json:"id"`         // e.g. "greenhouse-12345"
+	CompanyID  string `json:"company_id"` // UUID from companies table — set by scan engine before publishing
+	Adapter    string `json:"adapter"`    // the adapter type (e.g. "greenhouse", "lever", "ashby", "workday", "workable", "chromedp")
 	Title      string `json:"title"`
 	Location   string `json:"location"`
 	URL        string `json:"url"` // the individual job posting URL (used by enricher)

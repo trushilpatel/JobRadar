@@ -11,6 +11,9 @@ type CompanyReader interface {
 	GetActiveCompanies() ([]model.Company, error)
 	GetAllCompanies() ([]model.Company, error)
 	GetCompanyByID(id string) (model.Company, error)
+	// GetCompaniesDueForScan returns active companies whose last_scan_at is NULL
+	// or older than intervalMinutes ago. Used by the scheduler binary.
+	GetCompaniesDueForScan(intervalMinutes int) ([]model.Company, error)
 }
 
 // CompanyWriter covers mutations from the API.
@@ -66,4 +69,13 @@ func (s *companyStore) UpdateCompany(id string, fields map[string]any) error {
 
 func (s *companyStore) DeleteCompany(id string) error {
 	return s.db.Delete(&model.Company{}, "id = ?", id).Error
+}
+
+func (s *companyStore) GetCompaniesDueForScan(intervalMinutes int) ([]model.Company, error) {
+	var companies []model.Company
+	err := s.db.Where(
+		"active = true AND (last_scan_at IS NULL OR last_scan_at + (? * INTERVAL '1 minute') <= NOW())",
+		intervalMinutes,
+	).Find(&companies).Error
+	return companies, err
 }

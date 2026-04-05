@@ -99,7 +99,10 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 			continue
 		}
 
-		// New job — mark it and publish to Kafka
+		// New job — attach company UUID so the enricher can use it as FK
+		job.CompanyID = company.ID
+
+		// mark it and publish to Kafka
 		if err := e.ledger.MarkSeen(job.ID, company.ID, model.SeenReasonFetch); err != nil {
 			log.Printf("[scan] %s: failed to mark seen for %s: %v", company.Name, job.ID, err)
 			continue

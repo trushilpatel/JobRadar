@@ -166,7 +166,7 @@ func buildJob(raw adapter.RawJob, enriched *llm.EnrichResult) (*model.Job, error
 	return &model.Job{
 		ID:            uuid.New().String(),
 		JobPostID:     raw.ID,
-		CompanyID:     extractCompanyID(raw.ID),
+		CompanyID:     raw.CompanyID,
 		Title:         raw.Title,
 		Location:      nullableString(raw.Location),
 		URL:           raw.URL,
@@ -180,17 +180,6 @@ func buildJob(raw adapter.RawJob, enriched *llm.EnrichResult) (*model.Job, error
 		OtherCriteria: datatypes.JSON(otherCriteria),
 		Status:        model.JobStatusNew,
 	}, nil
-}
-
-// extractCompanyID pulls the company ID prefix from a job ID like "greenhouse-12345".
-// The scan engine always uses the format "<adapter>-<id>" so we can reverse it here.
-func extractCompanyID(jobID string) string {
-	for i, c := range jobID {
-		if c == '-' {
-			return jobID[:i]
-		}
-	}
-	return jobID
 }
 
 func nullableString(s string) *string {

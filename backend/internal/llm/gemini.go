@@ -45,20 +45,27 @@ func (s *geminiScorer) ScoreBatch(ctx context.Context, jobs []ScorerInput) ([]st
 	}
 
 	roles := strings.Join(s.targetRoles, ", ")
-	prompt := fmt.Sprintf(`You are filtering job listings for a candidate with the following preferences:
+	prompt := fmt.Sprintf(`You are a job relevance filter for a software engineer with these preferences:
 - Target roles: %s
-- Minimum years of experience: %d
+- Years of experience: %d+
 
-Here is a list of job titles with their IDs:
+Evaluate each job title below and return the IDs of all jobs that could be relevant.
+
+IMPORTANT: When in doubt, INCLUDE the job. A borderline match that gets included
+can be filtered later. A relevant job that gets excluded is lost permanently.
+Only exclude jobs you are confident are NOT a match.
+
+Exclude only: pure internships, C-suite/VP management with no IC track, sales,
+marketing, design, and clearly non-engineering roles.
+
+Job list:
 %s
-Return ONLY a JSON array of the IDs that are a strong match for the target roles above.
-Exclude: internships, management-only roles, sales, marketing, design, data science, and any non-engineering roles.
-Exclude roles requiring significantly more experience than specified.
-
-Respond with ONLY the JSON array, no explanation. Example: ["greenhouse-123", "lever-456"]`,
+Respond with ONLY a JSON array of matching IDs, no explanation.
+Example: ["greenhouse-123", "lever-456"]`,
 		roles, s.yearsExp, sb.String(),
 	)
 
+	// TODO In future get the reason from LLM and add it to the dismissed jobs to analyse if we are not missing any relevant jobs
 	raw, err := s.generate(ctx, prompt, 512)
 	if err != nil {
 		return nil, fmt.Errorf("gemini score batch: %w", err)
