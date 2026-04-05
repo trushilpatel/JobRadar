@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"os/signal"
 	"syscall"
@@ -29,16 +30,23 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := kafka.EnsureTopics(ctx, cfg, kafka.TopicJobsRaw, kafka.TopicJobsRawDetail); err != nil {
+	if err := kafka.EnsureTopics(ctx, cfg, kafka.TopicJobsRaw, kafka.TopicJobsRawDetail, kafka.TopicCompanyScanJob); err != nil {
 		log.Fatalf("kafka topics: %v", err)
 	}
 
 	// --- Kafka producer ---
 	producer, err := kafka.NewProducer(cfg)
 	if err != nil {
-		log.Fatalf("kafka: %v", err)
+		log.Fatalf("kafka producer: %v", err)
 	}
 	defer producer.Close()
+
+	// --- Kafka consumer for manual scan triggers ---
+	consumer, err := kafka.NewConsumer(cfg, "scan-trigger", kafka.TopicCompanyScanJob)
+	if err != nil {
+		log.Fatalf("kafka consumer: %v", err)
+	}
+	defer consumer.Close()
 
 	// --- Store layer ---
 	companies := store.NewCompanyStore(database)
@@ -47,6 +55,29 @@ func main() {
 
 	// --- Engine ---
 	engine := scan.NewEngine(companies, ledger, scanLog, producer)
+
+	// --- Goroutine: consume company.scan_job for on-demand scans ---
+	go func() {
+		type scanRequest struct {
+			CompanyID string `json:"company_id"`
+		}
+		err := consumer.Poll(ctx, func(_ string, value []byte) error {
+			var req scanRequest
+			if err := json.Unmarshal(value, &req); err != nil {
+				log.Printf("[scan] malformed scan_job message: %v", err)
+				return nil // don't fail the consumer on bad messages
+			}
+			if req.CompanyID == "" {
+				log.Printf("[scan] scan_job message missing company_id")
+				return nil
+			}
+			engine.RunForCompany(ctx, req.CompanyID)
+			return nil
+		})
+		if err != nil && ctx.Err() == nil {
+			log.Printf("[scan] scan_job consumer error: %v", err)
+		}
+	}()
 
 	log.Println("[scan] worker started")
 	engine.RunOnce(ctx) // run immediately on startup

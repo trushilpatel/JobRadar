@@ -12,6 +12,7 @@ import (
 	"github.com/trushilpatel/jobradar/internal/api"
 	"github.com/trushilpatel/jobradar/internal/api/handler"
 	"github.com/trushilpatel/jobradar/internal/db"
+	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/store"
 )
 
@@ -23,17 +24,29 @@ func main() {
 		log.Fatalf("db: %v", err)
 	}
 
+	// --- Kafka: ensure topic exists, then create producer ---
+	kafkaCtx := context.Background()
+	if err := kafka.EnsureTopics(kafkaCtx, cfg, kafka.TopicCompanyScanJob); err != nil {
+		log.Fatalf("kafka topics: %v", err)
+	}
+	producer, err := kafka.NewProducer(cfg)
+	if err != nil {
+		log.Fatalf("kafka producer: %v", err)
+	}
+	defer producer.Close()
+
 	// --- Stores ---
 	jobStore := store.NewJobStore(database)
 	ledger := store.NewSeenLedgerStore(database)
 	discardStore := store.NewDiscardStore(database)
 	appStore := store.NewApplicationStore(database)
 	companyStore := store.NewCompanyStore(database)
+	scanLogStore := store.NewJobScanLogStore(database)
 
 	// --- Handlers ---
 	jobHandler := handler.NewJobHandler(jobStore, ledger, discardStore)
 	appHandler := handler.NewApplicationHandler(appStore, jobStore)
-	companyHandler := handler.NewCompanyHandler(companyStore)
+	companyHandler := handler.NewCompanyHandler(companyStore, scanLogStore, producer)
 
 	// --- Router ---
 	router := api.NewRouter(jobHandler, appHandler, companyHandler)

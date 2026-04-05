@@ -33,7 +33,17 @@ func NewRouter(
 		})
 	})
 
-	r.Get("/companies", companies.List)
+	r.Route("/companies", func(r chi.Router) {
+		r.Get("/", companies.List)
+		r.Post("/", companies.Create)
+
+		r.Route("/{id}", func(r chi.Router) {
+			r.Patch("/", companies.Update)
+			r.Delete("/", companies.Delete)
+			r.Get("/scan-stats", companies.ScanStats)
+			r.Post("/scan", companies.TriggerScan)
+		})
+	})
 
 	return r
 }

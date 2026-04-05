@@ -54,6 +54,18 @@ func (e *Engine) RunOnce(ctx context.Context) {
 	log.Printf("[scan] cycle complete")
 }
 
+// RunForCompany runs a scan for a single company by ID.
+// Used when triggered via the company.scan_job Kafka topic.
+func (e *Engine) RunForCompany(ctx context.Context, companyID string) {
+	company, err := e.companies.GetCompanyByID(companyID)
+	if err != nil {
+		log.Printf("[scan] RunForCompany: company %q not found: %v", companyID, err)
+		return
+	}
+	log.Printf("[scan] triggered scan for company %s (%s)", company.Name, company.ID)
+	e.scanCompany(ctx, company)
+}
+
 // scanCompany runs the full scan for a single company.
 func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 	start := time.Now()
