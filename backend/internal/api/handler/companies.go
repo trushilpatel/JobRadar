@@ -23,7 +23,7 @@ func NewCompanyHandler(companies store.CompanyStore, scanLog store.JobScanLogRea
 
 // GET /companies
 func (h *CompanyHandler) List(w http.ResponseWriter, r *http.Request) {
-	companies, err := h.companies.GetActiveCompanies()
+	companies, err := h.companies.GetAllCompanies()
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch companies")
 		return

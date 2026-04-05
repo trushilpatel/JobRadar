@@ -9,6 +9,7 @@ import (
 // Workers receive this interface — not the concrete type.
 type CompanyReader interface {
 	GetActiveCompanies() ([]model.Company, error)
+	GetAllCompanies() ([]model.Company, error)
 	GetCompanyByID(id string) (model.Company, error)
 }
 
@@ -37,6 +38,12 @@ func NewCompanyStore(db *gorm.DB) CompanyStore {
 func (s *companyStore) GetActiveCompanies() ([]model.Company, error) {
 	var companies []model.Company
 	err := s.db.Where("active = ?", true).Find(&companies).Error
+	return companies, err
+}
+
+func (s *companyStore) GetAllCompanies() ([]model.Company, error) {
+	var companies []model.Company
+	err := s.db.Find(&companies).Error
 	return companies, err
 }
 

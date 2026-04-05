@@ -11,6 +11,7 @@ func NewRouter(
 	jobs *handler.JobHandler,
 	apps *handler.ApplicationHandler,
 	companies *handler.CompanyHandler,
+	dashboard *handler.DashboardHandler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -30,8 +31,15 @@ func NewRouter(
 
 			r.Get("/applications", apps.List)
 			r.Post("/applications", apps.Create)
+
+			r.Route("/applications/{app_id}", func(r chi.Router) {
+				r.Patch("/stage", apps.UpdateStage)
+				r.Patch("/note", apps.UpdateNote)
+			})
 		})
 	})
+
+	r.Get("/applications", apps.ListAll)
 
 	r.Route("/companies", func(r chi.Router) {
 		r.Get("/", companies.List)
@@ -43,6 +51,11 @@ func NewRouter(
 			r.Get("/scan-stats", companies.ScanStats)
 			r.Post("/scan", companies.TriggerScan)
 		})
+	})
+
+	r.Route("/dashboard", func(r chi.Router) {
+		r.Get("/stats", dashboard.Stats)
+		r.Get("/activity", dashboard.Activity)
 	})
 
 	return r

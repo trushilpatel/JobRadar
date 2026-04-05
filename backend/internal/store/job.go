@@ -5,10 +5,18 @@ import (
 	"gorm.io/gorm"
 )
 
+// DailyJobCount holds the number of jobs added on a given date.
+type DailyJobCount struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}
+
 // JobReader is for the UI/API layer to query enriched jobs.
 type JobReader interface {
 	GetJobsByStatus(status string) ([]model.Job, error)
 	GetJobByID(id string) (*model.Job, error)
+	GetJobCounts() (newCount, savedCount, appliedCount int64, err error)
+	GetJobsAddedByDay(days int) ([]DailyJobCount, error)
 }
 
 // JobWriter is for the LLM enricher to insert completed job results.
@@ -70,4 +78,26 @@ func (s *jobStore) UpdateJobNotes(id, notes string) error {
 	return s.db.Model(&model.Job{}).
 		Where("id = ?", id).
 		Update("notes", notes).Error
+}
+
+func (s *jobStore) GetJobCounts() (newCount, savedCount, appliedCount int64, err error) {
+	if err = s.db.Model(&model.Job{}).Where("status = ?", model.JobStatusNew).Count(&newCount).Error; err != nil {
+		return
+	}
+	if err = s.db.Model(&model.Job{}).Where("status = ?", model.JobStatusSaved).Count(&savedCount).Error; err != nil {
+		return
+	}
+	err = s.db.Model(&model.Job{}).Where("status = ?", model.JobStatusApplied).Count(&appliedCount).Error
+	return
+}
+
+func (s *jobStore) GetJobsAddedByDay(days int) ([]DailyJobCount, error) {
+	var results []DailyJobCount
+	err := s.db.Model(&model.Job{}).
+		Select("DATE(added_at) as date, COUNT(*) as count").
+		Where("added_at >= NOW() - INTERVAL ? * INTERVAL '1 day'", days).
+		Group("DATE(added_at)").
+		Order("date ASC").
+		Scan(&results).Error
+	return results, err
 }

@@ -21,9 +21,18 @@ type JobScanLogWriter interface {
 	UpdateCompanyScanStatus(companyID, status string) error
 }
 
+// DailyScanCount holds aggregated scan totals for a given date.
+type DailyScanCount struct {
+	Date    string `json:"date"`
+	Scanned int    `json:"scanned"`
+	NewJobs int    `json:"new_jobs"`
+}
+
 // JobScanLogReader reads scan history for a company.
 type JobScanLogReader interface {
 	GetScanStats(companyID string) (ScanStats, error)
+	GetJobsScannedToday() (int64, error)
+	GetScansByDay(days int) ([]DailyScanCount, error)
 }
 
 type jobScanLogStore struct {
@@ -81,6 +90,26 @@ func (s *jobScanLogStore) GetScanStats(companyID string) (ScanStats, error) {
 		Limit(20).
 		Find(&stats.RecentRuns).Error
 	return stats, err
+}
+
+func (s *jobScanLogStore) GetJobsScannedToday() (int64, error) {
+	var count int64
+	err := s.db.Model(&model.JobScanLog{}).
+		Where("DATE(scanned_at) = CURRENT_DATE").
+		Select("COALESCE(SUM(jobs_fetched), 0)").
+		Scan(&count).Error
+	return count, err
+}
+
+func (s *jobScanLogStore) GetScansByDay(days int) ([]DailyScanCount, error) {
+	var results []DailyScanCount
+	err := s.db.Model(&model.JobScanLog{}).
+		Select("DATE(scanned_at) as date, SUM(jobs_fetched) as scanned, SUM(jobs_new) as new_jobs").
+		Where("scanned_at >= NOW() - INTERVAL ? * INTERVAL '1 day'", days).
+		Group("DATE(scanned_at)").
+		Order("date ASC").
+		Scan(&results).Error
+	return results, err
 }
 
 func (s *jobScanLogStore) UpdateCompanyScanStatus(companyID, status string) error {
