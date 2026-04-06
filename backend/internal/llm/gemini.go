@@ -92,8 +92,8 @@ Return a JSON object with exactly these fields (use null for missing fields):
 {
   "experience_years": <minimum years of experience required as integer, or null>,
   "tech_stack": <array of key tools/languages/frameworks mentioned>,
-  "salary_min": <integer or null>,
-  "salary_max": <integer or null>,
+  "salary_min": <integer or null> if in USD show it like this: "$100,000 - $120,000" without country currency>,
+  "salary_max": <integer or null, format like this: "$100,000 - $120,000" without country currency",
   "salary_currency": <string or null>,
   "summary": "<2-3 sentence summary of the role>",
   "sponsorship": <true if the posting mentions H1B/visa sponsorship support, false otherwise>,

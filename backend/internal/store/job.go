@@ -50,13 +50,13 @@ func (s *jobStore) GetJobsByStatus(status string) ([]model.Job, error) {
 	} else {
 		query = query.Where("status = ?", status)
 	}
-	err := query.Find(&jobs).Error
+	err := query.Preload("Company").Find(&jobs).Error
 	return jobs, err
 }
 
 func (s *jobStore) GetJobByID(id string) (*model.Job, error) {
 	var job model.Job
-	err := s.db.Where("id = ?", id).First(&job).Error
+	err := s.db.Preload("Company").Where("id = ?", id).First(&job).Error
 	if err != nil {
 		return nil, err
 	}

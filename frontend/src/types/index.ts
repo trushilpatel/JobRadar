@@ -67,12 +67,15 @@ export interface Job {
   url: string
   department: string | null
   employ_type: string | null
-  years_exp_min: number | null
-  years_exp_max: number | null
+  experience_years: number | null
   tech_stack: string[] | null
   salary_range: SalaryRange | null
   llm_summary: string | null
-  other_criteria: Record<string, unknown> | null
+  sponsorship: boolean
+  requires_citizen: boolean
+  security_clearance: boolean
+  role_brief: string | null
+  responsibilities: string | null
   status: JobStatus
   saved: boolean
   notes: string | null
