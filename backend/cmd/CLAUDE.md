@@ -35,7 +35,8 @@ The context is passed into workers so in-flight jobs drain before exit.
 
 | Binary | Port/topic | Interval |
 |---|---|---|
-| `scan` | publishes to `jobs.raw` | every 30 min, runs immediately on start |
+| `scheduler` | publishes to `company.scan_job` | checks DB every 1 min, enqueues companies due per `SCAN_INTERVAL_MINUTES` config |
+| `scan` | consumes `company.scan_job`, publishes to `jobs.raw` | event-driven (triggered by scheduler) |
 | `scorer` | consumes `jobs.raw`, publishes to `jobs.raw_detail` | event-driven |
 | `enricher` | consumes `jobs.raw_detail` | event-driven |
 | `api` | `:8080` | always on |

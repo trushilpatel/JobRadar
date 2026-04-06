@@ -7,7 +7,7 @@ Full design spec: `Designs/job-tracker-final-architecture.md`
 ## Pipeline
 
 ```
-Scan Engine → jobs.raw (Kafka) → LLM Scorer → jobs.raw_detail (Kafka) → Enricher → job (DB) → API
+Scheduler → company.scan_job (Kafka) → Scan Engine → jobs.raw (Kafka) → LLM Scorer → jobs.raw_detail (Kafka) → Enricher → job (DB) → API
 ```
 
 ## Directory map
@@ -30,7 +30,8 @@ Scan Engine → jobs.raw (Kafka) → LLM Scorer → jobs.raw_detail (Kafka) → 
 
 | Binary | Role |
 |---|---|
-| `cmd/scan` | Fetches jobs from careers pages, publishes to `jobs.raw` |
+| `cmd/scheduler` | Queries DB for companies due for a scan, publishes to `company.scan_job` |
+| `cmd/scan` | Consumes `company.scan_job`, fetches careers pages, publishes to `jobs.raw` |
 | `cmd/scorer` | Scores batches via LLM, routes relevant to `jobs.raw_detail` |
 | `cmd/enricher` | Fetches full job page, LLM enriches, writes to `job` table |
 | `cmd/api` | REST API on `:8080` |

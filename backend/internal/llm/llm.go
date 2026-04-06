@@ -17,15 +17,20 @@ type EnrichInput struct {
 
 // EnrichResult is the structured data the LLM extracts from a full job page.
 type EnrichResult struct {
-	JobID        string
-	YearsExpMin  *int
-	YearsExpMax  *int
-	TechStack    []string
-	SalaryMin    *int
-	SalaryMax    *int
-	SalaryCurrency string
-	Summary      string
-	OtherCriteria map[string]string
+	JobID           string
+	ExperienceYears *int
+	TechStack       []string
+	SalaryMin       *int
+	SalaryMax       *int
+	SalaryCurrency  string
+	Summary         string
+	// Visa / clearance flags
+	Sponsorship       bool
+	RequiresCitizen   bool
+	SecurityClearance bool
+	// Role details
+	RoleBrief        string
+	Responsibilities string
 }
 
 // Scorer is the interface for LLM-based job relevance scoring and enrichment.

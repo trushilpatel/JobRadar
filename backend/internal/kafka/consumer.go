@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"context"
+	"log"
 	"strings"
 
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -41,12 +42,17 @@ func NewConsumer(cfg *config.Config, groupID string, topics ...string) (*Consume
 }
 
 // Poll fetches the next batch of records and calls fn for each one.
-// Commits offsets after fn returns nil.
+// Commits offsets after fn returns nil. Transient fetch errors are logged
+// and skipped — only context cancellation stops the loop.
 func (c *Consumer) Poll(ctx context.Context, fn func(topic string, value []byte) error) error {
 	for {
 		fetches := c.client.PollFetches(ctx)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if err := fetches.Err(); err != nil {
-			return err
+			log.Printf("[kafka] fetch error (retrying): %v", err)
+			continue
 		}
 
 		var lastErr error

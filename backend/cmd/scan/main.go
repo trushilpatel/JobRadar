@@ -6,6 +6,7 @@ import (
 	"log"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/trushilpatel/jobradar/config"
 	"github.com/trushilpatel/jobradar/internal/db"
@@ -51,7 +52,8 @@ func main() {
 	scanLog := store.NewJobScanLogStore(database)
 
 	// --- Engine ---
-	engine := scan.NewEngine(companies, ledger, scanLog, producer)
+	companyDelay := time.Duration(cfg.ScanCompanyDelaySeconds) * time.Second
+	engine := scan.NewEngine(companies, ledger, scanLog, producer, companyDelay)
 
 	log.Println("[scan] worker started — waiting for scan jobs on", kafka.TopicCompanyScanJob)
 

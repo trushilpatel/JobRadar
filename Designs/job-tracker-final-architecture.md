@@ -18,12 +18,26 @@ JobRadar is a single-user automated job tracking system that monitors up to 100+
 
 ```
 ┌─────────────────────────────────────────────────────────┐
+│                      SCHEDULER                          │
+│  - Queries DB every 1 min for companies due for scan    │
+│  - Due = last_scan_at is NULL or older than             │
+│    SCAN_INTERVAL_MINUTES config value                   │
+│  - Publishes company IDs to company.scan_job            │
+└────────────────────────┬────────────────────────────────┘
+                         │
+                         ▼
+            ┌────────────────────────┐
+            │    company.scan_job    │  Kafka topic
+            │    { company_id }      │
+            └────────────┬───────────┘
+                         │
+┌────────────────────────▼────────────────────────────────┐
 │                     SCAN ENGINE                         │
-│  - Reads company list from DB                           │
-│  - Fetches all careers pages concurrently               │
-│  - Checks each job ID against seen_ledger               │
+│  - Consumes company IDs from company.scan_job           │
+│  - Fetches careers page for that company                │
+│  - Checks each job ID against job_seen_ledger           │
 │  - Skips known IDs, pushes new ones to Kafka            │
-│  - Writes scan summary to scan_log                      │
+│  - Writes scan summary to job_scan_log                  │
 └────────────────────────┬────────────────────────────────┘
                          │
                          ▼
@@ -36,9 +50,9 @@ JobRadar is a single-user automated job tracking system that monitors up to 100+
 ┌───────────────────────▼─────────────────────────────────┐
 │                  LLM BATCH SCORER                        │
 │  - Consumes jobs.raw in batches of 50–100               │
-│  - Sends title + id only to Claude                      │
+│  - Sends title + id only to LLM                         │
 │  - Relevant   → publishes to jobs.raw_detail            │
-│  - Irrelevant → writes directly to seen_ledger          │
+│  - Irrelevant → updates job_seen_ledger                 │
 │                 reason = 'llm_irrelevant'                │
 └───────────────┬─────────────────────────────────────────┘
                 │ relevant only
@@ -51,13 +65,13 @@ JobRadar is a single-user automated job tracking system that monitors up to 100+
 ┌────────────────▼────────────────────────────────────────┐
 │               DETAIL FETCHER + LLM ENRICHER             │
 │  - Fetches full job page per job (network I/O)          │
-│  - Sends full text to Claude                            │
-│  - Claude extracts: years exp, tech stack,              │
-│    salary, team info, summary, other criteria           │
-│  - Writes final row to job_result (DB)                  │
-│  - Updates seen_ledger reason = 'fetch'                 │
-│  - On failure (404/timeout): writes to scan_log error   │
-│    and seen_ledger reason = 'error'                     │
+│  - Sends full text to LLM                               │
+│  - LLM extracts: experience years, tech stack,          │
+│    salary, role brief, responsibilities,                │
+│    sponsorship/citizen/clearance flags, summary         │
+│  - Writes final row to job (DB)                         │
+│  - Updates job_seen_ledger reason = 'fetch'             │
+│  - On failure: job_seen_ledger reason = 'error'         │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -67,17 +81,18 @@ JobRadar is a single-user automated job tracking system that monitors up to 100+
 
 | Topic | Producer | Consumer | Carries |
 |---|---|---|---|
-| `jobs.raw` | Scan engine | LLM batch scorer | Full job payload (id, title, location, url, department) |
-| `jobs.raw_detail` | LLM batch scorer | Detail fetcher + LLM enricher | Relevant job IDs only |
+| `company.scan_job` | Scheduler | Scan engine | `{ company_id }` — triggers a scan for one company |
+| `jobs.raw` | Scan engine | LLM batch scorer | Full raw job payload (id, title, location, url, department, employ_type) |
+| `jobs.raw_detail` | LLM batch scorer | Detail fetcher + LLM enricher | Relevant raw job payload (same struct, scorer-filtered) |
 
-**No dead letter topic.** Failures are written directly to `scan_log.error` and `seen_ledger` with `reason = 'error'`. Simple, queryable, no extra infrastructure.
+**No dead letter topic.** Failures are written directly to `job_scan_log.error` and `job_seen_ledger` with `reason = 'error'`. Simple, queryable, no extra infrastructure.
 
 ---
 
 ## 4. Database Tables
 
 ### 4.1 `companies`
-Configuration table. Read by scan engine to know what to fetch.
+Configuration table. Read by the scheduler and scan engine to know what to fetch.
 
 ```sql
 CREATE TABLE companies (
@@ -90,8 +105,8 @@ CREATE TABLE companies (
                               'workday', 'workable', 'chromedp'
                           )),
     active            BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    last_scan_at      DATETIME,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_scan_at      TIMESTAMPTZ,
     last_scan_status  TEXT
                           CHECK(last_scan_status IN ('ok', 'error', 'pending'))
 );
@@ -99,19 +114,19 @@ CREATE TABLE companies (
 
 **Why this and nothing more:**
 - `adapter_type` tells the registry which adapter to use — must be stored, can't be derived
-- `last_scan_at` + `last_scan_status` are for the dashboard status indicators
-- No scan metrics here — those live in `scan_log`
+- `last_scan_at` + `last_scan_status` are for the dashboard status indicators and scheduler due-check
+- No scan metrics here — those live in `job_scan_log`
 
 ---
 
-### 4.2 `seen_ledger`
+### 4.2 `job_seen_ledger`
 The deduplication gate. Every job ever touched by the pipeline gets a row here. Checked before any job enters Kafka.
 
 ```sql
-CREATE TABLE seen_ledger (
+CREATE TABLE job_seen_ledger (
     job_id        TEXT NOT NULL PRIMARY KEY,  -- e.g. "greenhouse-12345"
     company_id    TEXT NOT NULL REFERENCES companies(id),
-    first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     reason        TEXT NOT NULL
                       CHECK(reason IN (
                           'fetch',            -- successfully processed
@@ -121,7 +136,7 @@ CREATE TABLE seen_ledger (
                       ))
 );
 
-CREATE INDEX idx_seen_company ON seen_ledger(company_id);
+CREATE INDEX idx_seen_company ON job_seen_ledger(company_id);
 ```
 
 **Why this and nothing more:**
@@ -131,22 +146,22 @@ CREATE INDEX idx_seen_company ON seen_ledger(company_id);
 
 ---
 
-### 4.3 `scan_log`
+### 4.3 `job_scan_log`
 Append-only record of every scan run per company. Powers dashboard activity feed and weekly chart.
 
 ```sql
-CREATE TABLE scan_log (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE job_scan_log (
+    id            BIGSERIAL PRIMARY KEY,
     company_id    TEXT NOT NULL REFERENCES companies(id),
-    scanned_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    scanned_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     jobs_fetched  INTEGER NOT NULL DEFAULT 0,
     jobs_new      INTEGER NOT NULL DEFAULT 0,
     error         TEXT,
     duration_ms   INTEGER
 );
 
-CREATE INDEX idx_scan_company ON scan_log(company_id);
-CREATE INDEX idx_scan_time    ON scan_log(scanned_at DESC);
+CREATE INDEX idx_scan_company ON job_scan_log(company_id);
+CREATE INDEX idx_scan_time    ON job_scan_log(scanned_at DESC);
 ```
 
 **Why this and nothing more:**
@@ -157,13 +172,13 @@ CREATE INDEX idx_scan_time    ON scan_log(scanned_at DESC);
 
 ---
 
-### 4.4 `job_result`
+### 4.4 `job`
 The only table the UI reads for the main jobs feed. Written once by the enrichment worker. After that, only `status`, `saved`, and `notes` change.
 
 ```sql
-CREATE TABLE job_result (
+CREATE TABLE job (
     id              TEXT PRIMARY KEY,
-    job_id          TEXT NOT NULL,           -- matches seen_ledger.job_id
+    job_post_id     TEXT NOT NULL,           -- matches job_seen_ledger.job_id
     company_id      TEXT NOT NULL REFERENCES companies(id),
 
     -- job identity (from Kafka payload)
@@ -177,35 +192,38 @@ CREATE TABLE job_result (
                             'full_time', 'part_time', 'contract', 'internship'
                         )),
 
-    -- enriched details (written by LLM enricher, never updated)
-    years_exp_min   INTEGER,
-    years_exp_max   INTEGER,
-    tech_stack      TEXT,        -- JSON array: ["Go", "Kafka", "PostgreSQL"]
-    salary_range    TEXT,        -- JSON: {"min": 120000, "max": 160000, "currency": "USD"}
-    llm_summary     TEXT,        -- 2–3 sentence digest shown in UI card
-    other_criteria  TEXT,        -- JSON: any other structured fields LLM found
+    -- LLM-enriched details (written once by enricher, never updated)
+    experience_years    INTEGER,
+    tech_stack          JSONB,               -- ["Go", "Kafka", "PostgreSQL"]
+    salary_range        JSONB,               -- {"min": 120000, "max": 160000, "currency": "USD"}
+    llm_summary         TEXT,               -- 2–3 sentence digest shown in UI card
+    sponsorship         BOOLEAN NOT NULL DEFAULT FALSE,  -- mentions H1B/visa support
+    requires_citizen    BOOLEAN NOT NULL DEFAULT FALSE,  -- US Citizen/Green Card required
+    security_clearance  BOOLEAN NOT NULL DEFAULT FALSE,  -- Secret, TS/SCI, etc.
+    role_brief          TEXT,               -- one-sentence technical mission
+    responsibilities    TEXT,               -- newline-separated technical bullet points
 
-    -- user state (only these three change after insert)
+    -- user state (only these change after insert)
     status          TEXT NOT NULL DEFAULT 'new'
                         CHECK(status IN ('new', 'saved', 'applied')),
     saved           BOOLEAN NOT NULL DEFAULT FALSE,
     notes           TEXT,
 
-    added_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    added_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_result_company ON job_result(company_id);
-CREATE INDEX idx_result_status  ON job_result(status);
-CREATE INDEX idx_result_saved   ON job_result(saved);
-CREATE INDEX idx_result_added   ON job_result(added_at DESC);
+CREATE INDEX idx_job_company ON job(company_id);
+CREATE INDEX idx_job_status  ON job(status);
+CREATE INDEX idx_job_saved   ON job(saved);
+CREATE INDEX idx_job_added   ON job(added_at DESC);
 ```
 
 **Why this and nothing more:**
-- No `match_score` or `match_breakdown` — LLM already determined relevance, user decides priority
-- No `enriched_at` — `added_at` is sufficient, enrichment and insert happen atomically
+- `experience_years` replaces the previous `years_exp_min/max` split — enricher extracts a single minimum requirement
+- `sponsorship`, `requires_citizen`, `security_clearance` are hard filter flags — LLM extracts these to let the UI/API filter ineligible jobs instantly
+- `role_brief` + `responsibilities` give the user a fast technical read without opening the full posting
+- No `match_score` — LLM already determined relevance, user decides priority
 - `status` only covers pre-application states — once `applied`, `job_application` takes over
-- `saved` is a simple boolean toggle separate from status — user can save without applying
-- `tech_stack`, `salary_range`, `other_criteria` are JSON strings — flexible for varied job formats
 
 ---
 
@@ -214,8 +232,8 @@ Only created when the user applies. Tracks the full application lifecycle as an 
 
 ```sql
 CREATE TABLE job_application (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_result_id TEXT NOT NULL REFERENCES job_result(id),
+    id            BIGSERIAL PRIMARY KEY,
+    job_id        TEXT NOT NULL REFERENCES job(id),
     stage         TEXT NOT NULL
                       CHECK(stage IN (
                           'applied',
@@ -225,11 +243,11 @@ CREATE TABLE job_application (
                           'offer',
                           'rejected'
                       )),
-    stage_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    stage_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     note          TEXT
 );
 
-CREATE INDEX idx_app_job     ON job_application(job_result_id);
+CREATE INDEX idx_app_job     ON job_application(job_id);
 CREATE INDEX idx_app_stage   ON job_application(stage);
 CREATE INDEX idx_app_time    ON job_application(stage_at DESC);
 ```
@@ -238,36 +256,36 @@ CREATE INDEX idx_app_time    ON job_application(stage_at DESC);
 - One row per stage transition — gives full history with timestamps
 - `note` per stage — user can record what happened at each step
 - Drives the dashboard activity feed: "Phone screen at Stripe · 2 days ago"
-- `job_result.status` stays `applied` once this table has any row for that job
+- `job.status` stays `applied` once this table has any row for that job
 - Never updated, only inserted — each new stage is a new row
 
 ---
 
-### 4.6 `discarded`
-Holds jobs the user explicitly dismissed from the UI. Separate from `seen_ledger` because the user may want to review what they dismissed and why.
+### 4.6 `job_discarded`
+Holds jobs the user explicitly dismissed from the UI. Separate from `job_seen_ledger` because the user may want to review what they dismissed and why.
 
 ```sql
-CREATE TABLE discarded (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_result_id TEXT NOT NULL REFERENCES job_result(id),
+CREATE TABLE job_discarded (
+    id            BIGSERIAL PRIMARY KEY,
+    job_id        TEXT NOT NULL REFERENCES job(id),
     reason        TEXT NOT NULL
                       CHECK(reason IN (
                           'user_dismissed',    -- user hit dismiss in UI
                           'user_not_relevant'  -- user marked as not relevant
                       )),
-    discarded_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    discarded_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     note          TEXT
 );
 
-CREATE INDEX idx_discarded_job ON discarded(job_result_id);
+CREATE INDEX idx_discarded_job ON job_discarded(job_id);
 ```
 
-**Why separate from `seen_ledger`:**
-- `seen_ledger` is a pipeline gate — it only cares about the job ID
-- `discarded` is a user-facing record — it holds the reason and optional note
+**Why separate from `job_seen_ledger`:**
+- `job_seen_ledger` is a pipeline gate — it only cares about the job ID
+- `job_discarded` is a user-facing record — it holds the reason and optional note
 - When a job is dismissed, both tables get written:
-  - `seen_ledger` → `reason = 'user_dismissed'` (blocks re-entry to pipeline)
-  - `discarded` → full record (user can review later)
+  - `job_seen_ledger` → `reason = 'user_dismissed'` (blocks re-entry to pipeline)
+  - `job_discarded` → full record (user can review later)
 
 ---
 
@@ -279,46 +297,52 @@ All valid values enforced via SQL CHECK constraints and mirrored as Go typed con
 |---|---|---|
 | `companies` | `adapter_type` | `greenhouse` · `lever` · `ashby` · `workday` · `workable` · `chromedp` |
 | `companies` | `last_scan_status` | `ok` · `error` · `pending` |
-| `seen_ledger` | `reason` | `fetch` · `llm_irrelevant` · `user_dismissed` · `error` |
-| `job_result` | `employ_type` | `full_time` · `part_time` · `contract` · `internship` |
-| `job_result` | `status` | `new` · `saved` · `applied` |
+| `job_seen_ledger` | `reason` | `fetch` · `llm_irrelevant` · `user_dismissed` · `error` |
+| `job` | `employ_type` | `full_time` · `part_time` · `contract` · `internship` |
+| `job` | `status` | `new` · `saved` · `applied` |
 | `job_application` | `stage` | `applied` · `phone_screen` · `technical` · `final_round` · `offer` · `rejected` |
-| `discarded` | `reason` | `user_dismissed` · `user_not_relevant` |
+| `job_discarded` | `reason` | `user_dismissed` · `user_not_relevant` |
 
 ---
 
 ## 6. Data Flow Per Job (End to End)
 
 ```
-1. Scan engine fetches job from careers page
-   → CHECK seen_ledger: known? skip. new? continue.
-   → INSERT seen_ledger (reason = 'fetch') ← tentative, updated later
-   → PUBLISH to jobs.raw
-   → INSERT scan_log row
+1. Scheduler (every 1 min) queries companies table
+   → finds companies where last_scan_at IS NULL
+     or last_scan_at < NOW() - SCAN_INTERVAL_MINUTES
+   → PUBLISH to company.scan_job for each due company
 
-2. LLM batch scorer consumes jobs.raw (batch of 50–100)
-   → sends title + id to Claude
-   → irrelevant: UPDATE seen_ledger reason = 'llm_irrelevant'
+2. Scan engine consumes company.scan_job
+   → fetches careers page for that company
+   → for each job on the page:
+       CHECK job_seen_ledger: known? skip. new? continue.
+       INSERT job_seen_ledger (reason = 'fetch')
+       PUBLISH to jobs.raw
+   → INSERT job_scan_log row (fetched, new, duration)
+   → UPDATE companies SET last_scan_at, last_scan_status
+
+3. LLM batch scorer consumes jobs.raw (batch of 50–100)
+   → sends title + id to LLM
+   → irrelevant: UPDATE job_seen_ledger reason = 'llm_irrelevant'
    → relevant:   PUBLISH to jobs.raw_detail
 
-3. Detail fetcher + LLM enricher consumes jobs.raw_detail
+4. Detail fetcher + LLM enricher consumes jobs.raw_detail
    → fetches full job page
-   → on error: UPDATE seen_ledger reason = 'error'
-               UPDATE scan_log error column
-   → on success: sends full text to Claude
-               → Claude returns structured extraction
-               → INSERT job_result
-               → UPDATE seen_ledger reason = 'fetch' (confirmed)
+   → on fetch error: UPDATE job_seen_ledger reason = 'error'
+   → on success: sends full text to LLM
+               → LLM returns structured extraction
+               → INSERT job row
+               → UPDATE job_seen_ledger reason = 'fetch' (confirmed)
 
-4. User opens UI, sees job_result feed
-   → saves a job:    UPDATE job_result SET saved = TRUE
-   → dismisses:      INSERT discarded
-                     UPDATE seen_ledger reason = 'user_dismissed'
-   → applies:        UPDATE job_result SET status = 'applied'
+5. User opens UI, sees job feed
+   → saves a job:    UPDATE job SET saved = TRUE
+   → dismisses:      INSERT job_discarded
+                     UPDATE job_seen_ledger reason = 'user_dismissed'
+   → applies:        UPDATE job SET status = 'applied'
                      INSERT job_application (stage = 'applied')
    → stage update:   INSERT job_application (stage = 'phone_screen' etc.)
-   → adds note:      UPDATE job_result SET notes = '...'
-                     or INSERT job_application with note on stage row
+   → adds note:      UPDATE job SET notes = '...'
 ```
 
 ---
@@ -327,9 +351,9 @@ All valid values enforced via SQL CHECK constraints and mirrored as Go typed con
 
 | Type | Count | Names |
 |---|---|---|
-| Kafka topics | 2 | `jobs.raw` · `jobs.raw_detail` |
-| Workers | 3 | scan engine · LLM batch scorer · detail fetcher + LLM enricher |
-| DB tables | 6 | `companies` · `seen_ledger` · `scan_log` · `job_result` · `job_application` · `discarded` |
+| Kafka topics | 3 | `company.scan_job` · `jobs.raw` · `jobs.raw_detail` |
+| Binaries | 5 | scheduler · scan engine · LLM batch scorer · detail fetcher + LLM enricher · api |
+| DB tables | 6 | `companies` · `job_seen_ledger` · `job_scan_log` · `job` · `job_application` · `job_discarded` |
 
 ---
 
@@ -337,12 +361,13 @@ All valid values enforced via SQL CHECK constraints and mirrored as Go typed con
 
 | Concern | Lives In |
 |---|---|
-| What to scan | `companies` |
-| Have I seen this job? | `seen_ledger` |
-| Why was it rejected by LLM? | `seen_ledger.reason = 'llm_irrelevant'` |
-| Scan metrics and errors | `scan_log` |
-| Job content + enrichment | `job_result` |
-| User's pre-apply actions | `job_result.status` + `job_result.saved` |
+| What to scan and when | `companies` + scheduler |
+| Have I seen this job? | `job_seen_ledger` |
+| Why was it rejected by LLM? | `job_seen_ledger.reason = 'llm_irrelevant'` |
+| Scan metrics and errors | `job_scan_log` |
+| Job content + enrichment | `job` |
+| Visa / clearance eligibility | `job.sponsorship`, `job.requires_citizen`, `job.security_clearance` |
+| User's pre-apply actions | `job.status` + `job.saved` |
 | Full application history | `job_application` |
-| User-dismissed jobs | `discarded` + `seen_ledger` |
+| User-dismissed jobs | `job_discarded` + `job_seen_ledger` |
 | Data in transit between workers | Kafka topics |

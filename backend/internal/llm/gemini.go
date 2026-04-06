@@ -90,14 +90,17 @@ Job posting text:
 
 Return a JSON object with exactly these fields (use null for missing fields):
 {
-  "years_exp_min": <integer or null>,
-  "years_exp_max": <integer or null>,
-  "tech_stack": <array of strings>,
+  "experience_years": <minimum years of experience required as integer, or null>,
+  "tech_stack": <array of key tools/languages/frameworks mentioned>,
   "salary_min": <integer or null>,
   "salary_max": <integer or null>,
   "salary_currency": <string or null>,
   "summary": "<2-3 sentence summary of the role>",
-  "other_criteria": <object with any other notable requirements>
+  "sponsorship": <true if the posting mentions H1B/visa sponsorship support, false otherwise>,
+  "requires_citizen": <true if the posting requires US Citizen or Green Card only, false otherwise>,
+  "security_clearance": <true if any security clearance (Secret, TS/SCI, etc.) is required, false otherwise>,
+  "role_brief": "<one sentence technical mission of the role>",
+  "responsibilities": "<concise bullet points of key technical responsibilities, newline-separated>"
 }
 
 Respond with ONLY the JSON object, no explanation.`,
@@ -110,29 +113,35 @@ Respond with ONLY the JSON object, no explanation.`,
 	}
 
 	var out struct {
-		YearsExpMin    *int              `json:"years_exp_min"`
-		YearsExpMax    *int              `json:"years_exp_max"`
-		TechStack      []string          `json:"tech_stack"`
-		SalaryMin      *int              `json:"salary_min"`
-		SalaryMax      *int              `json:"salary_max"`
-		SalaryCurrency string            `json:"salary_currency"`
-		Summary        string            `json:"summary"`
-		OtherCriteria  map[string]string `json:"other_criteria"`
+		ExperienceYears   *int     `json:"experience_years"`
+		TechStack         []string `json:"tech_stack"`
+		SalaryMin         *int     `json:"salary_min"`
+		SalaryMax         *int     `json:"salary_max"`
+		SalaryCurrency    string   `json:"salary_currency"`
+		Summary           string   `json:"summary"`
+		Sponsorship       bool     `json:"sponsorship"`
+		RequiresCitizen   bool     `json:"requires_citizen"`
+		SecurityClearance bool     `json:"security_clearance"`
+		RoleBrief         string   `json:"role_brief"`
+		Responsibilities  string   `json:"responsibilities"`
 	}
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
 		return nil, fmt.Errorf("gemini enrich: parse response %q: %w", raw, err)
 	}
 
 	return &EnrichResult{
-		JobID:          input.ID,
-		YearsExpMin:    out.YearsExpMin,
-		YearsExpMax:    out.YearsExpMax,
-		TechStack:      out.TechStack,
-		SalaryMin:      out.SalaryMin,
-		SalaryMax:      out.SalaryMax,
-		SalaryCurrency: out.SalaryCurrency,
-		Summary:        out.Summary,
-		OtherCriteria:  out.OtherCriteria,
+		JobID:             input.ID,
+		ExperienceYears:   out.ExperienceYears,
+		TechStack:         out.TechStack,
+		SalaryMin:         out.SalaryMin,
+		SalaryMax:         out.SalaryMax,
+		SalaryCurrency:    out.SalaryCurrency,
+		Summary:           out.Summary,
+		Sponsorship:       out.Sponsorship,
+		RequiresCitizen:   out.RequiresCitizen,
+		SecurityClearance: out.SecurityClearance,
+		RoleBrief:         out.RoleBrief,
+		Responsibilities:  out.Responsibilities,
 	}, nil
 }
 

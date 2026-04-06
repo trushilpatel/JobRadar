@@ -18,12 +18,17 @@ type Job struct {
 	Department *string `json:"department"`
 	EmployType *string `json:"employ_type"`
 
-	YearsExpMin   *int           `json:"years_exp_min"`
-	YearsExpMax   *int           `json:"years_exp_max"`
-	TechStack     datatypes.JSON `json:"tech_stack"`
-	SalaryRange   datatypes.JSON `json:"salary_range"`
-	LLMSummary    *string        `json:"llm_summary"`
-	OtherCriteria datatypes.JSON `json:"other_criteria"`
+	ExperienceYears *int           `json:"experience_years"`
+	TechStack       datatypes.JSON `json:"tech_stack"`
+	SalaryRange     datatypes.JSON `json:"salary_range"`
+	LLMSummary      *string        `json:"llm_summary"`
+
+	// LLM-enriched fields
+	Sponsorship       bool    `gorm:"not null;default:false" json:"sponsorship"`
+	RequiresCitizen   bool    `gorm:"not null;default:false" json:"requires_citizen"`
+	SecurityClearance bool    `gorm:"not null;default:false" json:"security_clearance"`
+	RoleBrief         *string `json:"role_brief"`
+	Responsibilities  *string `json:"responsibilities"`
 
 	Status string  `gorm:"not null;default:new" json:"status"`
 	Saved  bool    `gorm:"not null;default:false" json:"saved"`

@@ -16,10 +16,11 @@ import (
 // Engine is the scan worker. It reads companies from DB, fetches their jobs,
 // deduplicates via seen_ledger, and publishes new jobs to Kafka.
 type Engine struct {
-	companies store.CompanyReader
-	ledger    store.SeenLedgerStore
-	scanLog   store.JobScanLogWriter
-	publisher kafka.Publisher
+	companies    store.CompanyReader
+	ledger       store.SeenLedgerStore
+	scanLog      store.JobScanLogWriter
+	publisher    kafka.Publisher
+	companyDelay time.Duration // sleep after each company job-list fetch
 }
 
 func NewEngine(
@@ -27,12 +28,14 @@ func NewEngine(
 	ledger store.SeenLedgerStore,
 	scanLog store.JobScanLogWriter,
 	publisher kafka.Publisher,
+	companyDelay time.Duration,
 ) *Engine {
 	return &Engine{
-		companies: companies,
-		ledger:    ledger,
-		scanLog:   scanLog,
-		publisher: publisher,
+		companies:    companies,
+		ledger:       ledger,
+		scanLog:      scanLog,
+		publisher:    publisher,
+		companyDelay: companyDelay,
 	}
 }
 
@@ -118,6 +121,14 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 
 	log.Printf("[scan] %s: fetched=%d new=%d duration=%s", company.Name, fetched, newCount, time.Since(start).Round(time.Millisecond))
 	e.recordResult(ctx, company.ID, fetched, newCount, time.Since(start), nil)
+
+	if e.companyDelay > 0 {
+		log.Printf("[scan] sleeping %s before next company fetch", e.companyDelay)
+		select {
+		case <-time.After(e.companyDelay):
+		case <-ctx.Done():
+		}
+	}
 }
 
 // publish serialises a RawJob to JSON and sends it to the jobs.raw topic.

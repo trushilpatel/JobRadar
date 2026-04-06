@@ -34,6 +34,7 @@ type Config struct {
 	LLMRateLimits LLMRateLimits
 
 	ScanIntervalMinutes       int // how often the scan worker runs a full sweep
+	ScanCompanyDelaySeconds   int // sleep between company job-list fetches to avoid being blocked
 	ScorerBatchSize           int // number of job titles sent to LLM per ScoreBatch call
 	ScorerFlushTimeoutSeconds int // flush a partial batch after this many seconds of inactivity
 
@@ -65,6 +66,7 @@ func Load() *Config {
 			TPMIn: getEnvInt("LLM_TPM", 250000),
 		},
 		ScanIntervalMinutes:       getEnvInt("SCAN_INTERVAL_MINUTES", 1440), // default: 24h
+		ScanCompanyDelaySeconds:   getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 60),
 		ScorerBatchSize:           getEnvInt("SCORER_BATCH_SIZE", 50),
 		ScorerFlushTimeoutSeconds: getEnvInt("SCORER_FLUSH_TIMEOUT_SECONDS", 10),
 

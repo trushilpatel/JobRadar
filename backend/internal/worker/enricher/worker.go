@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,6 +18,11 @@ import (
 	"github.com/trushilpatel/jobradar/internal/store"
 	"gorm.io/datatypes"
 )
+
+// enrichConcurrency is the number of jobs processed in parallel.
+// Page fetches (up to 15s each) dominate latency, so concurrency here
+// is the main throughput lever. LLM calls are still rate-limited globally.
+const enrichConcurrency = 5
 
 // Worker consumes jobs.raw_detail, fetches the full job page,
 // runs LLM enrichment, and writes the final row to the job table.
@@ -42,19 +48,36 @@ func NewWorker(
 }
 
 // Run starts consuming jobs.raw_detail and blocks until ctx is cancelled.
+// Jobs are processed concurrently up to enrichConcurrency — page fetches
+// dominate latency so parallelism here is the main throughput lever.
 func (w *Worker) Run(ctx context.Context) error {
-	log.Println("[enricher] worker started")
+	log.Printf("[enricher] worker started (concurrency=%d)", enrichConcurrency)
 
-	return w.consumer.Poll(ctx, func(topic string, value []byte) error {
+	sem := make(chan struct{}, enrichConcurrency)
+	var wg sync.WaitGroup
+
+	err := w.consumer.Poll(ctx, func(_ string, value []byte) error {
 		var job adapter.RawJob
 		if err := json.Unmarshal(value, &job); err != nil {
-			log.Printf("[enricher] malformed message: %v", err)
-			return nil // skip, don't stop the consumer
+			log.Printf("[enricher] malformed message: %v — skipping", err)
+			return nil
 		}
 
-		w.enrich(ctx, job)
+		log.Printf("[enricher] received %s — %q", job.ID, job.Title)
+
+		sem <- struct{}{} // block if all workers are busy
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			w.enrich(ctx, job)
+		}()
+
 		return nil
 	})
+
+	wg.Wait() // drain in-flight enrichments before returning
+	return err
 }
 
 // enrich runs the full enrichment pipeline for a single job.
@@ -141,7 +164,6 @@ func fetchPage(ctx context.Context, url string) (string, error) {
 
 // buildJob maps adapter.RawJob + llm.EnrichResult into a model.Job ready for DB insert.
 func buildJob(raw adapter.RawJob, enriched *llm.EnrichResult) (*model.Job, error) {
-	// JSON-encode the array/map fields
 	techStack, err := json.Marshal(enriched.TechStack)
 	if err != nil {
 		return nil, fmt.Errorf("marshal tech_stack: %w", err)
@@ -156,29 +178,25 @@ func buildJob(raw adapter.RawJob, enriched *llm.EnrichResult) (*model.Job, error
 		return nil, fmt.Errorf("marshal salary_range: %w", err)
 	}
 
-	otherCriteria, err := json.Marshal(enriched.OtherCriteria)
-	if err != nil {
-		return nil, fmt.Errorf("marshal other_criteria: %w", err)
-	}
-
-	employType := raw.EmployType // may be empty — that's fine, column is nullable
-
 	return &model.Job{
-		ID:            uuid.New().String(),
-		JobPostID:     raw.ID,
-		CompanyID:     raw.CompanyID,
-		Title:         raw.Title,
-		Location:      nullableString(raw.Location),
-		URL:           raw.URL,
-		Department:    nullableString(raw.Department),
-		EmployType:    nullableString(employType),
-		YearsExpMin:   enriched.YearsExpMin,
-		YearsExpMax:   enriched.YearsExpMax,
-		TechStack:     datatypes.JSON(techStack),
-		SalaryRange:   datatypes.JSON(salaryRange),
-		LLMSummary:    nullableString(enriched.Summary),
-		OtherCriteria: datatypes.JSON(otherCriteria),
-		Status:        model.JobStatusNew,
+		ID:                uuid.New().String(),
+		JobPostID:         raw.ID,
+		CompanyID:         raw.CompanyID,
+		Title:             raw.Title,
+		Location:          nullableString(raw.Location),
+		URL:               raw.URL,
+		Department:        nullableString(raw.Department),
+		EmployType:        nullableString(raw.EmployType),
+		ExperienceYears:   enriched.ExperienceYears,
+		TechStack:         datatypes.JSON(techStack),
+		SalaryRange:       datatypes.JSON(salaryRange),
+		LLMSummary:        nullableString(enriched.Summary),
+		Sponsorship:       enriched.Sponsorship,
+		RequiresCitizen:   enriched.RequiresCitizen,
+		SecurityClearance: enriched.SecurityClearance,
+		RoleBrief:         nullableString(enriched.RoleBrief),
+		Responsibilities:  nullableString(enriched.Responsibilities),
+		Status:            model.JobStatusNew,
 	}, nil
 }
 

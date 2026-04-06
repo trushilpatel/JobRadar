@@ -172,4 +172,3 @@ func (w *Worker) publishDetail(ctx context.Context, job adapter.RawJob) {
 		log.Printf("[scorer] publish failed for %s: %v", job.ID, err)
 	}
 }
-
