@@ -9,9 +9,9 @@ import { InsightsPage } from '@/pages/InsightsPage'
 export default function App() {
   return (
     <HashRouter>
-      <div className="flex w-full min-h-screen">
+      <div className="flex h-screen w-full overflow-hidden">
         <Sidebar />
-        <main className="flex-1 flex flex-col min-h-screen overflow-hidden">
+        <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />

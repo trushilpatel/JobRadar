@@ -9,6 +9,8 @@ handler/
   jobs.go           — JobHandler
   applications.go   — ApplicationHandler
   companies.go      — CompanyHandler
+  dashboard.go      — DashboardHandler
+  insights.go       — InsightsHandler
 middleware/
   logger.go         — logs method, path, status, duration per request
 ```
@@ -47,8 +49,58 @@ GET    /jobs/:id
 PATCH  /jobs/:id/save
 PATCH  /jobs/:id/status
 PATCH  /jobs/:id/notes
-DELETE /jobs/:id
+DELETE /jobs/:id                          — sets status=dismissed, backfills snapshot
 GET    /jobs/:id/applications
 POST   /jobs/:id/applications
+PATCH  /jobs/:id/applications/:app_id/stage
+PATCH  /jobs/:id/applications/:app_id/note
+GET    /applications
+
 GET    /companies
+POST   /companies
+PATCH  /companies/:id
+DELETE /companies/:id
+GET    /companies/:id/scan-stats
+POST   /companies/:id/scan              — 429 if scanned within SCAN_INTERVAL_MINUTES
+
+GET    /dashboard/stats
+GET    /dashboard/activity?days=N
+
+GET    /insights/tech-stack
+GET    /insights/company-activity
+GET    /insights/funnel
+GET    /insights/location
+GET    /insights/sponsorship?days=N
+GET    /insights/velocity
+GET    /insights/role-categories
 ```
+
+## Scan cooldown rule
+
+`CompanyHandler` is constructed with `scanIntervalMinutes` (from `cfg.ScanIntervalMinutes`).
+`POST /companies/:id/scan` checks `company.last_scan_at` before publishing to Kafka:
+
+```go
+// Returns 429 if company was scanned within the interval
+if company.LastScanAt != nil {
+    nextAllowed := company.LastScanAt.Add(time.Duration(h.scanIntervalMinutes) * time.Minute)
+    if time.Now().Before(nextAllowed) {
+        respondError(w, http.StatusTooManyRequests, "scanned too recently, next scan allowed in ...")
+        return
+    }
+}
+```
+
+The scheduler already enforces the same interval via `GetCompaniesDueForScan`. This guard makes the manual trigger consistent with the automated schedule.
+
+## Snapshot backfill rule
+
+`JobHandler` holds a `store.SnapshotWriter`. After any user action that changes job state, backfill the snapshot — but always non-fatally (`_ =`):
+
+```go
+_ = h.snapshot.UpdateSnapshotAction(id, "saved")    // PATCH /save
+_ = h.snapshot.UpdateSnapshotAction(id, "applied")  // PATCH /status → applied
+_ = h.snapshot.UpdateSnapshotAction(id, "dismissed") // DELETE
+```
+
+Snapshot rows may not exist for jobs enriched before migration 011 — that's expected.

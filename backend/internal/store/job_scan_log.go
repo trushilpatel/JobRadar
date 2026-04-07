@@ -12,6 +12,8 @@ type ScanStats struct {
 	TotalNew      int64    `json:"total_new"`
 	ErrorCount    int64    `json:"error_count"`
 	AvgDurationMs *float64 `json:"avg_duration_ms"`
+	NewToday      int64    `json:"new_today"`
+	NewThisMonth  int64    `json:"new_this_month"`
 	RecentRuns    []model.JobScanLog `json:"recent_runs"`
 }
 
@@ -85,6 +87,16 @@ func (s *jobScanLogStore) GetScanStats(companyID string) (ScanStats, error) {
 	stats.ErrorCount = a.ErrorCount
 	stats.AvgDurationMs = a.AvgDurationMs
 
+	var newToday, newThisMonth int64
+	s.db.Model(&model.JobScanLog{}).
+		Where("company_id = ? AND DATE(scanned_at) = CURRENT_DATE", companyID).
+		Select("COALESCE(SUM(jobs_new), 0)").Scan(&newToday)
+	s.db.Model(&model.JobScanLog{}).
+		Where("company_id = ? AND DATE_TRUNC('month', scanned_at) = DATE_TRUNC('month', CURRENT_DATE)", companyID).
+		Select("COALESCE(SUM(jobs_new), 0)").Scan(&newThisMonth)
+	stats.NewToday = newToday
+	stats.NewThisMonth = newThisMonth
+
 	err = s.db.Where("company_id = ?", companyID).
 		Order("scanned_at DESC").
 		Limit(20).
@@ -105,7 +117,7 @@ func (s *jobScanLogStore) GetScansByDay(days int) ([]DailyScanCount, error) {
 	var results []DailyScanCount
 	err := s.db.Model(&model.JobScanLog{}).
 		Select("DATE(scanned_at) as date, SUM(jobs_fetched) as scanned, SUM(jobs_new) as new_jobs").
-		Where("scanned_at >= NOW() - INTERVAL ? * INTERVAL '1 day'", days).
+		Where("scanned_at >= NOW() - ? * INTERVAL '1 day'", days).
 		Group("DATE(scanned_at)").
 		Order("date ASC").
 		Scan(&results).Error

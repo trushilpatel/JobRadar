@@ -13,6 +13,8 @@ type Job struct {
 
 	Title      string  `gorm:"not null"            json:"title"`
 	Location   *string `json:"location"`
+	Country    *string `json:"country"`
+	State      *string `json:"state"`
 	Remote     bool    `gorm:"not null;default:false" json:"remote"`
 	URL        string  `gorm:"not null"            json:"url"`
 	Department *string `json:"department"`
@@ -30,7 +32,7 @@ type Job struct {
 	RoleBrief         *string `json:"role_brief"`
 	Responsibilities  *string `json:"responsibilities"`
 
-	Status string  `gorm:"not null;default:new" json:"status"`
+	Status string  `gorm:"not null;default:'new'" json:"status"`
 	Saved  bool    `gorm:"not null;default:false" json:"saved"`
 	Notes  *string `json:"notes"`
 

@@ -104,11 +104,14 @@ Return a JSON object with exactly these fields (use null for missing fields):
   "salary_max": <integer or null>,
   "salary_currency": <string or null>,
   "summary": "<2-3 sentence summary of the role>",
+  "country": "<country where the job is located, e.g. 'USA', 'Canada', 'UK', 'India'. Use 'Remote' if fully remote with no country specified. null if unknown>",
+  "state": "<US state abbreviation if country is USA, e.g. 'CA', 'NY', 'TX'. null otherwise>",
   "sponsorship": <true if the posting mentions H1B/visa sponsorship support, false otherwise>,
   "requires_citizen": <true if the posting requires US Citizen or Green Card only, false otherwise>,
   "security_clearance": <true if any security clearance (Secret, TS/SCI, etc.) is required, false otherwise>,
   "role_brief": "<one sentence technical mission of the role>",
-  "responsibilities": "<concise bullet points of key technical responsibilities, newline-separated>"
+  "responsibilities": "<concise bullet points of key technical responsibilities, newline-separated>",
+  "role_category": "<one of: backend, frontend, fullstack, devops, ml, data, other>"
 }
 
 Respond with ONLY the JSON object, no explanation.`,
@@ -135,11 +138,14 @@ Respond with ONLY the JSON object, no explanation.`,
 		SalaryMax         *int     `json:"salary_max"`
 		SalaryCurrency    string   `json:"salary_currency"`
 		Summary           string   `json:"summary"`
+		Country           string   `json:"country"`
+		State             string   `json:"state"`
 		Sponsorship       bool     `json:"sponsorship"`
 		RequiresCitizen   bool     `json:"requires_citizen"`
 		SecurityClearance bool     `json:"security_clearance"`
 		RoleBrief         string   `json:"role_brief"`
 		Responsibilities  string   `json:"responsibilities"`
+		RoleCategory      string   `json:"role_category"`
 	}
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
 		return nil, fmt.Errorf("anthropic enrich: parse response %q: %w", raw, err)
@@ -153,10 +159,13 @@ Respond with ONLY the JSON object, no explanation.`,
 		SalaryMax:         out.SalaryMax,
 		SalaryCurrency:    out.SalaryCurrency,
 		Summary:           out.Summary,
+		Country:           out.Country,
+		State:             out.State,
 		Sponsorship:       out.Sponsorship,
 		RequiresCitizen:   out.RequiresCitizen,
 		SecurityClearance: out.SecurityClearance,
 		RoleBrief:         out.RoleBrief,
 		Responsibilities:  out.Responsibilities,
+		RoleCategory:      out.RoleCategory,
 	}, nil
 }

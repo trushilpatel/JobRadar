@@ -50,9 +50,10 @@ func main() {
 	// --- Store ---
 	jobs := store.NewJobStore(database)
 	ledger := store.NewSeenLedgerStore(database)
+	snapshot := store.NewSnapshotStore(database)
 
 	// --- Worker ---
-	worker := enricher.NewWorker(consumer, scorer, jobs, ledger)
+	worker := enricher.NewWorker(consumer, scorer, jobs, ledger, snapshot)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

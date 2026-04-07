@@ -125,16 +125,13 @@ func (w *Worker) flushBatch(ctx context.Context, batch []adapter.RawJob) {
 
 	relevantIDs, err := w.scorer.ScoreBatch(ctx, inputs)
 	if err != nil {
-		log.Printf("[scorer] ScoreBatch failed: %v — re-queuing batch of %d", err, len(batch))
-		for _, job := range batch {
-			payload, merr := json.Marshal(job)
-			if merr != nil {
-				log.Printf("[scorer] re-queue marshal failed for %s: %v", job.ID, merr)
-				continue
-			}
-			if perr := w.publisher.Publish(ctx, kafka.TopicJobsRaw, payload); perr != nil {
-				log.Printf("[scorer] re-queue publish failed for %s: %v", job.ID, perr)
-			}
+		log.Printf("[scorer] ScoreBatch failed: %v — marking batch of %d as error", err, len(batch))
+		ids := make([]string, len(batch))
+		for i, job := range batch {
+			ids[i] = job.ID
+		}
+		if merr := w.ledger.UpdateSeenReasonBatch(ids, model.SeenReasonError); merr != nil {
+			log.Printf("[scorer] mark error batch failed: %v", merr)
 		}
 		return
 	}

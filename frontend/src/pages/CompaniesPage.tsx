@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   Plus, Search, RefreshCw, Trash2, Pencil, ChevronUp, ChevronDown,
   CheckCircle2, XCircle, Clock, Minus, ExternalLink
@@ -22,8 +22,24 @@ export function CompaniesPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [editCompany, setEditCompany] = useState<Company | null>(null)
   const [drawerCompany, setDrawerCompany] = useState<Company | null>(null)
+  const [panelWidth, setPanelWidth] = useState(400)
   const [scanning, setScanning] = useState<Set<string>>(new Set())
   const [toastMsg, setToastMsg] = useState('')
+
+  const startDrag = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = panelWidth
+    function onMove(e: MouseEvent) {
+      setPanelWidth(Math.min(Math.max(startWidth + (startX - e.clientX), 280), 680))
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [panelWidth])
 
   useEffect(() => {
     load()
@@ -70,8 +86,8 @@ export function CompaniesPage() {
     try {
       await triggerScan(company.id)
       toast(`Scan queued for ${company.name}`)
-    } catch {
-      toast('Failed to queue scan')
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to queue scan')
     } finally {
       setScanning(s => { const n = new Set(s); n.delete(company.id); return n })
     }
@@ -166,8 +182,9 @@ export function CompaniesPage() {
         </button>
       </div>
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto px-6 py-4">
+      {/* Content: table + optional detail panel */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+      <div className="flex-1 overflow-auto px-6 py-4 min-w-0">
         {loading ? (
           <div className="flex items-center justify-center h-48">
             <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
@@ -178,8 +195,8 @@ export function CompaniesPage() {
           </div>
         ) : (
           <table className="w-full border-collapse">
-            <thead>
-              <tr className="text-left">
+            <thead className="sticky top-0 bg-[#0a0a0f] z-10">
+              <tr className="text-left border-b border-white/[0.07]">
                 {[
                   { key: 'name', label: 'Company' },
                   { key: null, label: 'Adapter' },
@@ -208,26 +225,28 @@ export function CompaniesPage() {
             </thead>
             <tbody className="divide-y divide-white/[0.04]">
               {filtered.map(company => (
-                <tr key={company.id} className="group hover:bg-white/[0.02] transition-colors">
+                <tr
+                  key={company.id}
+                  onClick={() => setDrawerCompany(company)}
+                  className={cn(
+                    'group cursor-pointer transition-colors',
+                    drawerCompany?.id === company.id ? 'bg-violet-500/[0.08]' : 'hover:bg-white/[0.02]'
+                  )}
+                >
                   <td className="py-3 pr-4">
-                    <div
-                      className="cursor-pointer"
-                      onClick={() => setDrawerCompany(company)}
+                    <p className={cn('text-sm font-medium transition-colors', drawerCompany?.id === company.id ? 'text-violet-300' : 'text-white group-hover:text-violet-300')}>
+                      {company.name}
+                    </p>
+                    <a
+                      href={company.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors mt-0.5 w-fit"
                     >
-                      <p className="text-sm font-medium text-white group-hover:text-violet-300 transition-colors">
-                        {company.name}
-                      </p>
-                      <a
-                        href={company.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors mt-0.5 w-fit"
-                      >
-                        {(() => { try { return new URL(company.url).hostname } catch { return company.url } })()}
-                        <ExternalLink size={10} />
-                      </a>
-                    </div>
+                      {(() => { try { return new URL(company.url).hostname } catch { return company.url } })()}
+                      <ExternalLink size={10} />
+                    </a>
                   </td>
                   <td className="py-3 pr-4">
                     <span className="text-xs bg-white/[0.07] text-slate-300 px-2 py-0.5 rounded-md font-mono">
@@ -254,7 +273,7 @@ export function CompaniesPage() {
                       )} />
                     </button>
                   </td>
-                  <td className="py-3">
+                  <td className="py-3" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-1 justify-end">
                       <button
                         onClick={() => handleScan(company)}
@@ -292,6 +311,23 @@ export function CompaniesPage() {
         )}
       </div>
 
+        {/* Drag handle + detail panel */}
+        {drawerCompany && (
+          <>
+            <div
+              onMouseDown={startDrag}
+              className="w-1 shrink-0 cursor-col-resize bg-white/[0.06] hover:bg-violet-500/50 transition-colors"
+            />
+            <div style={{ width: panelWidth }} className="shrink-0 flex flex-col min-h-0 border-l border-white/[0.07] overflow-hidden">
+              <ScanStatsDrawer
+                company={drawerCompany}
+                onClose={() => setDrawerCompany(null)}
+              />
+            </div>
+          </>
+        )}
+      </div>
+
       <AddCompanyModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
@@ -306,11 +342,6 @@ export function CompaniesPage() {
           setCompanies(cs => cs.map(c => c.id === updated.id ? updated : c))
           toast('Company updated')
         }}
-      />
-
-      <ScanStatsDrawer
-        company={drawerCompany}
-        onClose={() => setDrawerCompany(null)}
       />
 
       {/* Toast */}

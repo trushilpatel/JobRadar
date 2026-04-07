@@ -35,9 +35,10 @@ const (
 
 // JobStatus
 const (
-    JobStatusNew     = "new"
-    JobStatusSaved   = "saved"
-    JobStatusApplied = "applied"
+    JobStatusNew       = "new"
+    JobStatusSaved     = "saved"
+    JobStatusApplied   = "applied"
+    JobStatusDismissed = "dismissed"
 )
 
 // ApplicationStage

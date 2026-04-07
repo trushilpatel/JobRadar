@@ -52,5 +52,8 @@ export async function fetchScanStats(id: string): Promise<ScanStats> {
 
 export async function triggerScan(id: string): Promise<void> {
   const res = await fetch(`${BASE}/companies/${id}/scan`, { method: 'POST' })
-  if (!res.ok) throw new Error('Failed to trigger scan')
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error ?? 'Failed to trigger scan')
+  }
 }

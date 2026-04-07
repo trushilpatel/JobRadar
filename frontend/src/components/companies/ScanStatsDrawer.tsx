@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, CheckCircle2, XCircle, Clock, TrendingUp, Zap } from 'lucide-react'
+import { X, CheckCircle2, XCircle, Clock, Zap, CalendarDays } from 'lucide-react'
 import type { Company, ScanStats } from '@/types'
 import { fetchScanStats } from '@/api/companies'
 import { formatRelativeTime } from '@/lib/utils'
@@ -26,9 +26,7 @@ export function ScanStatsDrawer({ company, onClose }: Props) {
   if (!company) return null
 
   return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full w-full max-w-md bg-[#13131a] border-l border-white/10 z-50 flex flex-col shadow-2xl">
+    <div className="flex flex-col flex-1 min-h-0 bg-[#0d0d14]">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <div>
@@ -52,14 +50,13 @@ export function ScanStatsDrawer({ company, onClose }: Props) {
           {stats && (
             <>
               {/* Summary stat cards */}
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard icon={<TrendingUp size={14} />} label="Total Scans" value={stats.total_scans} />
-                <StatCard icon={<Zap size={14} />} label="New Jobs Found" value={stats.total_new} accent />
-                <StatCard icon={<CheckCircle2 size={14} />} label="Total Fetched" value={stats.total_fetched} />
+              <div className="grid grid-cols-3 gap-3">
+                <StatCard icon={<Zap size={14} />} label="New Today" value={stats.new_today} accent />
+                <StatCard icon={<CalendarDays size={14} />} label="This Month" value={stats.new_this_month} />
                 <StatCard
                   icon={<Clock size={14} />}
-                  label="Avg Duration"
-                  value={stats.avg_duration_ms ? `${Math.round(stats.avg_duration_ms)}ms` : '—'}
+                  label="Last Scanned"
+                  value={company.last_scan_at ? formatRelativeTime(company.last_scan_at) : '—'}
                 />
               </div>
 
@@ -106,8 +103,7 @@ export function ScanStatsDrawer({ company, onClose }: Props) {
             </>
           )}
         </div>
-      </div>
-    </>
+    </div>
   )
 }
 

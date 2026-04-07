@@ -9,10 +9,12 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
   if (!res.ok) throw new Error('Failed to fetch dashboard stats')
   const raw = await res.json()
   return {
-    scanned_today: raw.jobs_scanned_today ?? 0,
-    relevant_today: raw.funnel?.relevant ?? 0,
-    saved: raw.jobs_saved ?? 0,
-    applied: raw.jobs_applied ?? 0,
+    scanned_today:    raw.jobs_scanned_today ?? 0,
+    jobs_new:         raw.jobs_new ?? 0,
+    saved:            raw.jobs_saved ?? 0,
+    applied:          raw.jobs_applied ?? 0,
+    pipeline_pending: raw.pipeline_pending ?? 0,
+    pipeline_errors:  raw.pipeline_errors ?? 0,
   }
 }
 

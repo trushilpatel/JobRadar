@@ -25,6 +25,8 @@ export interface ScanStats {
   total_new: number
   error_count: number
   avg_duration_ms: number | null
+  new_today: number
+  new_this_month: number
   recent_runs: ScanRun[]
 }
 
@@ -102,12 +104,13 @@ export interface ApplicationWithJob {
   company_name: string
 }
 
-// TODO: replace with GET /api/stats when backend endpoint exists
 export interface DashboardStats {
   scanned_today: number
-  relevant_today: number
+  jobs_new: number
   saved: number
   applied: number
+  pipeline_pending: number
+  pipeline_errors: number
 }
 
 export interface WeeklyDataPoint {

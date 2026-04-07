@@ -8,12 +8,13 @@ import (
 )
 
 type DashboardHandler struct {
-	jobs    store.JobReader
-	scanLog store.JobScanLogReader
+	jobs     store.JobReader
+	scanLog  store.JobScanLogReader
+	insights store.InsightsReader
 }
 
-func NewDashboardHandler(jobs store.JobReader, scanLog store.JobScanLogReader) *DashboardHandler {
-	return &DashboardHandler{jobs: jobs, scanLog: scanLog}
+func NewDashboardHandler(jobs store.JobReader, scanLog store.JobScanLogReader, insights store.InsightsReader) *DashboardHandler {
+	return &DashboardHandler{jobs: jobs, scanLog: scanLog, insights: insights}
 }
 
 // GET /dashboard/stats
@@ -30,6 +31,12 @@ func (h *DashboardHandler) Stats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	pipeline, err := h.insights.GetPipelineCounts()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to fetch pipeline counts")
+		return
+	}
+
 	relevant := newCount + savedCount + appliedCount
 
 	respond(w, http.StatusOK, map[string]any{
@@ -37,6 +44,8 @@ func (h *DashboardHandler) Stats(w http.ResponseWriter, r *http.Request) {
 		"jobs_new":           newCount,
 		"jobs_saved":         savedCount,
 		"jobs_applied":       appliedCount,
+		"pipeline_pending":   pipeline.Pending,
+		"pipeline_errors":    pipeline.Errors,
 		"funnel": map[string]any{
 			"scanned":  scannedToday,
 			"relevant": relevant,

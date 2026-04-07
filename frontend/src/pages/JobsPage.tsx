@@ -142,7 +142,7 @@ function JobDetailDrawer({ job, onClose, onSave, onApply, onDismiss }: DrawerPro
   const companyName = job.company?.name ?? job.company_id
 
   return (
-    <div className="flex flex-col h-full bg-[#0d0d14]">
+    <div className="flex flex-col flex-1 min-h-0 bg-[#0d0d14]">
       {/* Header: title + company + actions */}
       <div className="px-5 pt-4 pb-3 border-b border-white/[0.07]">
         <div className="flex items-start justify-between gap-3 mb-3">
@@ -427,7 +427,9 @@ export function JobsPage() {
   const [remoteFilter, setRemoteFilter] = useState(false)
   const [employTypes, setEmployTypes] = useState<string[]>(['full_time'])
   const [sponsorshipFilter, setSponsorshipFilter] = useState(true)
+  const [noSponsorshipFilter, setNoSponsorshipFilter] = useState(false)
   const [noRequirementsFilter, setNoRequirementsFilter] = useState(true)
+  const [citizenshipReqFilter, setCitizenshipReqFilter] = useState(false)
   const [expFilter, setExpFilter] = useState<string[]>(['0-2', '3-5'])
   const [dateFilter, setDateFilter] = useState<'all' | '7d' | '30d'>('all')
 
@@ -470,21 +472,22 @@ export function JobsPage() {
       if (remoteFilter && !j.remote) return false
       if (employTypes.length > 0 && j.employ_type && !employTypes.includes(j.employ_type)) return false
       if (sponsorshipFilter && !j.sponsorship) return false
+      if (noSponsorshipFilter && j.sponsorship) return false
       if (noRequirementsFilter && (j.requires_citizen || j.security_clearance)) return false
+      if (citizenshipReqFilter && !j.requires_citizen) return false
       if (expFilter.length > 0 && j.experience_years != null) {
         const y = j.experience_years
         const inRange = expFilter.some(r =>
           (r === '0-2' && y <= 2) ||
           (r === '3-5' && y >= 3 && y <= 5) ||
-          (r === '6-10' && y >= 6 && y <= 10) ||
-          (r === '10+' && y >= 10)
+          (r === '5 <' && y > 5)
         )
         if (!inRange) return false
       }
       if (cutoff && new Date(j.added_at).getTime() < cutoff) return false
       return true
     })
-  }, [jobs, selectedCompanies, remoteFilter, employTypes, sponsorshipFilter, noRequirementsFilter, expFilter, dateFilter])
+  }, [jobs, selectedCompanies, remoteFilter, employTypes, sponsorshipFilter, noSponsorshipFilter, noRequirementsFilter, citizenshipReqFilter, expFilter, dateFilter])
 
   function toggleEmployType(val: string) {
     setEmployTypes(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])
@@ -608,7 +611,7 @@ export function JobsPage() {
         <div className="w-px h-4 bg-white/[0.08] mx-0.5" />
 
         {/* Experience years */}
-        {(['0-2', '3-5'] as const).map(opt => (
+        {(['0-2', '3-5', '5 <'] as const).map(opt => (
           <button
             key={opt}
             onClick={() => setExpFilter(prev =>
@@ -621,7 +624,7 @@ export function JobsPage() {
                 : 'bg-white/[0.03] border-white/[0.07] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
             )}
           >
-            {opt} yrs
+            {opt === '5 <' ? '5 < yrs' : `${opt} yrs`}
           </button>
         ))}
 
@@ -689,6 +692,19 @@ export function JobsPage() {
           Sponsorship
         </button>
 
+        {/* No sponsorship */}
+        <button
+          onClick={() => setNoSponsorshipFilter(v => !v)}
+          className={cn(
+            'px-2.5 py-1.5 text-xs rounded-lg border transition-colors',
+            noSponsorshipFilter
+              ? 'bg-violet-500/15 border-violet-500/30 text-violet-300'
+              : 'bg-white/[0.03] border-white/[0.07] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
+          )}
+        >
+          No Sponsorship
+        </button>
+
         {/* No citizenship / clearance required (combined) */}
         <button
           onClick={() => setNoRequirementsFilter(v => !v)}
@@ -700,6 +716,19 @@ export function JobsPage() {
           )}
         >
           No Citizenship Req.
+        </button>
+
+        {/* Citizenship required */}
+        <button
+          onClick={() => setCitizenshipReqFilter(v => !v)}
+          className={cn(
+            'px-2.5 py-1.5 text-xs rounded-lg border transition-colors',
+            citizenshipReqFilter
+              ? 'bg-violet-500/15 border-violet-500/30 text-violet-300'
+              : 'bg-white/[0.03] border-white/[0.07] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
+          )}
+        >
+          Citizenship Req.
         </button>
 
       </div>

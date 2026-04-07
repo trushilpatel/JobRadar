@@ -27,6 +27,11 @@ Table names use snake_case with a `job_` prefix for job-related tables:
 | `job` | `004_job.sql` |
 | `job_application` | `005_job_application.sql` |
 | `job_discarded` | `006_discarded.sql` |
+| cascade deletes | `007_cascade_delete_company.sql` |
+| cascade seen_ledger | `008_cascade_delete_seen_ledger.sql` |
+| `job` enrich fields | `009_job_enrich_fields.sql` |
+| gaps + `country`/`state`/`removed_at` | `010_fix_gaps.sql` |
+| `job_snapshot` | `011_job_snapshot.sql` |
 
 ## Rules
 

@@ -31,6 +31,7 @@ type Worker struct {
 	scorer   llm.Scorer
 	jobs     store.JobWriter
 	ledger   store.SeenLedgerWriter
+	snapshot store.SnapshotWriter
 }
 
 func NewWorker(
@@ -38,12 +39,14 @@ func NewWorker(
 	scorer llm.Scorer,
 	jobs store.JobWriter,
 	ledger store.SeenLedgerWriter,
+	snapshot store.SnapshotWriter,
 ) *Worker {
 	return &Worker{
 		consumer: consumer,
 		scorer:   scorer,
 		jobs:     jobs,
 		ledger:   ledger,
+		snapshot: snapshot,
 	}
 }
 
@@ -116,7 +119,27 @@ func (w *Worker) enrich(ctx context.Context, job adapter.RawJob) {
 		return
 	}
 
-	// 5. Confirm in seen_ledger
+	// 5. Write snapshot (analytics record — survives job deletion)
+	techBytes, _ := json.Marshal(result.TechStack)
+	if err := w.snapshot.InsertSnapshot(store.SnapshotInput{
+		ID:                row.ID,
+		CompanyID:         job.CompanyID,
+		Country:           result.Country,
+		State:             result.State,
+		Remote:            row.Remote,
+		Sponsorship:       result.Sponsorship,
+		RequiresCitizen:   result.RequiresCitizen,
+		SecurityClearance: result.SecurityClearance,
+		EmployType:        job.EmployType,
+		ExperienceYears:   result.ExperienceYears,
+		TechStack:         techBytes,
+		RoleCategory:      result.RoleCategory,
+	}); err != nil {
+		// Non-fatal: log and continue — job is already saved
+		log.Printf("[enricher] %s: write snapshot failed: %v", job.ID, err)
+	}
+
+	// 6. Confirm in seen_ledger
 	if err := w.ledger.UpdateSeenReason(job.ID, model.SeenReasonFetch); err != nil {
 		log.Printf("[enricher] %s: update seen_ledger failed: %v", job.ID, err)
 	}
@@ -184,6 +207,8 @@ func buildJob(raw adapter.RawJob, enriched *llm.EnrichResult) (*model.Job, error
 		CompanyID:         raw.CompanyID,
 		Title:             raw.Title,
 		Location:          nullableString(raw.Location),
+		Country:           nullableString(enriched.Country),
+		State:             nullableString(enriched.State),
 		URL:               raw.URL,
 		Department:        nullableString(raw.Department),
 		EmployType:        nullableString(raw.EmployType),

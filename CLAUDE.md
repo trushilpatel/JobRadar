@@ -38,10 +38,48 @@ Scheduler → company.scan_job (Kafka) → Scan Engine → jobs.raw (Kafka) → 
 
 ## Database tables
 
-`companies` · `job_seen_ledger` · `job_scan_log` · `job` · `job_application` · `job_discarded`
+| Table | Role |
+|---|---|
+| `companies` | Tracked companies |
+| `job_seen_ledger` | Dedup + pipeline blocking; `removed_at` tracks when a job disappears from a careers page |
+| `job_scan_log` | Per-run scan summary (fetched, new, duration, error) |
+| `job` | Operational feed — only `new`, `saved`, `applied`, `dismissed` rows live here |
+| `job_snapshot` | Append-only analytics record written by enricher; survives job dismissal |
+| `job_application` | Application stage tracking |
+| `job_discarded` | Dismiss log with reason and note |
+
+## Job status flow
+
+```
+new → saved → applied    (user advances)
+new → dismissed          (user dismisses — job row kept for FK integrity, hidden from feed)
+```
+
+`dismissed` jobs still exist in `job` but are excluded from feed queries (`WHERE status = 'new'`). Analytics come from `job_snapshot`, not `job`.
+
+## Scan scheduling
+
+- `SCAN_INTERVAL_MINUTES` (default `1440` = 24h) controls how often each company is scanned
+- Scheduler checks every 1 min; only enqueues companies where `last_scan_at` is NULL or older than the interval
+- Manual trigger (`POST /companies/:id/scan`) enforces the same interval — returns 429 if scanned too recently
+
+## Dashboard stats fields
+
+`GET /dashboard/stats` returns:
+
+| Field | Description |
+|---|---|
+| `jobs_scanned_today` | Total job pages fetched today across all companies |
+| `jobs_new` | Jobs in feed with status `new` |
+| `jobs_saved` | Jobs with status `saved` |
+| `jobs_applied` | Jobs with status `applied` |
+| `pipeline_pending` | Jobs in `job_seen_ledger` with `reason='fetch'` but not yet in `job` table |
+| `pipeline_errors` | Jobs in `job_seen_ledger` with `reason='error'` |
 
 ## Key rules (detail in subdirectory CLAUDE.md files)
 
 - Workers depend on **interfaces**, never concrete types
 - All DB access goes through `internal/store/` — no raw GORM elsewhere
 - All typed values (status, stage, reason) use constants from `internal/model/constants.go`
+- Insights query `job_snapshot`, not `job` — snapshot rows are never deleted
+- Scorer batch failures mark jobs as `error` in `job_seen_ledger` — never re-queue to Kafka

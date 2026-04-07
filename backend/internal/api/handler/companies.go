@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/internal/kafka"
@@ -12,13 +13,14 @@ import (
 )
 
 type CompanyHandler struct {
-	companies store.CompanyStore
-	scanLog   store.JobScanLogReader
-	publisher kafka.Publisher
+	companies           store.CompanyStore
+	scanLog             store.JobScanLogReader
+	publisher           kafka.Publisher
+	scanIntervalMinutes int
 }
 
-func NewCompanyHandler(companies store.CompanyStore, scanLog store.JobScanLogReader, publisher kafka.Publisher) *CompanyHandler {
-	return &CompanyHandler{companies: companies, scanLog: scanLog, publisher: publisher}
+func NewCompanyHandler(companies store.CompanyStore, scanLog store.JobScanLogReader, publisher kafka.Publisher, scanIntervalMinutes int) *CompanyHandler {
+	return &CompanyHandler{companies: companies, scanLog: scanLog, publisher: publisher, scanIntervalMinutes: scanIntervalMinutes}
 }
 
 // GET /companies
@@ -161,16 +163,27 @@ func (h *CompanyHandler) ScanStats(w http.ResponseWriter, r *http.Request) {
 
 // POST /companies/:id/scan
 // Publishes a scan request to company.scan_job — scan worker picks it up async.
+// Returns 429 if the company was scanned within the configured scan interval.
 func (h *CompanyHandler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	if _, err := h.companies.GetCompanyByID(id); err != nil {
+	company, err := h.companies.GetCompanyByID(id)
+	if err != nil {
 		if store.IsNotFound(err) {
 			respondError(w, http.StatusNotFound, "company not found")
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "failed to fetch company")
 		return
+	}
+
+	if company.LastScanAt != nil {
+		nextAllowed := company.LastScanAt.Add(time.Duration(h.scanIntervalMinutes) * time.Minute)
+		if time.Now().Before(nextAllowed) {
+			remaining := time.Until(nextAllowed).Round(time.Minute)
+			respondError(w, http.StatusTooManyRequests, "scanned too recently, next scan allowed in "+remaining.String())
+			return
+		}
 	}
 
 	payload, _ := json.Marshal(map[string]string{"company_id": id})

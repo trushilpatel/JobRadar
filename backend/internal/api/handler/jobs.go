@@ -10,13 +10,14 @@ import (
 )
 
 type JobHandler struct {
-	jobs   store.JobStore
-	ledger store.SeenLedgerWriter
-	discard store.DiscardStore
+	jobs     store.JobStore
+	ledger   store.SeenLedgerWriter
+	discard  store.DiscardStore
+	snapshot store.SnapshotWriter
 }
 
-func NewJobHandler(jobs store.JobStore, ledger store.SeenLedgerWriter, discard store.DiscardStore) *JobHandler {
-	return &JobHandler{jobs: jobs, ledger: ledger, discard: discard}
+func NewJobHandler(jobs store.JobStore, ledger store.SeenLedgerWriter, discard store.DiscardStore, snapshot store.SnapshotWriter) *JobHandler {
+	return &JobHandler{jobs: jobs, ledger: ledger, discard: discard, snapshot: snapshot}
 }
 
 // GET /jobs?status=new&saved=true
@@ -70,6 +71,11 @@ func (h *JobHandler) SetSaved(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if body.Saved {
+		// Non-fatal — snapshot may not exist for older jobs
+		_ = h.snapshot.UpdateSnapshotAction(id, "saved")
+	}
+
 	respond(w, http.StatusOK, map[string]bool{"saved": body.Saved})
 }
 
@@ -99,6 +105,10 @@ func (h *JobHandler) SetStatus(w http.ResponseWriter, r *http.Request) {
 	if err := h.jobs.UpdateJobStatus(id, body.Status); err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to update status")
 		return
+	}
+
+	if body.Status == model.JobStatusApplied {
+		_ = h.snapshot.UpdateSnapshotAction(id, "applied")
 	}
 
 	respond(w, http.StatusOK, map[string]string{"status": body.Status})
@@ -170,6 +180,14 @@ func (h *JobHandler) Dismiss(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "failed to update seen ledger")
 		return
 	}
+
+	// Hide from feed without deleting (preserves insight/analytics data)
+	if err := h.jobs.UpdateJobStatus(id, model.JobStatusDismissed); err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to update job status")
+		return
+	}
+
+	_ = h.snapshot.UpdateSnapshotAction(id, "dismissed")
 
 	respond(w, http.StatusOK, map[string]string{"id": id, "reason": body.Reason})
 }

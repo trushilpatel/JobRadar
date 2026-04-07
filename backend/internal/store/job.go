@@ -22,6 +22,7 @@ type JobReader interface {
 // JobWriter is for the LLM enricher to insert completed job results.
 type JobWriter interface {
 	InsertJob(job *model.Job) error
+	DeleteJob(id string) error
 	UpdateJobStatus(id, status string) error
 	UpdateJobSaved(id string, saved bool) error
 	UpdateJobNotes(id, notes string) error
@@ -67,6 +68,10 @@ func (s *jobStore) InsertJob(job *model.Job) error {
 	return s.db.Create(job).Error
 }
 
+func (s *jobStore) DeleteJob(id string) error {
+	return s.db.Where("id = ?", id).Delete(&model.Job{}).Error
+}
+
 func (s *jobStore) UpdateJobStatus(id, status string) error {
 	return s.db.Model(&model.Job{}).
 		Where("id = ?", id).
@@ -108,7 +113,7 @@ func (s *jobStore) GetJobsAddedByDay(days int) ([]DailyJobCount, error) {
 	var results []DailyJobCount
 	err := s.db.Model(&model.Job{}).
 		Select("DATE(added_at) as date, COUNT(*) as count").
-		Where("added_at >= NOW() - INTERVAL ? * INTERVAL '1 day'", days).
+		Where("added_at >= NOW() - ? * INTERVAL '1 day'", days).
 		Group("DATE(added_at)").
 		Order("date ASC").
 		Scan(&results).Error

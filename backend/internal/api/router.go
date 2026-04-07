@@ -45,6 +45,11 @@ func NewRouter(
 
 	r.Get("/insights/tech-stack", insights.TechStack)
 	r.Get("/insights/company-activity", insights.CompanyActivity)
+	r.Get("/insights/funnel", insights.Funnel)
+	r.Get("/insights/location", insights.Location)
+	r.Get("/insights/sponsorship", insights.Sponsorship)
+	r.Get("/insights/velocity", insights.Velocity)
+	r.Get("/insights/role-categories", insights.RoleCategories)
 
 	return r
 }

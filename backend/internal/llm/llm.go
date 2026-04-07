@@ -24,6 +24,9 @@ type EnrichResult struct {
 	SalaryMax       *int
 	SalaryCurrency  string
 	Summary         string
+	// Location (structured)
+	Country string // "USA", "Canada", "UK", etc. — empty if unknown
+	State   string // US state abbreviation, e.g. "CA", "NY" — empty if not USA or unknown
 	// Visa / clearance flags
 	Sponsorship       bool
 	RequiresCitizen   bool
@@ -31,6 +34,7 @@ type EnrichResult struct {
 	// Role details
 	RoleBrief        string
 	Responsibilities string
+	RoleCategory     string // backend | frontend | fullstack | devops | ml | data | other
 }
 
 // Scorer is the interface for LLM-based job relevance scoring and enrichment.
