@@ -1,34 +1,79 @@
 package ats_fetcher
 
-import "context"
+import (
+	"context"
+	"html"
+	"regexp"
+	"strings"
+)
 
-// RawJob is the raw job payload fetched from a careers page.
-// This is what gets published to the jobs.raw Kafka topic.
+// RawJob is the Kafka message published to job_listings.raw.
+// Set by the scan engine after FetchJobs returns — never by the adapter itself.
 type RawJob struct {
-	ID         string `json:"id"`         // e.g. "greenhouse-12345"
-	CompanyID  string `json:"company_id"` // UUID from companies table — set by scan engine before publishing
-	Adapter    string `json:"adapter"`    // the adapter type (e.g. "greenhouse", "lever", "ashby", "workday", "workable", "chromedp")
+	ID         string `json:"id"`          // e.g. "greenhouse-12345"
+	CompanyID  string `json:"company_id"`  // UUID from companies table
+	Adapter    string `json:"adapter"`     // "greenhouse", "lever", "ashby", etc.
 	Title      string `json:"title"`
 	Location   string `json:"location"`
-	URL        string `json:"url"` // the individual job posting URL (used by enricher)
-	Department string `json:"department"`
-	EmployType string `json:"employ_type"` // full-time, contract, part-time
+	URL        string `json:"url"`
+	EmployType string `json:"employ_type"` // full_time, contract, part_time, internship
+}
+
+// FetchJobsItem is one job from a company's listing page.
+// Minimal — only what's needed to dedup and publish to Kafka.
+type FetchJobsItem struct {
+	ID             string
+	Title          string
+	URL            string
+	Location       string
+	EmploymentType string
+}
+
+// FetchJobsResponse is returned by FetchJobs.
+type FetchJobsResponse struct {
+	Jobs []FetchJobsItem
+}
+
+// FetchJobContentResponse is returned by FetchJobContent.
+// Union of all fields available across Greenhouse, Lever, and Ashby.
+// Fields not provided by a platform are left as empty strings.
+type FetchJobContentResponse struct {
+	ID             string // all platforms
+	Title          string // all platforms
+	Location       string // all platforms
+	URL            string // Greenhouse, Lever
+	Description    string // plain text — HTML stripped from all platforms
+	EmploymentType string // Lever (commitment), Ashby (employmentType)
+	Department     string // Greenhouse (departments[0]), Lever (team)
+	Compensation   string // Ashby (compensationTierSummary)
+	WorkplaceType  string // Ashby (Remote / Hybrid / Onsite)
+	Requirements   string // plain text — Greenhouse (questions), Lever (lists)
+	PublishedDate  string // Lever (createdAt), Ashby (publishedDate)
 }
 
 // Adapter fetches the current job listings for a company.
 type Adapter interface {
-	FetchJobs(ctx context.Context, companyURL string) ([]RawJob, error)
+	FetchJobs(ctx context.Context, companyURL string) (FetchJobsResponse, error)
 }
 
 // ContentFetcher is an optional interface for adapters that can fetch the full
 // content of a single job posting via their native API.
 //
-// Adapters that implement this return structured text (typically JSON) which is
-// cleaner for LLM enrichment than raw HTML. Adapters that don't implement this
-// fall back to a plain HTTP GET on job.URL.
-//
-// Implementing this interface is optional — only do it when the adapter has a
-// better data source than scraping the hosted job URL.
+// Implement this when the platform has a structured JSON API cleaner than
+// scraping the hosted HTML page. Adapters without this fall back to a plain
+// HTTP GET on RawJob.URL in the job_post_analyzer.
 type ContentFetcher interface {
-	FetchJobContent(ctx context.Context, job RawJob) (string, error)
+	FetchJobContent(ctx context.Context, job RawJob) (FetchJobContentResponse, error)
+}
+
+// ── HTML helpers ──────────────────────────────────────────────────────────────
+
+var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
+
+// stripHTML removes all HTML tags, decodes entities, and collapses whitespace.
+// Used by all adapters when converting HTML descriptions to plain text.
+func StripHTML(s string) string {
+	s = htmlTagRe.ReplaceAllString(s, " ")
+	s = html.UnescapeString(s)
+	return strings.TrimSpace(strings.Join(strings.Fields(s), " "))
 }

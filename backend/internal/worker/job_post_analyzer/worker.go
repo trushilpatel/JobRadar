@@ -87,9 +87,19 @@ func (w *Worker) Run(ctx context.Context) error {
 func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 	// 1. Fetch the full job content — via native API if the adapter supports it,
 	// otherwise fall back to a plain HTTP GET on the job URL.
-	rawText, err := fetchContent(ctx, job)
+	content, err := fetchContent(ctx, job)
 	if err != nil {
 		log.Printf("[job_post_analyzer] %s: fetch content failed: %v", job.ID, err)
+		w.markError(job.ID)
+		return
+	}
+
+	// Serialize the structured content to JSON for the LLM.
+	// JSON gives the LLM all available fields (description, compensation, location, etc.)
+	// in a compact, consistent format regardless of which platform fetched the job.
+	rawText, err := json.Marshal(content)
+	if err != nil {
+		log.Printf("[job_post_analyzer] %s: marshal content failed: %v", job.ID, err)
 		w.markError(job.ID)
 		return
 	}
@@ -97,7 +107,7 @@ func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 	// 2. Send to LLM for structured extraction
 	result, err := w.scorer.Enrich(ctx, llm.EnrichInput{
 		ID:      job.ID,
-		RawText: rawText,
+		RawText: string(rawText),
 	})
 	if err != nil {
 		log.Printf("[job_post_analyzer] %s: LLM enrich failed: %v", job.ID, err)
@@ -155,21 +165,31 @@ func (w *Worker) markError(jobID string) {
 	}
 }
 
-// fetchContent fetches the full text of a job posting.
-// If the adapter implements ContentFetcher, its native API is used (returns clean JSON).
-// Otherwise falls back to a plain HTTP GET on job.URL (raw HTML).
-func fetchContent(ctx context.Context, job ats_fetcher.RawJob) (string, error) {
+// fetchContent fetches the full content of a job posting as a structured response.
+// If the adapter implements ContentFetcher, its native API is used (structured JSON).
+// Otherwise falls back to a plain HTTP GET and wraps the stripped HTML in a FetchJobContentResponse.
+func fetchContent(ctx context.Context, job ats_fetcher.RawJob) (ats_fetcher.FetchJobContentResponse, error) {
 	adp, err := ats_fetcher.Registry(job.Adapter)
 	if err == nil {
 		if cf, ok := adp.(ats_fetcher.ContentFetcher); ok {
 			return cf.FetchJobContent(ctx, job)
 		}
 	}
-	return fetchPage(ctx, job.URL)
+	// Fallback: scrape the hosted HTML page and populate only the fields we can infer
+	html, err := fetchPage(ctx, job.URL)
+	if err != nil {
+		return ats_fetcher.FetchJobContentResponse{}, err
+	}
+	return ats_fetcher.FetchJobContentResponse{
+		ID:          job.ID,
+		Title:       job.Title,
+		Location:    job.Location,
+		URL:         job.URL,
+		Description: ats_fetcher.StripHTML(html),
+	}, nil
 }
 
-// fetchPage does a simple HTTP GET and returns the response body as a string.
-// Claude handles both raw HTML and plain text — no stripping needed.
+// fetchPage does a simple HTTP GET and returns the raw response body.
 func fetchPage(ctx context.Context, url string) (string, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 
@@ -177,7 +197,6 @@ func fetchPage(ctx context.Context, url string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("build request: %w", err)
 	}
-	// Mimic a browser so job pages don't block us
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; JobRadar/1.0)")
 
 	resp, err := client.Do(req)
@@ -190,12 +209,11 @@ func fetchPage(ctx context.Context, url string) (string, error) {
 		return "", fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
 
-	// Cap at 50KB — job pages don't need more and LLM context windows are finite
+	// Cap at 50KB — LLM context windows are finite
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024))
 	if err != nil {
 		return "", fmt.Errorf("read body: %w", err)
 	}
-
 	return string(body), nil
 }
 
@@ -224,7 +242,6 @@ func buildJob(raw ats_fetcher.RawJob, enriched *llm.EnrichResult) (*model.Job, e
 		Country:           nullableString(enriched.Country),
 		State:             nullableString(enriched.State),
 		URL:               raw.URL,
-		Department:        nullableString(raw.Department),
 		EmployType:        nullableString(raw.EmployType),
 		ExperienceYears:   enriched.ExperienceYears,
 		TechStack:         datatypes.JSON(techStack),

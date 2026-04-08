@@ -4,8 +4,8 @@ package ats_fetcher
 // Skipped under `go test -short` or in CI without network access.
 //
 // Run explicitly:
-//   go test ./internal/adapter/ -run Integration -v
-//   go test ./internal/adapter/ -run Integration -v -count=1
+//   go test ./internal/ats_fetcher/ -run Integration -v
+//   go test ./internal/ats_fetcher/ -run TestAshby_Integration -v -count=1
 
 import (
 	"context"
@@ -22,19 +22,19 @@ func TestAshby_Integration_FetchJobs(t *testing.T) {
 	}
 
 	a := &Ashby{}
-	jobs, err := a.FetchJobs(context.Background(), integrationCompanyURL)
+	result, err := a.FetchJobs(context.Background(), integrationCompanyURL)
 	if err != nil {
 		t.Fatalf("FetchJobs error: %v", err)
 	}
 
-	if len(jobs) == 0 {
+	if len(result.Jobs) == 0 {
 		t.Fatal("expected at least one job, got 0")
 	}
 
-	t.Logf("FetchJobs returned %d jobs", len(jobs))
+	t.Logf("FetchJobs returned %d jobs", len(result.Jobs))
 
 	// Spot-check first job has all required fields populated
-	j := jobs[0]
+	j := result.Jobs[0]
 	if j.ID == "" {
 		t.Error("job.ID is empty")
 	}
@@ -50,11 +50,8 @@ func TestAshby_Integration_FetchJobs(t *testing.T) {
 	if !strings.HasPrefix(j.URL, "https://jobs.ashbyhq.com/openai/") {
 		t.Errorf("job.URL %q should start with https://jobs.ashbyhq.com/openai/", j.URL)
 	}
-	if j.Adapter != "ashby" {
-		t.Errorf("job.Adapter = %q, want ashby", j.Adapter)
-	}
 
-	t.Logf("Sample job: id=%s title=%q location=%q employ_type=%q", j.ID, j.Title, j.Location, j.EmployType)
+	t.Logf("Sample job: id=%s title=%q location=%q employ_type=%q", j.ID, j.Title, j.Location, j.EmploymentType)
 }
 
 func TestAshby_Integration_FetchJobs_SlugVariants(t *testing.T) {
@@ -74,10 +71,10 @@ func TestAshby_Integration_FetchJobs_SlugVariants(t *testing.T) {
 		t.Fatalf("FetchJobs (URL) error: %v", err)
 	}
 
-	if len(bySlug) != len(byURL) {
-		t.Errorf("slug returned %d jobs, full URL returned %d — should match", len(bySlug), len(byURL))
+	if len(bySlug.Jobs) != len(byURL.Jobs) {
+		t.Errorf("slug returned %d jobs, full URL returned %d — should match", len(bySlug.Jobs), len(byURL.Jobs))
 	}
-	t.Logf("Both forms returned %d jobs", len(bySlug))
+	t.Logf("Both forms returned %d jobs", len(bySlug.Jobs))
 }
 
 func TestAshby_Integration_FetchJobContent(t *testing.T) {
@@ -88,40 +85,36 @@ func TestAshby_Integration_FetchJobContent(t *testing.T) {
 	a := &Ashby{}
 
 	// First fetch the list to get a real job ID
-	jobs, err := a.FetchJobs(context.Background(), integrationCompanySlug)
+	result, err := a.FetchJobs(context.Background(), integrationCompanySlug)
 	if err != nil {
 		t.Fatalf("FetchJobs error: %v", err)
 	}
-	if len(jobs) == 0 {
+	if len(result.Jobs) == 0 {
 		t.Skip("no jobs returned, skipping content fetch")
 	}
 
-	job := jobs[0]
-	t.Logf("Fetching content for: %s — %q", job.ID, job.Title)
+	item := result.Jobs[0]
+	t.Logf("Fetching content for: %s — %q", item.ID, item.Title)
 
-	content, err := a.FetchJobContent(context.Background(), job)
+	// FetchJobContent takes a RawJob — construct one from the listing item
+	raw := RawJob{ID: item.ID, Title: item.Title, URL: item.URL, Adapter: "ashby"}
+	content, err := a.FetchJobContent(context.Background(), raw)
 	if err != nil {
 		t.Fatalf("FetchJobContent error: %v", err)
 	}
 
-	if content == "" {
-		t.Fatal("FetchJobContent returned empty content")
+	if content.ID == "" {
+		t.Fatal("FetchJobContent returned empty ID")
 	}
-	if !strings.Contains(content, job.ID[len("ashby-"):]) {
-		t.Errorf("content does not contain job UUID %q", job.ID)
+	if content.Title == "" {
+		t.Fatal("FetchJobContent returned empty Title")
 	}
-	// Should be valid JSON with a title field
-	if !strings.Contains(content, `"title"`) {
-		t.Error("content does not contain title field")
-	}
-	if !strings.Contains(content, `"descriptionHtml"`) {
-		t.Error("content does not contain descriptionHtml field")
+	if content.Description == "" {
+		t.Error("FetchJobContent returned empty Description")
 	}
 
-	t.Logf("FetchJobContent returned %d chars of JSON", len(content))
-	if len(content) > 200 {
-		t.Logf("Preview: %s...", content[:200])
-	}
+	t.Logf("FetchJobContent: id=%s title=%q location=%q compensation=%q desc_len=%d",
+		content.ID, content.Title, content.Location, content.Compensation, len(content.Description))
 }
 
 func TestAshby_Integration_FetchJobContent_AllFields(t *testing.T) {
@@ -130,33 +123,33 @@ func TestAshby_Integration_FetchJobContent_AllFields(t *testing.T) {
 	}
 
 	a := &Ashby{}
-	jobs, err := a.FetchJobs(context.Background(), integrationCompanySlug)
+	result, err := a.FetchJobs(context.Background(), integrationCompanySlug)
 	if err != nil {
 		t.Fatalf("FetchJobs error: %v", err)
 	}
-	if len(jobs) == 0 {
+	if len(result.Jobs) == 0 {
 		t.Skip("no jobs returned")
 	}
 
-	// Check a few jobs to verify field coverage
-	limit := 3
-	if len(jobs) < limit {
-		limit = len(jobs)
-	}
-
-	for i := 0; i < limit; i++ {
-		job := jobs[i]
-		content, err := a.FetchJobContent(context.Background(), job)
+	limit := min(3, len(result.Jobs))
+	for i := range limit {
+		item := result.Jobs[i]
+		raw := RawJob{ID: item.ID, Title: item.Title, URL: item.URL, Adapter: "ashby"}
+		content, err := a.FetchJobContent(context.Background(), raw)
 		if err != nil {
-			t.Errorf("job[%d] %s: FetchJobContent error: %v", i, job.ID, err)
+			t.Errorf("job[%d] %s: FetchJobContent error: %v", i, item.ID, err)
 			continue
 		}
-		expectedFields := []string{"id", "title", "locationName", "descriptionHtml", "compensationTierSummary", "publishedDate"}
-		for _, field := range expectedFields {
-			if !strings.Contains(content, `"`+field+`"`) {
-				t.Errorf("job[%d] %s: content missing field %q", i, job.ID, field)
-			}
+		if content.ID == "" {
+			t.Errorf("job[%d] %s: content.ID is empty", i, item.ID)
 		}
-		t.Logf("job[%d]: %s — %q — %d chars", i, job.ID, job.Title, len(content))
+		if content.Title == "" {
+			t.Errorf("job[%d] %s: content.Title is empty", i, item.ID)
+		}
+		if content.Description == "" {
+			t.Errorf("job[%d] %s: content.Description is empty", i, item.ID)
+		}
+		t.Logf("job[%d]: %s — %q — desc=%d chars compensation=%q workplace=%q",
+			i, content.ID, content.Title, len(content.Description), content.Compensation, content.WorkplaceType)
 	}
 }

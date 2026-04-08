@@ -13,14 +13,13 @@ import (
 	"github.com/trushilpatel/jobradar/internal/store"
 )
 
-// Engine is the scan worker. It reads companies from DB, fetches their jobs,
-// deduplicates via seen_ledger, and publishes new jobs to Kafka.
+// Engine crawls company careers pages, deduplicates jobs, and publishes new ones to Kafka.
 type Engine struct {
 	companies    store.CompanyReader
 	ledger       store.SeenLedgerStore
 	scanLog      store.CompanyScanLogWriter
 	publisher    kafka.Publisher
-	companyDelay time.Duration // sleep after each company job-list fetch
+	companyDelay time.Duration
 }
 
 func NewEngine(
@@ -40,25 +39,21 @@ func NewEngine(
 }
 
 // RunOnce runs one full scan cycle across all active companies.
-// Call this on a ticker in main — the engine itself has no scheduler.
 func (e *Engine) RunOnce(ctx context.Context) {
 	companies, err := e.companies.GetActiveCompanies()
 	if err != nil {
 		log.Printf("[job_listing_crawler] failed to load companies: %v", err)
 		return
 	}
-
 	log.Printf("[job_listing_crawler] starting cycle — %d active companies", len(companies))
-
 	for _, company := range companies {
 		e.scanCompany(ctx, company)
 	}
-
 	log.Printf("[job_listing_crawler] cycle complete")
 }
 
 // RunForCompany runs a scan for a single company by ID.
-// Used when triggered via the company.scan_job Kafka topic.
+// Used when triggered via the company.scan_request Kafka topic.
 func (e *Engine) RunForCompany(ctx context.Context, companyID string) {
 	company, err := e.companies.GetCompanyByID(companyID)
 	if err != nil {
@@ -69,7 +64,6 @@ func (e *Engine) RunForCompany(ctx context.Context, companyID string) {
 	e.scanCompany(ctx, company)
 }
 
-// scanCompany runs the full scan for a single company.
 func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 	start := time.Now()
 
@@ -81,7 +75,7 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 		return
 	}
 
-	jobs, err := adp.FetchJobs(ctx, company.URL)
+	result, err := adp.FetchJobs(ctx, company.URL)
 	if err != nil {
 		errMsg := fmt.Sprintf("fetch failed: %v", err)
 		log.Printf("[job_listing_crawler] %s: %s", company.Name, errMsg)
@@ -89,37 +83,35 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 		return
 	}
 
-	fetched := len(jobs)
+	fetched := len(result.Jobs)
 	newCount := 0
 
-	for _, job := range jobs {
-		seen, err := e.ledger.HasSeen(job.ID)
+	for _, item := range result.Jobs {
+		seen, err := e.ledger.HasSeen(item.ID)
 		if err != nil {
-			log.Printf("[job_listing_crawler] %s: seen_ledger check failed for %s: %v", company.Name, job.ID, err)
+			log.Printf("[job_listing_crawler] %s: seen_ledger check failed for %s: %v", company.Name, item.ID, err)
 			continue
 		}
 		if seen {
 			continue
 		}
 
-		// New job — attach company UUID so the enricher can use it as FK
-		job.CompanyID = company.ID
-
-		// mark it and publish to Kafka
-		if err := e.ledger.MarkSeen(job.ID, company.ID, model.SeenReasonFetch); err != nil {
-			log.Printf("[job_listing_crawler] %s: failed to mark seen for %s: %v", company.Name, job.ID, err)
+		if err := e.ledger.MarkSeen(item.ID, company.ID, model.SeenReasonFetch); err != nil {
+			log.Printf("[job_listing_crawler] %s: failed to mark seen for %s: %v", company.Name, item.ID, err)
 			continue
 		}
 
-		if err := e.publish(ctx, job); err != nil {
-			log.Printf("[job_listing_crawler] %s: failed to publish %s: %v", company.Name, job.ID, err)
+		rawJob := toRawJob(item, company.ID, company.AdapterType)
+		if err := e.publish(ctx, rawJob); err != nil {
+			log.Printf("[job_listing_crawler] %s: failed to publish %s: %v", company.Name, item.ID, err)
 			continue
 		}
 
 		newCount++
 	}
 
-	log.Printf("[job_listing_crawler] %s: fetched=%d new=%d duration=%s", company.Name, fetched, newCount, time.Since(start).Round(time.Millisecond))
+	log.Printf("[job_listing_crawler] %s: fetched=%d new=%d duration=%s",
+		company.Name, fetched, newCount, time.Since(start).Round(time.Millisecond))
 	e.recordResult(ctx, company.ID, fetched, newCount, time.Since(start), nil)
 
 	if e.companyDelay > 0 {
@@ -131,7 +123,20 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 	}
 }
 
-// publish serialises a RawJob to JSON and sends it to the jobs.raw topic.
+// toRawJob converts a FetchJobsItem into the RawJob Kafka message.
+// CompanyID and AdapterType come from the company record, not the listing.
+func toRawJob(item ats_fetcher.FetchJobsItem, companyID, adapterType string) ats_fetcher.RawJob {
+	return ats_fetcher.RawJob{
+		ID:         item.ID,
+		CompanyID:  companyID,
+		Adapter:    adapterType,
+		Title:      item.Title,
+		Location:   item.Location,
+		URL:        item.URL,
+		EmployType: item.EmploymentType,
+	}
+}
+
 func (e *Engine) publish(ctx context.Context, job ats_fetcher.RawJob) error {
 	payload, err := json.Marshal(job)
 	if err != nil {
@@ -140,18 +145,15 @@ func (e *Engine) publish(ctx context.Context, job ats_fetcher.RawJob) error {
 	return e.publisher.Publish(ctx, kafka.TopicJobListingsRaw, payload)
 }
 
-// recordResult writes the scan summary to job_scan_log and updates the company status.
 func (e *Engine) recordResult(ctx context.Context, companyID string, fetched, newCount int, duration time.Duration, errMsg *string) {
 	status := model.ScanStatusOK
 	if errMsg != nil {
 		status = model.ScanStatusError
 	}
-
 	durationMs := int(duration.Milliseconds())
 	if err := e.scanLog.InsertCompanyScanLog(companyID, fetched, newCount, durationMs, errMsg); err != nil {
-		log.Printf("[job_listing_crawler] failed to insert job_scan_log for %s: %v", companyID, err)
+		log.Printf("[job_listing_crawler] failed to write scan log for %s: %v", companyID, err)
 	}
-
 	if err := e.scanLog.UpdateCompanyScanStatus(companyID, status); err != nil {
 		log.Printf("[job_listing_crawler] failed to update company status for %s: %v", companyID, err)
 	}

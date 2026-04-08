@@ -1,10 +1,13 @@
 package ats_fetcher
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 type Workday struct{}
 
-func (w *Workday) FetchJobs(ctx context.Context, companyURL string) ([]RawJob, error) {
+func (w *Workday) FetchJobs(ctx context.Context, companyURL string) (FetchJobsResponse, error) {
 	// TODO: implement Workday adapter
-	return nil, nil
+	return FetchJobsResponse{}, fmt.Errorf("workday: not implemented")
 }
