@@ -1,4 +1,4 @@
-package ats_fetcher
+package greenhouse
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/trushilpatel/jobradar/internal/ats_fetcher/types"
 )
 
 // ── FetchJobs ─────────────────────────────────────────────────────────────────
@@ -148,7 +150,7 @@ func TestGreenhouse_FetchJobContent(t *testing.T) {
 	defer srv.Close()
 
 	g := &Greenhouse{contentBaseURL: srv.URL}
-	job := RawJob{
+	job := types.RawJob{
 		Adapter: "greenhouse",
 		URL:     "https://job-boards.greenhouse.io/stripe/jobs/12345",
 	}
@@ -158,11 +160,9 @@ func TestGreenhouse_FetchJobContent(t *testing.T) {
 		t.Fatalf("FetchJobContent error: %v", err)
 	}
 
-	// Verify it hit the right API path
 	if capturedPath != "/v1/boards/stripe/jobs/12345" {
 		t.Errorf("API path = %q, want /v1/boards/stripe/jobs/12345", capturedPath)
 	}
-
 	if content.ID != "greenhouse-12345" {
 		t.Errorf("content.ID = %q, want greenhouse-12345", content.ID)
 	}
@@ -185,9 +185,9 @@ func TestGreenhouse_FetchJobContent(t *testing.T) {
 
 func TestGreenhouse_FetchJobContent_BadURL_MissingID(t *testing.T) {
 	g := &Greenhouse{}
-	job := RawJob{
+	job := types.RawJob{
 		Adapter: "greenhouse",
-		URL:     "https://job-boards.greenhouse.io/stripe", // missing /jobs/{id}
+		URL:     "https://job-boards.greenhouse.io/stripe",
 	}
 	_, err := g.FetchJobContent(context.Background(), job)
 	if err == nil {
@@ -197,9 +197,9 @@ func TestGreenhouse_FetchJobContent_BadURL_MissingID(t *testing.T) {
 
 func TestGreenhouse_FetchJobContent_BadURL_WrongSegment(t *testing.T) {
 	g := &Greenhouse{}
-	job := RawJob{
+	job := types.RawJob{
 		Adapter: "greenhouse",
-		URL:     "https://job-boards.greenhouse.io/stripe/roles/12345", // "roles" not "jobs"
+		URL:     "https://job-boards.greenhouse.io/stripe/roles/12345",
 	}
 	_, err := g.FetchJobContent(context.Background(), job)
 	if err == nil {
@@ -214,7 +214,7 @@ func TestGreenhouse_FetchJobContent_HTTPError(t *testing.T) {
 	defer srv.Close()
 
 	g := &Greenhouse{contentBaseURL: srv.URL}
-	job := RawJob{
+	job := types.RawJob{
 		Adapter: "greenhouse",
 		URL:     "https://job-boards.greenhouse.io/stripe/jobs/12345",
 	}
@@ -226,7 +226,7 @@ func TestGreenhouse_FetchJobContent_HTTPError(t *testing.T) {
 
 func TestGreenhouse_FetchJobContent_InvalidURL(t *testing.T) {
 	g := &Greenhouse{}
-	job := RawJob{
+	job := types.RawJob{
 		Adapter: "greenhouse",
 		URL:     "://not-a-url",
 	}

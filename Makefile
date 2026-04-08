@@ -2,6 +2,8 @@
         build build-frontend build-backend \
         run-api run-scan run-scorer run-enricher \
         migrate lint tsc \
+        test test-short test-adapters \
+        test-adapter-greenhouse test-adapter-lever test-adapter-ashby \
         docker-up docker-down \
         help
 
@@ -56,8 +58,23 @@ lint: ## Run ESLint on frontend
 tsc: ## Type-check frontend without emitting
 	cd frontend && npx tsc --noEmit
 
-test: ## Run Go tests
+test: ## Run all Go tests (unit + integration, hits real APIs)
 	cd backend && go test ./...
+
+test-short: ## Run unit tests only — no real HTTP calls, fast
+	cd backend && go test -short ./...
+
+test-adapters: ## Run all adapter integration tests (Greenhouse + Lever + Ashby hit real APIs)
+	cd backend && go test -v -run "Integration" ./internal/ats_fetcher/greenhouse/... ./internal/ats_fetcher/lever/... ./internal/ats_fetcher/ashby/...
+
+test-adapter-greenhouse: ## Run Greenhouse integration tests only
+	cd backend && go test -v -run "Integration" ./internal/ats_fetcher/greenhouse/...
+
+test-adapter-lever: ## Run Lever integration tests only
+	cd backend && go test -v -run "Integration" ./internal/ats_fetcher/lever/...
+
+test-adapter-ashby: ## Run Ashby integration tests only
+	cd backend && go test -v -run "Integration" ./internal/ats_fetcher/ashby/...
 
 vet: ## Run go vet
 	cd backend && go vet ./...

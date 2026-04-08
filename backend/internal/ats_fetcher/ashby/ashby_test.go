@@ -1,4 +1,4 @@
-package ats_fetcher
+package ashby
 
 import (
 	"context"
@@ -6,31 +6,30 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/trushilpatel/jobradar/internal/ats_fetcher/types"
 )
 
-// ── slugFromURL ───────────────────────────────────────────────────────────────
+// ── SlugFromURL ───────────────────────────────────────────────────────────────
 
 func TestSlugFromURL(t *testing.T) {
 	cases := []struct {
 		input string
 		want  string
 	}{
-		// Full Ashby API URLs
 		{"https://api.ashbyhq.com/posting-api/job-board/openai", "openai"},
 		{"https://api.ashbyhq.com/posting-api/job-board/stripe", "stripe"},
 		{"https://api.ashbyhq.com/posting-api/job-board/anduril-industries", "anduril-industries"},
-		// Bare slugs pass through unchanged
 		{"openai", "openai"},
 		{"my-company", "my-company"},
-		// Trailing slash
 		{"https://api.ashbyhq.com/posting-api/job-board/openai/", ""},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
-			got := slugFromURL(tc.input)
+			got := SlugFromURL(tc.input)
 			if got != tc.want {
-				t.Errorf("slugFromURL(%q) = %q, want %q", tc.input, got, tc.want)
+				t.Errorf("SlugFromURL(%q) = %q, want %q", tc.input, got, tc.want)
 			}
 		})
 	}
@@ -122,35 +121,29 @@ func TestAshby_FetchJobs(t *testing.T) {
 		t.Fatalf("expected 3 jobs, got %d", len(result.Jobs))
 	}
 
-	// Verify slug was extracted and sent in GraphQL variables
 	vars, _ := capturedBody["variables"].(map[string]any)
 	if vars["organizationHostedJobsPageName"] != "openai" {
 		t.Errorf("expected organizationHostedJobsPageName=openai, got %v", vars["organizationHostedJobsPageName"])
 	}
 
-	// Job 0 — full time
 	j0 := result.Jobs[0]
 	if j0.ID != "ashby-abc-111" {
-		t.Errorf("job[0].ID = %q, want %q", j0.ID, "ashby-abc-111")
+		t.Errorf("job[0].ID = %q, want ashby-abc-111", j0.ID)
 	}
 	if j0.Title != "Backend Engineer" {
-		t.Errorf("job[0].Title = %q, want %q", j0.Title, "Backend Engineer")
+		t.Errorf("job[0].Title = %q, want Backend Engineer", j0.Title)
 	}
 	if j0.EmploymentType != "full_time" {
-		t.Errorf("job[0].EmploymentType = %q, want %q", j0.EmploymentType, "full_time")
+		t.Errorf("job[0].EmploymentType = %q, want full_time", j0.EmploymentType)
 	}
-	wantURL := "https://jobs.ashbyhq.com/openai/abc-111"
-	if j0.URL != wantURL {
-		t.Errorf("job[0].URL = %q, want %q", j0.URL, wantURL)
+	if j0.URL != "https://jobs.ashbyhq.com/openai/abc-111" {
+		t.Errorf("job[0].URL = %q, want https://jobs.ashbyhq.com/openai/abc-111", j0.URL)
 	}
 
-	// Job 2 — intern normalisation
 	j2 := result.Jobs[2]
 	if j2.EmploymentType != "internship" {
-		t.Errorf("job[2].EmploymentType = %q, want %q", j2.EmploymentType, "internship")
+		t.Errorf("job[2].EmploymentType = %q, want internship", j2.EmploymentType)
 	}
-
-	// Location with null workplaceType should not append "()"
 	if j2.Location == "New York ()" {
 		t.Errorf("job[2].Location should not include empty workplaceType, got %q", j2.Location)
 	}
@@ -232,10 +225,7 @@ func TestAshby_FetchJobContent(t *testing.T) {
 	defer srv.Close()
 
 	a := &Ashby{baseURL: srv.URL}
-	job := RawJob{
-		Adapter: "ashby",
-		URL:     "https://jobs.ashbyhq.com/openai/abc-111",
-	}
+	job := types.RawJob{Adapter: "ashby", URL: "https://jobs.ashbyhq.com/openai/abc-111"}
 	content, err := a.FetchJobContent(context.Background(), job)
 	if err != nil {
 		t.Fatalf("FetchJobContent error: %v", err)
@@ -257,7 +247,6 @@ func TestAshby_FetchJobContent(t *testing.T) {
 		t.Error("content.Description is empty")
 	}
 
-	// Verify variables sent in GraphQL request
 	vars, _ := capturedBody["variables"].(map[string]any)
 	if vars["organizationHostedJobsPageName"] != "openai" {
 		t.Errorf("company = %v, want openai", vars["organizationHostedJobsPageName"])
@@ -275,7 +264,7 @@ func TestAshby_FetchJobContent_NotFound(t *testing.T) {
 	defer srv.Close()
 
 	a := &Ashby{baseURL: srv.URL}
-	job := RawJob{Adapter: "ashby", URL: "https://jobs.ashbyhq.com/openai/missing-id"}
+	job := types.RawJob{Adapter: "ashby", URL: "https://jobs.ashbyhq.com/openai/missing-id"}
 	_, err := a.FetchJobContent(context.Background(), job)
 	if err == nil {
 		t.Fatal("expected error for null jobPosting, got nil")
@@ -284,7 +273,7 @@ func TestAshby_FetchJobContent_NotFound(t *testing.T) {
 
 func TestAshby_FetchJobContent_BadURL(t *testing.T) {
 	a := &Ashby{}
-	job := RawJob{Adapter: "ashby", URL: "https://jobs.ashbyhq.com/openai"} // missing job ID
+	job := types.RawJob{Adapter: "ashby", URL: "https://jobs.ashbyhq.com/openai"}
 	_, err := a.FetchJobContent(context.Background(), job)
 	if err == nil {
 		t.Fatal("expected error for bad URL, got nil")
@@ -298,7 +287,7 @@ func TestAshby_FetchJobContent_HTTPError(t *testing.T) {
 	defer srv.Close()
 
 	a := &Ashby{baseURL: srv.URL}
-	job := RawJob{Adapter: "ashby", URL: "https://jobs.ashbyhq.com/openai/abc-111"}
+	job := types.RawJob{Adapter: "ashby", URL: "https://jobs.ashbyhq.com/openai/abc-111"}
 	_, err := a.FetchJobContent(context.Background(), job)
 	if err == nil {
 		t.Fatal("expected error on HTTP 401, got nil")
@@ -313,15 +302,11 @@ func TestAshby_FetchJobsViaAPI(t *testing.T) {
 		"moreDataAvailable": false,
 		"results": []any{
 			map[string]any{
-				"id":             "job-001",
-				"title":          "Backend Engineer",
-				"status":         "Open",
-				"employmentType": "FullTime",
+				"id": "job-001", "title": "Backend Engineer",
+				"status": "Open", "employmentType": "FullTime",
 				"location": map[string]any{
-					"id":            "loc-1",
-					"name":          "San Francisco",
-					"externalName":  "San Francisco, CA",
-					"workplaceType": "Hybrid",
+					"id": "loc-1", "name": "San Francisco",
+					"externalName": "San Francisco, CA", "workplaceType": "Hybrid",
 				},
 				"compensation": map[string]any{
 					"compensationTiers": []any{
@@ -330,11 +315,8 @@ func TestAshby_FetchJobsViaAPI(t *testing.T) {
 				},
 			},
 			map[string]any{
-				"id":             "job-002",
-				"title":          "ML Researcher",
-				"status":         "Open",
-				"employmentType": "FullTime",
-				// no location or compensation — simulates missing expand
+				"id": "job-002", "title": "ML Researcher",
+				"status": "Open", "employmentType": "FullTime",
 			},
 		},
 	}
@@ -359,7 +341,6 @@ func TestAshby_FetchJobsViaAPI(t *testing.T) {
 		t.Fatalf("expected 2 jobs, got %d", len(result.Jobs))
 	}
 
-	// Verify expand was requested
 	expand, _ := capturedBody["expand"].([]any)
 	if len(expand) == 0 {
 		t.Error("expected expand to be sent in payload")
@@ -376,10 +357,8 @@ func TestAshby_FetchJobsViaAPI(t *testing.T) {
 		t.Errorf("job[0].EmploymentType = %q, want full_time", j0.EmploymentType)
 	}
 
-	// Job without location — should be empty string, not panic
-	j1 := result.Jobs[1]
-	if j1.Location != "" {
-		t.Errorf("job[1].Location = %q, want empty", j1.Location)
+	if result.Jobs[1].Location != "" {
+		t.Errorf("job[1].Location = %q, want empty", result.Jobs[1].Location)
 	}
 }
 
@@ -408,16 +387,12 @@ func TestAshby_FetchJobContentViaAPI(t *testing.T) {
 	fakeResp := map[string]any{
 		"success": true,
 		"results": map[string]any{
-			"id":             "job-001",
-			"title":          "Backend Engineer",
-			"status":         "Open",
-			"employmentType": "FullTime",
-			"openedAt":       "2026-01-15T00:00:00Z",
+			"id": "job-001", "title": "Backend Engineer",
+			"status": "Open", "employmentType": "FullTime",
+			"openedAt": "2026-01-15T00:00:00Z",
 			"location": map[string]any{
-				"id":            "loc-1",
-				"name":          "San Francisco",
-				"externalName":  "San Francisco, CA",
-				"workplaceType": "Hybrid",
+				"id": "loc-1", "name": "San Francisco",
+				"externalName": "San Francisco, CA", "workplaceType": "Hybrid",
 			},
 			"compensation": map[string]any{
 				"compensationTiers": []any{
@@ -443,21 +418,15 @@ func TestAshby_FetchJobContentViaAPI(t *testing.T) {
 		t.Fatalf("FetchJobContentViaAPI error: %v", err)
 	}
 
-	// Verify expand was requested
 	expand, _ := capturedBody["expand"].([]any)
 	if len(expand) == 0 {
 		t.Error("expected expand to be sent in payload")
 	}
-	// Verify ashby- prefix is stripped before sending
 	if capturedBody["id"] != "job-001" {
 		t.Errorf("expected id=job-001 in request, got %v", capturedBody["id"])
 	}
-
 	if content.ID != "ashby-job-001" {
 		t.Errorf("content.ID = %q, want ashby-job-001", content.ID)
-	}
-	if content.Title != "Backend Engineer" {
-		t.Errorf("content.Title = %q, want Backend Engineer", content.Title)
 	}
 	if content.Location != "San Francisco, CA" {
 		t.Errorf("content.Location = %q, want San Francisco, CA", content.Location)

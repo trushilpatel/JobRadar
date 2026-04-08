@@ -11,32 +11,39 @@ import (
 	"github.com/trushilpatel/jobradar/internal/ats_fetcher"
 )
 
-// ── URL parsing — no network needed ──────────────────────────────────────────
+// ── Registry — ContentFetcher interface assertions ────────────────────────────
 
-// verifyContentFetcher calls FetchJobContent against a local test server and
-// checks that the request hits the expected path/method.
-// Returns the raw content string and the request the adapter made.
-func serveAndFetch(t *testing.T, job ats_fetcher.RawJob, responseBody string, checkReq func(r *http.Request)) string {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if checkReq != nil {
-			checkReq(r)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(responseBody))
-	}))
-	defer srv.Close()
+func TestRegistry_ContentFetcherImplementations(t *testing.T) {
+	// These adapters must implement ContentFetcher
+	shouldImplement := []string{"greenhouse", "lever", "ashby"}
+	for _, name := range shouldImplement {
+		t.Run(name, func(t *testing.T) {
+			adp, err := ats_fetcher.Registry(name)
+			if err != nil {
+				t.Fatalf("Registry(%q) error: %v", name, err)
+			}
+			if _, ok := adp.(ats_fetcher.ContentFetcher); !ok {
+				t.Errorf("%s does not implement ContentFetcher", name)
+			}
+		})
+	}
 
-	// We can't redirect the real adapter to a test server without overriding the URL.
-	// So these tests verify URL parsing by checking the path the adapter would call.
-	// The integration section below uses real adapter structs with real test servers
-	// by monkey-patching the URL via job.URL pointing at the test server.
-	_ = srv
-	return responseBody
+	// These adapters must NOT (they rely on HTML scrape fallback)
+	shouldNotImplement := []string{"workday", "workable", "chromedp"}
+	for _, name := range shouldNotImplement {
+		t.Run(name+"_no_content_fetcher", func(t *testing.T) {
+			adp, err := ats_fetcher.Registry(name)
+			if err != nil {
+				t.Fatalf("Registry(%q) error: %v", name, err)
+			}
+			if _, ok := adp.(ats_fetcher.ContentFetcher); ok {
+				t.Errorf("%s implements ContentFetcher but should not yet", name)
+			}
+		})
+	}
 }
 
-// ── Greenhouse ────────────────────────────────────────────────────────────────
+// ── URL parsing helpers ───────────────────────────────────────────────────────
 
 func TestGreenhouse_FetchJobContent_URLParsing(t *testing.T) {
 	cases := []struct {
@@ -67,7 +74,6 @@ func TestGreenhouse_FetchJobContent_URLParsing(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Parse the URL manually to mirror what FetchJobContent does
 			parts := strings.Split(strings.Trim(mustParsePath(tc.jobURL), "/"), "/")
 			if tc.expectError {
 				if len(parts) == 3 && parts[1] == "jobs" {
@@ -87,8 +93,6 @@ func TestGreenhouse_FetchJobContent_URLParsing(t *testing.T) {
 		})
 	}
 }
-
-// ── Lever ─────────────────────────────────────────────────────────────────────
 
 func TestLever_FetchJobContent_URLParsing(t *testing.T) {
 	cases := []struct {
@@ -133,8 +137,6 @@ func TestLever_FetchJobContent_URLParsing(t *testing.T) {
 	}
 }
 
-// ── Ashby ─────────────────────────────────────────────────────────────────────
-
 func TestAshby_FetchJobContent_URLParsing(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -178,78 +180,32 @@ func TestAshby_FetchJobContent_URLParsing(t *testing.T) {
 	}
 }
 
-// ── ContentFetcher dispatch ───────────────────────────────────────────────────
-
-func TestRegistry_ContentFetcherImplementations(t *testing.T) {
-	// These adapters must implement ContentFetcher
-	shouldImplement := []string{"greenhouse", "lever", "ashby"}
-	for _, name := range shouldImplement {
-		t.Run(name, func(t *testing.T) {
-			adp, err := ats_fetcher.Registry(name)
-			if err != nil {
-				t.Fatalf("Registry(%q) error: %v", name, err)
-			}
-			if _, ok := adp.(ats_fetcher.ContentFetcher); !ok {
-				t.Errorf("%s does not implement ContentFetcher", name)
-			}
-		})
-	}
-
-	// These adapters must NOT (they rely on HTML scrape fallback)
-	shouldNotImplement := []string{"workday", "workable", "chromedp"}
-	for _, name := range shouldNotImplement {
-		t.Run(name+"_no_content_fetcher", func(t *testing.T) {
-			adp, err := ats_fetcher.Registry(name)
-			if err != nil {
-				t.Fatalf("Registry(%q) error: %v", name, err)
-			}
-			if _, ok := adp.(ats_fetcher.ContentFetcher); ok {
-				t.Errorf("%s implements ContentFetcher but should not yet", name)
-			}
-		})
-	}
-}
-
 // ── Ashby FetchJobContent against a fake server ───────────────────────────────
 
 func TestAshby_FetchJobContent_FakeServer(t *testing.T) {
 	fakeJob := map[string]any{
-		"id":              "abc-123",
-		"title":           "Backend Engineer",
-		"locationName":    "Remote",
-		"workplaceType":   "Remote",
+		"id": "abc-123", "title": "Backend Engineer",
+		"locationName": "Remote", "workplaceType": "Remote",
 		"descriptionHtml": "<p>Join us.</p>",
 	}
-	fakeBody := map[string]any{
-		"data": map[string]any{
-			"jobPosting": fakeJob,
-		},
-	}
-	fakeBodyJSON, _ := json.Marshal(fakeBody)
+	fakeBody, _ := json.Marshal(map[string]any{"data": map[string]any{"jobPosting": fakeJob}})
 
-	var gotBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
-		json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(fakeBodyJSON)
+		w.Write(fakeBody)
 	}))
 	defer srv.Close()
 
-	// We can't redirect ashby's hardcoded URL in this test — this verifies
-	// the response parsing logic by calling FetchJobContent on a real Ashby URL
-	// shape and checking what variables the GraphQL body would contain.
-	// The actual network test is done via the manual curl section below.
 	_ = context.Background()
-	t.Log("fake server test verifies response parsing; see curl commands for live API check")
+	t.Log("fake server available at", srv.URL, "— live API tests are in ashby/ashby_integration_test.go")
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func mustParsePath(rawURL string) string {
-	// Trim scheme+host: "https://host/path" → "/path"
 	idx := strings.Index(rawURL, "//")
 	if idx < 0 {
 		return rawURL

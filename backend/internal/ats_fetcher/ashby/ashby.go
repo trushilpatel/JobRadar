@@ -1,4 +1,4 @@
-package ats_fetcher
+package ashby
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/trushilpatel/jobradar/internal/ats_fetcher/types"
 	"github.com/trushilpatel/jobradar/internal/model"
 )
 
@@ -45,10 +46,10 @@ func (a *Ashby) restURL(path string) string {
 	return strings.TrimRight(base, "/") + "/" + strings.TrimLeft(path, "/")
 }
 
-// slugFromURL extracts the company slug from an Ashby URL.
+// SlugFromURL extracts the company slug from an Ashby URL.
 // Handles both full URLs (https://api.ashbyhq.com/posting-api/job-board/openai)
 // and bare slugs (openai).
-func slugFromURL(rawURL string) string {
+func SlugFromURL(rawURL string) string {
 	if !strings.Contains(rawURL, "/") {
 		return rawURL // already a bare slug
 	}
@@ -67,7 +68,7 @@ func ashbyRawID(id string) string {
 
 // ── Public hosted jobs GraphQL response structs ──────────────────────────────
 
-type ashbyFetchJobsResponse struct {
+type fetchJobsResponse struct {
 	Data struct {
 		JobBoardWithTeams struct {
 			JobPostings []struct {
@@ -82,15 +83,15 @@ type ashbyFetchJobsResponse struct {
 	} `json:"data"`
 }
 
-func (r *ashbyFetchJobsResponse) toFetchJobsResponse(slug string) FetchJobsResponse {
+func (r *fetchJobsResponse) toFetchJobsResponse(slug string) types.FetchJobsResponse {
 	postings := r.Data.JobBoardWithTeams.JobPostings
-	items := make([]FetchJobsItem, 0, len(postings))
+	items := make([]types.FetchJobsItem, 0, len(postings))
 	for _, j := range postings {
 		location := j.LocationName
 		if j.WorkplaceType != "" {
 			location = fmt.Sprintf("%s (%s)", j.LocationName, j.WorkplaceType)
 		}
-		items = append(items, FetchJobsItem{
+		items = append(items, types.FetchJobsItem{
 			ID:             fmt.Sprintf("%s-%s", model.AdapterAshby, j.ID),
 			Title:          j.Title,
 			Location:       location,
@@ -98,10 +99,10 @@ func (r *ashbyFetchJobsResponse) toFetchJobsResponse(slug string) FetchJobsRespo
 			EmploymentType: normalizeAshbyEmploymentType(j.EmploymentType),
 		})
 	}
-	return FetchJobsResponse{Jobs: items}
+	return types.FetchJobsResponse{Jobs: items}
 }
 
-type ashbyFetchJobContentResponse struct {
+type fetchJobContentResponse struct {
 	Data struct {
 		JobPosting struct {
 			ID                      string `json:"id"`
@@ -116,17 +117,17 @@ type ashbyFetchJobContentResponse struct {
 	} `json:"data"`
 }
 
-func (r *ashbyFetchJobContentResponse) toFetchJobContentResponse() FetchJobContentResponse {
+func (r *fetchJobContentResponse) toFetchJobContentResponse() types.FetchJobContentResponse {
 	p := r.Data.JobPosting
 	location := p.LocationName
 	if p.WorkplaceType != "" {
 		location = fmt.Sprintf("%s (%s)", p.LocationName, p.WorkplaceType)
 	}
-	return FetchJobContentResponse{
+	return types.FetchJobContentResponse{
 		ID:             fmt.Sprintf("%s-%s", model.AdapterAshby, p.ID),
 		Title:          p.Title,
 		Location:       location,
-		Description:    StripHTML(p.DescriptionHtml),
+		Description:    types.StripHTML(p.DescriptionHtml),
 		EmploymentType: normalizeAshbyEmploymentType(p.EmploymentType),
 		Compensation:   p.CompensationTierSummary,
 		WorkplaceType:  p.WorkplaceType,
@@ -136,58 +137,58 @@ func (r *ashbyFetchJobContentResponse) toFetchJobContentResponse() FetchJobConte
 
 // ── Authenticated REST API response structs ──────────────────────────────────
 
-type ashbyJobListResponse struct {
-	Success           bool          `json:"success"`
-	MoreDataAvailable bool          `json:"moreDataAvailable"`
-	NextCursor        string        `json:"nextCursor,omitempty"`
-	SyncToken         string        `json:"syncToken,omitempty"`
-	Results           []ashbyAPIJob `json:"results"`
+type jobListResponse struct {
+	Success           bool     `json:"success"`
+	MoreDataAvailable bool     `json:"moreDataAvailable"`
+	NextCursor        string   `json:"nextCursor,omitempty"`
+	SyncToken         string   `json:"syncToken,omitempty"`
+	Results           []apiJob `json:"results"`
 }
 
-type ashbyJobInfoResponse struct {
-	Success bool        `json:"success"`
-	Results ashbyAPIJob `json:"results"`
+type jobInfoResponse struct {
+	Success bool   `json:"success"`
+	Results apiJob `json:"results"`
 }
 
-type ashbyAPIJob struct {
-	ID                     string                 `json:"id"`
-	Title                  string                 `json:"title"`
-	Confidential           bool                   `json:"confidential"`
-	Status                 string                 `json:"status"`
-	EmploymentType         string                 `json:"employmentType"`
-	LocationID             string                 `json:"locationId,omitempty"`
-	DepartmentID           string                 `json:"departmentId,omitempty"`
-	DefaultInterviewPlanID string                 `json:"defaultInterviewPlanId,omitempty"`
-	InterviewPlanIDs       []string               `json:"interviewPlanIds,omitempty"`
-	CustomFields           []ashbyCustomField     `json:"customFields,omitempty"`
-	JobPostingIDs          []string               `json:"jobPostingIds,omitempty"`
-	CustomRequisitionID    string                 `json:"customRequisitionId,omitempty"`
-	BrandID                string                 `json:"brandId,omitempty"`
-	HiringTeam             []ashbyHiringTeam      `json:"hiringTeam,omitempty"`
-	Author                 *ashbyAuthor           `json:"author,omitempty"`
-	CreatedAt              string                 `json:"createdAt,omitempty"`
-	UpdatedAt              string                 `json:"updatedAt,omitempty"`
-	OpenedAt               string                 `json:"openedAt,omitempty"`
-	ClosedAt               string                 `json:"closedAt,omitempty"`
+type apiJob struct {
+	ID                     string           `json:"id"`
+	Title                  string           `json:"title"`
+	Confidential           bool             `json:"confidential"`
+	Status                 string           `json:"status"`
+	EmploymentType         string           `json:"employmentType"`
+	LocationID             string           `json:"locationId,omitempty"`
+	DepartmentID           string           `json:"departmentId,omitempty"`
+	DefaultInterviewPlanID string           `json:"defaultInterviewPlanId,omitempty"`
+	InterviewPlanIDs       []string         `json:"interviewPlanIds,omitempty"`
+	CustomFields           []customField    `json:"customFields,omitempty"`
+	JobPostingIDs          []string         `json:"jobPostingIds,omitempty"`
+	CustomRequisitionID    string           `json:"customRequisitionId,omitempty"`
+	BrandID                string           `json:"brandId,omitempty"`
+	HiringTeam             []hiringTeam     `json:"hiringTeam,omitempty"`
+	Author                 *author          `json:"author,omitempty"`
+	CreatedAt              string           `json:"createdAt,omitempty"`
+	UpdatedAt              string           `json:"updatedAt,omitempty"`
+	OpenedAt               string           `json:"openedAt,omitempty"`
+	ClosedAt               string           `json:"closedAt,omitempty"`
 	// Expanded fields — only present when expand:["location","compensation"] is requested
-	Location     *ashbyAPILocation     `json:"location,omitempty"`
-	Compensation *ashbyAPICompensation `json:"compensation,omitempty"`
+	Location     *apiLocation     `json:"location,omitempty"`
+	Compensation *apiCompensation `json:"compensation,omitempty"`
 }
 
-type ashbyAPILocation struct {
+type apiLocation struct {
 	ID            string `json:"id"`
 	Name          string `json:"name"`
 	ExternalName  string `json:"externalName"`
 	WorkplaceType string `json:"workplaceType"` // Remote, Hybrid, OnSite
 }
 
-type ashbyAPICompensation struct {
+type apiCompensation struct {
 	CompensationTiers []struct {
 		TierSummary string `json:"tierSummary"`
 	} `json:"compensationTiers"`
 }
 
-type ashbyCustomField struct {
+type customField struct {
 	ID         string      `json:"id"`
 	IsPrivate  bool        `json:"isPrivate,omitempty"`
 	Title      string      `json:"title"`
@@ -195,7 +196,7 @@ type ashbyCustomField struct {
 	Value      interface{} `json:"value"`
 }
 
-type ashbyHiringTeam struct {
+type hiringTeam struct {
 	Email     string `json:"email"`
 	FirstName string `json:"firstName"`
 	LastName  string `json:"lastName"`
@@ -203,20 +204,20 @@ type ashbyHiringTeam struct {
 	UserID    string `json:"userId"`
 }
 
-type ashbyAuthor struct {
-	ID           string             `json:"id"`
-	FirstName    string             `json:"firstName"`
-	LastName     string             `json:"lastName"`
-	Email        string             `json:"email"`
-	GlobalRole   string             `json:"globalRole"`
-	IsEnabled    bool               `json:"isEnabled"`
-	UpdatedAt    string             `json:"updatedAt,omitempty"`
-	ManagerID    string             `json:"managerId,omitempty"`
-	CustomFields []ashbyCustomField `json:"customFields,omitempty"`
+type author struct {
+	ID           string        `json:"id"`
+	FirstName    string        `json:"firstName"`
+	LastName     string        `json:"lastName"`
+	Email        string        `json:"email"`
+	GlobalRole   string        `json:"globalRole"`
+	IsEnabled    bool          `json:"isEnabled"`
+	UpdatedAt    string        `json:"updatedAt,omitempty"`
+	ManagerID    string        `json:"managerId,omitempty"`
+	CustomFields []customField `json:"customFields,omitempty"`
 }
 
-func (r *ashbyJobListResponse) toAPIFetchJobsResponse() FetchJobsResponse {
-	items := make([]FetchJobsItem, 0, len(r.Results))
+func (r *jobListResponse) toAPIFetchJobsResponse() types.FetchJobsResponse {
+	items := make([]types.FetchJobsItem, 0, len(r.Results))
 	for _, j := range r.Results {
 		location := ""
 		if j.Location != nil {
@@ -225,7 +226,7 @@ func (r *ashbyJobListResponse) toAPIFetchJobsResponse() FetchJobsResponse {
 				location = j.Location.Name
 			}
 		}
-		items = append(items, FetchJobsItem{
+		items = append(items, types.FetchJobsItem{
 			ID:             fmt.Sprintf("%s-%s", model.AdapterAshby, j.ID),
 			Title:          j.Title,
 			Location:       location,
@@ -233,10 +234,10 @@ func (r *ashbyJobListResponse) toAPIFetchJobsResponse() FetchJobsResponse {
 			EmploymentType: normalizeAshbyEmploymentType(j.EmploymentType),
 		})
 	}
-	return FetchJobsResponse{Jobs: items}
+	return types.FetchJobsResponse{Jobs: items}
 }
 
-func (r *ashbyJobInfoResponse) toAPIFetchJobContentResponse() FetchJobContentResponse {
+func (r *jobInfoResponse) toAPIFetchJobContentResponse() types.FetchJobContentResponse {
 	j := r.Results
 	location, workplaceType := "", ""
 	if j.Location != nil {
@@ -250,7 +251,7 @@ func (r *ashbyJobInfoResponse) toAPIFetchJobContentResponse() FetchJobContentRes
 	if j.Compensation != nil && len(j.Compensation.CompensationTiers) > 0 {
 		comp = j.Compensation.CompensationTiers[0].TierSummary
 	}
-	return FetchJobContentResponse{
+	return types.FetchJobContentResponse{
 		ID:             fmt.Sprintf("%s-%s", model.AdapterAshby, j.ID),
 		Title:          j.Title,
 		Location:       location,
@@ -282,8 +283,8 @@ func normalizeAshbyEmploymentType(t string) string {
 // FetchJobs for Ashby public hosted jobs pages.
 // companyID can be either a bare slug (e.g. "openai")
 // or a full URL (https://api.ashbyhq.com/posting-api/job-board/openai).
-func (a *Ashby) FetchJobs(ctx context.Context, companyID string) (FetchJobsResponse, error) {
-	slug := slugFromURL(companyID)
+func (a *Ashby) FetchJobs(ctx context.Context, companyID string) (types.FetchJobsResponse, error) {
+	slug := SlugFromURL(companyID)
 	payload := map[string]any{
 		"operationName": "ApiJobBoardWithTeams",
 		"variables": map[string]string{
@@ -305,46 +306,46 @@ func (a *Ashby) FetchJobs(ctx context.Context, companyID string) (FetchJobsRespo
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return FetchJobsResponse{}, fmt.Errorf("ashby: marshal payload: %w", err)
+		return types.FetchJobsResponse{}, fmt.Errorf("ashby: marshal payload: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.graphqlURL("ApiJobBoardWithTeams"), bytes.NewBuffer(body))
 	if err != nil {
-		return FetchJobsResponse{}, fmt.Errorf("ashby: build request: %w", err)
+		return types.FetchJobsResponse{}, fmt.Errorf("ashby: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return FetchJobsResponse{}, fmt.Errorf("ashby: fetch: %w", err)
+		return types.FetchJobsResponse{}, fmt.Errorf("ashby: fetch: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return FetchJobsResponse{}, fmt.Errorf("ashby: unexpected status %d", resp.StatusCode)
+		return types.FetchJobsResponse{}, fmt.Errorf("ashby: unexpected status %d", resp.StatusCode)
 	}
 
-	var raw ashbyFetchJobsResponse
+	var raw fetchJobsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return FetchJobsResponse{}, fmt.Errorf("ashby: decode: %w", err)
+		return types.FetchJobsResponse{}, fmt.Errorf("ashby: decode: %w", err)
 	}
 
 	return raw.toFetchJobsResponse(slug), nil
 }
 
-// FetchJobContent implements ContentFetcher using the public hosted job GraphQL endpoint.
+// FetchJobContent implements types.ContentFetcher using the public hosted job GraphQL endpoint.
 // job.URL is the hosted web URL (e.g. https://jobs.ashbyhq.com/{company}/{uuid}).
-func (a *Ashby) FetchJobContent(ctx context.Context, job RawJob) (FetchJobContentResponse, error) {
+func (a *Ashby) FetchJobContent(ctx context.Context, job types.RawJob) (types.FetchJobContentResponse, error) {
 	u, err := url.Parse(job.URL)
 	if err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: parse job URL: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: parse job URL: %w", err)
 	}
 
 	// path: /{company}/{uuid}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(parts) != 2 {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: unexpected URL path %q", u.Path)
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: unexpected URL path %q", u.Path)
 	}
 	company, id := parts[0], parts[1]
 
@@ -373,32 +374,32 @@ func (a *Ashby) FetchJobContent(ctx context.Context, job RawJob) (FetchJobConten
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: marshal content payload: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: marshal content payload: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.graphqlURL("ApiJobPosting"), bytes.NewBuffer(body))
 	if err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: build content request: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: build content request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: fetch content: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: fetch content: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: content status %d", resp.StatusCode)
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: content status %d", resp.StatusCode)
 	}
 
-	var raw ashbyFetchJobContentResponse
+	var raw fetchJobContentResponse
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: decode content: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: decode content: %w", err)
 	}
 	if raw.Data.JobPosting.ID == "" {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: job not found")
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: job not found")
 	}
 
 	return raw.toFetchJobContentResponse(), nil
@@ -407,10 +408,9 @@ func (a *Ashby) FetchJobContent(ctx context.Context, job RawJob) (FetchJobConten
 // ── Authenticated REST API methods ───────────────────────────────────────────
 
 // FetchJobsViaAPI fetches jobs from the authenticated Ashby REST API (job.list).
-// This is separate from FetchJobs because the REST API uses authentication and a different response shape.
-func (a *Ashby) FetchJobsViaAPI(ctx context.Context) (FetchJobsResponse, error) {
+func (a *Ashby) FetchJobsViaAPI(ctx context.Context) (types.FetchJobsResponse, error) {
 	if a.apiKey == "" {
-		return FetchJobsResponse{}, fmt.Errorf("ashby: apiKey is required for job.list")
+		return types.FetchJobsResponse{}, fmt.Errorf("ashby: apiKey is required for job.list")
 	}
 
 	payload := map[string]any{
@@ -421,12 +421,12 @@ func (a *Ashby) FetchJobsViaAPI(ctx context.Context) (FetchJobsResponse, error) 
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return FetchJobsResponse{}, fmt.Errorf("ashby: marshal job.list payload: %w", err)
+		return types.FetchJobsResponse{}, fmt.Errorf("ashby: marshal job.list payload: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.restURL("job.list"), bytes.NewBuffer(body))
 	if err != nil {
-		return FetchJobsResponse{}, fmt.Errorf("ashby: build job.list request: %w", err)
+		return types.FetchJobsResponse{}, fmt.Errorf("ashby: build job.list request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
@@ -434,33 +434,32 @@ func (a *Ashby) FetchJobsViaAPI(ctx context.Context) (FetchJobsResponse, error) 
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return FetchJobsResponse{}, fmt.Errorf("ashby: fetch job.list: %w", err)
+		return types.FetchJobsResponse{}, fmt.Errorf("ashby: fetch job.list: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return FetchJobsResponse{}, fmt.Errorf("ashby: job.list unexpected status %d", resp.StatusCode)
+		return types.FetchJobsResponse{}, fmt.Errorf("ashby: job.list unexpected status %d", resp.StatusCode)
 	}
 
-	var raw ashbyJobListResponse
+	var raw jobListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return FetchJobsResponse{}, fmt.Errorf("ashby: decode job.list: %w", err)
+		return types.FetchJobsResponse{}, fmt.Errorf("ashby: decode job.list: %w", err)
 	}
 	if !raw.Success {
-		return FetchJobsResponse{}, fmt.Errorf("ashby: job.list returned success=false")
+		return types.FetchJobsResponse{}, fmt.Errorf("ashby: job.list returned success=false")
 	}
 
 	return raw.toAPIFetchJobsResponse(), nil
 }
 
 // FetchJobContentViaAPI fetches one job from the authenticated Ashby REST API (job.info).
-// Note: the documented job.info response does not include rich public posting fields like descriptionHtml.
-func (a *Ashby) FetchJobContentViaAPI(ctx context.Context, jobID string) (FetchJobContentResponse, error) {
+func (a *Ashby) FetchJobContentViaAPI(ctx context.Context, jobID string) (types.FetchJobContentResponse, error) {
 	if a.apiKey == "" {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: apiKey is required for job.info")
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: apiKey is required for job.info")
 	}
 	if jobID == "" {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: empty job id")
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: empty job id")
 	}
 
 	payload := map[string]any{
@@ -470,12 +469,12 @@ func (a *Ashby) FetchJobContentViaAPI(ctx context.Context, jobID string) (FetchJ
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: marshal job.info payload: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: marshal job.info payload: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.restURL("job.info"), bytes.NewBuffer(body))
 	if err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: build job.info request: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: build job.info request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
@@ -483,20 +482,20 @@ func (a *Ashby) FetchJobContentViaAPI(ctx context.Context, jobID string) (FetchJ
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: fetch job.info: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: fetch job.info: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: job.info unexpected status %d", resp.StatusCode)
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: job.info unexpected status %d", resp.StatusCode)
 	}
 
-	var raw ashbyJobInfoResponse
+	var raw jobInfoResponse
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: decode job.info: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: decode job.info: %w", err)
 	}
 	if !raw.Success || raw.Results.ID == "" {
-		return FetchJobContentResponse{}, fmt.Errorf("ashby: job not found")
+		return types.FetchJobContentResponse{}, fmt.Errorf("ashby: job not found")
 	}
 
 	return raw.toAPIFetchJobContentResponse(), nil

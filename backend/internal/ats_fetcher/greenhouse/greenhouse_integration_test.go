@@ -1,16 +1,18 @@
-package ats_fetcher
+package greenhouse
 
 // Integration tests — hit the real Greenhouse public API.
 // Skipped under `go test -short` or in CI without network access.
 //
 // Run explicitly:
-//   go test ./internal/ats_fetcher/ -run Integration -v
-//   go test ./internal/ats_fetcher/ -run TestGreenhouse_Integration -v -count=1
+//   go test ./internal/ats_fetcher/greenhouse/ -run Integration -v
+//   go test ./internal/ats_fetcher/greenhouse/ -run TestGreenhouse_Integration -v -count=1
 
 import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/trushilpatel/jobradar/internal/ats_fetcher/types"
 )
 
 // Reddit uses Greenhouse with standard job-boards.greenhouse.io URLs.
@@ -33,7 +35,6 @@ func TestGreenhouse_Integration_FetchJobs(t *testing.T) {
 
 	t.Logf("FetchJobs returned %d jobs", len(result.Jobs))
 
-	// Spot-check first job has all required fields
 	j := result.Jobs[0]
 	if j.ID == "" {
 		t.Error("job.ID is empty")
@@ -60,8 +61,6 @@ func TestGreenhouse_Integration_FetchJobContent(t *testing.T) {
 	}
 
 	g := &Greenhouse{}
-
-	// First fetch the listing to get a real job URL
 	result, err := g.FetchJobs(context.Background(), ghIntegrationCompanyURL)
 	if err != nil {
 		t.Fatalf("FetchJobs error: %v", err)
@@ -73,8 +72,7 @@ func TestGreenhouse_Integration_FetchJobContent(t *testing.T) {
 	item := result.Jobs[0]
 	t.Logf("Fetching content for: %s — %q", item.ID, item.Title)
 
-	// FetchJobContent takes a RawJob — construct one from the listing item
-	raw := RawJob{ID: item.ID, Title: item.Title, URL: item.URL, Adapter: "greenhouse"}
+	raw := types.RawJob{ID: item.ID, Title: item.Title, URL: item.URL, Adapter: "greenhouse"}
 	content, err := g.FetchJobContent(context.Background(), raw)
 	if err != nil {
 		t.Fatalf("FetchJobContent error: %v", err)
@@ -111,7 +109,7 @@ func TestGreenhouse_Integration_FetchJobContent_AllFields(t *testing.T) {
 	limit := min(3, len(result.Jobs))
 	for i := range limit {
 		item := result.Jobs[i]
-		raw := RawJob{ID: item.ID, Title: item.Title, URL: item.URL, Adapter: "greenhouse"}
+		raw := types.RawJob{ID: item.ID, Title: item.Title, URL: item.URL, Adapter: "greenhouse"}
 		content, err := g.FetchJobContent(context.Background(), raw)
 		if err != nil {
 			t.Errorf("job[%d] %s: FetchJobContent error: %v", i, item.ID, err)

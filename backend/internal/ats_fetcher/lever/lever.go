@@ -1,4 +1,4 @@
-package ats_fetcher
+package lever
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/trushilpatel/jobradar/internal/ats_fetcher/types"
 	"github.com/trushilpatel/jobradar/internal/model"
 )
 
@@ -27,7 +28,7 @@ func (l *Lever) apiURL(path string) string {
 
 // ── Internal API response structs ────────────────────────────────────────────
 
-type leverFetchJobsResponse []struct {
+type fetchJobsResponse []struct {
 	ID        string `json:"id"`
 	Text      string `json:"text"`      // job title
 	HostedURL string `json:"hostedUrl"` // hosted web URL
@@ -43,10 +44,10 @@ type leverFetchJobsResponse []struct {
 	WorkplaceType string `json:"workplaceType"` // unspecified | on-site | remote | hybrid
 }
 
-func (r leverFetchJobsResponse) toFetchJobsResponse() FetchJobsResponse {
-	items := make([]FetchJobsItem, 0, len(r))
+func (r fetchJobsResponse) toFetchJobsResponse() types.FetchJobsResponse {
+	items := make([]types.FetchJobsItem, 0, len(r))
 	for _, j := range r {
-		items = append(items, FetchJobsItem{
+		items = append(items, types.FetchJobsItem{
 			ID:             fmt.Sprintf("%s-%s", model.AdapterLever, j.ID),
 			Title:          j.Text,
 			Location:       j.Categories.Location,
@@ -54,37 +55,37 @@ func (r leverFetchJobsResponse) toFetchJobsResponse() FetchJobsResponse {
 			EmploymentType: normalizeLeverCommitment(j.Categories.Commitment),
 		})
 	}
-	return FetchJobsResponse{Jobs: items}
+	return types.FetchJobsResponse{Jobs: items}
 }
 
-type leverSalaryRange struct {
+type salaryRange struct {
 	Currency string  `json:"currency"` // e.g. "USD"
 	Interval string  `json:"interval"` // e.g. "per-year-salary"
 	Min      float64 `json:"min"`
 	Max      float64 `json:"max"`
 }
 
-// leverFetchJobContentResponse mirrors the complete Lever Postings API response.
+// fetchJobContentResponse mirrors the complete Lever Postings API response.
 // Every field from GET /v0/postings/{company}/{id}?mode=json is captured here.
 // toFetchJobContentResponse() picks what is needed for the pipeline.
-type leverFetchJobContentResponse struct {
+type fetchJobContentResponse struct {
 	ID      string `json:"id"`
-	Text    string `json:"text"`      // job title
-	Country string `json:"country"`   // ISO 3166-1 alpha-2, nullable
+	Text    string `json:"text"`    // job title
+	Country string `json:"country"` // ISO 3166-1 alpha-2, nullable
 
 	// URLs
 	HostedURL string `json:"hostedUrl"` // hosted job posting page
 	ApplyURL  string `json:"applyUrl"`  // direct application form
 
 	// Description — Lever provides multiple variants; use the most complete plain-text ones
-	Opening             string `json:"opening"`             // opening section (HTML)
-	OpeningPlain        string `json:"openingPlain"`        // opening section (plain text)
-	Description         string `json:"description"`         // opening + body (HTML)
-	DescriptionPlain    string `json:"descriptionPlain"`    // opening + body (plain text) ← primary
-	DescriptionBody     string `json:"descriptionBody"`     // body without opening (HTML)
+	Opening              string `json:"opening"`              // opening section (HTML)
+	OpeningPlain         string `json:"openingPlain"`         // opening section (plain text)
+	Description          string `json:"description"`          // opening + body (HTML)
+	DescriptionPlain     string `json:"descriptionPlain"`     // opening + body (plain text) ← primary
+	DescriptionBody      string `json:"descriptionBody"`      // body without opening (HTML)
 	DescriptionBodyPlain string `json:"descriptionBodyPlain"` // body without opening (plain text)
-	Additional          string `json:"additional"`          // closing content (HTML)
-	AdditionalPlain     string `json:"additionalPlain"`     // closing content (plain text)
+	Additional           string `json:"additional"`           // closing content (HTML)
+	AdditionalPlain      string `json:"additionalPlain"`      // closing content (plain text)
 
 	// Structured requirement/benefit sections
 	Lists []struct {
@@ -93,9 +94,9 @@ type leverFetchJobContentResponse struct {
 	} `json:"lists"`
 
 	// Compensation
-	SalaryRange            *leverSalaryRange `json:"salaryRange"`            // structured range, optional
-	SalaryDescription      string            `json:"salaryDescription"`      // salary narrative (HTML)
-	SalaryDescriptionPlain string            `json:"salaryDescriptionPlain"` // salary narrative (plain text)
+	SalaryRange            *salaryRange `json:"salaryRange"`            // structured range, optional
+	SalaryDescription      string       `json:"salaryDescription"`      // salary narrative (HTML)
+	SalaryDescriptionPlain string       `json:"salaryDescriptionPlain"` // salary narrative (plain text) ← primary
 
 	WorkplaceType string `json:"workplaceType"` // unspecified | on-site | remote | hybrid
 
@@ -110,8 +111,8 @@ type leverFetchJobContentResponse struct {
 	CreatedAt int64 `json:"createdAt"` // Unix ms timestamp
 }
 
-func (r *leverFetchJobContentResponse) toFetchJobContentResponse() FetchJobContentResponse {
-	// Full description: Lever's descriptionPlain already contains opening + body.
+func (r *fetchJobContentResponse) toFetchJobContentResponse() types.FetchJobContentResponse {
+	// Full description: descriptionPlain already contains opening + body.
 	// Append additionalPlain (closing content) if present.
 	desc := r.DescriptionPlain
 	if r.AdditionalPlain != "" {
@@ -121,7 +122,7 @@ func (r *leverFetchJobContentResponse) toFetchJobContentResponse() FetchJobConte
 	// Requirement/benefit sections from lists[]
 	var reqParts []string
 	for _, section := range r.Lists {
-		plain := StripHTML(section.Content)
+		plain := types.StripHTML(section.Content)
 		if plain != "" {
 			reqParts = append(reqParts, section.Text+": "+plain)
 		}
@@ -146,7 +147,7 @@ func (r *leverFetchJobContentResponse) toFetchJobContentResponse() FetchJobConte
 		publishedDate = fmt.Sprintf("%d", r.CreatedAt)
 	}
 
-	return FetchJobContentResponse{
+	return types.FetchJobContentResponse{
 		ID:             fmt.Sprintf("%s-%s", model.AdapterLever, r.ID),
 		Title:          r.Text,
 		Location:       r.Categories.Location,
@@ -179,65 +180,65 @@ func normalizeLeverCommitment(c string) string {
 
 // ── Adapter implementation ────────────────────────────────────────────────────
 
-func (l *Lever) FetchJobs(ctx context.Context, companyID string) (FetchJobsResponse, error) {
+func (l *Lever) FetchJobs(ctx context.Context, companyID string) (types.FetchJobsResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		l.apiURL(fmt.Sprintf("/v0/postings/%s?mode=json", companyID)), nil)
 	if err != nil {
-		return FetchJobsResponse{}, fmt.Errorf("lever: build request: %w", err)
+		return types.FetchJobsResponse{}, fmt.Errorf("lever: build request: %w", err)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return FetchJobsResponse{}, fmt.Errorf("lever: fetch: %w", err)
+		return types.FetchJobsResponse{}, fmt.Errorf("lever: fetch: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return FetchJobsResponse{}, fmt.Errorf("lever: unexpected status %d", resp.StatusCode)
+		return types.FetchJobsResponse{}, fmt.Errorf("lever: unexpected status %d", resp.StatusCode)
 	}
 
-	var raw leverFetchJobsResponse
+	var raw fetchJobsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return FetchJobsResponse{}, fmt.Errorf("lever: decode: %w", err)
+		return types.FetchJobsResponse{}, fmt.Errorf("lever: decode: %w", err)
 	}
 
 	return raw.toFetchJobsResponse(), nil
 }
 
-// FetchJobContent implements ContentFetcher.
+// FetchJobContent implements types.ContentFetcher.
 // job.URL is the hosted web URL (e.g. https://jobs.lever.co/{company}/{uuid}).
 // Calls the Lever API directly to get structured JSON.
-func (l *Lever) FetchJobContent(ctx context.Context, job RawJob) (FetchJobContentResponse, error) {
+func (l *Lever) FetchJobContent(ctx context.Context, job types.RawJob) (types.FetchJobContentResponse, error) {
 	u, err := url.Parse(job.URL)
 	if err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("lever: parse job URL: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("lever: parse job URL: %w", err)
 	}
 	// path: /{company}/{uuid}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(parts) != 2 {
-		return FetchJobContentResponse{}, fmt.Errorf("lever: unexpected URL path %q", u.Path)
+		return types.FetchJobContentResponse{}, fmt.Errorf("lever: unexpected URL path %q", u.Path)
 	}
 	company, id := parts[0], parts[1]
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		l.apiURL(fmt.Sprintf("/v0/postings/%s/%s?mode=json", company, id)), nil)
 	if err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("lever: build content request: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("lever: build content request: %w", err)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("lever: fetch content: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("lever: fetch content: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return FetchJobContentResponse{}, fmt.Errorf("lever: content status %d", resp.StatusCode)
+		return types.FetchJobContentResponse{}, fmt.Errorf("lever: content status %d", resp.StatusCode)
 	}
 
-	var raw leverFetchJobContentResponse
+	var raw fetchJobContentResponse
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return FetchJobContentResponse{}, fmt.Errorf("lever: decode content: %w", err)
+		return types.FetchJobContentResponse{}, fmt.Errorf("lever: decode content: %w", err)
 	}
 
 	return raw.toFetchJobContentResponse(), nil

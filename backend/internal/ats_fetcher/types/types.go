@@ -1,4 +1,4 @@
-package ats_fetcher
+package types
 
 import (
 	"context"
@@ -29,12 +29,12 @@ type FetchJobsItem struct {
 	EmploymentType string
 }
 
-// FetchJobsResponse is returned by FetchJobs.
+// FetchJobsResponse is returned by Adapter.FetchJobs.
 type FetchJobsResponse struct {
 	Jobs []FetchJobsItem
 }
 
-// FetchJobContentResponse is returned by FetchJobContent.
+// FetchJobContentResponse is returned by ContentFetcher.FetchJobContent.
 // Union of all fields available across Greenhouse, Lever, and Ashby.
 // Fields not provided by a platform are left as empty strings.
 type FetchJobContentResponse struct {
@@ -44,14 +44,15 @@ type FetchJobContentResponse struct {
 	URL            string // Greenhouse, Lever
 	Description    string // plain text — HTML stripped from all platforms
 	EmploymentType string // Lever (commitment), Ashby (employmentType)
-	Department     string // Greenhouse (departments[0]), Lever (team)
-	Compensation   string // Ashby (compensationTierSummary)
-	WorkplaceType  string // Ashby (Remote / Hybrid / Onsite)
-	Requirements   string // plain text — Greenhouse (questions), Lever (lists)
-	PublishedDate  string // Lever (createdAt), Ashby (publishedDate)
+	Department     string // Greenhouse (departments[0]), Lever (department > team fallback)
+	Compensation   string // Greenhouse (pay_input_ranges), Lever (salaryDescriptionPlain > salaryRange), Ashby (compensationTierSummary)
+	WorkplaceType  string // Lever (workplaceType), Ashby (workplaceType)
+	Requirements   string // plain text — Lever (lists[])
+	PublishedDate  string // Lever (createdAt ms), Ashby (publishedDate), Greenhouse (updated_at)
 }
 
 // Adapter fetches the current job listings for a company.
+// Required — implemented by all adapters.
 type Adapter interface {
 	FetchJobs(ctx context.Context, companyURL string) (FetchJobsResponse, error)
 }
@@ -70,8 +71,7 @@ type ContentFetcher interface {
 
 var htmlTagRe = regexp.MustCompile(`<[^>]+>`)
 
-// stripHTML removes all HTML tags, decodes entities, and collapses whitespace.
-// Used by all adapters when converting HTML descriptions to plain text.
+// StripHTML removes all HTML tags, decodes entities, and collapses whitespace.
 func StripHTML(s string) string {
 	s = htmlTagRe.ReplaceAllString(s, " ")
 	s = html.UnescapeString(s)

@@ -1,4 +1,4 @@
-package ats_fetcher
+package lever
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/trushilpatel/jobradar/internal/ats_fetcher/types"
 )
 
 // ── FetchJobs ─────────────────────────────────────────────────────────────────
@@ -57,7 +59,6 @@ func TestLever_FetchJobs(t *testing.T) {
 		t.Fatalf("expected 2 jobs, got %d", len(result.Jobs))
 	}
 
-	// Verify it hit the right API path with mode=json
 	if capturedPath != "/v0/postings/netlify?mode=json" {
 		t.Errorf("API path = %q, want /v0/postings/netlify?mode=json", capturedPath)
 	}
@@ -194,7 +195,7 @@ func TestLever_FetchJobContent(t *testing.T) {
 	defer srv.Close()
 
 	l := &Lever{baseURL: srv.URL}
-	job := RawJob{
+	job := types.RawJob{
 		Adapter: "lever",
 		URL:     "https://jobs.lever.co/netlify/abc-111-def",
 	}
@@ -204,11 +205,9 @@ func TestLever_FetchJobContent(t *testing.T) {
 		t.Fatalf("FetchJobContent error: %v", err)
 	}
 
-	// Verify it hit the right API path with mode=json
 	if capturedPath != "/v0/postings/netlify/abc-111-def?mode=json" {
 		t.Errorf("API path = %q, want /v0/postings/netlify/abc-111-def?mode=json", capturedPath)
 	}
-
 	if content.ID != "lever-abc-111-def" {
 		t.Errorf("content.ID = %q, want lever-abc-111-def", content.ID)
 	}
@@ -228,7 +227,7 @@ func TestLever_FetchJobContent(t *testing.T) {
 		t.Errorf("content.Compensation = %q, want salary string", content.Compensation)
 	}
 	if content.Department != "Product & Engineering" {
-		t.Errorf("content.Department = %q, want Product & Engineering (categories.department)", content.Department)
+		t.Errorf("content.Department = %q, want Product & Engineering", content.Department)
 	}
 	if content.Description == "" {
 		t.Error("content.Description is empty")
@@ -239,13 +238,11 @@ func TestLever_FetchJobContent(t *testing.T) {
 }
 
 func TestLever_FetchJobContent_SalaryRangeFallback(t *testing.T) {
-	// When salaryDescriptionPlain is absent, should fall back to structured salaryRange
 	fakePosting := map[string]any{
 		"id":               "abc-999",
 		"text":             "Data Engineer",
 		"hostedUrl":        "https://jobs.lever.co/acme/abc-999",
 		"descriptionPlain": "Great role.",
-		// no salaryDescriptionPlain
 		"salaryRange": map[string]any{
 			"currency": "USD",
 			"interval": "per-year-salary",
@@ -267,7 +264,7 @@ func TestLever_FetchJobContent_SalaryRangeFallback(t *testing.T) {
 	defer srv.Close()
 
 	l := &Lever{baseURL: srv.URL}
-	content, err := l.FetchJobContent(context.Background(), RawJob{
+	content, err := l.FetchJobContent(context.Background(), types.RawJob{
 		Adapter: "lever",
 		URL:     "https://jobs.lever.co/acme/abc-999",
 	})
@@ -301,7 +298,7 @@ func TestLever_FetchJobContent_AdditionalPlainAppended(t *testing.T) {
 	defer srv.Close()
 
 	l := &Lever{baseURL: srv.URL}
-	content, err := l.FetchJobContent(context.Background(), RawJob{
+	content, err := l.FetchJobContent(context.Background(), types.RawJob{
 		Adapter: "lever",
 		URL:     "https://jobs.lever.co/acme/abc-888",
 	})
@@ -318,9 +315,9 @@ func TestLever_FetchJobContent_AdditionalPlainAppended(t *testing.T) {
 
 func TestLever_FetchJobContent_BadURL_MissingID(t *testing.T) {
 	l := &Lever{}
-	job := RawJob{
+	job := types.RawJob{
 		Adapter: "lever",
-		URL:     "https://jobs.lever.co/netlify", // missing /{uuid}
+		URL:     "https://jobs.lever.co/netlify",
 	}
 	_, err := l.FetchJobContent(context.Background(), job)
 	if err == nil {
@@ -335,7 +332,7 @@ func TestLever_FetchJobContent_HTTPError(t *testing.T) {
 	defer srv.Close()
 
 	l := &Lever{baseURL: srv.URL}
-	job := RawJob{
+	job := types.RawJob{
 		Adapter: "lever",
 		URL:     "https://jobs.lever.co/netlify/abc-111-def",
 	}
@@ -347,7 +344,7 @@ func TestLever_FetchJobContent_HTTPError(t *testing.T) {
 
 func TestLever_FetchJobContent_InvalidURL(t *testing.T) {
 	l := &Lever{}
-	job := RawJob{
+	job := types.RawJob{
 		Adapter: "lever",
 		URL:     "://not-a-url",
 	}
