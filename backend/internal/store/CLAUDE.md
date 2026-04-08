@@ -6,7 +6,7 @@ One file per table. Each file owns exactly one table — no cross-table queries.
 |---|---|---|
 | `company.go` | `CompanyReader` | `companies` |
 | `seen_ledger.go` | `SeenLedgerReader`, `SeenLedgerWriter`, `SeenLedgerStore` | `job_seen_ledger` |
-| `job_scan_log.go` | `JobScanLogWriter`, `JobScanLogReader`, `JobScanLogStore` | `job_scan_log` |
+| `company_scan_log.go` | `CompanyScanLogWriter`, `CompanyScanLogReader`, `CompanyScanLogStore` | `company_scan_log` |
 | `job.go` | `JobReader`, `JobWriter`, `JobStore` | `job` |
 | `job_snapshot.go` | `SnapshotWriter` | `job_snapshot` |
 | `application.go` | `ApplicationStore` | `job_application` |

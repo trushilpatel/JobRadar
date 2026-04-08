@@ -13,5 +13,5 @@ type JobSeenLedger struct {
 }
 
 func (JobSeenLedger) TableName() string {
-	return "job_seen_ledger"
+	return "job_pipeline_ledger"
 }

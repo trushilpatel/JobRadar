@@ -12,7 +12,7 @@ import (
 	"github.com/trushilpatel/jobradar/internal/db"
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/store"
-	"github.com/trushilpatel/jobradar/internal/worker/scan"
+	"github.com/trushilpatel/jobradar/internal/worker/job_listing_crawler"
 )
 
 func main() {
@@ -28,11 +28,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := kafka.EnsureTopics(ctx, cfg, kafka.TopicJobsRaw); err != nil {
+	if err := kafka.EnsureTopics(ctx, cfg, kafka.TopicJobListingsRaw); err != nil {
 		log.Fatalf("kafka topics: %v", err)
 	}
 
-	// --- Kafka producer (publishes to jobs.raw) ---
+	// --- Kafka producer (publishes to job_listings.raw) ---
 	producer, err := kafka.NewProducer(cfg)
 	if err != nil {
 		log.Fatalf("kafka producer: %v", err)
@@ -40,7 +40,7 @@ func main() {
 	defer producer.Close()
 
 	// --- Kafka consumer (receives company IDs from scheduler + API trigger) ---
-	consumer, err := kafka.NewConsumer(cfg, "scan-worker", kafka.TopicCompanyScanJob)
+	consumer, err := kafka.NewConsumer(cfg, "job-listing-crawler", kafka.TopicCompanyScanRequest)
 	if err != nil {
 		log.Fatalf("kafka consumer: %v", err)
 	}
@@ -49,13 +49,13 @@ func main() {
 	// --- Store layer ---
 	companies := store.NewCompanyStore(database)
 	ledger := store.NewSeenLedgerStore(database)
-	scanLog := store.NewJobScanLogStore(database)
+	scanLog := store.NewCompanyScanLogStore(database)
 
 	// --- Engine ---
 	companyDelay := time.Duration(cfg.ScanCompanyDelaySeconds) * time.Second
-	engine := scan.NewEngine(companies, ledger, scanLog, producer, companyDelay)
+	engine := job_listing_crawler.NewEngine(companies, ledger, scanLog, producer, companyDelay)
 
-	log.Println("[scan] worker started — waiting for scan jobs on", kafka.TopicCompanyScanJob)
+	log.Println("[scan] worker started — waiting for scan jobs on", kafka.TopicCompanyScanRequest)
 
 	type scanRequest struct {
 		CompanyID string `json:"company_id"`

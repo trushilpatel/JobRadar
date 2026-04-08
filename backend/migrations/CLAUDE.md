@@ -23,7 +23,7 @@ Table names use snake_case with a `job_` prefix for job-related tables:
 |---|---|
 | `companies` | `001_companies.sql` |
 | `job_seen_ledger` | `002_job_seen_ledger.sql` |
-| `job_scan_log` | `003_job_scan_log.sql` |
+| `company_scan_log` | `003_company_scan_log.sql` |
 | `job` | `004_job.sql` |
 | `job_application` | `005_job_application.sql` |
 | `job_discarded` | `006_discarded.sql` |

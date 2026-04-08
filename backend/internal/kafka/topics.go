@@ -1,7 +1,7 @@
 package kafka
 
 const (
-	TopicJobsRaw       = "jobs.raw"
-	TopicJobsRawDetail = "jobs.raw_detail"
-	TopicCompanyScanJob = "company.scan_job"
+	TopicJobListingsRaw      = "job_listings.raw"
+	TopicJobListingsFiltered = "job_listings.filtered"
+	TopicCompanyScanRequest  = "company.scan_request"
 )

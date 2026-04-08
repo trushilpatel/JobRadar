@@ -11,7 +11,7 @@ import (
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/llm"
 	"github.com/trushilpatel/jobradar/internal/store"
-	"github.com/trushilpatel/jobradar/internal/worker/scorer"
+	"github.com/trushilpatel/jobradar/internal/worker/job_listing_relevance_filter"
 )
 
 func main() {
@@ -24,11 +24,11 @@ func main() {
 	}
 
 	// --- Kafka ---
-	if err := kafka.EnsureTopics(context.Background(), cfg, kafka.TopicJobsRaw, kafka.TopicJobsRawDetail); err != nil {
+	if err := kafka.EnsureTopics(context.Background(), cfg, kafka.TopicJobListingsRaw, kafka.TopicJobListingsFiltered); err != nil {
 		log.Fatalf("kafka topics: %v", err)
 	}
 
-	consumer, err := kafka.NewConsumer(cfg, "scorer-group", kafka.TopicJobsRaw)
+	consumer, err := kafka.NewConsumer(cfg, "job-listing-relevance-filter", kafka.TopicJobListingsRaw)
 	if err != nil {
 		log.Fatalf("kafka consumer: %v", err)
 	}
@@ -61,15 +61,15 @@ func main() {
 	ledger := store.NewSeenLedgerStore(database)
 
 	// --- Worker ---
-	worker := scorer.NewWorker(consumer, producer, scorer_, ledger,
+	worker := job_listing_relevance_filter.NewWorker(consumer, producer, scorer_, ledger,
 		cfg.ScorerBatchSize, cfg.ScorerFlushTimeoutSeconds)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	if err := worker.Run(ctx); err != nil && ctx.Err() == nil {
-		log.Fatalf("[scorer] worker exited with error: %v", err)
+		log.Fatalf("[job_listing_relevance_filter] worker exited with error: %v", err)
 	}
 
-	log.Println("[scorer] shutting down")
+	log.Println("[job_listing_relevance_filter] shutting down")
 }

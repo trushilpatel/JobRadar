@@ -11,7 +11,7 @@ import (
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/llm"
 	"github.com/trushilpatel/jobradar/internal/store"
-	"github.com/trushilpatel/jobradar/internal/worker/enricher"
+	"github.com/trushilpatel/jobradar/internal/worker/job_post_analyzer"
 )
 
 func main() {
@@ -24,7 +24,7 @@ func main() {
 	}
 
 	// --- Kafka ---
-	consumer, err := kafka.NewConsumer(cfg, "enricher-group", kafka.TopicJobsRawDetail)
+	consumer, err := kafka.NewConsumer(cfg, "job-post-analyzer", kafka.TopicJobListingsFiltered)
 	if err != nil {
 		log.Fatalf("kafka consumer: %v", err)
 	}
@@ -53,14 +53,14 @@ func main() {
 	snapshot := store.NewSnapshotStore(database)
 
 	// --- Worker ---
-	worker := enricher.NewWorker(consumer, scorer, jobs, ledger, snapshot)
+	worker := job_post_analyzer.NewWorker(consumer, scorer, jobs, ledger, snapshot)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	if err := worker.Run(ctx); err != nil && ctx.Err() == nil {
-		log.Fatalf("[enricher] worker exited with error: %v", err)
+		log.Fatalf("[job_post_analyzer] worker exited with error: %v", err)
 	}
 
-	log.Println("[enricher] shutting down")
+	log.Println("[job_post_analyzer] shutting down")
 }

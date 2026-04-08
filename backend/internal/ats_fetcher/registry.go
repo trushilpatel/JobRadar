@@ -1,4 +1,4 @@
-package adapter
+package ats_fetcher
 
 import (
 	"fmt"

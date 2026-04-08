@@ -42,5 +42,5 @@ type Job struct {
 }
 
 func (Job) TableName() string {
-	return "job"
+	return "job_feed"
 }

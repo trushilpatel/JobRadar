@@ -13,5 +13,5 @@ type Discarded struct {
 }
 
 func (Discarded) TableName() string {
-	return "job_discarded"
+	return "job_dismissal_log"
 }

@@ -11,5 +11,5 @@ type JobApplication struct {
 }
 
 func (JobApplication) TableName() string {
-	return "job_application"
+	return "job_application_tracker"
 }

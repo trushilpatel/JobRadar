@@ -9,11 +9,11 @@ import (
 
 type DashboardHandler struct {
 	jobs     store.JobReader
-	scanLog  store.JobScanLogReader
+	scanLog  store.CompanyScanLogReader
 	insights store.InsightsReader
 }
 
-func NewDashboardHandler(jobs store.JobReader, scanLog store.JobScanLogReader, insights store.InsightsReader) *DashboardHandler {
+func NewDashboardHandler(jobs store.JobReader, scanLog store.CompanyScanLogReader, insights store.InsightsReader) *DashboardHandler {
 	return &DashboardHandler{jobs: jobs, scanLog: scanLog, insights: insights}
 }
 

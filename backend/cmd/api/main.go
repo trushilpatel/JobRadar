@@ -26,7 +26,7 @@ func main() {
 
 	// --- Kafka: ensure topic exists, then create producer ---
 	kafkaCtx := context.Background()
-	if err := kafka.EnsureTopics(kafkaCtx, cfg, kafka.TopicCompanyScanJob); err != nil {
+	if err := kafka.EnsureTopics(kafkaCtx, cfg, kafka.TopicCompanyScanRequest); err != nil {
 		log.Fatalf("kafka topics: %v", err)
 	}
 	producer, err := kafka.NewProducer(cfg)
@@ -42,7 +42,7 @@ func main() {
 	snapshotStore := store.NewSnapshotStore(database)
 	appStore := store.NewApplicationStore(database)
 	companyStore := store.NewCompanyStore(database)
-	scanLogStore := store.NewJobScanLogStore(database)
+	scanLogStore := store.NewCompanyScanLogStore(database)
 	insightsStore := store.NewInsightsStore(database)
 
 	// --- Handlers ---

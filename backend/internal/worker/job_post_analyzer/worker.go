@@ -1,4 +1,4 @@
-package enricher
+package job_post_analyzer
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/trushilpatel/jobradar/internal/adapter"
+	"github.com/trushilpatel/jobradar/internal/ats_fetcher"
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/llm"
 	"github.com/trushilpatel/jobradar/internal/model"
@@ -54,19 +54,19 @@ func NewWorker(
 // Jobs are processed concurrently up to enrichConcurrency — page fetches
 // dominate latency so parallelism here is the main throughput lever.
 func (w *Worker) Run(ctx context.Context) error {
-	log.Printf("[enricher] worker started (concurrency=%d)", enrichConcurrency)
+	log.Printf("[job_post_analyzer] worker started (concurrency=%d)", enrichConcurrency)
 
 	sem := make(chan struct{}, enrichConcurrency)
 	var wg sync.WaitGroup
 
 	err := w.consumer.Poll(ctx, func(_ string, value []byte) error {
-		var job adapter.RawJob
+		var job ats_fetcher.RawJob
 		if err := json.Unmarshal(value, &job); err != nil {
-			log.Printf("[enricher] malformed message: %v — skipping", err)
+			log.Printf("[job_post_analyzer] malformed message: %v — skipping", err)
 			return nil
 		}
 
-		log.Printf("[enricher] received %s — %q", job.ID, job.Title)
+		log.Printf("[job_post_analyzer] received %s — %q", job.ID, job.Title)
 
 		sem <- struct{}{} // block if all workers are busy
 		wg.Add(1)
@@ -84,11 +84,12 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 // enrich runs the full enrichment pipeline for a single job.
-func (w *Worker) enrich(ctx context.Context, job adapter.RawJob) {
-	// 1. Fetch the full job page
-	rawText, err := fetchPage(ctx, job.URL)
+func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
+	// 1. Fetch the full job content — via native API if the adapter supports it,
+	// otherwise fall back to a plain HTTP GET on the job URL.
+	rawText, err := fetchContent(ctx, job)
 	if err != nil {
-		log.Printf("[enricher] %s: fetch page failed: %v", job.ID, err)
+		log.Printf("[job_post_analyzer] %s: fetch content failed: %v", job.ID, err)
 		w.markError(job.ID)
 		return
 	}
@@ -99,7 +100,7 @@ func (w *Worker) enrich(ctx context.Context, job adapter.RawJob) {
 		RawText: rawText,
 	})
 	if err != nil {
-		log.Printf("[enricher] %s: LLM enrich failed: %v", job.ID, err)
+		log.Printf("[job_post_analyzer] %s: LLM enrich failed: %v", job.ID, err)
 		w.markError(job.ID)
 		return
 	}
@@ -107,14 +108,14 @@ func (w *Worker) enrich(ctx context.Context, job adapter.RawJob) {
 	// 3. Build the DB row
 	row, err := buildJob(job, result)
 	if err != nil {
-		log.Printf("[enricher] %s: build job failed: %v", job.ID, err)
+		log.Printf("[job_post_analyzer] %s: build job failed: %v", job.ID, err)
 		w.markError(job.ID)
 		return
 	}
 
 	// 4. Insert into DB
 	if err := w.jobs.InsertJob(row); err != nil {
-		log.Printf("[enricher] %s: insert job failed: %v", job.ID, err)
+		log.Printf("[job_post_analyzer] %s: insert job failed: %v", job.ID, err)
 		w.markError(job.ID)
 		return
 	}
@@ -136,22 +137,35 @@ func (w *Worker) enrich(ctx context.Context, job adapter.RawJob) {
 		RoleCategory:      result.RoleCategory,
 	}); err != nil {
 		// Non-fatal: log and continue — job is already saved
-		log.Printf("[enricher] %s: write snapshot failed: %v", job.ID, err)
+		log.Printf("[job_post_analyzer] %s: write snapshot failed: %v", job.ID, err)
 	}
 
 	// 6. Confirm in seen_ledger
 	if err := w.ledger.UpdateSeenReason(job.ID, model.SeenReasonFetch); err != nil {
-		log.Printf("[enricher] %s: update seen_ledger failed: %v", job.ID, err)
+		log.Printf("[job_post_analyzer] %s: update seen_ledger failed: %v", job.ID, err)
 	}
 
-	log.Printf("[enricher] %s: enriched and saved — %q", job.ID, job.Title)
+	log.Printf("[job_post_analyzer] %s: enriched and saved — %q", job.ID, job.Title)
 }
 
 // markError updates the seen_ledger so failed jobs aren't re-processed endlessly.
 func (w *Worker) markError(jobID string) {
 	if err := w.ledger.UpdateSeenReason(jobID, model.SeenReasonError); err != nil {
-		log.Printf("[enricher] %s: failed to mark error in seen_ledger: %v", jobID, err)
+		log.Printf("[job_post_analyzer] %s: failed to mark error in seen_ledger: %v", jobID, err)
 	}
+}
+
+// fetchContent fetches the full text of a job posting.
+// If the adapter implements ContentFetcher, its native API is used (returns clean JSON).
+// Otherwise falls back to a plain HTTP GET on job.URL (raw HTML).
+func fetchContent(ctx context.Context, job ats_fetcher.RawJob) (string, error) {
+	adp, err := ats_fetcher.Registry(job.Adapter)
+	if err == nil {
+		if cf, ok := adp.(ats_fetcher.ContentFetcher); ok {
+			return cf.FetchJobContent(ctx, job)
+		}
+	}
+	return fetchPage(ctx, job.URL)
 }
 
 // fetchPage does a simple HTTP GET and returns the response body as a string.
@@ -185,8 +199,8 @@ func fetchPage(ctx context.Context, url string) (string, error) {
 	return string(body), nil
 }
 
-// buildJob maps adapter.RawJob + llm.EnrichResult into a model.Job ready for DB insert.
-func buildJob(raw adapter.RawJob, enriched *llm.EnrichResult) (*model.Job, error) {
+// buildJob maps ats_fetcher.RawJob + llm.EnrichResult into a model.Job ready for DB insert.
+func buildJob(raw ats_fetcher.RawJob, enriched *llm.EnrichResult) (*model.Job, error) {
 	techStack, err := json.Marshal(enriched.TechStack)
 	if err != nil {
 		return nil, fmt.Errorf("marshal tech_stack: %w", err)

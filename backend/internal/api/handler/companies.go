@@ -14,12 +14,12 @@ import (
 
 type CompanyHandler struct {
 	companies           store.CompanyStore
-	scanLog             store.JobScanLogReader
+	scanLog             store.CompanyScanLogReader
 	publisher           kafka.Publisher
 	scanIntervalMinutes int
 }
 
-func NewCompanyHandler(companies store.CompanyStore, scanLog store.JobScanLogReader, publisher kafka.Publisher, scanIntervalMinutes int) *CompanyHandler {
+func NewCompanyHandler(companies store.CompanyStore, scanLog store.CompanyScanLogReader, publisher kafka.Publisher, scanIntervalMinutes int) *CompanyHandler {
 	return &CompanyHandler{companies: companies, scanLog: scanLog, publisher: publisher, scanIntervalMinutes: scanIntervalMinutes}
 }
 
@@ -187,7 +187,7 @@ func (h *CompanyHandler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	payload, _ := json.Marshal(map[string]string{"company_id": id})
-	if err := h.publisher.Publish(context.Background(), kafka.TopicCompanyScanJob, payload); err != nil {
+	if err := h.publisher.Publish(context.Background(), kafka.TopicCompanyScanRequest, payload); err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to trigger scan")
 		return
 	}

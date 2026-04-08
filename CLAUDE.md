@@ -7,7 +7,7 @@ Full design spec: `Designs/job-tracker-final-architecture.md`
 ## Pipeline
 
 ```
-Scheduler → company.scan_job (Kafka) → Scan Engine → jobs.raw (Kafka) → LLM Scorer → jobs.raw_detail (Kafka) → Enricher → job (DB) → API
+company_scan_scheduler → company.scan_request (Kafka) → job_listing_crawler → job_listings.raw (Kafka) → job_listing_relevance_filter → job_listings.filtered (Kafka) → job_post_analyzer → job (DB) → API
 ```
 
 ## Directory map
@@ -15,7 +15,7 @@ Scheduler → company.scan_job (Kafka) → Scan Engine → jobs.raw (Kafka) → 
 | Path | What lives there |
 |---|---|
 | `cmd/` | Binary entry points — one per worker + api |
-| `internal/adapter/` | Careers page fetchers (Greenhouse, Lever, etc.) |
+| `internal/ats_fetcher/` | Careers page fetchers (Greenhouse, Lever, etc.) |
 | `internal/api/` | REST API router, handlers, middleware |
 | `internal/db/` | GORM connection setup |
 | `internal/kafka/` | Producer, consumer, admin, topic names |
@@ -30,10 +30,10 @@ Scheduler → company.scan_job (Kafka) → Scan Engine → jobs.raw (Kafka) → 
 
 | Binary | Role |
 |---|---|
-| `cmd/scheduler` | Queries DB for companies due for a scan, publishes to `company.scan_job` |
-| `cmd/scan` | Consumes `company.scan_job`, fetches careers pages, publishes to `jobs.raw` |
-| `cmd/scorer` | Scores batches via LLM, routes relevant to `jobs.raw_detail` |
-| `cmd/enricher` | Fetches full job page, LLM enriches, writes to `job` table |
+| `cmd/company_scan_scheduler` | Queries DB for companies due for a scan, publishes to `company.scan_request` |
+| `cmd/job_listing_crawler` | Consumes `company.scan_request`, fetches careers pages, publishes to `job_listings.raw` |
+| `cmd/job_listing_relevance_filter` | Scores batches via LLM, routes relevant to `job_listings.filtered` |
+| `cmd/job_post_analyzer` | Fetches full job page, LLM enriches, writes to `job` table |
 | `cmd/api` | REST API on `:8080` |
 
 ## Database tables
@@ -42,9 +42,9 @@ Scheduler → company.scan_job (Kafka) → Scan Engine → jobs.raw (Kafka) → 
 |---|---|
 | `companies` | Tracked companies |
 | `job_seen_ledger` | Dedup + pipeline blocking; `removed_at` tracks when a job disappears from a careers page |
-| `job_scan_log` | Per-run scan summary (fetched, new, duration, error) |
+| `company_scan_log` | Per-run scan summary (fetched, new, duration, error) |
 | `job` | Operational feed — only `new`, `saved`, `applied`, `dismissed` rows live here |
-| `job_snapshot` | Append-only analytics record written by enricher; survives job dismissal |
+| `job_snapshot` | Append-only analytics record written by job_post_analyzer; survives job dismissal |
 | `job_application` | Application stage tracking |
 | `job_discarded` | Dismiss log with reason and note |
 
@@ -82,4 +82,4 @@ new → dismissed          (user dismisses — job row kept for FK integrity, hi
 - All DB access goes through `internal/store/` — no raw GORM elsewhere
 - All typed values (status, stage, reason) use constants from `internal/model/constants.go`
 - Insights query `job_snapshot`, not `job` — snapshot rows are never deleted
-- Scorer batch failures mark jobs as `error` in `job_seen_ledger` — never re-queue to Kafka
+- job_listing_relevance_filter batch failures mark jobs as `error` in `job_seen_ledger` — never re-queue to Kafka

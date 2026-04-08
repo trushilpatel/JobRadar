@@ -14,12 +14,12 @@ type ScanStats struct {
 	AvgDurationMs *float64 `json:"avg_duration_ms"`
 	NewToday      int64    `json:"new_today"`
 	NewThisMonth  int64    `json:"new_this_month"`
-	RecentRuns    []model.JobScanLog `json:"recent_runs"`
+	RecentRuns    []model.CompanyScanLog `json:"recent_runs"`
 }
 
-// JobScanLogWriter records scan summaries and updates company scan status.
-type JobScanLogWriter interface {
-	InsertJobScanLog(companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) error
+// CompanyScanLogWriter records scan summaries and updates company scan status.
+type CompanyScanLogWriter interface {
+	InsertCompanyScanLog(companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) error
 	UpdateCompanyScanStatus(companyID, status string) error
 }
 
@@ -30,29 +30,29 @@ type DailyScanCount struct {
 	NewJobs int    `json:"new_jobs"`
 }
 
-// JobScanLogReader reads scan history for a company.
-type JobScanLogReader interface {
+// CompanyScanLogReader reads scan history for a company.
+type CompanyScanLogReader interface {
 	GetScanStats(companyID string) (ScanStats, error)
 	GetJobsScannedToday() (int64, error)
 	GetScansByDay(days int) ([]DailyScanCount, error)
 }
 
-type jobScanLogStore struct {
+type companyScanLogStore struct {
 	db *gorm.DB
 }
 
-// JobScanLogStore is the full interface used by anything that reads + writes scan logs.
-type JobScanLogStore interface {
-	JobScanLogWriter
-	JobScanLogReader
+// CompanyScanLogStore is the full interface used by anything that reads + writes scan logs.
+type CompanyScanLogStore interface {
+	CompanyScanLogWriter
+	CompanyScanLogReader
 }
 
-func NewJobScanLogStore(db *gorm.DB) JobScanLogStore {
-	return &jobScanLogStore{db: db}
+func NewCompanyScanLogStore(db *gorm.DB) CompanyScanLogStore {
+	return &companyScanLogStore{db: db}
 }
 
-func (s *jobScanLogStore) InsertJobScanLog(companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) error {
-	row := model.JobScanLog{
+func (s *companyScanLogStore) InsertCompanyScanLog(companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) error {
+	row := model.CompanyScanLog{
 		CompanyID:   companyID,
 		JobsFetched: jobsFetched,
 		JobsNew:     jobsNew,
@@ -62,7 +62,7 @@ func (s *jobScanLogStore) InsertJobScanLog(companyID string, jobsFetched, jobsNe
 	return s.db.Create(&row).Error
 }
 
-func (s *jobScanLogStore) GetScanStats(companyID string) (ScanStats, error) {
+func (s *companyScanLogStore) GetScanStats(companyID string) (ScanStats, error) {
 	var stats ScanStats
 
 	type agg struct {
@@ -73,7 +73,7 @@ func (s *jobScanLogStore) GetScanStats(companyID string) (ScanStats, error) {
 		AvgDurationMs *float64
 	}
 	var a agg
-	err := s.db.Model(&model.JobScanLog{}).
+	err := s.db.Model(&model.CompanyScanLog{}).
 		Where("company_id = ?", companyID).
 		Select("COUNT(*) as total_scans, SUM(jobs_fetched) as total_fetched, SUM(jobs_new) as total_new, SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) as error_count, AVG(duration_ms) as avg_duration_ms").
 		Scan(&a).Error
@@ -88,10 +88,10 @@ func (s *jobScanLogStore) GetScanStats(companyID string) (ScanStats, error) {
 	stats.AvgDurationMs = a.AvgDurationMs
 
 	var newToday, newThisMonth int64
-	s.db.Model(&model.JobScanLog{}).
+	s.db.Model(&model.CompanyScanLog{}).
 		Where("company_id = ? AND DATE(scanned_at) = CURRENT_DATE", companyID).
 		Select("COALESCE(SUM(jobs_new), 0)").Scan(&newToday)
-	s.db.Model(&model.JobScanLog{}).
+	s.db.Model(&model.CompanyScanLog{}).
 		Where("company_id = ? AND DATE_TRUNC('month', scanned_at) = DATE_TRUNC('month', CURRENT_DATE)", companyID).
 		Select("COALESCE(SUM(jobs_new), 0)").Scan(&newThisMonth)
 	stats.NewToday = newToday
@@ -104,18 +104,18 @@ func (s *jobScanLogStore) GetScanStats(companyID string) (ScanStats, error) {
 	return stats, err
 }
 
-func (s *jobScanLogStore) GetJobsScannedToday() (int64, error) {
+func (s *companyScanLogStore) GetJobsScannedToday() (int64, error) {
 	var count int64
-	err := s.db.Model(&model.JobScanLog{}).
+	err := s.db.Model(&model.CompanyScanLog{}).
 		Where("DATE(scanned_at) = CURRENT_DATE").
 		Select("COALESCE(SUM(jobs_fetched), 0)").
 		Scan(&count).Error
 	return count, err
 }
 
-func (s *jobScanLogStore) GetScansByDay(days int) ([]DailyScanCount, error) {
+func (s *companyScanLogStore) GetScansByDay(days int) ([]DailyScanCount, error) {
 	var results []DailyScanCount
-	err := s.db.Model(&model.JobScanLog{}).
+	err := s.db.Model(&model.CompanyScanLog{}).
 		Select("DATE(scanned_at) as date, SUM(jobs_fetched) as scanned, SUM(jobs_new) as new_jobs").
 		Where("scanned_at >= NOW() - ? * INTERVAL '1 day'", days).
 		Group("DATE(scanned_at)").
@@ -124,7 +124,7 @@ func (s *jobScanLogStore) GetScansByDay(days int) ([]DailyScanCount, error) {
 	return results, err
 }
 
-func (s *jobScanLogStore) UpdateCompanyScanStatus(companyID, status string) error {
+func (s *companyScanLogStore) UpdateCompanyScanStatus(companyID, status string) error {
 	return s.db.Model(&model.Company{}).
 		Where("id = ?", companyID).
 		Updates(map[string]any{

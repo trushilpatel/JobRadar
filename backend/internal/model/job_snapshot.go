@@ -32,5 +32,5 @@ type JobSnapshot struct {
 }
 
 func (JobSnapshot) TableName() string {
-	return "job_snapshot"
+	return "job_analytics"
 }

@@ -1,4 +1,4 @@
-package scorer
+package job_listing_relevance_filter
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/trushilpatel/jobradar/internal/adapter"
+	"github.com/trushilpatel/jobradar/internal/ats_fetcher"
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/llm"
 	"github.com/trushilpatel/jobradar/internal/model"
@@ -46,21 +46,21 @@ func NewWorker(
 // Jobs are scored in batches of batchSize. If the batch doesn't fill within
 // flushTimeout, whatever is buffered gets flushed — so jobs never sit forever.
 func (w *Worker) Run(ctx context.Context) error {
-	log.Printf("[scorer] worker started (batchSize=%d flushTimeout=%s)", w.batchSize, w.flushTimeout)
+	log.Printf("[job_listing_relevance_filter] worker started (batchSize=%d flushTimeout=%s)", w.batchSize, w.flushTimeout)
 
-	var batch []adapter.RawJob
+	var batch []ats_fetcher.RawJob
 	timer := time.NewTimer(w.flushTimeout)
 	defer timer.Stop()
 
 	// jobsCh bridges the Kafka poll goroutine to the batch loop below.
-	jobsCh := make(chan adapter.RawJob, w.batchSize*2)
+	jobsCh := make(chan ats_fetcher.RawJob, w.batchSize*2)
 	errCh := make(chan error, 1)
 
 	go func() {
 		err := w.consumer.Poll(ctx, func(_ string, value []byte) error {
-			var job adapter.RawJob
+			var job ats_fetcher.RawJob
 			if err := json.Unmarshal(value, &job); err != nil {
-				log.Printf("[scorer] malformed message: %v — skipping", err)
+				log.Printf("[job_listing_relevance_filter] malformed message: %v — skipping", err)
 				return nil
 			}
 			select {
@@ -92,7 +92,7 @@ func (w *Worker) Run(ctx context.Context) error {
 
 		case <-timer.C:
 			if len(batch) > 0 {
-				log.Printf("[scorer] flush timeout — flushing %d buffered jobs", len(batch))
+				log.Printf("[job_listing_relevance_filter] flush timeout — flushing %d buffered jobs", len(batch))
 				w.flushBatch(ctx, batch)
 				batch = batch[:0]
 			}
@@ -108,7 +108,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			// Flush remaining jobs on graceful shutdown
 			if len(batch) > 0 {
-				log.Printf("[scorer] shutdown — flushing %d remaining jobs", len(batch))
+				log.Printf("[job_listing_relevance_filter] shutdown — flushing %d remaining jobs", len(batch))
 				w.flushBatch(ctx, batch)
 			}
 			return nil
@@ -117,7 +117,7 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 // flushBatch scores a batch of jobs and routes them.
-func (w *Worker) flushBatch(ctx context.Context, batch []adapter.RawJob) {
+func (w *Worker) flushBatch(ctx context.Context, batch []ats_fetcher.RawJob) {
 	inputs := make([]llm.ScorerInput, len(batch))
 	for i, job := range batch {
 		inputs[i] = llm.ScorerInput{ID: job.ID, Title: job.Title}
@@ -125,13 +125,13 @@ func (w *Worker) flushBatch(ctx context.Context, batch []adapter.RawJob) {
 
 	relevantIDs, err := w.scorer.ScoreBatch(ctx, inputs)
 	if err != nil {
-		log.Printf("[scorer] ScoreBatch failed: %v — marking batch of %d as error", err, len(batch))
+		log.Printf("[job_listing_relevance_filter] ScoreBatch failed: %v — marking batch of %d as error", err, len(batch))
 		ids := make([]string, len(batch))
 		for i, job := range batch {
 			ids[i] = job.ID
 		}
 		if merr := w.ledger.UpdateSeenReasonBatch(ids, model.SeenReasonError); merr != nil {
-			log.Printf("[scorer] mark error batch failed: %v", merr)
+			log.Printf("[job_listing_relevance_filter] mark error batch failed: %v", merr)
 		}
 		return
 	}
@@ -152,20 +152,20 @@ func (w *Worker) flushBatch(ctx context.Context, batch []adapter.RawJob) {
 
 	if len(irrelevantIDs) > 0 {
 		if err := w.ledger.UpdateSeenReasonBatch(irrelevantIDs, model.SeenReasonLLMIrrelevant); err != nil {
-			log.Printf("[scorer] batch mark irrelevant failed: %v", err)
+			log.Printf("[job_listing_relevance_filter] batch mark irrelevant failed: %v", err)
 		}
 	}
 
-	log.Printf("[scorer] batch=%d relevant=%d irrelevant=%d", len(batch), len(relevantIDs), len(batch)-len(relevantIDs))
+	log.Printf("[job_listing_relevance_filter] batch=%d relevant=%d irrelevant=%d", len(batch), len(relevantIDs), len(batch)-len(relevantIDs))
 }
 
-func (w *Worker) publishDetail(ctx context.Context, job adapter.RawJob) {
+func (w *Worker) publishDetail(ctx context.Context, job ats_fetcher.RawJob) {
 	payload, err := json.Marshal(job)
 	if err != nil {
-		log.Printf("[scorer] marshal failed for %s: %v", job.ID, err)
+		log.Printf("[job_listing_relevance_filter] marshal failed for %s: %v", job.ID, err)
 		return
 	}
-	if err := w.publisher.Publish(ctx, kafka.TopicJobsRawDetail, payload); err != nil {
-		log.Printf("[scorer] publish failed for %s: %v", job.ID, err)
+	if err := w.publisher.Publish(ctx, kafka.TopicJobListingsFiltered, payload); err != nil {
+		log.Printf("[job_listing_relevance_filter] publish failed for %s: %v", job.ID, err)
 	}
 }

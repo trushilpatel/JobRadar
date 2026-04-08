@@ -31,7 +31,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := kafka.EnsureTopics(ctx, cfg, kafka.TopicCompanyScanJob); err != nil {
+	if err := kafka.EnsureTopics(ctx, cfg, kafka.TopicCompanyScanRequest); err != nil {
 		log.Fatalf("kafka topics: %v", err)
 	}
 
@@ -44,7 +44,7 @@ func main() {
 	// --- Store ---
 	companies := store.NewCompanyStore(database)
 
-	log.Printf("[scheduler] started — scan interval=%dm, check every %s",
+	log.Printf("[company_scan_scheduler] started — scan interval=%dm, check every %s",
 		cfg.ScanIntervalMinutes, checkInterval)
 
 	// Run once immediately on startup, then on every tick.
@@ -58,7 +58,7 @@ func main() {
 		case <-ticker.C:
 			enqueuedue(ctx, companies, producer, cfg.ScanIntervalMinutes)
 		case <-ctx.Done():
-			log.Println("[scheduler] shutting down")
+			log.Println("[company_scan_scheduler] shutting down")
 			return
 		}
 	}
@@ -69,14 +69,14 @@ func main() {
 func enqueuedue(ctx context.Context, companies store.CompanyReader, pub kafka.Publisher, intervalMinutes int) {
 	due, err := companies.GetCompaniesDueForScan(intervalMinutes)
 	if err != nil {
-		log.Printf("[scheduler] failed to query due companies: %v", err)
+		log.Printf("[company_scan_scheduler] failed to query due companies: %v", err)
 		return
 	}
 	if len(due) == 0 {
 		return
 	}
 
-	log.Printf("[scheduler] %d companies due for scan", len(due))
+	log.Printf("[company_scan_scheduler] %d companies due for scan", len(due))
 
 	type scanRequest struct {
 		CompanyID string `json:"company_id"`
@@ -85,13 +85,13 @@ func enqueuedue(ctx context.Context, companies store.CompanyReader, pub kafka.Pu
 	for _, c := range due {
 		payload, err := json.Marshal(scanRequest{CompanyID: c.ID})
 		if err != nil {
-			log.Printf("[scheduler] marshal failed for %s: %v", c.ID, err)
+			log.Printf("[company_scan_scheduler] marshal failed for %s: %v", c.ID, err)
 			continue
 		}
-		if err := pub.Publish(ctx, kafka.TopicCompanyScanJob, payload); err != nil {
-			log.Printf("[scheduler] publish failed for %s: %v", c.ID, err)
+		if err := pub.Publish(ctx, kafka.TopicCompanyScanRequest, payload); err != nil {
+			log.Printf("[company_scan_scheduler] publish failed for %s: %v", c.ID, err)
 			continue
 		}
-		log.Printf("[scheduler] queued %s (%s)", c.Name, c.ID)
+		log.Printf("[company_scan_scheduler] queued %s (%s)", c.Name, c.ID)
 	}
 }

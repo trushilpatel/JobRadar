@@ -1,12 +1,12 @@
 -- +goose Up
 -- Add ON DELETE CASCADE to every FK that blocks company deletion.
--- Delete chain: companies → job_scan_log
+-- Delete chain: companies → company_scan_log
 --                         → job → job_application
 --                                → job_discarded
 
-ALTER TABLE job_scan_log
-    DROP CONSTRAINT job_scan_log_company_id_fkey,
-    ADD  CONSTRAINT job_scan_log_company_id_fkey
+ALTER TABLE company_scan_log
+    DROP CONSTRAINT company_scan_log_company_id_fkey,
+    ADD  CONSTRAINT company_scan_log_company_id_fkey
          FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE;
 
 ALTER TABLE job
@@ -40,7 +40,7 @@ ALTER TABLE job
     ADD  CONSTRAINT job_company_id_fkey
          FOREIGN KEY (company_id) REFERENCES companies(id);
 
-ALTER TABLE job_scan_log
-    DROP CONSTRAINT job_scan_log_company_id_fkey,
-    ADD  CONSTRAINT job_scan_log_company_id_fkey
+ALTER TABLE company_scan_log
+    DROP CONSTRAINT company_scan_log_company_id_fkey,
+    ADD  CONSTRAINT company_scan_log_company_id_fkey
          FOREIGN KEY (company_id) REFERENCES companies(id);
