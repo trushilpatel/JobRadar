@@ -50,8 +50,8 @@ export interface RoleCategoryCount {
   count: number
 }
 
-export async function fetchTechStack(): Promise<TechCount[]> {
-  const res = await fetch(`${BASE}/insights/tech-stack`)
+export async function fetchTechStack(limit = 15): Promise<TechCount[]> {
+  const res = await fetch(`${BASE}/insights/tech-stack?limit=${limit}`)
   if (!res.ok) throw new Error('Failed to fetch tech stack')
   return res.json()
 }
@@ -80,8 +80,8 @@ export async function fetchSponsorshipTrend(days = 30): Promise<SponsorshipDay[]
   return res.json()
 }
 
-export async function fetchVelocity(): Promise<CompanyVelocity[]> {
-  const res = await fetch(`${BASE}/insights/velocity`)
+export async function fetchVelocity(limit = 20): Promise<CompanyVelocity[]> {
+  const res = await fetch(`${BASE}/insights/velocity?limit=${limit}`)
   if (!res.ok) throw new Error('Failed to fetch velocity')
   return res.json()
 }

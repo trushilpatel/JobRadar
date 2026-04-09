@@ -7,6 +7,7 @@
         test-adapters \
         test-adapter-greenhouse test-adapter-lever test-adapter-ashby \
         docker-up docker-down \
+        up down logs build-docker \
         help
 
 # ── Dev ──────────────────────────────────────────────────────────────────────
@@ -98,16 +99,30 @@ test-adapter-ashby: ## Run Ashby integration tests only
 vet: ## Run go vet
 	cd backend && go vet ./...
 
-# ── Docker ────────────────────────────────────────────────────────────────────
+# ── Docker (infra only — for local dev) ──────────────────────────────────────
 
-docker-up: ## Start Kafka + Postgres via docker-compose
-	docker-compose up -d
+docker-up: ## Start Kafka + Postgres only (for local go run dev)
+	docker-compose up -d postgres kafka
 
-docker-down: ## Stop docker-compose services
+docker-down: ## Stop all docker-compose services
 	docker-compose down
 
 docker-logs: ## Tail docker-compose logs
 	docker-compose logs -f
+
+# ── Full stack ────────────────────────────────────────────────────────────────
+
+up: ## Build images and start the entire stack (infra + all workers + frontend)
+	docker-compose up -d --build
+
+down: ## Stop and remove all containers (keeps volumes)
+	docker-compose down
+
+logs: ## Tail logs for all services (Ctrl-C to stop)
+	docker-compose logs -f
+
+build-docker: ## Build all Docker images without starting
+	docker-compose build
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 

@@ -319,12 +319,12 @@ export function InsightsPage() {
 
   useEffect(() => {
     Promise.allSettled([
-      fetchTechStack().then(d => setTechData((d ?? []).slice(0, 15))),
+      fetchTechStack(15).then(d => setTechData(d ?? [])),
       fetchCompanyActivity().then(d => setActivityData(d ?? [])),
       fetchFunnel().then(d => setFunnelData(d ?? [])),
       fetchLocation().then(d => setLocationData(d ?? { countries: [], states: [] })),
       fetchSponsorshipTrend(30).then(d => setSponsorshipData(d ?? [])),
-      fetchVelocity().then(d => setVelocityData(d ?? [])),
+      fetchVelocity(20).then(d => setVelocityData(d ?? [])),
       fetchRoleCategories().then(d => setRoleData(d ?? [])),
     ]).finally(() => setLoading(false))
   }, [])
