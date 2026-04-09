@@ -89,7 +89,7 @@ Example: ["greenhouse-123", "lever-456"]`,
 // ── Enrich ───────────────────────────────────────────────────────────────────
 
 func (s *geminiScorer) Enrich(ctx context.Context, input EnrichInput) (*EnrichResult, error) {
-	prompt := fmt.Sprintf(`Extract structured information from the following job posting.
+	prompt := fmt.Sprintf(`Extract structured information from the following job posting. **Strictly evaluate the text provided without using external knowledge or making assumptions about company policies not explicitly stated in the content.**
 
 Job ID: %s
 
@@ -98,21 +98,21 @@ Job posting text:
 
 Return a JSON object with exactly these fields (use null for missing fields):
 {
-  "experience_years": <minimum years of experience required as integer, or null>,
-  "tech_stack": <array of key tools/languages/frameworks mentioned>,
-  "salary_min": <integer or null>,
-  "salary_max": <integer or null>,
-  "salary_currency": <string or null>,
-  "summary": "<2-3 sentence summary of the role>",
-  "remote": <true if the role is remote or hybrid, false if fully on-site>,
-  "country": "<location restriction — the country where the candidate must be based, e.g. 'USA', 'Canada', 'UK'. Empty string if no country restriction (globally remote or not specified)>",
-  "state": "<US state abbreviation if restricted to a US state, e.g. 'CA', 'NY', 'TX'. null otherwise>",
-  "sponsorship": <true if the posting mentions H1B/visa sponsorship support, false otherwise>,
-  "requires_citizen": <true if the posting requires US Citizen or Green Card only, false otherwise>,
-  "security_clearance": <true if any security clearance (Secret, TS/SCI, etc.) is required, false otherwise>,
-  "role_brief": "<one sentence technical mission of the role>",
-  "responsibilities": "<concise bullet points of key technical responsibilities, newline-separated>",
-  "role_category": "<one of: backend, frontend, fullstack, devops, ml, data, other>"
+"experience\_years": \<minimum years of experience required as integer, or null\>,
+"tech\_stack": \<array of key tools/languages/frameworks mentioned\>,
+"salary\_min": \<integer or null\>,
+"salary\_max": \<integer or null\>,
+"salary\_currency": \<string or null\>,
+"summary": "\<2-3 sentence summary of the role\>",
+"remote": \<true if the role is remote or hybrid, false if fully on-site\>,
+"country": "\<location restriction — the country where the candidate must be based, e.g. 'USA', 'Canada', 'UK'. Empty string if no country restriction (globally remote or not specified)\>",
+"state": "\<US state abbreviation if restricted to a US state, e.g. 'CA', 'NY', 'TX'. null otherwise\>",
+"sponsorship": \<true ONLY if the posting text explicitly mentions H1B, visa sponsorship, or work authorization support; false otherwise\>,
+"requires\_citizen": \<true ONLY if the posting text explicitly states US Citizen or Green Card is required; false otherwise\>,
+"security\_clearance": \<true if any security clearance (Secret, TS/SCI, etc.) is required, false otherwise\>,
+"role\_brief": "\<one sentence technical mission of the role\>",
+"responsibilities": "\<concise bullet points of key technical responsibilities, newline-separated\>",
+"role\_category": "\<one of: backend, frontend, fullstack, devops, ml, data, other\>"
 }
 
 Respond with ONLY the JSON object, no explanation.`,
