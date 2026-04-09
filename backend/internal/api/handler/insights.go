@@ -15,9 +15,15 @@ func NewInsightsHandler(insights store.InsightsReader) *InsightsHandler {
 	return &InsightsHandler{insights: insights}
 }
 
-// GET /insights/tech-stack
+// GET /insights/tech-stack?limit=15
 func (h *InsightsHandler) TechStack(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.GetTechStackTrends(15)
+	limit := 15
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	data, err := h.insights.GetTechStackTrends(limit)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch tech stack")
 		return
@@ -79,9 +85,15 @@ func (h *InsightsHandler) Sponsorship(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, data)
 }
 
-// GET /insights/velocity
+// GET /insights/velocity?limit=20
 func (h *InsightsHandler) Velocity(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.GetCompanyVelocity(20)
+	limit := 20
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	data, err := h.insights.GetCompanyVelocity(limit)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch company velocity")
 		return

@@ -2,7 +2,9 @@
         build build-frontend build-backend \
         run-api run-scan run-scorer run-enricher \
         migrate lint tsc \
-        test test-short test-adapters \
+        test test-short test-unit \
+        test-api test-workers test-scheduler test-llm \
+        test-adapters \
         test-adapter-greenhouse test-adapter-lever test-adapter-ashby \
         docker-up docker-down \
         help
@@ -63,6 +65,23 @@ test: ## Run all Go tests (unit + integration, hits real APIs)
 
 test-short: ## Run unit tests only — no real HTTP calls, fast
 	cd backend && go test -short ./...
+
+test-unit: test-scheduler test-workers test-api ## Run all unit tests (scheduler + workers + api) — no real connections
+
+test-scheduler: ## Test company_scan_scheduler
+	cd backend && go test -v ./cmd/company_scan_scheduler/...
+
+test-workers: ## Test all pipeline workers (crawler, relevance filter, enricher)
+	cd backend && go test -v \
+		./internal/worker/job_listing_crawler/... \
+		./internal/worker/job_listing_relevance_filter/... \
+		./internal/worker/job_post_analyzer/...
+
+test-api: ## Test API handlers
+	cd backend && go test -v ./internal/api/handler/...
+
+test-llm: ## Test LLM package
+	cd backend && go test -v ./internal/llm/...
 
 test-adapters: ## Run all adapter integration tests (Greenhouse + Lever + Ashby hit real APIs)
 	cd backend && go test -v -run "Integration" ./internal/ats_fetcher/greenhouse/... ./internal/ats_fetcher/lever/... ./internal/ats_fetcher/ashby/...

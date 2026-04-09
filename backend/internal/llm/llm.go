@@ -25,7 +25,8 @@ type EnrichResult struct {
 	SalaryCurrency  string
 	Summary         string
 	// Location (structured)
-	Country string // "USA", "Canada", "UK", etc. — empty if unknown
+	Remote  bool   // true if the role is remote (fully or partially)
+	Country string // location restriction — "USA", "Canada", etc. Empty if no country restriction.
 	State   string // US state abbreviation, e.g. "CA", "NY" — empty if not USA or unknown
 	// Visa / clearance flags
 	Sponsorship       bool

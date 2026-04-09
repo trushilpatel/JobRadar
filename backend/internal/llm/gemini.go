@@ -47,7 +47,7 @@ func (s *geminiScorer) ScoreBatch(ctx context.Context, jobs []ScorerInput) ([]st
 	roles := strings.Join(s.targetRoles, ", ")
 	prompt := fmt.Sprintf(`You are a job relevance filter for a software engineer with the following profile:
 - Target roles: %s
-- Years of experience: ~4.5 years (mid-level)
+- Years of experience: %d+ years
 
 Evaluate each job title and return the IDs of jobs that are a plausible match.
 
@@ -104,8 +104,9 @@ Return a JSON object with exactly these fields (use null for missing fields):
   "salary_max": <integer or null>,
   "salary_currency": <string or null>,
   "summary": "<2-3 sentence summary of the role>",
-  "country": "<country where the job is located, e.g. 'USA', 'Canada', 'UK', 'India'. Use 'Remote' if fully remote with no country specified. null if unknown>",
-  "state": "<US state abbreviation if country is USA, e.g. 'CA', 'NY', 'TX'. null otherwise>",
+  "remote": <true if the role is remote or hybrid, false if fully on-site>,
+  "country": "<location restriction — the country where the candidate must be based, e.g. 'USA', 'Canada', 'UK'. Empty string if no country restriction (globally remote or not specified)>",
+  "state": "<US state abbreviation if restricted to a US state, e.g. 'CA', 'NY', 'TX'. null otherwise>",
   "sponsorship": <true if the posting mentions H1B/visa sponsorship support, false otherwise>,
   "requires_citizen": <true if the posting requires US Citizen or Green Card only, false otherwise>,
   "security_clearance": <true if any security clearance (Secret, TS/SCI, etc.) is required, false otherwise>,
@@ -130,6 +131,7 @@ Respond with ONLY the JSON object, no explanation.`,
 		SalaryMax         *int     `json:"salary_max"`
 		SalaryCurrency    string   `json:"salary_currency"`
 		Summary           string   `json:"summary"`
+		Remote            bool     `json:"remote"`
 		Country           string   `json:"country"`
 		State             string   `json:"state"`
 		Sponsorship       bool     `json:"sponsorship"`
@@ -151,6 +153,7 @@ Respond with ONLY the JSON object, no explanation.`,
 		SalaryMax:         out.SalaryMax,
 		SalaryCurrency:    out.SalaryCurrency,
 		Summary:           out.Summary,
+		Remote:            out.Remote,
 		Country:           out.Country,
 		State:             out.State,
 		Sponsorship:       out.Sponsorship,

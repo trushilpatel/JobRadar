@@ -20,11 +20,21 @@ func NewJobHandler(jobs store.JobStore, ledger store.SeenLedgerWriter, discard s
 	return &JobHandler{jobs: jobs, ledger: ledger, discard: discard, snapshot: snapshot}
 }
 
-// GET /jobs?status=new&saved=true
+// GET /jobs?status=new
 func (h *JobHandler) List(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	if status == "" {
 		status = model.JobStatusNew
+	}
+
+	valid := map[string]bool{
+		model.JobStatusNew:     true,
+		model.JobStatusSaved:   true,
+		model.JobStatusApplied: true,
+	}
+	if !valid[status] {
+		respondError(w, http.StatusBadRequest, "invalid status value")
+		return
 	}
 
 	jobs, err := h.jobs.GetJobsByStatus(status)

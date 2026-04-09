@@ -32,6 +32,7 @@ type Worker struct {
 	jobs     store.JobWriter
 	ledger   store.SeenLedgerWriter
 	snapshot store.SnapshotWriter
+	client   *http.Client
 }
 
 func NewWorker(
@@ -47,6 +48,7 @@ func NewWorker(
 		jobs:     jobs,
 		ledger:   ledger,
 		snapshot: snapshot,
+		client:   &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -87,7 +89,7 @@ func (w *Worker) Run(ctx context.Context) error {
 func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 	// 1. Fetch the full job content — via native API if the adapter supports it,
 	// otherwise fall back to a plain HTTP GET on the job URL.
-	content, err := fetchContent(ctx, job)
+	content, err := w.fetchContent(ctx, job)
 	if err != nil {
 		log.Printf("[job_post_analyzer] %s: fetch content failed: %v", job.ID, err)
 		w.markError(job.ID)
@@ -137,7 +139,7 @@ func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 		CompanyID:         job.CompanyID,
 		Country:           result.Country,
 		State:             result.State,
-		Remote:            row.Remote,
+		Remote:            result.Remote,
 		Sponsorship:       result.Sponsorship,
 		RequiresCitizen:   result.RequiresCitizen,
 		SecurityClearance: result.SecurityClearance,
@@ -148,11 +150,6 @@ func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 	}); err != nil {
 		// Non-fatal: log and continue — job is already saved
 		log.Printf("[job_post_analyzer] %s: write snapshot failed: %v", job.ID, err)
-	}
-
-	// 6. Confirm in seen_ledger
-	if err := w.ledger.UpdateSeenReason(job.ID, model.SeenReasonFetch); err != nil {
-		log.Printf("[job_post_analyzer] %s: update seen_ledger failed: %v", job.ID, err)
 	}
 
 	log.Printf("[job_post_analyzer] %s: enriched and saved — %q", job.ID, job.Title)
@@ -168,7 +165,7 @@ func (w *Worker) markError(jobID string) {
 // fetchContent fetches the full content of a job posting as a structured response.
 // If the adapter implements ContentFetcher, its native API is used (structured JSON).
 // Otherwise falls back to a plain HTTP GET and wraps the stripped HTML in a FetchJobContentResponse.
-func fetchContent(ctx context.Context, job ats_fetcher.RawJob) (ats_fetcher.FetchJobContentResponse, error) {
+func (w *Worker) fetchContent(ctx context.Context, job ats_fetcher.RawJob) (ats_fetcher.FetchJobContentResponse, error) {
 	adp, err := ats_fetcher.Registry(job.Adapter)
 	if err == nil {
 		if cf, ok := adp.(ats_fetcher.ContentFetcher); ok {
@@ -176,7 +173,7 @@ func fetchContent(ctx context.Context, job ats_fetcher.RawJob) (ats_fetcher.Fetc
 		}
 	}
 	// Fallback: scrape the hosted HTML page and populate only the fields we can infer
-	html, err := fetchPage(ctx, job.URL)
+	html, err := w.fetchPage(ctx, job.URL)
 	if err != nil {
 		return ats_fetcher.FetchJobContentResponse{}, err
 	}
@@ -190,16 +187,14 @@ func fetchContent(ctx context.Context, job ats_fetcher.RawJob) (ats_fetcher.Fetc
 }
 
 // fetchPage does a simple HTTP GET and returns the raw response body.
-func fetchPage(ctx context.Context, url string) (string, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-
+func (w *Worker) fetchPage(ctx context.Context, url string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; JobRadar/1.0)")
 
-	resp, err := client.Do(req)
+	resp, err := w.client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("get: %w", err)
 	}
@@ -239,6 +234,7 @@ func buildJob(raw ats_fetcher.RawJob, enriched *llm.EnrichResult) (*model.Job, e
 		CompanyID:         raw.CompanyID,
 		Title:             raw.Title,
 		Location:          nullableString(raw.Location),
+		Remote:            enriched.Remote,
 		Country:           nullableString(enriched.Country),
 		State:             nullableString(enriched.State),
 		URL:               raw.URL,
