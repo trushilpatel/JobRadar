@@ -45,21 +45,29 @@ func (s *geminiScorer) ScoreBatch(ctx context.Context, jobs []ScorerInput) ([]st
 	}
 
 	roles := strings.Join(s.targetRoles, ", ")
-	prompt := fmt.Sprintf(`You are a job relevance filter for a software engineer with these preferences:
+	prompt := fmt.Sprintf(`You are a job relevance filter for a software engineer with the following profile:
 - Target roles: %s
-- Years of experience: %d+
+- Years of experience: ~4.5 years (mid-level)
 
-Evaluate each job title below and return the IDs of all jobs that could be relevant.
+Evaluate each job title and return the IDs of jobs that are a plausible match.
 
-IMPORTANT: When in doubt, INCLUDE the job. A borderline match that gets included
-can be filtered later. A relevant job that gets excluded is lost permanently.
-Only exclude jobs you are confident are NOT a match.
+SENIORITY GUIDELINES:
+- INCLUDE: Junior, Mid-level, Senior, Software Engineer I/II/III, SWE, Backend,
+  Frontend, Fullstack, Platform, Infrastructure, DevOps, SRE, Data Engineer,
+  ML Engineer, and similar IC (Individual Contributor) roles
+- INCLUDE if ambiguous or unclear seniority — prefer false positives over false negatives
+- EXCLUDE: Staff, Principal, Distinguished, Fellow, Architect (standalone),
+  Director, VP, C-suite, Head of Engineering, or any role that is explicitly
+  a people manager with no IC track
+- EXCLUDE: Internships, Co-ops, Apprenticeships
+- EXCLUDE: Non-engineering roles — Sales, Marketing, Design, Recruiting, Finance, Legal
 
-Exclude only: pure internships, C-suite/VP management with no IC track, sales,
-marketing, design, and clearly non-engineering roles.
+IMPORTANT: When in doubt, INCLUDE the job. A borderline match included here can
+be filtered later. A relevant job excluded here is lost permanently.
 
 Job list:
 %s
+
 Respond with ONLY a JSON array of matching IDs, no explanation.
 Example: ["greenhouse-123", "lever-456"]`,
 		roles, s.yearsExp, sb.String(),
