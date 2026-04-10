@@ -60,6 +60,10 @@ func (e *Engine) RunForCompany(ctx context.Context, companyID string) {
 		log.Printf("[job_listing_crawler] RunForCompany: company %q not found: %v", companyID, err)
 		return
 	}
+	if !company.Active {
+		log.Printf("[job_listing_crawler] skipping %s (%s) — company is inactive", company.Name, company.ID)
+		return
+	}
 	log.Printf("[job_listing_crawler] triggered scan for company %s (%s)", company.Name, company.ID)
 	e.scanCompany(ctx, company)
 }

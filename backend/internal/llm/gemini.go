@@ -49,26 +49,27 @@ func (s *geminiScorer) ScoreBatch(ctx context.Context, jobs []ScorerInput) ([]st
 - Target roles: %s
 - Years of experience: %d+ years
 
-Evaluate each job title and return the IDs of jobs that are a plausible match.
+Evaluate each job title and location to return the IDs of jobs that are a plausible match.
 
-SENIORITY GUIDELINES:
-- INCLUDE: Junior, Mid-level, Senior, Software Engineer I/II/III, SWE, Backend,
-  Frontend, Fullstack, Platform, Infrastructure, DevOps, SRE, Data Engineer,
-  ML Engineer, and similar IC (Individual Contributor) roles
-- INCLUDE if ambiguous or unclear seniority — prefer false positives over false negatives
-- EXCLUDE: Staff, Principal, Distinguished, Fellow, Architect (standalone),
-  Director, VP, C-suite, Head of Engineering, or any role that is explicitly
-  a people manager with no IC track
-- EXCLUDE: Internships, Co-ops, Apprenticeships
-- EXCLUDE: Non-engineering roles — Sales, Marketing, Design, Recruiting, Finance, Legal
+### SENIORITY GUIDELINES
+* **INCLUDE:** Junior, Mid-level, Senior, Software Engineer I/II/III, SWE, Backend, Frontend, Fullstack, Platform, Infrastructure, DevOps, SRE, Data Engineer, ML Engineer, and similar IC (Individual Contributor) roles.
+* **INCLUDE:** Ambiguous or unclear seniority—prefer false positives over false negatives.
+* **EXCLUDE:** Staff, Principal, Distinguished, Fellow, Architect (standalone), Director, VP, C-suite, Head of Engineering, or any role that is explicitly a people manager with no IC track.
+* **EXCLUDE:** Internships, Co-ops, Apprenticeships.
+* **EXCLUDE:** Non-engineering roles (Sales, Marketing, Design, Recruiting, Finance, Legal).
 
-IMPORTANT: When in doubt, INCLUDE the job. A borderline match included here can
-be filtered later. A relevant job excluded here is lost permanently.
+### LOCATION GUIDELINES
+* **INCLUDE:** Positions explicitly located within the **USA**.
+* **INCLUDE:** Positions listed as **Remote** (if the company is US-based or specifies US-remote).
+* **EXCLUDE:** Any positions located outside of the USA (e.g., EMEA, APAC, Canada, LATAM) or remote roles restricted to non-US time zones.
+
+### IMPORTANT
+When in doubt, **INCLUDE** the job. A borderline match included here can be filtered later. A relevant job excluded here is lost permanently.
 
 Job list:
 %s
 
-Respond with ONLY a JSON array of matching IDs, no explanation.
+**Respond with ONLY a JSON array of matching IDs, no explanation.**
 Example: ["greenhouse-123", "lever-456"]`,
 		roles, s.yearsExp, sb.String(),
 	)
@@ -107,7 +108,7 @@ Return a JSON object with exactly these fields (use null for missing fields):
 "remote": \<true if the role is remote or hybrid, false if fully on-site\>,
 "country": "\<location restriction — the country where the candidate must be based, e.g. 'USA', 'Canada', 'UK'. Empty string if no country restriction (globally remote or not specified)\>",
 "state": "\<US state abbreviation if restricted to a US state, e.g. 'CA', 'NY', 'TX'. null otherwise\>",
-"sponsorship": \<true ONLY if the posting text explicitly mentions H1B, visa sponsorship, or work authorization support; false otherwise\>,
+"sponsorship": <set to false only if the posting explicitly says it does not provide H-1B/visa/work-authorization support, or explicitly requires U.S. citizenship or security clearance; if none of these are explicitly stated, set to true>,
 "requires\_citizen": \<true ONLY if the posting text explicitly states US Citizen or Green Card is required; false otherwise\>,
 "security\_clearance": \<true if any security clearance (Secret, TS/SCI, etc.) is required, false otherwise\>,
 "role\_brief": "\<one sentence technical mission of the role\>",
