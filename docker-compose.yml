@@ -58,9 +58,8 @@ services:
   # ── One-shot migration ────────────────────────────────────────────────────────
 
   migrate:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: jobradar_backend
+    pull_policy: never
     container_name: jobradar_migrate
     env_file:
       - ./backend/.env
@@ -79,6 +78,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: jobradar_backend
     container_name: jobradar_api
     env_file:
       - ./backend/.env
@@ -103,9 +103,8 @@ services:
     restart: unless-stopped
 
   scheduler:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: jobradar_backend
+    pull_policy: never
     container_name: jobradar_scheduler
     env_file:
       - ./backend/.env
@@ -128,9 +127,8 @@ services:
     restart: unless-stopped
 
   crawler:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: jobradar_backend
+    pull_policy: never
     container_name: jobradar_crawler
     env_file:
       - ./backend/.env
@@ -153,9 +151,8 @@ services:
     restart: unless-stopped
 
   filter:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: jobradar_backend
+    pull_policy: never
     container_name: jobradar_filter
     env_file:
       - ./backend/.env
@@ -178,9 +175,8 @@ services:
     restart: unless-stopped
 
   enricher:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: jobradar_backend
+    pull_policy: never
     container_name: jobradar_enricher
     env_file:
       - ./backend/.env

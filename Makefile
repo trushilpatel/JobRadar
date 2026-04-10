@@ -112,8 +112,8 @@ docker-logs: ## Tail docker-compose logs
 
 # ── Full stack ────────────────────────────────────────────────────────────────
 
-up: ## Build images and start the entire stack (infra + all workers + frontend)
-	docker-compose up -d --build
+up: ## Build backend + frontend images and start the entire stack
+	DOCKER_BUILDKIT=1 docker-compose up -d --build
 
 down: ## Stop and remove all containers (keeps volumes)
 	docker-compose down
@@ -121,8 +121,8 @@ down: ## Stop and remove all containers (keeps volumes)
 logs: ## Tail logs for all services (Ctrl-C to stop)
 	docker-compose logs -f
 
-build-docker: ## Build all Docker images without starting
-	docker-compose build
+build-docker: ## Build backend (jobradar_backend) + frontend images without starting
+	DOCKER_BUILDKIT=1 docker-compose build
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 
