@@ -18,6 +18,11 @@ type Lever struct {
 	baseURL string
 }
 
+// CareersURL returns the public Lever jobs page URL for a given company slug.
+func (l *Lever) CareersURL(id string) string {
+	return "https://jobs.lever.co/" + id
+}
+
 func (l *Lever) apiURL(path string) string {
 	base := "https://api.lever.co"
 	if l.baseURL != "" {

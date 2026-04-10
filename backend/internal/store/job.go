@@ -87,7 +87,7 @@ func (s *jobStore) UpdateJobSaved(id string, saved bool) error {
 	}
 	// Revert status to 'new' only if currently 'saved'; don't touch applied jobs
 	return s.db.Exec(
-		`UPDATE job SET saved = false, status = CASE WHEN status = ? THEN ? ELSE status END WHERE id = ?`,
+		`UPDATE job_feed SET saved = false, status = CASE WHEN status = ? THEN ? ELSE status END WHERE id = ?`,
 		model.JobStatusSaved, model.JobStatusNew, id,
 	).Error
 }

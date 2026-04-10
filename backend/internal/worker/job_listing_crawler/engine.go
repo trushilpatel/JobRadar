@@ -75,7 +75,7 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 		return
 	}
 
-	result, err := adp.FetchJobs(ctx, company.URL)
+	result, err := adp.FetchJobs(ctx, company.ID)
 	if err != nil {
 		errMsg := fmt.Sprintf("fetch failed: %v", err)
 		log.Printf("[job_listing_crawler] %s: %s", company.Name, errMsg)

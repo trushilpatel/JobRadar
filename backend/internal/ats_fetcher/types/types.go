@@ -54,7 +54,17 @@ type FetchJobContentResponse struct {
 // Adapter fetches the current job listings for a company.
 // Required — implemented by all adapters.
 type Adapter interface {
-	FetchJobs(ctx context.Context, companyURL string) (FetchJobsResponse, error)
+	FetchJobs(ctx context.Context, companyID string) (FetchJobsResponse, error)
+}
+
+// URLProvider is an optional interface for adapters that know how to construct
+// a canonical careers page URL from a company slug.
+//
+// Implemented by Greenhouse, Lever, and Ashby. Adapters that scrape arbitrary
+// URLs (Workday, Workable, Chromedp) do not implement this — the stored
+// company.URL is used directly for display.
+type URLProvider interface {
+	CareersURL(id string) string
 }
 
 // ContentFetcher is an optional interface for adapters that can fetch the full

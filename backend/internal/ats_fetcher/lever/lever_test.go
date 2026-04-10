@@ -11,6 +11,15 @@ import (
 	"github.com/trushilpatel/jobradar/internal/ats_fetcher/types"
 )
 
+func TestLever_CareersURL(t *testing.T) {
+	l := &Lever{}
+	got := l.CareersURL("netlify")
+	want := "https://jobs.lever.co/netlify"
+	if got != want {
+		t.Errorf("CareersURL(%q) = %q, want %q", "netlify", got, want)
+	}
+}
+
 // ── FetchJobs ─────────────────────────────────────────────────────────────────
 
 func TestLever_FetchJobs(t *testing.T) {

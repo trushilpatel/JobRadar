@@ -1,5 +1,7 @@
 FROM golang:1.24-alpine AS builder
 
+ENV GOTOOLCHAIN=auto
+
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -17,3 +19,4 @@ FROM alpine:3.20
 RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 COPY --from=builder /out/* /app/
+COPY migrations/ /app/migrations/

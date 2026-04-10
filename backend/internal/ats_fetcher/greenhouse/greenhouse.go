@@ -13,9 +13,20 @@ import (
 )
 
 type Greenhouse struct {
-	// contentBaseURL overrides the Greenhouse API base — used in tests to point at a fake server.
+	// listBaseURL overrides the Greenhouse list API base — used in tests to point at a fake server.
+	// Leave empty for production (defaults to https://boards-api.greenhouse.io).
+	listBaseURL string
+	// contentBaseURL overrides the Greenhouse content API base — used in tests to point at a fake server.
 	// Leave empty for production (defaults to https://boards-api.greenhouse.io).
 	contentBaseURL string
+}
+
+func (g *Greenhouse) listURL(slug string) string {
+	base := "https://boards-api.greenhouse.io"
+	if g.listBaseURL != "" {
+		base = g.listBaseURL
+	}
+	return fmt.Sprintf("%s/v1/boards/%s/jobs", base, slug)
 }
 
 func (g *Greenhouse) contentURL(slug, id string) string {
@@ -24,6 +35,11 @@ func (g *Greenhouse) contentURL(slug, id string) string {
 		base = g.contentBaseURL
 	}
 	return fmt.Sprintf("%s/v1/boards/%s/jobs/%s", base, slug, id)
+}
+
+// CareersURL returns the Greenhouse job board API URL for a given company slug.
+func (g *Greenhouse) CareersURL(id string) string {
+	return fmt.Sprintf("https://boards-api.greenhouse.io/v1/boards/%s/jobs", id)
 }
 
 // ── Internal API response structs ────────────────────────────────────────────
@@ -98,8 +114,8 @@ func (r *fetchJobContentResponse) toFetchJobContentResponse() types.FetchJobCont
 
 // ── Adapter implementation ────────────────────────────────────────────────────
 
-func (g *Greenhouse) FetchJobs(ctx context.Context, companyURL string) (types.FetchJobsResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, companyURL, nil)
+func (g *Greenhouse) FetchJobs(ctx context.Context, companyID string) (types.FetchJobsResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, g.listURL(companyID), nil)
 	if err != nil {
 		return types.FetchJobsResponse{}, fmt.Errorf("greenhouse: build request: %w", err)
 	}

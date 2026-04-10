@@ -60,8 +60,8 @@ func (s *applicationStore) GetLatestApplicationsWithJob() ([]ApplicationWithJob,
 			j.title as job_title,
 			j.company_id,
 			c.name as company_name
-		FROM job_application ja
-		JOIN job j ON ja.job_result_id = j.id
+		FROM job_application_tracker ja
+		JOIN job_feed j ON ja.job_result_id = j.id
 		JOIN companies c ON j.company_id = c.id
 		ORDER BY ja.job_result_id, ja.stage_at DESC
 	`).Scan(&results).Error
@@ -70,14 +70,14 @@ func (s *applicationStore) GetLatestApplicationsWithJob() ([]ApplicationWithJob,
 
 func (s *applicationStore) UpdateApplicationStage(id int64, stage string) error {
 	return s.db.Exec(
-		`UPDATE job_application SET stage = ?, stage_at = NOW() WHERE id = ?`,
+		`UPDATE job_application_tracker SET stage = ?, stage_at = NOW() WHERE id = ?`,
 		stage, id,
 	).Error
 }
 
 func (s *applicationStore) UpdateApplicationNote(id int64, note string) error {
 	return s.db.Exec(
-		`UPDATE job_application SET note = ? WHERE id = ?`,
+		`UPDATE job_application_tracker SET note = ? WHERE id = ?`,
 		note, id,
 	).Error
 }

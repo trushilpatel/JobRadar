@@ -40,8 +40,8 @@ func TestGreenhouse_FetchJobs(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	g := &Greenhouse{}
-	result, err := g.FetchJobs(context.Background(), srv.URL)
+	g := &Greenhouse{listBaseURL: srv.URL}
+	result, err := g.FetchJobs(context.Background(), "stripe")
 	if err != nil {
 		t.Fatalf("FetchJobs error: %v", err)
 	}
@@ -80,8 +80,8 @@ func TestGreenhouse_FetchJobs_Empty(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	g := &Greenhouse{}
-	result, err := g.FetchJobs(context.Background(), srv.URL)
+	g := &Greenhouse{listBaseURL: srv.URL}
+	result, err := g.FetchJobs(context.Background(), "stripe")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -96,8 +96,8 @@ func TestGreenhouse_FetchJobs_HTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	g := &Greenhouse{}
-	_, err := g.FetchJobs(context.Background(), srv.URL)
+	g := &Greenhouse{listBaseURL: srv.URL}
+	_, err := g.FetchJobs(context.Background(), "stripe")
 	if err == nil {
 		t.Fatal("expected error on HTTP 500, got nil")
 	}
@@ -110,10 +110,39 @@ func TestGreenhouse_FetchJobs_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	g := &Greenhouse{}
-	_, err := g.FetchJobs(context.Background(), srv.URL)
+	g := &Greenhouse{listBaseURL: srv.URL}
+	_, err := g.FetchJobs(context.Background(), "stripe")
 	if err == nil {
 		t.Fatal("expected error on malformed JSON, got nil")
+	}
+}
+
+func TestGreenhouse_CareersURL(t *testing.T) {
+	g := &Greenhouse{}
+	got := g.CareersURL("stripe")
+	want := "https://boards-api.greenhouse.io/v1/boards/stripe/jobs"
+	if got != want {
+		t.Errorf("CareersURL(%q) = %q, want %q", "stripe", got, want)
+	}
+}
+
+func TestGreenhouse_FetchJobs_UsesSlug(t *testing.T) {
+	var capturedPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"jobs":[]}`))
+	}))
+	defer srv.Close()
+
+	g := &Greenhouse{listBaseURL: srv.URL}
+	_, err := g.FetchJobs(context.Background(), "stripe")
+	if err != nil {
+		t.Fatalf("FetchJobs error: %v", err)
+	}
+	if capturedPath != "/v1/boards/stripe/jobs" {
+		t.Errorf("API path = %q, want /v1/boards/stripe/jobs", capturedPath)
 	}
 }
 

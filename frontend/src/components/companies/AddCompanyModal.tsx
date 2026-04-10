@@ -18,8 +18,8 @@ interface Props {
 // URL templates for adapters that have a known API pattern.
 const URL_TEMPLATES: Partial<Record<string, (id: string) => string>> = {
   greenhouse: id => `https://boards-api.greenhouse.io/v1/boards/${id}/jobs`,
-  lever:      id => `https://api.lever.co/v0/postings/${id}`,
-  ashby:      id => `https://api.ashbyhq.com/posting-api/job-board/${id}`,
+  lever:      id => `https://jobs.lever.co/${id}`,
+  ashby:      id => `https://jobs.ashbyhq.com/${id}`,
   workable:   id => `https://${id}.workable.com/spi/v3/jobs`,
 }
 

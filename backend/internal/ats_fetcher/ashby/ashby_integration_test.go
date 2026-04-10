@@ -16,7 +16,6 @@ import (
 )
 
 const integrationCompanySlug = "openai"
-const integrationCompanyURL = "https://api.ashbyhq.com/posting-api/job-board/openai"
 
 func TestAshby_Integration_FetchJobs(t *testing.T) {
 	if testing.Short() {
@@ -24,7 +23,7 @@ func TestAshby_Integration_FetchJobs(t *testing.T) {
 	}
 
 	a := &Ashby{}
-	result, err := a.FetchJobs(context.Background(), integrationCompanyURL)
+	result, err := a.FetchJobs(context.Background(), integrationCompanySlug)
 	if err != nil {
 		t.Fatalf("FetchJobs error: %v", err)
 	}
@@ -52,28 +51,6 @@ func TestAshby_Integration_FetchJobs(t *testing.T) {
 	}
 
 	t.Logf("Sample job: id=%s title=%q location=%q employ_type=%q", j.ID, j.Title, j.Location, j.EmploymentType)
-}
-
-func TestAshby_Integration_FetchJobs_SlugVariants(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	a := &Ashby{}
-
-	bySlug, err := a.FetchJobs(context.Background(), integrationCompanySlug)
-	if err != nil {
-		t.Fatalf("FetchJobs (slug) error: %v", err)
-	}
-	byURL, err := a.FetchJobs(context.Background(), integrationCompanyURL)
-	if err != nil {
-		t.Fatalf("FetchJobs (URL) error: %v", err)
-	}
-
-	if len(bySlug.Jobs) != len(byURL.Jobs) {
-		t.Errorf("slug returned %d jobs, full URL returned %d — should match", len(bySlug.Jobs), len(byURL.Jobs))
-	}
-	t.Logf("Both forms returned %d jobs", len(bySlug.Jobs))
 }
 
 func TestAshby_Integration_FetchJobContent(t *testing.T) {

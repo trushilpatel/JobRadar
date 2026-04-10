@@ -46,19 +46,9 @@ func (a *Ashby) restURL(path string) string {
 	return strings.TrimRight(base, "/") + "/" + strings.TrimLeft(path, "/")
 }
 
-// SlugFromURL extracts the company slug from an Ashby URL.
-// Handles both full URLs (https://api.ashbyhq.com/posting-api/job-board/openai)
-// and bare slugs (openai).
-func SlugFromURL(rawURL string) string {
-	if !strings.Contains(rawURL, "/") {
-		return rawURL // already a bare slug
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return rawURL
-	}
-	parts := strings.Split(strings.TrimLeft(u.Path, "/"), "/")
-	return parts[len(parts)-1]
+// CareersURL returns the public Ashby hosted jobs page URL for a given company slug.
+func (a *Ashby) CareersURL(id string) string {
+	return "https://jobs.ashbyhq.com/" + id
 }
 
 func ashbyRawID(id string) string {
@@ -284,7 +274,7 @@ func normalizeAshbyEmploymentType(t string) string {
 // companyID can be either a bare slug (e.g. "openai")
 // or a full URL (https://api.ashbyhq.com/posting-api/job-board/openai).
 func (a *Ashby) FetchJobs(ctx context.Context, companyID string) (types.FetchJobsResponse, error) {
-	slug := SlugFromURL(companyID)
+	slug := companyID
 	payload := map[string]any{
 		"operationName": "ApiJobBoardWithTeams",
 		"variables": map[string]string{

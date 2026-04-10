@@ -16,7 +16,6 @@ import (
 )
 
 // Reddit uses Greenhouse with standard job-boards.greenhouse.io URLs.
-const ghIntegrationCompanyURL = "https://boards-api.greenhouse.io/v1/boards/reddit/jobs"
 const ghIntegrationSlug = "reddit"
 
 func TestGreenhouse_Integration_FetchJobs(t *testing.T) {
@@ -25,7 +24,7 @@ func TestGreenhouse_Integration_FetchJobs(t *testing.T) {
 	}
 
 	g := &Greenhouse{}
-	result, err := g.FetchJobs(context.Background(), ghIntegrationCompanyURL)
+	result, err := g.FetchJobs(context.Background(), ghIntegrationSlug)
 	if err != nil {
 		t.Fatalf("FetchJobs error: %v", err)
 	}
@@ -61,7 +60,7 @@ func TestGreenhouse_Integration_FetchJobContent(t *testing.T) {
 	}
 
 	g := &Greenhouse{}
-	result, err := g.FetchJobs(context.Background(), ghIntegrationCompanyURL)
+	result, err := g.FetchJobs(context.Background(), ghIntegrationSlug)
 	if err != nil {
 		t.Fatalf("FetchJobs error: %v", err)
 	}
@@ -98,7 +97,7 @@ func TestGreenhouse_Integration_FetchJobContent_AllFields(t *testing.T) {
 	}
 
 	g := &Greenhouse{}
-	result, err := g.FetchJobs(context.Background(), ghIntegrationCompanyURL)
+	result, err := g.FetchJobs(context.Background(), ghIntegrationSlug)
 	if err != nil {
 		t.Fatalf("FetchJobs error: %v", err)
 	}

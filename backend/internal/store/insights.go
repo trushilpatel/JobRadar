@@ -97,7 +97,7 @@ func (s *insightsStore) GetTechStackTrends(limit int) ([]TechCount, error) {
 	var results []TechCount
 	err := s.db.Raw(`
 		SELECT tech, COUNT(*) AS count
-		FROM job, jsonb_array_elements_text(tech_stack) AS tech
+		FROM job_feed, jsonb_array_elements_text(tech_stack) AS tech
 		WHERE tech_stack IS NOT NULL
 		GROUP BY tech
 		ORDER BY count DESC
@@ -113,7 +113,7 @@ func (s *insightsStore) GetCompanyActivity() ([]CompanyActivityItem, error) {
 			c.name AS company_name,
 			TO_CHAR(DATE_TRUNC('week', j.added_at), 'YYYY-MM-DD') AS week,
 			COUNT(*) AS count
-		FROM job j
+		FROM job_feed j
 		JOIN companies c ON j.company_id = c.id
 		GROUP BY c.name, DATE_TRUNC('week', j.added_at)
 		ORDER BY week DESC, count DESC
@@ -131,7 +131,7 @@ func (s *insightsStore) GetPipelineFunnel() ([]FunnelStep, error) {
 	}
 	err := s.db.Raw(`
 		SELECT user_action AS action, COUNT(*) AS count
-		FROM job_snapshot
+		FROM job_analytics
 		GROUP BY user_action
 	`).Scan(&rows).Error
 	if err != nil {
@@ -160,7 +160,7 @@ func (s *insightsStore) GetLocationBreakdown() ([]LocationCount, error) {
 	var results []LocationCount
 	err := s.db.Raw(`
 		SELECT COALESCE(country, 'Unknown') AS country, COUNT(*) AS count
-		FROM job_snapshot
+		FROM job_analytics
 		GROUP BY country
 		ORDER BY count DESC
 	`).Scan(&results).Error
@@ -172,7 +172,7 @@ func (s *insightsStore) GetUSAStateBreakdown() ([]StateCount, error) {
 	var results []StateCount
 	err := s.db.Raw(`
 		SELECT COALESCE(state, 'Unknown') AS state, COUNT(*) AS count
-		FROM job_snapshot
+		FROM job_analytics
 		WHERE country = 'USA' AND state IS NOT NULL
 		GROUP BY state
 		ORDER BY count DESC
@@ -189,7 +189,7 @@ func (s *insightsStore) GetSponsorshipTrend(days int) ([]SponsorshipDay, error) 
 			TO_CHAR(snapshotted_at, 'YYYY-MM-DD') AS date,
 			COUNT(*) AS total,
 			COUNT(*) FILTER (WHERE sponsorship = true) AS sponsored
-		FROM job_snapshot
+		FROM job_analytics
 		WHERE snapshotted_at >= CURRENT_DATE - ? * INTERVAL '1 day'
 		GROUP BY snapshotted_at
 		ORDER BY snapshotted_at ASC
@@ -212,7 +212,7 @@ func (s *insightsStore) GetCompanyVelocity(limit int) ([]CompanyVelocity, error)
 					WHERE s.snapshotted_at >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
 					  AND s.snapshotted_at <  DATE_TRUNC('week', CURRENT_DATE)
 				) AS last_week
-			FROM job_snapshot s
+			FROM job_analytics s
 			JOIN companies c ON s.company_id = c.id
 			WHERE s.snapshotted_at >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
 			GROUP BY s.company_id, c.name
@@ -238,10 +238,10 @@ func (s *insightsStore) GetPipelineCounts() (PipelineCounts, error) {
 		SELECT
 			COUNT(*) FILTER (
 				WHERE l.reason = 'fetch'
-				AND NOT EXISTS (SELECT 1 FROM job j WHERE j.job_post_id = l.job_id)
+				AND NOT EXISTS (SELECT 1 FROM job_feed j WHERE j.job_post_id = l.job_id)
 			) AS pending,
 			COUNT(*) FILTER (WHERE l.reason = 'error') AS errors
-		FROM job_seen_ledger l
+		FROM job_pipeline_ledger l
 	`).Scan(&result).Error
 	return PipelineCounts{Pending: result.Pending, Errors: result.Errors}, err
 }
@@ -251,7 +251,7 @@ func (s *insightsStore) GetRoleCategoryBreakdown() ([]RoleCategoryCount, error) 
 	var results []RoleCategoryCount
 	err := s.db.Raw(`
 		SELECT COALESCE(role_category, 'other') AS category, COUNT(*) AS count
-		FROM job_snapshot
+		FROM job_analytics
 		GROUP BY role_category
 		ORDER BY count DESC
 	`).Scan(&results).Error

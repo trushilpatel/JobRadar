@@ -10,28 +10,12 @@ import (
 	"github.com/trushilpatel/jobradar/internal/ats_fetcher/types"
 )
 
-// ── SlugFromURL ───────────────────────────────────────────────────────────────
-
-func TestSlugFromURL(t *testing.T) {
-	cases := []struct {
-		input string
-		want  string
-	}{
-		{"https://api.ashbyhq.com/posting-api/job-board/openai", "openai"},
-		{"https://api.ashbyhq.com/posting-api/job-board/stripe", "stripe"},
-		{"https://api.ashbyhq.com/posting-api/job-board/anduril-industries", "anduril-industries"},
-		{"openai", "openai"},
-		{"my-company", "my-company"},
-		{"https://api.ashbyhq.com/posting-api/job-board/openai/", ""},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.input, func(t *testing.T) {
-			got := SlugFromURL(tc.input)
-			if got != tc.want {
-				t.Errorf("SlugFromURL(%q) = %q, want %q", tc.input, got, tc.want)
-			}
-		})
+func TestAshby_CareersURL(t *testing.T) {
+	a := &Ashby{}
+	got := a.CareersURL("openai")
+	want := "https://jobs.ashbyhq.com/openai"
+	if got != want {
+		t.Errorf("CareersURL(%q) = %q, want %q", "openai", got, want)
 	}
 }
 
@@ -146,27 +130,6 @@ func TestAshby_FetchJobs(t *testing.T) {
 	}
 	if j2.Location == "New York ()" {
 		t.Errorf("job[2].Location should not include empty workplaceType, got %q", j2.Location)
-	}
-}
-
-func TestAshby_FetchJobs_SlugExtractedFromFullURL(t *testing.T) {
-	var capturedBody map[string]any
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&capturedBody)
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data":{"jobBoardWithTeams":{"jobPostings":[]}}}`))
-	}))
-	defer srv.Close()
-
-	a := &Ashby{baseURL: srv.URL}
-	_, err := a.FetchJobs(context.Background(), "https://api.ashbyhq.com/posting-api/job-board/stripe")
-	if err != nil {
-		t.Fatalf("FetchJobs error: %v", err)
-	}
-
-	vars, _ := capturedBody["variables"].(map[string]any)
-	if vars["organizationHostedJobsPageName"] != "stripe" {
-		t.Errorf("slug not extracted: got %v, want stripe", vars["organizationHostedJobsPageName"])
 	}
 }
 
