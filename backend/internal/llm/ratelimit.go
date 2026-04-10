@@ -3,11 +3,12 @@ package llm
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
+
+	"github.com/trushilpatel/jobradar/internal/logger"
 )
 
 // RateLimits holds the three quota dimensions for an LLM model.
@@ -23,6 +24,7 @@ type RateLimits struct {
 // Workers depend on the Scorer interface — this wrapper is invisible to them.
 type rateLimitedScorer struct {
 	inner Scorer
+	log   logger.Logger
 
 	// RPM: token bucket — 1 token consumed per request
 	rpm *rate.Limiter // nil when RPM=0
@@ -37,9 +39,10 @@ type rateLimitedScorer struct {
 	dayReset time.Time
 }
 
-func newRateLimitedScorer(inner Scorer, limits RateLimits) Scorer {
+func newRateLimitedScorer(inner Scorer, limits RateLimits, log logger.Logger) Scorer {
 	s := &rateLimitedScorer{
 		inner:    inner,
+		log:      log,
 		dayMax:   limits.RPD,
 		dayReset: nextMidnightUTC(),
 	}
@@ -78,8 +81,10 @@ func (s *rateLimitedScorer) wait(ctx context.Context, estimatedTokens int) error
 			// Quota exhausted — wait until UTC midnight then re-check
 			waitUntil := s.dayReset
 			s.mu.Unlock()
-			log.Printf("[llm] daily request limit (%d RPD) reached — sleeping until %s",
-				s.dayMax, waitUntil.Format(time.RFC3339))
+			s.log.Warn("daily request limit reached, sleeping",
+				logger.Int("rpd_limit", s.dayMax),
+				logger.Str("reset_at", waitUntil.Format(time.RFC3339)),
+			)
 
 			select {
 			case <-time.After(time.Until(waitUntil) + time.Second): // +1s buffer past midnight

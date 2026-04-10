@@ -88,6 +88,8 @@ services:
       KAFKA_BROKERS: kafka:29092
       KAFKA_USER: ""
       KAFKA_PASSWORD: ""
+      LOG_LEVEL: info
+      LOG_FORMAT: json
     ports:
       - "8080:8080"
     command: ["/app/api"]
@@ -113,6 +115,8 @@ services:
       KAFKA_BROKERS: kafka:29092
       KAFKA_USER: ""
       KAFKA_PASSWORD: ""
+      LOG_LEVEL: info
+      LOG_FORMAT: json
     command: ["/app/scheduler"]
     depends_on:
       postgres:
@@ -136,6 +140,8 @@ services:
       KAFKA_BROKERS: kafka:29092
       KAFKA_USER: ""
       KAFKA_PASSWORD: ""
+      LOG_LEVEL: info
+      LOG_FORMAT: json
     command: ["/app/crawler"]
     depends_on:
       postgres:
@@ -159,6 +165,8 @@ services:
       KAFKA_BROKERS: kafka:29092
       KAFKA_USER: ""
       KAFKA_PASSWORD: ""
+      LOG_LEVEL: info
+      LOG_FORMAT: json
     command: ["/app/filter"]
     depends_on:
       postgres:
@@ -182,6 +190,8 @@ services:
       KAFKA_BROKERS: kafka:29092
       KAFKA_USER: ""
       KAFKA_PASSWORD: ""
+      LOG_LEVEL: info
+      LOG_FORMAT: json
     command: ["/app/enricher"]
     depends_on:
       postgres:

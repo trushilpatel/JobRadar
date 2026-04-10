@@ -3,6 +3,8 @@ package llm
 import (
 	"context"
 	"fmt"
+
+	"github.com/trushilpatel/jobradar/internal/logger"
 )
 
 // ScorerOptions holds everything needed to build and configure a Scorer.
@@ -13,7 +15,8 @@ type ScorerOptions struct {
 	Model       string // provider-specific model name, e.g. "Gemini-3.1-Flash-Lite"
 	TargetRoles []string
 	YearsExp    int
-	Limits      RateLimits // zero value = no rate limiting
+	Limits      RateLimits  // zero value = no rate limiting
+	Log         logger.Logger // used by the rate limiter; noop if nil
 }
 
 // NewScorer builds the concrete provider scorer and wraps it with the rate
@@ -40,7 +43,7 @@ func NewScorer(opts ScorerOptions) (Scorer, error) {
 
 	// Wrap with rate limiter only when at least one limit is set.
 	if opts.Limits.RPM > 0 || opts.Limits.RPD > 0 || opts.Limits.TPMIn > 0 {
-		return newRateLimitedScorer(inner, opts.Limits), nil
+		return newRateLimitedScorer(inner, opts.Limits, opts.Log), nil
 	}
 	return inner, nil
 }

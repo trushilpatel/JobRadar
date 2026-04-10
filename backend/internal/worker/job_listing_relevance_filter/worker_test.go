@@ -7,6 +7,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/internal/ats_fetcher"
 	"github.com/trushilpatel/jobradar/internal/llm"
+	"github.com/trushilpatel/jobradar/internal/logger"
 	"github.com/trushilpatel/jobradar/internal/model"
 )
 
@@ -63,6 +64,7 @@ func makeWorker(scorer *fakeScorer, ledger *fakeLedger, pub *fakePublisher) *Wor
 		ledger:    ledger,
 		publisher: pub,
 		batchSize: 10,
+		log:       logger.NewNoop(),
 	}
 }
 

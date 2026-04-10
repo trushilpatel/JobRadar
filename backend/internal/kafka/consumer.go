@@ -2,19 +2,20 @@ package kafka
 
 import (
 	"context"
-	"log"
 	"strings"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl/plain"
 	"github.com/trushilpatel/jobradar/config"
+	"github.com/trushilpatel/jobradar/internal/logger"
 )
 
 type Consumer struct {
 	client *kgo.Client
+	log    logger.Logger
 }
 
-func NewConsumer(cfg *config.Config, groupID string, topics ...string) (*Consumer, error) {
+func NewConsumer(cfg *config.Config, log logger.Logger, groupID string, topics ...string) (*Consumer, error) {
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(strings.Split(cfg.KafkaBrokers, ",")...),
 		kgo.ConsumerGroup(groupID),
@@ -38,7 +39,7 @@ func NewConsumer(cfg *config.Config, groupID string, topics ...string) (*Consume
 		return nil, err
 	}
 
-	return &Consumer{client: client}, nil
+	return &Consumer{client: client, log: log}, nil
 }
 
 // Poll fetches the next batch of records and calls fn for each one.
@@ -51,7 +52,7 @@ func (c *Consumer) Poll(ctx context.Context, fn func(topic string, value []byte)
 			return ctx.Err()
 		}
 		if err := fetches.Err(); err != nil {
-			log.Printf("[kafka] fetch error (retrying): %v", err)
+			c.log.Warn("fetch error, retrying", logger.Err(err))
 			continue
 		}
 

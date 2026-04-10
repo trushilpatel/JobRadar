@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -11,51 +11,51 @@ import (
 	"github.com/trushilpatel/jobradar/config"
 	"github.com/trushilpatel/jobradar/internal/db"
 	"github.com/trushilpatel/jobradar/internal/kafka"
+	"github.com/trushilpatel/jobradar/internal/logger"
 	"github.com/trushilpatel/jobradar/internal/store"
 	"github.com/trushilpatel/jobradar/internal/worker/job_listing_crawler"
 )
 
 func main() {
 	cfg := config.Load()
+	log := logger.Init("crawler")
 
-	// --- DB ---
 	database, err := db.Open(cfg)
 	if err != nil {
-		log.Fatalf("db: %v", err)
+		log.Error("db open failed", err)
+		os.Exit(1)
 	}
 
-	// --- Kafka: ensure topics exist before producing ---
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	if err := kafka.EnsureTopics(ctx, cfg, kafka.TopicJobListingsRaw); err != nil {
-		log.Fatalf("kafka topics: %v", err)
+		log.Error("kafka topics failed", err)
+		os.Exit(1)
 	}
 
-	// --- Kafka producer (publishes to job_listings.raw) ---
 	producer, err := kafka.NewProducer(cfg)
 	if err != nil {
-		log.Fatalf("kafka producer: %v", err)
+		log.Error("kafka producer failed", err)
+		os.Exit(1)
 	}
 	defer producer.Close()
 
-	// --- Kafka consumer (receives company IDs from scheduler + API trigger) ---
-	consumer, err := kafka.NewConsumer(cfg, "job-listing-crawler", kafka.TopicCompanyScanRequest)
+	consumer, err := kafka.NewConsumer(cfg, log, "job-listing-crawler", kafka.TopicCompanyScanRequest)
 	if err != nil {
-		log.Fatalf("kafka consumer: %v", err)
+		log.Error("kafka consumer failed", err)
+		os.Exit(1)
 	}
 	defer consumer.Close()
 
-	// --- Store layer ---
 	companies := store.NewCompanyStore(database)
 	ledger := store.NewSeenLedgerStore(database)
 	scanLog := store.NewCompanyScanLogStore(database)
 
-	// --- Engine ---
 	companyDelay := time.Duration(cfg.ScanCompanyDelaySeconds) * time.Second
-	engine := job_listing_crawler.NewEngine(companies, ledger, scanLog, producer, companyDelay)
+	engine := job_listing_crawler.NewEngine(companies, ledger, scanLog, producer, companyDelay, log)
 
-	log.Println("[scan] worker started — waiting for scan jobs on", kafka.TopicCompanyScanRequest)
+	log.Info("worker started", logger.Str("topic", kafka.TopicCompanyScanRequest))
 
 	type scanRequest struct {
 		CompanyID string `json:"company_id"`
@@ -64,11 +64,11 @@ func main() {
 	err = consumer.Poll(ctx, func(_ string, value []byte) error {
 		var req scanRequest
 		if err := json.Unmarshal(value, &req); err != nil {
-			log.Printf("[scan] malformed message: %v — skipping", err)
+			log.Warn("malformed message, skipping", logger.Err(err))
 			return nil
 		}
 		if req.CompanyID == "" {
-			log.Printf("[scan] message missing company_id — skipping")
+			log.Warn("message missing company_id, skipping")
 			return nil
 		}
 		engine.RunForCompany(ctx, req.CompanyID)
@@ -76,7 +76,8 @@ func main() {
 	})
 
 	if err != nil && ctx.Err() == nil {
-		log.Fatalf("[scan] consumer error: %v", err)
+		log.Error("consumer error", err)
+		os.Exit(1)
 	}
-	log.Println("[scan] shutting down")
+	log.Info("shutting down")
 }

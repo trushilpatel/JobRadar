@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -10,43 +10,47 @@ import (
 	"github.com/trushilpatel/jobradar/internal/db"
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/llm"
+	"github.com/trushilpatel/jobradar/internal/logger"
 	"github.com/trushilpatel/jobradar/internal/store"
 	"github.com/trushilpatel/jobradar/internal/worker/job_listing_relevance_filter"
 )
 
 func main() {
 	cfg := config.Load()
+	log := logger.Init("filter")
 
-	// --- DB ---
 	database, err := db.Open(cfg)
 	if err != nil {
-		log.Fatalf("db: %v", err)
+		log.Error("db open failed", err)
+		os.Exit(1)
 	}
 
-	// --- Kafka ---
 	if err := kafka.EnsureTopics(context.Background(), cfg, kafka.TopicJobListingsRaw, kafka.TopicJobListingsFiltered); err != nil {
-		log.Fatalf("kafka topics: %v", err)
+		log.Error("kafka topics failed", err)
+		os.Exit(1)
 	}
 
-	consumer, err := kafka.NewConsumer(cfg, "job-listing-relevance-filter", kafka.TopicJobListingsRaw)
+	consumer, err := kafka.NewConsumer(cfg, log, "job-listing-relevance-filter", kafka.TopicJobListingsRaw)
 	if err != nil {
-		log.Fatalf("kafka consumer: %v", err)
+		log.Error("kafka consumer failed", err)
+		os.Exit(1)
 	}
 	defer consumer.Close()
 
 	producer, err := kafka.NewProducer(cfg)
 	if err != nil {
-		log.Fatalf("kafka producer: %v", err)
+		log.Error("kafka producer failed", err)
+		os.Exit(1)
 	}
 	defer producer.Close()
 
-	// --- LLM ---
-	scorer_, err := llm.NewScorer(llm.ScorerOptions{
+	scorer, err := llm.NewScorer(llm.ScorerOptions{
 		Provider:    cfg.LLMProvider,
 		APIKey:      cfg.LLMAPIKey,
 		Model:       cfg.LLMModel,
 		TargetRoles: cfg.TargetRoles,
 		YearsExp:    cfg.YearsExp,
+		Log:         log,
 		Limits: llm.RateLimits{
 			RPM:   cfg.LLMRateLimits.RPM,
 			RPD:   cfg.LLMRateLimits.RPD,
@@ -54,22 +58,20 @@ func main() {
 		},
 	})
 	if err != nil {
-		log.Fatalf("llm: %v", err)
+		log.Error("llm init failed", err)
+		os.Exit(1)
 	}
 
-	// --- Store ---
 	ledger := store.NewSeenLedgerStore(database)
-
-	// --- Worker ---
-	worker := job_listing_relevance_filter.NewWorker(consumer, producer, scorer_, ledger,
-		cfg.ScorerBatchSize, cfg.ScorerFlushTimeoutSeconds)
+	worker := job_listing_relevance_filter.NewWorker(consumer, producer, scorer, ledger,
+		cfg.ScorerBatchSize, cfg.ScorerFlushTimeoutSeconds, log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	if err := worker.Run(ctx); err != nil && ctx.Err() == nil {
-		log.Fatalf("[job_listing_relevance_filter] worker exited with error: %v", err)
+		log.Error("worker exited with error", err)
+		os.Exit(1)
 	}
-
-	log.Println("[job_listing_relevance_filter] shutting down")
+	log.Info("shutting down")
 }

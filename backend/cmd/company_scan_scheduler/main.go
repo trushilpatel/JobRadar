@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -11,6 +11,7 @@ import (
 	"github.com/trushilpatel/jobradar/config"
 	"github.com/trushilpatel/jobradar/internal/db"
 	"github.com/trushilpatel/jobradar/internal/kafka"
+	"github.com/trushilpatel/jobradar/internal/logger"
 	"github.com/trushilpatel/jobradar/internal/store"
 )
 
@@ -20,35 +21,38 @@ const checkInterval = 1 * time.Minute
 
 func main() {
 	cfg := config.Load()
+	log := logger.Init("scheduler")
 
-	// --- DB ---
 	database, err := db.Open(cfg)
 	if err != nil {
-		log.Fatalf("db: %v", err)
+		log.Error("db open failed", err)
+		os.Exit(1)
 	}
 
-	// --- Kafka: ensure topic exists before producing ---
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	if err := kafka.EnsureTopics(ctx, cfg, kafka.TopicCompanyScanRequest); err != nil {
-		log.Fatalf("kafka topics: %v", err)
+		log.Error("kafka topics failed", err)
+		os.Exit(1)
 	}
 
 	producer, err := kafka.NewProducer(cfg)
 	if err != nil {
-		log.Fatalf("kafka producer: %v", err)
+		log.Error("kafka producer failed", err)
+		os.Exit(1)
 	}
 	defer producer.Close()
 
-	// --- Store ---
 	companies := store.NewCompanyStore(database)
 
-	log.Printf("[company_scan_scheduler] started — scan interval=%dm, check every %s",
-		cfg.ScanIntervalMinutes, checkInterval)
+	log.Info("started",
+		logger.Int("scan_interval_minutes", cfg.ScanIntervalMinutes),
+		logger.Dur("check_interval", checkInterval),
+	)
 
 	// Run once immediately on startup, then on every tick.
-	enqueuedue(ctx, companies, producer, cfg.ScanIntervalMinutes)
+	enqueuedue(ctx, log, companies, producer, cfg.ScanIntervalMinutes)
 
 	ticker := time.NewTicker(checkInterval)
 	defer ticker.Stop()
@@ -56,9 +60,9 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			enqueuedue(ctx, companies, producer, cfg.ScanIntervalMinutes)
+			enqueuedue(ctx, log, companies, producer, cfg.ScanIntervalMinutes)
 		case <-ctx.Done():
-			log.Println("[company_scan_scheduler] shutting down")
+			log.Info("shutting down")
 			return
 		}
 	}
@@ -66,17 +70,17 @@ func main() {
 
 // enqueuedue queries companies that are due for a scan and publishes their IDs
 // to TopicCompanyScanJob. The scan worker will pick them up and run RunForCompany.
-func enqueuedue(ctx context.Context, companies store.CompanyReader, pub kafka.Publisher, intervalMinutes int) {
+func enqueuedue(ctx context.Context, log logger.Logger, companies store.CompanyReader, pub kafka.Publisher, intervalMinutes int) {
 	due, err := companies.GetCompaniesDueForScan(intervalMinutes)
 	if err != nil {
-		log.Printf("[company_scan_scheduler] failed to query due companies: %v", err)
+		log.Error("failed to query due companies", err)
 		return
 	}
 	if len(due) == 0 {
 		return
 	}
 
-	log.Printf("[company_scan_scheduler] %d companies due for scan", len(due))
+	log.Info("companies due for scan", logger.Int("count", len(due)))
 
 	type scanRequest struct {
 		CompanyID string `json:"company_id"`
@@ -85,13 +89,13 @@ func enqueuedue(ctx context.Context, companies store.CompanyReader, pub kafka.Pu
 	for _, c := range due {
 		payload, err := json.Marshal(scanRequest{CompanyID: c.ID})
 		if err != nil {
-			log.Printf("[company_scan_scheduler] marshal failed for %s: %v", c.ID, err)
+			log.Error("marshal failed", err, logger.Str(logger.FieldCompany, c.ID))
 			continue
 		}
 		if err := pub.Publish(ctx, kafka.TopicCompanyScanRequest, payload); err != nil {
-			log.Printf("[company_scan_scheduler] publish failed for %s: %v", c.ID, err)
+			log.Error("publish failed", err, logger.Str(logger.FieldCompany, c.ID))
 			continue
 		}
-		log.Printf("[company_scan_scheduler] queued %s (%s)", c.Name, c.ID)
+		log.Debug("queued company", logger.Str(logger.FieldCompany, c.ID), logger.Str("name", c.Name))
 	}
 }

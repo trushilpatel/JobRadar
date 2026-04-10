@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/trushilpatel/jobradar/internal/logger"
 	"github.com/trushilpatel/jobradar/internal/model"
 )
 
@@ -64,7 +65,7 @@ func TestEnqueueDue_NoCompaniesDue(t *testing.T) {
 	reader := &fakeCompanyReader{due: []model.Company{}}
 	pub := &fakePublisher{}
 
-	enqueuedue(context.Background(), reader, pub, 1440)
+	enqueuedue(context.Background(), logger.NewNoop(), reader, pub, 1440)
 
 	if len(pub.payloads) != 0 {
 		t.Errorf("expected no publishes, got %d", len(pub.payloads))
@@ -79,7 +80,7 @@ func TestEnqueueDue_PublishesAllDueCompanies(t *testing.T) {
 	}}
 	pub := &fakePublisher{}
 
-	enqueuedue(context.Background(), reader, pub, 1440)
+	enqueuedue(context.Background(), logger.NewNoop(), reader, pub, 1440)
 
 	ids := publishedIDs(t, pub)
 	if len(ids) != 3 {
@@ -97,7 +98,7 @@ func TestEnqueueDue_StoreError_PublishesNothing(t *testing.T) {
 	reader := &fakeCompanyReader{err: errors.New("db down")}
 	pub := &fakePublisher{}
 
-	enqueuedue(context.Background(), reader, pub, 1440)
+	enqueuedue(context.Background(), logger.NewNoop(), reader, pub, 1440)
 
 	if len(pub.payloads) != 0 {
 		t.Errorf("expected no publishes on store error, got %d", len(pub.payloads))
@@ -113,7 +114,7 @@ func TestEnqueueDue_PublishError_ContinuesToNext(t *testing.T) {
 	pub := &fakePublisher{err: errors.New("kafka unavailable")}
 
 	// Should not panic — just logs and continues
-	enqueuedue(context.Background(), reader, pub, 1440)
+	enqueuedue(context.Background(), logger.NewNoop(), reader, pub, 1440)
 
 	if len(pub.payloads) != 0 {
 		t.Errorf("expected no successful publishes, got %d", len(pub.payloads))
@@ -124,7 +125,7 @@ func TestEnqueueDue_PayloadShape(t *testing.T) {
 	reader := &fakeCompanyReader{due: []model.Company{company("abc-123", "TestCo")}}
 	pub := &fakePublisher{}
 
-	enqueuedue(context.Background(), reader, pub, 1440)
+	enqueuedue(context.Background(), logger.NewNoop(), reader, pub, 1440)
 
 	if len(pub.payloads) != 1 {
 		t.Fatalf("expected 1 payload, got %d", len(pub.payloads))

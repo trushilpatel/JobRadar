@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -44,7 +43,7 @@ type Config struct {
 
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
-		log.Println("no .env file found, falling back to environment variables")
+		fmt.Fprintf(os.Stderr, "config: no .env file found, falling back to environment variables\n")
 	}
 
 	return &Config{

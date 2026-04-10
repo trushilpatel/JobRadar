@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -13,29 +13,32 @@ import (
 	"github.com/trushilpatel/jobradar/internal/api/handler"
 	"github.com/trushilpatel/jobradar/internal/db"
 	"github.com/trushilpatel/jobradar/internal/kafka"
+	"github.com/trushilpatel/jobradar/internal/logger"
 	"github.com/trushilpatel/jobradar/internal/store"
 )
 
 func main() {
 	cfg := config.Load()
+	log := logger.Init("api")
 
 	database, err := db.Open(cfg)
 	if err != nil {
-		log.Fatalf("db: %v", err)
+		log.Error("db open failed", err)
+		os.Exit(1)
 	}
 
-	// --- Kafka: ensure topic exists, then create producer ---
 	kafkaCtx := context.Background()
 	if err := kafka.EnsureTopics(kafkaCtx, cfg, kafka.TopicCompanyScanRequest); err != nil {
-		log.Fatalf("kafka topics: %v", err)
+		log.Error("kafka topics failed", err)
+		os.Exit(1)
 	}
 	producer, err := kafka.NewProducer(cfg)
 	if err != nil {
-		log.Fatalf("kafka producer: %v", err)
+		log.Error("kafka producer failed", err)
+		os.Exit(1)
 	}
 	defer producer.Close()
 
-	// --- Stores ---
 	jobStore := store.NewJobStore(database)
 	ledger := store.NewSeenLedgerStore(database)
 	discardStore := store.NewDiscardStore(database)
@@ -45,17 +48,14 @@ func main() {
 	scanLogStore := store.NewCompanyScanLogStore(database)
 	insightsStore := store.NewInsightsStore(database)
 
-	// --- Handlers ---
 	jobHandler := handler.NewJobHandler(jobStore, ledger, discardStore, snapshotStore)
 	appHandler := handler.NewApplicationHandler(appStore, jobStore)
 	companyHandler := handler.NewCompanyHandler(companyStore, scanLogStore, producer, cfg.ScanIntervalMinutes)
 	dashboardHandler := handler.NewDashboardHandler(jobStore, scanLogStore, insightsStore)
 	insightsHandler := handler.NewInsightsHandler(insightsStore)
 
-	// --- Router ---
-	router := api.NewRouter(jobHandler, appHandler, companyHandler, dashboardHandler, insightsHandler)
+	router := api.NewRouter(log, jobHandler, appHandler, companyHandler, dashboardHandler, insightsHandler)
 
-	// --- Server ---
 	srv := &http.Server{
 		Addr:         ":8080",
 		Handler:      router,
@@ -64,21 +64,21 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Graceful shutdown on SIGINT/SIGTERM
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	go func() {
-		log.Printf("[api] listening on %s", srv.Addr)
+		log.Info("listening", logger.Str("addr", srv.Addr))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("[api] server error: %v", err)
+			log.Error("server error", err)
+			os.Exit(1)
 		}
 	}()
 
 	<-ctx.Done()
-	log.Println("[api] shutting down")
+	log.Info("shutting down")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	srv.Shutdown(shutdownCtx)
+	srv.Shutdown(shutdownCtx) //nolint:errcheck
 }

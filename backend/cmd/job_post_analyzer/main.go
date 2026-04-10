@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -10,33 +10,35 @@ import (
 	"github.com/trushilpatel/jobradar/internal/db"
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/llm"
+	"github.com/trushilpatel/jobradar/internal/logger"
 	"github.com/trushilpatel/jobradar/internal/store"
 	"github.com/trushilpatel/jobradar/internal/worker/job_post_analyzer"
 )
 
 func main() {
 	cfg := config.Load()
+	log := logger.Init("enricher")
 
-	// --- DB ---
 	database, err := db.Open(cfg)
 	if err != nil {
-		log.Fatalf("db: %v", err)
+		log.Error("db open failed", err)
+		os.Exit(1)
 	}
 
-	// --- Kafka ---
-	consumer, err := kafka.NewConsumer(cfg, "job-post-analyzer", kafka.TopicJobListingsFiltered)
+	consumer, err := kafka.NewConsumer(cfg, log, "job-post-analyzer", kafka.TopicJobListingsFiltered)
 	if err != nil {
-		log.Fatalf("kafka consumer: %v", err)
+		log.Error("kafka consumer failed", err)
+		os.Exit(1)
 	}
 	defer consumer.Close()
 
-	// --- LLM ---
 	scorer, err := llm.NewScorer(llm.ScorerOptions{
 		Provider:    cfg.LLMProvider,
 		APIKey:      cfg.LLMAPIKey,
 		Model:       cfg.LLMModel,
 		TargetRoles: cfg.TargetRoles,
 		YearsExp:    cfg.YearsExp,
+		Log:         log,
 		Limits: llm.RateLimits{
 			RPM:   cfg.LLMRateLimits.RPM,
 			RPD:   cfg.LLMRateLimits.RPD,
@@ -44,23 +46,21 @@ func main() {
 		},
 	})
 	if err != nil {
-		log.Fatalf("llm: %v", err)
+		log.Error("llm init failed", err)
+		os.Exit(1)
 	}
 
-	// --- Store ---
 	jobs := store.NewJobStore(database)
 	ledger := store.NewSeenLedgerStore(database)
 	snapshot := store.NewSnapshotStore(database)
-
-	// --- Worker ---
-	worker := job_post_analyzer.NewWorker(consumer, scorer, jobs, ledger, snapshot)
+	worker := job_post_analyzer.NewWorker(consumer, scorer, jobs, ledger, snapshot, log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	if err := worker.Run(ctx); err != nil && ctx.Err() == nil {
-		log.Fatalf("[job_post_analyzer] worker exited with error: %v", err)
+		log.Error("worker exited with error", err)
+		os.Exit(1)
 	}
-
-	log.Println("[job_post_analyzer] shutting down")
+	log.Info("shutting down")
 }

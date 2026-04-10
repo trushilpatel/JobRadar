@@ -5,9 +5,11 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/trushilpatel/jobradar/internal/api/handler"
 	"github.com/trushilpatel/jobradar/internal/api/middleware"
+	"github.com/trushilpatel/jobradar/internal/logger"
 )
 
 func NewRouter(
+	log logger.Logger,
 	jobs *handler.JobHandler,
 	apps *handler.ApplicationHandler,
 	companies *handler.CompanyHandler,
@@ -17,7 +19,7 @@ func NewRouter(
 	r := chi.NewRouter()
 
 	// Global middleware — runs on every request
-	r.Use(middleware.Logger)
+	r.Use(middleware.Logger(log))
 	r.Use(chimiddleware.Recoverer) // catches panics, returns 500 instead of crashing
 
 	r.Get("/jobs", jobs.List)
