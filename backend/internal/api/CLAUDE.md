@@ -57,6 +57,7 @@ PATCH  /jobs/:id/applications/:app_id/note
 GET    /applications
 
 GET    /companies
+GET    /companies/queue                 — active scan queue entries (queued + processing)
 POST   /companies
 PATCH  /companies/:id
 DELETE /companies/:id
@@ -77,8 +78,8 @@ GET    /insights/role-categories
 
 ## Scan cooldown rule
 
-`CompanyHandler` is constructed with `scanIntervalMinutes` (from `cfg.ScanIntervalMinutes`).
-`POST /companies/:id/scan` checks `company.last_scan_at` before publishing to Kafka:
+`CompanyHandler` holds `store.ScanQueueStore` (not `kafka.Publisher`).
+`POST /companies/:id/scan` checks `company.last_scan_at` before calling `queue.Enqueue`:
 
 ```go
 // Returns 429 if company was scanned within the interval
@@ -91,7 +92,7 @@ if company.LastScanAt != nil {
 }
 ```
 
-The scheduler already enforces the same interval via `GetCompaniesDueForScan`. This guard makes the manual trigger consistent with the automated schedule.
+`queue.Enqueue` uses `ON CONFLICT DO NOTHING` — calling it for a company already in the queue is safe and silently no-ops. The scheduler enforces the same interval via `GetCompaniesDueForScan`.
 
 ## Snapshot backfill rule
 

@@ -1,13 +1,11 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/model"
 	"github.com/trushilpatel/jobradar/internal/store"
 )
@@ -15,12 +13,12 @@ import (
 type CompanyHandler struct {
 	companies           store.CompanyStore
 	scanLog             store.CompanyScanLogReader
-	publisher           kafka.Publisher
+	queue               store.ScanQueueStore
 	scanIntervalMinutes int
 }
 
-func NewCompanyHandler(companies store.CompanyStore, scanLog store.CompanyScanLogReader, publisher kafka.Publisher, scanIntervalMinutes int) *CompanyHandler {
-	return &CompanyHandler{companies: companies, scanLog: scanLog, publisher: publisher, scanIntervalMinutes: scanIntervalMinutes}
+func NewCompanyHandler(companies store.CompanyStore, scanLog store.CompanyScanLogReader, queue store.ScanQueueStore, scanIntervalMinutes int) *CompanyHandler {
+	return &CompanyHandler{companies: companies, scanLog: scanLog, queue: queue, scanIntervalMinutes: scanIntervalMinutes}
 }
 
 // GET /companies
@@ -162,8 +160,7 @@ func (h *CompanyHandler) ScanStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /companies/:id/scan
-// Publishes a scan request to company.scan_job — scan worker picks it up async.
-// Returns 429 if the company was scanned within the configured scan interval.
+// Enqueues a scan request. Returns 429 if scanned within the configured scan interval.
 func (h *CompanyHandler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
@@ -186,10 +183,19 @@ func (h *CompanyHandler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	payload, _ := json.Marshal(map[string]string{"company_id": id})
-	if err := h.publisher.Publish(context.Background(), kafka.TopicCompanyScanRequest, payload); err != nil {
+	if err := h.queue.Enqueue(id, model.QueueSourceManual); err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to trigger scan")
 		return
 	}
 	respond(w, http.StatusAccepted, map[string]string{"company_id": id, "status": "scan_queued"})
+}
+
+// GET /companies/queue
+func (h *CompanyHandler) ListQueue(w http.ResponseWriter, r *http.Request) {
+	items, err := h.queue.ListQueue()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to fetch queue")
+		return
+	}
+	respond(w, http.StatusOK, items)
 }

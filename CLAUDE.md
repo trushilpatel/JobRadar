@@ -7,7 +7,7 @@ Full design spec: `Designs/job-tracker-final-architecture.md`
 ## Pipeline
 
 ```
-company_scan_scheduler → company.scan_request (Kafka) → job_listing_crawler → job_listings.raw (Kafka) → job_listing_relevance_filter → job_listings.filtered (Kafka) → job_post_analyzer → job (DB) → API
+company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → job_listings.raw (Kafka) → job_listing_relevance_filter → job_listings.filtered (Kafka) → job_post_analyzer → job (DB) → API
 ```
 
 ## Directory map
@@ -31,8 +31,8 @@ company_scan_scheduler → company.scan_request (Kafka) → job_listing_crawler 
 
 | Binary | Role |
 |---|---|
-| `cmd/company_scan_scheduler` | Queries DB for companies due for a scan, publishes to `company.scan_request` |
-| `cmd/job_listing_crawler` | Consumes `company.scan_request`, fetches careers pages, publishes to `job_listings.raw` |
+| `cmd/company_scan_scheduler` | Queries DB for companies due for a scan, inserts into `company_scan_queue` |
+| `cmd/job_listing_crawler` | Polls `company_scan_queue` (DB), fetches careers pages, publishes to `job_listings.raw` |
 | `cmd/job_listing_relevance_filter` | Scores batches via LLM, routes relevant to `job_listings.filtered` |
 | `cmd/job_post_analyzer` | Fetches full job page, LLM enriches, writes to `job` table |
 | `cmd/api` | REST API on `:8080` |
@@ -42,6 +42,7 @@ company_scan_scheduler → company.scan_request (Kafka) → job_listing_crawler 
 | Table | Role |
 |---|---|
 | `companies` | Tracked companies |
+| `company_scan_queue` | Durable work queue for pending/in-progress company scans; deduped by unique partial index |
 | `job_seen_ledger` | Dedup + pipeline blocking; `removed_at` tracks when a job disappears from a careers page |
 | `company_scan_log` | Per-run scan summary (fetched, new, duration, error) |
 | `job` | Operational feed — only `new`, `saved`, `applied`, `dismissed` rows live here |

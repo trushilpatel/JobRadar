@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/trushilpatel/jobradar/internal/model"
 	"github.com/trushilpatel/jobradar/internal/store"
@@ -259,19 +260,33 @@ func (f *fakeInsightsReader) GetPipelineCounts() (store.PipelineCounts, error) {
 	return store.PipelineCounts{Pending: 3, Errors: 1}, f.err
 }
 
-// ── fakePublisher ─────────────────────────────────────────────────────────────
+// ── fakeScanQueueStore ────────────────────────────────────────────────────────
 
-type fakePublisher struct {
-	payloads [][]byte
-	err      error
+type fakeScanQueueStore struct {
+	items []store.ScanQueueItem
+	err   error
 }
 
-func (f *fakePublisher) Publish(_ context.Context, _ string, value []byte) error {
+func (f *fakeScanQueueStore) Enqueue(companyID, source string) error {
 	if f.err != nil {
 		return f.err
 	}
-	f.payloads = append(f.payloads, value)
+	f.items = append(f.items, store.ScanQueueItem{
+		ID:        "fake-id",
+		CompanyID: companyID,
+		Source:    source,
+		Status:    model.QueueStatusQueued,
+		QueuedAt:  time.Now(),
+	})
 	return nil
+}
+func (f *fakeScanQueueStore) ClaimNext(_ context.Context) (*store.ScanQueueItem, error) {
+	return nil, f.err
+}
+func (f *fakeScanQueueStore) Complete(_ string) error           { return f.err }
+func (f *fakeScanQueueStore) ResetStuck(_ time.Duration) error { return f.err }
+func (f *fakeScanQueueStore) ListQueue() ([]store.ScanQueueItem, error) {
+	return f.items, f.err
 }
 
 // ── sentinel ──────────────────────────────────────────────────────────────────

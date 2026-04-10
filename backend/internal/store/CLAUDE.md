@@ -5,6 +5,7 @@ One file per table. Each file owns exactly one table — no cross-table queries.
 | File | Interface(s) | Table |
 |---|---|---|
 | `company.go` | `CompanyReader` | `companies` |
+| `scan_queue.go` | `ScanQueueStore` | `company_scan_queue` |
 | `seen_ledger.go` | `SeenLedgerReader`, `SeenLedgerWriter`, `SeenLedgerStore` | `job_seen_ledger` |
 | `company_scan_log.go` | `CompanyScanLogWriter`, `CompanyScanLogReader`, `CompanyScanLogStore` | `company_scan_log` |
 | `job.go` | `JobReader`, `JobWriter`, `JobStore` | `job` |

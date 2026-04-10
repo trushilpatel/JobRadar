@@ -38,8 +38,8 @@ The context is passed into workers so in-flight jobs drain before exit.
 
 | Binary | Port/topic | Interval |
 |---|---|---|
-| `company_scan_scheduler` | publishes to `company.scan_request` | checks DB every 1 min, enqueues companies due per `SCAN_INTERVAL_MINUTES` config |
-| `job_listing_crawler` | consumes `company.scan_request`, publishes to `job_listings.raw` | event-driven (triggered by company_scan_scheduler) |
+| `company_scan_scheduler` | inserts into `company_scan_queue` (DB) | checks DB every 1 min, enqueues companies due per `SCAN_INTERVAL_MINUTES` config |
+| `job_listing_crawler` | polls `company_scan_queue` (DB), publishes to `job_listings.raw` | polls every 10s; `FOR UPDATE SKIP LOCKED` claim is safe for concurrent instances |
 | `job_listing_relevance_filter` | consumes `job_listings.raw`, publishes to `job_listings.filtered` | event-driven |
 | `job_post_analyzer` | consumes `job_listings.filtered` | event-driven |
 | `api` | `:8080` | always on |

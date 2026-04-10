@@ -12,7 +12,6 @@ import (
 	"github.com/trushilpatel/jobradar/internal/api"
 	"github.com/trushilpatel/jobradar/internal/api/handler"
 	"github.com/trushilpatel/jobradar/internal/db"
-	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/logger"
 	"github.com/trushilpatel/jobradar/internal/store"
 )
@@ -27,18 +26,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	kafkaCtx := context.Background()
-	if err := kafka.EnsureTopics(kafkaCtx, cfg, kafka.TopicCompanyScanRequest); err != nil {
-		log.Error("kafka topics failed", err)
-		os.Exit(1)
-	}
-	producer, err := kafka.NewProducer(cfg)
-	if err != nil {
-		log.Error("kafka producer failed", err)
-		os.Exit(1)
-	}
-	defer producer.Close()
-
 	jobStore := store.NewJobStore(database)
 	ledger := store.NewSeenLedgerStore(database)
 	discardStore := store.NewDiscardStore(database)
@@ -47,10 +34,11 @@ func main() {
 	companyStore := store.NewCompanyStore(database)
 	scanLogStore := store.NewCompanyScanLogStore(database)
 	insightsStore := store.NewInsightsStore(database)
+	scanQueueStore := store.NewScanQueueStore(database)
 
 	jobHandler := handler.NewJobHandler(jobStore, ledger, discardStore, snapshotStore)
 	appHandler := handler.NewApplicationHandler(appStore, jobStore)
-	companyHandler := handler.NewCompanyHandler(companyStore, scanLogStore, producer, cfg.ScanIntervalMinutes)
+	companyHandler := handler.NewCompanyHandler(companyStore, scanLogStore, scanQueueStore, cfg.ScanIntervalMinutes)
 	dashboardHandler := handler.NewDashboardHandler(jobStore, scanLogStore, insightsStore)
 	insightsHandler := handler.NewInsightsHandler(insightsStore)
 

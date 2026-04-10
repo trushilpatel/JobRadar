@@ -4,7 +4,7 @@
 
 | Package | Consumes | Produces | Writes to DB |
 |---|---|---|---|
-| `job_listing_crawler/` | companies table | `job_listings.raw` | `job_seen_ledger`, `company_scan_log` |
+| `job_listing_crawler/` | `company_scan_queue` (DB poll) | `job_listings.raw` | `job_seen_ledger`, `company_scan_log` |
 | `job_listing_relevance_filter/` | `job_listings.raw` | `job_listings.filtered` | updates `job_seen_ledger.reason` |
 | `job_post_analyzer/` | `job_listings.filtered` | — | `job`, `job_snapshot`, updates `job_seen_ledger.reason` |
 
@@ -48,7 +48,8 @@ Failed jobs can be reprocessed by deleting their `job_seen_ledger` rows.
 
 ## job_listing_crawler specifics
 
-- `RunOnce(ctx)` runs one full cycle and returns — no internal ticker
-- Scheduling lives in `cmd/company_scan_scheduler/main.go` — checks every 1 min, enqueues companies whose `last_scan_at` is older than `SCAN_INTERVAL_MINUTES`
+- `RunForCompany(ctx, companyID)` runs a scan for one company — called by the crawler's DB poll loop
+- The crawler polls `company_scan_queue` every 10s; `ClaimNext` uses `FOR UPDATE SKIP LOCKED` so concurrent instances don't double-process
+- Scheduling lives in `cmd/company_scan_scheduler/main.go` — checks every 1 min, inserts due companies into `company_scan_queue`
 - Manual trigger via `POST /companies/:id/scan` also respects `SCAN_INTERVAL_MINUTES` — returns 429 if scanned too recently
 - `EnsureTopics` must be called before the producer is created — see `cmd/CLAUDE.md`

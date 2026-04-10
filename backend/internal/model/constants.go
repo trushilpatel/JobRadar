@@ -56,3 +56,15 @@ const (
     DiscardReasonDismissed   = "user_dismissed"
     DiscardReasonNotRelevant = "user_not_relevant"
 )
+
+// QueueStatus — values for company_scan_queue.status
+const (
+    QueueStatusQueued     = "queued"
+    QueueStatusProcessing = "processing"
+)
+
+// QueueSource — who enqueued the company
+const (
+    QueueSourceScheduler = "scheduler"
+    QueueSourceManual    = "manual"
+)
