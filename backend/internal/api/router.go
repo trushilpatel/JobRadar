@@ -37,6 +37,9 @@ func NewRouter(
 
 	r.Get("/companies", companies.List)
 	r.Get("/companies/queue", companies.ListQueue)
+	r.Delete("/companies/queue/{entry_id}", companies.RemoveFromQueue)
+	r.Post("/companies/queue/{entry_id}/move-up", companies.MoveQueueItemUp)
+	r.Post("/companies/queue/{entry_id}/move-down", companies.MoveQueueItemDown)
 	r.Post("/companies", companies.Create)
 	r.Patch("/companies/{id}", companies.Update)
 	r.Delete("/companies/{id}", companies.Delete)

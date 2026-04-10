@@ -1,4 +1,4 @@
-import type { Company, ScanStats } from '@/types'
+import type { Company, ScanStats, QueueEntry } from '@/types'
 
 const BASE = '/api'
 
@@ -56,4 +56,25 @@ export async function triggerScan(id: string): Promise<void> {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.error ?? 'Failed to trigger scan')
   }
+}
+
+export async function fetchQueue(): Promise<QueueEntry[]> {
+  const res = await fetch(`${BASE}/companies/queue`)
+  if (!res.ok) throw new Error('Failed to fetch queue')
+  return res.json()
+}
+
+export async function removeFromQueue(entryId: string): Promise<void> {
+  const res = await fetch(`${BASE}/companies/queue/${entryId}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to remove queue entry')
+}
+
+export async function moveQueueItemUp(entryId: string): Promise<void> {
+  const res = await fetch(`${BASE}/companies/queue/${entryId}/move-up`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to move queue entry')
+}
+
+export async function moveQueueItemDown(entryId: string): Promise<void> {
+  const res = await fetch(`${BASE}/companies/queue/${entryId}/move-down`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to move queue entry')
 }

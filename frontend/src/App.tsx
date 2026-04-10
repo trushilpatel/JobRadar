@@ -1,4 +1,5 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { Sidebar } from '@/components/Sidebar'
 import { CompaniesPage } from '@/pages/CompaniesPage'
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -9,6 +10,7 @@ import { InsightsPage } from '@/pages/InsightsPage'
 export default function App() {
   return (
     <HashRouter>
+      <Toaster position="bottom-center" theme="dark" richColors />
       <div className="flex h-screen w-full overflow-hidden">
         <Sidebar />
         <main className="flex-1 flex flex-col min-h-0 overflow-hidden">

@@ -22,13 +22,30 @@ func NewCompanyHandler(companies store.CompanyStore, scanLog store.CompanyScanLo
 }
 
 // GET /companies
+// Returns companies enriched with next_scan_at = last_scan_at + scan_interval.
 func (h *CompanyHandler) List(w http.ResponseWriter, r *http.Request) {
 	companies, err := h.companies.GetAllCompanies()
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch companies")
 		return
 	}
-	respond(w, http.StatusOK, companies)
+
+	type CompanyView struct {
+		model.Company
+		NextScanAt *time.Time `json:"next_scan_at"`
+	}
+
+	views := make([]CompanyView, len(companies))
+	for i, c := range companies {
+		v := CompanyView{Company: c}
+		if c.LastScanAt != nil {
+			t := c.LastScanAt.Add(time.Duration(h.scanIntervalMinutes) * time.Minute)
+			v.NextScanAt = &t
+		}
+		views[i] = v
+	}
+
+	respond(w, http.StatusOK, views)
 }
 
 // POST /companies
@@ -191,11 +208,90 @@ func (h *CompanyHandler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /companies/queue
+// Returns enriched queue entries joined with company name, adapter, and next_scan_at.
 func (h *CompanyHandler) ListQueue(w http.ResponseWriter, r *http.Request) {
 	items, err := h.queue.ListQueue()
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to fetch queue")
 		return
 	}
-	respond(w, http.StatusOK, items)
+
+	allCompanies, err := h.companies.GetAllCompanies()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to fetch companies")
+		return
+	}
+
+	companyMap := make(map[string]model.Company, len(allCompanies))
+	for _, c := range allCompanies {
+		companyMap[c.ID] = c
+	}
+
+	type QueueEntryView struct {
+		ID          string     `json:"id"`
+		CompanyID   string     `json:"company_id"`
+		CompanyName string     `json:"company_name"`
+		AdapterType string     `json:"adapter_type"`
+		Status      string     `json:"status"`
+		Source      string     `json:"source"`
+		Priority    int        `json:"priority"`
+		QueuedAt    time.Time  `json:"queued_at"`
+		StartedAt   *time.Time `json:"started_at"`
+		NextScanAt  *time.Time `json:"next_scan_at"`
+	}
+
+	views := make([]QueueEntryView, 0, len(items))
+	for _, item := range items {
+		v := QueueEntryView{
+			ID:        item.ID,
+			CompanyID: item.CompanyID,
+			Status:    item.Status,
+			Source:    item.Source,
+			Priority:  item.Priority,
+			QueuedAt:  item.QueuedAt,
+			StartedAt: item.StartedAt,
+		}
+		if c, ok := companyMap[item.CompanyID]; ok {
+			v.CompanyName = c.Name
+			v.AdapterType = c.AdapterType
+			if c.LastScanAt != nil {
+				t := c.LastScanAt.Add(time.Duration(h.scanIntervalMinutes) * time.Minute)
+				v.NextScanAt = &t
+			}
+		}
+		views = append(views, v)
+	}
+
+	respond(w, http.StatusOK, views)
+}
+
+// DELETE /companies/queue/:entry_id
+// Removes a queued entry. No-ops if the entry is processing.
+func (h *CompanyHandler) RemoveFromQueue(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "entry_id")
+	if err := h.queue.Remove(id); err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to remove queue entry")
+		return
+	}
+	respond(w, http.StatusOK, map[string]string{"id": id})
+}
+
+// POST /companies/queue/:entry_id/move-up
+func (h *CompanyHandler) MoveQueueItemUp(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "entry_id")
+	if err := h.queue.MoveUp(id); err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to move queue entry")
+		return
+	}
+	respond(w, http.StatusOK, map[string]string{"id": id})
+}
+
+// POST /companies/queue/:entry_id/move-down
+func (h *CompanyHandler) MoveQueueItemDown(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "entry_id")
+	if err := h.queue.MoveDown(id); err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to move queue entry")
+		return
+	}
+	respond(w, http.StatusOK, map[string]string{"id": id})
 }

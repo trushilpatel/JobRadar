@@ -7,6 +7,7 @@ export interface Company {
   created_at: string
   last_scan_at: string | null
   last_scan_status: 'ok' | 'error' | 'pending' | null
+  next_scan_at: string | null
 }
 
 export interface ScanRun {
@@ -102,6 +103,19 @@ export interface ApplicationWithJob {
   job_title: string
   company_id: string
   company_name: string
+}
+
+export interface QueueEntry {
+  id: string
+  company_id: string
+  company_name: string
+  adapter_type: string
+  status: 'queued' | 'processing'
+  source: 'scheduler' | 'manual'
+  priority: number
+  queued_at: string
+  started_at: string | null
+  next_scan_at: string | null  // null = never scanned (first scan / ASAP)
 }
 
 export interface DashboardStats {

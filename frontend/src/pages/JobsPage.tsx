@@ -10,6 +10,9 @@ import {
   fetchJobs, setJobSaved, setJobStatus, dismissJob,
 } from '@/api/jobs'
 import { formatRelativeTime, cn } from '@/lib/utils'
+import { toast } from 'sonner'
+import { DataTable } from '@/components/ui/data-table'
+import { buildJobColumns } from '@/pages/jobs-columns'
 
 // ─── Dismiss reasons ──────────────────────────────────────────────────────────
 const DISMISS_REASON_OPTIONS = [
@@ -405,7 +408,6 @@ export function JobsPage() {
   const [dismissTarget, setDismissTarget] = useState<Job | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [panelWidth, setPanelWidth] = useState(440)
-  const [toastMsg, setToastMsg] = useState('')
 
   function startDrag(e: React.MouseEvent) {
     e.preventDefault()
@@ -447,11 +449,6 @@ export function JobsPage() {
   }, [tab])
 
   useEffect(() => { load() }, [load])
-
-  function toast(msg: string) {
-    setToastMsg(msg)
-    setTimeout(() => setToastMsg(''), 3000)
-  }
 
   const companies = useMemo(() => {
     const names = Array.from(new Set(jobs.map(j => j.company?.name ?? j.company_id).filter(Boolean)))
@@ -506,11 +503,11 @@ export function JobsPage() {
     if (drawerJob?.id === job.id) setDrawerJob(d => d ? { ...d, saved: next, status: nextStatus } : d)
     try {
       await setJobSaved(job.id, next)
-      toast(next ? 'Job saved' : 'Removed from saved')
+      toast.success(next ? 'Job saved' : 'Removed from saved')
     } catch {
       setJobs(js => js.map(j => j.id === job.id ? { ...j, saved: job.saved, status: job.status } : j))
       if (drawerJob?.id === job.id) setDrawerJob(d => d ? { ...d, saved: job.saved, status: job.status } : d)
-      toast('Failed to update job')
+      toast.error('Failed to update job')
     }
   }
 
@@ -519,10 +516,10 @@ export function JobsPage() {
     if (drawerJob?.id === job.id) setDrawerJob(d => d ? { ...d, status: 'applied' } : d)
     try {
       await setJobStatus(job.id, 'applied')
-      toast('Marked as applied')
+      toast.success('Marked as applied')
     } catch {
       setJobs(js => js.map(j => j.id === job.id ? { ...j, status: job.status } : j))
-      toast('Failed to update job')
+      toast.error('Failed to update job')
     }
   }
 
@@ -534,10 +531,10 @@ export function JobsPage() {
     if (drawerJob && ids.includes(drawerJob.id)) setDrawerJob(null)
     try {
       await Promise.all(ids.map(id => dismissJob(id, 'user_not_relevant')))
-      toast(`${ids.length} job${ids.length !== 1 ? 's' : ''} dismissed`)
+      toast.success(`${ids.length} job${ids.length !== 1 ? 's' : ''} dismissed`)
     } catch {
       setJobs(js => [...js, ...targets])
-      toast('Failed to dismiss some jobs')
+      toast.error('Failed to dismiss some jobs')
     }
   }
 
@@ -549,12 +546,28 @@ export function JobsPage() {
     if (drawerJob?.id === target.id) setDrawerJob(null)
     try {
       await dismissJob(target.id, reason)
-      toast('Job dismissed')
+      toast.success('Job dismissed')
     } catch {
       setJobs(js => [...js, target])
-      toast('Failed to dismiss job')
+      toast.error('Failed to dismiss job')
     }
   }
+
+  const emptyMessage = tab === 'new'
+    ? 'No new jobs — run a scan to populate the feed'
+    : tab === 'saved' ? 'No saved jobs yet' : 'No applied jobs yet'
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const columns = useMemo(() => buildJobColumns({
+    selectedIds,
+    filteredIds: filtered.map(j => j.id),
+    onToggleSelect: (id, checked) => {
+      setSelectedIds(prev => { const n = new Set(prev); checked ? n.add(id) : n.delete(id); return n })
+    },
+    onSelectAll: (checked) => {
+      setSelectedIds(checked ? new Set(filtered.map(j => j.id)) : new Set())
+    },
+  }), [selectedIds, filtered])
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -757,107 +770,21 @@ export function JobsPage() {
 
       {/* Content: table + optional detail panel */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
-      <div className="flex-1 overflow-auto min-w-0">
-        {loading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-20 text-slate-500 text-sm">
-            {tab === 'new'
-              ? 'No new jobs — run a scan to populate the feed'
-              : tab === 'saved'
-                ? 'No saved jobs yet'
-                : 'No applied jobs yet'}
-          </div>
-        ) : (
-          <table className="w-full min-w-[680px] text-sm border-collapse">
-            <thead className="sticky top-0 bg-[#0a0a0f] z-10">
-              <tr className="border-b border-white/[0.07]">
-                <th className="px-4 py-2.5 w-8">
-                  <input
-                    type="checkbox"
-                    checked={filtered.length > 0 && filtered.every(j => selectedIds.has(j.id))}
-                    ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && !filtered.every(j => selectedIds.has(j.id)) }}
-                    onChange={e => {
-                      if (e.target.checked) setSelectedIds(new Set(filtered.map(j => j.id)))
-                      else setSelectedIds(new Set())
-                    }}
-                    className="accent-violet-500 cursor-pointer"
-                  />
-                </th>
-                <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wide px-4 py-2.5 w-44">Company</th>
-                <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wide px-4 py-2.5">Title</th>
-                <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wide px-4 py-2.5 w-44">Location</th>
-                <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wide px-4 py-2.5 w-36">Salary</th>
-                <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wide px-4 py-2.5 w-24">Added</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(job => {
-                const companyName = job.company?.name ?? job.company_id
-                const salary = formatSalary(job.salary_range)
-                const isActive = drawerJob?.id === job.id
-                const isSelected = selectedIds.has(job.id)
-
-                return (
-                  <tr
-                    key={job.id}
-                    onClick={() => setDrawerJob(job)}
-                    className={cn(
-                      'border-b border-white/[0.04] cursor-pointer transition-colors',
-                      isSelected ? 'bg-violet-500/[0.06]' : isActive ? 'bg-violet-500/[0.08]' : 'hover:bg-white/[0.03]'
-                    )}
-                  >
-                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={e => {
-                          const next = new Set(selectedIds)
-                          e.target.checked ? next.add(job.id) : next.delete(job.id)
-                          setSelectedIds(next)
-                        }}
-                        className="accent-violet-500 cursor-pointer"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-slate-300">{companyName}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={cn('font-medium', isActive ? 'text-violet-200' : 'text-white')}>
-                        {job.title}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {job.remote ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
-                          <Wifi size={10} /> Remote
-                        </span>
-                      ) : job.location ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-slate-400">
-                          <MapPin size={10} /> {job.location}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-600">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {salary
-                        ? <span className="text-xs text-amber-300">{salary}</span>
-                        : <span className="text-xs text-slate-600">—</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-slate-500">{formatRelativeTime(job.added_at)}</span>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+        <div className="flex-1 overflow-auto min-w-0">
+          <DataTable
+            columns={columns}
+            data={filtered}
+            loading={loading}
+            emptyMessage={emptyMessage}
+            getRowId={j => j.id}
+            onRowClick={setDrawerJob}
+            getRowClassName={job => {
+              if (selectedIds.has(job.id)) return 'bg-violet-500/[0.06]'
+              if (drawerJob?.id === job.id) return 'bg-violet-500/[0.08]'
+              return 'hover:bg-white/[0.03]'
+            }}
+          />
+        </div>
 
         {/* Drag handle + detail panel */}
         {drawerJob && (
@@ -887,12 +814,6 @@ export function JobsPage() {
         onCancel={() => setDismissTarget(null)}
       />
 
-      {/* Toast */}
-      {toastMsg && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#1e1e2a] border border-white/10 text-sm text-white px-4 py-2.5 rounded-lg shadow-xl z-50">
-          {toastMsg}
-        </div>
-      )}
     </div>
   )
 }
