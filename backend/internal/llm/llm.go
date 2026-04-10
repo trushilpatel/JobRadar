@@ -34,7 +34,7 @@ type EnrichResult struct {
 	SecurityClearance bool
 	// Role details
 	RoleBrief        string
-	Responsibilities string
+	Responsibilities []string
 	RoleCategory     string // backend | frontend | fullstack | devops | ml | data | other
 }
 

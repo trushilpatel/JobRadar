@@ -274,10 +274,14 @@ function JobDetailDrawer({ job, onClose, onSave, onApply, onDismiss }: DrawerPro
         )}
 
         {/* Responsibilities */}
-        {job.responsibilities && (
+        {job.responsibilities && job.responsibilities.length > 0 && (
           <div>
             <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Responsibilities</h3>
-            <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">{job.responsibilities}</p>
+            <ul className="list-disc list-inside space-y-1">
+              {job.responsibilities.map((r, i) => (
+                <li key={i} className="text-sm text-slate-300">{r}</li>
+              ))}
+            </ul>
           </div>
         )}
 

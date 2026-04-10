@@ -61,14 +61,14 @@ Evaluate each job title and location to return the IDs of jobs that are a plausi
 SENIORITY GUIDELINES
 INCLUDE: Junior, Mid-level, Senior, Software Engineer I/II/III, SWE, Backend, Frontend, Fullstack, Platform, Infrastructure, DevOps, SRE, Data Engineer, ML Engineer, and similar IC (Individual Contributor) roles.
 INCLUDE: Ambiguous or unclear seniority - prefer false positives over false negatives.
-EXCLUDE: Staff, Principal, Distinguished, Fellow, Architect (standalone), Director, VP, C-suite, Head of Engineering, or any role that is explicitly a people manager with no IC track.
-EXCLUDE: Internships, Co-ops, Apprenticeships.
+EXCLUDE: Systems Administrator, IT support, Staff, Principal, Distinguished, Fellow, Architect (standalone), Director, VP, C-suite, Head of Engineering, or any role that is explicitly a people manager with no IC track.
+EXCLUDE: Internships, Co-ops, Apprenticeships, part-time.
 EXCLUDE: Non-engineering roles (Sales, Marketing, Design, Recruiting, Finance, Legal).
 
 LOCATION GUIDELINES
 INCLUDE: Positions explicitly located within the USA.
 INCLUDE: Positions listed as Remote (if the company is US-based or specifies US-remote).
-EXCLUDE: Any positions located outside of the USA (e.g., EMEA, APAC, Canada, LATAM) or remote roles restricted to non-US time zones.
+EXCLUDE: Any positions located outside of the USA
 
 When in doubt, INCLUDE the job. A borderline match included here can be filtered later. A relevant job excluded here is lost permanently.
 
@@ -109,7 +109,7 @@ var enrichSchema = &genai.Schema{
 		"requires_citizen":   {Type: genai.TypeBoolean},
 		"security_clearance": {Type: genai.TypeBoolean},
 		"role_brief":         {Type: genai.TypeString},
-		"responsibilities":   {Type: genai.TypeString},
+		"responsibilities":   {Type: genai.TypeArray, Items: &genai.Schema{Type: genai.TypeString}},
 		"role_category": {
 			Type: genai.TypeString,
 			Enum: []string{"backend", "frontend", "fullstack", "devops", "ml", "data", "other"},
@@ -136,16 +136,16 @@ Field instructions:
 - experience_years: minimum years of experience required as integer, or null if not stated
 - tech_stack: array of key tools, languages, and frameworks explicitly mentioned
 - salary_min, salary_max: integers or null if not stated
-- salary_currency: currency code (e.g. "USD") or null
-- summary: 2-3 sentence summary of the role
+- salary_currency: Extract salary or salary range. if not found null.
+- summary: 2-3 sentence summary of the role only, do not include any information about company
 - remote: true if remote or hybrid, false if fully on-site
 - country: country where candidate must be based (e.g. "USA", "Canada"). Empty string if no restriction.
 - state: US state abbreviation if restricted (e.g. "CA"), null otherwise
-- sponsorship: false ONLY if posting explicitly denies H-1B/visa support or requires US citizenship/clearance; true otherwise
-- requires_citizen: true ONLY if posting explicitly requires US Citizen or Green Card
-- security_clearance: true if any clearance (Secret, TS/SCI, etc.) is required
+- sponsorship: false ONLY if the posting contains explicit language such as "no sponsorship", "will not sponsor", "sponsorship not available", "must be authorized to work", "does not offer visa sponsorship", or similar denial phrases. Default true if not mentioned.
+- requires_citizen: true ONLY if the posting explicitly states "US Citizen", "US Citizenship required", "must be a US citizen", "Green Card required", or "must have permanent residency". Default false if not mentioned.
+- security_clearance: true if the posting mentions any security clearance in any form — required, preferred, or eligibility to obtain. This includes: "Secret", "Top Secret", "TS/SCI", "clearance required", "must obtain clearance", "eligible to obtain clearance", "ability to obtain", "active clearance", "U.S. security clearance", or any mention of clearance levels. When in doubt, set true. Default false ONLY if the word "clearance" does not appear at all.
 - role_brief: one sentence technical mission of the role
-- responsibilities: concise bullet points of key technical responsibilities, newline-separated
+- responsibilities: array of concise strings, one key technical responsibility per element, no noise
 - role_category: one of backend, frontend, fullstack, devops, ml, data, other`,
 		input.ID, input.RawText,
 	)

@@ -28,13 +28,15 @@ type Scorer interface {
 ```go
 func NewScorer(provider, apiKey string, targetRoles []string, yearsExp int) (Scorer, error) {
     switch provider {
-    case "anthropic":
-        return NewAnthropicScorer(apiKey, targetRoles, yearsExp), nil
+    case "gemini":
+        return newGeminiScorer(ctx, apiKey, model, targetRoles, yearsExp)
     case "openai":                          // ← add here
         return NewOpenAIScorer(apiKey, targetRoles, yearsExp), nil
     }
 }
 ```
+
+Currently only `gemini` is supported. `gemini.go` uses structured JSON schema (`ResponseSchema`) for reliable output — new providers should do the same where possible.
 
 ## EnrichResult fields
 
@@ -42,20 +44,20 @@ All fields extracted by `Enrich()` and their downstream use:
 
 | Field | Type | Used by |
 |---|---|---|
-| `ExperienceYears` | `*int` | `job.experience_years`, `job_snapshot.experience_years` |
-| `TechStack` | `[]string` | `job.tech_stack`, `job_snapshot.tech_stack` |
-| `SalaryMin/Max/Currency` | `*int`, `string` | `job.salary_range` (JSONB) |
-| `Summary` | `string` | `job.llm_summary` |
-| `Country` | `string` | `job.country`, `job_snapshot.country` — e.g. `"USA"`, `"Canada"` |
-| `State` | `string` | `job.state`, `job_snapshot.state` — US state abbrev e.g. `"CA"` |
-| `Sponsorship` | `bool` | `job.sponsorship`, `job_snapshot.sponsorship` |
-| `RequiresCitizen` | `bool` | `job.requires_citizen`, `job_snapshot.requires_citizen` |
-| `SecurityClearance` | `bool` | `job.security_clearance`, `job_snapshot.security_clearance` |
-| `RoleBrief` | `string` | `job.role_brief` |
-| `Responsibilities` | `string` | `job.responsibilities` |
-| `RoleCategory` | `string` | `job_snapshot.role_category` — one of: `backend`, `frontend`, `fullstack`, `devops`, `ml`, `data`, `other` |
+| `ExperienceYears` | `*int` | `job_feed.experience_years`, `job_analytics.experience_years` |
+| `TechStack` | `[]string` | `job_feed.tech_stack`, `job_analytics.tech_stack` |
+| `SalaryMin/Max/Currency` | `*int`, `string` | `job_feed.salary_range` (JSONB) |
+| `Summary` | `string` | `job_feed.llm_summary` |
+| `Country` | `string` | `job_feed.country`, `job_analytics.country` — e.g. `"USA"`, `"Canada"` |
+| `State` | `string` | `job_feed.state`, `job_analytics.state` — US state abbrev e.g. `"CA"` |
+| `Sponsorship` | `bool` | `job_feed.sponsorship`, `job_analytics.sponsorship` |
+| `RequiresCitizen` | `bool` | `job_feed.requires_citizen`, `job_analytics.requires_citizen` |
+| `SecurityClearance` | `bool` | `job_feed.security_clearance`, `job_analytics.security_clearance` |
+| `RoleBrief` | `string` | `job_feed.role_brief` |
+| `Responsibilities` | `[]string` | `job_feed.responsibilities` (JSONB array) |
+| `RoleCategory` | `string` | `job_analytics.role_category` — one of: `backend`, `frontend`, `fullstack`, `devops`, `ml`, `data`, `other` |
 
-When adding a new field: update `EnrichResult`, both provider prompts (`anthropic.go` + `gemini.go`), `buildJob` in the enricher, and `SnapshotInput` if it belongs in analytics.
+When adding a new field: update `EnrichResult`, `gemini.go` prompt + schema, `buildJob` in the enricher, and `SnapshotInput` if it belongs in analytics.
 
 ## Prompt design rule
 
@@ -63,3 +65,16 @@ When adding a new field: update `EnrichResult`, both provider prompts (`anthropi
 - **Dynamic** (from config): `TARGET_ROLES`, `YEARS_EXP` — loaded via `config.Config`
 
 Never hardcode role titles or experience levels in the prompt strings.
+
+## Eligibility filtering
+
+Job dropping happens in the `job_post_analyzer` worker via `dropJob()`, not in the LLM. The LLM's job is accurate extraction — Go enforces the rules:
+
+| Condition | `EnrichResult` field | Drop if |
+|---|---|---|
+| No sponsorship | `Sponsorship bool` | `false` |
+| Citizenship required | `RequiresCitizen bool` | `true` |
+| Security clearance required | `SecurityClearance bool` | `true` |
+| Over experience limit | `ExperienceYears *int` | `> DISCARD_JOB_WITH_EXP_GT` (0 = disabled) |
+
+The Enrich prompt uses explicit signal phrases for each flag — see `gemini.go`. Default bias: assume sponsorship available, no citizenship requirement, no clearance, unless the posting explicitly says otherwise.

@@ -53,7 +53,7 @@ func main() {
 	jobs := store.NewJobStore(database)
 	ledger := store.NewSeenLedgerStore(database)
 	snapshot := store.NewSnapshotStore(database)
-	worker := job_post_analyzer.NewWorker(consumer, scorer, jobs, ledger, snapshot, log)
+	worker := job_post_analyzer.NewWorker(consumer, scorer, jobs, ledger, snapshot, log, cfg.MaxExpYears)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

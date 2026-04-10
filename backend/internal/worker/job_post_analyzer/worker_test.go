@@ -91,7 +91,7 @@ func TestBuildJob_FieldMapping(t *testing.T) {
 		RequiresCitizen:   false,
 		SecurityClearance: false,
 		RoleBrief:         "Build APIs.",
-		Responsibilities:  "- Design systems",
+		Responsibilities:  []string{"Design systems"},
 		RoleCategory:      "backend",
 	}
 
@@ -151,7 +151,7 @@ func TestBuildJob_NullableStrings(t *testing.T) {
 // ── enrich tests ──────────────────────────────────────────────────────────────
 
 func makeWorkerWithFakes(scorer *fakeScorer, jobs *fakeJobWriter, ledger *fakeLedger, snap *fakeSnapshot) *Worker {
-	w := NewWorker(nil, scorer, jobs, ledger, snap, logger.NewNoop())
+	w := NewWorker(nil, scorer, jobs, ledger, snap, logger.NewNoop(), 0)
 	return w
 }
 

@@ -30,7 +30,7 @@ type Job struct {
 	RequiresCitizen   bool    `gorm:"not null;default:false" json:"requires_citizen"`
 	SecurityClearance bool    `gorm:"not null;default:false" json:"security_clearance"`
 	RoleBrief         *string `json:"role_brief"`
-	Responsibilities  *string `json:"responsibilities"`
+	Responsibilities  datatypes.JSON `json:"responsibilities"`
 
 	Status string  `gorm:"not null;default:'new'" json:"status"`
 	Saved  bool    `gorm:"not null;default:false" json:"saved"`

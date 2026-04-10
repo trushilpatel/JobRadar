@@ -27,7 +27,7 @@ type Config struct {
 	KafkaBrokers  string
 	KafkaUser     string
 	KafkaPassword string
-	LLMProvider   string // anthropic | gemini
+	LLMProvider   string // "gemini"
 	LLMAPIKey     string
 	LLMModel      string // e.g. "gemini-3.1-flash-lite", "claude-haiku-4-5-20251001"
 	LLMRateLimits LLMRateLimits
@@ -39,6 +39,7 @@ type Config struct {
 
 	TargetRoles []string // e.g. ["Backend Engineer", "Platform Engineer"]
 	YearsExp    int
+	MaxExpYears int // DISCARD_JOB_WITH_EXP_GT — drop jobs requiring more than this many years (0 = disabled)
 }
 
 func Load() *Config {
@@ -71,6 +72,7 @@ func Load() *Config {
 
 		TargetRoles: splitCSV(getEnv("TARGET_ROLES", "Software Engineer")),
 		YearsExp:    getEnvInt("YEARS_EXP", 0),
+		MaxExpYears: getEnvInt("DISCARD_JOB_WITH_EXP_GT", 0),
 	}
 }
 

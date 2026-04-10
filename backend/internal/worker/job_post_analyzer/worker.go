@@ -27,13 +27,14 @@ const enrichConcurrency = 5
 // Worker consumes jobs.raw_detail, fetches the full job page,
 // runs LLM enrichment, and writes the final row to the job table.
 type Worker struct {
-	consumer *kafka.Consumer
-	scorer   llm.Scorer
-	jobs     store.JobWriter
-	ledger   store.SeenLedgerWriter
-	snapshot store.SnapshotWriter
-	client   *http.Client
-	log      logger.Logger
+	consumer    *kafka.Consumer
+	scorer      llm.Scorer
+	jobs        store.JobWriter
+	ledger      store.SeenLedgerWriter
+	snapshot    store.SnapshotWriter
+	client      *http.Client
+	log         logger.Logger
+	maxExpYears int
 }
 
 func NewWorker(
@@ -43,15 +44,17 @@ func NewWorker(
 	ledger store.SeenLedgerWriter,
 	snapshot store.SnapshotWriter,
 	log logger.Logger,
+	maxExpYears int,
 ) *Worker {
 	return &Worker{
-		consumer: consumer,
-		scorer:   scorer,
-		jobs:     jobs,
-		ledger:   ledger,
-		snapshot: snapshot,
-		client:   &http.Client{Timeout: 15 * time.Second},
-		log:      log,
+		consumer:    consumer,
+		scorer:      scorer,
+		jobs:        jobs,
+		ledger:      ledger,
+		snapshot:    snapshot,
+		client:      &http.Client{Timeout: 15 * time.Second},
+		log:         log,
+		maxExpYears: maxExpYears,
 	}
 }
 
@@ -128,7 +131,14 @@ func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 		return
 	}
 
-	// 3. Build the DB row
+	// 3. Drop ineligible jobs before writing to DB
+	if reason := w.dropJob(result); reason != "" {
+		jobLog.Info("job dropped", logger.Str("reason", reason))
+		w.markError(job.ID)
+		return
+	}
+
+	// 4. Build the DB row
 	row, err := buildJob(job, result)
 	if err != nil {
 		jobLog.Error("build job failed", err)
@@ -136,7 +146,7 @@ func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 		return
 	}
 
-	// 4. Insert into DB
+	// 5. Insert into DB
 	if err := w.jobs.InsertJob(row); err != nil {
 		jobLog.Error("insert job failed", err)
 		w.markError(job.ID)
@@ -223,11 +233,34 @@ func (w *Worker) fetchPage(ctx context.Context, url string) (string, error) {
 	return string(body), nil
 }
 
+// dropJob returns a non-empty reason string if the job should be discarded.
+// It never writes to the DB — the caller decides what to do with the reason.
+func (w *Worker) dropJob(e *llm.EnrichResult) string {
+	if !e.Sponsorship {
+		return "no sponsorship"
+	}
+	if e.RequiresCitizen {
+		return "requires citizenship"
+	}
+	if e.SecurityClearance {
+		return "requires security clearance"
+	}
+	if w.maxExpYears > 0 && e.ExperienceYears != nil && *e.ExperienceYears > w.maxExpYears {
+		return fmt.Sprintf("experience required (%d yrs) exceeds max (%d yrs)", *e.ExperienceYears, w.maxExpYears)
+	}
+	return ""
+}
+
 // buildJob maps ats_fetcher.RawJob + llm.EnrichResult into a model.Job ready for DB insert.
 func buildJob(raw ats_fetcher.RawJob, enriched *llm.EnrichResult) (*model.Job, error) {
 	techStack, err := json.Marshal(enriched.TechStack)
 	if err != nil {
 		return nil, fmt.Errorf("marshal tech_stack: %w", err)
+	}
+
+	responsibilities, err := json.Marshal(enriched.Responsibilities)
+	if err != nil {
+		return nil, fmt.Errorf("marshal responsibilities: %w", err)
 	}
 
 	salaryRange, err := json.Marshal(map[string]any{
@@ -258,7 +291,7 @@ func buildJob(raw ats_fetcher.RawJob, enriched *llm.EnrichResult) (*model.Job, e
 		RequiresCitizen:   enriched.RequiresCitizen,
 		SecurityClearance: enriched.SecurityClearance,
 		RoleBrief:         nullableString(enriched.RoleBrief),
-		Responsibilities:  nullableString(enriched.Responsibilities),
+		Responsibilities:  datatypes.JSON(responsibilities),
 		Status:            model.JobStatusNew,
 	}, nil
 }

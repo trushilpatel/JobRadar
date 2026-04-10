@@ -10,7 +10,7 @@ import (
 // ScorerOptions holds everything needed to build and configure a Scorer.
 // Using a struct keeps the factory signature stable as new fields are added.
 type ScorerOptions struct {
-	Provider    string // "gemini" | "anthropic"
+	Provider    string // "gemini"
 	APIKey      string
 	Model       string // provider-specific model name, e.g. "Gemini-3.1-Flash-Lite"
 	TargetRoles []string
@@ -31,10 +31,8 @@ func NewScorer(opts ScorerOptions) (Scorer, error) {
 	switch opts.Provider {
 	case "gemini":
 		inner, err = newGeminiScorer(context.Background(), opts.APIKey, opts.Model, opts.TargetRoles, opts.YearsExp)
-	case "anthropic":
-		inner = newAnthropicScorer(opts.APIKey, opts.Model, opts.TargetRoles, opts.YearsExp)
 	default:
-		return nil, fmt.Errorf("llm: unknown provider %q (supported: gemini, anthropic)", opts.Provider)
+		return nil, fmt.Errorf("llm: unknown provider %q (supported: gemini)", opts.Provider)
 	}
 
 	if err != nil {

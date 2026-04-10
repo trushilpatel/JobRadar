@@ -98,7 +98,8 @@ function PipelineFunnel({ data }: { data: FunnelStep[] }) {
 // ─── Location Breakdown ───────────────────────────────────────────────────────
 
 function LocationBreakdown({ data }: { data: LocationData }) {
-  const { countries, states } = data
+  const countries = data?.countries ?? []
+  const states = data?.states ?? []
   if (countries.length === 0 && states.length === 0) return <Empty />
 
   const maxC = countries[0]?.count ?? 1
@@ -322,7 +323,7 @@ export function InsightsPage() {
       fetchTechStack(15).then(d => setTechData(d ?? [])),
       fetchCompanyActivity().then(d => setActivityData(d ?? [])),
       fetchFunnel().then(d => setFunnelData(d ?? [])),
-      fetchLocation().then(d => setLocationData(d ?? { countries: [], states: [] })),
+      fetchLocation().then(d => setLocationData({ countries: d?.countries ?? [], states: d?.states ?? [] })),
       fetchSponsorshipTrend(30).then(d => setSponsorshipData(d ?? [])),
       fetchVelocity(20).then(d => setVelocityData(d ?? [])),
       fetchRoleCategories().then(d => setRoleData(d ?? [])),

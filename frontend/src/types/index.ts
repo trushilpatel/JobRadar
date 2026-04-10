@@ -78,7 +78,7 @@ export interface Job {
   requires_citizen: boolean
   security_clearance: boolean
   role_brief: string | null
-  responsibilities: string | null
+  responsibilities: string[] | null
   status: JobStatus
   saved: boolean
   notes: string | null

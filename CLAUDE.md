@@ -7,7 +7,7 @@ Full design spec: `Designs/job-tracker-final-architecture.md`
 ## Pipeline
 
 ```
-company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → job_listings.raw (Kafka) → job_listing_relevance_filter → job_listings.filtered (Kafka) → job_post_analyzer → job (DB) → API
+company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → job_listings.raw (Kafka) → job_listing_relevance_filter → job_listings.filtered (Kafka) → job_post_analyzer → job_feed (DB) → API
 ```
 
 ## Directory map
@@ -19,7 +19,7 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `internal/api/` | REST API router, handlers, middleware |
 | `internal/db/` | GORM connection setup |
 | `internal/kafka/` | Producer, consumer, admin, topic names |
-| `internal/llm/` | LLM scorer interface + Anthropic implementation |
+| `internal/llm/` | LLM scorer interface + Gemini implementation |
 | `internal/logger/` | Logger interface + zerolog implementation + noop for tests |
 | `internal/model/` | DB structs + all typed constants |
 | `internal/store/` | All DB query logic — one file per table |
@@ -34,7 +34,7 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `cmd/company_scan_scheduler` | Queries DB for companies due for a scan, inserts into `company_scan_queue` |
 | `cmd/job_listing_crawler` | Polls `company_scan_queue` (DB), fetches careers pages, publishes to `job_listings.raw` |
 | `cmd/job_listing_relevance_filter` | Scores batches via LLM, routes relevant to `job_listings.filtered` |
-| `cmd/job_post_analyzer` | Fetches full job page, LLM enriches, writes to `job` table |
+| `cmd/job_post_analyzer` | Fetches full job page, LLM enriches, writes to `job_feed` table |
 | `cmd/api` | REST API on `:8080` |
 
 ## Database tables
@@ -43,12 +43,12 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 |---|---|
 | `companies` | Tracked companies |
 | `company_scan_queue` | Durable work queue for pending/in-progress company scans; deduped by unique partial index |
-| `job_seen_ledger` | Dedup + pipeline blocking; `removed_at` tracks when a job disappears from a careers page |
+| `job_pipeline_ledger` | Dedup + pipeline blocking; `removed_at` tracks when a job disappears from a careers page |
 | `company_scan_log` | Per-run scan summary (fetched, new, duration, error) |
-| `job` | Operational feed — only `new`, `saved`, `applied`, `dismissed` rows live here |
-| `job_snapshot` | Append-only analytics record written by job_post_analyzer; survives job dismissal |
-| `job_application` | Application stage tracking |
-| `job_discarded` | Dismiss log with reason and note |
+| `job_feed` | Operational feed — only `new`, `saved`, `applied`, `dismissed` rows live here |
+| `job_analytics` | Append-only analytics record written by job_post_analyzer; survives job dismissal |
+| `job_application_tracker` | Application stage tracking |
+| `job_dismissal_log` | Dismiss log with reason and note |
 
 ## Job status flow
 
@@ -57,7 +57,7 @@ new → saved → applied    (user advances)
 new → dismissed          (user dismisses — job row kept for FK integrity, hidden from feed)
 ```
 
-`dismissed` jobs still exist in `job` but are excluded from feed queries (`WHERE status = 'new'`). Analytics come from `job_snapshot`, not `job`.
+`dismissed` jobs still exist in `job_feed` but are excluded from feed queries (`WHERE status = 'new'`). Analytics come from `job_analytics`, not `job_feed`.
 
 ## Scan scheduling
 
@@ -75,15 +75,15 @@ new → dismissed          (user dismisses — job row kept for FK integrity, hi
 | `jobs_new` | Jobs in feed with status `new` |
 | `jobs_saved` | Jobs with status `saved` |
 | `jobs_applied` | Jobs with status `applied` |
-| `pipeline_pending` | Jobs in `job_seen_ledger` with `reason='fetch'` but not yet in `job` table |
-| `pipeline_errors` | Jobs in `job_seen_ledger` with `reason='error'` |
+| `pipeline_pending` | Jobs in `job_pipeline_ledger` with `reason='fetch'` but not yet in `job_feed` table |
+| `pipeline_errors` | Jobs in `job_pipeline_ledger` with `reason='error'` |
 
 ## Key rules (detail in subdirectory CLAUDE.md files)
 
 - Workers depend on **interfaces**, never concrete types
 - All DB access goes through `internal/store/` — no raw GORM elsewhere
 - All typed values (status, stage, reason) use constants from `internal/model/constants.go`
-- Insights query `job_snapshot`, not `job` — snapshot rows are never deleted
-- job_listing_relevance_filter batch failures mark jobs as `error` in `job_seen_ledger` — never re-queue to Kafka
+- Insights query `job_analytics`, not `job_feed` — snapshot rows are never deleted
+- job_listing_relevance_filter batch failures mark jobs as `error` in `job_pipeline_ledger` — never re-queue to Kafka
 - All logging goes through `internal/logger.Logger` — never use stdlib `log` package directly
 - Field keys must use constants from `internal/logger/fields.go` — never raw strings

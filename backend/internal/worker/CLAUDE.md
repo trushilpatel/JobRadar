@@ -4,9 +4,9 @@
 
 | Package | Consumes | Produces | Writes to DB |
 |---|---|---|---|
-| `job_listing_crawler/` | `company_scan_queue` (DB poll) | `job_listings.raw` | `job_seen_ledger`, `company_scan_log` |
-| `job_listing_relevance_filter/` | `job_listings.raw` | `job_listings.filtered` | updates `job_seen_ledger.reason` |
-| `job_post_analyzer/` | `job_listings.filtered` | — | `job`, `job_snapshot`, updates `job_seen_ledger.reason` |
+| `job_listing_crawler/` | `company_scan_queue` (DB poll) | `job_listings.raw` | `job_pipeline_ledger`, `company_scan_log` |
+| `job_listing_relevance_filter/` | `job_listings.raw` | `job_listings.filtered` | updates `job_pipeline_ledger.reason` |
+| `job_post_analyzer/` | `job_listings.filtered` | — | `job_feed`, `job_analytics`, updates `job_pipeline_ledger.reason` |
 
 ## Error handling rule
 
@@ -25,12 +25,24 @@ if err := doSomething(job); err != nil {
 return err
 ```
 
-Failed jobs are marked in `job_seen_ledger` with `reason = 'error'`.
-They can be re-processed later by deleting their `job_seen_ledger` row.
+Failed jobs are marked in `job_pipeline_ledger` with `reason = 'error'`.
+They can be re-processed later by deleting their `job_pipeline_ledger` row.
+
+## Job eligibility — `dropJob`
+
+Before writing to the DB, `job_post_analyzer` calls `dropJob(enriched)`. If it returns a non-empty reason, the job is marked `error` in `job_pipeline_ledger` and skipped — never written to `job_feed`.
+
+Conditions (all checked in Go, not the LLM):
+- `Sponsorship == false` — posting explicitly denies visa sponsorship
+- `RequiresCitizen == true` — posting requires US Citizen or Green Card
+- `SecurityClearance == true` — posting requires any security clearance
+- `ExperienceYears > DISCARD_JOB_WITH_EXP_GT` — experience requirement exceeds config limit (0 = disabled)
+
+`dropJob` is a method on `Worker` so it can read `maxExpYears` from config. Never add business logic anywhere else for these rules.
 
 ## Enricher snapshot rule
 
-The enricher writes to `job_snapshot` **after** a successful `InsertJob`. The snapshot write is non-fatal — if it fails, the job row is already saved and the error is logged. Do not roll back the job insert if the snapshot fails.
+The enricher writes to `job_analytics` **after** a successful `InsertJob`. The snapshot write is non-fatal — if it fails, the job row is already saved and the error is logged. Do not roll back the job insert if the snapshot fails.
 
 ```go
 // correct — snapshot failure is non-fatal, log as Warn not Error
@@ -42,9 +54,9 @@ if err := w.snapshot.InsertSnapshot(...); err != nil {
 
 ## job_listing_relevance_filter error handling
 
-On `ScoreBatch` failure the entire batch is marked `reason='error'` in `job_seen_ledger` — **not re-queued**. Re-queuing caused an infinite tight loop because the batch was immediately re-consumed.
+On `ScoreBatch` failure the entire batch is marked `reason='error'` in `job_pipeline_ledger` — **not re-queued**. Re-queuing caused an infinite tight loop because the batch was immediately re-consumed.
 
-Failed jobs can be reprocessed by deleting their `job_seen_ledger` rows.
+Failed jobs can be reprocessed by deleting their `job_pipeline_ledger` rows.
 
 ## job_listing_crawler specifics
 

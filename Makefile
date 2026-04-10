@@ -1,7 +1,7 @@
 .PHONY: dev dev-frontend dev-backend \
         build build-frontend build-backend \
         run-api run-scan run-scorer run-enricher \
-        migrate lint tsc \
+        migrate db-truncate lint tsc \
         test test-short test-unit \
         test-api test-workers test-scheduler test-llm \
         test-adapters \
@@ -52,6 +52,10 @@ run-scheduler: ## Run scan scheduler (enqueues due companies)
 
 migrate: ## Run database migrations (goose up)
 	cd backend && go run ./cmd/migrate
+
+db-truncate: ## Truncate all tables except companies (keeps company list intact)
+	docker exec -it jobradar_postgres psql -U postgres -d jobradar -c \
+		"TRUNCATE TABLE job_pipeline_ledger, company_scan_queue, company_scan_log, job_application_tracker, job_dismissal_log, job_analytics, job_feed CASCADE;"
 
 # ── Quality ───────────────────────────────────────────────────────────────────
 
