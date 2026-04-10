@@ -20,6 +20,7 @@ company_scan_scheduler → company.scan_request (Kafka) → job_listing_crawler 
 | `internal/db/` | GORM connection setup |
 | `internal/kafka/` | Producer, consumer, admin, topic names |
 | `internal/llm/` | LLM scorer interface + Anthropic implementation |
+| `internal/logger/` | Logger interface + zerolog implementation + noop for tests |
 | `internal/model/` | DB structs + all typed constants |
 | `internal/store/` | All DB query logic — one file per table |
 | `internal/worker/` | The three pipeline workers |
@@ -83,3 +84,5 @@ new → dismissed          (user dismisses — job row kept for FK integrity, hi
 - All typed values (status, stage, reason) use constants from `internal/model/constants.go`
 - Insights query `job_snapshot`, not `job` — snapshot rows are never deleted
 - job_listing_relevance_filter batch failures mark jobs as `error` in `job_seen_ledger` — never re-queue to Kafka
+- All logging goes through `internal/logger.Logger` — never use stdlib `log` package directly
+- Field keys must use constants from `internal/logger/fields.go` — never raw strings

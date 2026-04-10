@@ -13,9 +13,10 @@
 **Errors are per-job, not per-batch.** One bad job must never stop the worker.
 
 ```go
-// correct — log, mark error, continue
+// correct — use a child logger with job_id baked in, mark error, continue
+jobLog := w.log.With(logger.Str(logger.FieldJobID, job.ID))
 if err := doSomething(job); err != nil {
-    log.Printf("[worker] %s: failed: %v", job.ID, err)
+    jobLog.Error("step failed", err)
     w.markError(job.ID)
     continue
 }
@@ -32,9 +33,9 @@ They can be re-processed later by deleting their `job_seen_ledger` row.
 The enricher writes to `job_snapshot` **after** a successful `InsertJob`. The snapshot write is non-fatal — if it fails, the job row is already saved and the error is logged. Do not roll back the job insert if the snapshot fails.
 
 ```go
-// correct — snapshot failure is non-fatal
+// correct — snapshot failure is non-fatal, log as Warn not Error
 if err := w.snapshot.InsertSnapshot(...); err != nil {
-    log.Printf("[job_post_analyzer] %s: write snapshot failed: %v", job.ID, err)
+    jobLog.Warn("write snapshot failed (non-fatal)", logger.Err(err))
     // continue — job is saved
 }
 ```

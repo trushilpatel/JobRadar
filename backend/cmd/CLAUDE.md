@@ -6,14 +6,17 @@ Each binary wires dependencies together and starts the process. No business logi
 
 Every `main.go` follows this order:
 1. Load config
-2. Open DB
-3. Call `kafka.EnsureTopics` (if producing) — **before** creating the producer
-4. Create Kafka producer/consumer
-5. Create LLM scorer (if needed)
-6. Create stores
-7. Create worker/handler
-8. Set up signal context
-9. Start and block
+2. **Init logger** — `log := logger.Init("service-name")` — must be first so startup errors are structured
+3. Open DB
+4. Call `kafka.EnsureTopics` (if producing) — **before** creating the producer
+5. Create Kafka producer/consumer (pass `log` to `kafka.NewConsumer`)
+6. Create LLM scorer (if needed, pass `Log: log` in `ScorerOptions`)
+7. Create stores
+8. Create worker/handler (pass `log` to constructor)
+9. Set up signal context
+10. Start and block
+
+Startup failures use `log.Error(...)` + `os.Exit(1)` — never `log.Fatalf`.
 
 ## EnsureTopics rule
 
