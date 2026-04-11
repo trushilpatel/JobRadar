@@ -225,15 +225,28 @@ export function CompaniesPage() {
       <AddCompanyModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onCreated={c => setCompanies(cs => [...cs, c])}
+        onCreated={async c => {
+          load()
+          if (c.active) {
+            try {
+              await triggerScan(c.id)
+              toast.success(`${c.name} added and scan queued`)
+              loadQueueStatus()
+            } catch {
+              toast.success(`${c.name} added — click Scan to start scanning`)
+            }
+          } else {
+            toast.success(`${c.name} added`)
+          }
+        }}
       />
       <AddCompanyModal
         open={!!editCompany}
         initialData={editCompany ?? undefined}
         onClose={() => setEditCompany(null)}
         onUpdated={updated => {
-          setCompanies(cs => cs.map(c => c.id === updated.id ? updated : c))
-          toast.success('Company updated')
+          load()
+          toast.success(`${updated.name} updated`)
         }}
       />
     </div>

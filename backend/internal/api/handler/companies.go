@@ -85,12 +85,16 @@ func (h *CompanyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		active = *body.Active
 	}
 
+	// Set last_scan_at to now so the scheduler doesn't immediately pick it up.
+	// Users trigger the first scan explicitly via POST /companies/:id/scan.
+	now := time.Now()
 	company := model.Company{
 		ID:          body.ID,
 		Name:        body.Name,
 		URL:         body.URL,
 		AdapterType: body.AdapterType,
 		Active:      active,
+		LastScanAt:  &now,
 	}
 	if err := h.companies.CreateCompany(company); err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to create company")
@@ -177,27 +181,17 @@ func (h *CompanyHandler) ScanStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /companies/:id/scan
-// Enqueues a scan request. Returns 429 if scanned within the configured scan interval.
+// Enqueues a manual scan request. Always allowed — no cooldown enforced for user-triggered scans.
 func (h *CompanyHandler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	company, err := h.companies.GetCompanyByID(id)
-	if err != nil {
+	if _, err := h.companies.GetCompanyByID(id); err != nil {
 		if store.IsNotFound(err) {
 			respondError(w, http.StatusNotFound, "company not found")
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "failed to fetch company")
 		return
-	}
-
-	if company.LastScanAt != nil {
-		nextAllowed := company.LastScanAt.Add(time.Duration(h.scanIntervalMinutes) * time.Minute)
-		if time.Now().Before(nextAllowed) {
-			remaining := time.Until(nextAllowed).Round(time.Minute)
-			respondError(w, http.StatusTooManyRequests, "scanned too recently, next scan allowed in "+remaining.String())
-			return
-		}
 	}
 
 	if err := h.queue.Enqueue(id, model.QueueSourceManual); err != nil {
