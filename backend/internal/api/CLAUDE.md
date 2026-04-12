@@ -79,9 +79,9 @@ GET    /insights/role-categories
 ## Manual scan rule
 
 `CompanyHandler` holds `store.ScanQueueStore` (not `kafka.Publisher`).
-`POST /companies/:id/scan` enqueues the company immediately — no cooldown check for user-triggered scans.
+`POST /companies/:id/scan` enforces the same `SCAN_INTERVAL_MINUTES` cooldown as the scheduler — returns 429 if `company.LastScanAt` is within the interval. If the cooldown passes, it calls `queue.Enqueue`.
 
-`queue.Enqueue` uses `ON CONFLICT DO NOTHING` — calling it for a company already in the queue is safe and silently no-ops. The scheduler enforces `SCAN_INTERVAL_MINUTES` for automatic scans via `GetCompaniesDueForScan`, but manual triggers bypass this.
+`queue.Enqueue` uses `ON CONFLICT DO NOTHING` — calling it for a company already in the queue is safe and silently no-ops.
 
 ## Snapshot backfill rule
 

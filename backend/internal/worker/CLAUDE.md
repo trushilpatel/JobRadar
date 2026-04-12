@@ -58,6 +58,17 @@ On `ScoreBatch` failure the entire batch is marked `reason='error'` in `job_pipe
 
 Failed jobs can be reprocessed by deleting their `job_pipeline_ledger` rows.
 
+## job_post_analyzer — FullContent fast path
+
+If `RawJob.FullContent != nil`, the analyzer skips both the HTTP fetch and the `ContentFetcher` call. It calls `fullContentToResponse(job)` to convert the pre-fetched data directly to `FetchJobContentResponse`, then proceeds to LLM enrichment as normal.
+
+```
+job.FullContent != nil  →  fullContentToResponse()  →  Enrich()  →  DB
+job.FullContent == nil  →  fetchContent()            →  Enrich()  →  DB
+```
+
+The LLM enrichment step always runs — `FullContent` only skips the fetch, not the enrichment. This is intentional: enrichment extracts sponsorship flags, tech stack, salary, etc. regardless of how content was obtained.
+
 ## job_listing_crawler specifics
 
 - `RunForCompany(ctx, companyID)` runs a scan for one company — called by the crawler's DB poll loop

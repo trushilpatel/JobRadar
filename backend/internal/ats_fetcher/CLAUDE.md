@@ -6,11 +6,14 @@
 job_listing_crawler
   └─ Registry(company.adapter_type)        → Adapter.FetchJobs()
        └─ FetchJobsItem[]                  → RawJob (published to job_listings.raw)
+            └─ item.FullContent != nil     → RawJob.FullContent set (full-detail adapters)
 
 job_post_analyzer
-  └─ Registry(rawJob.adapter)              → ContentFetcher.FetchJobContent()   [if implemented]
-       └─ FetchJobContentResponse          → JSON → LLM → model.Job (DB)
-  └─ fallback: HTTP GET rawJob.URL         → StripHTML → FetchJobContentResponse
+  └─ job.FullContent != nil?
+       └─ yes → fullContentToResponse()    → JSON → LLM → model.Job (DB)  [skip fetch]
+       └─ no  → Registry(rawJob.adapter)   → ContentFetcher.FetchJobContent()   [if implemented]
+                    └─ FetchJobContentResponse → JSON → LLM → model.Job (DB)
+             → fallback: HTTP GET rawJob.URL   → StripHTML → FetchJobContentResponse
 ```
 
 There are **two phases** with distinct types:
@@ -19,6 +22,8 @@ There are **two phases** with distinct types:
 |---|---|---|---|
 | Scan | `Adapter` | `company.url` | `FetchJobsResponse` → `RawJob` (Kafka) |
 | Enrich | `ContentFetcher` | `RawJob.URL` | `FetchJobContentResponse` (→ LLM) |
+
+Full-detail adapters (e.g. custom company scrapers) collapse both phases — they populate `FetchJobsItem.FullContent` at scan time, so the analyzer skips the fetch step entirely.
 
 ---
 
@@ -46,15 +51,18 @@ Kafka message published to `job_listings.raw`. Defined here, not in `model/`.
 
 ```go
 type RawJob struct {
-    ID         string // e.g. "greenhouse-12345" — adapter prefix + external ID
-    CompanyID  string // UUID from companies table — set by scan engine before publishing
-    Adapter    string // "greenhouse", "lever", "ashby", etc.
-    Title      string
-    Location   string
-    URL        string // hosted web URL — ContentFetcher parses this; fallback scrape target
-    EmployType string // full_time | part_time | contract | internship (model constants)
+    ID          string          // e.g. "greenhouse-12345" — adapter prefix + external ID
+    CompanyID   string          // UUID from companies table — set by scan engine before publishing
+    Adapter     string          // "greenhouse", "lever", "ashby", etc.
+    Title       string
+    Location    string
+    URL         string          // hosted web URL — ContentFetcher parses this; fallback scrape target
+    EmployType  string          // full_time | part_time | contract | internship (model constants)
+    FullContent *FullJobContent `json:"full_content,omitempty"` // nil for thin adapters
 }
 ```
+
+`FullContent` is `omitempty` — existing Kafka consumers that don't know about it are unaffected.
 
 ### FetchJobsItem / FetchJobsResponse
 
@@ -62,15 +70,31 @@ Minimal listing data — only what's needed for dedup and Kafka publish.
 
 ```go
 type FetchJobsItem struct {
-    ID             string // adapter-prefixed, e.g. "lever-abc-123"
+    ID             string         // adapter-prefixed, e.g. "lever-abc-123"
     Title          string
-    URL            string // hosted web URL → becomes RawJob.URL
+    URL            string         // hosted web URL → becomes RawJob.URL
     Location       string
-    EmploymentType string // normalized via model constants
+    EmploymentType string         // normalized via model constants
+    FullContent    *FullJobContent // nil for thin adapters; set by full-detail adapters
 }
 
 type FetchJobsResponse struct {
     Jobs []FetchJobsItem
+}
+```
+
+### FullJobContent
+
+Optional full job details returned by adapters that provide everything at listing time (e.g. custom company scrapers). Fields map 1:1 to `FetchJobContentResponse`. When present, `job_post_analyzer` skips the HTTP fetch and LLM structuring steps.
+
+```go
+type FullJobContent struct {
+    Description   string
+    Requirements  string
+    Compensation  string
+    WorkplaceType string
+    Department    string
+    PublishedDate string
 }
 ```
 
@@ -195,7 +219,7 @@ The prefix matches the `model.Adapter*` constants in `model/constants.go`.
 ## Adding a new adapter
 
 1. Create `{name}.go` — implement `Adapter` (`FetchJobs`)
-2. Implement `ContentFetcher` (`FetchJobContent`) if the platform has a native job detail API
+2. Implement `ContentFetcher` (`FetchJobContent`) if the platform has a native job detail API — OR populate `FetchJobsItem.FullContent` if the adapter returns full details at listing time (full-detail path)
 3. Create `{name}.md` documenting the full API response with a `Captured` column
 4. Add a `case` in `registry.go`
 5. Add the adapter constant to `model/constants.go`
@@ -204,6 +228,11 @@ The prefix matches the `model.Adapter*` constants in `model/constants.go`.
 
 The raw response struct must capture **all** documented fields from the platform API.
 The converter (`toFetch*Response()`) maps to the pipeline types — keep it separate from the HTTP logic.
+
+**Full-detail adapters** (custom company scrapers that return everything at once):
+- Populate `FetchJobsItem.FullContent` instead of implementing `ContentFetcher`
+- Do NOT implement `ContentFetcher` — the analyzer checks `RawJob.FullContent` first and skips the fetch
+- Set all fields you have; leave unset fields as empty strings
 
 ---
 

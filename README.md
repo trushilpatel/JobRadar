@@ -15,7 +15,7 @@ job_listing_crawler       ← fetches careers pages via ATS adapters
         ↓  (Kafka: job_listings.raw)
 job_listing_relevance_filter  ← LLM batch-scores job titles
         ↓  (Kafka: job_listings.filtered)
-job_post_analyzer         ← fetches full page, LLM enriches, eligibility check
+job_post_analyzer         ← fetches full page (or uses pre-fetched content), LLM enriches, eligibility check
         ↓  (Postgres: job_feed)
 REST API + React UI
 ```

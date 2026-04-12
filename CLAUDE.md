@@ -34,7 +34,7 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `cmd/company_scan_scheduler` | Queries DB for companies due for a scan, inserts into `company_scan_queue` |
 | `cmd/job_listing_crawler` | Polls `company_scan_queue` (DB), fetches careers pages, publishes to `job_listings.raw` |
 | `cmd/job_listing_relevance_filter` | Scores batches via LLM, routes relevant to `job_listings.filtered` |
-| `cmd/job_post_analyzer` | Fetches full job page, LLM enriches, writes to `job_feed` table |
+| `cmd/job_post_analyzer` | Fetches full job page (or uses pre-fetched FullContent), LLM enriches, writes to `job_feed` table |
 | `cmd/api` | REST API on `:8080` |
 
 ## Database tables
