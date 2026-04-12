@@ -10,13 +10,14 @@ import (
 // RawJob is the Kafka message published to job_listings.raw.
 // Set by the scan engine after FetchJobs returns — never by the adapter itself.
 type RawJob struct {
-	ID         string `json:"id"`          // e.g. "greenhouse-12345"
-	CompanyID  string `json:"company_id"`  // UUID from companies table
-	Adapter    string `json:"adapter"`     // "greenhouse", "lever", "ashby", etc.
-	Title      string `json:"title"`
-	Location   string `json:"location"`
-	URL        string `json:"url"`
-	EmployType string `json:"employ_type"` // full_time, contract, part_time, internship
+	ID          string          `json:"id"`                       // e.g. "greenhouse-12345"
+	CompanyID   string          `json:"company_id"`               // UUID from companies table
+	Adapter     string          `json:"adapter"`                  // "greenhouse", "lever", "ashby", etc.
+	Title       string          `json:"title"`
+	Location    string          `json:"location"`
+	URL         string          `json:"url"`
+	EmployType  string          `json:"employ_type"`              // full_time, contract, part_time, internship
+	FullContent *FullJobContent `json:"full_content,omitempty"`
 }
 
 // FetchJobsItem is one job from a company's listing page.
@@ -27,11 +28,24 @@ type FetchJobsItem struct {
 	URL            string
 	Location       string
 	EmploymentType string
+	FullContent    *FullJobContent // nil for thin adapters
 }
 
 // FetchJobsResponse is returned by Adapter.FetchJobs.
 type FetchJobsResponse struct {
 	Jobs []FetchJobsItem
+}
+
+// FullJobContent holds complete job details returned by adapters that provide
+// all data at listing time (e.g. Google Careers). Fields map 1:1 to
+// FetchJobContentResponse — nil pointer on FetchJobsItem means the adapter did not provide it.
+type FullJobContent struct {
+	Description   string
+	Requirements  string
+	Compensation  string
+	WorkplaceType string
+	Department    string
+	PublishedDate string
 }
 
 // FetchJobContentResponse is returned by ContentFetcher.FetchJobContent.

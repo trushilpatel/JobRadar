@@ -43,6 +43,9 @@ func (f *fakeScanQueueStore) ClaimNext(_ context.Context) (*store.ScanQueueItem,
 func (f *fakeScanQueueStore) Complete(_ string) error              { return f.err }
 func (f *fakeScanQueueStore) ResetStuck(_ time.Duration) error    { return f.err }
 func (f *fakeScanQueueStore) ListQueue() ([]store.ScanQueueItem, error) { return nil, f.err }
+func (f *fakeScanQueueStore) MoveDown(_ string) error { return f.err }
+func (f *fakeScanQueueStore) MoveUp(_ string) error   { return f.err }
+func (f *fakeScanQueueStore) Remove(_ string) error   { return f.err }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

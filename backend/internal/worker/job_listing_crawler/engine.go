@@ -147,13 +147,14 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 // CompanyID and AdapterType come from the company record, not the listing.
 func toRawJob(item ats_fetcher.FetchJobsItem, companyID, adapterType string) ats_fetcher.RawJob {
 	return ats_fetcher.RawJob{
-		ID:         item.ID,
-		CompanyID:  companyID,
-		Adapter:    adapterType,
-		Title:      item.Title,
-		Location:   item.Location,
-		URL:        item.URL,
-		EmployType: item.EmploymentType,
+		ID:          item.ID,
+		CompanyID:   companyID,
+		Adapter:     adapterType,
+		Title:       item.Title,
+		Location:    item.Location,
+		URL:         item.URL,
+		EmployType:  item.EmploymentType,
+		FullContent: item.FullContent,
 	}
 }
 

@@ -288,6 +288,9 @@ func (f *fakeScanQueueStore) ResetStuck(_ time.Duration) error { return f.err }
 func (f *fakeScanQueueStore) ListQueue() ([]store.ScanQueueItem, error) {
 	return f.items, f.err
 }
+func (f *fakeScanQueueStore) MoveDown(_ string) error { return f.err }
+func (f *fakeScanQueueStore) MoveUp(_ string) error   { return f.err }
+func (f *fakeScanQueueStore) Remove(_ string) error   { return f.err }
 
 // ── sentinel ──────────────────────────────────────────────────────────────────
 

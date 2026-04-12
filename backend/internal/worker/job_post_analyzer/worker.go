@@ -101,13 +101,19 @@ func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 		logger.Str("title", job.Title),
 	)
 
-	// 1. Fetch the full job content — via native API if the adapter supports it,
-	// otherwise fall back to a plain HTTP GET on the job URL.
-	content, err := w.fetchContent(ctx, job)
-	if err != nil {
-		jobLog.Error("fetch content failed", err)
-		w.markError(job.ID)
-		return
+	// 1. Get full job content — use pre-fetched data if available,
+	// otherwise fetch via native API or HTTP fallback.
+	var content ats_fetcher.FetchJobContentResponse
+	if job.FullContent != nil {
+		content = fullContentToResponse(job)
+	} else {
+		var err error
+		content, err = w.fetchContent(ctx, job)
+		if err != nil {
+			jobLog.Error("fetch content failed", err)
+			w.markError(job.ID)
+			return
+		}
 	}
 
 	// Serialize the structured content to JSON for the LLM.
@@ -294,6 +300,25 @@ func buildJob(raw ats_fetcher.RawJob, enriched *llm.EnrichResult) (*model.Job, e
 		Responsibilities:  datatypes.JSON(responsibilities),
 		Status:            model.JobStatusNew,
 	}, nil
+}
+
+// fullContentToResponse converts a pre-fetched FullJobContent into the
+// FetchJobContentResponse shape that the rest of the enrich pipeline expects.
+func fullContentToResponse(job ats_fetcher.RawJob) ats_fetcher.FetchJobContentResponse {
+	fc := job.FullContent
+	return ats_fetcher.FetchJobContentResponse{
+		ID:             job.ID,
+		Title:          job.Title,
+		Location:       job.Location,
+		URL:            job.URL,
+		Description:    fc.Description,
+		EmploymentType: job.EmployType,
+		Department:     fc.Department,
+		Compensation:   fc.Compensation,
+		WorkplaceType:  fc.WorkplaceType,
+		Requirements:   fc.Requirements,
+		PublishedDate:  fc.PublishedDate,
+	}
 }
 
 func nullableString(s string) *string {
