@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/internal/logger"
-	"github.com/trushilpatel/jobradar/internal/model"
-	"github.com/trushilpatel/jobradar/internal/store"
+	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/model"
+	"github.com/trushilpatel/jobradar/store"
 )
 
 // ── fakes ─────────────────────────────────────────────────────────────────────

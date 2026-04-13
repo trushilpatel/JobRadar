@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/config"
-	"github.com/trushilpatel/jobradar/internal/db"
-	"github.com/trushilpatel/jobradar/internal/logger"
-	"github.com/trushilpatel/jobradar/internal/metrics"
-	"github.com/trushilpatel/jobradar/internal/model"
-	"github.com/trushilpatel/jobradar/internal/store"
+	"github.com/trushilpatel/jobradar/infra/db"
+	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/infra/metrics"
+	"github.com/trushilpatel/jobradar/model"
+	"github.com/trushilpatel/jobradar/store"
 )
 
 const checkInterval = 1 * time.Minute

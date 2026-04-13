@@ -15,15 +15,16 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | Path | What lives there |
 |---|---|
 | `cmd/` | Binary entry points — one per worker + api |
-| `internal/ats_fetcher/` | Careers page fetchers (Greenhouse, Lever, etc.) |
-| `internal/api/` | REST API router, handlers, middleware |
-| `internal/db/` | GORM connection setup |
-| `internal/kafka/` | Producer, consumer, admin, topic names |
-| `internal/llm/` | LLM scorer interface + Gemini implementation |
-| `internal/logger/` | Logger interface + zerolog implementation + noop for tests |
-| `internal/model/` | DB structs + all typed constants |
-| `internal/store/` | All DB query logic — one file per table |
-| `internal/worker/` | The three pipeline workers |
+| `pipeline/` | The entire data pipeline |
+| `pipeline/ats/` | Careers page fetchers (Greenhouse, Lever, Ashby, Google) |
+| `pipeline/crawler/` | Polls scan queue, fetches careers pages, publishes raw jobs |
+| `pipeline/filter/` | Scores batches via LLM, routes relevant jobs |
+| `pipeline/analyzer/` | Fetches full job page, LLM enriches, writes to job_feed |
+| `pipeline/llm/` | LLM scorer interface + Gemini implementation |
+| `api/` | REST API router, handlers, middleware |
+| `model/` | DB structs + all typed constants |
+| `store/` | All DB query logic — one file per table |
+| `infra/` | Infrastructure plumbing (db, kafka, logger, metrics) |
 | `migrations/` | goose SQL migration files |
 | `deploy/` | Docker / Kafka entrypoint scripts |
 
@@ -81,9 +82,9 @@ new → dismissed          (user dismisses — job row kept for FK integrity, hi
 ## Key rules (detail in subdirectory CLAUDE.md files)
 
 - Workers depend on **interfaces**, never concrete types
-- All DB access goes through `internal/store/` — no raw GORM elsewhere
-- All typed values (status, stage, reason) use constants from `internal/model/constants.go`
+- All DB access goes through `store/` — no raw GORM elsewhere
+- All typed values (status, stage, reason) use constants from `model/constants.go`
 - Insights query `job_analytics`, not `job_feed` — snapshot rows are never deleted
 - job_listing_relevance_filter batch failures mark jobs as `error` in `job_pipeline_ledger` — never re-queue to Kafka
-- All logging goes through `internal/logger.Logger` — never use stdlib `log` package directly
-- Field keys must use constants from `internal/logger/fields.go` — never raw strings
+- All logging goes through `infra/logger.Logger` — never use stdlib `log` package directly
+- Field keys must use constants from `infra/logger/fields.go` — never raw strings

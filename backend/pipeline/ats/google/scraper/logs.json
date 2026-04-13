@@ -1,0 +1,33 @@
+{"ts":"2026-04-13T02:01:11.290Z","msg":"starting google careers scraper","url":"https://www.google.com/about/careers/applications/jobs/results?location=United%20States&target_level=EARLY&target_level=MID&employment_type=FULL_TIME&q=Software%20Engineering","timeout_ms":2700000,"min_delay":30000,"max_delay":45000}
+{"ts":"2026-04-13T02:01:12.485Z","msg":"navigating to google careers with filters"}
+{"ts":"2026-04-13T02:01:20.787Z","msg":"initial page loaded","jobs_on_page":20}
+{"ts":"2026-04-13T02:01:20.787Z","msg":"starting pagination","page":1,"jobs_so_far":20}
+{"ts":"2026-04-13T02:01:23.554Z","msg":"waiting before next page","delay_ms":42528}
+{"ts":"2026-04-13T02:02:14.028Z","msg":"page scraped","page":2,"jobs_on_page":20,"new_jobs":20,"total_jobs":40}
+{"ts":"2026-04-13T02:02:16.115Z","msg":"waiting before next page","delay_ms":30204}
+{"ts":"2026-04-13T02:02:52.547Z","msg":"page scraped","page":3,"jobs_on_page":20,"new_jobs":20,"total_jobs":60}
+{"ts":"2026-04-13T02:02:55.055Z","msg":"waiting before next page","delay_ms":41821}
+{"ts":"2026-04-13T02:03:42.282Z","msg":"page scraped","page":4,"jobs_on_page":20,"new_jobs":20,"total_jobs":80}
+{"ts":"2026-04-13T02:03:44.147Z","msg":"waiting before next page","delay_ms":40550}
+{"ts":"2026-04-13T02:04:30.478Z","msg":"page scraped","page":5,"jobs_on_page":20,"new_jobs":20,"total_jobs":100}
+{"ts":"2026-04-13T02:04:32.526Z","msg":"waiting before next page","delay_ms":44776}
+{"ts":"2026-04-13T02:05:24.950Z","msg":"page scraped","page":6,"jobs_on_page":20,"new_jobs":20,"total_jobs":120}
+{"ts":"2026-04-13T02:05:27.142Z","msg":"waiting before next page","delay_ms":41233}
+{"ts":"2026-04-13T02:06:16.314Z","msg":"page scraped","page":7,"jobs_on_page":20,"new_jobs":20,"total_jobs":140}
+{"ts":"2026-04-13T02:06:18.634Z","msg":"waiting before next page","delay_ms":36761}
+{"ts":"2026-04-13T02:07:02.012Z","msg":"page scraped","page":8,"jobs_on_page":20,"new_jobs":20,"total_jobs":160}
+{"ts":"2026-04-13T02:07:04.472Z","msg":"waiting before next page","delay_ms":31905}
+{"ts":"2026-04-13T02:07:43.460Z","msg":"page scraped","page":9,"jobs_on_page":20,"new_jobs":20,"total_jobs":180}
+{"ts":"2026-04-13T02:07:45.533Z","msg":"waiting before next page","delay_ms":31199}
+{"ts":"2026-04-13T02:08:24.106Z","msg":"page scraped","page":10,"jobs_on_page":20,"new_jobs":20,"total_jobs":200}
+{"ts":"2026-04-13T02:08:27.003Z","msg":"waiting before next page","delay_ms":31520}
+{"ts":"2026-04-13T02:09:06.185Z","msg":"page scraped","page":11,"jobs_on_page":20,"new_jobs":20,"total_jobs":220}
+{"ts":"2026-04-13T02:09:07.724Z","msg":"waiting before next page","delay_ms":32864}
+{"ts":"2026-04-13T02:09:46.268Z","msg":"page scraped","page":12,"jobs_on_page":20,"new_jobs":20,"total_jobs":240}
+{"ts":"2026-04-13T02:09:48.714Z","msg":"waiting before next page","delay_ms":32809}
+{"ts":"2026-04-13T02:10:27.055Z","msg":"page scraped","page":13,"jobs_on_page":20,"new_jobs":20,"total_jobs":260}
+{"ts":"2026-04-13T02:10:29.214Z","msg":"waiting before next page","delay_ms":41655}
+{"ts":"2026-04-13T02:11:18.479Z","msg":"page scraped","page":14,"jobs_on_page":20,"new_jobs":20,"total_jobs":280}
+{"ts":"2026-04-13T02:11:21.411Z","msg":"waiting before next page","delay_ms":33533}
+{"ts":"2026-04-13T02:12:02.491Z","msg":"page scraped","page":15,"jobs_on_page":20,"new_jobs":20,"total_jobs":300}
+{"ts":"2026-04-13T02:12:05.368Z","msg":"waiting before next page","delay_ms":39082}

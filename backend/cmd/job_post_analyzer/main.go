@@ -7,13 +7,13 @@ import (
 	"syscall"
 
 	"github.com/trushilpatel/jobradar/config"
-	"github.com/trushilpatel/jobradar/internal/db"
-	"github.com/trushilpatel/jobradar/internal/kafka"
-	"github.com/trushilpatel/jobradar/internal/llm"
-	"github.com/trushilpatel/jobradar/internal/logger"
-	"github.com/trushilpatel/jobradar/internal/metrics"
-	"github.com/trushilpatel/jobradar/internal/store"
-	"github.com/trushilpatel/jobradar/internal/worker/job_post_analyzer"
+	"github.com/trushilpatel/jobradar/infra/db"
+	"github.com/trushilpatel/jobradar/infra/kafka"
+	"github.com/trushilpatel/jobradar/pipeline/llm"
+	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/infra/metrics"
+	"github.com/trushilpatel/jobradar/store"
+	"github.com/trushilpatel/jobradar/pipeline/analyzer"
 )
 
 func main() {
@@ -56,7 +56,7 @@ func main() {
 	jobs := store.NewJobStore(database)
 	ledger := store.NewSeenLedgerStore(database)
 	snapshot := store.NewSnapshotStore(database)
-	worker := job_post_analyzer.NewWorker(consumer, scorer, jobs, ledger, snapshot, log, cfg.MaxExpYears)
+	worker := analyzer.NewWorker(consumer, scorer, jobs, ledger, snapshot, log, cfg.MaxExpYears)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

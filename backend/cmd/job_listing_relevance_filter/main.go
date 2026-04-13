@@ -7,13 +7,13 @@ import (
 	"syscall"
 
 	"github.com/trushilpatel/jobradar/config"
-	"github.com/trushilpatel/jobradar/internal/db"
-	"github.com/trushilpatel/jobradar/internal/kafka"
-	"github.com/trushilpatel/jobradar/internal/llm"
-	"github.com/trushilpatel/jobradar/internal/logger"
-	"github.com/trushilpatel/jobradar/internal/metrics"
-	"github.com/trushilpatel/jobradar/internal/store"
-	"github.com/trushilpatel/jobradar/internal/worker/job_listing_relevance_filter"
+	"github.com/trushilpatel/jobradar/infra/db"
+	"github.com/trushilpatel/jobradar/infra/kafka"
+	"github.com/trushilpatel/jobradar/pipeline/llm"
+	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/infra/metrics"
+	"github.com/trushilpatel/jobradar/store"
+	"github.com/trushilpatel/jobradar/pipeline/filter"
 )
 
 func main() {
@@ -66,7 +66,7 @@ func main() {
 	}
 
 	ledger := store.NewSeenLedgerStore(database)
-	worker := job_listing_relevance_filter.NewWorker(consumer, producer, scorer, ledger,
+	worker := filter.NewWorker(consumer, producer, scorer, ledger,
 		cfg.ScorerBatchSize, cfg.ScorerFlushTimeoutSeconds, log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

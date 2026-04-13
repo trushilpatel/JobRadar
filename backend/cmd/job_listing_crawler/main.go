@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/config"
-	"github.com/trushilpatel/jobradar/internal/ats_fetcher/google"
-	"github.com/trushilpatel/jobradar/internal/db"
-	"github.com/trushilpatel/jobradar/internal/kafka"
-	"github.com/trushilpatel/jobradar/internal/logger"
-	"github.com/trushilpatel/jobradar/internal/metrics"
-	"github.com/trushilpatel/jobradar/internal/store"
-	"github.com/trushilpatel/jobradar/internal/worker/job_listing_crawler"
+	"github.com/trushilpatel/jobradar/pipeline/ats/google"
+	"github.com/trushilpatel/jobradar/infra/db"
+	"github.com/trushilpatel/jobradar/infra/kafka"
+	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/infra/metrics"
+	"github.com/trushilpatel/jobradar/store"
+	"github.com/trushilpatel/jobradar/pipeline/crawler"
 )
 
 const pollInterval = 10 * time.Second
@@ -59,7 +59,7 @@ func main() {
 		TimeoutMs:  cfg.GoogleScraperTimeoutMs,
 		MaxPages:   cfg.GoogleScraperMaxPages,
 	}
-	engine := job_listing_crawler.NewEngine(companies, ledger, scanLog, producer, companyDelay, googleCfg, log)
+	engine := crawler.NewEngine(companies, ledger, scanLog, producer, companyDelay, googleCfg, log)
 
 	// Reset any rows stuck in processing from a previous crash.
 	if err := queue.ResetStuck(stuckTimeout); err != nil {
@@ -86,7 +86,7 @@ func main() {
 	}
 }
 
-func pollAndProcess(ctx context.Context, log logger.Logger, queue store.ScanQueueStore, engine *job_listing_crawler.Engine) {
+func pollAndProcess(ctx context.Context, log logger.Logger, queue store.ScanQueueStore, engine *crawler.Engine) {
 	item, err := queue.ClaimNext(ctx)
 	if err != nil {
 		log.Error("failed to claim queue item", err)

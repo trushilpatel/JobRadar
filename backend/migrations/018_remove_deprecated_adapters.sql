@@ -1,6 +1,10 @@
 -- +goose Up
 
--- Remove workday, workable, chromedp from the adapter_type CHECK constraint.
+-- Remove companies using deprecated adapters before tightening the constraint.
+DELETE FROM companies
+WHERE adapter_type NOT IN ('greenhouse', 'lever', 'ashby', 'google');
+
+-- Remove workday, workable, chromedp, icims from the adapter_type CHECK constraint.
 ALTER TABLE companies
     DROP CONSTRAINT IF EXISTS companies_adapter_type_check;
 

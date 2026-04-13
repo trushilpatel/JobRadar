@@ -9,11 +9,9 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/config"
-	"github.com/trushilpatel/jobradar/internal/api"
-	"github.com/trushilpatel/jobradar/internal/api/handler"
-	"github.com/trushilpatel/jobradar/internal/db"
-	"github.com/trushilpatel/jobradar/internal/logger"
-	"github.com/trushilpatel/jobradar/internal/store"
+	"github.com/trushilpatel/jobradar/api"
+	"github.com/trushilpatel/jobradar/infra/db"
+	"github.com/trushilpatel/jobradar/infra/logger"
 )
 
 func main() {
@@ -26,23 +24,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	jobStore := store.NewJobStore(database)
-	ledger := store.NewSeenLedgerStore(database)
-	discardStore := store.NewDiscardStore(database)
-	snapshotStore := store.NewSnapshotStore(database)
-	appStore := store.NewApplicationStore(database)
-	companyStore := store.NewCompanyStore(database)
-	scanLogStore := store.NewCompanyScanLogStore(database)
-	insightsStore := store.NewInsightsStore(database)
-	scanQueueStore := store.NewScanQueueStore(database)
-
-	jobHandler := handler.NewJobHandler(jobStore, ledger, discardStore, snapshotStore)
-	appHandler := handler.NewApplicationHandler(appStore, jobStore)
-	companyHandler := handler.NewCompanyHandler(companyStore, scanLogStore, scanQueueStore, cfg.ScanIntervalMinutes)
-	dashboardHandler := handler.NewDashboardHandler(jobStore, scanLogStore, insightsStore)
-	insightsHandler := handler.NewInsightsHandler(insightsStore)
-
-	router := api.NewRouter(log, database, jobHandler, appHandler, companyHandler, dashboardHandler, insightsHandler)
+	app := api.NewApp(database, cfg)
+	router := api.NewRouter(log, database, app.Handlers())
 
 	srv := &http.Server{
 		Addr:         ":8080",
