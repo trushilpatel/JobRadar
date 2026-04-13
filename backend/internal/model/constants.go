@@ -5,9 +5,6 @@ const (
     AdapterGreenhouse = "greenhouse"
     AdapterLever      = "lever"
     AdapterAshby      = "ashby"
-    AdapterWorkday    = "workday"
-    AdapterWorkable   = "workable"
-    AdapterChromedp   = "chromedp"
     AdapterGoogle     = "google"
 )
 

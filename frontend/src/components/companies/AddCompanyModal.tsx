@@ -20,16 +20,13 @@ const URL_TEMPLATES: Partial<Record<string, (id: string) => string>> = {
   greenhouse: id => `https://boards-api.greenhouse.io/v1/boards/${id}/jobs`,
   lever:      id => `https://jobs.lever.co/${id}`,
   ashby:      id => `https://jobs.ashbyhq.com/${id}`,
-  workable:   id => `https://${id}.workable.com/spi/v3/jobs`,
 }
 
 const ADAPTER_HINTS: Partial<Record<string, string>> = {
   greenhouse: 'URL auto-filled from company ID',
   lever:      'URL auto-filled from company ID',
   ashby:      'URL auto-filled from company ID',
-  workable:   'URL auto-filled from company ID',
-  workday:    'Paste the full Workday API endpoint',
-  chromedp:   'Paste the careers page URL (browser-rendered)',
+  google:     'No URL required — uses built-in Google Careers scraper',
 }
 
 function buildUrl(adapter: string, id: string): string {

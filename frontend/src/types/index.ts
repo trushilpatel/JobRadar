@@ -35,9 +35,7 @@ export const ADAPTER_TYPES = [
   'greenhouse',
   'lever',
   'ashby',
-  'workday',
-  'workable',
-  'chromedp',
+  'google',
 ] as const
 
 export type AdapterType = typeof ADAPTER_TYPES[number]

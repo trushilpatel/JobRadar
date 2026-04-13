@@ -4,12 +4,9 @@ import (
 	"fmt"
 
 	"github.com/trushilpatel/jobradar/internal/ats_fetcher/ashby"
-	"github.com/trushilpatel/jobradar/internal/ats_fetcher/chromedp"
 	"github.com/trushilpatel/jobradar/internal/ats_fetcher/google"
 	"github.com/trushilpatel/jobradar/internal/ats_fetcher/greenhouse"
 	"github.com/trushilpatel/jobradar/internal/ats_fetcher/lever"
-	"github.com/trushilpatel/jobradar/internal/ats_fetcher/workable"
-	"github.com/trushilpatel/jobradar/internal/ats_fetcher/workday"
 	"github.com/trushilpatel/jobradar/internal/model"
 )
 
@@ -31,12 +28,6 @@ func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config) (Adap
 		return &lever.Lever{}, nil
 	case model.AdapterAshby:
 		return &ashby.Ashby{}, nil
-	case model.AdapterWorkday:
-		return &workday.Workday{}, nil
-	case model.AdapterWorkable:
-		return &workable.Workable{}, nil
-	case model.AdapterChromedp:
-		return &chromedp.Chromedp{}, nil
 	case model.AdapterGoogle:
 		if googleCfg == (google.Config{}) {
 			return google.NewDefault(), nil

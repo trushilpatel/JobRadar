@@ -71,9 +71,7 @@ func (h *CompanyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		model.AdapterGreenhouse: true,
 		model.AdapterLever:      true,
 		model.AdapterAshby:      true,
-		model.AdapterWorkday:    true,
-		model.AdapterWorkable:   true,
-		model.AdapterChromedp:   true,
+		model.AdapterGoogle:     true,
 	}
 	if !validAdapters[body.AdapterType] {
 		respondError(w, http.StatusBadRequest, "invalid adapter_type")
@@ -131,9 +129,7 @@ func (h *CompanyHandler) Update(w http.ResponseWriter, r *http.Request) {
 			model.AdapterGreenhouse: true,
 			model.AdapterLever:      true,
 			model.AdapterAshby:      true,
-			model.AdapterWorkday:    true,
-			model.AdapterWorkable:   true,
-			model.AdapterChromedp:   true,
+			model.AdapterGoogle:     true,
 		}
 		if !validAdapters[at] {
 			respondError(w, http.StatusBadRequest, "invalid adapter_type")
