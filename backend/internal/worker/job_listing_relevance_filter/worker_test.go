@@ -46,6 +46,7 @@ func (f *fakeLedger) UpdateSeenReasonBatch(ids []string, reason string) error {
 	f.calls = append(f.calls, ledgerCall{ids: ids, reason: reason})
 	return nil
 }
+func (f *fakeLedger) MarkRemovedBatch(_ []string) error { return nil }
 
 type fakePublisher struct {
 	payloads [][]byte

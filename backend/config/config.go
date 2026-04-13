@@ -40,6 +40,15 @@ type Config struct {
 	TargetRoles []string // e.g. ["Backend Engineer", "Platform Engineer"]
 	YearsExp    int
 	MaxExpYears int // DISCARD_JOB_WITH_EXP_GT — drop jobs requiring more than this many years (0 = disabled)
+
+	// Google Careers scraper (Playwright / Node.js)
+	GoogleScraperMinDelayMs  int // min delay between page navigations in ms (default: 30000)
+	GoogleScraperMaxDelayMs  int // max delay between page navigations in ms (default: 60000)
+	GoogleScraperTimeoutMs   int // overall scraper timeout in ms (default: 2700000 = 45 min)
+	GoogleScraperMaxPages    int // max pages to paginate, 0 = all (default: 0)
+
+	// Prometheus
+	MetricsAddr string // address for metrics/health HTTP server (workers); API uses :8080
 }
 
 func Load() *Config {
@@ -73,6 +82,13 @@ func Load() *Config {
 		TargetRoles: splitCSV(getEnv("TARGET_ROLES", "Software Engineer")),
 		YearsExp:    getEnvInt("YEARS_EXP", 0),
 		MaxExpYears: getEnvInt("DISCARD_JOB_WITH_EXP_GT", 0),
+
+		GoogleScraperMinDelayMs: getEnvInt("GOOGLE_SCRAPER_MIN_DELAY", 30000),
+		GoogleScraperMaxDelayMs: getEnvInt("GOOGLE_SCRAPER_MAX_DELAY", 60000),
+		GoogleScraperTimeoutMs:  getEnvInt("GOOGLE_SCRAPER_TIMEOUT_MS", 2700000),
+		GoogleScraperMaxPages:   getEnvInt("GOOGLE_SCRAPER_MAX_PAGES", 0),
+
+		MetricsAddr: getEnv("METRICS_ADDR", ":9090"),
 	}
 }
 

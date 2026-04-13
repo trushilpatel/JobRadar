@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/internal/ats_fetcher"
+	"github.com/trushilpatel/jobradar/internal/ats_fetcher/google"
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/logger"
 	"github.com/trushilpatel/jobradar/internal/metrics"
@@ -21,6 +22,7 @@ type Engine struct {
 	scanLog      store.CompanyScanLogWriter
 	publisher    kafka.Publisher
 	companyDelay time.Duration
+	googleCfg    google.Config
 	log          logger.Logger
 }
 
@@ -30,6 +32,7 @@ func NewEngine(
 	scanLog store.CompanyScanLogWriter,
 	publisher kafka.Publisher,
 	companyDelay time.Duration,
+	googleCfg google.Config,
 	log logger.Logger,
 ) *Engine {
 	return &Engine{
@@ -38,6 +41,7 @@ func NewEngine(
 		scanLog:      scanLog,
 		publisher:    publisher,
 		companyDelay: companyDelay,
+		googleCfg:    googleCfg,
 		log:          log,
 	}
 }
@@ -85,7 +89,7 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 		logger.Str("name", company.Name),
 	)
 
-	adp, err := ats_fetcher.Registry(company.AdapterType)
+	adp, err := ats_fetcher.RegistryWithGoogleConfig(company.AdapterType, e.googleCfg)
 	if err != nil {
 		errMsg := fmt.Sprintf("no adapter for type %q: %v", company.AdapterType, err)
 		companyLog.Error("no adapter found", err)

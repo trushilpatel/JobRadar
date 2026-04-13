@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/config"
+	"github.com/trushilpatel/jobradar/internal/ats_fetcher/google"
 	"github.com/trushilpatel/jobradar/internal/db"
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/logger"
@@ -52,7 +53,13 @@ func main() {
 	queue := store.NewScanQueueStore(database)
 
 	companyDelay := time.Duration(cfg.ScanCompanyDelaySeconds) * time.Second
-	engine := job_listing_crawler.NewEngine(companies, ledger, scanLog, producer, companyDelay, log)
+	googleCfg := google.Config{
+		MinDelayMs: cfg.GoogleScraperMinDelayMs,
+		MaxDelayMs: cfg.GoogleScraperMaxDelayMs,
+		TimeoutMs:  cfg.GoogleScraperTimeoutMs,
+		MaxPages:   cfg.GoogleScraperMaxPages,
+	}
+	engine := job_listing_crawler.NewEngine(companies, ledger, scanLog, producer, companyDelay, googleCfg, log)
 
 	// Reset any rows stuck in processing from a previous crash.
 	if err := queue.ResetStuck(stuckTimeout); err != nil {

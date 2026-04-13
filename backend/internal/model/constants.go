@@ -8,6 +8,7 @@ const (
     AdapterWorkday    = "workday"
     AdapterWorkable   = "workable"
     AdapterChromedp   = "chromedp"
+    AdapterGoogle     = "google"
 )
 
 // ScanStatus

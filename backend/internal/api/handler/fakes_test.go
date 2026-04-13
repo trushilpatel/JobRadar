@@ -96,6 +96,7 @@ func (f *fakeLedgerWriter) UpdateSeenReason(_ string, reason string) error {
 	return nil
 }
 func (f *fakeLedgerWriter) UpdateSeenReasonBatch(_ []string, _ string) error { return nil }
+func (f *fakeLedgerWriter) MarkRemovedBatch(_ []string) error                 { return nil }
 
 // ── fakeDiscardStore ──────────────────────────────────────────────────────────
 

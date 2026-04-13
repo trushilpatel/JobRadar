@@ -155,6 +155,7 @@ if cf, ok := adp.(ats_fetcher.ContentFetcher); ok {
 | `greenhouse.go` | ✅ | ✅ | Parses `{slug}/{id}` from `RawJob.URL`, calls `boards-api.greenhouse.io` REST |
 | `lever.go` | ✅ | ✅ | Parses `{company}/{uuid}` from `RawJob.URL`, calls `api.lever.co` REST (`?mode=json`) |
 | `ashby.go` | ✅ | ✅ | Parses `{company}/{uuid}` from `RawJob.URL`, GraphQL POST to `jobs.ashbyhq.com` |
+| `google/google.go` | ✅ (full-detail) | — (FullContent at scan) | Playwright subprocess → `careers.google.com`, populates FullContent |
 | `workday.go` | Stub | — | Falls back to HTML scrape |
 | `workable.go` | Stub | — | Falls back to HTML scrape |
 | `chromedp.go` | Stub | — | Falls back to HTML scrape (headless browser) |
@@ -176,19 +177,19 @@ The REST API does **not** return `descriptionHtml` — use GraphQL when you need
 
 ### FetchJobContent fields
 
-| Field          | Greenhouse | Lever | Ashby (GraphQL) |
-|---|---|---|---|
-| `ID`           | ✅ | ✅ | ✅ |
-| `Title`        | ✅ | ✅ | ✅ |
-| `Location`     | ✅ | ✅ | ✅ (+ workplaceType in parens) |
-| `URL`          | ✅ | ✅ | — |
-| `Description`  | ✅ (HTML→plain) | ✅ (`descriptionPlain` + `additionalPlain`) | ✅ (HTML→plain) |
-| `EmploymentType` | — | ✅ (normalized from `commitment`) | ✅ (normalized from `employmentType`) |
-| `Department`   | ✅ (`departments[0]`) | ✅ (`department` > `team` fallback) | — |
-| `Compensation` | ✅ (`pay_input_ranges[0]` formatted) | ✅ (`salaryDescriptionPlain` > `salaryRange` fallback) | ✅ (`compensationTierSummary`) |
-| `WorkplaceType` | — | ✅ (raw: `on-site`/`remote`/`hybrid`) | ✅ (raw: `Remote`/`Hybrid`/`Onsite`) |
-| `Requirements` | — | ✅ (`lists[]` HTML→plain) | — |
-| `PublishedDate` | ✅ (`updated_at` ISO 8601) | ✅ (`createdAt` Unix ms as string) | ✅ (`publishedDate` date string) |
+| Field          | Greenhouse | Lever | Ashby (GraphQL) | Google (Playwright) |
+|---|---|---|---|---|
+| `ID`           | ✅ | ✅ | ✅ | ✅ (`google-{id}` from URL) |
+| `Title`        | ✅ | ✅ | ✅ | ✅ |
+| `Location`     | ✅ | ✅ | ✅ (+ workplaceType in parens) | ✅ |
+| `URL`          | ✅ | ✅ | — | ✅ |
+| `Description`  | ✅ (HTML→plain) | ✅ (`descriptionPlain` + `additionalPlain`) | ✅ (HTML→plain) | ✅ (DOM innerText) |
+| `EmploymentType` | — | ✅ (normalized from `commitment`) | ✅ (normalized from `employmentType`) | ✅ (normalized from card text) |
+| `Department`   | ✅ (`departments[0]`) | ✅ (`department` > `team` fallback) | — | ✅ (from card metadata) |
+| `Compensation` | ✅ (`pay_input_ranges[0]` formatted) | ✅ (`salaryDescriptionPlain` > `salaryRange` fallback) | ✅ (`compensationTierSummary`) | ✅ (if displayed) |
+| `WorkplaceType` | — | ✅ (raw: `on-site`/`remote`/`hybrid`) | ✅ (raw: `Remote`/`Hybrid`/`Onsite`) | ✅ (from metadata chips) |
+| `Requirements` | — | ✅ (`lists[]` HTML→plain) | — | ✅ (from qualification sections) |
+| `PublishedDate` | ✅ (`updated_at` ISO 8601) | ✅ (`createdAt` Unix ms as string) | ✅ (`publishedDate` date string) | ✅ (if available) |
 
 ---
 
@@ -199,6 +200,7 @@ The REST API does **not** return `descriptionHtml` — use GraphQL when you need
 | Greenhouse | `https://boards-api.greenhouse.io/v1/boards/{slug}/jobs` | `https://job-boards.greenhouse.io/{slug}/jobs/{id}` | `https://boards-api.greenhouse.io/v1/boards/{slug}/jobs/{id}` |
 | Lever | `{company-slug}` (e.g. `netlify`) | `https://jobs.lever.co/{company}/{uuid}` | `https://api.lever.co/v0/postings/{company}/{uuid}?mode=json` |
 | Ashby | `{company-slug}` (e.g. `openai`) | `https://jobs.ashbyhq.com/{company}/{uuid}` | GraphQL POST to `https://jobs.ashbyhq.com/api/non-user-graphql` |
+| Google | (unused — scraper has built-in filtered URL) | `https://www.google.com/about/careers/applications/jobs/results/{id}-{slug}` | Playwright DOM extraction (full-detail, no separate fetch) |
 
 ---
 
@@ -245,3 +247,4 @@ Per-adapter API reference with full response schemas and `Captured` column:
 | [`greenhouse.md`](greenhouse.md) | Greenhouse Boards API — list jobs, get single job, pay ranges |
 | [`lever.md`](lever.md) | Lever Postings API — list jobs, get single job, all description variants, salary fields |
 | [`ashby.md`](ashby.md) | Ashby public GraphQL + authenticated REST API |
+| [`google/google.md`](google/google.md) | Google Careers — Playwright scraper, DOM extraction, anti-bot config |

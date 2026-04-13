@@ -1,0 +1,45 @@
+{
+  "_comment": "Example scraper stdout — page 1 of ~34 pages (681 jobs). Job #1 fully enriched.",
+  "_go_mapping": {
+    "id":                        "→ FetchJobsItem.ID",
+    "title":                     "→ FetchJobsItem.Title",
+    "url":                       "→ FetchJobsItem.URL",
+    "location":                  "→ FetchJobsItem.Location",
+    "employ_type":               "→ FetchJobsItem.EmploymentType",
+    "full_content.description":  "→ FullJobContent.Description (title + location from listing card + sections from detail page)",
+    "full_content.department":   "→ FullJobContent.Department (org from material icon on listing card)"
+  },
+
+  "jobs": [
+    {
+      "id": "google-79506891570324166",
+      "title": "Software Engineer, Site Reliability Engineering, Pub/Sub",
+      "url": "https://www.google.com/about/careers/applications/jobs/results/79506891570324166-software-engineer-site-reliability-engineering-pubsub",
+      "location": "New York, NY, USA",
+      "employ_type": "full_time",
+      "full_content": {
+        "description": "Software Engineer, Site Reliability Engineering, Pub/Sub\n\nNew York, NY, USA\n\nMinimum qualifications:\n- Bachelor's degree in Computer Science, a related field, or equivalent practical experience.\n- 1 year of experience with software development in one or more programming languages (e.g., Python, Java, C++).\n- 1 year of experience with data structures and algorithms.\n- Experience with debugging and troubleshooting software issues.\n\nPreferred qualifications:\n- Master's degree in Computer Science or Engineering.\n- Experience with on-call and production incident management.\n- Knowledge of reliability patterns and anti-patterns.\n\nResponsibilities\n- Write product or system development code.\n- Review code developed by other engineers and provide feedback to ensure best practices (e.g., style guidelines, checking code in, accuracy, testability, and efficiency).\n- Contribute to existing documentation or educational content and adapt content based on product/program updates and user feedback.\n- Triage product or system issues and debug/track/resolve by analyzing the sources of issues and the impact on hardware, network, or service operations and quality.\n- Participate in, or lead incident management and write postmortems for assigned areas.",
+        "requirements": "",
+        "compensation": "",
+        "workplace_type": "",
+        "department": "Google",
+        "published_date": ""
+      }
+    },
+    {
+      "id": "google-94462708576854726",
+      "title": "Senior Software Engineer, Site Reliability Engineering",
+      "url": "https://www.google.com/about/careers/applications/jobs/results/94462708576854726-senior-software-engineer-site-reliability-engineering",
+      "location": "Pittsburgh, PA, USA",
+      "employ_type": "full_time",
+      "full_content": {
+        "description": "(enriched after visiting detail page — same clean format)",
+        "requirements": "",
+        "compensation": "",
+        "workplace_type": "",
+        "department": "Google",
+        "published_date": ""
+      }
+    }
+  ]
+}

@@ -56,6 +56,7 @@ func (f *fakeLedger) UpdateSeenReason(_ string, reason string) error {
 	return nil
 }
 func (f *fakeLedger) UpdateSeenReasonBatch(_ []string, _ string) error { return nil }
+func (f *fakeLedger) MarkRemovedBatch(_ []string) error                { return nil }
 
 type fakeSnapshot struct {
 	called bool

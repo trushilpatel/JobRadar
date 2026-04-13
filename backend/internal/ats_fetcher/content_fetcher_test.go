@@ -28,8 +28,8 @@ func TestRegistry_ContentFetcherImplementations(t *testing.T) {
 		})
 	}
 
-	// These adapters must NOT (they rely on HTML scrape fallback)
-	shouldNotImplement := []string{"workday", "workable", "chromedp"}
+	// These adapters must NOT (they rely on HTML scrape fallback or full-detail pattern)
+	shouldNotImplement := []string{"workday", "workable", "chromedp", "google"}
 	for _, name := range shouldNotImplement {
 		t.Run(name+"_no_content_fetcher", func(t *testing.T) {
 			adp, err := ats_fetcher.Registry(name)
