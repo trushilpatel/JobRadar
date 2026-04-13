@@ -1,15 +1,21 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/trushilpatel/jobradar/internal/api/handler"
 	"github.com/trushilpatel/jobradar/internal/api/middleware"
+	"github.com/trushilpatel/jobradar/internal/db"
 	"github.com/trushilpatel/jobradar/internal/logger"
+	"gorm.io/gorm"
 )
 
 func NewRouter(
 	log logger.Logger,
+	database *gorm.DB,
 	jobs *handler.JobHandler,
 	apps *handler.ApplicationHandler,
 	companies *handler.CompanyHandler,
@@ -20,7 +26,21 @@ func NewRouter(
 
 	// Global middleware — runs on every request
 	r.Use(middleware.Logger(log))
-	r.Use(chimiddleware.Recoverer) // catches panics, returns 500 instead of crashing
+	r.Use(middleware.Metrics())
+	r.Use(chimiddleware.Recoverer)
+
+	// Operational endpoints
+	r.Handle("/metrics", promhttp.Handler())
+	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	r.Get("/ready", func(w http.ResponseWriter, _ *http.Request) {
+		if err := db.Ping(database); err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 
 	r.Get("/jobs", jobs.List)
 	r.Get("/jobs/{id}", jobs.Get)

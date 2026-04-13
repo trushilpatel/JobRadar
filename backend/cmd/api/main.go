@@ -42,7 +42,7 @@ func main() {
 	dashboardHandler := handler.NewDashboardHandler(jobStore, scanLogStore, insightsStore)
 	insightsHandler := handler.NewInsightsHandler(insightsStore)
 
-	router := api.NewRouter(log, jobHandler, appHandler, companyHandler, dashboardHandler, insightsHandler)
+	router := api.NewRouter(log, database, jobHandler, appHandler, companyHandler, dashboardHandler, insightsHandler)
 
 	srv := &http.Server{
 		Addr:         ":8080",
