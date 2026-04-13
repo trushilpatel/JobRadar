@@ -116,6 +116,9 @@ services:
       KAFKA_PASSWORD: ""
       LOG_LEVEL: info
       LOG_FORMAT: json
+      METRICS_ADDR: ":9101"
+    ports:
+      - "9101:9101"
     command: ["/app/scheduler"]
     depends_on:
       postgres:
@@ -140,6 +143,9 @@ services:
       KAFKA_PASSWORD: ""
       LOG_LEVEL: info
       LOG_FORMAT: json
+      METRICS_ADDR: ":9102"
+    ports:
+      - "9102:9102"
     command: ["/app/crawler"]
     depends_on:
       postgres:
@@ -164,6 +170,9 @@ services:
       KAFKA_PASSWORD: ""
       LOG_LEVEL: info
       LOG_FORMAT: json
+      METRICS_ADDR: ":9103"
+    ports:
+      - "9103:9103"
     command: ["/app/filter"]
     depends_on:
       postgres:
@@ -188,6 +197,9 @@ services:
       KAFKA_PASSWORD: ""
       LOG_LEVEL: info
       LOG_FORMAT: json
+      METRICS_ADDR: ":9104"
+    ports:
+      - "9104:9104"
     command: ["/app/enricher"]
     depends_on:
       postgres:
@@ -197,6 +209,24 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+
+  # ── Google Careers Scraper ─────────────────────────────────────────────────────
+
+  google-scraper:
+    build:
+      context: ./backend/internal/ats_fetcher/google/scraper
+      dockerfile: Dockerfile
+    image: jobradar_google_scraper
+    container_name: jobradar_google_scraper
+    environment:
+      GOOGLE_SCRAPER_TIMEOUT_MS: "2700000"
+      GOOGLE_SCRAPER_MIN_DELAY: "30000"
+      GOOGLE_SCRAPER_MAX_DELAY: "45000"
+    # Not a long-running service — started on-demand by the crawler.
+    # Use: docker compose run --rm google-scraper
+    profiles:
+      - scraper
+    restart: "no"
 
   # ── Frontend ──────────────────────────────────────────────────────────────────
 
@@ -242,6 +272,7 @@ services:
       - "3001:3000"
     volumes:
       - ./backend/deploy/loki/grafana-datasources.yml:/etc/grafana/provisioning/datasources/loki.yml
+      - ./backend/deploy/prometheus/grafana-prometheus-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml
       - grafanadata:/var/lib/grafana
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
@@ -250,9 +281,23 @@ services:
       - loki
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: jobradar_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./backend/deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheusdata:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    restart: unless-stopped
+
 volumes:
   pgdata:
   kafkadata:
   lokidata:
   grafanadata:
+  prometheusdata:
 

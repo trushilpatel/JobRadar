@@ -9,6 +9,7 @@ import (
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/llm"
 	"github.com/trushilpatel/jobradar/internal/logger"
+	"github.com/trushilpatel/jobradar/internal/metrics"
 	"github.com/trushilpatel/jobradar/internal/model"
 	"github.com/trushilpatel/jobradar/internal/store"
 )
@@ -129,7 +130,10 @@ func (w *Worker) flushBatch(ctx context.Context, batch []ats_fetcher.RawJob) {
 		inputs[i] = llm.ScorerInput{ID: job.ID, Title: job.Title}
 	}
 
+	start := time.Now()
 	relevantIDs, err := w.scorer.ScoreBatch(ctx, inputs)
+	metrics.FilterLLMDuration.Observe(time.Since(start).Seconds())
+
 	if err != nil {
 		w.log.Error("ScoreBatch failed, marking batch as error", err, logger.Int(logger.FieldBatch, len(batch)))
 		ids := make([]string, len(batch))
@@ -139,6 +143,7 @@ func (w *Worker) flushBatch(ctx context.Context, batch []ats_fetcher.RawJob) {
 		if merr := w.ledger.UpdateSeenReasonBatch(ids, model.SeenReasonError); merr != nil {
 			w.log.Error("mark error batch failed", merr)
 		}
+		metrics.FilterJobsTotal.WithLabelValues("error").Add(float64(len(batch)))
 		return
 	}
 
@@ -161,6 +166,9 @@ func (w *Worker) flushBatch(ctx context.Context, batch []ats_fetcher.RawJob) {
 			w.log.Error("mark irrelevant failed", err)
 		}
 	}
+
+	metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(relevantIDs)))
+	metrics.FilterJobsTotal.WithLabelValues("irrelevant").Add(float64(len(irrelevantIDs)))
 
 	w.log.Info("batch scored",
 		logger.Int(logger.FieldBatch, len(batch)),

@@ -11,6 +11,7 @@ import (
 	"github.com/trushilpatel/jobradar/internal/db"
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/logger"
+	"github.com/trushilpatel/jobradar/internal/metrics"
 	"github.com/trushilpatel/jobradar/internal/store"
 	"github.com/trushilpatel/jobradar/internal/worker/job_listing_crawler"
 )
@@ -27,6 +28,8 @@ func main() {
 		log.Error("db open failed", err)
 		os.Exit(1)
 	}
+
+	go metrics.Serve(cfg.MetricsAddr, func() error { return db.Ping(database) })
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

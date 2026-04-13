@@ -11,6 +11,7 @@ import (
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/llm"
 	"github.com/trushilpatel/jobradar/internal/logger"
+	"github.com/trushilpatel/jobradar/internal/metrics"
 	"github.com/trushilpatel/jobradar/internal/store"
 	"github.com/trushilpatel/jobradar/internal/worker/job_post_analyzer"
 )
@@ -24,6 +25,8 @@ func main() {
 		log.Error("db open failed", err)
 		os.Exit(1)
 	}
+
+	go metrics.Serve(cfg.MetricsAddr, func() error { return db.Ping(database) })
 
 	consumer, err := kafka.NewConsumer(cfg, log, "job-post-analyzer", kafka.TopicJobListingsFiltered)
 	if err != nil {

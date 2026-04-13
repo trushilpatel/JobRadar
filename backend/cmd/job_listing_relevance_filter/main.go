@@ -11,6 +11,7 @@ import (
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/llm"
 	"github.com/trushilpatel/jobradar/internal/logger"
+	"github.com/trushilpatel/jobradar/internal/metrics"
 	"github.com/trushilpatel/jobradar/internal/store"
 	"github.com/trushilpatel/jobradar/internal/worker/job_listing_relevance_filter"
 )
@@ -24,6 +25,8 @@ func main() {
 		log.Error("db open failed", err)
 		os.Exit(1)
 	}
+
+	go metrics.Serve(cfg.MetricsAddr, func() error { return db.Ping(database) })
 
 	if err := kafka.EnsureTopics(context.Background(), cfg, kafka.TopicJobListingsRaw, kafka.TopicJobListingsFiltered); err != nil {
 		log.Error("kafka topics failed", err)

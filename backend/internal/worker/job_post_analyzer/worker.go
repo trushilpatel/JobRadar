@@ -14,6 +14,7 @@ import (
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/llm"
 	"github.com/trushilpatel/jobradar/internal/logger"
+	"github.com/trushilpatel/jobradar/internal/metrics"
 	"github.com/trushilpatel/jobradar/internal/model"
 	"github.com/trushilpatel/jobradar/internal/store"
 	"gorm.io/datatypes"
@@ -112,6 +113,7 @@ func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 		if err != nil {
 			jobLog.Error("fetch content failed", err)
 			w.markError(job.ID)
+			metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 			return
 		}
 	}
@@ -123,17 +125,21 @@ func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 	if err != nil {
 		jobLog.Error("marshal content failed", err)
 		w.markError(job.ID)
+		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 		return
 	}
 
 	// 2. Send to LLM for structured extraction
+	llmStart := time.Now()
 	result, err := w.scorer.Enrich(ctx, llm.EnrichInput{
 		ID:      job.ID,
 		RawText: string(rawText),
 	})
+	metrics.EnricherLLMDuration.Observe(time.Since(llmStart).Seconds())
 	if err != nil {
 		jobLog.Error("LLM enrich failed", err)
 		w.markError(job.ID)
+		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 		return
 	}
 
@@ -141,6 +147,7 @@ func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 	if reason := w.dropJob(result); reason != "" {
 		jobLog.Info("job dropped", logger.Str("reason", reason))
 		w.markError(job.ID)
+		metrics.EnricherJobsTotal.WithLabelValues("dropped").Inc()
 		return
 	}
 
@@ -149,6 +156,7 @@ func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 	if err != nil {
 		jobLog.Error("build job failed", err)
 		w.markError(job.ID)
+		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 		return
 	}
 
@@ -156,6 +164,7 @@ func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 	if err := w.jobs.InsertJob(row); err != nil {
 		jobLog.Error("insert job failed", err)
 		w.markError(job.ID)
+		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 		return
 	}
 
@@ -179,6 +188,7 @@ func (w *Worker) enrich(ctx context.Context, job ats_fetcher.RawJob) {
 		jobLog.Warn("write snapshot failed (non-fatal)", logger.Err(err))
 	}
 
+	metrics.EnricherJobsTotal.WithLabelValues("saved").Inc()
 	jobLog.Info("enriched and saved")
 }
 

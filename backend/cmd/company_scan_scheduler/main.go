@@ -10,6 +10,7 @@ import (
 	"github.com/trushilpatel/jobradar/config"
 	"github.com/trushilpatel/jobradar/internal/db"
 	"github.com/trushilpatel/jobradar/internal/logger"
+	"github.com/trushilpatel/jobradar/internal/metrics"
 	"github.com/trushilpatel/jobradar/internal/model"
 	"github.com/trushilpatel/jobradar/internal/store"
 )
@@ -25,6 +26,8 @@ func main() {
 		log.Error("db open failed", err)
 		os.Exit(1)
 	}
+
+	go metrics.Serve(cfg.MetricsAddr, func() error { return db.Ping(database) })
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -70,6 +73,7 @@ func enqueuedue(ctx context.Context, log logger.Logger, companies store.CompanyR
 			log.Error("enqueue failed", err, logger.Str(logger.FieldCompany, c.ID))
 			continue
 		}
+		metrics.SchedulerCompaniesEnqueuedTotal.Inc()
 		log.Debug("queued company", logger.Str(logger.FieldCompany, c.ID), logger.Str("name", c.Name))
 	}
 }
