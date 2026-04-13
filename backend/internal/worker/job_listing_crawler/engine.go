@@ -9,6 +9,7 @@ import (
 	"github.com/trushilpatel/jobradar/internal/ats_fetcher"
 	"github.com/trushilpatel/jobradar/internal/kafka"
 	"github.com/trushilpatel/jobradar/internal/logger"
+	"github.com/trushilpatel/jobradar/internal/metrics"
 	"github.com/trushilpatel/jobradar/internal/model"
 	"github.com/trushilpatel/jobradar/internal/store"
 )
@@ -89,6 +90,8 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 		errMsg := fmt.Sprintf("no adapter for type %q: %v", company.AdapterType, err)
 		companyLog.Error("no adapter found", err)
 		e.recordResult(ctx, company.ID, 0, 0, time.Since(start), &errMsg)
+
+		metrics.CrawlerScansTotal.WithLabelValues("error").Inc()
 		return
 	}
 
@@ -97,6 +100,7 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 		errMsg := fmt.Sprintf("fetch failed: %v", err)
 		companyLog.Error("fetch jobs failed", err)
 		e.recordResult(ctx, company.ID, 0, 0, time.Since(start), &errMsg)
+		metrics.CrawlerScansTotal.WithLabelValues("error").Inc()
 		return
 	}
 
@@ -127,12 +131,21 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 		newCount++
 	}
 
+	// Detect removed jobs: diff current scan results against previously known active jobs.
+	// This is important for full-scan adapters (e.g. Google) that return all jobs each time.
+	e.detectRemovedJobs(company.ID, result.Jobs, companyLog)
+
+	elapsed := time.Since(start)
+	metrics.CrawlerScansTotal.WithLabelValues("success").Inc()
+	metrics.CrawlerJobsFetchedTotal.Add(float64(fetched))
+	metrics.CrawlerScanDuration.Observe(elapsed.Seconds())
+
 	companyLog.Info("scan complete",
 		logger.Int(logger.FieldFetched, fetched),
 		logger.Int(logger.FieldNew, newCount),
-		logger.Dur(logger.FieldDuration, time.Since(start).Round(time.Millisecond)),
+		logger.Dur(logger.FieldDuration, elapsed.Round(time.Millisecond)),
 	)
-	e.recordResult(ctx, company.ID, fetched, newCount, time.Since(start), nil)
+	e.recordResult(ctx, company.ID, fetched, newCount, elapsed, nil)
 
 	if e.companyDelay > 0 {
 		companyLog.Debug("sleeping before next company", logger.Dur("delay", e.companyDelay))
@@ -164,6 +177,49 @@ func (e *Engine) publish(ctx context.Context, job ats_fetcher.RawJob) error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 	return e.publisher.Publish(ctx, kafka.TopicJobListingsRaw, payload)
+}
+
+// detectRemovedJobs compares the current scan results against previously known
+// active jobs for a company. Any job that was previously seen but is no longer
+// in the current scan gets marked with removed_at in the ledger.
+func (e *Engine) detectRemovedJobs(companyID string, currentJobs []ats_fetcher.FetchJobsItem, log logger.Logger) {
+	// Get all previously active job IDs for this company
+	previousIDs, err := e.ledger.GetActiveJobIDsByCompany(companyID)
+	if err != nil {
+		log.Error("failed to load previous job IDs for removal detection", err)
+		return
+	}
+	if len(previousIDs) == 0 {
+		return // First scan or no active jobs — nothing to diff
+	}
+
+	// Build a set of current job IDs
+	currentSet := make(map[string]struct{}, len(currentJobs))
+	for _, job := range currentJobs {
+		currentSet[job.ID] = struct{}{}
+	}
+
+	// Find IDs that were previously active but are no longer in the current scan
+	var removedIDs []string
+	for _, id := range previousIDs {
+		if _, exists := currentSet[id]; !exists {
+			removedIDs = append(removedIDs, id)
+		}
+	}
+
+	if len(removedIDs) == 0 {
+		return
+	}
+
+	if err := e.ledger.MarkRemovedBatch(removedIDs); err != nil {
+		log.Error("failed to mark removed jobs", err, logger.Int("count", len(removedIDs)))
+		return
+	}
+
+	log.Info("marked removed jobs",
+		logger.Int("removed", len(removedIDs)),
+		logger.Int("still_active", len(previousIDs)-len(removedIDs)),
+	)
 }
 
 func (e *Engine) recordResult(ctx context.Context, companyID string, fetched, newCount int, duration time.Duration, errMsg *string) {
