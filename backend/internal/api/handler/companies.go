@@ -144,6 +144,23 @@ func (h *CompanyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, map[string]string{"id": id})
 }
 
+// PATCH /companies/active
+// Body: {"active": true|false} — sets all companies to the given active state.
+func (h *CompanyHandler) SetAllActive(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Active *bool `json:"active"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Active == nil {
+		respondError(w, http.StatusBadRequest, "active (bool) is required")
+		return
+	}
+	if err := h.companies.SetAllCompaniesActive(*body.Active); err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to update companies")
+		return
+	}
+	respond(w, http.StatusOK, map[string]bool{"active": *body.Active})
+}
+
 // DELETE /companies/:id
 func (h *CompanyHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")

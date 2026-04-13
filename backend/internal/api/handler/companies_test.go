@@ -169,6 +169,61 @@ func TestCompanyTriggerScan_NotFound(t *testing.T) {
 	}
 }
 
+// ── SetAllActive ──────────────────────────────────────────────────────────────
+
+func TestCompanySetAllActive_Activate(t *testing.T) {
+	inactive := testCompany("c1", nil)
+	inactive.Active = false
+	cs := newFakeCompanyStore(inactive, testCompany("c2", nil))
+	h := newCompanyHandler(cs, &fakeScanQueueStore{})
+
+	body := strings.NewReader(`{"active":true}`)
+	req := httptest.NewRequest(http.MethodPatch, "/companies/active", body)
+	w := httptest.NewRecorder()
+	h.SetAllActive(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 got %d: %s", w.Code, w.Body.String())
+	}
+	for _, c := range cs.companies {
+		if !c.Active {
+			t.Errorf("company %s should be active", c.ID)
+		}
+	}
+}
+
+func TestCompanySetAllActive_Deactivate(t *testing.T) {
+	cs := newFakeCompanyStore(testCompany("c1", nil), testCompany("c2", nil))
+	h := newCompanyHandler(cs, &fakeScanQueueStore{})
+
+	body := strings.NewReader(`{"active":false}`)
+	req := httptest.NewRequest(http.MethodPatch, "/companies/active", body)
+	w := httptest.NewRecorder()
+	h.SetAllActive(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 got %d: %s", w.Code, w.Body.String())
+	}
+	for _, c := range cs.companies {
+		if c.Active {
+			t.Errorf("company %s should be inactive", c.ID)
+		}
+	}
+}
+
+func TestCompanySetAllActive_BadRequest(t *testing.T) {
+	h := newCompanyHandler(newFakeCompanyStore(), &fakeScanQueueStore{})
+
+	body := strings.NewReader(`not json`)
+	req := httptest.NewRequest(http.MethodPatch, "/companies/active", body)
+	w := httptest.NewRecorder()
+	h.SetAllActive(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 got %d", w.Code)
+	}
+}
+
 // ── ListQueue ─────────────────────────────────────────────────────────────────
 
 func TestCompanyListQueue_Empty(t *testing.T) {

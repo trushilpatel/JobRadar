@@ -56,6 +56,7 @@ func NewRouter(
 	r.Get("/applications", apps.ListAll)
 
 	r.Get("/companies", companies.List)
+	r.Patch("/companies/active", companies.SetAllActive)
 	r.Get("/companies/queue", companies.ListQueue)
 	r.Delete("/companies/queue/{entry_id}", companies.RemoveFromQueue)
 	r.Post("/companies/queue/{entry_id}/move-up", companies.MoveQueueItemUp)

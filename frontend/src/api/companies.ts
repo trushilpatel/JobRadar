@@ -58,6 +58,15 @@ export async function triggerScan(id: string): Promise<void> {
   }
 }
 
+export async function setAllCompaniesActive(active: boolean): Promise<void> {
+  const res = await fetch(`${BASE}/companies/active`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ active }),
+  })
+  if (!res.ok) throw new Error('Failed to update companies')
+}
+
 export async function fetchQueue(): Promise<QueueEntry[]> {
   const res = await fetch(`${BASE}/companies/queue`)
   if (!res.ok) throw new Error('Failed to fetch queue')

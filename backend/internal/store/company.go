@@ -21,6 +21,7 @@ type CompanyWriter interface {
 	CreateCompany(c model.Company) error
 	UpdateCompany(id string, fields map[string]any) error
 	DeleteCompany(id string) error
+	SetAllCompaniesActive(active bool) error
 }
 
 // CompanyStore is the full interface used by the API handler.
@@ -69,6 +70,10 @@ func (s *companyStore) UpdateCompany(id string, fields map[string]any) error {
 
 func (s *companyStore) DeleteCompany(id string) error {
 	return s.db.Delete(&model.Company{}, "id = ?", id).Error
+}
+
+func (s *companyStore) SetAllCompaniesActive(active bool) error {
+	return s.db.Model(&model.Company{}).Where("1 = 1").Update("active", active).Error
 }
 
 func (s *companyStore) GetCompaniesDueForScan(intervalMinutes int) ([]model.Company, error) {

@@ -201,6 +201,17 @@ func (f *fakeCompanyStore) UpdateCompany(id string, fields map[string]any) error
 	return f.err
 }
 
+func (f *fakeCompanyStore) SetAllCompaniesActive(active bool) error {
+	if f.err != nil {
+		return f.err
+	}
+	for id, c := range f.companies {
+		c.Active = active
+		f.companies[id] = c
+	}
+	return nil
+}
+
 func (f *fakeCompanyStore) DeleteCompany(id string) error {
 	delete(f.companies, id)
 	return f.err

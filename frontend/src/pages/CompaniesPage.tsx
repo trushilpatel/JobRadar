@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { Plus, Search, RefreshCw } from 'lucide-react'
+import { Plus, Search, RefreshCw, Power, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Company } from '@/types'
-import { fetchCompanies, deleteCompany, updateCompany, triggerScan, fetchQueue } from '@/api/companies'
+import { fetchCompanies, deleteCompany, updateCompany, triggerScan, fetchQueue, setAllCompaniesActive } from '@/api/companies'
 import { AddCompanyModal } from '@/components/companies/AddCompanyModal'
 import { ScanStatsDrawer } from '@/components/companies/ScanStatsDrawer'
 import { DataTable } from '@/components/ui/data-table'
@@ -21,6 +21,7 @@ export function CompaniesPage() {
   const [panelWidth, setPanelWidth] = useState(400)
   const [scanning, setScanning]     = useState<Set<string>>(new Set())
   const [queueMap, setQueueMap]     = useState<Map<string, 'queued' | 'processing'>>(new Map())
+  const [bulkToggling, setBulkToggling] = useState(false)
 
   // ── Data loading ───────────────────────────────────────────────────────────
 
@@ -102,6 +103,21 @@ export function CompaniesPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to queue scan')
     } finally {
       setScanning(s => { const n = new Set(s); n.delete(company.id); return n })
+    }
+  }
+
+  async function handleBulkToggleActive() {
+    const allActive = companies.every(c => c.active)
+    const next = !allActive
+    setBulkToggling(true)
+    try {
+      await setAllCompaniesActive(next)
+      await load()
+      toast.success(next ? 'All companies activated' : 'All companies deactivated')
+    } catch {
+      toast.error('Failed to update companies')
+    } finally {
+      setBulkToggling(false)
     }
   }
 
@@ -187,6 +203,17 @@ export function CompaniesPage() {
           ))}
         </div>
 
+        <button
+          onClick={handleBulkToggleActive}
+          disabled={bulkToggling || companies.length === 0}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-400 hover:text-white bg-white/5 border border-white/10 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {bulkToggling
+            ? <Loader2 size={14} className="animate-spin" />
+            : <Power size={14} />
+          }
+          {companies.every(c => c.active) ? 'Deactivate All' : 'Activate All'}
+        </button>
         <button
           onClick={() => { load(); loadQueueStatus() }}
           className="p-2 text-slate-400 hover:text-white bg-white/5 border border-white/10 rounded-lg transition-colors"
