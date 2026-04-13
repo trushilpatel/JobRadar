@@ -25,3 +25,13 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 
 	return db, nil
 }
+
+// Ping checks that the database connection is alive.
+// Used by readiness handlers.
+func Ping(database *gorm.DB) error {
+	sqlDB, err := database.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Ping()
+}
