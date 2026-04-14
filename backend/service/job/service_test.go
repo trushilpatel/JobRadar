@@ -23,10 +23,7 @@ type fakeJobStore struct {
 	updateNotesCalled  bool
 }
 
-func (f *fakeJobStore) GetJobsByStatus(status string) ([]model.Job, error) {
-	return f.jobs, f.err
-}
-func (f *fakeJobStore) GetJobsByStatusPaged(status string, page, limit int) ([]model.Job, int64, error) {
+func (f *fakeJobStore) GetJobs(_ JobFilter, _, _ int) ([]model.Job, int64, error) {
 	return f.jobs, f.total, f.err
 }
 func (f *fakeJobStore) GetJobByID(id string) (*model.Job, error) {

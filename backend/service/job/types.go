@@ -1,10 +1,17 @@
 package job
 
-// JobFilter holds optional filter criteria for listing jobs.
+// JobFilter holds all filter criteria for listing jobs.
+// Every field is optional — zero value means "no filter on this field".
 type JobFilter struct {
-	Status  string // "new" | "saved" | "applied"
-	Company string // company_id substring match
-	Saved   *bool
+	Status           string   // "new" | "saved" | "applied" — required
+	Companies        []string // filter by company_id (exact match, OR across values)
+	Remote           *bool    // remote = true/false
+	EmployTypes      []string // employ_type IN (...) — OR across values
+	Sponsorship      *bool    // sponsorship = true/false
+	NoRequirements   bool     // requires_citizen = false AND security_clearance = false
+	RequiresCitizen  *bool    // requires_citizen = true/false
+	ExperienceRanges []string // "0-2" | "3-5" | "5+" — OR across values
+	DaysAdded        *int     // added_at >= NOW() - N days
 }
 
 // DismissInput is the input for dismissing a job.

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/trushilpatel/jobradar/api/request"
 	"github.com/trushilpatel/jobradar/api/response"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/service/company"
@@ -57,7 +58,10 @@ type fakeCompanyService struct {
 	err     error
 }
 
-func (f *fakeCompanyService) List(_ company.CompanyFilter) ([]company.CompanyView, error) {
+func (f *fakeCompanyService) List(_ company.CompanyFilter, _ request.Pagination) (company.CompanyListResult, error) {
+	return company.CompanyListResult{Items: f.views, Total: int64(len(f.views))}, f.err
+}
+func (f *fakeCompanyService) GetAll() ([]company.CompanyView, error) {
 	return f.views, f.err
 }
 func (f *fakeCompanyService) Get(id string) (*model.Company, error) {

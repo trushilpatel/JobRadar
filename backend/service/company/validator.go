@@ -1,6 +1,7 @@
 package company
 
 import (
+	"github.com/trushilpatel/jobradar/api/request"
 	"github.com/trushilpatel/jobradar/api/response"
 	"github.com/trushilpatel/jobradar/model"
 )
@@ -8,7 +9,7 @@ import (
 // Validator validates user-submitted input for the company domain.
 // It never makes DB calls.
 type Validator interface {
-	ValidateList(filter CompanyFilter) error
+	ValidateList(filter CompanyFilter, p request.Pagination) error
 	ValidateCreate(input CreateCompanyInput) error
 	ValidateUpdate(input UpdateCompanyInput) error
 	ValidateSetAllActive(active *bool) error
@@ -46,13 +47,34 @@ var validAdapters = map[string]bool{
 	model.AdapterRippling:   true,
 }
 
-// ValidateList validates list filter parameters.
-func (v *validator) ValidateList(filter CompanyFilter) error {
+// ValidateList validates list filter and pagination parameters.
+func (v *validator) ValidateList(filter CompanyFilter, p request.Pagination) error {
 	if filter.AdapterType != "" && !validAdapters[filter.AdapterType] {
 		return &response.ValidationError{
 			Field:   "adapter_type",
 			Code:    "INVALID_VALUE",
 			Message: "adapter_type is not a recognised adapter",
+		}
+	}
+	if len(filter.Search) > 100 {
+		return &response.ValidationError{
+			Field:   "search",
+			Code:    "INVALID_VALUE",
+			Message: "search must be 100 characters or fewer",
+		}
+	}
+	if p.Page < 1 {
+		return &response.ValidationError{
+			Field:   "page",
+			Code:    "INVALID_VALUE",
+			Message: "page must be >= 1",
+		}
+	}
+	if p.Limit < 1 || p.Limit > 100 {
+		return &response.ValidationError{
+			Field:   "limit",
+			Code:    "INVALID_VALUE",
+			Message: "limit must be between 1 and 100",
 		}
 	}
 	return nil

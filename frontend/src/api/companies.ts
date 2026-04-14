@@ -2,10 +2,35 @@ import type { Company, ScanStats, QueueEntry } from '@/types'
 
 const BASE = '/api'
 
-export async function fetchCompanies(): Promise<Company[]> {
-  const res = await fetch(`${BASE}/companies`)
+export interface CompanyFilters {
+  active?: boolean        // true = active only, false = inactive only, undefined = all
+  adapterType?: string    // e.g. 'greenhouse', 'lever'
+  search?: string         // ILIKE name match
+}
+
+export interface CompaniesPage {
+  data: Company[]
+  total: number           // total matching filter
+  total_active: number    // always: total active companies (for header stats)
+  page: number
+  limit: number
+}
+
+export async function fetchCompanies(
+  filters: CompanyFilters = {},
+  page = 1,
+  limit = 20,
+): Promise<CompaniesPage> {
+  const p = new URLSearchParams()
+  p.set('page', String(page))
+  p.set('limit', String(limit))
+  if (filters.active !== undefined) p.set('active', String(filters.active))
+  if (filters.adapterType) p.set('adapter_type', filters.adapterType)
+  if (filters.search) p.set('search', filters.search)
+
+  const res = await fetch(`${BASE}/companies?${p}`)
   if (!res.ok) throw new Error('Failed to fetch companies')
-  return res.json().then((r: { data: Company[] }) => r.data)
+  return res.json().then((r: { data: CompaniesPage }) => r.data)
 }
 
 export async function createCompany(data: {

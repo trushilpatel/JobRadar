@@ -62,7 +62,7 @@ func (s *service) ListQueue(filter QueueFilter) ([]QueueEntryView, error) {
 		return nil, response.ErrInternal.WithMessage("failed to fetch queue")
 	}
 
-	allCompanies, err := s.companySvc.List(company.CompanyFilter{})
+	allCompanies, err := s.companySvc.GetAll()
 	if err != nil {
 		return nil, response.ErrInternal.WithMessage("failed to fetch companies")
 	}

@@ -3,6 +3,7 @@ package job
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/api/handler"
@@ -31,14 +32,41 @@ func (h *Handler) Register(r chi.Router) {
 	r.Patch("/jobs/{id}/notes", h.SetNotes)
 }
 
-// GET /jobs?status=new&page=1&limit=20
+// GET /jobs?status=new&page=1&limit=20&remote=true&sponsorship=true&...
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	p := request.ParsePagination(r)
+	q := r.URL.Query()
+
 	filter := JobFilter{
-		Status: r.URL.Query().Get("status"),
+		Status:           q.Get("status"),
+		Companies:        q["companies"],        // ?companies=stripe&companies=google
+		EmployTypes:      q["employ_types"],      // ?employ_types=full_time
+		ExperienceRanges: q["experience_ranges"], // ?experience_ranges=0-2&experience_ranges=3-5
 	}
+
 	if filter.Status == "" {
 		filter.Status = model.JobStatusNew
+	}
+
+	if v := q.Get("remote"); v == "true" {
+		t := true
+		filter.Remote = &t
+	}
+	if v := q.Get("sponsorship"); v != "" {
+		b := v == "true"
+		filter.Sponsorship = &b
+	}
+	if q.Get("no_requirements") == "true" {
+		filter.NoRequirements = true
+	}
+	if v := q.Get("requires_citizen"); v != "" {
+		b := v == "true"
+		filter.RequiresCitizen = &b
+	}
+	if v := q.Get("days_added"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			filter.DaysAdded = &n
+		}
 	}
 
 	if err := h.validator.ValidateList(filter, p); err != nil {

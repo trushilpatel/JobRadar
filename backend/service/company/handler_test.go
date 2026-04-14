@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/api/request"
 	"github.com/trushilpatel/jobradar/api/response"
 	"github.com/trushilpatel/jobradar/model"
 )
@@ -22,10 +23,10 @@ type fakeValidator struct {
 	activeErr  error
 }
 
-func (f *fakeValidator) ValidateList(_ CompanyFilter) error         { return f.listErr }
-func (f *fakeValidator) ValidateCreate(_ CreateCompanyInput) error  { return f.createErr }
-func (f *fakeValidator) ValidateUpdate(_ UpdateCompanyInput) error  { return f.updateErr }
-func (f *fakeValidator) ValidateSetAllActive(_ *bool) error        { return f.activeErr }
+func (f *fakeValidator) ValidateList(_ CompanyFilter, _ request.Pagination) error { return f.listErr }
+func (f *fakeValidator) ValidateCreate(_ CreateCompanyInput) error                { return f.createErr }
+func (f *fakeValidator) ValidateUpdate(_ UpdateCompanyInput) error                { return f.updateErr }
+func (f *fakeValidator) ValidateSetAllActive(_ *bool) error                      { return f.activeErr }
 
 // fakeService is a test double for Service.
 type fakeService struct {
@@ -35,7 +36,10 @@ type fakeService struct {
 	err          error
 }
 
-func (f *fakeService) List(_ CompanyFilter) ([]CompanyView, error) {
+func (f *fakeService) List(_ CompanyFilter, _ request.Pagination) (CompanyListResult, error) {
+	return CompanyListResult{Items: f.listResult, Total: int64(len(f.listResult))}, f.err
+}
+func (f *fakeService) GetAll() ([]CompanyView, error) {
 	return f.listResult, f.err
 }
 func (f *fakeService) Get(id string) (*model.Company, error) {

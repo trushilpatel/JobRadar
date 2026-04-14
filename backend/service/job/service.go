@@ -34,9 +34,9 @@ func NewService(jobs JobStore, ledger SeenLedgerWriter, discard DiscardStore, sn
 	}
 }
 
-// List returns a paginated list of jobs matching the filter.
+// List returns a paginated, filtered list of jobs — all filtering happens at the DB level.
 func (s *service) List(filter JobFilter, p request.Pagination) ([]model.Job, int, error) {
-	jobs, total, err := s.jobs.GetJobsByStatusPaged(filter.Status, p.Page, p.Limit)
+	jobs, total, err := s.jobs.GetJobs(filter, p.Page, p.Limit)
 	if err != nil {
 		return nil, 0, response.ErrInternal.WithMessage("failed to fetch jobs")
 	}

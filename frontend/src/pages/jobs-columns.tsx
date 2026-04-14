@@ -80,10 +80,10 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
     {
       id: 'company',
       size: 180,
-      accessorFn: row => row.company?.name ?? row.company_id,
+      accessorFn: row => row.company?.name ?? row.company_id ?? '',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Company" />,
       cell: ({ row }) => {
-        const name = row.original.company?.name ?? row.original.company_id
+        const name = row.original.company?.name ?? row.original.company_id ?? ''
         return (
           <div className="flex items-center gap-2">
             <CompanyAvatar name={name} />
@@ -159,6 +159,7 @@ const AVATAR_COLORS = [
 ]
 
 function avatarColor(name: string): string {
+  if (!name) return AVATAR_COLORS[0]
   let hash = 0
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]

@@ -9,13 +9,39 @@ export interface JobsPage {
   limit: number
 }
 
-// GET /jobs?status=new|saved|applied&page=N&limit=N
+export interface JobFilters {
+  status: 'new' | 'saved' | 'applied'
+  companies?: string[]
+  remote?: boolean
+  employTypes?: string[]
+  sponsorship?: boolean
+  noRequirements?: boolean
+  requiresCitizen?: boolean
+  experienceRanges?: string[]
+  daysAdded?: number
+}
+
+// GET /jobs — all filters pushed to server, no client-side filtering
 export async function fetchJobs(
-  status: 'new' | 'saved' | 'applied',
+  filters: JobFilters,
   page = 1,
   limit = 20,
 ): Promise<JobsPage> {
-  const res = await fetch(`${BASE}/jobs?status=${status}&page=${page}&limit=${limit}`)
+  const p = new URLSearchParams()
+  p.set('status', filters.status)
+  p.set('page', String(page))
+  p.set('limit', String(limit))
+
+  filters.companies?.forEach(c => p.append('companies', c))
+  if (filters.remote) p.set('remote', 'true')
+  filters.employTypes?.forEach(t => p.append('employ_types', t))
+  if (filters.sponsorship !== undefined) p.set('sponsorship', String(filters.sponsorship))
+  if (filters.noRequirements) p.set('no_requirements', 'true')
+  if (filters.requiresCitizen !== undefined) p.set('requires_citizen', String(filters.requiresCitizen))
+  filters.experienceRanges?.forEach(r => p.append('experience_ranges', r))
+  if (filters.daysAdded) p.set('days_added', String(filters.daysAdded))
+
+  const res = await fetch(`${BASE}/jobs?${p}`)
   if (!res.ok) throw new Error('Failed to fetch jobs')
   return res.json()
 }

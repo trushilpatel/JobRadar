@@ -3,6 +3,7 @@ package company
 import (
 	"testing"
 
+	"github.com/trushilpatel/jobradar/api/request"
 	"github.com/trushilpatel/jobradar/model"
 )
 
@@ -109,21 +110,25 @@ func TestValidateUpdate(t *testing.T) {
 
 func TestValidateList(t *testing.T) {
 	v := NewValidator()
+	validP := request.Pagination{Page: 1, Limit: 20}
 
 	tests := []struct {
 		name    string
 		filter  CompanyFilter
+		p       request.Pagination
 		wantErr bool
 	}{
-		{name: "empty filter", filter: CompanyFilter{}},
-		{name: "valid adapter_type", filter: CompanyFilter{AdapterType: model.AdapterGreenhouse}},
-		{name: "valid active filter", filter: CompanyFilter{Active: boolPtr(true)}},
-		{name: "invalid adapter_type", filter: CompanyFilter{AdapterType: "bogus"}, wantErr: true},
+		{name: "empty filter", filter: CompanyFilter{}, p: validP},
+		{name: "valid adapter_type", filter: CompanyFilter{AdapterType: model.AdapterGreenhouse}, p: validP},
+		{name: "valid active filter", filter: CompanyFilter{Active: boolPtr(true)}, p: validP},
+		{name: "invalid adapter_type", filter: CompanyFilter{AdapterType: "bogus"}, p: validP, wantErr: true},
+		{name: "page zero", filter: CompanyFilter{}, p: request.Pagination{Page: 0, Limit: 20}, wantErr: true},
+		{name: "limit too large", filter: CompanyFilter{}, p: request.Pagination{Page: 1, Limit: 200}, wantErr: true},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := v.ValidateList(tc.filter)
+			err := v.ValidateList(tc.filter, tc.p)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ValidateList() error = %v, wantErr %v", err, tc.wantErr)
 			}

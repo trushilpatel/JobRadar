@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import type { Job, SalaryRange } from '@/types'
 import {
-  fetchJobs, setJobSaved, setJobStatus, dismissJob,
+  fetchJobs, setJobSaved, setJobStatus, dismissJob, type JobFilters,
 } from '@/api/jobs'
 import { formatRelativeTime, cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -57,6 +57,7 @@ const AVATAR_COLORS = [
   'bg-indigo-600', 'bg-teal-600',
 ]
 function avatarColor(name: string): string {
+  if (!name) return AVATAR_COLORS[0]
   let hash = 0
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
@@ -142,7 +143,7 @@ function JobDetailDrawer({ job, onClose, onSave, onApply, onDismiss }: DrawerPro
 
   const salary = formatSalary(job.salary_range)
   const techStack: string[] = Array.isArray(job.tech_stack) ? job.tech_stack : []
-  const companyName = job.company?.name ?? job.company_id
+  const companyName = job.company?.name ?? job.company_id ?? ''
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[#0d0d14]">
@@ -442,11 +443,23 @@ export function JobsPage() {
   const [expFilter, setExpFilter] = useState<string[]>(['0-2', '3-5'])
   const [dateFilter, setDateFilter] = useState<'all' | '7d' | '30d'>('all')
 
+  const filters = useMemo<JobFilters>(() => ({
+    status: tab,
+    companies: selectedCompanies.length > 0 ? selectedCompanies : undefined,
+    remote: remoteFilter || undefined,
+    employTypes: employTypes.length > 0 ? employTypes : undefined,
+    sponsorship: sponsorshipFilter ? true : noSponsorshipFilter ? false : undefined,
+    noRequirements: noRequirementsFilter || undefined,
+    requiresCitizen: citizenshipReqFilter ? true : undefined,
+    experienceRanges: expFilter.length > 0 ? expFilter : undefined,
+    daysAdded: dateFilter === '7d' ? 7 : dateFilter === '30d' ? 30 : undefined,
+  }), [tab, selectedCompanies, remoteFilter, employTypes, sponsorshipFilter, noSponsorshipFilter, noRequirementsFilter, citizenshipReqFilter, expFilter, dateFilter])
+
   const load = useCallback(async () => {
     setLoading(true)
     setSelectedIds(new Set())
     try {
-      const res = await fetchJobs(tab, page, limit)
+      const res = await fetchJobs(filters, page, limit)
       setJobs(res.data ?? [])
       setTotal(res.total ?? 0)
     } catch {
@@ -455,48 +468,18 @@ export function JobsPage() {
     } finally {
       setLoading(false)
     }
-  }, [tab, page, limit])
+  }, [filters, page, limit])
 
-  // Reset to page 1 whenever the tab changes
-  useEffect(() => { setPage(1) }, [tab])
+  // Reset to page 1 whenever filters change (tab or any filter field)
+  useEffect(() => { setPage(1) }, [filters])
 
   useEffect(() => { load() }, [load])
 
+  // companies for the multi-select dropdown — derived from current page results
   const companies = useMemo(() => {
     const names = Array.from(new Set(jobs.map(j => j.company?.name ?? j.company_id).filter(Boolean)))
     return names.sort()
   }, [jobs])
-
-  const filtered = useMemo(() => {
-    const now = Date.now()
-    const cutoff = dateFilter === '7d'
-      ? now - 7 * 24 * 60 * 60 * 1000
-      : dateFilter === '30d'
-        ? now - 30 * 24 * 60 * 60 * 1000
-        : null
-
-    return jobs.filter(j => {
-      const name = j.company?.name ?? j.company_id ?? ''
-      if (selectedCompanies.length > 0 && !selectedCompanies.includes(name)) return false
-      if (remoteFilter && !j.remote) return false
-      if (employTypes.length > 0 && j.employ_type && !employTypes.includes(j.employ_type)) return false
-      if (sponsorshipFilter && !j.sponsorship) return false
-      if (noSponsorshipFilter && j.sponsorship) return false
-      if (noRequirementsFilter && (j.requires_citizen || j.security_clearance)) return false
-      if (citizenshipReqFilter && !j.requires_citizen) return false
-      if (expFilter.length > 0 && j.experience_years != null) {
-        const y = j.experience_years
-        const inRange = expFilter.some(r =>
-          (r === '0-2' && y <= 2) ||
-          (r === '3-5' && y >= 3 && y <= 5) ||
-          (r === '5 <' && y > 5)
-        )
-        if (!inRange) return false
-      }
-      if (cutoff && new Date(j.added_at).getTime() < cutoff) return false
-      return true
-    })
-  }, [jobs, selectedCompanies, remoteFilter, employTypes, sponsorshipFilter, noSponsorshipFilter, noRequirementsFilter, citizenshipReqFilter, expFilter, dateFilter])
 
   function toggleEmployType(val: string) {
     setEmployTypes(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val])
@@ -572,14 +555,14 @@ export function JobsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const columns = useMemo(() => buildJobColumns({
     selectedIds,
-    filteredIds: filtered.map(j => j.id),
+    filteredIds: jobs.map(j => j.id),
     onToggleSelect: (id, checked) => {
       setSelectedIds(prev => { const n = new Set(prev); checked ? n.add(id) : n.delete(id); return n })
     },
     onSelectAll: (checked) => {
-      setSelectedIds(checked ? new Set(filtered.map(j => j.id)) : new Set())
+      setSelectedIds(checked ? new Set(jobs.map(j => j.id)) : new Set())
     },
-  }), [selectedIds, filtered])
+  }), [selectedIds, jobs])
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -587,7 +570,7 @@ export function JobsPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07]">
         <div>
           <h1 className="text-xl font-semibold text-white">Jobs</h1>
-          <p className="text-sm text-slate-400 mt-0.5">{filtered.length} job{filtered.length !== 1 ? 's' : ''}</p>
+          <p className="text-sm text-slate-400 mt-0.5">{total} job{total !== 1 ? 's' : ''}</p>
         </div>
         <button
           onClick={load}
@@ -785,7 +768,7 @@ export function JobsPage() {
         <div className="flex-1 overflow-auto min-w-0">
           <DataTable
             columns={columns}
-            data={filtered}
+            data={jobs}
             loading={loading}
             emptyMessage={emptyMessage}
             getRowId={j => j.id}

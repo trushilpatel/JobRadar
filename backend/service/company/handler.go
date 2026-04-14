@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/api/handler"
+	"github.com/trushilpatel/jobradar/api/request"
 )
 
 // Handler handles HTTP requests for the company domain.
@@ -30,30 +31,51 @@ func (h *Handler) Register(r chi.Router) {
 	})
 }
 
-// GET /companies
-func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	var filter CompanyFilter
+// companyListResponse is the envelope for GET /companies.
+// Extends the standard paged envelope with total_active for header stats.
+type companyListResponse struct {
+	Data        []CompanyView `json:"data"`
+	Total       int64         `json:"total"`
+	TotalActive int64         `json:"total_active"`
+	Page        int           `json:"page"`
+	Limit       int           `json:"limit"`
+}
 
-	if v := r.URL.Query().Get("adapter_type"); v != "" {
+// GET /companies?active=true&adapter_type=greenhouse&search=stripe&page=1&limit=20
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	p := request.ParsePagination(r)
+	q := r.URL.Query()
+
+	var filter CompanyFilter
+	if v := q.Get("adapter_type"); v != "" {
 		filter.AdapterType = v
 	}
-	if v := r.URL.Query().Get("active"); v != "" {
+	if v := q.Get("active"); v != "" {
 		active := v == "true"
 		filter.Active = &active
 	}
+	if v := q.Get("search"); v != "" {
+		filter.Search = v
+	}
 
-	if err := h.validator.ValidateList(filter); err != nil {
+	if err := h.validator.ValidateList(filter, p); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
 
-	views, err := h.companies.List(filter)
+	result, err := h.companies.List(filter, p)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
 	}
 
-	handler.Respond(w, http.StatusOK, views)
+	handler.Respond(w, http.StatusOK, companyListResponse{
+		Data:        result.Items,
+		Total:       result.Total,
+		TotalActive: result.TotalActive,
+		Page:        p.Page,
+		Limit:       p.Limit,
+	})
 }
 
 // POST /companies

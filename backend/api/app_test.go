@@ -140,9 +140,10 @@ func TestRouter_OperationalEndpointsSeparateFromHandlers(t *testing.T) {
 
 type fakeCompanyService struct{}
 
-func (f *fakeCompanyService) List(_ company.CompanyFilter) ([]company.CompanyView, error) {
-	return nil, nil
+func (f *fakeCompanyService) List(_ company.CompanyFilter, _ request.Pagination) (company.CompanyListResult, error) {
+	return company.CompanyListResult{}, nil
 }
+func (f *fakeCompanyService) GetAll() ([]company.CompanyView, error) { return nil, nil }
 func (f *fakeCompanyService) Get(_ string) (*model.Company, error)                         { return nil, nil }
 func (f *fakeCompanyService) Create(_ company.CreateCompanyInput) (*model.Company, error)  { return nil, nil }
 func (f *fakeCompanyService) Update(_ string, _ company.UpdateCompanyInput) error          { return nil }

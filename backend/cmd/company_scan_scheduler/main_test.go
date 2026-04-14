@@ -8,6 +8,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/model"
+	companysvc "github.com/trushilpatel/jobradar/service/company"
 	scansvc "github.com/trushilpatel/jobradar/service/scan"
 )
 
@@ -24,6 +25,10 @@ func (f *fakeCompanyReader) GetCompaniesDueForScan(_ int) ([]model.Company, erro
 func (f *fakeCompanyReader) GetActiveCompanies() ([]model.Company, error)   { return nil, nil }
 func (f *fakeCompanyReader) GetAllCompanies() ([]model.Company, error)      { return nil, nil }
 func (f *fakeCompanyReader) GetCompanyByID(_ string) (model.Company, error) { return model.Company{}, nil }
+func (f *fakeCompanyReader) GetCompanies(_ companysvc.CompanyFilter, _, _ int) ([]model.Company, int64, error) {
+	return nil, 0, nil
+}
+func (f *fakeCompanyReader) GetCompanyCounts() (total, active int64, err error) { return 0, 0, nil }
 
 type fakeScanQueueStore struct {
 	enqueued []string // company IDs enqueued

@@ -32,6 +32,12 @@ var validDiscardReasons = map[string]bool{
 	model.DiscardReasonNotRelevant: true,
 }
 
+var validExperienceRanges = map[string]bool{
+	"0-2": true,
+	"3-5": true,
+	"5+":  true,
+}
+
 // ValidateList validates list filter and pagination parameters.
 func (v *validator) ValidateList(filter JobFilter, p request.Pagination) error {
 	if filter.Status != "" && !validJobStatuses[filter.Status] {
@@ -39,6 +45,15 @@ func (v *validator) ValidateList(filter JobFilter, p request.Pagination) error {
 			Field:   "status",
 			Code:    "INVALID_VALUE",
 			Message: "status must be 'new', 'saved', or 'applied'",
+		}
+	}
+	for _, r := range filter.ExperienceRanges {
+		if !validExperienceRanges[r] {
+			return &response.ValidationError{
+				Field:   "experience_ranges",
+				Code:    "INVALID_VALUE",
+				Message: "experience_ranges must be '0-2', '3-5', or '5+'",
+			}
 		}
 	}
 	if p.Page < 1 {

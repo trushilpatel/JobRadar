@@ -1,6 +1,7 @@
 package job
 
 import (
+	"strings"
 	"time"
 
 	"github.com/trushilpatel/jobradar/model"
@@ -17,8 +18,7 @@ type DailyJobCount struct {
 
 // JobReader is for the UI/API layer to query enriched jobs.
 type JobReader interface {
-	GetJobsByStatus(status string) ([]model.Job, error)
-	GetJobsByStatusPaged(status string, page, limit int) ([]model.Job, int64, error)
+	GetJobs(filter JobFilter, page, limit int) ([]model.Job, int64, error)
 	GetJobByID(id string) (*model.Job, error)
 	GetJobCounts() (newCount, savedCount, appliedCount int64, err error)
 	GetJobsAddedByDay(days int) ([]DailyJobCount, error)
@@ -108,33 +108,75 @@ func NewJobStore(db *gorm.DB) JobStore {
 	return &jobStore{db: db}
 }
 
-func (s *jobStore) GetJobsByStatus(status string) ([]model.Job, error) {
-	var jobs []model.Job
-	query := s.db.Order("added_at DESC")
-	if status == model.JobStatusSaved {
-		query = query.Where("saved = ?", true)
-	} else {
-		query = query.Where("status = ?", status)
-	}
-	err := query.Preload("Company").Find(&jobs).Error
-	return jobs, err
-}
-
-func (s *jobStore) GetJobsByStatusPaged(status string, page, limit int) ([]model.Job, int64, error) {
-	var jobs []model.Job
-	var total int64
-
+func (s *jobStore) GetJobs(filter JobFilter, page, limit int) ([]model.Job, int64, error) {
 	query := s.db.Model(&model.Job{})
-	if status == model.JobStatusSaved {
+
+	// Status — always applied; "saved" is a boolean flag, not a status value
+	if filter.Status == model.JobStatusSaved {
 		query = query.Where("saved = ?", true)
-	} else if status != "" {
-		query = query.Where("status = ?", status)
+	} else if filter.Status != "" {
+		query = query.Where("status = ?", filter.Status)
 	}
 
+	// Company — exact match on company_id, OR across values
+	if len(filter.Companies) > 0 {
+		query = query.Where("company_id IN ?", filter.Companies)
+	}
+
+	// Remote
+	if filter.Remote != nil {
+		query = query.Where("remote = ?", *filter.Remote)
+	}
+
+	// Employment type — OR across values
+	if len(filter.EmployTypes) > 0 {
+		query = query.Where("employ_type IN ?", filter.EmployTypes)
+	}
+
+	// Sponsorship
+	if filter.Sponsorship != nil {
+		query = query.Where("sponsorship = ?", *filter.Sponsorship)
+	}
+
+	// No citizenship / clearance requirements
+	if filter.NoRequirements {
+		query = query.Where("requires_citizen = ? AND security_clearance = ?", false, false)
+	}
+
+	// Citizenship required
+	if filter.RequiresCitizen != nil {
+		query = query.Where("requires_citizen = ?", *filter.RequiresCitizen)
+	}
+
+	// Experience ranges — OR across selected bands
+	if len(filter.ExperienceRanges) > 0 {
+		var clauses []string
+		for _, r := range filter.ExperienceRanges {
+			switch r {
+			case "0-2":
+				clauses = append(clauses, "experience_years <= 2")
+			case "3-5":
+				clauses = append(clauses, "(experience_years >= 3 AND experience_years <= 5)")
+			case "5+":
+				clauses = append(clauses, "experience_years > 5")
+			}
+		}
+		if len(clauses) > 0 {
+			query = query.Where("(" + strings.Join(clauses, " OR ") + ")")
+		}
+	}
+
+	// Days added — added_at >= NOW() - N days
+	if filter.DaysAdded != nil {
+		query = query.Where("added_at >= NOW() - ? * INTERVAL '1 day'", *filter.DaysAdded)
+	}
+
+	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
+	var jobs []model.Job
 	offset := (page - 1) * limit
 	err := query.Order("added_at DESC").Offset(offset).Limit(limit).Preload("Company").Find(&jobs).Error
 	return jobs, total, err

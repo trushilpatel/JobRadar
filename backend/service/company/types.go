@@ -15,6 +15,14 @@ type Config struct {
 type CompanyFilter struct {
 	Active      *bool
 	AdapterType string
+	Search      string // ILIKE match on name
+}
+
+// CompanyListResult is returned by Service.List.
+type CompanyListResult struct {
+	Items       []CompanyView
+	Total       int64 // total matching the current filter
+	TotalActive int64 // total active companies (always unfiltered)
 }
 
 // CompanyView embeds a Company and adds the computed next_scan_at field.

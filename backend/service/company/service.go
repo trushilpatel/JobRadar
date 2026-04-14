@@ -3,6 +3,7 @@ package company
 import (
 	"time"
 
+	"github.com/trushilpatel/jobradar/api/request"
 	"github.com/trushilpatel/jobradar/api/response"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/store"
@@ -10,7 +11,10 @@ import (
 
 // Service defines all business operations for the company domain.
 type Service interface {
-	List(filter CompanyFilter) ([]CompanyView, error)
+	List(filter CompanyFilter, p request.Pagination) (CompanyListResult, error)
+	// GetAll returns every company as a view without pagination.
+	// Used by internal workers that need the full set (e.g. scan queue enrichment).
+	GetAll() ([]CompanyView, error)
 	Get(id string) (*model.Company, error)
 	Create(input CreateCompanyInput) (*model.Company, error)
 	Update(id string, input UpdateCompanyInput) error
@@ -28,24 +32,20 @@ func NewService(s Store, cfg Config) Service {
 	return &service{store: s, config: cfg}
 }
 
-// List returns all companies enriched with computed next_scan_at.
-func (s *service) List(filter CompanyFilter) ([]CompanyView, error) {
-	companies, err := s.store.GetAllCompanies()
+// List returns a filtered, paginated page of companies enriched with next_scan_at.
+func (s *service) List(filter CompanyFilter, p request.Pagination) (CompanyListResult, error) {
+	companies, total, err := s.store.GetCompanies(filter, p.Page, p.Limit)
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch companies")
+		return CompanyListResult{}, response.ErrInternal.WithMessage("failed to fetch companies")
+	}
+
+	_, totalActive, err := s.store.GetCompanyCounts()
+	if err != nil {
+		return CompanyListResult{}, response.ErrInternal.WithMessage("failed to fetch company counts")
 	}
 
 	views := make([]CompanyView, 0, len(companies))
 	for _, c := range companies {
-		// Apply active filter if set
-		if filter.Active != nil && c.Active != *filter.Active {
-			continue
-		}
-		// Apply adapter_type filter if set
-		if filter.AdapterType != "" && c.AdapterType != filter.AdapterType {
-			continue
-		}
-
 		v := CompanyView{Company: c}
 		if c.LastScanAt != nil {
 			t := c.LastScanAt.Add(time.Duration(s.config.ScanIntervalMinutes) * time.Minute)
@@ -54,6 +54,28 @@ func (s *service) List(filter CompanyFilter) ([]CompanyView, error) {
 		views = append(views, v)
 	}
 
+	return CompanyListResult{
+		Items:       views,
+		Total:       total,
+		TotalActive: totalActive,
+	}, nil
+}
+
+// GetAll returns all companies as views without pagination (for internal/worker use).
+func (s *service) GetAll() ([]CompanyView, error) {
+	companies, err := s.store.GetAllCompanies()
+	if err != nil {
+		return nil, response.ErrInternal.WithMessage("failed to fetch companies")
+	}
+	views := make([]CompanyView, 0, len(companies))
+	for _, c := range companies {
+		v := CompanyView{Company: c}
+		if c.LastScanAt != nil {
+			t := c.LastScanAt.Add(time.Duration(s.config.ScanIntervalMinutes) * time.Minute)
+			v.NextScanAt = &t
+		}
+		views = append(views, v)
+	}
 	return views, nil
 }
 

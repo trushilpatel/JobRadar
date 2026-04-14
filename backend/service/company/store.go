@@ -14,6 +14,11 @@ type CompanyReader interface {
 	// GetCompaniesDueForScan returns active companies whose last_scan_at is NULL
 	// or older than intervalMinutes ago. Used by the scheduler binary.
 	GetCompaniesDueForScan(intervalMinutes int) ([]model.Company, error)
+	// GetCompanies returns a filtered, paginated slice and the total matching count.
+	GetCompanies(filter CompanyFilter, page, limit int) ([]model.Company, int64, error)
+	// GetCompanyCounts returns (total, total_active) across all companies,
+	// regardless of the current filter — used for header stats.
+	GetCompanyCounts() (total, active int64, error error)
 }
 
 // CompanyWriter covers mutations from the API.
@@ -90,4 +95,36 @@ func (s *companyStore) GetCompaniesDueForScan(intervalMinutes int) ([]model.Comp
 		intervalMinutes,
 	).Find(&companies).Error
 	return companies, err
+}
+
+func (s *companyStore) GetCompanies(filter CompanyFilter, page, limit int) ([]model.Company, int64, error) {
+	q := s.db.Model(&model.Company{})
+
+	if filter.Active != nil {
+		q = q.Where("active = ?", *filter.Active)
+	}
+	if filter.AdapterType != "" {
+		q = q.Where("adapter_type = ?", filter.AdapterType)
+	}
+	if filter.Search != "" {
+		q = q.Where("name ILIKE ?", "%"+filter.Search+"%")
+	}
+
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var companies []model.Company
+	offset := (page - 1) * limit
+	err := q.Order("name ASC").Offset(offset).Limit(limit).Find(&companies).Error
+	return companies, total, err
+}
+
+func (s *companyStore) GetCompanyCounts() (total, active int64, err error) {
+	if err = s.db.Model(&model.Company{}).Count(&total).Error; err != nil {
+		return
+	}
+	err = s.db.Model(&model.Company{}).Where("active = ?", true).Count(&active).Error
+	return
 }
