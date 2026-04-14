@@ -31,7 +31,7 @@ export async function updateCompany(
   id: string,
   fields: Partial<Pick<Company, 'name' | 'url' | 'adapter_type' | 'active'>>
 ): Promise<void> {
-  const res = await fetch(`${BASE}/companies/${id}`, {
+  const res = await fetch(`${BASE}/companies/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(fields),
@@ -40,18 +40,18 @@ export async function updateCompany(
 }
 
 export async function deleteCompany(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/companies/${id}`, { method: 'DELETE' })
+  const res = await fetch(`${BASE}/companies/${encodeURIComponent(id)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete company')
 }
 
 export async function fetchScanStats(id: string): Promise<ScanStats> {
-  const res = await fetch(`${BASE}/companies/${id}/scan-stats`)
+  const res = await fetch(`${BASE}/companies/${encodeURIComponent(id)}/scan-stats`)
   if (!res.ok) throw new Error('Failed to fetch scan stats')
   return res.json()
 }
 
 export async function triggerScan(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/companies/${id}/scan`, { method: 'POST' })
+  const res = await fetch(`${BASE}/companies/${encodeURIComponent(id)}/scan`, { method: 'POST' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.error ?? 'Failed to trigger scan')

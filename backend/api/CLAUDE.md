@@ -62,7 +62,7 @@ POST   /companies
 PATCH  /companies/:id
 DELETE /companies/:id
 GET    /companies/:id/scan-stats
-POST   /companies/:id/scan              — 429 if scanned within SCAN_INTERVAL_MINUTES
+POST   /companies/:id/scan              — always enqueues; manual triggers bypass the cooldown
 
 GET    /dashboard/stats
 GET    /dashboard/activity?days=N

@@ -36,6 +36,8 @@ export const ADAPTER_TYPES = [
   'lever',
   'ashby',
   'google',
+  'netflix',
+  'uber',
 ] as const
 
 export type AdapterType = typeof ADAPTER_TYPES[number]

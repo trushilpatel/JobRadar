@@ -130,8 +130,10 @@ services:
     restart: unless-stopped
 
   crawler:
-    image: jobradar_backend
-    pull_policy: never
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.crawler
+    image: jobradar_crawler
     container_name: jobradar_crawler
     env_file:
       - ./backend/.env
@@ -214,7 +216,7 @@ services:
 
   google-scraper:
     build:
-      context: ./backend/internal/ats_fetcher/google/scraper
+      context: ./backend/pipeline/ats/google/scraper
       dockerfile: Dockerfile
     image: jobradar_google_scraper
     container_name: jobradar_google_scraper

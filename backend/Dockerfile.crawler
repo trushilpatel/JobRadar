@@ -1,0 +1,29 @@
+FROM golang:1.24-alpine AS go-builder
+
+ENV GOTOOLCHAIN=auto
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go build -o /out/crawler ./cmd/job_listing_crawler
+
+FROM mcr.microsoft.com/playwright:v1.59.1-noble
+
+RUN apt-get update && apt-get install -y ca-certificates tzdata xvfb && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=go-builder /out/crawler /app/crawler
+
+COPY pipeline/ats/google/scraper/package.json pipeline/ats/google/scraper/package-lock.json* /app/scraper/
+RUN cd /app/scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --production
+COPY pipeline/ats/google/scraper/scrape.js /app/scraper/
+
+ENV GOOGLE_SCRAPER_DIR=/app/scraper
+
+CMD ["/app/crawler"]

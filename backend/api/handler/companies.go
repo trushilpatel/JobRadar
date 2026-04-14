@@ -93,6 +93,8 @@ func (h *CompanyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		model.AdapterLever:      true,
 		model.AdapterAshby:      true,
 		model.AdapterGoogle:     true,
+		model.AdapterNetflix:    true,
+		model.AdapterUber:       true,
 	}
 	if !validAdapters[body.AdapterType] {
 		respondError(w, http.StatusBadRequest, "invalid adapter_type")
@@ -151,6 +153,8 @@ func (h *CompanyHandler) Update(w http.ResponseWriter, r *http.Request) {
 			model.AdapterLever:      true,
 			model.AdapterAshby:      true,
 			model.AdapterGoogle:     true,
+			model.AdapterNetflix:    true,
+			model.AdapterUber:       true,
 		}
 		if !validAdapters[at] {
 			respondError(w, http.StatusBadRequest, "invalid adapter_type")
@@ -159,6 +163,10 @@ func (h *CompanyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.companies.UpdateCompany(id, fields); err != nil {
+		if store.IsNotFound(err) {
+			respondError(w, http.StatusNotFound, "company not found")
+			return
+		}
 		respondError(w, http.StatusInternalServerError, "failed to update company")
 		return
 	}
@@ -215,26 +223,17 @@ func (h *CompanyHandler) ScanStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /companies/:id/scan
-// Enqueues a manual scan request. Returns 429 if the company was scanned within the cooldown interval.
+// Enqueues a manual scan request. Always honours the request — no cooldown on manual triggers.
 func (h *CompanyHandler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	company, err := h.companies.GetCompanyByID(id)
-	if err != nil {
+	if _, err := h.companies.GetCompanyByID(id); err != nil {
 		if store.IsNotFound(err) {
 			respondError(w, http.StatusNotFound, "company not found")
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "failed to fetch company")
 		return
-	}
-
-	if company.LastScanAt != nil {
-		cooldown := time.Duration(h.scanIntervalMinutes) * time.Minute
-		if time.Since(*company.LastScanAt) < cooldown {
-			respondError(w, http.StatusTooManyRequests, "scanned too recently")
-			return
-		}
 	}
 
 	if err := h.queue.Enqueue(id, model.QueueSourceManual); err != nil {

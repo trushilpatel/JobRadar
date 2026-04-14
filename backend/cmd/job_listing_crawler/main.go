@@ -54,10 +54,12 @@ func main() {
 
 	companyDelay := time.Duration(cfg.ScanCompanyDelaySeconds) * time.Second
 	googleCfg := google.Config{
-		MinDelayMs: cfg.GoogleScraperMinDelayMs,
-		MaxDelayMs: cfg.GoogleScraperMaxDelayMs,
-		TimeoutMs:  cfg.GoogleScraperTimeoutMs,
-		MaxPages:   cfg.GoogleScraperMaxPages,
+		MinDelayMs:  cfg.GoogleScraperMinDelayMs,
+		MaxDelayMs:  cfg.GoogleScraperMaxDelayMs,
+		TimeoutMs:   cfg.GoogleScraperTimeoutMs,
+		MaxPages:    cfg.GoogleScraperMaxPages,
+		EnrichMinMs: cfg.GoogleScraperEnrichMinMs,
+		EnrichMaxMs: cfg.GoogleScraperEnrichMaxMs,
 	}
 	engine := crawler.NewEngine(companies, ledger, scanLog, producer, companyDelay, googleCfg, log)
 

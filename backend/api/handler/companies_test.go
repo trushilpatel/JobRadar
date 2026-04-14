@@ -137,10 +137,12 @@ func TestCompanyTriggerScan_Success(t *testing.T) {
 	}
 }
 
-func TestCompanyTriggerScan_Cooldown(t *testing.T) {
+func TestCompanyTriggerScan_RecentScanStillAllowed(t *testing.T) {
+	// Manual triggers bypass the cooldown — always enqueue regardless of last_scan_at.
 	recent := time.Now().Add(-10 * time.Minute)
+	q := &fakeScanQueueStore{}
 	cs := newFakeCompanyStore(testCompany("c1", &recent))
-	h := newCompanyHandler(cs, &fakeScanQueueStore{})
+	h := newCompanyHandler(cs, q)
 
 	r := chi.NewRouter()
 	r.Post("/companies/{id}/scan", h.TriggerScan)
@@ -149,8 +151,11 @@ func TestCompanyTriggerScan_Cooldown(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusTooManyRequests {
-		t.Fatalf("want 429 got %d", w.Code)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("want 202 got %d", w.Code)
+	}
+	if len(q.items) != 1 {
+		t.Fatalf("expected 1 queued item, got %d", len(q.items))
 	}
 }
 

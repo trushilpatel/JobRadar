@@ -7,6 +7,8 @@ import (
 	"github.com/trushilpatel/jobradar/pipeline/ats/google"
 	"github.com/trushilpatel/jobradar/pipeline/ats/greenhouse"
 	"github.com/trushilpatel/jobradar/pipeline/ats/lever"
+	"github.com/trushilpatel/jobradar/pipeline/ats/netflix"
+	"github.com/trushilpatel/jobradar/pipeline/ats/uber"
 	"github.com/trushilpatel/jobradar/model"
 )
 
@@ -33,6 +35,10 @@ func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config) (Adap
 			return google.NewDefault(), nil
 		}
 		return google.New(googleCfg), nil
+	case model.AdapterNetflix:
+		return netflix.New(), nil
+	case model.AdapterUber:
+		return uber.New(), nil
 	default:
 		return nil, fmt.Errorf("unknown adapter type: %s", adapterType)
 	}

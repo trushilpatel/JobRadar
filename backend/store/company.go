@@ -65,7 +65,14 @@ func (s *companyStore) CreateCompany(c model.Company) error {
 }
 
 func (s *companyStore) UpdateCompany(id string, fields map[string]any) error {
-	return s.db.Model(&model.Company{}).Where("id = ?", id).Updates(fields).Error
+	result := s.db.Model(&model.Company{}).Where("id = ?", id).Updates(fields)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (s *companyStore) DeleteCompany(id string) error {

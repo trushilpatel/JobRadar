@@ -74,5 +74,5 @@ The LLM enrichment step always runs — `FullContent` only skips the fetch, not 
 - `RunForCompany(ctx, companyID)` runs a scan for one company — called by the crawler's DB poll loop
 - The crawler polls `company_scan_queue` every 10s; `ClaimNext` uses `FOR UPDATE SKIP LOCKED` so concurrent instances don't double-process
 - Scheduling lives in `cmd/company_scan_scheduler/main.go` — checks every 1 min, inserts due companies into `company_scan_queue`
-- Manual trigger via `POST /companies/:id/scan` also respects `SCAN_INTERVAL_MINUTES` — returns 429 if scanned too recently
+- Manual trigger via `POST /companies/:id/scan` bypasses the cooldown — always enqueues immediately
 - `EnsureTopics` must be called before the producer is created — see `cmd/CLAUDE.md`

@@ -25,10 +25,12 @@ func TestCareersURL(t *testing.T) {
 
 func TestNew_StoresConfig(t *testing.T) {
 	cfg := Config{
-		MinDelayMs: 5000,
-		MaxDelayMs: 8000,
-		TimeoutMs:  60000,
-		MaxPages:   2,
+		MinDelayMs:  5000,
+		MaxDelayMs:  8000,
+		TimeoutMs:   60000,
+		MaxPages:    2,
+		EnrichMinMs: 3000,
+		EnrichMaxMs: 5000,
 	}
 	g := New(cfg)
 	if g.cfg.MinDelayMs != 5000 {
@@ -39,6 +41,12 @@ func TestNew_StoresConfig(t *testing.T) {
 	}
 	if g.cfg.MaxPages != 2 {
 		t.Errorf("MaxPages: got %d, want 2", g.cfg.MaxPages)
+	}
+	if g.cfg.EnrichMinMs != 3000 {
+		t.Errorf("EnrichMinMs: got %d, want 3000", g.cfg.EnrichMinMs)
+	}
+	if g.cfg.EnrichMaxMs != 5000 {
+		t.Errorf("EnrichMaxMs: got %d, want 5000", g.cfg.EnrichMaxMs)
 	}
 }
 
@@ -56,6 +64,12 @@ func TestNewDefault_UsesProductionDefaults(t *testing.T) {
 	if g.cfg.MaxPages != 0 {
 		t.Errorf("MaxPages: got %d, want 0 (no limit)", g.cfg.MaxPages)
 	}
+	if g.cfg.EnrichMinMs != 15000 {
+		t.Errorf("EnrichMinMs: got %d, want 15000", g.cfg.EnrichMinMs)
+	}
+	if g.cfg.EnrichMaxMs != 25000 {
+		t.Errorf("EnrichMaxMs: got %d, want 25000", g.cfg.EnrichMaxMs)
+	}
 }
 
 // ── Interface compliance ────────────────────────────────────────────────────
@@ -68,16 +82,17 @@ func TestGoogleImplementsURLProvider(t *testing.T) {
 	var _ types.URLProvider = (*Google)(nil)
 }
 
+// Google uses the FullContent fast path — it does NOT implement ContentFetcher.
+// The Playwright scraper populates FullContent at scan time.
 func TestGoogleDoesNotImplementContentFetcher(t *testing.T) {
 	var adp types.Adapter = NewDefault()
 	if _, ok := adp.(types.ContentFetcher); ok {
-		t.Error("Google should NOT implement ContentFetcher — it is a thin adapter, job_post_analyzer fetches detail pages")
+		t.Error("Google should NOT implement ContentFetcher — it is a full-detail adapter; FullContent is set by the scraper")
 	}
 }
 
-// ── JSON parsing — thin scraper output ─────────────────────────────────────
+// ── JSON parsing — full scraper output ─────────────────────────────────────
 
-// scraperJob no longer has full_content. Verify the struct parses correctly.
 func TestParseScraperOutput_ValidJobs(t *testing.T) {
 	sampleOutput := `[
 		{
@@ -85,14 +100,30 @@ func TestParseScraperOutput_ValidJobs(t *testing.T) {
 			"title": "Software Engineer, Backend",
 			"url": "https://www.google.com/about/careers/applications/jobs/results/123456",
 			"location": "Mountain View, CA",
-			"employ_type": "full_time"
+			"employ_type": "full_time",
+			"full_content": {
+				"description": "Software Engineer, Backend\n\nMountain View, CA\n\nMinimum qualifications:\n- BS in CS",
+				"requirements": "",
+				"compensation": "",
+				"workplace_type": "",
+				"department": "Google",
+				"published_date": ""
+			}
 		},
 		{
 			"id": "google-789012",
 			"title": "Product Manager, Cloud",
 			"url": "https://www.google.com/about/careers/applications/jobs/results/789012",
 			"location": "New York, NY",
-			"employ_type": "full_time"
+			"employ_type": "full_time",
+			"full_content": {
+				"description": "Product Manager, Cloud\n\nNew York, NY\n\nResponsibilities\n- Lead the product vision",
+				"requirements": "",
+				"compensation": "",
+				"workplace_type": "",
+				"department": "Google Cloud",
+				"published_date": ""
+			}
 		}
 	]`
 
@@ -109,10 +140,22 @@ func TestParseScraperOutput_ValidJobs(t *testing.T) {
 	assertEqual(t, "title", j.Title, "Software Engineer, Backend")
 	assertEqual(t, "location", j.Location, "Mountain View, CA")
 	assertEqual(t, "employ_type", j.EmployType, "full_time")
+	if j.FullContent == nil {
+		t.Fatal("FullContent should not be nil")
+	}
+	if j.FullContent.Department != "Google" {
+		t.Errorf("Department: got %q, want %q", j.FullContent.Department, "Google")
+	}
+	if !contains(j.FullContent.Description, "Minimum qualifications") {
+		t.Error("Description should contain 'Minimum qualifications'")
+	}
 
 	j2 := scraperJobs[1]
 	assertEqual(t, "id", j2.ID, "google-789012")
-	assertEqual(t, "location", j2.Location, "New York, NY")
+	if j2.FullContent == nil {
+		t.Fatal("FullContent should not be nil for second job")
+	}
+	assertEqual(t, "department", j2.FullContent.Department, "Google Cloud")
 }
 
 func TestParseScraperOutput_EmptyArray(t *testing.T) {
@@ -138,14 +181,30 @@ func TestParseScraperOutput_ErrorResponse(t *testing.T) {
 
 // ── Conversion to pipeline types ────────────────────────────────────────────
 
-// Thin adapter: FullContent must always be nil — job_post_analyzer enriches later.
-func TestConvertToPipelineTypes_FullContentIsNil(t *testing.T) {
+// Full-detail adapter: FullContent must be set when the scraper outputs full_content.
+func TestConvertToPipelineTypes_FullContentSet(t *testing.T) {
 	sj := scraperJob{
 		ID:         "google-42",
 		Title:      "SRE",
 		URL:        "https://www.google.com/about/careers/applications/jobs/results/42",
 		Location:   "London",
 		EmployType: "full_time",
+		FullContent: &scraperFullContent{
+			Description: "SRE\n\nLondon\n\nMinimum qualifications:\n- 2 years experience",
+			Department:  "Google",
+		},
+	}
+
+	var fc *types.FullJobContent
+	if sj.FullContent != nil {
+		fc = &types.FullJobContent{
+			Description:   sj.FullContent.Description,
+			Requirements:  sj.FullContent.Requirements,
+			Compensation:  sj.FullContent.Compensation,
+			WorkplaceType: sj.FullContent.WorkplaceType,
+			Department:    sj.FullContent.Department,
+			PublishedDate: sj.FullContent.PublishedDate,
+		}
 	}
 
 	item := types.FetchJobsItem{
@@ -154,15 +213,44 @@ func TestConvertToPipelineTypes_FullContentIsNil(t *testing.T) {
 		URL:            sj.URL,
 		Location:       sj.Location,
 		EmploymentType: sj.EmployType,
-		FullContent:    nil,
+		FullContent:    fc,
 	}
 
 	assertEqual(t, "ID", item.ID, "google-42")
 	assertEqual(t, "Title", item.Title, "SRE")
 	assertEqual(t, "EmploymentType", item.EmploymentType, "full_time")
 
+	if item.FullContent == nil {
+		t.Fatal("FullContent must not be nil — Google is a full-detail adapter")
+	}
+	if item.FullContent.Department != "Google" {
+		t.Errorf("Department: got %q, want %q", item.FullContent.Department, "Google")
+	}
+	if !contains(item.FullContent.Description, "Minimum qualifications") {
+		t.Error("Description should contain section content")
+	}
+}
+
+// Jobs where the scraper timed out before visiting the detail page have nil
+// FullContent — the analyzer falls back to HTTP fetch for those.
+func TestConvertToPipelineTypes_NilFullContentWhenScraperTimedOut(t *testing.T) {
+	sj := scraperJob{
+		ID:          "google-99",
+		Title:       "Engineer",
+		URL:         "https://www.google.com/about/careers/applications/jobs/results/99",
+		Location:    "Remote",
+		EmployType:  "full_time",
+		FullContent: nil, // scraper timed out before visiting this job
+	}
+
+	var fc *types.FullJobContent
+	if sj.FullContent != nil {
+		fc = &types.FullJobContent{}
+	}
+
+	item := types.FetchJobsItem{FullContent: fc}
 	if item.FullContent != nil {
-		t.Error("FullContent must be nil — Google is a thin adapter")
+		t.Error("FullContent must be nil when scraper timed out — analyzer will fall back to HTTP fetch")
 	}
 }
 
@@ -183,7 +271,6 @@ func TestFetchJobs_ScraperNotFound(t *testing.T) {
 
 func TestFetchJobs_MockScraper_Success(t *testing.T) {
 	dir := t.TempDir()
-	// Mock script outputs thin listing items — no full_content
 	fakeScript := `
 		const jobs = [
 			{
@@ -191,7 +278,15 @@ func TestFetchJobs_MockScraper_Success(t *testing.T) {
 				"title": "Test Engineer",
 				"url": "https://www.google.com/about/careers/applications/jobs/results/111",
 				"location": "Remote",
-				"employ_type": "full_time"
+				"employ_type": "full_time",
+				"full_content": {
+					"description": "Test Engineer\n\nRemote\n\nMinimum qualifications:\n- 1 year experience",
+					"requirements": "",
+					"compensation": "",
+					"workplace_type": "",
+					"department": "Google",
+					"published_date": ""
+				}
 			}
 		];
 		process.stdout.write(JSON.stringify(jobs));
@@ -213,8 +308,12 @@ func TestFetchJobs_MockScraper_Success(t *testing.T) {
 	assertEqual(t, "Location", job.Location, "Remote")
 	assertEqual(t, "EmploymentType", job.EmploymentType, "full_time")
 
-	if job.FullContent != nil {
-		t.Error("FullContent must be nil — Google is a thin adapter")
+	if job.FullContent == nil {
+		t.Fatal("FullContent must not be nil — Google is a full-detail adapter")
+	}
+	assertEqual(t, "Department", job.FullContent.Department, "Google")
+	if !contains(job.FullContent.Description, "Minimum qualifications") {
+		t.Error("Description should contain section content")
 	}
 }
 
@@ -267,7 +366,15 @@ func TestFetchJobs_MockScraper_MultipleJobs(t *testing.T) {
 				title: "Job " + i,
 				url: "https://www.google.com/about/careers/applications/jobs/results/" + i,
 				location: "City " + i,
-				employ_type: "full_time"
+				employ_type: "full_time",
+				full_content: {
+					description: "Job " + i + "\n\nCity " + i + "\n\nMinimum qualifications:\n- Req " + i,
+					requirements: "",
+					compensation: "",
+					workplace_type: "",
+					department: "Dept " + i,
+					published_date: ""
+				}
 			});
 		}
 		process.stdout.write(JSON.stringify(jobs));
@@ -283,9 +390,37 @@ func TestFetchJobs_MockScraper_MultipleJobs(t *testing.T) {
 		t.Fatalf("expected 5 jobs, got %d", len(result.Jobs))
 	}
 	for _, job := range result.Jobs {
-		if job.FullContent != nil {
-			t.Errorf("job %s: FullContent should be nil", job.ID)
+		if job.FullContent == nil {
+			t.Errorf("job %s: FullContent must not be nil — full-detail adapter", job.ID)
 		}
+	}
+}
+
+// Jobs with missing full_content (e.g. scraper timed out mid-run) gracefully
+// produce FullContent == nil — the analyzer falls back to HTTP fetch for those.
+func TestFetchJobs_MockScraper_MissingFullContent(t *testing.T) {
+	dir := t.TempDir()
+	fakeScript := `
+		process.stdout.write(JSON.stringify([{
+			"id": "google-999",
+			"title": "Partial Job",
+			"url": "https://www.google.com/about/careers/applications/jobs/results/999",
+			"location": "Unknown",
+			"employ_type": "full_time"
+		}]));
+	`
+	writeScript(t, dir, fakeScript)
+
+	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	result, err := g.FetchJobs(context.Background(), "google")
+	if err != nil {
+		t.Fatalf("FetchJobs failed: %v", err)
+	}
+	if len(result.Jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(result.Jobs))
+	}
+	if result.Jobs[0].FullContent != nil {
+		t.Error("FullContent must be nil when scraper did not output full_content (timeout case)")
 	}
 }
 
@@ -293,17 +428,20 @@ func TestFetchJobs_MockScraper_MultipleJobs(t *testing.T) {
 
 func TestFetchJobs_ConfigPassedToNode(t *testing.T) {
 	dir := t.TempDir()
-	// Script that reads the env vars we pass and echoes them back as a job title
+	// Script echoes env vars back as the job title to verify they were set
 	fakeScript := `
 		const minDelay = process.env.GOOGLE_SCRAPER_MIN_DELAY || "missing";
 		const maxDelay = process.env.GOOGLE_SCRAPER_MAX_DELAY || "missing";
 		const maxPages = process.env.GOOGLE_SCRAPER_MAX_PAGES || "missing";
+		const enrichMin = process.env.GOOGLE_SCRAPER_ENRICH_MIN || "missing";
+		const enrichMax = process.env.GOOGLE_SCRAPER_ENRICH_MAX || "missing";
 		const jobs = [{
 			id: "google-1",
-			title: minDelay + "|" + maxDelay + "|" + maxPages,
+			title: minDelay + "|" + maxDelay + "|" + maxPages + "|" + enrichMin + "|" + enrichMax,
 			url: "https://www.google.com/about/careers/applications/jobs/results/1",
 			location: "Test",
-			employ_type: "full_time"
+			employ_type: "full_time",
+			full_content: { description: "test", requirements: "", compensation: "", workplace_type: "", department: "G", published_date: "" }
 		}];
 		process.stdout.write(JSON.stringify(jobs));
 	`
@@ -311,10 +449,12 @@ func TestFetchJobs_ConfigPassedToNode(t *testing.T) {
 
 	g := &Google{
 		cfg: Config{
-			MinDelayMs: 3000,
-			MaxDelayMs: 5000,
-			TimeoutMs:  60000,
-			MaxPages:   1,
+			MinDelayMs:  3000,
+			MaxDelayMs:  5000,
+			TimeoutMs:   60000,
+			MaxPages:    1,
+			EnrichMinMs: 1000,
+			EnrichMaxMs: 2000,
 		},
 		scraperDir: dir,
 	}
@@ -325,8 +465,8 @@ func TestFetchJobs_ConfigPassedToNode(t *testing.T) {
 	if len(result.Jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(result.Jobs))
 	}
-	// Title encodes the env var values — verify they were passed correctly
-	assertEqual(t, "env vars in title", result.Jobs[0].Title, "3000|5000|1")
+	// Title encodes all env var values — verify all were passed correctly
+	assertEqual(t, "env vars in title", result.Jobs[0].Title, "3000|5000|1|1000|2000")
 }
 
 // ── Context cancellation ────────────────────────────────────────────────────
@@ -342,6 +482,166 @@ func TestFetchJobs_ContextCancelled(t *testing.T) {
 	_, err := g.FetchJobs(ctx, "google")
 	if err == nil {
 		t.Fatal("expected error when context is cancelled")
+	}
+}
+
+// ── resolveScraperDir ────────────────────────────────────────────────────────
+
+func TestResolveScraperDir_ExplicitOverride(t *testing.T) {
+	g := &Google{scraperDir: "/explicit/path"}
+	if got := g.resolveScraperDir(); got != "/explicit/path" {
+		t.Errorf("resolveScraperDir() = %q, want /explicit/path", got)
+	}
+}
+
+func TestResolveScraperDir_EnvVar(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("GOOGLE_SCRAPER_DIR", dir)
+
+	g := &Google{}
+	if got := g.resolveScraperDir(); got != dir {
+		t.Errorf("resolveScraperDir() = %q, want %q (from GOOGLE_SCRAPER_DIR)", got, dir)
+	}
+}
+
+func TestResolveScraperDir_ExplicitTakesPrecedenceOverEnv(t *testing.T) {
+	t.Setenv("GOOGLE_SCRAPER_DIR", "/from-env")
+	g := &Google{scraperDir: "/explicit"}
+	if got := g.resolveScraperDir(); got != "/explicit" {
+		t.Errorf("expected explicit override to win, got %q", got)
+	}
+}
+
+// ── truncate / itoa helpers ──────────────────────────────────────────────────
+
+func TestTruncate_ShortString(t *testing.T) {
+	if got := truncate("hello", 10); got != "hello" {
+		t.Errorf("truncate(short) = %q, want %q", got, "hello")
+	}
+}
+
+func TestTruncate_ExactLength(t *testing.T) {
+	if got := truncate("hello", 5); got != "hello" {
+		t.Errorf("truncate(exact) = %q, want %q", got, "hello")
+	}
+}
+
+func TestTruncate_Overflow(t *testing.T) {
+	got := truncate("hello world", 5)
+	want := "hello..."
+	if got != want {
+		t.Errorf("truncate(overflow) = %q, want %q", got, want)
+	}
+}
+
+func TestItoa(t *testing.T) {
+	cases := []struct {
+		n    int
+		want string
+	}{{0, "0"}, {42, "42"}, {-1, "-1"}, {30000, "30000"}}
+	for _, tc := range cases {
+		if got := itoa(tc.n); got != tc.want {
+			t.Errorf("itoa(%d) = %q, want %q", tc.n, got, tc.want)
+		}
+	}
+}
+
+// ── FetchJobs edge cases ─────────────────────────────────────────────────────
+
+// Scraper exits 0 but writes {"error": "..."} — should be caught as an error.
+func TestFetchJobs_MockScraper_ErrorInBodyExitZero(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, `process.stdout.write(JSON.stringify({error: "blocked by captcha"}));`)
+
+	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	_, err := g.FetchJobs(context.Background(), "google")
+	if err == nil {
+		t.Fatal("expected error for error-body response with exit 0")
+	}
+	if !contains(err.Error(), "blocked by captcha") {
+		t.Errorf("expected error message in output, got: %s", err.Error())
+	}
+}
+
+// Scraper exits 0 but writes nothing to stdout — should fail to parse.
+func TestFetchJobs_MockScraper_EmptyStdout(t *testing.T) {
+	dir := t.TempDir()
+	writeScript(t, dir, `// writes nothing`)
+
+	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	_, err := g.FetchJobs(context.Background(), "google")
+	if err == nil {
+		t.Fatal("expected error for empty scraper stdout")
+	}
+}
+
+// Scraper output has extra unknown fields — forward-compat, should not break.
+func TestFetchJobs_MockScraper_ExtraFields(t *testing.T) {
+	dir := t.TempDir()
+	fakeScript := `
+		process.stdout.write(JSON.stringify([{
+			"id": "google-99",
+			"title": "SWE",
+			"url": "https://www.google.com/about/careers/applications/jobs/results/99",
+			"location": "Remote",
+			"employ_type": "full_time",
+			"full_content": {
+				"description": "SWE\n\nRemote\n\nMinimum qualifications:\n- Req",
+				"requirements": "",
+				"compensation": "",
+				"workplace_type": "",
+				"department": "Google",
+				"published_date": ""
+			},
+			"unknown_future_field": "ignored",
+			"another_field": 42
+		}]));
+	`
+	writeScript(t, dir, fakeScript)
+
+	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	result, err := g.FetchJobs(context.Background(), "google")
+	if err != nil {
+		t.Fatalf("FetchJobs failed with extra fields: %v", err)
+	}
+	if len(result.Jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(result.Jobs))
+	}
+	assertEqual(t, "ID", result.Jobs[0].ID, "google-99")
+}
+
+// Employment type strings from the scraper are passed through as-is.
+func TestFetchJobs_MockScraper_EmploymentTypes(t *testing.T) {
+	cases := []struct{ raw, want string }{
+		{"full_time", "full_time"},
+		{"part_time", "part_time"},
+		{"contract", "contract"},
+		{"internship", "internship"},
+		{"", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.raw, func(t *testing.T) {
+			dir := t.TempDir()
+			script := `process.stdout.write(JSON.stringify([{
+				"id": "google-1", "title": "T", "url": "https://example.com", "location": "L",
+				"employ_type": "` + tc.raw + `",
+				"full_content": {"description":"d","requirements":"","compensation":"","workplace_type":"","department":"G","published_date":""}
+			}]));`
+			writeScript(t, dir, script)
+
+			g := &Google{cfg: defaultConfig(), scraperDir: dir}
+			result, err := g.FetchJobs(context.Background(), "google")
+			if err != nil {
+				t.Fatalf("FetchJobs failed: %v", err)
+			}
+			if len(result.Jobs) != 1 {
+				t.Fatalf("expected 1 job, got %d", len(result.Jobs))
+			}
+			if result.Jobs[0].EmploymentType != tc.want {
+				t.Errorf("EmploymentType = %q, want %q", result.Jobs[0].EmploymentType, tc.want)
+			}
+		})
 	}
 }
 

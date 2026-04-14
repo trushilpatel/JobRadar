@@ -11,7 +11,7 @@
 # Run:
 #   docker run --rm jobradar-google-scraper
 
-FROM mcr.microsoft.com/playwright:v1.49.0-noble
+FROM mcr.microsoft.com/playwright:v1.59.1-noble
 
 WORKDIR /app
 

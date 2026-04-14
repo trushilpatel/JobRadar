@@ -15,28 +15,34 @@ import (
 
 // Config holds the Google scraper settings sourced from the central config.
 type Config struct {
-	MinDelayMs int // min delay between page navigations in ms
-	MaxDelayMs int // max delay between page navigations in ms
-	TimeoutMs  int // overall scraper timeout in ms
-	MaxPages   int // max pages to paginate, 0 = all
+	MinDelayMs  int // min delay between page navigations in ms
+	MaxDelayMs  int // max delay between page navigations in ms
+	TimeoutMs   int // overall scraper timeout in ms
+	MaxPages    int // max pages to paginate, 0 = all
+	EnrichMinMs int // min delay between detail page visits in ms
+	EnrichMaxMs int // max delay between detail page visits in ms
 }
 
 // defaultConfig returns sensible production defaults.
 func defaultConfig() Config {
 	return Config{
-		MinDelayMs: 30000,
-		MaxDelayMs: 60000,
-		TimeoutMs:  2700000,
-		MaxPages:   0,
+		MinDelayMs:  120000,  // 2 min between pages
+		MaxDelayMs:  240000,  // 4 min between pages
+		TimeoutMs:   14400000, // 4 hours total
+		MaxPages:    0,
+		EnrichMinMs: 60000,  // 1 min between detail pages
+		EnrichMaxMs: 120000, // 2 min between detail pages
 	}
 }
 
 // Google implements types.Adapter by shelling out to a Node.js Playwright
-// scraper that navigates careers.google.com, paginates through all results,
-// and returns listing card data as JSON.
+// scraper that navigates careers.google.com, paginates through all result pages,
+// then visits each job detail page to extract full content.
 //
-// This is a thin adapter: FullContent is always nil. The job_post_analyzer
-// is responsible for fetching the detail page and enriching the job.
+// This is a full-detail adapter: FullContent is populated at scan time by the
+// scraper. The job_post_analyzer skips the HTTP fetch and goes straight to LLM
+// enrichment. Jobs where the scraper timed out before visiting their detail page
+// will have FullContent.Description == "" and fall back to HTTP fetch in the analyzer.
 type Google struct {
 	cfg Config
 	// scraperDir overrides the path to the scraper/ directory.
@@ -63,13 +69,25 @@ func (g *Google) CareersURL(_ string) string {
 
 // ── Scraper output types ────────────────────────────────────────────────────
 
-// scraperJob mirrors the JSON output from scrape.js (LIST_ONLY mode).
+// scraperJob mirrors the JSON output from scrape.js.
 type scraperJob struct {
-	ID         string `json:"id"`          // "google-123456"
-	Title      string `json:"title"`
-	URL        string `json:"url"`
-	Location   string `json:"location"`
-	EmployType string `json:"employ_type"` // normalized: full_time, contract, etc.
+	ID          string              `json:"id"`           // "google-123456"
+	Title       string              `json:"title"`
+	URL         string              `json:"url"`
+	Location    string              `json:"location"`
+	EmployType  string              `json:"employ_type"`  // normalized: full_time, contract, etc.
+	FullContent *scraperFullContent `json:"full_content,omitempty"`
+}
+
+// scraperFullContent mirrors the full_content object in the scraper JSON output.
+// Fields map 1:1 to types.FullJobContent.
+type scraperFullContent struct {
+	Description   string `json:"description"`
+	Requirements  string `json:"requirements"`
+	Compensation  string `json:"compensation"`
+	WorkplaceType string `json:"workplace_type"`
+	Department    string `json:"department"`
+	PublishedDate string `json:"published_date"`
 }
 
 // scraperError is returned when the scraper exits with an error payload.
@@ -92,8 +110,15 @@ func (g *Google) FetchJobs(ctx context.Context, _ string) (types.FetchJobsRespon
 		return types.FetchJobsResponse{}, fmt.Errorf("google: scraper not found at %s — run install.sh first", scriptPath)
 	}
 
-	// Build command with context for timeout/cancellation
-	cmd := exec.CommandContext(ctx, "node", scriptPath)
+	// Run via xvfb-run for a virtual display so Chrome runs in headed mode.
+	// Headed Chrome has a more realistic browser fingerprint than headless mode.
+	// Falls back to plain node if xvfb-run is not installed (e.g. local dev).
+	var cmd *exec.Cmd
+	if _, err := exec.LookPath("xvfb-run"); err == nil {
+		cmd = exec.CommandContext(ctx, "xvfb-run", "--auto-servernum", "--server-args=-screen 0 1366x768x24", "node", scriptPath)
+	} else {
+		cmd = exec.CommandContext(ctx, "node", scriptPath)
+	}
 	cmd.Dir = scraperPath
 
 	// Pass config values directly to the Node process as environment variables.
@@ -103,6 +128,8 @@ func (g *Google) FetchJobs(ctx context.Context, _ string) (types.FetchJobsRespon
 		fmt.Sprintf("GOOGLE_SCRAPER_MAX_DELAY=%s", itoa(g.cfg.MaxDelayMs)),
 		fmt.Sprintf("GOOGLE_SCRAPER_TIMEOUT_MS=%s", itoa(g.cfg.TimeoutMs)),
 		fmt.Sprintf("GOOGLE_SCRAPER_MAX_PAGES=%s", itoa(g.cfg.MaxPages)),
+		fmt.Sprintf("GOOGLE_SCRAPER_ENRICH_MIN=%s", itoa(g.cfg.EnrichMinMs)),
+		fmt.Sprintf("GOOGLE_SCRAPER_ENRICH_MAX=%s", itoa(g.cfg.EnrichMaxMs)),
 	)
 
 	var stdout, stderr bytes.Buffer
@@ -128,16 +155,28 @@ func (g *Google) FetchJobs(ctx context.Context, _ string) (types.FetchJobsRespon
 		return types.FetchJobsResponse{}, fmt.Errorf("google: failed to parse scraper output: %w\nraw (first 500 bytes): %s", err, truncate(string(raw), 500))
 	}
 
-	// Convert to pipeline types. FullContent is nil — this is a thin adapter.
+	// Convert to pipeline types. FullContent is set when the scraper visited the
+	// detail page; nil when the scraper timed out before reaching that job.
 	items := make([]types.FetchJobsItem, 0, len(scraperJobs))
 	for _, sj := range scraperJobs {
+		var fc *types.FullJobContent
+		if sj.FullContent != nil {
+			fc = &types.FullJobContent{
+				Description:   sj.FullContent.Description,
+				Requirements:  sj.FullContent.Requirements,
+				Compensation:  sj.FullContent.Compensation,
+				WorkplaceType: sj.FullContent.WorkplaceType,
+				Department:    sj.FullContent.Department,
+				PublishedDate: sj.FullContent.PublishedDate,
+			}
+		}
 		items = append(items, types.FetchJobsItem{
 			ID:             sj.ID,
 			Title:          sj.Title,
 			URL:            sj.URL,
 			Location:       sj.Location,
 			EmploymentType: sj.EmployType,
-			FullContent:    nil,
+			FullContent:    fc,
 		})
 	}
 
@@ -185,6 +224,6 @@ var (
 	_ types.URLProvider = (*Google)(nil)
 )
 
-// Note: Google does NOT implement types.ContentFetcher. The job_post_analyzer
-// fetches detail page content directly via the job URL using its own HTTP/browser
-// fetch — the same flow as Greenhouse, Lever, and Ashby.
+// Note: Google does NOT implement types.ContentFetcher. It is a full-detail
+// adapter — the Playwright scraper populates FullContent at scan time so the
+// job_post_analyzer skips the HTTP fetch entirely via the FullContent fast path.

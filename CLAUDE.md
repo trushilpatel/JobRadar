@@ -64,7 +64,7 @@ new → dismissed          (user dismisses — job row kept for FK integrity, hi
 
 - `SCAN_INTERVAL_MINUTES` (default `1440` = 24h) controls how often each company is scanned
 - Scheduler checks every 1 min; only enqueues companies where `last_scan_at` is NULL or older than the interval
-- Manual trigger (`POST /companies/:id/scan`) enforces the same interval — returns 429 if scanned too recently
+- Manual trigger (`POST /companies/:id/scan`) bypasses the cooldown — always enqueues immediately
 
 ## Dashboard stats fields
 
