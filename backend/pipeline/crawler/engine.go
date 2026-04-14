@@ -12,24 +12,33 @@ import (
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
 	"github.com/trushilpatel/jobradar/model"
-	"github.com/trushilpatel/jobradar/store"
+	companysvc "github.com/trushilpatel/jobradar/service/company"
+	scansvc "github.com/trushilpatel/jobradar/service/scan"
 )
 
 // Engine crawls company careers pages, deduplicates jobs, and publishes new ones to Kafka.
 type Engine struct {
-	companies    store.CompanyReader
-	ledger       store.SeenLedgerStore
-	scanLog      store.CompanyScanLogWriter
+	companies    companysvc.CompanyReader
+	ledger       jobLedger
+	scanLog      scansvc.ScanLogWriter
 	publisher    kafka.Publisher
 	companyDelay time.Duration
 	googleCfg    google.Config
 	log          logger.Logger
 }
 
+// jobLedger is the combined interface the crawler needs from the seen ledger.
+type jobLedger interface {
+	HasSeen(jobID string) (bool, error)
+	MarkSeen(jobID, companyID, reason string) error
+	GetActiveJobIDsByCompany(companyID string) ([]string, error)
+	MarkRemovedBatch(jobIDs []string) error
+}
+
 func NewEngine(
-	companies store.CompanyReader,
-	ledger store.SeenLedgerStore,
-	scanLog store.CompanyScanLogWriter,
+	companies companysvc.CompanyReader,
+	ledger jobLedger,
+	scanLog scansvc.ScanLogWriter,
 	publisher kafka.Publisher,
 	companyDelay time.Duration,
 	googleCfg google.Config,

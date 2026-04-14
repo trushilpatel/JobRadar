@@ -5,7 +5,7 @@ const BASE = '/api'
 export async function fetchCompanies(): Promise<Company[]> {
   const res = await fetch(`${BASE}/companies`)
   if (!res.ok) throw new Error('Failed to fetch companies')
-  return res.json()
+  return res.json().then((r: { data: Company[] }) => r.data)
 }
 
 export async function createCompany(data: {
@@ -22,9 +22,9 @@ export async function createCompany(data: {
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err.error ?? 'Failed to create company')
+    throw new Error(err.error?.message ?? 'Failed to create company')
   }
-  return res.json()
+  return res.json().then((r: { data: Company }) => r.data)
 }
 
 export async function updateCompany(
@@ -47,14 +47,14 @@ export async function deleteCompany(id: string): Promise<void> {
 export async function fetchScanStats(id: string): Promise<ScanStats> {
   const res = await fetch(`${BASE}/companies/${encodeURIComponent(id)}/scan-stats`)
   if (!res.ok) throw new Error('Failed to fetch scan stats')
-  return res.json()
+  return res.json().then((r: { data: ScanStats }) => r.data)
 }
 
 export async function triggerScan(id: string): Promise<void> {
   const res = await fetch(`${BASE}/companies/${encodeURIComponent(id)}/scan`, { method: 'POST' })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.error ?? 'Failed to trigger scan')
+    throw new Error(body.error?.message ?? 'Failed to trigger scan')
   }
 }
 
@@ -70,7 +70,7 @@ export async function setAllCompaniesActive(active: boolean): Promise<void> {
 export async function fetchQueue(): Promise<QueueEntry[]> {
   const res = await fetch(`${BASE}/companies/queue`)
   if (!res.ok) throw new Error('Failed to fetch queue')
-  return res.json()
+  return res.json().then((r: { data: QueueEntry[] }) => r.data)
 }
 
 export async function removeFromQueue(entryId: string): Promise<void> {

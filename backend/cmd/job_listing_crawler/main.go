@@ -13,7 +13,9 @@ import (
 	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
-	"github.com/trushilpatel/jobradar/store"
+	companysvc "github.com/trushilpatel/jobradar/service/company"
+	jobsvc "github.com/trushilpatel/jobradar/service/job"
+	scansvc "github.com/trushilpatel/jobradar/service/scan"
 	"github.com/trushilpatel/jobradar/pipeline/crawler"
 )
 
@@ -47,10 +49,10 @@ func main() {
 	}
 	defer producer.Close()
 
-	companies := store.NewCompanyStore(database)
-	ledger := store.NewSeenLedgerStore(database)
-	scanLog := store.NewCompanyScanLogStore(database)
-	queue := store.NewScanQueueStore(database)
+	companies := companysvc.NewStore(database)
+	ledger := jobsvc.NewSeenLedgerStore(database)
+	scanLog := scansvc.NewLogStore(database)
+	queue := scansvc.NewQueueStore(database)
 
 	companyDelay := time.Duration(cfg.ScanCompanyDelaySeconds) * time.Second
 	googleCfg := google.Config{
@@ -88,7 +90,7 @@ func main() {
 	}
 }
 
-func pollAndProcess(ctx context.Context, log logger.Logger, queue store.ScanQueueStore, engine *crawler.Engine) {
+func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.ScanQueueStore, engine *crawler.Engine) {
 	item, err := queue.ClaimNext(ctx)
 	if err != nil {
 		log.Error("failed to claim queue item", err)

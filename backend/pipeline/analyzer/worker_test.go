@@ -12,7 +12,7 @@ import (
 	"github.com/trushilpatel/jobradar/pipeline/llm"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/model"
-	"github.com/trushilpatel/jobradar/store"
+	jobsvc "github.com/trushilpatel/jobradar/service/job"
 )
 
 // ── fakes ────────────────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ type fakeSnapshot struct {
 	called bool
 }
 
-func (f *fakeSnapshot) InsertSnapshot(_ store.SnapshotInput) error {
+func (f *fakeSnapshot) InsertSnapshot(_ jobsvc.SnapshotInput) error {
 	f.called = true
 	return nil
 }
@@ -208,7 +208,7 @@ func TestEnrich_HappyPath(t *testing.T) {
 	}
 
 	// Snapshot
-	_ = snap.InsertSnapshot(store.SnapshotInput{Remote: result.Remote})
+	_ = snap.InsertSnapshot(jobsvc.SnapshotInput{Remote: result.Remote})
 	if !snap.called {
 		t.Error("snapshot should have been called")
 	}

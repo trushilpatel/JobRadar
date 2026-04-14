@@ -16,7 +16,7 @@ import (
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
 	"github.com/trushilpatel/jobradar/model"
-	"github.com/trushilpatel/jobradar/store"
+	jobsvc "github.com/trushilpatel/jobradar/service/job"
 	"gorm.io/datatypes"
 )
 
@@ -30,9 +30,9 @@ const enrichConcurrency = 5
 type Worker struct {
 	consumer    *kafka.Consumer
 	scorer      llm.Scorer
-	jobs        store.JobWriter
-	ledger      store.SeenLedgerWriter
-	snapshot    store.SnapshotWriter
+	jobs        jobsvc.JobWriter
+	ledger      jobsvc.SeenLedgerWriter
+	snapshot    jobsvc.SnapshotWriter
 	client      *http.Client
 	log         logger.Logger
 	maxExpYears int
@@ -41,9 +41,9 @@ type Worker struct {
 func NewWorker(
 	consumer *kafka.Consumer,
 	scorer llm.Scorer,
-	jobs store.JobWriter,
-	ledger store.SeenLedgerWriter,
-	snapshot store.SnapshotWriter,
+	jobs jobsvc.JobWriter,
+	ledger jobsvc.SeenLedgerWriter,
+	snapshot jobsvc.SnapshotWriter,
 	log logger.Logger,
 	maxExpYears int,
 ) *Worker {
@@ -170,7 +170,7 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 
 	// 5. Write snapshot (analytics record — survives job deletion)
 	techBytes, _ := json.Marshal(result.TechStack)
-	if err := w.snapshot.InsertSnapshot(store.SnapshotInput{
+	if err := w.snapshot.InsertSnapshot(jobsvc.SnapshotInput{
 		ID:                row.ID,
 		CompanyID:         job.CompanyID,
 		Country:           result.Country,

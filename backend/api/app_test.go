@@ -7,19 +7,37 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/api/handler"
+	"github.com/trushilpatel/jobradar/api/request"
+	"github.com/trushilpatel/jobradar/model"
+	"github.com/trushilpatel/jobradar/service/application"
+	"github.com/trushilpatel/jobradar/service/company"
+	"github.com/trushilpatel/jobradar/service/dashboard"
+	"github.com/trushilpatel/jobradar/service/insights"
+	"github.com/trushilpatel/jobradar/service/job"
+	"github.com/trushilpatel/jobradar/service/scan"
 )
 
-// ── App.Handlers() ───────────────────────────────────────────────────────────
+// buildTestApp creates an App with all real validators and nil-safe fake services.
+// We only need the route tree, not actual DB calls.
+func buildTestApp() *App {
+	companyH := company.NewHandler(company.NewValidator(), &fakeCompanyService{})
+	scanH := scan.NewHandler(scan.NewValidator(), &fakeScanService{})
+	jobH := job.NewHandler(job.NewValidator(), &fakeJobService{})
+	appH := application.NewHandler(application.NewValidator(), &fakeAppService{})
+	dashH := dashboard.NewHandler(dashboard.NewValidator(), &fakeDashboardService{})
+	insightsH := insights.NewHandler(insights.NewValidator(), &fakeInsightsService{})
+	return NewApp(companyH, scanH, jobH, appH, dashH, insightsH)
+}
 
 func TestApp_Handlers_ReturnsExpectedCount(t *testing.T) {
-	app := &App{scanIntervalMinutes: 1440}
-	if got := len(app.Handlers()); got != 5 {
-		t.Fatalf("expected 5 route groups, got %d", got)
+	app := buildTestApp()
+	if got := len(app.Handlers()); got != 6 {
+		t.Fatalf("expected 6 route groups, got %d", got)
 	}
 }
 
 func TestApp_Handlers_NoneAreNil(t *testing.T) {
-	app := &App{scanIntervalMinutes: 1440}
+	app := buildTestApp()
 	for i, g := range app.Handlers() {
 		if g == nil {
 			t.Errorf("handler[%d] is nil", i)
@@ -28,7 +46,7 @@ func TestApp_Handlers_NoneAreNil(t *testing.T) {
 }
 
 func TestApp_Handlers_AllImplementRouteGroup(t *testing.T) {
-	app := &App{scanIntervalMinutes: 1440}
+	app := buildTestApp()
 	for i, g := range app.Handlers() {
 		if _, ok := g.(handler.RouteGroup); !ok {
 			t.Errorf("handler[%d] does not implement RouteGroup", i)
@@ -36,20 +54,14 @@ func TestApp_Handlers_AllImplementRouteGroup(t *testing.T) {
 	}
 }
 
-// ── Full router coverage ──────────────────────────────────────────────────────
-
-// TestRouter_AllRoutesMounted builds the real router via App.Handlers() and
-// uses chi.Walk to verify every expected API path is registered.
-// No stores are invoked — chi.Walk only inspects the route tree.
 func TestRouter_AllRoutesMounted(t *testing.T) {
-	app := &App{scanIntervalMinutes: 1440}
+	app := buildTestApp()
 
 	r := chi.NewRouter()
 	for _, g := range app.Handlers() {
 		g.Register(r)
 	}
 
-	// Collect all mounted routes via chi.Walk (no handler invocation)
 	mounted := map[string]bool{}
 	_ = chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		mounted[method+":"+strings.TrimSuffix(route, "/")] = true
@@ -57,20 +69,17 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 	})
 
 	expected := []struct{ method, route string }{
-		// Jobs
 		{http.MethodGet, "/jobs"},
 		{http.MethodGet, "/jobs/{id}"},
 		{http.MethodDelete, "/jobs/{id}"},
 		{http.MethodPatch, "/jobs/{id}/save"},
 		{http.MethodPatch, "/jobs/{id}/status"},
 		{http.MethodPatch, "/jobs/{id}/notes"},
-		// Applications
 		{http.MethodGet, "/jobs/{id}/applications"},
 		{http.MethodPost, "/jobs/{id}/applications"},
 		{http.MethodPatch, "/jobs/{id}/applications/{app_id}/stage"},
 		{http.MethodPatch, "/jobs/{id}/applications/{app_id}/note"},
 		{http.MethodGet, "/applications"},
-		// Companies
 		{http.MethodGet, "/companies"},
 		{http.MethodPost, "/companies"},
 		{http.MethodPatch, "/companies/active"},
@@ -82,10 +91,8 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 		{http.MethodDelete, "/companies/{id}"},
 		{http.MethodGet, "/companies/{id}/scan-stats"},
 		{http.MethodPost, "/companies/{id}/scan"},
-		// Dashboard
 		{http.MethodGet, "/dashboard/stats"},
 		{http.MethodGet, "/dashboard/activity"},
-		// Insights
 		{http.MethodGet, "/insights/tech-stack"},
 		{http.MethodGet, "/insights/company-activity"},
 		{http.MethodGet, "/insights/funnel"},
@@ -103,21 +110,12 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 	}
 }
 
-// TestRouter_OperationalEndpointsSeparateFromHandlers verifies that the
-// operational endpoints (/health, /ready, /metrics) are NOT in App.Handlers() —
-// they are mounted directly in NewRouter() and should not be owned by any group.
 func TestRouter_OperationalEndpointsSeparateFromHandlers(t *testing.T) {
-	app := &App{scanIntervalMinutes: 1440}
+	app := buildTestApp()
 
 	r := chi.NewRouter()
 	for _, g := range app.Handlers() {
 		g.Register(r)
-	}
-
-	operational := []struct{ method, route string }{
-		{http.MethodGet, "/health"},
-		{http.MethodGet, "/ready"},
-		{http.MethodGet, "/metrics"},
 	}
 
 	mounted := map[string]bool{}
@@ -126,10 +124,83 @@ func TestRouter_OperationalEndpointsSeparateFromHandlers(t *testing.T) {
 		return nil
 	})
 
-	for _, tc := range operational {
+	for _, tc := range []struct{ method, route string }{
+		{http.MethodGet, "/health"},
+		{http.MethodGet, "/ready"},
+		{http.MethodGet, "/metrics"},
+	} {
 		key := tc.method + ":" + tc.route
 		if mounted[key] {
 			t.Errorf("operational endpoint %s %s should not be in App.Handlers()", tc.method, tc.route)
 		}
 	}
 }
+
+// ── Minimal fake services for route registration testing ─────────────────────
+
+type fakeCompanyService struct{}
+
+func (f *fakeCompanyService) List(_ company.CompanyFilter) ([]company.CompanyView, error) {
+	return nil, nil
+}
+func (f *fakeCompanyService) Get(_ string) (*model.Company, error)                         { return nil, nil }
+func (f *fakeCompanyService) Create(_ company.CreateCompanyInput) (*model.Company, error)  { return nil, nil }
+func (f *fakeCompanyService) Update(_ string, _ company.UpdateCompanyInput) error          { return nil }
+func (f *fakeCompanyService) Delete(_ string) error                                        { return nil }
+func (f *fakeCompanyService) SetAllActive(_ bool) error                                    { return nil }
+
+type fakeScanService struct{}
+
+func (f *fakeScanService) TriggerScan(_ string) error                                  { return nil }
+func (f *fakeScanService) GetStats(_ string) (*scan.ScanStatsView, error)              { return nil, nil }
+func (f *fakeScanService) ListQueue(_ scan.QueueFilter) ([]scan.QueueEntryView, error) { return nil, nil }
+func (f *fakeScanService) RemoveFromQueue(_ string) error                               { return nil }
+func (f *fakeScanService) MoveUp(_ string) error                                        { return nil }
+func (f *fakeScanService) MoveDown(_ string) error                                      { return nil }
+
+type fakeJobService struct{}
+
+func (f *fakeJobService) List(_ job.JobFilter, _ request.Pagination) ([]model.Job, int, error) {
+	return nil, 0, nil
+}
+func (f *fakeJobService) Get(_ string) (*model.Job, error)           { return nil, nil }
+func (f *fakeJobService) Dismiss(_ string, _ job.DismissInput) error { return nil }
+func (f *fakeJobService) SetSaved(_ string, _ bool) error            { return nil }
+func (f *fakeJobService) SetStatus(_, _ string) error                { return nil }
+func (f *fakeJobService) SetNotes(_, _ string) error                 { return nil }
+
+type fakeAppService struct{}
+
+func (f *fakeAppService) ListByJob(_ string) ([]model.JobApplication, error) { return nil, nil }
+func (f *fakeAppService) ListAll(_ request.Pagination) ([]application.ApplicationWithJob, int, error) {
+	return nil, 0, nil
+}
+func (f *fakeAppService) Create(_ string, _ application.CreateApplicationInput) (*model.JobApplication, error) {
+	return nil, nil
+}
+func (f *fakeAppService) UpdateStage(_, _ string, _ application.UpdateStageInput) error { return nil }
+func (f *fakeAppService) UpdateNote(_, _ string, _ application.UpdateNoteInput) error   { return nil }
+
+type fakeDashboardService struct{}
+
+func (f *fakeDashboardService) GetStats() (*dashboard.StatsView, error)              { return nil, nil }
+func (f *fakeDashboardService) GetActivity(_ int) ([]dashboard.ActivityView, error)  { return nil, nil }
+
+type fakeInsightsService struct{}
+
+func (f *fakeInsightsService) TechStack() (interface{}, error)                               { return nil, nil }
+func (f *fakeInsightsService) CompanyActivity() (interface{}, error)                         { return nil, nil }
+func (f *fakeInsightsService) Funnel() (interface{}, error)                                  { return nil, nil }
+func (f *fakeInsightsService) Location() (interface{}, error)                                { return nil, nil }
+func (f *fakeInsightsService) Sponsorship(_ insights.InsightsFilter) (interface{}, error)    { return nil, nil }
+func (f *fakeInsightsService) Velocity() (interface{}, error)                                { return nil, nil }
+func (f *fakeInsightsService) RoleCategories() (interface{}, error)                          { return nil, nil }
+func (f *fakeInsightsService) GetPipelineCounts() (insights.PipelineCounts, error)          { return insights.PipelineCounts{}, nil }
+
+// Ensure fakes implement interfaces.
+var _ company.Service = (*fakeCompanyService)(nil)
+var _ scan.Service = (*fakeScanService)(nil)
+var _ job.Service = (*fakeJobService)(nil)
+var _ application.Service = (*fakeAppService)(nil)
+var _ dashboard.Service = (*fakeDashboardService)(nil)
+var _ insights.Service = (*fakeInsightsService)(nil)

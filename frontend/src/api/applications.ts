@@ -5,7 +5,7 @@ const BASE = '/api'
 export async function fetchAllApplications(): Promise<ApplicationWithJob[]> {
   const res = await fetch(`${BASE}/applications`)
   if (!res.ok) throw new Error('Failed to fetch applications')
-  return res.json()
+  return res.json().then((r: { data: ApplicationWithJob[] }) => r.data)
 }
 
 export async function updateApplicationStage(

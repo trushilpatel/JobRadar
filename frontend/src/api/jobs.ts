@@ -2,9 +2,20 @@ import type { Job, JobApplication } from '@/types'
 
 const BASE = '/api'
 
-// GET /jobs?status=new|saved|applied
-export async function fetchJobs(status: 'new' | 'saved' | 'applied'): Promise<Job[]> {
-  const res = await fetch(`${BASE}/jobs?status=${status}`)
+export interface JobsPage {
+  data: Job[]
+  total: number
+  page: number
+  limit: number
+}
+
+// GET /jobs?status=new|saved|applied&page=N&limit=N
+export async function fetchJobs(
+  status: 'new' | 'saved' | 'applied',
+  page = 1,
+  limit = 20,
+): Promise<JobsPage> {
+  const res = await fetch(`${BASE}/jobs?status=${status}&page=${page}&limit=${limit}`)
   if (!res.ok) throw new Error('Failed to fetch jobs')
   return res.json()
 }
@@ -13,7 +24,7 @@ export async function fetchJobs(status: 'new' | 'saved' | 'applied'): Promise<Jo
 export async function fetchJob(id: string): Promise<Job> {
   const res = await fetch(`${BASE}/jobs/${id}`)
   if (!res.ok) throw new Error('Failed to fetch job')
-  return res.json()
+  return res.json().then((r: { data: Job }) => r.data)
 }
 
 // PATCH /jobs/:id/save
@@ -60,7 +71,7 @@ export async function dismissJob(id: string, reason: string, note?: string): Pro
 export async function fetchApplications(jobId: string): Promise<JobApplication[]> {
   const res = await fetch(`${BASE}/jobs/${jobId}/applications`)
   if (!res.ok) throw new Error('Failed to fetch applications')
-  return res.json()
+  return res.json().then((r: { data: JobApplication[] }) => r.data)
 }
 
 // POST /jobs/:id/applications

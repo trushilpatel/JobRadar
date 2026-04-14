@@ -9,9 +9,18 @@ import {
 } from '@tanstack/react-table'
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Pagination } from '@/components/ui/pagination'
 import { cn } from '@/lib/utils'
 
 // ── DataTable ────────────────────────────────────────────────────────────────
+
+interface ServerPagination {
+  page: number
+  limit: number
+  total: number
+  onPageChange: (page: number) => void
+  onLimitChange: (limit: number) => void
+}
 
 interface DataTableProps<TData> {
   columns: ColumnDef<TData, unknown>[]
@@ -25,6 +34,8 @@ interface DataTableProps<TData> {
   selectedId?: string
   /** Override per-row background/hover className (replaces selectedId highlight when provided) */
   getRowClassName?: (row: TData) => string
+  /** When provided, renders server-side pagination controls below the table */
+  serverPagination?: ServerPagination
 }
 
 export function DataTable<TData>({
@@ -36,6 +47,7 @@ export function DataTable<TData>({
   getRowId,
   selectedId,
   getRowClassName,
+  serverPagination,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([])
 
@@ -47,6 +59,10 @@ export function DataTable<TData>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getRowId,
+    manualPagination: !!serverPagination,
+    pageCount: serverPagination
+      ? Math.ceil(serverPagination.total / serverPagination.limit)
+      : undefined,
   })
 
   if (loading) {
@@ -62,45 +78,59 @@ export function DataTable<TData>({
   }
 
   return (
-    <Table>
-      <TableHeader>
-        {table.getHeaderGroups().map(hg => (
-          <tr key={hg.id} className="border-b border-white/[0.07]">
-            {hg.headers.map(header => (
-              <TableHead key={header.id} style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}>
-                {header.isPlaceholder
-                  ? null
-                  : flexRender(header.column.columnDef.header, header.getContext())}
-              </TableHead>
-            ))}
-          </tr>
-        ))}
-      </TableHeader>
-      <TableBody>
-        {table.getRowModel().rows.map(row => {
-          const isSelected = selectedId !== undefined && getRowId?.(row.original) === selectedId
-          const rowBg = getRowClassName
-            ? getRowClassName(row.original)
-            : isSelected ? 'bg-violet-500/[0.08]' : 'hover:bg-white/[0.02]'
-          return (
-            <TableRow
-              key={row.id}
-              onClick={() => onRowClick?.(row.original)}
-              className={cn(
-                onRowClick && 'cursor-pointer',
-                rowBg,
-              )}
-            >
-              {row.getVisibleCells().map(cell => (
-                <TableCell key={cell.id}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </TableCell>
+    <div className="flex flex-col">
+      <Table>
+        <TableHeader>
+          {table.getHeaderGroups().map(hg => (
+            <tr key={hg.id} className="border-b border-white/[0.07]">
+              {hg.headers.map(header => (
+                <TableHead key={header.id} style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}>
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                </TableHead>
               ))}
-            </TableRow>
-          )
-        })}
-      </TableBody>
-    </Table>
+            </tr>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {table.getRowModel().rows.map(row => {
+            const isSelected = selectedId !== undefined && getRowId?.(row.original) === selectedId
+            const rowBg = getRowClassName
+              ? getRowClassName(row.original)
+              : isSelected ? 'bg-violet-500/[0.08]' : 'hover:bg-white/[0.02]'
+            return (
+              <TableRow
+                key={row.id}
+                onClick={() => onRowClick?.(row.original)}
+                className={cn(
+                  onRowClick && 'cursor-pointer',
+                  rowBg,
+                )}
+              >
+                {row.getVisibleCells().map(cell => (
+                  <TableCell key={cell.id}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
+                ))}
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+
+      {serverPagination && (
+        <div className="border-t border-white/[0.07]">
+          <Pagination
+            page={serverPagination.page}
+            total={serverPagination.total}
+            limit={serverPagination.limit}
+            onPageChange={serverPagination.onPageChange}
+            onLimitChange={serverPagination.onLimitChange}
+          />
+        </div>
+      )}
+    </div>
   )
 }
 

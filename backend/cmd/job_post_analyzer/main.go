@@ -12,7 +12,7 @@ import (
 	"github.com/trushilpatel/jobradar/pipeline/llm"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
-	"github.com/trushilpatel/jobradar/store"
+	jobsvc "github.com/trushilpatel/jobradar/service/job"
 	"github.com/trushilpatel/jobradar/pipeline/analyzer"
 )
 
@@ -53,9 +53,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	jobs := store.NewJobStore(database)
-	ledger := store.NewSeenLedgerStore(database)
-	snapshot := store.NewSnapshotStore(database)
+	jobs := jobsvc.NewJobStore(database)
+	ledger := jobsvc.NewSeenLedgerStore(database)
+	snapshot := jobsvc.NewSnapshotStore(database)
 	worker := analyzer.NewWorker(consumer, scorer, jobs, ledger, snapshot, log, cfg.MaxExpYears)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

@@ -12,7 +12,8 @@ import (
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
 	"github.com/trushilpatel/jobradar/model"
-	"github.com/trushilpatel/jobradar/store"
+	companysvc "github.com/trushilpatel/jobradar/service/company"
+	scansvc "github.com/trushilpatel/jobradar/service/scan"
 )
 
 const checkInterval = 1 * time.Minute
@@ -32,8 +33,8 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	companies := store.NewCompanyStore(database)
-	queue := store.NewScanQueueStore(database)
+	companies := companysvc.NewStore(database)
+	queue := scansvc.NewQueueStore(database)
 
 	log.Info("started",
 		logger.Int("scan_interval_minutes", cfg.ScanIntervalMinutes),
@@ -56,7 +57,7 @@ func main() {
 	}
 }
 
-func enqueuedue(ctx context.Context, log logger.Logger, companies store.CompanyReader, queue store.ScanQueueStore, intervalMinutes int) {
+func enqueuedue(ctx context.Context, log logger.Logger, companies companysvc.CompanyReader, queue scansvc.ScanQueueStore, intervalMinutes int) {
 	due, err := companies.GetCompaniesDueForScan(intervalMinutes)
 	if err != nil {
 		log.Error("failed to query due companies", err)

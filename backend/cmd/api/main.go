@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trushilpatel/jobradar/config"
 	"github.com/trushilpatel/jobradar/api"
+	"github.com/trushilpatel/jobradar/config"
 	"github.com/trushilpatel/jobradar/infra/db"
 	"github.com/trushilpatel/jobradar/infra/logger"
 )
@@ -24,7 +24,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	app := api.NewApp(database, cfg)
+	app, err := InitializeApp(database, cfg)
+	if err != nil {
+		log.Error("wire initialization failed", err)
+		os.Exit(1)
+	}
+
 	router := api.NewRouter(log, database, app.Handlers())
 
 	srv := &http.Server{

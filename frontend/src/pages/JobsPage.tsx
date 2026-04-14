@@ -407,6 +407,9 @@ function CompanyMultiSelect({ companies, selected, onChange }: {
 export function JobsPage() {
   const [tab, setTab] = useState<TabKey>('new')
   const [jobs, setJobs] = useState<Job[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
   const [loading, setLoading] = useState(true)
   const [drawerJob, setDrawerJob] = useState<Job | null>(null)
   const [dismissTarget, setDismissTarget] = useState<Job | null>(null)
@@ -443,14 +446,19 @@ export function JobsPage() {
     setLoading(true)
     setSelectedIds(new Set())
     try {
-      const data = await fetchJobs(tab)
-      setJobs(data ?? [])
+      const res = await fetchJobs(tab, page, limit)
+      setJobs(res.data ?? [])
+      setTotal(res.total ?? 0)
     } catch {
       setJobs([])
+      setTotal(0)
     } finally {
       setLoading(false)
     }
-  }, [tab])
+  }, [tab, page, limit])
+
+  // Reset to page 1 whenever the tab changes
+  useEffect(() => { setPage(1) }, [tab])
 
   useEffect(() => { load() }, [load])
 
@@ -786,6 +794,13 @@ export function JobsPage() {
               if (selectedIds.has(job.id)) return 'bg-violet-500/[0.06]'
               if (drawerJob?.id === job.id) return 'bg-violet-500/[0.08]'
               return 'hover:bg-white/[0.03]'
+            }}
+            serverPagination={{
+              page,
+              limit,
+              total,
+              onPageChange: setPage,
+              onLimitChange: (l) => { setLimit(l); setPage(1) },
             }}
           />
         </div>

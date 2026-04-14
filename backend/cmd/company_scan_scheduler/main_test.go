@@ -8,7 +8,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/model"
-	"github.com/trushilpatel/jobradar/store"
+	scansvc "github.com/trushilpatel/jobradar/service/scan"
 )
 
 // ── fakes ─────────────────────────────────────────────────────────────────────
@@ -37,12 +37,12 @@ func (f *fakeScanQueueStore) Enqueue(companyID, _ string) error {
 	f.enqueued = append(f.enqueued, companyID)
 	return nil
 }
-func (f *fakeScanQueueStore) ClaimNext(_ context.Context) (*store.ScanQueueItem, error) {
+func (f *fakeScanQueueStore) ClaimNext(_ context.Context) (*scansvc.ScanQueueItem, error) {
 	return nil, f.err
 }
 func (f *fakeScanQueueStore) Complete(_ string) error              { return f.err }
 func (f *fakeScanQueueStore) ResetStuck(_ time.Duration) error    { return f.err }
-func (f *fakeScanQueueStore) ListQueue() ([]store.ScanQueueItem, error) { return nil, f.err }
+func (f *fakeScanQueueStore) ListQueue() ([]scansvc.ScanQueueItem, error) { return nil, f.err }
 func (f *fakeScanQueueStore) MoveDown(_ string) error { return f.err }
 func (f *fakeScanQueueStore) MoveUp(_ string) error   { return f.err }
 func (f *fakeScanQueueStore) Remove(_ string) error   { return f.err }

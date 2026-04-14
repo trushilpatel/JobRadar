@@ -12,7 +12,7 @@ import (
 	"github.com/trushilpatel/jobradar/pipeline/llm"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
-	"github.com/trushilpatel/jobradar/store"
+	jobsvc "github.com/trushilpatel/jobradar/service/job"
 	"github.com/trushilpatel/jobradar/pipeline/filter"
 )
 
@@ -65,7 +65,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ledger := store.NewSeenLedgerStore(database)
+	ledger := jobsvc.NewSeenLedgerStore(database)
 	worker := filter.NewWorker(consumer, producer, scorer, ledger,
 		cfg.ScorerBatchSize, cfg.ScorerFlushTimeoutSeconds, log)
 
