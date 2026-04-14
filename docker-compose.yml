@@ -221,9 +221,11 @@ services:
     image: jobradar_google_scraper
     container_name: jobradar_google_scraper
     environment:
-      GOOGLE_SCRAPER_TIMEOUT_MS: "2700000"
-      GOOGLE_SCRAPER_MIN_DELAY: "30000"
-      GOOGLE_SCRAPER_MAX_DELAY: "45000"
+      GOOGLE_SCRAPER_TIMEOUT_MS: "14400000"   # 4 hours — matches defaultConfig()
+      GOOGLE_SCRAPER_MIN_DELAY: "120000"       # 2 min — matches defaultConfig()
+      GOOGLE_SCRAPER_MAX_DELAY: "240000"       # 4 min — matches defaultConfig()
+      GOOGLE_SCRAPER_ENRICH_MIN: "60000"       # 1 min — matches defaultConfig()
+      GOOGLE_SCRAPER_ENRICH_MAX: "120000"      # 2 min — matches defaultConfig()
     # Not a long-running service — started on-demand by the crawler.
     # Use: docker compose run --rm google-scraper
     profiles:

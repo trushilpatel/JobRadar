@@ -3,13 +3,17 @@ package ats
 import (
 	"fmt"
 
+	"github.com/trushilpatel/jobradar/model"
+	"github.com/trushilpatel/jobradar/pipeline/ats/apple"
 	"github.com/trushilpatel/jobradar/pipeline/ats/ashby"
 	"github.com/trushilpatel/jobradar/pipeline/ats/google"
 	"github.com/trushilpatel/jobradar/pipeline/ats/greenhouse"
 	"github.com/trushilpatel/jobradar/pipeline/ats/lever"
+	"github.com/trushilpatel/jobradar/pipeline/ats/meta"
+	"github.com/trushilpatel/jobradar/pipeline/ats/microsoft"
 	"github.com/trushilpatel/jobradar/pipeline/ats/netflix"
+	"github.com/trushilpatel/jobradar/pipeline/ats/rippling"
 	"github.com/trushilpatel/jobradar/pipeline/ats/uber"
-	"github.com/trushilpatel/jobradar/model"
 )
 
 // Registry returns the correct Adapter for a given adapter_type string.
@@ -39,6 +43,14 @@ func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config) (Adap
 		return netflix.New(), nil
 	case model.AdapterUber:
 		return uber.New(), nil
+	case model.AdapterMicrosoft:
+		return microsoft.New(), nil
+	case model.AdapterRippling:
+		return rippling.New(), nil
+	case model.AdapterApple:
+		return apple.New(), nil
+	case model.AdapterMeta:
+		return meta.NewDefault(), nil
 	default:
 		return nil, fmt.Errorf("unknown adapter type: %s", adapterType)
 	}

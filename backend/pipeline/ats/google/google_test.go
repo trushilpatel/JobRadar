@@ -52,23 +52,23 @@ func TestNew_StoresConfig(t *testing.T) {
 
 func TestNewDefault_UsesProductionDefaults(t *testing.T) {
 	g := NewDefault()
-	if g.cfg.MinDelayMs != 30000 {
-		t.Errorf("MinDelayMs: got %d, want 30000", g.cfg.MinDelayMs)
+	if g.cfg.MinDelayMs != 120000 {
+		t.Errorf("MinDelayMs: got %d, want 120000", g.cfg.MinDelayMs)
 	}
-	if g.cfg.MaxDelayMs != 60000 {
-		t.Errorf("MaxDelayMs: got %d, want 60000", g.cfg.MaxDelayMs)
+	if g.cfg.MaxDelayMs != 240000 {
+		t.Errorf("MaxDelayMs: got %d, want 240000", g.cfg.MaxDelayMs)
 	}
-	if g.cfg.TimeoutMs != 2700000 {
-		t.Errorf("TimeoutMs: got %d, want 2700000", g.cfg.TimeoutMs)
+	if g.cfg.TimeoutMs != 14400000 {
+		t.Errorf("TimeoutMs: got %d, want 14400000", g.cfg.TimeoutMs)
 	}
 	if g.cfg.MaxPages != 0 {
 		t.Errorf("MaxPages: got %d, want 0 (no limit)", g.cfg.MaxPages)
 	}
-	if g.cfg.EnrichMinMs != 15000 {
-		t.Errorf("EnrichMinMs: got %d, want 15000", g.cfg.EnrichMinMs)
+	if g.cfg.EnrichMinMs != 60000 {
+		t.Errorf("EnrichMinMs: got %d, want 60000", g.cfg.EnrichMinMs)
 	}
-	if g.cfg.EnrichMaxMs != 25000 {
-		t.Errorf("EnrichMaxMs: got %d, want 25000", g.cfg.EnrichMaxMs)
+	if g.cfg.EnrichMaxMs != 120000 {
+		t.Errorf("EnrichMaxMs: got %d, want 120000", g.cfg.EnrichMaxMs)
 	}
 }
 

@@ -21,7 +21,8 @@ WORKDIR /app
 COPY --from=go-builder /out/crawler /app/crawler
 
 COPY pipeline/ats/google/scraper/package.json pipeline/ats/google/scraper/package-lock.json* /app/scraper/
-RUN cd /app/scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --production
+RUN --mount=type=cache,target=/root/.npm \
+    cd /app/scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --production --cache /root/.npm
 COPY pipeline/ats/google/scraper/scrape.js /app/scraper/
 
 ENV GOOGLE_SCRAPER_DIR=/app/scraper

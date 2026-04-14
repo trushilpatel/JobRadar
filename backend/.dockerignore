@@ -2,4 +2,14 @@
 *.md
 deploy/
 **/*_test.go
+**/*.test.js
 .env*
+# Scraper dev/test artifacts — not needed for Go compilation
+pipeline/ats/google/scraper/node_modules
+pipeline/ats/google/scraper/.npm
+pipeline/ats/google/scraper/example_output.json
+pipeline/ats/google/scraper/jobs.json
+pipeline/ats/google/scraper/logs.json
+pipeline/ats/google/scraper/install.sh
+# Meta scraper scripts — only needed in crawler image, not the main backend build
+pipeline/ats/meta/scraper/install.sh

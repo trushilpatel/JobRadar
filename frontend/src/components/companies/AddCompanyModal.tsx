@@ -27,12 +27,18 @@ const ADAPTER_HINTS: Partial<Record<string, string>> = {
   lever:      'URL auto-filled from company ID',
   ashby:      'URL auto-filled from company ID',
   google:     'No URL required — uses built-in Google Careers scraper',
+  apple:      'No URL required — uses built-in Apple Jobs scraper',
+  meta:       'No URL required — uses built-in Meta Careers scraper',
+  microsoft:  'No URL required — uses built-in Microsoft Careers scraper',
+  rippling:   'No URL required — uses built-in Rippling Jobs scraper',
 }
 
 function buildUrl(adapter: string, id: string): string {
   const tmpl = URL_TEMPLATES[adapter]
   return tmpl && id ? tmpl(id) : ''
 }
+
+const FIXED_URL_ADAPTERS = new Set(['google', 'netflix', 'uber', 'apple', 'meta', 'microsoft', 'rippling'])
 
 const EMPTY_FORM = { id: '', name: '', url: '', adapter_type: 'greenhouse', active: true }
 
@@ -95,7 +101,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.id || !form.name || !form.url) {
+    if (!form.id || !form.name || (!FIXED_URL_ADAPTERS.has(form.adapter_type) && !form.url)) {
       setError('ID, name, and URL are required')
       return
     }

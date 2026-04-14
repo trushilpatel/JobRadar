@@ -38,6 +38,10 @@ export const ADAPTER_TYPES = [
   'google',
   'netflix',
   'uber',
+  'apple',
+  'meta',
+  'microsoft',
+  'rippling',
 ] as const
 
 export type AdapterType = typeof ADAPTER_TYPES[number]

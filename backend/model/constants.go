@@ -6,8 +6,12 @@ const (
     AdapterLever      = "lever"
     AdapterAshby      = "ashby"
     AdapterGoogle     = "google"
+    AdapterMeta       = "meta"
     AdapterNetflix    = "netflix"
     AdapterUber       = "uber"
+    AdapterRippling   = "rippling"
+    AdapterMicrosoft  = "microsoft"
+    AdapterApple      = "apple"
 )
 
 // ScanStatus

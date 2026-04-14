@@ -83,7 +83,17 @@ func (h *CompanyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if body.ID == "" || body.Name == "" || body.URL == "" {
+	// Fixed-URL adapters have a built-in target — URL is optional for them.
+	fixedURLAdapters := map[string]bool{
+		model.AdapterGoogle:    true,
+		model.AdapterNetflix:   true,
+		model.AdapterUber:      true,
+		model.AdapterApple:     true,
+		model.AdapterMeta:      true,
+		model.AdapterMicrosoft: true,
+		model.AdapterRippling:  true,
+	}
+	if body.ID == "" || body.Name == "" || (!fixedURLAdapters[body.AdapterType] && body.URL == "") {
 		respondError(w, http.StatusBadRequest, "id, name, and url are required")
 		return
 	}
@@ -95,6 +105,10 @@ func (h *CompanyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		model.AdapterGoogle:     true,
 		model.AdapterNetflix:    true,
 		model.AdapterUber:       true,
+		model.AdapterApple:      true,
+		model.AdapterMeta:       true,
+		model.AdapterMicrosoft:  true,
+		model.AdapterRippling:   true,
 	}
 	if !validAdapters[body.AdapterType] {
 		respondError(w, http.StatusBadRequest, "invalid adapter_type")
