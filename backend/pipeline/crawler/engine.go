@@ -18,13 +18,12 @@ import (
 
 // Engine crawls company careers pages, deduplicates jobs, and publishes new ones to Kafka.
 type Engine struct {
-	companies    companysvc.CompanyReader
-	ledger       jobLedger
-	scanLog      scansvc.ScanLogWriter
-	publisher    kafka.Publisher
-	companyDelay time.Duration
-	googleCfg    google.Config
-	log          logger.Logger
+	companies companysvc.CompanyReader
+	ledger    jobLedger
+	scanLog   scansvc.ScanLogWriter
+	publisher kafka.Publisher
+	googleCfg google.Config
+	log       logger.Logger
 }
 
 // jobLedger is the combined interface the crawler needs from the seen ledger.
@@ -40,18 +39,16 @@ func NewEngine(
 	ledger jobLedger,
 	scanLog scansvc.ScanLogWriter,
 	publisher kafka.Publisher,
-	companyDelay time.Duration,
 	googleCfg google.Config,
 	log logger.Logger,
 ) *Engine {
 	return &Engine{
-		companies:    companies,
-		ledger:       ledger,
-		scanLog:      scanLog,
-		publisher:    publisher,
-		companyDelay: companyDelay,
-		googleCfg:    googleCfg,
-		log:          log,
+		companies: companies,
+		ledger:    ledger,
+		scanLog:   scanLog,
+		publisher: publisher,
+		googleCfg: googleCfg,
+		log:       log,
 	}
 }
 
@@ -159,14 +156,6 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 		logger.Dur(logger.FieldDuration, elapsed.Round(time.Millisecond)),
 	)
 	e.recordResult(ctx, company.ID, fetched, newCount, elapsed, nil)
-
-	if e.companyDelay > 0 {
-		companyLog.Debug("sleeping before next company", logger.Dur("delay", e.companyDelay))
-		select {
-		case <-time.After(e.companyDelay):
-		case <-ctx.Done():
-		}
-	}
 }
 
 // toRawJob converts a FetchJobsItem into the RawJob Kafka message.

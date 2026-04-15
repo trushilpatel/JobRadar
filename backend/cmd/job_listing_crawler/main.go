@@ -63,7 +63,7 @@ func main() {
 		EnrichMinMs: cfg.GoogleScraperEnrichMinMs,
 		EnrichMaxMs: cfg.GoogleScraperEnrichMaxMs,
 	}
-	engine := crawler.NewEngine(companies, ledger, scanLog, producer, companyDelay, googleCfg, log)
+	engine := crawler.NewEngine(companies, ledger, scanLog, producer, googleCfg, log)
 
 	// Reset any rows stuck in processing from a previous crash.
 	if err := queue.ResetStuck(stuckTimeout); err != nil {
@@ -74,7 +74,7 @@ func main() {
 	log.Info("worker started", logger.Dur("poll_interval", pollInterval))
 
 	// Poll once immediately on startup, then on every tick.
-	pollAndProcess(ctx, log, queue, engine)
+	pollAndProcess(ctx, log, queue, engine, companyDelay)
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -82,7 +82,7 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			pollAndProcess(ctx, log, queue, engine)
+			pollAndProcess(ctx, log, queue, engine, companyDelay)
 		case <-ctx.Done():
 			log.Info("shutting down")
 			return
@@ -90,7 +90,7 @@ func main() {
 	}
 }
 
-func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.ScanQueueStore, engine *crawler.Engine) {
+func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.ScanQueueStore, engine *crawler.Engine, companyDelay time.Duration) {
 	item, err := queue.ClaimNext(ctx)
 	if err != nil {
 		log.Error("failed to claim queue item", err)
@@ -110,5 +110,13 @@ func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.ScanQu
 
 	if err := queue.Complete(item.ID); err != nil {
 		log.Error("failed to complete queue item", err, logger.Str(logger.FieldCompany, item.CompanyID))
+	}
+
+	if companyDelay > 0 {
+		log.Debug("pacing before next claim", logger.Dur("delay", companyDelay))
+		select {
+		case <-time.After(companyDelay):
+		case <-ctx.Done():
+		}
 	}
 }
