@@ -1,0 +1,21 @@
+import { cn } from '@/lib/utils'
+import { avatarColor } from '@/services/jobs.service'
+
+interface CompanyAvatarProps {
+  name: string
+  size?: 'sm' | 'md'
+}
+
+export function CompanyAvatar({ name, size = 'sm' }: CompanyAvatarProps) {
+  return (
+    <div
+      className={cn(
+        'rounded-md flex items-center justify-center font-semibold text-white shrink-0',
+        avatarColor(name),
+        size === 'sm' ? 'w-7 h-7 text-xs' : 'w-9 h-9 text-sm',
+      )}
+    >
+      {name ? name[0].toUpperCase() : '?'}
+    </div>
+  )
+}

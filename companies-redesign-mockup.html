@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>JobRadar — Companies redesign</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background:#0a0a10; color:#e5e7eb; font-family: ui-sans-serif, system-ui, sans-serif; }
+  .scrollbar-thin::-webkit-scrollbar { width:8px; height:8px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background:#ffffff14; border-radius:4px; }
+
+  .filter-pill { display:inline-flex; align-items:center; gap:6px; font-size:11px; padding:6px 10px; border-radius:8px; border:1px solid; transition:all .12s; white-space:nowrap; cursor:pointer; }
+  .filter-pill.off { background:#ffffff08; border-color:#ffffff14; color:#94a3b8; }
+  .filter-pill.off:hover { background:#ffffff14; color:#e2e8f0; }
+  .filter-pill.on  { background:rgba(124,58,237,.15); border-color:rgba(124,58,237,.35); color:#c4b5fd; }
+  .filter-pill.on.red  { background:rgba(239,68,68,.1); border-color:rgba(239,68,68,.3); color:#fca5a5; }
+
+  .group-sep { width:1px; height:22px; background:#ffffff14; margin:0 4px; flex-shrink:0; }
+
+  /* Segmented switch (all/active/inactive, status group) */
+  .seg { display:inline-flex; background:#ffffff08; border:1px solid #ffffff14; border-radius:8px; padding:2px; }
+  .seg button { font-size:11px; padding:4px 10px; border-radius:6px; color:#94a3b8; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; transition:all .12s; }
+  .seg button:hover { color:#e2e8f0; }
+  .seg button.on { background:rgba(124,58,237,.2); color:#c4b5fd; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+  .seg button.on.emerald { background:rgba(16,185,129,.18); color:#6ee7b7; }
+  .seg button.on.red     { background:rgba(239,68,68,.18);  color:#fca5a5; }
+  .seg button.on.blue    { background:rgba(59,130,246,.2);  color:#93c5fd; }
+  .seg button.on.amber   { background:rgba(245,158,11,.2);  color:#fcd34d; }
+  .seg button .count { font-size:10px; background:#00000040; padding:1px 5px; border-radius:999px; }
+
+  /* Multi-select dropdown */
+  .dropdown { position:relative; }
+  .dropdown-btn { display:inline-flex; align-items:center; gap:6px; font-size:11px; padding:6px 10px; border-radius:8px; border:1px solid #ffffff14; background:#ffffff08; color:#94a3b8; cursor:pointer; }
+  .dropdown-btn.has-selected { background:rgba(124,58,237,.15); border-color:rgba(124,58,237,.35); color:#c4b5fd; }
+  .dropdown-btn:hover { background:#ffffff14; }
+  .dropdown-menu { position:absolute; top:calc(100% + 4px); left:0; z-index:30; min-width:240px; background:#13131e; border:1px solid #ffffff1a; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.4); overflow:hidden; }
+  .dropdown-menu input { width:100%; background:#ffffff08; border:none; border-bottom:1px solid #ffffff12; padding:8px 10px; font-size:12px; color:#fff; outline:none; }
+  .dropdown-menu input::placeholder { color:#64748b; }
+  .dropdown-list { max-height:220px; overflow-y:auto; padding:4px 0; }
+  .dropdown-item { display:flex; align-items:center; gap:8px; padding:6px 10px; font-size:12px; color:#cbd5e1; cursor:pointer; }
+  .dropdown-item:hover { background:#ffffff0a; }
+  .dropdown-item .check { width:14px; height:14px; border-radius:4px; border:1px solid #ffffff30; display:grid; place-items:center; flex-shrink:0; }
+  .dropdown-item.selected .check { background:#7c3aed; border-color:#7c3aed; }
+  .dropdown-item.selected .check::after { content:'✓'; font-size:10px; color:#fff; }
+  .dropdown-add { border-top:1px solid #ffffff12; padding:6px 10px; display:flex; gap:6px; align-items:center; }
+  .dropdown-add input { flex:1; background:#ffffff08; border:1px solid #ffffff14; border-radius:6px; padding:4px 8px; font-size:12px; color:#fff; }
+  .dropdown-add button { font-size:11px; padding:4px 10px; border-radius:6px; background:#7c3aed; color:#fff; }
+  .dropdown-add button:hover { background:#8b5cf6; }
+
+  .dot { width:7px; height:7px; border-radius:999px; display:inline-block; }
+  .dot.ok { background:#10b981; box-shadow:0 0 6px rgba(16,185,129,.5); }
+  .dot.err { background:#ef4444; box-shadow:0 0 6px rgba(239,68,68,.5); }
+  .dot.warn { background:#f59e0b; }
+  .dot.idle { background:#52525b; }
+  .dot.run { background:#3b82f6; animation:pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  .kpi-card { background:#ffffff05; border:1px solid #ffffff10; border-radius:10px; padding:12px 14px; transition:all .15s; }
+  .kpi-card.clickable { cursor:pointer; }
+  .kpi-card.clickable:hover { border-color:rgba(124,58,237,.35); background:#ffffff08; }
+  .kpi-card.clickable.active { border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.05); }
+  .kpi-val { font-size:22px; font-weight:600; color:#fff; line-height:1.1; }
+  .kpi-label { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:#64748b; margin-top:4px; }
+
+  .scan-history { display:inline-flex; gap:2px; }
+  .scan-history span { width:6px; height:16px; border-radius:2px; }
+
+  tr.row { cursor:pointer; }
+  tr.row:hover .actions { opacity:1; }
+  .actions { opacity:0; transition:opacity .15s; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<main class="flex min-h-screen">
+
+  <section class="flex-1 min-w-0 flex flex-col">
+
+    <!-- Inline header -->
+    <div class="flex items-center justify-between px-6 py-3 border-b border-white/[0.07]">
+      <div class="flex items-baseline gap-3">
+        <h1 class="text-lg font-semibold">Companies</h1>
+        <span class="text-xs text-slate-400">24 tracked · <span class="text-emerald-400">21 active</span> · <span id="err-inline" class="text-red-400 cursor-pointer hover:underline">2 errors</span></span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button class="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white" title="Refresh">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+        </button>
+        <button class="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Add Company
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI strip (errors card is clickable to filter) -->
+    <div class="grid grid-cols-5 gap-2 px-6 py-3 border-b border-white/[0.07]">
+      <div class="kpi-card"><div class="kpi-val">24</div><div class="kpi-label">Tracked</div></div>
+      <div class="kpi-card"><div class="kpi-val text-emerald-400">21</div><div class="kpi-label">Active</div></div>
+      <div class="kpi-card"><div class="kpi-val text-blue-400">1</div><div class="kpi-label">Running</div></div>
+      <div class="kpi-card"><div class="kpi-val text-amber-400">3</div><div class="kpi-label">In queue</div></div>
+      <div id="err-card" class="kpi-card clickable"><div class="kpi-val text-red-400">2</div><div class="kpi-label">Errors · click to filter</div></div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="px-6 py-3 border-b border-white/[0.07] flex items-center gap-2 flex-wrap">
+      <div class="relative">
+        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="search" placeholder="Search companies…" class="pl-7 pr-3 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg placeholder-slate-500 focus:outline-none focus:border-violet-500 w-56"/>
+      </div>
+
+      <!-- Adapter multi-select dropdown with add -->
+      <div class="dropdown" id="adapter-dd">
+        <button class="dropdown-btn" id="adapter-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+          <span id="adapter-label">All adapters</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="dropdown-menu hidden" id="adapter-menu">
+          <input id="adapter-search" placeholder="Search adapters…"/>
+          <div class="dropdown-list" id="adapter-list"></div>
+          <div class="dropdown-add">
+            <input id="adapter-new" placeholder="Add new adapter…"/>
+            <button id="adapter-add-btn">+ Add</button>
+          </div>
+        </div>
+      </div>
+
+      <span class="group-sep"></span>
+
+      <!-- Active-state segmented switch -->
+      <div class="seg" id="seg-active">
+        <button data-val="all"      class="on">All <span class="count">24</span></button>
+        <button data-val="active"   class="">Active <span class="count">21</span></button>
+        <button data-val="inactive" class="">Inactive <span class="count">3</span></button>
+      </div>
+
+      <span class="group-sep"></span>
+
+      <!-- Status segmented switch (none / errors / running / queued) -->
+      <div class="seg" id="seg-status">
+        <button data-val="none"    class="on">Any</button>
+        <button data-val="error"   class="">✕ Errors <span class="count">2</span></button>
+        <button data-val="running" class="">⟳ Running <span class="count">1</span></button>
+        <button data-val="queued"  class="">· Queued <span class="count">3</span></button>
+      </div>
+
+      <span class="ml-auto flex items-center gap-3">
+        <button class="text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1.5 rounded-lg">Activate all</button>
+        <button id="reset" class="text-[11px] text-slate-500 hover:text-slate-300">Reset</button>
+      </span>
+    </div>
+
+    <!-- Table -->
+    <div class="flex-1 overflow-auto scrollbar-thin">
+      <table class="w-full text-sm">
+        <thead class="sticky top-0 bg-[#0d0d14] border-b border-white/[0.07] text-[11px] uppercase tracking-wider text-slate-500">
+          <tr>
+            <th class="text-left px-6 py-2">Company</th>
+            <th class="text-left px-2 py-2">Adapter</th>
+            <th class="text-left px-2 py-2">Status</th>
+            <th class="text-left px-2 py-2">Last 10 scans</th>
+            <th class="text-left px-2 py-2">Last</th>
+            <th class="text-left px-2 py-2">Next</th>
+            <th class="text-left px-2 py-2">Active</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Drag handle (hidden unless drawer open) -->
+  <div id="dragHandle" class="w-1 shrink-0 cursor-col-resize bg-white/[0.06] hover:bg-violet-500/50 hidden"></div>
+
+  <!-- Side drawer (closed by default) -->
+  <aside id="drawer" class="w-[420px] shrink-0 border-l border-white/[0.07] bg-[#0d0d14] flex-col min-h-0 hidden">
+    <div id="drawerContent" class="flex flex-col h-full"></div>
+  </aside>
+</main>
+
+<script>
+const COMPANIES = [
+  { name:'Anthropic', host:'anthropic.com',    adapter:'greenhouse', status:'ok',      last:'2h ago',  next:'in 22h', active:true,  history:['ok','ok','ok','ok','ok','ok','ok','ok','ok','ok'] },
+  { name:'Stripe',    host:'stripe.com',       adapter:'greenhouse', status:'running', last:'1m ago',  next:'now',    active:true,  history:['ok','ok','ok','ok','ok','ok','ok','ok','ok','run'] },
+  { name:'Figma',     host:'figma.com',        adapter:'lever',      status:'ok',      last:'5h ago',  next:'in 19h', active:true,  history:['ok','ok','ok','ok','ok','ok','ok','ok','ok','ok'] },
+  { name:'Linear',    host:'linear.app',       adapter:'ashby',      status:'ok',      last:'8h ago',  next:'in 16h', active:true,  history:['ok','ok','ok','ok','ok','ok','ok','ok','ok','ok'] },
+  { name:'Vercel',    host:'vercel.com',       adapter:'greenhouse', status:'error',   last:'3h ago',  next:'in 21h', active:true,  history:['ok','ok','ok','err','err','err','ok','ok','ok','err'] },
+  { name:'Notion',    host:'notion.so',        adapter:'greenhouse', status:'ok',      last:'6h ago',  next:'in 18h', active:true,  history:['ok','ok','ok','ok','ok','ok','ok','ok','ok','ok'] },
+  { name:'Ramp',      host:'ramp.com',         adapter:'lever',      status:'error',   last:'1d ago',  next:'in 1h',  active:true,  history:['ok','ok','ok','ok','ok','ok','err','err','err','err'] },
+  { name:'OpenAI',    host:'openai.com',       adapter:'greenhouse', status:'ok',      last:'4h ago',  next:'in 20h', active:true,  history:['ok','ok','ok','ok','ok','ok','ok','ok','ok','ok'] },
+  { name:'Netflix',   host:'jobs.netflix.com', adapter:'netflix',    status:'queued',  last:'14h ago', next:'up next',active:true,  history:['ok','ok','ok','ok','ok','ok','ok','ok','ok','ok'] },
+  { name:'Apple',     host:'jobs.apple.com',   adapter:'apple',      status:'ok',      last:'12h ago', next:'in 12h', active:true,  history:['ok','ok','ok','ok','ok','ok','ok','ok','ok','ok'] },
+  { name:'Uber',      host:'uber.com/careers', adapter:'uber',       status:'pending', last:'—',       next:'—',      active:false, history:[] },
+  { name:'Meta',      host:'metacareers.com',  adapter:'meta',       status:'ok',      last:'6h ago',  next:'in 18h', active:true,  history:['ok','ok','ok','ok','ok','ok','ok','ok','ok','ok'] },
+];
+
+const ADAPTERS_BASE = ['greenhouse','lever','ashby','google','netflix','uber','apple','meta','microsoft','rippling'];
+const state = { search:'', activeState:'all', statusFilter:'none', adapters:[], allAdapters:[...ADAPTERS_BASE], selected:null };
+
+const avatarColors = ['bg-violet-600','bg-blue-600','bg-emerald-600','bg-amber-600','bg-rose-600','bg-cyan-600','bg-indigo-600','bg-teal-600'];
+function hashColor(s){ let h=0; for (const c of s) h = c.charCodeAt(0) + ((h<<5)-h); return avatarColors[Math.abs(h)%avatarColors.length]; }
+
+function hashInt(s){ let h=0; for (const c of s) h = c.charCodeAt(0) + ((h<<5)-h); return Math.abs(h); }
+
+const TECH_POOL = ['Python','TypeScript','Go','Rust','React','Kubernetes','AWS','PyTorch','LLMs','GraphQL','Postgres','Swift','Kotlin','Ruby'];
+function computeMetrics(c){
+  const h = hashInt(c.name);
+  const totalOpen = c.active ? 40 + (h % 260) : 0;
+  const new24h = c.active ? (h % 9) : 0;
+  const tags = [];
+  const used = new Set();
+  for (let i=0; i<4; i++){
+    let idx = (h + i*7) % TECH_POOL.length;
+    while (used.has(idx)) idx = (idx+1) % TECH_POOL.length;
+    used.add(idx); tags.push(TECH_POOL[idx]);
+  }
+  const counts = tags.map((t,i) => Math.max(3, Math.round(totalOpen * (0.55 - i*0.12))));
+  const max = counts[0] || 1;
+  return {
+    totalOpen,
+    new24h,
+    techTrend: tags.map((tag,i) => ({ tag, count: counts[i], pct: Math.round(counts[i]/max*100) })),
+  };
+}
+
+function statusPill(s){
+  const map = {
+    ok:      `<span class="inline-flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md"><span class="dot ok"></span>OK</span>`,
+    error:   `<span class="inline-flex items-center gap-1.5 text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-md"><span class="dot err"></span>Error</span>`,
+    running: `<span class="inline-flex items-center gap-1.5 text-[11px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-md"><span class="dot run"></span>Running</span>`,
+    queued:  `<span class="inline-flex items-center gap-1.5 text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md"><span class="dot warn"></span>Queued</span>`,
+    pending: `<span class="inline-flex items-center gap-1.5 text-[11px] text-slate-400 bg-white/[0.05] border border-white/[0.08] px-2 py-0.5 rounded-md"><span class="dot idle"></span>Never</span>`,
+  };
+  return map[s] || '';
+}
+
+function historyBar(h) {
+  if (!h || !h.length) return '<span class="text-[10px] text-slate-600">—</span>';
+  return '<div class="scan-history">' + h.map(x => {
+    if (x==='ok')  return '<span class="bg-emerald-500/70" title="OK"></span>';
+    if (x==='err') return '<span class="bg-red-500/80" title="Error"></span>';
+    if (x==='run') return '<span class="bg-blue-500 animate-pulse" title="Running"></span>';
+    return '<span class="bg-white/10"></span>';
+  }).join('') + '</div>';
+}
+
+function avatar(c, size='w-7 h-7 text-[11px]') {
+  return `<div class="${size} rounded-md ${hashColor(c.name)} grid place-items-center font-semibold text-white shrink-0">${c.name[0]}</div>`;
+}
+
+function toggle(c) {
+  return `<button class="relative inline-flex w-9 h-5 rounded-full ${c.active?'bg-violet-600':'bg-white/15'}" onclick="event.stopPropagation()">
+    <span class="absolute top-0.5 w-4 h-4 bg-white rounded-full ${c.active?'translate-x-4':'translate-x-0.5'} transition-transform"></span>
+  </button>`;
+}
+
+function applyFilters(list) {
+  return list.filter(c => {
+    if (state.search && !c.name.toLowerCase().includes(state.search.toLowerCase()) && !c.host.toLowerCase().includes(state.search.toLowerCase())) return false;
+    if (state.activeState === 'active' && !c.active) return false;
+    if (state.activeState === 'inactive' && c.active) return false;
+    if (state.adapters.length && !state.adapters.includes(c.adapter)) return false;
+    if (state.statusFilter !== 'none' && c.status !== state.statusFilter) return false;
+    return true;
+  });
+}
+
+function renderRows() {
+  const filtered = applyFilters(COMPANIES);
+  const rows = document.getElementById('rows');
+  if (!filtered.length) {
+    rows.innerHTML = '<tr><td colspan="8" class="px-6 py-10 text-center text-sm text-slate-500">No companies match the current filters</td></tr>';
+    return;
+  }
+  rows.innerHTML = filtered.map(c => `
+    <tr class="row border-b border-white/[0.04] hover:bg-white/[0.03] ${state.selected===c.name?'bg-violet-500/[0.08]':''}" data-name="${c.name}">
+      <td class="px-6 py-2.5">
+        <div class="flex items-center gap-2.5">
+          ${avatar(c)}
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-white">${c.name}</p>
+            <p class="text-[11px] text-slate-500">${c.host}</p>
+          </div>
+        </div>
+      </td>
+      <td class="px-2 py-2.5"><span class="font-mono text-[11px] text-slate-400 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">${c.adapter}</span></td>
+      <td class="px-2 py-2.5">${statusPill(c.status)}</td>
+      <td class="px-2 py-2.5">${historyBar(c.history)}</td>
+      <td class="px-2 py-2.5 text-xs text-slate-400">${c.last}</td>
+      <td class="px-2 py-2.5 text-xs text-slate-400">${c.next}</td>
+      <td class="px-2 py-2.5">${toggle(c)}</td>
+      <td class="px-2 py-2.5 text-right">
+        <div class="actions flex items-center gap-0.5 justify-end" onclick="event.stopPropagation()">
+          <button class="p-1.5 rounded hover:text-violet-300 hover:bg-violet-500/10 text-slate-500" title="Scan now">⟳</button>
+          <button class="p-1.5 rounded hover:text-white hover:bg-white/[0.06] text-slate-500" title="Edit">✎</button>
+          <button class="p-1.5 rounded hover:text-red-400 hover:bg-red-500/10 text-slate-500" title="Delete">🗑</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+  rows.querySelectorAll('tr.row').forEach(tr => tr.addEventListener('click', () => openDrawer(tr.dataset.name)));
+}
+
+// Drawer
+function openDrawer(name) {
+  state.selected = name;
+  renderRows();
+  const c = COMPANIES.find(x => x.name === name); if (!c) return;
+  document.getElementById('drawer').classList.remove('hidden');
+  document.getElementById('drawer').classList.add('flex');
+  document.getElementById('dragHandle').classList.remove('hidden');
+  const successCount = c.history.filter(x => x==='ok').length;
+  const errorCount = c.history.filter(x => x==='err').length;
+  const successRate = c.history.length ? Math.round(successCount/c.history.length*100) : 0;
+  const metrics = computeMetrics(c);
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="relative px-5 pt-4 pb-3 border-b border-white/[0.07]">
+      <div class="absolute top-3 right-3 flex items-center gap-1">
+        <button class="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10" title="Delete">🗑</button>
+        <button onclick="closeDrawer()" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06]" title="Close">✕</button>
+      </div>
+      <div class="flex items-start gap-3 pr-16">
+        ${avatar(c,'w-9 h-9 text-sm')}
+        <div class="min-w-0 flex-1">
+          <p class="text-base font-semibold text-white leading-tight">${c.name}</p>
+          <p class="text-sm text-slate-400 mt-0.5 truncate">${c.host} · ${c.adapter}</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-1.5 mt-3">
+        ${statusPill(c.status)}
+        <span class="text-xs text-slate-400 bg-white/[0.05] border border-white/[0.07] px-2 py-0.5 rounded-md">Last: ${c.last}</span>
+        <span class="text-xs text-slate-400 bg-white/[0.05] border border-white/[0.07] px-2 py-0.5 rounded-md">Next: ${c.next}</span>
+      </div>
+      <div class="flex items-center gap-2 mt-3">
+        <button class="flex items-center gap-1.5 text-xs text-white bg-violet-600 hover:bg-violet-500 px-2.5 py-1.5 rounded-lg">⟳ Scan now</button>
+        <button class="flex items-center gap-1.5 text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1.5 rounded-lg">✎ Edit</button>
+      </div>
+    </div>
+    <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5 scrollbar-thin">
+      <div>
+        <h3 class="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-2">Last 10 scans</h3>
+        <div class="flex items-center gap-2">
+          ${historyBar(c.history)}
+          <span class="text-xs text-slate-400">${successRate}% success${errorCount?` · ${errorCount} errors`:''}</span>
+        </div>
+      </div>
+      <div>
+        <h3 class="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-2">Activity</h3>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="border border-white/[0.07] rounded-lg px-3 py-2.5">
+            <div class="flex items-baseline gap-1.5">
+              <div class="text-lg font-semibold text-white">${metrics.new24h}</div>
+              <div class="text-[10px] text-emerald-400">new</div>
+            </div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">Last 24 hours</div>
+          </div>
+          <div class="border border-white/[0.07] rounded-lg px-3 py-2.5">
+            <div class="text-lg font-semibold text-white">${metrics.totalOpen}</div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">Open jobs total</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Tech trend</h3>
+          <span class="text-[10px] text-slate-500">last 30d</span>
+        </div>
+        <div class="space-y-1.5">
+          ${metrics.techTrend.map(t => `
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-300 w-20 truncate">${t.tag}</span>
+              <div class="flex-1 h-1.5 bg-white/[0.04] rounded-full overflow-hidden">
+                <div class="h-full bg-violet-500/70 rounded-full" style="width:${t.pct}%"></div>
+              </div>
+              <span class="text-[10px] text-slate-500 w-8 text-right">${t.count}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div>
+        <h3 class="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-2">Recent runs</h3>
+        <div class="space-y-1 text-xs">
+          <div class="flex items-center justify-between border-b border-white/[0.04] py-1.5"><span class="text-slate-300">${c.last}</span><span class="${c.status==='error'?'text-red-400':'text-emerald-400'}">${c.status==='error'?'Error · timeout':'OK · 23 jobs'}</span></div>
+          <div class="flex items-center justify-between border-b border-white/[0.04] py-1.5"><span class="text-slate-300">1d ago</span><span class="text-emerald-400">OK · 23 jobs</span></div>
+          <div class="flex items-center justify-between border-b border-white/[0.04] py-1.5"><span class="text-slate-300">2d ago</span><span class="text-emerald-400">OK · 24 jobs</span></div>
+          <div class="flex items-center justify-between border-b border-white/[0.04] py-1.5"><span class="text-slate-300">3d ago</span><span class="text-emerald-400">OK · 22 jobs</span></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function closeDrawer() {
+  state.selected = null; renderRows();
+  document.getElementById('drawer').classList.add('hidden');
+  document.getElementById('drawer').classList.remove('flex');
+  document.getElementById('dragHandle').classList.add('hidden');
+}
+
+// ---- Segmented switches ----
+function paintSegments() {
+  // active-state
+  document.querySelectorAll('#seg-active button').forEach(b => {
+    const on = b.dataset.val === state.activeState;
+    b.classList.toggle('on', on);
+    b.classList.toggle('emerald', on && b.dataset.val === 'active');
+  });
+  // status
+  document.querySelectorAll('#seg-status button').forEach(b => {
+    const on = b.dataset.val === state.statusFilter;
+    b.classList.toggle('on', on);
+    b.classList.remove('red','blue','amber');
+    if (on && b.dataset.val === 'error')   b.classList.add('red');
+    if (on && b.dataset.val === 'running') b.classList.add('blue');
+    if (on && b.dataset.val === 'queued')  b.classList.add('amber');
+  });
+  // KPI/inline error filter highlight
+  document.getElementById('err-card').classList.toggle('active', state.statusFilter === 'error');
+}
+document.querySelectorAll('#seg-active button').forEach(b => b.addEventListener('click', () => {
+  state.activeState = b.dataset.val; paintSegments(); renderRows();
+}));
+document.querySelectorAll('#seg-status button').forEach(b => b.addEventListener('click', () => {
+  state.statusFilter = b.dataset.val; paintSegments(); renderRows();
+}));
+
+// KPI card + inline errors-count: quick filter
+function toggleErrors() {
+  state.statusFilter = state.statusFilter === 'error' ? 'none' : 'error';
+  paintSegments(); renderRows();
+}
+document.getElementById('err-card').addEventListener('click', toggleErrors);
+document.getElementById('err-inline').addEventListener('click', toggleErrors);
+
+// ---- Adapter dropdown (multi-select + add) ----
+const ddBtn   = document.getElementById('adapter-btn');
+const ddMenu  = document.getElementById('adapter-menu');
+const ddList  = document.getElementById('adapter-list');
+const ddLabel = document.getElementById('adapter-label');
+const ddSearch = document.getElementById('adapter-search');
+const ddNew   = document.getElementById('adapter-new');
+const ddAdd   = document.getElementById('adapter-add-btn');
+
+function renderAdapterList() {
+  const q = ddSearch.value.toLowerCase();
+  const filtered = state.allAdapters.filter(a => a.toLowerCase().includes(q));
+  if (!filtered.length) {
+    ddList.innerHTML = '<p class="px-3 py-3 text-[11px] text-slate-500">No matches</p>';
+    return;
+  }
+  ddList.innerHTML = filtered.map(a => `
+    <div class="dropdown-item ${state.adapters.includes(a)?'selected':''}" data-a="${a}">
+      <div class="check"></div>
+      <span>${a}</span>
+    </div>
+  `).join('');
+  ddList.querySelectorAll('.dropdown-item').forEach(el => el.addEventListener('click', () => {
+    const a = el.dataset.a;
+    if (state.adapters.includes(a)) state.adapters = state.adapters.filter(x => x !== a);
+    else state.adapters = [...state.adapters, a];
+    renderAdapterList(); paintAdapterBtn(); renderRows();
+  }));
+}
+function paintAdapterBtn() {
+  const n = state.adapters.length;
+  ddLabel.textContent = n === 0 ? 'All adapters' : n === 1 ? state.adapters[0] : `${n} adapters`;
+  ddBtn.classList.toggle('has-selected', n > 0);
+}
+ddBtn.addEventListener('click', e => {
+  e.stopPropagation(); ddMenu.classList.toggle('hidden');
+  if (!ddMenu.classList.contains('hidden')) { ddSearch.value=''; renderAdapterList(); ddSearch.focus(); }
+});
+document.addEventListener('click', e => {
+  if (!document.getElementById('adapter-dd').contains(e.target)) ddMenu.classList.add('hidden');
+});
+ddSearch.addEventListener('input', renderAdapterList);
+function addNewAdapter() {
+  const v = ddNew.value.trim().toLowerCase();
+  if (!v) return;
+  if (!state.allAdapters.includes(v)) state.allAdapters.push(v);
+  if (!state.adapters.includes(v))   state.adapters.push(v);
+  ddNew.value = ''; renderAdapterList(); paintAdapterBtn(); renderRows();
+}
+ddAdd.addEventListener('click', addNewAdapter);
+ddNew.addEventListener('keydown', e => { if (e.key === 'Enter') addNewAdapter(); });
+
+// ---- Search + reset ----
+document.getElementById('search').addEventListener('input', e => { state.search = e.target.value; renderRows(); });
+document.getElementById('reset').addEventListener('click', () => {
+  state.search=''; state.activeState='all'; state.statusFilter='none'; state.adapters=[];
+  document.getElementById('search').value='';
+  paintSegments(); paintAdapterBtn(); renderRows();
+});
+
+window.closeDrawer = closeDrawer;
+renderRows();
+paintSegments();
+paintAdapterBtn();
+</script>
+</body>
+</html>

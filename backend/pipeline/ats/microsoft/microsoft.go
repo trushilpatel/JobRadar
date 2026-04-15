@@ -55,7 +55,7 @@ func (m *Microsoft) CareersURL(_ string) string {
 
 // searchResponse is the top-level JSON from /api/pcsx/search.
 type searchResponse struct {
-	Status  string                `json:"status"`
+	Status  any                   `json:"status"`
 	Error   string                `json:"error"`
 	Data    searchResponseData    `json:"data"`
 }
