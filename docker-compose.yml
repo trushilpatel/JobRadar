@@ -247,61 +247,61 @@ services:
 
   # ── Observability ─────────────────────────────────────────────────────────────
 
-  loki:
-    image: grafana/loki:2.9.0
-    container_name: jobradar_loki
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./backend/deploy/loki/loki-config.yml:/etc/loki/local-config.yaml
-      - lokidata:/loki
-    command: -config.file=/etc/loki/local-config.yaml
-    restart: unless-stopped
+#   loki:
+#     image: grafana/loki:2.9.0
+#     container_name: jobradar_loki
+#     ports:
+#       - "3100:3100"
+#     volumes:
+#       - ./backend/deploy/loki/loki-config.yml:/etc/loki/local-config.yaml
+#       - lokidata:/loki
+#     command: -config.file=/etc/loki/local-config.yaml
+#     restart: unless-stopped
 
-  promtail:
-    image: grafana/promtail:2.9.0
-    container_name: jobradar_promtail
-    volumes:
-      - ./backend/deploy/loki/promtail-config.yml:/etc/promtail/config.yml
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    command: -config.file=/etc/promtail/config.yml
-    depends_on:
-      - loki
-    restart: unless-stopped
+#   promtail:
+#     image: grafana/promtail:2.9.0
+#     container_name: jobradar_promtail
+#     volumes:
+#       - ./backend/deploy/loki/promtail-config.yml:/etc/promtail/config.yml
+#       - /var/run/docker.sock:/var/run/docker.sock:ro
+#     command: -config.file=/etc/promtail/config.yml
+#     depends_on:
+#       - loki
+#     restart: unless-stopped
 
-  grafana:
-    image: grafana/grafana:10.4.0
-    container_name: jobradar_grafana
-    ports:
-      - "3001:3000"
-    volumes:
-      - ./backend/deploy/loki/grafana-datasources.yml:/etc/grafana/provisioning/datasources/loki.yml
-      - ./backend/deploy/prometheus/grafana-prometheus-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml
-      - grafanadata:/var/lib/grafana
-    environment:
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-    depends_on:
-      - loki
-    restart: unless-stopped
+#   grafana:
+#     image: grafana/grafana:10.4.0
+#     container_name: jobradar_grafana
+#     ports:
+#       - "3001:3000"
+#     volumes:
+#       - ./backend/deploy/loki/grafana-datasources.yml:/etc/grafana/provisioning/datasources/loki.yml
+#       - ./backend/deploy/prometheus/grafana-prometheus-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml
+#       - grafanadata:/var/lib/grafana
+#     environment:
+#       - GF_AUTH_ANONYMOUS_ENABLED=true
+#       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+#     depends_on:
+#       - loki
+#     restart: unless-stopped
 
-  prometheus:
-    image: prom/prometheus:v2.51.0
-    container_name: jobradar_prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./backend/deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheusdata:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.retention.time=15d'
-    restart: unless-stopped
+#   prometheus:
+#     image: prom/prometheus:v2.51.0
+#     container_name: jobradar_prometheus
+#     ports:
+#       - "9090:9090"
+#     volumes:
+#       - ./backend/deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+#       - prometheusdata:/prometheus
+#     command:
+#       - '--config.file=/etc/prometheus/prometheus.yml'
+#       - '--storage.tsdb.retention.time=15d'
+#     restart: unless-stopped
 
-volumes:
-  pgdata:
-  kafkadata:
-  lokidata:
-  grafanadata:
-  prometheusdata:
+# volumes:
+#   pgdata:
+#   kafkadata:
+#   lokidata:
+#   grafanadata:
+#   prometheusdata:
 
