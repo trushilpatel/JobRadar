@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JobRadar — My Jobs Dashboard</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Design tokens (light) ── */
+:root {
+  --color-background-primary:    #ffffff;
+  --color-background-secondary:  #f5f4ef;
+  --color-background-tertiary:   #eceae3;
+  --color-background-info:       #e6f1fb;
+  --color-background-success:    #e1f5ee;
+  --color-background-warning:    #faeeda;
+  --color-background-danger:     #fcebeb;
+  --color-text-primary:          #1a1a18;
+  --color-text-secondary:        #4a4a47;
+  --color-text-tertiary:         #73726c;
+  --color-text-info:             #0c447c;
+  --color-text-success:          #0f6e56;
+  --color-text-warning:          #854f0b;
+  --color-text-danger:           #a32d2d;
+  --color-border-tertiary:       rgba(0,0,0,0.10);
+  --color-border-secondary:      rgba(0,0,0,0.18);
+  --color-border-primary:        rgba(0,0,0,0.28);
+  --color-border-info:           #378add;
+  --border-radius-md:            8px;
+  --border-radius-lg:            12px;
+  --font-sans:                   -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+/* ── Dark mode tokens ── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background-primary:    #1c1c1a;
+    --color-background-secondary:  #242422;
+    --color-background-tertiary:   #2c2c2a;
+    --color-background-info:       #042c53;
+    --color-background-success:    #04342c;
+    --color-background-warning:    #412402;
+    --color-background-danger:     #501313;
+    --color-text-primary:          #e8e6de;
+    --color-text-secondary:        #c2c0b6;
+    --color-text-tertiary:         #9c9a92;
+    --color-text-info:             #b5d4f4;
+    --color-text-success:          #9fe1cb;
+    --color-text-warning:          #fac775;
+    --color-text-danger:           #f09595;
+    --color-border-tertiary:       rgba(255,255,255,0.10);
+    --color-border-secondary:      rgba(255,255,255,0.18);
+    --color-border-primary:        rgba(255,255,255,0.28);
+  }
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
+  min-height: 100vh;
+  padding: 24px;
+}
+
+/* ── Page header ── */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.page-title { font-size: 20px; font-weight: 500; }
+.page-sub { font-size: 12px; color: var(--color-text-tertiary); margin-top: 2px; }
+.header-badges { display: flex; gap: 6px; }
+
+/* ── Dashboard grid ── */
+.dashboard { display: flex; flex-direction: column; gap: 12px; }
+.row-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* ── Section (tinted group container) ── */
+.section {
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 20px 24px;
+}
+.section-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+  margin-bottom: 16px;
+}
+
+/* ── Vertical divider ── */
+.vdiv {
+  width: 0.5px;
+  background: var(--color-border-tertiary);
+  align-self: stretch;
+}
+
+/* ── Stat (my progress + market) ── */
+.stats-row { display: flex; align-items: stretch; }
+.stat { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 0 20px; }
+.stat:first-child { padding-left: 0; }
+.stat:last-child  { padding-right: 0; }
+.stat-label {
+  font-size: 10px; font-weight: 500; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--color-text-tertiary);
+}
+.stat-val  { font-size: 36px; font-weight: 500; line-height: 1; }
+.stat-sub  { font-size: 11px; color: var(--color-text-tertiary); }
+
+/* ── Heatmap ── */
+.heatmap-months { display: grid; gap: 3px; margin-bottom: 4px; }
+.heatmap-grid   { display: grid; gap: 3px; }
+.heatmap-cell {
+  border-radius: 3px; aspect-ratio: 1;
+  cursor: pointer; transition: opacity .1s;
+}
+.heatmap-cell:hover { opacity: .75; }
+.month-label { font-size: 10px; color: var(--color-text-tertiary); text-align: center; }
+.heatmap-footer {
+  display: flex; align-items: center;
+  justify-content: space-between; margin-top: 12px;
+}
+.heatmap-tooltip { font-size: 12px; color: var(--color-text-secondary); min-height: 18px; }
+.heatmap-legend  { display: flex; align-items: center; gap: 6px; }
+.legend-label    { font-size: 11px; color: var(--color-text-tertiary); }
+.legend-swatches { display: flex; gap: 3px; }
+.legend-swatch   { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+
+/* ── Interview tracker ── */
+.tracker-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 0; border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+.tracker-row:last-child { border-bottom: none; }
+.tracker-co   { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+.tracker-role { font-size: 11px; color: var(--color-text-tertiary); margin-top: 1px; }
+
+.pill {
+  padding: 2px 8px; border-radius: 20px; font-size: 11px;
+  font-weight: 500; cursor: pointer; border: none; flex-shrink: 0;
+}
+.pill:hover { opacity: .85; }
+.pill-i { background: #EEEDFE; color: #3C3489; }
+.pill-w { background: #F1EFE8; color: #5F5E5A; }
+.pill-o { background: #EAF3DE; color: #3B6D11; }
+@media (prefers-color-scheme: dark) {
+  .pill-i { background: #26215C; color: #CECBF6; }
+  .pill-w { background: #2C2C2A; color: #D3D1C7; }
+  .pill-o { background: #173404; color: #C0DD97; }
+}
+
+.dropdown {
+  display: none; position: absolute; right: 0; top: 26px;
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  z-index: 10; min-width: 148px; overflow: hidden;
+}
+.dropdown.open { display: block; }
+.ditem {
+  padding: 6px 10px; font-size: 11px; cursor: pointer;
+  color: var(--color-text-primary);
+  display: flex; align-items: center; gap: 6px;
+}
+.ditem:hover   { background: var(--color-background-secondary); }
+.ditem.current { background: var(--color-background-secondary); }
+.ditem-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Velocity table ── */
+.v-header {
+  font-size: 10px; color: var(--color-text-tertiary);
+  padding-bottom: 8px; border-bottom: 0.5px solid var(--color-border-tertiary);
+  display: grid; grid-template-columns: 1fr 60px 70px 36px; gap: 12px;
+}
+.v-row {
+  display: grid; grid-template-columns: 1fr 60px 70px 36px;
+  align-items: center; gap: 12px;
+  padding: 9px 0; border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+.v-row:last-child { border-bottom: none; }
+.vbadge {
+  display: inline-block; padding: 2px 8px;
+  border-radius: 20px; font-size: 11px; font-weight: 500; flex-shrink: 0;
+}
+.v-spike  { background: #FAEEDA; color: #854F0B; }
+.v-rising { background: #E1F5EE; color: #0F6E56; }
+.v-normal { background: #F1EFE8; color: #5F5E5A; }
+@media (prefers-color-scheme: dark) {
+  .v-spike  { background: #412402; color: #FAC775; }
+  .v-rising { background: #04342C; color: #9FE1CB; }
+  .v-normal { background: #2C2C2A; color: #D3D1C7; }
+}
+.sparkline { display: flex; align-items: flex-end; gap: 2px; height: 22px; }
+.spark-bar { border-radius: 2px; }
+
+/* ── Tech stack ── */
+.tech-cols { display: flex; align-items: stretch; }
+.tech-col  { flex: 1; }
+.tech-col:first-child { padding-right: 24px; }
+.tech-col:last-child  { padding-left: 24px; }
+.tech-col-title {
+  font-size: 13px; font-weight: 500;
+  color: var(--color-text-primary); margin-bottom: 2px;
+}
+.tech-col-criteria {
+  font-size: 10px; color: var(--color-text-tertiary);
+  padding-bottom: 8px;
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+  margin-bottom: 4px;
+}
+.tech-col-header {
+  display: flex; align-items: center; gap: 10px;
+  padding-bottom: 6px; font-size: 10px; color: var(--color-text-tertiary);
+  border-bottom: 0.5px solid var(--color-border-tertiary); margin-bottom: 0;
+}
+.q-labels { display: flex; gap: 3px; flex-shrink: 0; }
+.q-lbl { font-size: 10px; color: var(--color-text-tertiary); width: 22px; text-align: center; }
+.tech-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+.tech-row:last-child { border-bottom: none; }
+.tech-name  { font-size: 13px; font-weight: 500; color: var(--color-text-primary); flex: 1; }
+.tech-delta { font-size: 11px; font-weight: 500; min-width: 44px; text-align: right; flex-shrink: 0; }
+.tech-delta.up { color: var(--color-text-success); }
+.tspark { display: flex; align-items: flex-end; gap: 3px; height: 20px; flex-shrink: 0; }
+.tspark-bar { border-radius: 2px; }
+
+/* ── Badges ── */
+.badge {
+  display: inline-block; padding: 2px 8px;
+  border-radius: 20px; font-size: 11px; font-weight: 500;
+}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <div class="page-title">JobRadar</div>
+    <div class="page-sub" id="page-date"></div>
+  </div>
+  <div class="header-badges">
+    <span class="badge" style="background:#E1F5EE;color:#0F6E56">3 new jobs</span>
+    <span class="badge" style="background:#FAEEDA;color:#854F0B">1 spike</span>
+  </div>
+</div>
+
+<div class="dashboard">
+
+  <!-- ROW 1: My Progress + Market -->
+  <div class="row-2col">
+
+    <div class="section">
+      <p class="section-label">my progress</p>
+      <div class="stats-row">
+        <div class="stat">
+          <span class="stat-label">Applied</span>
+          <span class="stat-val" style="color:#1D9E75">8</span>
+          <span class="stat-sub">3 awaiting reply</span>
+        </div>
+        <div class="vdiv"></div>
+        <div class="stat">
+          <span class="stat-label">Interviewing</span>
+          <span class="stat-val" style="color:#534AB7">3</span>
+          <span class="stat-sub">1 this week</span>
+        </div>
+        <div class="vdiv"></div>
+        <div class="stat">
+          <span class="stat-label">Offer</span>
+          <span class="stat-val" style="color:#BA7517">1</span>
+          <span class="stat-sub">decision pending</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <p class="section-label">market</p>
+      <div class="stats-row">
+        <div class="stat">
+          <span class="stat-label">New jobs</span>
+          <span class="stat-val" style="color:#378ADD">12</span>
+          <span class="stat-sub">since yesterday</span>
+        </div>
+        <div class="vdiv"></div>
+        <div class="stat">
+          <span class="stat-label">Total open</span>
+          <span class="stat-val">847</span>
+          <span class="stat-sub">+64 this week</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ROW 2: Hiring Activity -->
+  <div class="section">
+    <p class="section-label">hiring activity — all watched companies</p>
+    <div class="heatmap-months" id="month-row"></div>
+    <div class="heatmap-grid"   id="heatmap"></div>
+    <div class="heatmap-footer">
+      <div class="heatmap-tooltip" id="tooltip">hover any week to see details</div>
+      <div class="heatmap-legend">
+        <span class="legend-label">fewer</span>
+        <div class="legend-swatches" id="legend"></div>
+        <span class="legend-label">more</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 3: Interviewing + Velocity -->
+  <div class="row-2col">
+
+    <div class="section">
+      <p class="section-label">interviewing</p>
+      <div id="ilist"></div>
+    </div>
+
+    <div class="section">
+      <p class="section-label">top companies by velocity</p>
+      <div class="v-header">
+        <span>company</span>
+        <span>velocity</span>
+        <span style="text-align:center">4 weeks</span>
+        <span style="text-align:right">new</span>
+      </div>
+      <div id="vlist"></div>
+    </div>
+
+  </div>
+
+  <!-- ROW 4: Tech Stack Trends -->
+  <div class="section">
+    <p class="section-label">tech stack trends — by company adoption · 23 companies watched</p>
+    <div class="tech-cols">
+
+      <div class="tech-col">
+        <p class="tech-col-title">Rising</p>
+        <p class="tech-col-criteria">&gt;15% of companies · grew &gt;15% vs last quarter</p>
+        <div class="tech-col-header">
+          <span style="flex:1">technology</span>
+          <div class="q-labels">
+            <span class="q-lbl">Q3</span><span class="q-lbl">Q4</span>
+            <span class="q-lbl">Q1</span><span class="q-lbl">Q2</span>
+          </div>
+          <span style="min-width:44px;text-align:right">growth</span>
+        </div>
+        <div id="rising-list"></div>
+      </div>
+
+      <div class="vdiv"></div>
+
+      <div class="tech-col">
+        <p class="tech-col-title">New entrants</p>
+        <p class="tech-col-criteria">&gt;15% of companies · was &lt;5% last quarter</p>
+        <div class="tech-col-header">
+          <span style="flex:1">technology</span>
+          <div class="q-labels">
+            <span class="q-lbl">Q3</span><span class="q-lbl">Q4</span>
+            <span class="q-lbl">Q1</span><span class="q-lbl">Q2</span>
+          </div>
+          <span style="min-width:44px;text-align:right">% co.</span>
+        </div>
+        <div id="new-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Date
+const now = new Date();
+document.getElementById('page-date').textContent =
+  now.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}) +
+  ' · last crawl 18 min ago';
+
+const isDark = matchMedia('(prefers-color-scheme:dark)').matches;
+
+// ── Heatmap ──
+const hc = isDark
+  ? ['#2C2C2A','#085041','#0F6E56','#1D9E75','#5DCAA5']
+  : ['#F1EFE8','#9FE1CB','#5DCAA5','#1D9E75','#0F6E56'];
+
+const COLS=26, WEEKS=52, EMPTY=COLS*2-WEEKS;
+const MONTHS=['May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr'];
+
+const weekData = Array.from({length:WEEKS},(_,i)=>{
+  const base  = 28 + Math.sin(i*0.35)*12;
+  const spike = (i>18&&i<24)||(i>38&&i<44) ? 30 : 0;
+  const dip   = i>46 ? -10 : 0;
+  return Math.max(0, Math.round(base+spike+dip+Math.random()*8-4));
+});
+const mxW = Math.max(...weekData);
+
+const hmGrid = document.getElementById('heatmap');
+hmGrid.style.gridTemplateColumns = `repeat(${COLS},1fr)`;
+const hmMonths = document.getElementById('month-row');
+hmMonths.style.gridTemplateColumns = `repeat(${COLS},1fr)`;
+
+for(let c=0;c<COLS;c++){
+  const el = document.createElement('div');
+  el.className = 'month-label';
+  el.textContent = (c%4===0) ? MONTHS[Math.min(Math.round((c/COLS)*12),11)] : '';
+  hmMonths.appendChild(el);
+}
+for(let i=0;i<EMPTY;i++){
+  const c=document.createElement('div');
+  c.style.cssText='aspect-ratio:1;background:transparent';
+  hmGrid.appendChild(c);
+}
+weekData.forEach((v,i)=>{
+  const idx = v===0 ? 0 : Math.min(4,Math.floor((v/mxW)*4.5)+1);
+  const c = document.createElement('div');
+  c.className = 'heatmap-cell';
+  c.style.background = hc[idx];
+  const mIdx = Math.min(Math.floor((i/WEEKS)*12),11);
+  c.title = `${MONTHS[mIdx]} week ${(i%4)+1} — ${v} new jobs`;
+  c.onmouseenter = ()=>{ document.getElementById('tooltip').textContent = c.title; };
+  c.onmouseleave = ()=>{ document.getElementById('tooltip').textContent = 'hover any week to see details'; };
+  hmGrid.appendChild(c);
+});
+const lgEl = document.getElementById('legend');
+hc.forEach(col=>{
+  const s=document.createElement('span');
+  s.className='legend-swatch';
+  s.style.background=col;
+  lgEl.appendChild(s);
+});
+
+// ── Interview tracker ──
+const STAGES = [
+  {key:'i', label:'Interviewing',  dot:'#7F77DD', cls:'pill-i'},
+  {key:'w', label:'Waiting',       dot:'#888780', cls:'pill-w'},
+  {key:'o', label:'Offer received',dot:'#639922', cls:'pill-o'},
+];
+let apps = [
+  {id:1, co:'Stripe', role:'Senior SWE, Payments',     stage:'i'},
+  {id:2, co:'Vercel', role:'Staff Eng, Infrastructure', stage:'o'},
+  {id:3, co:'Linear', role:'SWE, Core Product',         stage:'w'},
+  {id:4, co:'Figma',  role:'Backend Eng',               stage:'i'},
+];
+
+function renderInterviews(){
+  document.getElementById('ilist').innerHTML = apps.map(a=>{
+    const s = STAGES.find(x=>x.key===a.stage);
+    return `<div class="tracker-row">
+      <div style="flex:1;min-width:0">
+        <div class="tracker-co">${a.co}</div>
+        <div class="tracker-role">${a.role}</div>
+      </div>
+      <div style="position:relative">
+        <button class="pill ${s.cls}" onclick="toggleDD(${a.id},event)">${s.label} ▾</button>
+        <div class="dropdown" id="dd-${a.id}">
+          ${STAGES.map(st=>`
+            <div class="ditem ${a.stage===st.key?'current':''}" onclick="setStage(${a.id},'${st.key}')">
+              <span class="ditem-dot" style="background:${st.dot}"></span>${st.label}
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleDD(id,e){
+  e.stopPropagation();
+  document.querySelectorAll('.dropdown').forEach(d=>{
+    if(d.id!=='dd-'+id) d.classList.remove('open');
+  });
+  document.getElementById('dd-'+id).classList.toggle('open');
+}
+function setStage(id,stage){
+  apps = apps.map(a=>a.id===id?{...a,stage}:a);
+  document.querySelectorAll('.dropdown').forEach(d=>d.classList.remove('open'));
+  renderInterviews();
+}
+document.addEventListener('click',()=>{
+  document.querySelectorAll('.dropdown').forEach(d=>d.classList.remove('open'));
+});
+
+// ── Velocity ──
+const vSC = '#1D9E75';
+const vSD = isDark ? '#2C2C2A' : '#E1F5EE';
+const vData = [
+  {co:'Stripe', cls:'v-spike',  label:'3×',   spark:[3,4,4,14], n:14},
+  {co:'Vercel', cls:'v-spike',  label:'2.8×',  spark:[3,4,3,9],  n:9},
+  {co:'Linear', cls:'v-rising', label:'1.6×',  spark:[3,3,3,5],  n:5},
+  {co:'Figma',  cls:'v-rising', label:'1.4×',  spark:[3,4,3,4],  n:4},
+  {co:'Notion', cls:'v-normal', label:'1×',    spark:[2,2,2,1],  n:1},
+];
+const vList = document.getElementById('vlist');
+vData.forEach(v=>{
+  const mx = Math.max(...v.spark);
+  const barsHTML = v.spark.map((val,i)=>{
+    const h = Math.max(3,Math.round((val/mx)*22));
+    const bg = i===v.spark.length-1 ? vSC : vSD;
+    return `<div class="spark-bar" style="width:8px;height:${h}px;background:${bg}"></div>`;
+  }).join('');
+  const row = document.createElement('div');
+  row.className = 'v-row';
+  row.innerHTML = `
+    <span style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${v.co}</span>
+    <span class="vbadge ${v.cls}">${v.label}</span>
+    <div class="sparkline" style="justify-content:center">${barsHTML}</div>
+    <div style="font-size:13px;font-weight:500;color:var(--color-text-success);text-align:right">+${v.n}</div>`;
+  vList.appendChild(row);
+});
+
+// ── Tech stack ──
+const TOTAL = 23;
+const tSC  = '#534AB7'; const tSD  = isDark ? '#3C3489' : '#EEEDFE';
+const tSCN = '#1D9E75'; const tSDN = isDark ? '#085041' : '#E1F5EE';
+
+function tSpark(values,color,dim){
+  const mx=Math.max(...values,1);
+  return `<div class="tspark">${values.map((v,i)=>{
+    const h=Math.max(2,Math.round((v/mx)*20));
+    const bg=i===values.length-1?color:dim;
+    return `<div class="tspark-bar" style="width:22px;height:${h}px;background:${bg}"></div>`;
+  }).join('')}</div>`;
+}
+function pct(n){ return Math.round((n/TOTAL)*100); }
+
+const risingTechs = {
+  'Rust':      [3,4,7,14], 'LLM / AI':  [2,5,9,18], 'Go':        [8,9,11,16],
+  'Temporal':  [2,4,7,12], 'Terraform': [8,9,11,15], 'TypeScript':[13,14,16,20],
+  'dbt':       [3,4,7,11], 'Wasm':      [1,3,6,10],  'Kubernetes':[10,11,13,17], 'Zig':[1,3,6,10],
+};
+const newEntrants = [
+  {tech:'Cursor',   quarters:[0,0,1,5]}, {tech:'LangChain',quarters:[0,0,1,6]},
+  {tech:'Bun',      quarters:[0,0,1,5]}, {tech:'Deno',     quarters:[0,0,1,4]},
+  {tech:'Temporal', quarters:[0,0,1,4]}, {tech:'Wasm',     quarters:[0,1,1,4]},
+  {tech:'Zig',      quarters:[0,0,1,4]}, {tech:'Neon',     quarters:[0,0,0,3]},
+  {tech:'Turso',    quarters:[0,0,0,3]}, {tech:'Oxlint',   quarters:[0,0,0,3]},
+];
+
+const rEntries = Object.entries(risingTechs)
+  .map(([tech,q])=>({tech,quarters:q,now:q[3],prev:q[2]}))
+  .filter(d=>pct(d.now)>15 && d.prev>0 && ((d.now-d.prev)/d.prev)>0.15)
+  .sort((a,b)=>(b.now-b.prev)/b.prev-(a.now-a.prev)/a.prev)
+  .slice(0,10);
+
+document.getElementById('rising-list').innerHTML = rEntries.map(d=>{
+  const growth = Math.round(((d.now-d.prev)/d.prev)*100);
+  return `<div class="tech-row">
+    <span class="tech-name">${d.tech}</span>
+    ${tSpark(d.quarters,tSC,tSD)}
+    <span class="tech-delta up">+${growth}%</span>
+  </div>`;
+}).join('');
+
+document.getElementById('new-list').innerHTML = newEntrants.slice(0,10).map(d=>`
+  <div class="tech-row">
+    <span class="tech-name">${d.tech}</span>
+    ${tSpark(d.quarters,tSCN,tSDN)}
+    <span class="tech-delta" style="color:var(--color-text-tertiary)">${pct(d.quarters[3])}%</span>
+  </div>`).join('');
+
+renderInterviews();
+</script>
+</body>
+</html>
