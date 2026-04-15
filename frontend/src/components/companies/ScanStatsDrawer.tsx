@@ -60,21 +60,21 @@ export function ScanStatsDrawer({ company, onClose }: Props) {
                 />
               </div>
 
-              {stats.error_count > 0 && (
+              {(stats.error_count ?? 0) > 0 && (
                 <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
                   <XCircle size={14} className="text-red-400 shrink-0" />
-                  <span className="text-sm text-red-300">{stats.error_count} scan{stats.error_count !== 1 ? 's' : ''} failed</span>
+                  <span className="text-sm text-red-300">{stats.error_count ?? 0} scan{(stats.error_count ?? 0) !== 1 ? 's' : ''} failed</span>
                 </div>
               )}
 
               {/* Recent runs */}
               <div>
                 <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">Recent Scans</h3>
-                {stats.recent_runs.length === 0 ? (
+                {(stats.recent_runs ?? []).length === 0 ? (
                   <p className="text-sm text-slate-500">No scans yet</p>
                 ) : (
                   <div className="space-y-2">
-                    {stats.recent_runs.map(run => (
+                    {(stats.recent_runs ?? []).map(run => (
                       <div key={run.id} className="flex items-center gap-3 bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5">
                         <div className="shrink-0">
                           {run.error

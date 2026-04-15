@@ -35,6 +35,12 @@ Files are numbered sequentially: `001_`, `002_`, etc.
 | `company_scan_queue` | `014_company_scan_queue.sql` |
 | scan queue priority | `015_scan_queue_priority.sql` |
 | `job_feed.responsibilities` → JSONB | `016_responsibilities_jsonb.sql` |
+| add google adapter type | `017_add_google_adapter.sql` |
+| remove deprecated adapters | `018_remove_deprecated_adapters.sql` |
+| add netflix adapter type | `019_add_netflix_adapter.sql` |
+| add uber adapter type | `020_add_uber_adapter.sql` |
+| add microsoft/rippling/apple/meta adapter types | `021_add_new_adapters.sql` |
+| seed microsoft/meta/apple/rippling company rows | `022_seed_new_companies.sql` |
 
 ## Rules
 

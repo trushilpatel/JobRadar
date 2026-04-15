@@ -1,109 +1,89 @@
-# JobRadar PM Priorities — 2026-04-13 (refresh)
+# JobRadar PM Priorities — 2026-04-13 (evening refresh, UI + filter polish)
 
 ## 1. State of the product
 
-Pipeline works end-to-end: scheduler → crawler → LLM filter → analyzer → `job_feed`, with React UI across Dashboard, Jobs, Companies, Applications, Insights. Prometheus/Loki/Grafana observability shipped (`9b4eaa5`). ATS coverage expanded heavily last week: Google, Netflix, Uber, Apple, Meta, Microsoft, Rippling (`b3504c3`, `d318ddf`). New in flight (uncommitted on `main`): a **service-oriented architecture refactor** — typed request/response envelopes (`backend/api/request`, `backend/api/response`), a `backend/service/` layer with `company` already scaffolded (handler + validator + service + store + wire DI), and a 586-line approved design doc at `docs/superpowers/specs/2026-04-13-service-oriented-architecture-design.md`. Only `company` is done; `job/`, `application/`, `dashboard/`, `insights/`, `scan/` are empty folders. Biggest strategic gap is still: no auth, no hosted URL, no user profile driving the filter, LLM cost unmetered. Zero TODO/FIXME markers in Go code — discipline is good.
+Pipeline runs end-to-end for one user: scheduler → crawler → Gemini filter → analyzer → `job_feed`, with five React pages (Dashboard 312 loc, Jobs 821 loc, Companies 336 loc, Applications 420 loc, Insights 409 loc). SOA refactor merged this morning (`c4c0423`); pagination landed (`197e10c`); ATS coverage spans Greenhouse/Lever/Ashby/Google plus Apple, Meta, MSFT, Netflix, Uber, Rippling. Observability wired. Working tree clean.
 
-## 2. Top 5 prioritized initiatives
+Strategy tonight: **harden what exists** — the crawler is not running today, so the analyzer-accuracy eval is parked until tomorrow and the four initiatives below are the focus. Three of the four (Jobs/Dashboard/Companies UI) have zero dependency on a live crawler, so they can be shipped cleanly this evening. Filter simplification is a pure code refactor; validation waits a day. Multi-user, auth, tailoring, notifications — all remain deferred.
 
-### #1 — Finish the SOA refactor (or stop it)
-**Why #1:** The `backend/service/` tree is half-built on a dirty worktree. Every other initiative below touches API handlers or stores — merging anything on top of a half-migrated architecture will triple rework. This wasn't on yesterday's list because the refactor hadn't started yet; it now dominates because it blocks all downstream API work (profile endpoint #2, tailor endpoint #5, waitlist handler in #3). Call: finish it this week, don't let it rot.
+## 2. Top 4 prioritized initiatives
 
-**Success criterion:** All 6 domains (`company`, `job`, `application`, `dashboard`, `insights`, `scan`) migrated to the 4-layer pattern; old fat handlers deleted; `go test ./...` green; tree commits cleanly.
+### #1 — Simplify the relevance filter
+**Why #1:** User-reported complexity. A smaller, more predictable filter is a prerequisite to trusting every downstream view. Also cuts LLM spend. Code-only refactor — safe to land today even without the crawler running; full pipeline validation runs tomorrow against the analyzer eval.
+
+**Success criterion:** `pipeline/filter/worker.go` drops from 189 LOC to ≤100; scoring prompt reduced to one paragraph + a 5-item rubric; every reject carries a single-string reason surfaced in the UI tooltip; `go test ./pipeline/filter/...` stays green.
 
 **Subtasks:**
-1. Commit current `company` service + request/response scaffolding as a single logical commit. ~30 min.
-2. Port `job` domain (highest endpoint count) using `company` as template — files: `service/job/{handler,validator,service,store,wire}.go`. ~90 min.
-3. Port `application` and `dashboard` domains (smaller surface). ~90 min.
-4. Port `insights` and `scan`. ~60 min.
-5. Delete old handler files in `backend/api/handler/` once parity confirmed; update `cmd/api` wiring. ~30 min.
-6. Add one service-layer test per domain mirroring `service/company/service_test.go`. ~60 min.
+1. Read `filter/worker.go` end-to-end; inventory every branching decision in `Designs/filter-simplification.md`. ~30 min.
+2. Collapse scoring into one template `pipeline/llm/prompts/score.go`; remove any title-stage vs body-stage split. ~60 min.
+3. Return `{score, reason}` only — drop multi-dimensional score tuples. Migrate `job_pipeline_ledger.reason` to hold the string. ~45 min.
+4. Delete dead branches, helpers, and tests that exist only to cover them. Run `go vet` + the package test. ~30 min.
+5. Surface `reason` on the Jobs UI rejection tooltip (read-only). ~30 min.
+6. Rewrite `pipeline/filter/CLAUDE.md` against the new contract. ~20 min.
 
-**Effort:** ~6h
-**Risks:** Scope creep — refactor must not add new endpoints. Wire DI churn on every domain addition.
+**Effort:** ~3.5h · **Risks:** Behavior drift — keep old prompt in git for one week; re-run analyzer eval tomorrow once crawler is back. Simplifying too aggressively can drop recall; explicitly watch the pass-rate before/after.
 
 ---
 
-### #2 — User Profile-Driven Relevance Filter
-**Why #2:** The filter is still hardcoded to one developer's preferences; no outsider gets useful matches. This is the single largest blocker to letting anyone else try JobRadar, and the structural moat vs. Simplify/Teal (keyword-only) and LinkedIn (behavioral only). Also a cost lever: a hard-constraint pre-filter cuts Gemini calls before they happen. Now unblocked to ship onto the new service layer cleanly.
+### #2 — Jobs page UI overhaul
+**Why #2:** Jobs is the workhorse screen (821 LOC today — almost certainly bloated). This is where the single user spends most of their time. With the reject-reason from #1 available, the table can finally show "why was this filtered?" on hover. Fully achievable tonight with no crawler.
 
-**Success criterion:** User submits resume text + 6 preference fields; `job_listing_relevance_filter` injects the profile into the Gemini prompt; two distinct profiles produce measurably different pass-rates on the same 100-job corpus.
+**Success criterion:** Single-screen table answers "what's new, what's worth my time" in under 5 seconds. Keyboard-driven: `j/k` navigate, `s` save, `a` apply, `d` dismiss. Filters persisted in URL. Detail drawer on click.
 
 **Subtasks:**
-1. Migration `022_user_profiles.sql`: `(id, resume_text, target_roles[], locations[], min_comp, needs_sponsorship, seniority, yoe, updated_at)`.
-2. `store/user_profiles.go` Get/Upsert. ~45 min.
-3. `service/profile/` scaffold (handler+validator+service+store+wire) following SOA pattern. ~90 min.
-4. Extend `pipeline/llm/Scorer` interface to accept `*UserProfile`; update `gemini.go` prompt. ~60 min.
-5. Pre-LLM cheap-reject in `pipeline/filter/` on hard constraints (location, sponsorship, comp floor); log reason via `logger/fields.go`. ~60 min.
-6. Frontend `ProfilePage.tsx` — resume textarea + prefs form, POST `/profile`. ~90 min.
+1. Inventory `JobsPage.tsx` + `jobs-columns.tsx`; list every existing column and split "keep / drop / redesign." ~30 min.
+2. Redesign column set — Company (logo+name), Title, Comp, Location, Age, Score (colored badge), Actions. Update `jobs-columns.tsx`. ~75 min.
+3. Slide-over detail drawer — full JD, tech-stack chips, responsibilities bullets, action bar. New `JobDetailDrawer.tsx`. ~90 min.
+4. URL-synced filters: query params for status, company, min-score, posted-since. ~60 min.
+5. Keyboard shortcuts via one `useHotkeys` hook; `?` shows the legend. ~45 min.
+6. Empty, loading, and error states reviewed and consistent. ~30 min.
 
-**Effort:** ~9h
-**Risks:** Prompt-shape change may regress scoring — A/B 24h on raw topic before flipping. PDF parsing deferred to v2.
+**Effort:** ~5.5h · **Risks:** Breaking the current mental model — ship behind a `?v=2` query flag for the first day. Chip overflow on narrow widths; define breakpoint behavior.
 
 ---
 
-### #3 — Deploy a hosted alpha + landing page with waitlist
-**Why #3:** Observability is done, Dockerfiles exist, and the SOA refactor gives a stable API surface to expose. Without a URL we cannot validate relevance quality against real users. A live `app.jobradar.app` (basic auth) plus marketing page is the gate to every distribution play (Reddit, IH, PH).
+### #3 — Dashboard + Insights clarity pass
+**Why #3:** Dashboard (312 LOC) is the first screen on login; today it dumps six stat tiles with no narrative. It should answer three questions in one glance: "Did anything happen overnight?", "What should I act on first?", "Is the pipeline healthy?" Insights (409 LOC) needs one-sentence commentary per chart or the user skims past.
 
-**Success criterion:** `jobradar.app` resolves with value prop + waitlist capture; staging app on `app.jobradar.app` behind basic auth; first 5 waitlist emails captured in a `waitlist` table.
+**Success criterion:** Dashboard renders under 300 LOC after extracting reusable `StatTile` and `PipelineHealth` components. Top of the page is a "Today's focus" card listing ≤5 high-score `new` jobs that link into the Jobs drawer. Insights charts each carry a single-sentence `<figcaption>` explaining the trend.
 
 **Subtasks:**
-1. Pick hosting: Fly.io (backend+managed Postgres), Vercel (frontend), Upstash Redpanda or single-node Kafka on Fly. Decision doc `Designs/deployment.md`. ~30 min.
-2. `fly.toml` for api / crawler / scheduler / analyzer / filter (5 machines). ~90 min.
-3. Migrate secrets out of `docker-compose.yml` env blocks into Fly secrets; verify local compose still boots. ~60 min.
-4. Single-page `LandingPage.tsx` — hero, 3 screenshots, email capture → `POST /waitlist`. ~60 min.
-5. `waitlist` table + handler via new SOA pattern. ~30 min.
-6. Buy domain + TLS + basic-auth middleware on app subdomain. ~60 min.
+1. Extract `components/StatTile.tsx` and `components/PipelineHealth.tsx`; unit-test the render. ~45 min.
+2. Rebuild DashboardPage as: Today's Focus (top), 4-stat row (middle), Pipeline Health (bottom). ~75 min.
+3. `GET /dashboard/focus` endpoint in `service/dashboard/` — top 5 `new` jobs ordered by score desc, age asc. ~45 min.
+4. Insights: plain-string `<figcaption>` generator driven by the metric delta (no LLM). ~30 min.
+5. Visual polish — consistent badge colors, skeleton loaders, spacing-scale audit. ~60 min.
 
-**Effort:** ~7h
-**Risks:** Kafka hosting cost; cap at $50/mo — drop to single-node Redpanda if Upstash bites. Fly free-tier cold-start may confuse testers.
+**Effort:** ~4.5h · **Risks:** "Today's focus" feels stale if scans didn't run — always render a prominent last-scan timestamp alongside. Since the crawler is off today, test with seeded data.
 
 ---
 
-### #4 — LLM cost instrumentation + batch tuning
-**Why #4:** ~3k LLM calls/day/user projected; zero visibility into $/job today. We need a meter and a circuit breaker before any waitlist user joins, otherwise we can't answer "what's our margin?" or prevent a runaway bill. Preempts the most common launch-day failure mode for LLM products.
+### #4 — Companies page + scan-health surfacing
+**Why #4:** Companies (336 LOC) today lets the user manage tracked orgs but hides scan failures. With 11+ adapters, adapter breakage is the #1 silent failure mode — the user finds out only when a company stops producing jobs. The Companies page is the right place to surface scan health. Perfect fit for a no-crawler evening: all data comes from the existing `company_scan_log` table.
 
-**Success criterion:** Grafana panel shows tokens + USD/day per service; `FILTER_BATCH_SIZE` env var with a documented precision/recall curve across {5,10,20} on a 50-job hand-labeled corpus; `LLM_DAILY_BUDGET_USD` circuit breaker pauses filter when exceeded.
-
-**Subtasks:**
-1. Scorer response adds `InputTokens`, `OutputTokens`, `EstUSD`; Prometheus counter `llm_tokens_total{service,model}`. ~60 min.
-2. Grafana JSON panel committed in `deploy/grafana/`. ~30 min.
-3. Hand-label 50 jobs (yes/no/maybe) in a CSV; run filter at batch=5,10,20; record precision/recall. ~90 min.
-4. Budget breaker daemon reads `sum(llm_cost_usd)`, flips a flag read by filter worker. ~60 min.
-5. Notes → `Designs/llm-cost-notes.md`. ~15 min.
-
-**Effort:** ~4.5h
-**Risks:** Gemini pricing moves — lock model+pricing table in a const file.
-
----
-
-### #5 — Resume-tailoring MVP (the demo wedge)
-**Why #5:** Every competitor stops at "job found." Tailoring bullets + missing keywords + cover letter draft is the feature users screenshot. Stays at #5 because it depends on #2 (profile) and needs #3 (users) to matter. Also the single best thing to film for a ProductHunt launch video.
-
-**Success criterion:** "Tailor" button on a job opens a panel with (a) 5 rewritten bullets, (b) top 5 missing keywords, (c) cover letter draft. Copy-to-clipboard works. Result cached keyed by `(job_id, profile_hash)`.
+**Success criterion:** Each row shows last-scan status (✓ / ✗ / ⌛), last-scan duration, jobs-found-last-scan, and success rate over the last 7 scans. Broken adapters (≥2 consecutive errors) float to the top with a red banner. Clicking the status opens the latest `company_scan_log` entry.
 
 **Subtasks:**
-1. `pipeline/llm/prompts/tailor.go` with strict JSON schema. ~45 min.
-2. `service/tailor/` scaffold — `POST /jobs/:id/tailor`. ~60 min.
-3. `job_tailoring` table + migration; cache-first read path. ~45 min.
-4. Slide-over panel component wired to endpoint. ~90 min.
-5. Rate limit: 20/day/user — token bucket in memory. ~30 min.
+1. Extend `GET /companies` response with `last_scan`, `success_rate_7d`, `jobs_last_scan`; query joins `company_scan_log`. ~60 min.
+2. Update `companies-columns.tsx` — add Health, Last Scan, Jobs Last Scan columns. ~60 min.
+3. Row-level drill-in modal showing the last 7 `company_scan_log` rows. ~60 min.
+4. Default sort broken-first; red banner at top with count + link to the drill-in. ~30 min.
+5. "Rescan now" already exists — add a toast with the enqueued queue position. ~30 min.
 
-**Effort:** ~5.5h
-**Risks:** Bullet quality varies — frame as "draft" in the UI. Prompt-injection via JD content; sanitize before inclusion.
+**Effort:** ~4h · **Risks:** Scan-log table could slow the page — aggregate server-side with `LIMIT 7` per company. Stale data ok tonight since crawler is off; mark scans older than 48h with a ⌛ badge rather than ✓.
 
 ## 3. "Do tomorrow" pick
 
-**Initiative #1, subtask 1 — commit the `company` SOA scaffold as a clean logical commit.** The tree is dirty and every other priority requires building on top of the new pattern. Thirty minutes of work that unblocks the next 40 hours; subtask 2 (port `job`) becomes the obvious next pull.
+**Initiative #1, subtasks 1 + 2 — inventory `filter/worker.go` and collapse the scoring prompt into `pipeline/llm/prompts/score.go`.** ~90 focused minutes. Pure code, no crawler needed. Unblocks subtask 3 (ledger reason migration) and subtask 5 (Jobs UI tooltip, which also shows up in initiative #2). If energy remains, jump to initiative #2 subtask 1 (column inventory) — it's pure reading and planning.
 
 ## 4. Ideas parked (not now)
 
-- **Chrome extension for one-click apply** — needs real-user validation first; scope >> value today.
-- **Mobile app** — web works on phones; no demand signal.
-- **AI interview prep chatbot** — ChatGPT does this for free; weak wedge.
-- **LinkedIn/Indeed direct scraping** — ToS and anti-bot costs >> value while ATS coverage is the moat.
-- **Kafka → NATS/SQS rewrite** — flagged in `architecture-review-scalability.md` but premature at single-user scale.
+- **LLM analyzer accuracy eval (today's old #1)** — revisit tomorrow once the crawler is running again; without live scans the eval has no fresh inputs to grade against.
+- **Resume tailoring / cover letter / interview prep** — feature additions on top of an unpolished base; revisit after this polish pass.
+- **Multi-user / auth / hosted alpha / waitlist** — explicit strategy: prove single-user first.
+- **Notifications / daily digest** — needs #2 (Jobs UI) and #3 (Dashboard focus) first.
+- **LLM $-cost instrumentation** — revisit when a new LLM-touchpoint feature ships; not a blocker for today's polish work.
 
 ---
 
-_Changelog vs. earlier 2026-04-13 report:_ SOA refactor (discovered uncommitted on `main`) jumped to **#1**, displacing "ship the 7 staged ATS adapters" entirely — those adapters are already committed (`b3504c3`, `d318ddf`), so yesterday's #2 is closed. User-profile filter moved 1 → 2; hosting, LLM cost, and tailoring held at 3/4/5. "Do tomorrow" shifted from committing adapters to committing the SOA scaffold.
+_Changelog vs. earlier 2026-04-13 reports:_ Strategy pivoted twice today — first to "single-user feature-complete," then to "harden what exists," and now trimmed further: **analyzer-accuracy eval deferred to tomorrow** (crawler not running today). Top 4 are now **filter simplification**, **Jobs UI**, **Dashboard/Insights clarity**, **Companies scan-health** — in that order so the Jobs UI work (#2) picks up the new reject-reason string from #1. "Do tomorrow" pick shifted to filter inventory + prompt collapse (90 min, pure code, no crawler dependency).
