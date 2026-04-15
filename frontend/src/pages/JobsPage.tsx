@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { RefreshCw, Trash2 } from 'lucide-react'
 import type { Job } from '@/types'
+import { ResizeHandle } from '@/components/ui/resize-handle'
 import {
   useJobs, useJobActions,
   JobStatusTabs, JobFilters, JobsTable,
@@ -15,21 +16,6 @@ export function JobsPage() {
   const [dismissTarget, setDismissTarget] = useState<Job | null>(null)
   const [selectedIds, setSelectedIds]     = useState<Set<string>>(new Set())
   const [panelWidth, setPanelWidth]       = useState(440)
-
-  function startDrag(e: React.MouseEvent) {
-    e.preventDefault()
-    const startX     = e.clientX
-    const startWidth = panelWidth
-    function onMove(e: MouseEvent) {
-      setPanelWidth(Math.min(Math.max(startWidth + (startX - e.clientX), 300), 720))
-    }
-    function onUp() {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  }
 
   function handleSave(job: Job) {
     actions.save.mutate({ id: job.id, saved: !job.saved })
@@ -150,10 +136,7 @@ export function JobsPage() {
 
         {activeJob && (
           <>
-            <div
-              onMouseDown={startDrag}
-              className="w-1 shrink-0 cursor-col-resize bg-white/[0.06] hover:bg-violet-500/50 transition-colors"
-            />
+            <ResizeHandle width={panelWidth} onChange={setPanelWidth} min={300} max={720} />
             <div
               style={{ width: panelWidth }}
               className="shrink-0 flex flex-col min-h-0 border-l border-white/[0.07] overflow-hidden"

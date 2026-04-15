@@ -1,305 +1,113 @@
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
-import { Plus, Search, RefreshCw, Power, Loader2, X } from 'lucide-react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import type { Company } from '@/types'
+import { triggerScan } from '@/api/companies'
+import { ADAPTER_TYPES } from '@/types'
+import { ResizeHandle } from '@/components/ui/resize-handle'
 import {
-  fetchCompanies, deleteCompany, updateCompany, triggerScan, fetchQueue,
-  setAllCompaniesActive, type CompanyFilters,
-} from '@/api/companies'
-import { AddCompanyModal } from '@/components/companies/AddCompanyModal'
-import { ScanStatsDrawer } from '@/components/companies/ScanStatsDrawer'
-import { DataTable } from '@/components/ui/data-table'
-import { buildCompanyColumns } from '@/pages/companies-columns'
-import { cn } from '@/lib/utils'
-
-// Known adapter types — hardcoded to avoid needing all companies in memory
-const ADAPTER_OPTIONS = [
-  'greenhouse', 'lever', 'ashby',
-  'google', 'netflix', 'uber', 'apple', 'meta', 'microsoft', 'rippling',
-]
+  useCompanies, useCompanyActions,
+  CompaniesHeader, CompaniesKpiStrip, CompaniesFilterBar,
+  CompaniesTable, CompanyDetailDrawer, AddCompanyModal,
+} from '@/features/companies'
 
 export function CompaniesPage() {
-  // ── Pagination + server state ──────────────────────────────────────────────
-  const [companies, setCompanies]     = useState<Company[]>([])
-  const [total, setTotal]             = useState(0)
-  const [totalActive, setTotalActive] = useState(0)
-  const [page, setPage]               = useState(1)
-  const [limit, setLimit]             = useState(20)
-  const [loading, setLoading]         = useState(true)
+  const c = useCompanies()
+  const actions = useCompanyActions()
 
-  // ── Filters ────────────────────────────────────────────────────────────────
-  const [search, setSearch]               = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [adapterFilter, setAdapterFilter] = useState('')
-  const [activeFilter, setActiveFilter]   = useState<'all' | 'active' | 'inactive'>('all')
-
-  // Debounce search input (300 ms)
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  function handleSearchChange(val: string) {
-    setSearch(val)
-    if (debounceTimer.current) clearTimeout(debounceTimer.current)
-    debounceTimer.current = setTimeout(() => setDebouncedSearch(val), 300)
-  }
-
-  const filters = useMemo<CompanyFilters>(() => ({
-    search: debouncedSearch || undefined,
-    adapterType: adapterFilter || undefined,
-    active: activeFilter === 'active' ? true : activeFilter === 'inactive' ? false : undefined,
-  }), [debouncedSearch, adapterFilter, activeFilter])
-
-  // Reset page whenever filters change
-  useEffect(() => { setPage(1) }, [filters])
-
-  // ── Drawer / modal state ──────────────────────────────────────────────────
-  const [addOpen, setAddOpen]         = useState(false)
-  const [editCompany, setEditCompany] = useState<Company | null>(null)
+  const [addOpen, setAddOpen]             = useState(false)
+  const [editCompany, setEditCompany]     = useState<Company | null>(null)
   const [drawerCompany, setDrawerCompany] = useState<Company | null>(null)
-  const [panelWidth, setPanelWidth]   = useState(400)
-  const [scanning, setScanning]       = useState<Set<string>>(new Set())
-  const [queueMap, setQueueMap]       = useState<Map<string, 'queued' | 'processing'>>(new Map())
-  const [bulkToggling, setBulkToggling] = useState(false)
+  const [panelWidth, setPanelWidth]       = useState(420)
+  const [adapterOptions, setAdapterOptions] = useState<string[]>([...ADAPTER_TYPES])
 
-  // ── Data loading ───────────────────────────────────────────────────────────
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await fetchCompanies(filters, page, limit)
-      setCompanies(res.data ?? [])
-      setTotal(res.total ?? 0)
-      setTotalActive(res.total_active ?? 0)
-    } catch {
-      setCompanies([])
-      setTotal(0)
-    } finally {
-      setLoading(false)
-    }
-  }, [filters, page, limit])
-
-  const loadQueueStatus = useCallback(async () => {
-    try {
-      const entries = await fetchQueue()
-      const map = new Map<string, 'queued' | 'processing'>()
-      for (const e of entries) map.set(e.company_id, e.status)
-      setQueueMap(map)
-    } catch {
-      // non-fatal
-    }
-  }, [])
-
-  useEffect(() => {
-    load()
-    loadQueueStatus()
-  }, [load, loadQueueStatus])
-
-  useEffect(() => {
-    const queueTimer   = setInterval(loadQueueStatus, 15_000)
-    const companyTimer = setInterval(load, 30_000)
-    return () => { clearInterval(queueTimer); clearInterval(companyTimer) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // ── Drag-resize panel ──────────────────────────────────────────────────────
-
-  const startDrag = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    const startX = e.clientX
-    const startWidth = panelWidth
-    const onMove = (e: MouseEvent) =>
-      setPanelWidth(Math.min(Math.max(startWidth + (startX - e.clientX), 280), 680))
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  }, [panelWidth])
-
-  // ── Row actions ────────────────────────────────────────────────────────────
-
-  async function handleToggleActive(company: Company) {
-    const next = !company.active
-    setCompanies(cs => cs.map(c => c.id === company.id ? { ...c, active: next } : c))
-    try {
-      await updateCompany(company.id, { active: next })
-    } catch {
-      setCompanies(cs => cs.map(c => c.id === company.id ? { ...c, active: !next } : c))
-    }
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm('Delete this company? This cannot be undone.')) return
-    try {
-      await deleteCompany(id)
-      toast.success('Company deleted')
-      load()
-    } catch {
-      toast.error('Failed to delete company')
-    }
-  }
-
-  async function handleScan(company: Company) {
-    setScanning(s => new Set(s).add(company.id))
-    try {
-      await triggerScan(company.id)
-      toast.success(`Scan queued for ${company.name}`)
-      loadQueueStatus()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to queue scan')
-    } finally {
-      setScanning(s => { const n = new Set(s); n.delete(company.id); return n })
-    }
-  }
-
-  async function handleBulkToggleActive() {
-    const allActive = totalActive > 0 && totalActive === total
-    const next = !allActive
-    setBulkToggling(true)
-    try {
-      await setAllCompaniesActive(next)
-      await load()
-      toast.success(next ? 'All companies activated' : 'All companies deactivated')
-    } catch {
-      toast.error('Failed to update companies')
-    } finally {
-      setBulkToggling(false)
-    }
-  }
-
-  // ── Columns ────────────────────────────────────────────────────────────────
-
-  const columns = useMemo(() => buildCompanyColumns({
-    onScan: handleScan,
-    onEdit: setEditCompany,
-    onDelete: handleDelete,
-    onToggleActive: handleToggleActive,
-    scanning,
-    queueMap,
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [scanning, queueMap])
-
-  // ── Render ─────────────────────────────────────────────────────────────────
-
-  const allActive = totalActive > 0 && totalActive === total
+  const bulkAllActive = c.totalActive > 0 && c.totalActive === c.total
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.07]">
-        <div>
-          <h1 className="text-xl font-semibold text-white">Companies</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
-            {total} tracked · {totalActive} active
-          </p>
-        </div>
-        <button
-          onClick={() => setAddOpen(true)}
-          className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus size={15} /> Add Company
-        </button>
-      </div>
+      <CompaniesHeader
+        total={c.total}
+        totalActive={c.totalActive}
+        errorCount={c.counts.errors}
+        loading={c.loading}
+        onRefresh={c.refetch}
+        onAddClick={() => setAddOpen(true)}
+        onErrorBadgeClick={() => c.setStatusFilter(c.statusFilter === 'error' ? 'none' : 'error')}
+      />
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 px-6 py-3 border-b border-white/[0.07] flex-wrap">
-        {/* Search */}
-        <div className="relative flex-1 min-w-48 max-w-72">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            value={search}
-            onChange={e => handleSearchChange(e.target.value)}
-            placeholder="Search companies…"
-            className="w-full bg-white/5 border border-white/10 rounded-lg pl-8 pr-8 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-colors"
-          />
-          {search && (
-            <button
-              onClick={() => { setSearch(''); setDebouncedSearch('') }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-            >
-              <X size={13} />
-            </button>
-          )}
-        </div>
+      <CompaniesKpiStrip
+        total={c.total}
+        totalActive={c.totalActive}
+        running={c.counts.running}
+        queued={c.counts.queued}
+        errors={c.counts.errors}
+        errorFilterActive={c.statusFilter === 'error'}
+        onErrorToggle={() => c.setStatusFilter(c.statusFilter === 'error' ? 'none' : 'error')}
+      />
 
-        {/* Adapter filter */}
-        <select
-          value={adapterFilter}
-          onChange={e => setAdapterFilter(e.target.value)}
-          className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-violet-500 transition-colors"
-        >
-          <option value="">All adapters</option>
-          {ADAPTER_OPTIONS.map(a => (
-            <option key={a} value={a}>{a}</option>
-          ))}
-        </select>
+      <CompaniesFilterBar
+        search={c.search}
+        onSearchChange={c.handleSearchChange}
+        adapters={c.adapters}
+        onAdaptersChange={c.setAdapters}
+        adapterOptions={adapterOptions}
+        onAddAdapter={v => {
+          if (!adapterOptions.includes(v)) setAdapterOptions(opts => [...opts, v])
+        }}
+        activeFilter={c.activeFilter}
+        onActiveFilterChange={c.setActiveFilter}
+        totalCount={c.total}
+        activeCount={c.totalActive}
+        statusFilter={c.statusFilter}
+        onStatusFilterChange={c.setStatusFilter}
+        errorCount={c.counts.errors}
+        runningCount={c.counts.running}
+        queuedCount={c.counts.queued}
+        bulkToggling={actions.bulkToggling}
+        bulkAllActive={bulkAllActive}
+        onBulkToggle={() => actions.bulkToggleActive(bulkAllActive)}
+        onReset={c.resetFilters}
+      />
 
-        {/* Active filter */}
-        <div className="flex rounded-lg border border-white/10 overflow-hidden">
-          {(['all', 'active', 'inactive'] as const).map(f => (
-            <button
-              key={f}
-              onClick={() => setActiveFilter(f)}
-              className={cn(
-                'px-3 py-2 text-sm transition-colors capitalize',
-                activeFilter === f ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white bg-white/5'
-              )}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-
-        {/* Bulk toggle */}
-        <button
-          onClick={handleBulkToggleActive}
-          disabled={bulkToggling || total === 0}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-400 hover:text-white bg-white/5 border border-white/10 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {bulkToggling
-            ? <Loader2 size={14} className="animate-spin" />
-            : <Power size={14} />
-          }
-          {allActive ? 'Deactivate All' : 'Activate All'}
-        </button>
-
-        <button
-          onClick={() => { load(); loadQueueStatus() }}
-          className="p-2 text-slate-400 hover:text-white bg-white/5 border border-white/10 rounded-lg transition-colors"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-        </button>
-      </div>
-
-      {/* Table + detail panel */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div className="flex-1 overflow-auto px-6 py-4 min-w-0">
-          <DataTable
-            columns={columns}
-            data={companies}
-            loading={loading}
-            emptyMessage={debouncedSearch ? 'No companies match your search' : 'No companies yet — add one to start'}
-            getRowId={c => c.id}
-            selectedId={drawerCompany?.id}
-            onRowClick={setDrawerCompany}
-            serverPagination={{
-              page,
-              limit,
-              total,
-              onPageChange: setPage,
-              onLimitChange: (l) => { setLimit(l); setPage(1) },
-            }}
-          />
-        </div>
+        <CompaniesTable
+          companies={c.companies}
+          total={c.total}
+          loading={c.loading}
+          page={c.page}
+          limit={c.limit}
+          onPageChange={c.setPage}
+          onLimitChange={l => { c.setLimit(l); c.setPage(1) }}
+          activeCompanyId={drawerCompany?.id}
+          onRowClick={setDrawerCompany}
+          actions={{
+            onScan: actions.scan,
+            onEdit: setEditCompany,
+            onDelete: actions.remove,
+            onToggleActive: actions.toggleActive,
+            scanning: actions.scanning,
+            queueMap: c.queueMap,
+          }}
+        />
 
         {drawerCompany && (
           <>
-            <div
-              onMouseDown={startDrag}
-              className="w-1 shrink-0 cursor-col-resize bg-white/[0.06] hover:bg-violet-500/50 transition-colors"
-            />
-            <div style={{ width: panelWidth }} className="shrink-0 flex flex-col min-h-0 border-l border-white/[0.07] overflow-hidden">
-              <ScanStatsDrawer company={drawerCompany} onClose={() => setDrawerCompany(null)} />
-            </div>
+            <ResizeHandle width={panelWidth} onChange={setPanelWidth} />
+            <aside
+              style={{ width: panelWidth }}
+              className="shrink-0 min-h-0 border-l border-white/[0.07] overflow-hidden"
+            >
+              <CompanyDetailDrawer
+                company={drawerCompany}
+                queueStatus={c.queueMap.get(drawerCompany.id)}
+                onClose={() => setDrawerCompany(null)}
+                onScan={actions.scan}
+                onEdit={setEditCompany}
+                onDelete={(id) => {
+                  actions.remove(id)
+                  setDrawerCompany(null)
+                }}
+              />
+            </aside>
           </>
         )}
       </div>
@@ -307,27 +115,28 @@ export function CompaniesPage() {
       <AddCompanyModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onCreated={async c => {
-          load()
-          if (c.active) {
+        onCreated={async company => {
+          c.refetch()
+          if (company.active) {
             try {
-              await triggerScan(c.id)
-              toast.success(`${c.name} added and scan queued`)
-              loadQueueStatus()
+              await triggerScan(company.id)
+              toast.success(`${company.name} added and scan queued`)
+              c.refetch()
             } catch {
-              toast.success(`${c.name} added — click Scan to start scanning`)
+              toast.success(`${company.name} added — click Scan to start scanning`)
             }
           } else {
-            toast.success(`${c.name} added`)
+            toast.success(`${company.name} added`)
           }
         }}
       />
+
       <AddCompanyModal
         open={!!editCompany}
         initialData={editCompany ?? undefined}
         onClose={() => setEditCompany(null)}
         onUpdated={updated => {
-          load()
+          c.refetch()
           toast.success(`${updated.name} updated`)
         }}
       />

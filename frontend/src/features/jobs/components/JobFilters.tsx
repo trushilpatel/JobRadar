@@ -1,111 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
 import type { DateFilter } from '@/features/jobs/hooks/useJobs'
-
-// ── CompanyMultiSelect ────────────────────────────────────────────────────────
-
-interface CompanyMultiSelectProps {
-  companies: string[]
-  selected: string[]
-  onChange: (v: string[]) => void
-}
-
-function CompanyMultiSelect({ companies, selected, onChange }: CompanyMultiSelectProps) {
-  const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState('')
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function onMouseDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onMouseDown)
-    return () => document.removeEventListener('mousedown', onMouseDown)
-  }, [])
-
-  const visible = companies.filter(c =>
-    c.toLowerCase().includes(search.toLowerCase())
-  )
-
-  function toggle(c: string) {
-    onChange(selected.includes(c) ? selected.filter(v => v !== c) : [...selected, c])
-  }
-
-  const label =
-    selected.length === 0
-      ? 'All companies'
-      : selected.length === 1
-        ? selected[0]
-        : `${selected.length} companies`
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors min-w-[120px]',
-          selected.length > 0
-            ? 'bg-violet-500/15 border-violet-500/30 text-violet-300'
-            : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]',
-        )}
-      >
-        <span className="flex-1 text-left truncate max-w-[140px]">{label}</span>
-        <ChevronDown size={11} className="shrink-0 text-slate-500" />
-      </button>
-
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-56 bg-[#13131e] border border-white/[0.1] rounded-lg shadow-xl z-20 overflow-hidden">
-          <div className="p-2 border-b border-white/[0.07]">
-            <input
-              autoFocus
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search…"
-              className="w-full bg-white/5 border border-white/10 rounded-md px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
-            />
-          </div>
-          <div className="max-h-52 overflow-y-auto py-1">
-            {visible.length === 0 ? (
-              <p className="text-xs text-slate-500 px-3 py-2">No results</p>
-            ) : (
-              visible.map(c => (
-                <button
-                  key={c}
-                  onClick={() => toggle(c)}
-                  className={cn(
-                    'w-full text-left px-3 py-2 text-xs transition-colors flex items-center gap-2',
-                    selected.includes(c)
-                      ? 'text-violet-300 bg-violet-500/10'
-                      : 'text-slate-300 hover:bg-white/[0.05]',
-                  )}
-                >
-                  <div className={cn(
-                    'w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0',
-                    selected.includes(c) ? 'bg-violet-500 border-violet-500' : 'border-white/20',
-                  )}>
-                    {selected.includes(c) && <Check size={9} className="text-white" />}
-                  </div>
-                  {c}
-                </button>
-              ))
-            )}
-          </div>
-          {selected.length > 0 && (
-            <div className="border-t border-white/[0.07] p-2">
-              <button
-                onClick={() => { onChange([]); setSearch('') }}
-                className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors py-1"
-              >
-                Clear selection
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ── FilterPill ─────────────────────────────────────────────────────────────────
 
@@ -190,10 +85,14 @@ export function JobFilters({
 
   return (
     <div className="flex items-center gap-2 px-6 py-2.5 border-b border-white/[0.07] flex-wrap">
-      <CompanyMultiSelect
-        companies={companies}
+      <MultiSelectDropdown
+        aria-label="Filter by company"
+        options={companies}
         selected={selectedCompanies}
         onChange={onCompaniesChange}
+        placeholder="All companies"
+        singularLabel={n => `${n} companies`}
+        searchPlaceholder="Search companies…"
       />
 
       <Divider />
