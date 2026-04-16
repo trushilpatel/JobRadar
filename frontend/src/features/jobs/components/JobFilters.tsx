@@ -1,3 +1,4 @@
+import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
 import type { DateFilter } from '@/features/jobs/hooks/useJobs'
@@ -22,7 +23,8 @@ function FilterPill({
         'px-2.5 py-1.5 text-xs rounded-lg border transition-colors',
         active && color === 'violet' && 'bg-violet-500/15 border-violet-500/30 text-violet-300',
         active && color === 'emerald' && 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
-        !active && 'bg-white/[0.03] border-white/[0.07] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]',
+        !active &&
+          'bg-white/[0.03] border-white/[0.07] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
       )}
     >
       {children}
@@ -37,113 +39,117 @@ function Divider() {
 // ── JobFilters ─────────────────────────────────────────────────────────────────
 
 interface JobFiltersProps {
+  searchQuery: string
+  onSearchChange: (q: string) => void
   companies: string[]
   selectedCompanies: string[]
   onCompaniesChange: (v: string[]) => void
   remoteFilter: boolean
   onRemoteChange: (v: boolean) => void
+  onSiteFilter: boolean
+  onOnSiteChange: (v: boolean) => void
   expFilter: string[]
   onExpChange: (v: string[]) => void
   dateFilter: DateFilter
   onDateChange: (v: DateFilter) => void
-  sponsorshipFilter: boolean
-  onSponsorshipChange: (v: boolean) => void
-  noSponsorshipFilter: boolean
-  onNoSponsorshipChange: (v: boolean) => void
-  noRequirementsFilter: boolean
-  onNoRequirementsChange: (v: boolean) => void
-  citizenshipReqFilter: boolean
-  onCitizenshipReqChange: (v: boolean) => void
-  employTypes: string[]
-  onEmployTypesChange: (types: string[]) => void
+  onReset: () => void
 }
 
-const EXP_OPTIONS = ['0-2', '3-5', '5 <'] as const
-const DATE_OPTIONS = ['all', '30d', '7d'] as const
-const EMPLOY_TYPE_OPTIONS = [{ value: 'full_time', label: 'Full-time' }]
+const EXP_OPTIONS = ['0-2', '3-5', '5+'] as const
+const DATE_OPTIONS: { value: DateFilter; label: string }[] = [
+  { value: 'all', label: 'Any' },
+  { value: '7d', label: '7d' },
+  { value: '30d', label: '30d' },
+]
 
 export function JobFilters({
-  companies, selectedCompanies, onCompaniesChange,
-  remoteFilter, onRemoteChange,
-  expFilter, onExpChange,
-  dateFilter, onDateChange,
-  sponsorshipFilter, onSponsorshipChange,
-  noSponsorshipFilter, onNoSponsorshipChange,
-  noRequirementsFilter, onNoRequirementsChange,
-  citizenshipReqFilter, onCitizenshipReqChange,
-  employTypes, onEmployTypesChange,
+  searchQuery,
+  onSearchChange,
+  companies,
+  selectedCompanies,
+  onCompaniesChange,
+  remoteFilter,
+  onRemoteChange,
+  onSiteFilter,
+  onOnSiteChange,
+  expFilter,
+  onExpChange,
+  dateFilter,
+  onDateChange,
+  onReset,
 }: JobFiltersProps) {
   function toggleExp(opt: string) {
-    onExpChange(expFilter.includes(opt) ? expFilter.filter(v => v !== opt) : [...expFilter, opt])
-  }
-
-  function toggleEmployType(val: string) {
-    onEmployTypesChange(
-      employTypes.includes(val) ? employTypes.filter(v => v !== val) : [...employTypes, val]
-    )
+    onExpChange(expFilter.includes(opt) ? expFilter.filter((v) => v !== opt) : [...expFilter, opt])
   }
 
   return (
     <div className="flex items-center gap-2 px-6 py-2.5 border-b border-white/[0.07] flex-wrap">
+      <div className="relative">
+        <Search
+          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+          size={13}
+        />
+        <input
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Search…"
+          className="pl-7 pr-3 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg placeholder-slate-500 focus:outline-none focus:border-violet-500 w-44 text-slate-200"
+        />
+      </div>
+
       <MultiSelectDropdown
         aria-label="Filter by company"
         options={companies}
         selected={selectedCompanies}
         onChange={onCompaniesChange}
         placeholder="All companies"
-        singularLabel={n => `${n} companies`}
+        singularLabel={(n) => `${n} companies`}
         searchPlaceholder="Search companies…"
       />
 
       <Divider />
 
-      {EXP_OPTIONS.map(opt => (
+      {EXP_OPTIONS.map((opt) => (
         <FilterPill key={opt} active={expFilter.includes(opt)} onClick={() => toggleExp(opt)}>
-          {opt === '5 <' ? '5+ yrs' : `${opt} yrs`}
+          {opt === '5+' ? '5+ yrs' : `${opt} yrs`}
         </FilterPill>
       ))}
 
       <Divider />
 
-      {DATE_OPTIONS.map(d => (
-        <FilterPill key={d} active={dateFilter === d} onClick={() => onDateChange(d as DateFilter)}>
-          {d === 'all' ? 'All' : d}
-        </FilterPill>
-      ))}
-
-      <Divider />
-
-      {EMPLOY_TYPE_OPTIONS.map(opt => (
+      {DATE_OPTIONS.map((d) => (
         <FilterPill
-          key={opt.value}
-          active={employTypes.includes(opt.value)}
-          onClick={() => toggleEmployType(opt.value)}
+          key={d.value}
+          active={dateFilter === d.value}
+          onClick={() => onDateChange(d.value)}
         >
-          {opt.label}
+          {d.label}
         </FilterPill>
       ))}
 
       <Divider />
 
-      <FilterPill color="emerald" active={remoteFilter} onClick={() => onRemoteChange(!remoteFilter)}>
+      <FilterPill
+        color="emerald"
+        active={remoteFilter}
+        onClick={() => onRemoteChange(!remoteFilter)}
+      >
         Remote
       </FilterPill>
 
-      <FilterPill active={sponsorshipFilter} onClick={() => onSponsorshipChange(!sponsorshipFilter)}>
-        Sponsorship
+      <FilterPill
+        color="violet"
+        active={onSiteFilter}
+        onClick={() => onOnSiteChange(!onSiteFilter)}
+      >
+        On-site
       </FilterPill>
 
-      <FilterPill active={noSponsorshipFilter} onClick={() => onNoSponsorshipChange(!noSponsorshipFilter)}>
-        No Sponsorship
-      </FilterPill>
+      <Divider />
 
-      <FilterPill active={noRequirementsFilter} onClick={() => onNoRequirementsChange(!noRequirementsFilter)}>
-        No Citizenship Req.
-      </FilterPill>
-
-      <FilterPill active={citizenshipReqFilter} onClick={() => onCitizenshipReqChange(!citizenshipReqFilter)}>
-        Citizenship Req.
-      </FilterPill>
+      <button onClick={onReset} className="text-[11px] text-slate-500 hover:text-slate-300 px-2">
+        Reset
+      </button>
     </div>
   )
 }

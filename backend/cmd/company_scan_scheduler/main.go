@@ -57,7 +57,7 @@ func main() {
 	}
 }
 
-func enqueuedue(ctx context.Context, log logger.Logger, companies companysvc.CompanyReader, queue scansvc.ScanQueueStore, intervalMinutes int) {
+func enqueuedue(ctx context.Context, log logger.Logger, companies companysvc.SchedulerService, queue scansvc.ScanQueueStore, intervalMinutes int) {
 	due, err := companies.GetCompaniesDueForScan(intervalMinutes)
 	if err != nil {
 		log.Error("failed to query due companies", err)

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 )
 
 // fakeDashboardValidator is a test double for Validator.
@@ -52,7 +52,7 @@ func TestDashboardHandlerStats_OK(t *testing.T) {
 func TestDashboardHandlerStats_ServiceError(t *testing.T) {
 	h := NewHandler(
 		&fakeDashboardValidator{},
-		&fakeDashboardService{err: response.ErrInternal.WithMessage("db down")},
+		&fakeDashboardService{err: domain.ErrInternal.WithMessage("db down")},
 	)
 	r := newDashboardTestRouter(h)
 
@@ -83,7 +83,7 @@ func TestDashboardHandlerActivity_OK(t *testing.T) {
 
 func TestDashboardHandlerActivity_ValidationError(t *testing.T) {
 	h := NewHandler(
-		&fakeDashboardValidator{activityErr: &response.ValidationError{Field: "days", Code: "INVALID_VALUE", Message: "days must be >= 1"}},
+		&fakeDashboardValidator{activityErr: &domain.ValidationError{Field: "days", Code: "INVALID_VALUE", Message: "days must be >= 1"}},
 		&fakeDashboardService{},
 	)
 	r := newDashboardTestRouter(h)
@@ -100,7 +100,7 @@ func TestDashboardHandlerActivity_ValidationError(t *testing.T) {
 func TestDashboardHandlerActivity_ServiceError(t *testing.T) {
 	h := NewHandler(
 		&fakeDashboardValidator{},
-		&fakeDashboardService{err: response.ErrInternal.WithMessage("db down")},
+		&fakeDashboardService{err: domain.ErrInternal.WithMessage("db down")},
 	)
 	r := newDashboardTestRouter(h)
 

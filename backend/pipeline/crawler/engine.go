@@ -6,38 +6,29 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trushilpatel/jobradar/pipeline/ats"
-	"github.com/trushilpatel/jobradar/pipeline/ats/google"
 	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
 	"github.com/trushilpatel/jobradar/model"
-	companysvc "github.com/trushilpatel/jobradar/service/company"
+	"github.com/trushilpatel/jobradar/pipeline/ats"
+	"github.com/trushilpatel/jobradar/pipeline/ats/google"
 	scansvc "github.com/trushilpatel/jobradar/service/scan"
 )
 
 // Engine crawls company careers pages, deduplicates jobs, and publishes new ones to Kafka.
 type Engine struct {
-	companies companysvc.CompanyReader
-	ledger    jobLedger
-	scanLog   scansvc.ScanLogWriter
+	companies CompanyReader
+	ledger    PipelineLedger
+	recorder  ScanRecorder
 	publisher kafka.Publisher
 	googleCfg google.Config
 	log       logger.Logger
 }
 
-// jobLedger is the combined interface the crawler needs from the seen ledger.
-type jobLedger interface {
-	HasSeen(jobID string) (bool, error)
-	MarkSeen(jobID, companyID, reason string) error
-	GetActiveJobIDsByCompany(companyID string) ([]string, error)
-	MarkRemovedBatch(jobIDs []string) error
-}
-
 func NewEngine(
-	companies companysvc.CompanyReader,
-	ledger jobLedger,
-	scanLog scansvc.ScanLogWriter,
+	companies CompanyReader,
+	ledger PipelineLedger,
+	recorder ScanRecorder,
 	publisher kafka.Publisher,
 	googleCfg google.Config,
 	log logger.Logger,
@@ -45,7 +36,7 @@ func NewEngine(
 	return &Engine{
 		companies: companies,
 		ledger:    ledger,
-		scanLog:   scanLog,
+		recorder:  recorder,
 		publisher: publisher,
 		googleCfg: googleCfg,
 		log:       log,
@@ -225,15 +216,15 @@ func (e *Engine) detectRemovedJobs(companyID string, currentJobs []ats.FetchJobs
 }
 
 func (e *Engine) recordResult(ctx context.Context, companyID string, fetched, newCount int, duration time.Duration, errMsg *string) {
-	status := model.ScanStatusOK
+	result := scansvc.ScanResult{
+		FetchedCount: fetched,
+		NewCount:     newCount,
+		Duration:     duration,
+	}
 	if errMsg != nil {
-		status = model.ScanStatusError
+		result.ErrMsg = *errMsg
 	}
-	durationMs := int(duration.Milliseconds())
-	if err := e.scanLog.InsertCompanyScanLog(companyID, fetched, newCount, durationMs, errMsg); err != nil {
-		e.log.Error("failed to write scan log", err, logger.Str(logger.FieldCompany, companyID))
-	}
-	if err := e.scanLog.UpdateCompanyScanStatus(companyID, status); err != nil {
-		e.log.Error("failed to update company status", err, logger.Str(logger.FieldCompany, companyID))
+	if err := e.recorder.RecordScanResult(companyID, result); err != nil {
+		e.log.Error("failed to record scan result", err, logger.Str(logger.FieldCompany, companyID))
 	}
 }

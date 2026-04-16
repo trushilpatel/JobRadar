@@ -1,72 +1,81 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchJobs, type JobFilters } from '@/api/jobs'
+import { fetchJobs, fetchJobCounts, type JobFilters } from '@/api/jobs'
 
-export type TabKey = 'new' | 'saved' | 'applied'
+export type TabKey = 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
 export type DateFilter = 'all' | '7d' | '30d'
 
 export function useJobs() {
   // Tab
   const [tab, setTab] = useState<TabKey>('new')
 
-  // Filter state — mirrors existing defaults in JobsPage
+  // Filter state
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
-  const [remoteFilter, setRemoteFilter]               = useState(false)
-  const [employTypes, setEmployTypes]                 = useState<string[]>(['full_time'])
-  const [sponsorshipFilter, setSponsorshipFilter]     = useState(true)
-  const [noSponsorshipFilter, setNoSponsorshipFilter] = useState(false)
-  const [noRequirementsFilter, setNoRequirementsFilter] = useState(true)
-  const [citizenshipReqFilter, setCitizenshipReqFilter] = useState(false)
-  const [expFilter, setExpFilter]                     = useState<string[]>(['0-2', '3-5'])
-  const [dateFilter, setDateFilter]                   = useState<DateFilter>('all')
+  const [remoteFilter, setRemoteFilter] = useState(false)
+  const [onSiteFilter, setOnSiteFilter] = useState(false)
+  const [expFilter, setExpFilter] = useState<string[]>(['0-2', '3-5'])
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all')
+
+  // Search
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Pagination
-  const [page, setPage]   = useState(1)
+  const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
 
   // Stable filter object — only changes when a filter value changes
-  const filters = useMemo<JobFilters>(() => ({
-    status: tab,
-    companies: selectedCompanies.length > 0 ? selectedCompanies : undefined,
-    remote: remoteFilter || undefined,
-    employTypes: employTypes.length > 0 ? employTypes : undefined,
-    sponsorship: sponsorshipFilter ? true : noSponsorshipFilter ? false : undefined,
-    noRequirements: noRequirementsFilter || undefined,
-    requiresCitizen: citizenshipReqFilter ? true : undefined,
-    experienceRanges: expFilter.length > 0 ? expFilter : undefined,
-    daysAdded: dateFilter === '7d' ? 7 : dateFilter === '30d' ? 30 : undefined,
-  }), [
-    tab, selectedCompanies, remoteFilter, employTypes,
-    sponsorshipFilter, noSponsorshipFilter, noRequirementsFilter,
-    citizenshipReqFilter, expFilter, dateFilter,
-  ])
+  const filters = useMemo<JobFilters>(
+    () => ({
+      status: tab,
+      companies: selectedCompanies.length > 0 ? selectedCompanies : undefined,
+      remote: remoteFilter || undefined,
+      onSite: onSiteFilter || undefined,
+      experienceRanges: expFilter.length > 0 ? expFilter : undefined,
+      daysAdded: dateFilter === '7d' ? 7 : dateFilter === '30d' ? 30 : undefined,
+    }),
+    [tab, selectedCompanies, remoteFilter, onSiteFilter, expFilter, dateFilter]
+  )
 
   // Reset to page 1 when filters change
-  useEffect(() => { setPage(1) }, [filters])
+  useEffect(() => {
+    setPage(1)
+  }, [filters])
 
   const query = useQuery({
     queryKey: ['jobs', filters, page, limit],
     queryFn: () => fetchJobs(filters, page, limit),
   })
 
-  const jobs  = query.data?.data  ?? []
+  const countsQuery = useQuery({
+    queryKey: ['jobs', 'counts'],
+    queryFn: fetchJobCounts,
+  })
+
+  const jobs = query.data?.data ?? []
   const total = query.data?.total ?? 0
+  const counts: Partial<Record<TabKey, number>> = countsQuery.data
+    ? {
+        new: countsQuery.data.new,
+        saved: countsQuery.data.saved,
+        applied: countsQuery.data.applied,
+        interviewing: countsQuery.data.interviewing,
+        offer: countsQuery.data.offer,
+      }
+    : {}
 
   // Companies for the multi-select dropdown — derived from current page results
   const companies = useMemo(() => {
     const names = Array.from(
-      new Set(jobs.map(j => j.company?.name ?? j.company_id).filter(Boolean))
+      new Set(jobs.map((j) => j.company?.name ?? j.company_id).filter(Boolean))
     )
     return (names as string[]).sort()
   }, [jobs])
 
   function resetFilters() {
+    setSearchQuery('')
     setSelectedCompanies([])
     setRemoteFilter(false)
-    setSponsorshipFilter(true)
-    setNoSponsorshipFilter(false)
-    setNoRequirementsFilter(true)
-    setCitizenshipReqFilter(false)
+    setOnSiteFilter(false)
     setExpFilter(['0-2', '3-5'])
     setDateFilter('all')
     setPage(1)
@@ -79,24 +88,33 @@ export function useJobs() {
     companies,
     isLoading: query.isLoading,
     refetch: query.refetch,
+    counts,
 
     // Tab
-    tab, setTab,
+    tab,
+    setTab,
+
+    // Search
+    searchQuery,
+    setSearchQuery,
 
     // Filters
-    selectedCompanies, setSelectedCompanies,
-    remoteFilter,      setRemoteFilter,
-    employTypes,       setEmployTypes,
-    sponsorshipFilter,    setSponsorshipFilter,
-    noSponsorshipFilter,  setNoSponsorshipFilter,
-    noRequirementsFilter, setNoRequirementsFilter,
-    citizenshipReqFilter, setCitizenshipReqFilter,
-    expFilter,  setExpFilter,
-    dateFilter, setDateFilter,
+    selectedCompanies,
+    setSelectedCompanies,
+    remoteFilter,
+    setRemoteFilter,
+    onSiteFilter,
+    setOnSiteFilter,
+    expFilter,
+    setExpFilter,
+    dateFilter,
+    setDateFilter,
     resetFilters,
 
     // Pagination
-    page, setPage,
-    limit, setLimit,
+    page,
+    setPage,
+    limit,
+    setLimit,
   }
 }

@@ -22,9 +22,11 @@ func NewValidator() Validator {
 }
 
 var validJobStatuses = map[string]bool{
-	model.JobStatusNew:     true,
-	model.JobStatusSaved:   true,
-	model.JobStatusApplied: true,
+	model.JobStatusNew:          true,
+	model.JobStatusSaved:        true,
+	model.JobStatusApplied:      true,
+	model.JobStatusInterviewing: true,
+	model.JobStatusOffer:        true,
 }
 
 var validDiscardReasons = map[string]bool{
@@ -44,7 +46,7 @@ func (v *validator) ValidateList(filter JobFilter, p request.Pagination) error {
 		return &response.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
-			Message: "status must be 'new', 'saved', or 'applied'",
+			Message: "status must be 'new', 'saved', 'applied', 'interviewing', or 'offer'",
 		}
 	}
 	for _, r := range filter.ExperienceRanges {
@@ -91,7 +93,7 @@ func (v *validator) ValidateSetStatus(status string) error {
 		return &response.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
-			Message: "status must be 'new', 'saved', or 'applied'",
+			Message: "status must be 'new', 'saved', 'applied', 'interviewing', or 'offer'",
 		}
 	}
 	return nil

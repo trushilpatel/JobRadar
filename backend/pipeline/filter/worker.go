@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/infra/kafka"
-	"github.com/trushilpatel/jobradar/pipeline/llm"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
 	"github.com/trushilpatel/jobradar/model"
-	jobsvc "github.com/trushilpatel/jobradar/service/job"
+	"github.com/trushilpatel/jobradar/pipeline/ats"
+	"github.com/trushilpatel/jobradar/pipeline/llm"
 )
 
 // Worker consumes jobs.raw, scores them in batches via LLM,
@@ -20,7 +19,7 @@ type Worker struct {
 	consumer     *kafka.Consumer
 	publisher    kafka.Publisher
 	scorer       llm.Scorer
-	ledger       jobsvc.SeenLedgerWriter
+	ledger       FilterLedger
 	batchSize    int
 	flushTimeout time.Duration
 	log          logger.Logger
@@ -30,7 +29,7 @@ func NewWorker(
 	consumer *kafka.Consumer,
 	publisher kafka.Publisher,
 	scorer llm.Scorer,
-	ledger jobsvc.SeenLedgerWriter,
+	ledger FilterLedger,
 	batchSize int,
 	flushTimeoutSeconds int,
 	log logger.Logger,

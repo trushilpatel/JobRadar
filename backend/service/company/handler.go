@@ -58,12 +58,12 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		filter.Search = v
 	}
 
-	if err := h.validator.ValidateList(filter, p); err != nil {
+	if err := h.validator.ValidateList(filter, p.Page, p.Limit); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
 
-	result, err := h.companies.List(filter, p)
+	result, err := h.companies.List(filter, p.Page, p.Limit)
 	if err != nil {
 		handler.HandleError(w, err)
 		return

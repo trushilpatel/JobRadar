@@ -3,7 +3,7 @@ package scan
 import (
 	"time"
 
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/service/company"
 )
@@ -41,7 +41,7 @@ func (s *service) TriggerScan(companyID string) error {
 		return err // already a ServiceError from company.Service
 	}
 	if err := s.queue.Enqueue(companyID, model.QueueSourceManual); err != nil {
-		return response.ErrInternal.WithMessage("failed to trigger scan")
+		return domain.ErrInternal.WithMessage("failed to trigger scan")
 	}
 	return nil
 }
@@ -50,7 +50,7 @@ func (s *service) TriggerScan(companyID string) error {
 func (s *service) GetStats(companyID string) (*ScanStatsView, error) {
 	stats, err := s.scanLog.GetScanStats(companyID)
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch scan stats")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch scan stats")
 	}
 	return &stats, nil
 }
@@ -59,12 +59,12 @@ func (s *service) GetStats(companyID string) (*ScanStatsView, error) {
 func (s *service) ListQueue(filter QueueFilter) ([]QueueEntryView, error) {
 	items, err := s.queue.ListQueue()
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch queue")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch queue")
 	}
 
 	allCompanies, err := s.companySvc.GetAll()
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch companies")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch companies")
 	}
 
 	companyMap := make(map[string]company.CompanyView, len(allCompanies))
@@ -109,7 +109,7 @@ func (s *service) ListQueue(filter QueueFilter) ([]QueueEntryView, error) {
 // RemoveFromQueue removes a queued entry by ID.
 func (s *service) RemoveFromQueue(entryID string) error {
 	if err := s.queue.Remove(entryID); err != nil {
-		return response.ErrInternal.WithMessage("failed to remove queue entry")
+		return domain.ErrInternal.WithMessage("failed to remove queue entry")
 	}
 	return nil
 }
@@ -117,7 +117,7 @@ func (s *service) RemoveFromQueue(entryID string) error {
 // MoveUp raises a queue entry one position.
 func (s *service) MoveUp(entryID string) error {
 	if err := s.queue.MoveUp(entryID); err != nil {
-		return response.ErrInternal.WithMessage("failed to move queue entry")
+		return domain.ErrInternal.WithMessage("failed to move queue entry")
 	}
 	return nil
 }
@@ -125,7 +125,7 @@ func (s *service) MoveUp(entryID string) error {
 // MoveDown lowers a queue entry one position.
 func (s *service) MoveDown(entryID string) error {
 	if err := s.queue.MoveDown(entryID); err != nil {
-		return response.ErrInternal.WithMessage("failed to move queue entry")
+		return domain.ErrInternal.WithMessage("failed to move queue entry")
 	}
 	return nil
 }

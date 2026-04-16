@@ -1,8 +1,7 @@
 package application
 
 import (
-	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 )
 
@@ -11,7 +10,7 @@ type Validator interface {
 	ValidateCreate(input CreateApplicationInput) error
 	ValidateUpdateStage(input UpdateStageInput) error
 	ValidateUpdateNote(input UpdateNoteInput) error
-	ValidateListAll(p request.Pagination) error
+	ValidateListAll(page, limit int) error
 }
 
 type validator struct{}
@@ -33,7 +32,7 @@ var validStages = map[string]bool{
 // ValidateCreate validates the stage value for application creation.
 func (v *validator) ValidateCreate(input CreateApplicationInput) error {
 	if !validStages[input.Stage] {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "stage",
 			Code:    "INVALID_VALUE",
 			Message: "stage must be a valid application stage",
@@ -45,7 +44,7 @@ func (v *validator) ValidateCreate(input CreateApplicationInput) error {
 // ValidateUpdateStage validates that the stage is a valid value.
 func (v *validator) ValidateUpdateStage(input UpdateStageInput) error {
 	if !validStages[input.Stage] {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "stage",
 			Code:    "INVALID_VALUE",
 			Message: "stage must be a valid application stage",
@@ -57,7 +56,7 @@ func (v *validator) ValidateUpdateStage(input UpdateStageInput) error {
 // ValidateUpdateNote validates that the note is non-empty.
 func (v *validator) ValidateUpdateNote(input UpdateNoteInput) error {
 	if input.Note == "" {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "note",
 			Code:    "REQUIRED",
 			Message: "note is required",
@@ -67,16 +66,16 @@ func (v *validator) ValidateUpdateNote(input UpdateNoteInput) error {
 }
 
 // ValidateListAll validates pagination parameters.
-func (v *validator) ValidateListAll(p request.Pagination) error {
-	if p.Page < 1 {
-		return &response.ValidationError{
+func (v *validator) ValidateListAll(page, limit int) error {
+	if page < 1 {
+		return &domain.ValidationError{
 			Field:   "page",
 			Code:    "INVALID_VALUE",
 			Message: "page must be >= 1",
 		}
 	}
-	if p.Limit < 1 || p.Limit > 100 {
-		return &response.ValidationError{
+	if limit < 1 || limit > 100 {
+		return &domain.ValidationError{
 			Field:   "limit",
 			Code:    "INVALID_VALUE",
 			Message: "limit must be between 1 and 100",

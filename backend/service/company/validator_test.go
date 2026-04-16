@@ -3,11 +3,10 @@ package company
 import (
 	"testing"
 
-	"github.com/trushilpatel/jobradar/api/request"
 	"github.com/trushilpatel/jobradar/model"
 )
 
-func boolPtr(b bool) *bool   { return &b }
+func boolPtr(b bool) *bool    { return &b }
 func strPtr(s string) *string { return &s }
 
 func TestValidateCreate(t *testing.T) {
@@ -110,25 +109,25 @@ func TestValidateUpdate(t *testing.T) {
 
 func TestValidateList(t *testing.T) {
 	v := NewValidator()
-	validP := request.Pagination{Page: 1, Limit: 20}
 
 	tests := []struct {
 		name    string
 		filter  CompanyFilter
-		p       request.Pagination
+		page    int
+		limit   int
 		wantErr bool
 	}{
-		{name: "empty filter", filter: CompanyFilter{}, p: validP},
-		{name: "valid adapter_type", filter: CompanyFilter{AdapterType: model.AdapterGreenhouse}, p: validP},
-		{name: "valid active filter", filter: CompanyFilter{Active: boolPtr(true)}, p: validP},
-		{name: "invalid adapter_type", filter: CompanyFilter{AdapterType: "bogus"}, p: validP, wantErr: true},
-		{name: "page zero", filter: CompanyFilter{}, p: request.Pagination{Page: 0, Limit: 20}, wantErr: true},
-		{name: "limit too large", filter: CompanyFilter{}, p: request.Pagination{Page: 1, Limit: 200}, wantErr: true},
+		{name: "empty filter", filter: CompanyFilter{}, page: 1, limit: 20},
+		{name: "valid adapter_type", filter: CompanyFilter{AdapterType: model.AdapterGreenhouse}, page: 1, limit: 20},
+		{name: "valid active filter", filter: CompanyFilter{Active: boolPtr(true)}, page: 1, limit: 20},
+		{name: "invalid adapter_type", filter: CompanyFilter{AdapterType: "bogus"}, page: 1, limit: 20, wantErr: true},
+		{name: "page zero", filter: CompanyFilter{}, page: 0, limit: 20, wantErr: true},
+		{name: "limit too large", filter: CompanyFilter{}, page: 1, limit: 200, wantErr: true},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := v.ValidateList(tc.filter, tc.p)
+			err := v.ValidateList(tc.filter, tc.page, tc.limit)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ValidateList() error = %v, wantErr %v", err, tc.wantErr)
 			}

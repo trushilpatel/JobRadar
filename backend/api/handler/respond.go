@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 )
 
 // Respond writes a JSON envelope response with a typed data payload.
@@ -39,12 +40,12 @@ func RespondError(w http.ResponseWriter, status int, code, message string) {
 // HandleError inspects err and writes the appropriate error response.
 // ValidationError → 400, ServiceError → its Status, anything else → 500.
 func HandleError(w http.ResponseWriter, err error) {
-	var vErr *response.ValidationError
+	var vErr *domain.ValidationError
 	if errors.As(err, &vErr) {
 		RespondError(w, http.StatusBadRequest, vErr.Code, vErr.Message)
 		return
 	}
-	var sErr *response.ServiceError
+	var sErr *domain.ServiceError
 	if errors.As(err, &sErr) {
 		RespondError(w, sErr.Status, sErr.Code, sErr.Message)
 		return

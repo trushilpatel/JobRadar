@@ -44,10 +44,10 @@ export const ADAPTER_TYPES = [
   'rippling',
 ] as const
 
-export type AdapterType = typeof ADAPTER_TYPES[number]
+export type AdapterType = (typeof ADAPTER_TYPES)[number]
 
 // Job status constants (mirrors model/constants.go)
-export type JobStatus = 'new' | 'saved' | 'applied'
+export type JobStatus = 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
 export type EmployType = 'full_time' | 'part_time' | 'contract' | 'internship'
 export type ApplicationStage =
   | 'applied'
@@ -119,7 +119,7 @@ export interface QueueEntry {
   priority: number
   queued_at: string
   started_at: string | null
-  next_scan_at: string | null  // null = never scanned (first scan / ASAP)
+  next_scan_at: string | null // null = never scanned (first scan / ASAP)
 }
 
 export interface DashboardStats {

@@ -35,10 +35,21 @@ func provideSeenLedgerWriter(s job.SeenLedgerStore) job.SeenLedgerWriter {
 	return s
 }
 
+// jobCountReaderAdapter wraps job.JobStore to satisfy the dashboard.JobCountReader interface.
+type jobCountReaderAdapter struct{ store job.JobStore }
+
+func (a *jobCountReaderAdapter) GetJobCounts() (int64, int64, int64, error) {
+	counts, err := a.store.GetJobCounts()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return counts.New, counts.Saved, counts.Applied, nil
+}
+
 // provideJobCountReader binds JobStore (returned by NewJobStore) to the JobCountReader
 // interface needed by dashboard.Service.
 func provideJobCountReader(s job.JobStore) dashboard.JobCountReader {
-	return s
+	return &jobCountReaderAdapter{store: s}
 }
 
 func InitializeApp(db *gorm.DB, cfg *config.Config) (*api.App, error) {

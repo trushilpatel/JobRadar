@@ -3,8 +3,7 @@ package application
 import (
 	"strconv"
 
-	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 	jobsvc "github.com/trushilpatel/jobradar/service/job"
 )
@@ -12,7 +11,7 @@ import (
 // Service defines all business operations for the application domain.
 type Service interface {
 	ListByJob(jobID string) ([]model.JobApplication, error)
-	ListAll(p request.Pagination) ([]ApplicationWithJob, int, error)
+	ListAll(page, limit int) ([]ApplicationWithJob, int, error)
 	Create(jobID string, input CreateApplicationInput) (*model.JobApplication, error)
 	UpdateStage(jobID, appID string, input UpdateStageInput) error
 	UpdateNote(jobID, appID string, input UpdateNoteInput) error
@@ -32,16 +31,16 @@ func NewService(s Store, jobSvc jobsvc.Service) Service {
 func (s *service) ListByJob(jobID string) ([]model.JobApplication, error) {
 	apps, err := s.store.GetApplicationsByJobID(jobID)
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch applications")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch applications")
 	}
 	return apps, nil
 }
 
 // ListAll returns a paginated list of the latest application per job.
-func (s *service) ListAll(p request.Pagination) ([]ApplicationWithJob, int, error) {
-	apps, total, err := s.store.GetLatestApplicationsWithJobPaged(p.Page, p.Limit)
+func (s *service) ListAll(page, limit int) ([]ApplicationWithJob, int, error) {
+	apps, total, err := s.store.GetLatestApplicationsWithJobPaged(page, limit)
 	if err != nil {
-		return nil, 0, response.ErrInternal.WithMessage("failed to fetch applications")
+		return nil, 0, domain.ErrInternal.WithMessage("failed to fetch applications")
 	}
 	return apps, int(total), nil
 }
@@ -55,7 +54,7 @@ func (s *service) Create(jobID string, input CreateApplicationInput) (*model.Job
 	}
 
 	if err := s.store.InsertApplication(jobID, input.Stage, input.Note); err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to create application")
+		return nil, domain.ErrInternal.WithMessage("failed to create application")
 	}
 
 	// When the first stage is added, mark the job as applied (non-fatal)
@@ -77,10 +76,10 @@ func (s *service) Create(jobID string, input CreateApplicationInput) (*model.Job
 func (s *service) UpdateStage(jobID, appID string, input UpdateStageInput) error {
 	id, err := strconv.ParseInt(appID, 10, 64)
 	if err != nil {
-		return response.ErrBadRequest.WithMessage("invalid app_id")
+		return domain.ErrBadRequest.WithMessage("invalid app_id")
 	}
 	if err := s.store.UpdateApplicationStage(id, input.Stage); err != nil {
-		return response.ErrInternal.WithMessage("failed to update stage")
+		return domain.ErrInternal.WithMessage("failed to update stage")
 	}
 	return nil
 }
@@ -89,10 +88,10 @@ func (s *service) UpdateStage(jobID, appID string, input UpdateStageInput) error
 func (s *service) UpdateNote(jobID, appID string, input UpdateNoteInput) error {
 	id, err := strconv.ParseInt(appID, 10, 64)
 	if err != nil {
-		return response.ErrBadRequest.WithMessage("invalid app_id")
+		return domain.ErrBadRequest.WithMessage("invalid app_id")
 	}
 	if err := s.store.UpdateApplicationNote(id, input.Note); err != nil {
-		return response.ErrInternal.WithMessage("failed to update note")
+		return domain.ErrInternal.WithMessage("failed to update note")
 	}
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 type Service interface {
 	List(filter JobFilter, p request.Pagination) ([]model.Job, int, error)
 	Get(id string) (*model.Job, error)
+	GetCounts() (*JobCounts, error)
 	Dismiss(id string, input DismissInput) error
 	SetSaved(id string, saved bool) error
 	SetStatus(id, status string) error
@@ -41,6 +42,15 @@ func (s *service) List(filter JobFilter, p request.Pagination) ([]model.Job, int
 		return nil, 0, response.ErrInternal.WithMessage("failed to fetch jobs")
 	}
 	return jobs, int(total), nil
+}
+
+// GetCounts returns a count of jobs per active status.
+func (s *service) GetCounts() (*JobCounts, error) {
+	counts, err := s.jobs.GetJobCounts()
+	if err != nil {
+		return nil, response.ErrInternal.WithMessage("failed to fetch job counts")
+	}
+	return counts, nil
 }
 
 // Get fetches a single job by ID.

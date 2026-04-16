@@ -9,15 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/infra/kafka"
-	"github.com/trushilpatel/jobradar/pipeline/llm"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
-	"github.com/trushilpatel/jobradar/model"
+	"github.com/trushilpatel/jobradar/pipeline/ats"
+	"github.com/trushilpatel/jobradar/pipeline/llm"
 	jobsvc "github.com/trushilpatel/jobradar/service/job"
-	"gorm.io/datatypes"
 )
 
 // enrichConcurrency is the number of jobs processed in parallel.
@@ -30,9 +27,7 @@ const enrichConcurrency = 5
 type Worker struct {
 	consumer    *kafka.Consumer
 	scorer      llm.Scorer
-	jobs        jobsvc.JobWriter
-	ledger      jobsvc.SeenLedgerWriter
-	snapshot    jobsvc.SnapshotWriter
+	pipeline    jobsvc.PipelineService
 	client      *http.Client
 	log         logger.Logger
 	maxExpYears int
@@ -41,18 +36,14 @@ type Worker struct {
 func NewWorker(
 	consumer *kafka.Consumer,
 	scorer llm.Scorer,
-	jobs jobsvc.JobWriter,
-	ledger jobsvc.SeenLedgerWriter,
-	snapshot jobsvc.SnapshotWriter,
+	pipeline jobsvc.PipelineService,
 	log logger.Logger,
 	maxExpYears int,
 ) *Worker {
 	return &Worker{
 		consumer:    consumer,
 		scorer:      scorer,
-		jobs:        jobs,
-		ledger:      ledger,
-		snapshot:    snapshot,
+		pipeline:    pipeline,
 		client:      &http.Client{Timeout: 15 * time.Second},
 		log:         log,
 		maxExpYears: maxExpYears,
@@ -151,50 +142,30 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 		return
 	}
 
-	// 4. Build the DB row
-	row, err := buildJob(job, result)
-	if err != nil {
-		jobLog.Error("build job failed", err)
+	// 4. Save via pipeline service (builds job row, inserts, writes snapshot, marks ledger)
+	input := toEnrichedInput(job, result)
+	if err := w.pipeline.SaveEnrichedJob(input); err != nil {
+		jobLog.Error("save enriched job failed", err)
 		w.markError(job.ID)
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 		return
-	}
-
-	// 5. Insert into DB
-	if err := w.jobs.InsertJob(row); err != nil {
-		jobLog.Error("insert job failed", err)
-		w.markError(job.ID)
-		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
-		return
-	}
-
-	// 5. Write snapshot (analytics record — survives job deletion)
-	techBytes, _ := json.Marshal(result.TechStack)
-	if err := w.snapshot.InsertSnapshot(jobsvc.SnapshotInput{
-		ID:                row.ID,
-		CompanyID:         job.CompanyID,
-		Country:           result.Country,
-		State:             result.State,
-		Remote:            result.Remote,
-		Sponsorship:       result.Sponsorship,
-		RequiresCitizen:   result.RequiresCitizen,
-		SecurityClearance: result.SecurityClearance,
-		EmployType:        job.EmployType,
-		ExperienceYears:   result.ExperienceYears,
-		TechStack:         techBytes,
-		RoleCategory:      result.RoleCategory,
-	}); err != nil {
-		// Non-fatal: log and continue — job is already saved
-		jobLog.Warn("write snapshot failed (non-fatal)", logger.Err(err))
 	}
 
 	metrics.EnricherJobsTotal.WithLabelValues("saved").Inc()
 	jobLog.Info("enriched and saved")
 }
 
+// toEnrichedInput builds a jobsvc.EnrichedJobInput from the raw job and LLM result.
+func toEnrichedInput(job ats.RawJob, result *llm.EnrichResult) jobsvc.EnrichedJobInput {
+	return jobsvc.EnrichedJobInput{
+		Raw:      job,
+		Enriched: result,
+	}
+}
+
 // markError updates the seen_ledger so failed jobs aren't re-processed endlessly.
 func (w *Worker) markError(jobID string) {
-	if err := w.ledger.UpdateSeenReason(jobID, model.SeenReasonError); err != nil {
+	if err := w.pipeline.MarkLedgerError(jobID); err != nil {
 		w.log.Error("failed to mark error in seen_ledger", err, logger.Str(logger.FieldJobID, jobID))
 	}
 }
@@ -267,51 +238,6 @@ func (w *Worker) dropJob(e *llm.EnrichResult) string {
 	return ""
 }
 
-// buildJob maps ats.RawJob + llm.EnrichResult into a model.Job ready for DB insert.
-func buildJob(raw ats.RawJob, enriched *llm.EnrichResult) (*model.Job, error) {
-	techStack, err := json.Marshal(enriched.TechStack)
-	if err != nil {
-		return nil, fmt.Errorf("marshal tech_stack: %w", err)
-	}
-
-	responsibilities, err := json.Marshal(enriched.Responsibilities)
-	if err != nil {
-		return nil, fmt.Errorf("marshal responsibilities: %w", err)
-	}
-
-	salaryRange, err := json.Marshal(map[string]any{
-		"min":      enriched.SalaryMin,
-		"max":      enriched.SalaryMax,
-		"currency": enriched.SalaryCurrency,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal salary_range: %w", err)
-	}
-
-	return &model.Job{
-		ID:                uuid.New().String(),
-		JobPostID:         raw.ID,
-		CompanyID:         raw.CompanyID,
-		Title:             raw.Title,
-		Location:          nullableString(raw.Location),
-		Remote:            enriched.Remote,
-		Country:           nullableString(enriched.Country),
-		State:             nullableString(enriched.State),
-		URL:               raw.URL,
-		EmployType:        nullableString(raw.EmployType),
-		ExperienceYears:   enriched.ExperienceYears,
-		TechStack:         datatypes.JSON(techStack),
-		SalaryRange:       datatypes.JSON(salaryRange),
-		LLMSummary:        nullableString(enriched.Summary),
-		Sponsorship:       enriched.Sponsorship,
-		RequiresCitizen:   enriched.RequiresCitizen,
-		SecurityClearance: enriched.SecurityClearance,
-		RoleBrief:         nullableString(enriched.RoleBrief),
-		Responsibilities:  datatypes.JSON(responsibilities),
-		Status:            model.JobStatusNew,
-	}, nil
-}
-
 // fullContentToResponse converts a pre-fetched FullJobContent into the
 // FetchJobContentResponse shape that the rest of the enrich pipeline expects.
 func fullContentToResponse(job ats.RawJob) ats.FetchJobContentResponse {
@@ -329,11 +255,4 @@ func fullContentToResponse(job ats.RawJob) ats.FetchJobContentResponse {
 		Requirements:   fc.Requirements,
 		PublishedDate:  fc.PublishedDate,
 	}
-}
-
-func nullableString(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
 }

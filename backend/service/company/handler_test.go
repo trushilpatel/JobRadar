@@ -10,23 +10,22 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 )
 
 // fakeValidator is a test double for Validator.
 type fakeValidator struct {
-	listErr    error
-	createErr  error
-	updateErr  error
-	activeErr  error
+	listErr   error
+	createErr error
+	updateErr error
+	activeErr error
 }
 
-func (f *fakeValidator) ValidateList(_ CompanyFilter, _ request.Pagination) error { return f.listErr }
-func (f *fakeValidator) ValidateCreate(_ CreateCompanyInput) error                { return f.createErr }
-func (f *fakeValidator) ValidateUpdate(_ UpdateCompanyInput) error                { return f.updateErr }
-func (f *fakeValidator) ValidateSetAllActive(_ *bool) error                      { return f.activeErr }
+func (f *fakeValidator) ValidateList(_ CompanyFilter, _, _ int) error { return f.listErr }
+func (f *fakeValidator) ValidateCreate(_ CreateCompanyInput) error    { return f.createErr }
+func (f *fakeValidator) ValidateUpdate(_ UpdateCompanyInput) error    { return f.updateErr }
+func (f *fakeValidator) ValidateSetAllActive(_ *bool) error           { return f.activeErr }
 
 // fakeService is a test double for Service.
 type fakeService struct {
@@ -36,7 +35,7 @@ type fakeService struct {
 	err          error
 }
 
-func (f *fakeService) List(_ CompanyFilter, _ request.Pagination) (CompanyListResult, error) {
+func (f *fakeService) List(_ CompanyFilter, _, _ int) (CompanyListResult, error) {
 	return CompanyListResult{Items: f.listResult, Total: int64(len(f.listResult))}, f.err
 }
 func (f *fakeService) GetAll() ([]CompanyView, error) {
@@ -82,7 +81,7 @@ func TestHandlerList_OK(t *testing.T) {
 
 func TestHandlerList_ValidatorError(t *testing.T) {
 	h := NewHandler(
-		&fakeValidator{listErr: &response.ValidationError{Field: "adapter_type", Code: "INVALID_VALUE", Message: "bad"}},
+		&fakeValidator{listErr: &domain.ValidationError{Field: "adapter_type", Code: "INVALID_VALUE", Message: "bad"}},
 		&fakeService{},
 	)
 	r := newTestRouter(h)
@@ -116,7 +115,7 @@ func TestHandlerCreate_OK(t *testing.T) {
 func TestHandlerCreate_ServiceError(t *testing.T) {
 	h := NewHandler(
 		&fakeValidator{},
-		&fakeService{err: response.ErrInternal.WithMessage("db error")},
+		&fakeService{err: domain.ErrInternal.WithMessage("db error")},
 	)
 	r := newTestRouter(h)
 
@@ -148,7 +147,7 @@ func TestHandlerDelete_OK(t *testing.T) {
 func TestHandlerDelete_NotFound(t *testing.T) {
 	h := NewHandler(
 		&fakeValidator{},
-		&fakeService{err: response.ErrNotFound.WithMessage("company not found")},
+		&fakeService{err: domain.ErrNotFound.WithMessage("company not found")},
 	)
 	r := newTestRouter(h)
 
@@ -163,7 +162,7 @@ func TestHandlerDelete_NotFound(t *testing.T) {
 
 func TestHandlerUpdate_ValidatorError(t *testing.T) {
 	h := NewHandler(
-		&fakeValidator{updateErr: &response.ValidationError{Field: "", Code: "BAD_REQUEST", Message: "at least one field"}},
+		&fakeValidator{updateErr: &domain.ValidationError{Field: "", Code: "BAD_REQUEST", Message: "at least one field"}},
 		&fakeService{},
 	)
 	r := newTestRouter(h)
@@ -195,7 +194,7 @@ func TestHandlerSetAllActive_OK(t *testing.T) {
 
 func TestHandlerSetAllActive_ValidationError(t *testing.T) {
 	h := NewHandler(
-		&fakeValidator{activeErr: &response.ValidationError{Field: "active", Code: "REQUIRED", Message: "required"}},
+		&fakeValidator{activeErr: &domain.ValidationError{Field: "active", Code: "REQUIRED", Message: "required"}},
 		&fakeService{},
 	)
 	r := newTestRouter(h)

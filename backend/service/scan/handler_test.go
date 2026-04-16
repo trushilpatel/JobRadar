@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 )
 
 // fakeScanValidator is a test double for Validator.
@@ -16,8 +16,8 @@ type fakeScanValidator struct {
 	triggerErr error
 }
 
-func (f *fakeScanValidator) ValidateListQueue(_ QueueFilter) error     { return f.listErr }
-func (f *fakeScanValidator) ValidateTriggerScan(_ string) error        { return f.triggerErr }
+func (f *fakeScanValidator) ValidateListQueue(_ QueueFilter) error { return f.listErr }
+func (f *fakeScanValidator) ValidateTriggerScan(_ string) error    { return f.triggerErr }
 
 // fakeScanService is a test double for Service.
 type fakeScanService struct {
@@ -26,8 +26,10 @@ type fakeScanService struct {
 	err         error
 }
 
-func (f *fakeScanService) TriggerScan(companyID string) error                   { return f.err }
-func (f *fakeScanService) GetStats(companyID string) (*ScanStatsView, error)    { return f.statsResult, f.err }
+func (f *fakeScanService) TriggerScan(companyID string) error { return f.err }
+func (f *fakeScanService) GetStats(companyID string) (*ScanStatsView, error) {
+	return f.statsResult, f.err
+}
 func (f *fakeScanService) ListQueue(filter QueueFilter) ([]QueueEntryView, error) {
 	return f.queueResult, f.err
 }
@@ -59,7 +61,7 @@ func TestHandlerListQueue_OK(t *testing.T) {
 
 func TestHandlerListQueue_ValidationError(t *testing.T) {
 	h := NewHandler(
-		&fakeScanValidator{listErr: &response.ValidationError{Field: "status", Code: "INVALID_VALUE", Message: "bad"}},
+		&fakeScanValidator{listErr: &domain.ValidationError{Field: "status", Code: "INVALID_VALUE", Message: "bad"}},
 		&fakeScanService{},
 	)
 	r := newScanTestRouter(h)
@@ -89,7 +91,7 @@ func TestHandlerTriggerScan_OK(t *testing.T) {
 func TestHandlerTriggerScan_NotFound(t *testing.T) {
 	h := NewHandler(
 		&fakeScanValidator{},
-		&fakeScanService{err: response.ErrNotFound.WithMessage("company not found")},
+		&fakeScanService{err: domain.ErrNotFound.WithMessage("company not found")},
 	)
 	r := newScanTestRouter(h)
 

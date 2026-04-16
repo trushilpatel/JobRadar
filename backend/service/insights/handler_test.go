@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 )
 
 // fakeInsightsValidator is a test double for Validator.
@@ -24,13 +24,15 @@ type fakeInsightsService struct {
 	err            error
 }
 
-func (f *fakeInsightsService) TechStack() (interface{}, error)                   { return f.data, f.err }
-func (f *fakeInsightsService) CompanyActivity() (interface{}, error)             { return f.data, f.err }
-func (f *fakeInsightsService) Funnel() (interface{}, error)                      { return f.data, f.err }
-func (f *fakeInsightsService) Location() (interface{}, error)                    { return f.data, f.err }
-func (f *fakeInsightsService) Sponsorship(_ InsightsFilter) (interface{}, error) { return f.data, f.err }
-func (f *fakeInsightsService) Velocity() (interface{}, error)                    { return f.data, f.err }
-func (f *fakeInsightsService) RoleCategories() (interface{}, error)              { return f.data, f.err }
+func (f *fakeInsightsService) TechStack() (interface{}, error)       { return f.data, f.err }
+func (f *fakeInsightsService) CompanyActivity() (interface{}, error) { return f.data, f.err }
+func (f *fakeInsightsService) Funnel() (interface{}, error)          { return f.data, f.err }
+func (f *fakeInsightsService) Location() (interface{}, error)        { return f.data, f.err }
+func (f *fakeInsightsService) Sponsorship(_ InsightsFilter) (interface{}, error) {
+	return f.data, f.err
+}
+func (f *fakeInsightsService) Velocity() (interface{}, error)       { return f.data, f.err }
+func (f *fakeInsightsService) RoleCategories() (interface{}, error) { return f.data, f.err }
 func (f *fakeInsightsService) GetPipelineCounts() (PipelineCounts, error) {
 	return f.pipelineCounts, f.err
 }
@@ -60,7 +62,7 @@ func TestInsightsHandlerTechStack_OK(t *testing.T) {
 func TestInsightsHandlerTechStack_ServiceError(t *testing.T) {
 	h := NewHandler(
 		&fakeInsightsValidator{},
-		&fakeInsightsService{err: response.ErrInternal.WithMessage("db down")},
+		&fakeInsightsService{err: domain.ErrInternal.WithMessage("db down")},
 	)
 	r := newInsightsTestRouter(h)
 
@@ -104,7 +106,7 @@ func TestInsightsHandlerSponsorship_OK(t *testing.T) {
 
 func TestInsightsHandlerSponsorship_ValidationError(t *testing.T) {
 	h := NewHandler(
-		&fakeInsightsValidator{filterErr: &response.ValidationError{Field: "days", Code: "INVALID_VALUE", Message: "days must be >= 1"}},
+		&fakeInsightsValidator{filterErr: &domain.ValidationError{Field: "days", Code: "INVALID_VALUE", Message: "days must be >= 1"}},
 		&fakeInsightsService{},
 	)
 	r := newInsightsTestRouter(h)

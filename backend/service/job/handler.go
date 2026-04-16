@@ -25,6 +25,7 @@ func NewHandler(v Validator, svc Service) *Handler {
 // Register mounts all job routes onto r.
 func (h *Handler) Register(r chi.Router) {
 	r.Get("/jobs", h.List)
+	r.Get("/jobs/counts", h.GetCounts)
 	r.Get("/jobs/{id}", h.Get)
 	r.Delete("/jobs/{id}", h.Dismiss)
 	r.Patch("/jobs/{id}/save", h.SetSaved)
@@ -39,7 +40,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	filter := JobFilter{
 		Status:           q.Get("status"),
-		Companies:        q["companies"],        // ?companies=stripe&companies=google
+		Companies:        q["companies"],         // ?companies=stripe&companies=google
 		EmployTypes:      q["employ_types"],      // ?employ_types=full_time
 		ExperienceRanges: q["experience_ranges"], // ?experience_ranges=0-2&experience_ranges=3-5
 	}
@@ -63,6 +64,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		b := v == "true"
 		filter.RequiresCitizen = &b
 	}
+	if q.Get("on_site") == "true" {
+		filter.OnSite = true
+	}
 	if v := q.Get("days_added"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			filter.DaysAdded = &n
@@ -81,6 +85,16 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handler.RespondPaged(w, http.StatusOK, jobs, total, p.Page, p.Limit)
+}
+
+// GET /jobs/counts
+func (h *Handler) GetCounts(w http.ResponseWriter, r *http.Request) {
+	counts, err := h.jobs.GetCounts()
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, counts)
 }
 
 // GET /jobs/:id

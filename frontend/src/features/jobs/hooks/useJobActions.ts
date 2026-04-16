@@ -34,9 +34,27 @@ export function useJobActions() {
     onError: () => toast.error('Failed to dismiss job'),
   })
 
+  const markInterviewing = useMutation({
+    mutationFn: (id: string) => setJobStatus(id, 'interviewing'),
+    onSuccess: () => {
+      toast.success('Marked as interviewing')
+      invalidateJobs()
+    },
+    onError: () => toast.error('Failed to update job'),
+  })
+
+  const markOffer = useMutation({
+    mutationFn: (id: string) => setJobStatus(id, 'offer'),
+    onSuccess: () => {
+      toast.success('Marked as offer')
+      invalidateJobs()
+    },
+    onError: () => toast.error('Failed to update job'),
+  })
+
   const bulkDismiss = useMutation({
     mutationFn: (ids: string[]) =>
-      Promise.all(ids.map(id => dismissJob(id, 'user_not_relevant'))),
+      Promise.all(ids.map((id) => dismissJob(id, 'user_not_relevant'))),
     onSuccess: (_, ids) => {
       toast.success(`${ids.length} job${ids.length !== 1 ? 's' : ''} dismissed`)
       invalidateJobs()
@@ -44,5 +62,5 @@ export function useJobActions() {
     onError: () => toast.error('Failed to dismiss some jobs'),
   })
 
-  return { save, apply, dismiss, bulkDismiss }
+  return { save, apply, markInterviewing, markOffer, dismiss, bulkDismiss }
 }

@@ -9,8 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 )
 
@@ -22,10 +21,10 @@ type fakeAppValidator struct {
 	listAllErr     error
 }
 
-func (f *fakeAppValidator) ValidateCreate(_ CreateApplicationInput) error    { return f.createErr }
-func (f *fakeAppValidator) ValidateUpdateStage(_ UpdateStageInput) error     { return f.updateStageErr }
-func (f *fakeAppValidator) ValidateUpdateNote(_ UpdateNoteInput) error       { return f.updateNoteErr }
-func (f *fakeAppValidator) ValidateListAll(_ request.Pagination) error       { return f.listAllErr }
+func (f *fakeAppValidator) ValidateCreate(_ CreateApplicationInput) error { return f.createErr }
+func (f *fakeAppValidator) ValidateUpdateStage(_ UpdateStageInput) error  { return f.updateStageErr }
+func (f *fakeAppValidator) ValidateUpdateNote(_ UpdateNoteInput) error    { return f.updateNoteErr }
+func (f *fakeAppValidator) ValidateListAll(_, _ int) error                { return f.listAllErr }
 
 // fakeAppService is a test double for Service.
 type fakeAppService struct {
@@ -39,7 +38,7 @@ type fakeAppService struct {
 func (f *fakeAppService) ListByJob(_ string) ([]model.JobApplication, error) {
 	return f.apps, f.err
 }
-func (f *fakeAppService) ListAll(_ request.Pagination) ([]ApplicationWithJob, int, error) {
+func (f *fakeAppService) ListAll(_, _ int) ([]ApplicationWithJob, int, error) {
 	return f.appsWithJob, f.total, f.err
 }
 func (f *fakeAppService) Create(_ string, _ CreateApplicationInput) (*model.JobApplication, error) {
@@ -85,7 +84,7 @@ func TestAppHandlerCreate_OK(t *testing.T) {
 func TestAppHandlerCreate_NotFound(t *testing.T) {
 	h := NewHandler(
 		&fakeAppValidator{},
-		&fakeAppService{err: response.ErrNotFound.WithMessage("job not found")},
+		&fakeAppService{err: domain.ErrNotFound.WithMessage("job not found")},
 	)
 	r := newAppTestRouter(h)
 
@@ -117,7 +116,7 @@ func TestAppHandlerListAll_OK(t *testing.T) {
 
 func TestAppHandlerUpdateStage_ValidationError(t *testing.T) {
 	h := NewHandler(
-		&fakeAppValidator{updateStageErr: &response.ValidationError{Field: "stage", Code: "INVALID_VALUE", Message: "bad"}},
+		&fakeAppValidator{updateStageErr: &domain.ValidationError{Field: "stage", Code: "INVALID_VALUE", Message: "bad"}},
 		&fakeAppService{},
 	)
 	r := newAppTestRouter(h)

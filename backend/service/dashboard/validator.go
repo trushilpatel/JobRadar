@@ -1,6 +1,6 @@
 package dashboard
 
-import "github.com/trushilpatel/jobradar/api/response"
+import "github.com/trushilpatel/jobradar/domain"
 
 // Validator validates user-submitted input for the dashboard domain.
 type Validator interface {
@@ -17,7 +17,7 @@ func NewValidator() Validator {
 // ValidateActivity validates that days >= 1.
 func (v *validator) ValidateActivity(days int) error {
 	if days < 1 {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "days",
 			Code:    "INVALID_VALUE",
 			Message: "days must be >= 1",

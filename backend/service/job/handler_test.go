@@ -16,16 +16,16 @@ import (
 
 // fakeJobValidator is a test double for Validator.
 type fakeJobValidator struct {
-	listErr   error
+	listErr    error
 	dismissErr error
 	statusErr  error
 	notesErr   error
 }
 
 func (f *fakeJobValidator) ValidateList(_ JobFilter, _ request.Pagination) error { return f.listErr }
-func (f *fakeJobValidator) ValidateDismiss(_ DismissInput) error                  { return f.dismissErr }
-func (f *fakeJobValidator) ValidateSetStatus(_ string) error                      { return f.statusErr }
-func (f *fakeJobValidator) ValidateSetNotes(_ SetNotesInput) error                { return f.notesErr }
+func (f *fakeJobValidator) ValidateDismiss(_ DismissInput) error                 { return f.dismissErr }
+func (f *fakeJobValidator) ValidateSetStatus(_ string) error                     { return f.statusErr }
+func (f *fakeJobValidator) ValidateSetNotes(_ SetNotesInput) error               { return f.notesErr }
 
 // fakeJobService is a test double for Service.
 type fakeJobService struct {
@@ -38,11 +38,12 @@ type fakeJobService struct {
 func (f *fakeJobService) List(_ JobFilter, _ request.Pagination) ([]model.Job, int, error) {
 	return f.jobs, f.total, f.err
 }
-func (f *fakeJobService) Get(_ string) (*model.Job, error)         { return f.job, f.err }
-func (f *fakeJobService) Dismiss(_ string, _ DismissInput) error   { return f.err }
-func (f *fakeJobService) SetSaved(_ string, _ bool) error          { return f.err }
-func (f *fakeJobService) SetStatus(_, _ string) error              { return f.err }
-func (f *fakeJobService) SetNotes(_, _ string) error               { return f.err }
+func (f *fakeJobService) Get(_ string) (*model.Job, error)       { return f.job, f.err }
+func (f *fakeJobService) GetCounts() (*JobCounts, error)         { return &JobCounts{}, f.err }
+func (f *fakeJobService) Dismiss(_ string, _ DismissInput) error { return f.err }
+func (f *fakeJobService) SetSaved(_ string, _ bool) error        { return f.err }
+func (f *fakeJobService) SetStatus(_, _ string) error            { return f.err }
+func (f *fakeJobService) SetNotes(_, _ string) error             { return f.err }
 
 func newJobTestRouter(h *Handler) *chi.Mux {
 	r := chi.NewRouter()
@@ -171,6 +172,23 @@ func TestJobHandlerSetNotes_OK(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("got status %d, want 200", w.Code)
+	}
+}
+
+func TestJobHandlerGetCounts_OK(t *testing.T) {
+	h := NewHandler(&fakeJobValidator{}, &fakeJobService{})
+	r := newJobTestRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/jobs/counts", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("got status %d, want 200", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"data"`) {
+		t.Errorf("body missing data envelope: %s", body)
 	}
 }
 

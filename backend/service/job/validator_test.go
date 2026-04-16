@@ -19,6 +19,8 @@ func TestValidateList(t *testing.T) {
 		{name: "valid new status", filter: JobFilter{Status: model.JobStatusNew}, p: request.Pagination{Page: 1, Limit: 20}},
 		{name: "valid saved status", filter: JobFilter{Status: model.JobStatusSaved}, p: request.Pagination{Page: 1, Limit: 20}},
 		{name: "valid applied status", filter: JobFilter{Status: model.JobStatusApplied}, p: request.Pagination{Page: 1, Limit: 20}},
+		{name: "valid interviewing status", filter: JobFilter{Status: model.JobStatusInterviewing}, p: request.Pagination{Page: 1, Limit: 20}},
+		{name: "valid offer status", filter: JobFilter{Status: model.JobStatusOffer}, p: request.Pagination{Page: 1, Limit: 20}},
 		{name: "invalid status", filter: JobFilter{Status: "dismissed"}, p: request.Pagination{Page: 1, Limit: 20}, wantErr: true},
 		{name: "page 0 invalid", filter: JobFilter{}, p: request.Pagination{Page: 0, Limit: 20}, wantErr: true},
 		{name: "limit 0 invalid", filter: JobFilter{}, p: request.Pagination{Page: 1, Limit: 0}, wantErr: true},
@@ -64,6 +66,12 @@ func TestValidateSetStatus(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	if err := v.ValidateSetStatus(model.JobStatusApplied); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if err := v.ValidateSetStatus(model.JobStatusInterviewing); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if err := v.ValidateSetStatus(model.JobStatusOffer); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 	if err := v.ValidateSetStatus(model.JobStatusDismissed); err == nil {

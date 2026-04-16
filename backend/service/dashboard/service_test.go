@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/service/insights"
 	"github.com/trushilpatel/jobradar/service/scan"
 )
@@ -92,7 +92,7 @@ func TestGetStats_Error(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var sErr *response.ServiceError
+	var sErr *domain.ServiceError
 	if !errors.As(err, &sErr) || sErr.Status != 500 {
 		t.Errorf("expected 500 ServiceError, got %v", err)
 	}

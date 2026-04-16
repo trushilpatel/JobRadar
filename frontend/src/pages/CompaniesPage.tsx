@@ -5,19 +5,24 @@ import { triggerScan } from '@/api/companies'
 import { ADAPTER_TYPES } from '@/types'
 import { ResizeHandle } from '@/components/ui/resize-handle'
 import {
-  useCompanies, useCompanyActions,
-  CompaniesHeader, CompaniesKpiStrip, CompaniesFilterBar,
-  CompaniesTable, CompanyDetailDrawer, AddCompanyModal,
+  useCompanies,
+  useCompanyActions,
+  CompaniesHeader,
+  CompaniesKpiStrip,
+  CompaniesFilterBar,
+  CompaniesTable,
+  CompanyDetailDrawer,
+  AddCompanyModal,
 } from '@/features/companies'
 
 export function CompaniesPage() {
   const c = useCompanies()
   const actions = useCompanyActions()
 
-  const [addOpen, setAddOpen]             = useState(false)
-  const [editCompany, setEditCompany]     = useState<Company | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [editCompany, setEditCompany] = useState<Company | null>(null)
   const [drawerCompany, setDrawerCompany] = useState<Company | null>(null)
-  const [panelWidth, setPanelWidth]       = useState(420)
+  const [panelWidth, setPanelWidth] = useState(420)
   const [adapterOptions, setAdapterOptions] = useState<string[]>([...ADAPTER_TYPES])
 
   const bulkAllActive = c.totalActive > 0 && c.totalActive === c.total
@@ -50,8 +55,8 @@ export function CompaniesPage() {
         adapters={c.adapters}
         onAdaptersChange={c.setAdapters}
         adapterOptions={adapterOptions}
-        onAddAdapter={v => {
-          if (!adapterOptions.includes(v)) setAdapterOptions(opts => [...opts, v])
+        onAddAdapter={(v) => {
+          if (!adapterOptions.includes(v)) setAdapterOptions((opts) => [...opts, v])
         }}
         activeFilter={c.activeFilter}
         onActiveFilterChange={c.setActiveFilter}
@@ -71,12 +76,22 @@ export function CompaniesPage() {
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <CompaniesTable
           companies={c.companies}
-          total={c.total}
+          total={c.statusFilter !== 'none' ? c.companies.length : c.total}
           loading={c.loading}
           page={c.page}
           limit={c.limit}
           onPageChange={c.setPage}
-          onLimitChange={l => { c.setLimit(l); c.setPage(1) }}
+          onLimitChange={(l) => {
+            c.setLimit(l)
+            c.setPage(1)
+          }}
+          emptyMessage={
+            c.statusFilter !== 'none'
+              ? `No ${c.statusFilter} companies on this page — try a different page or reset filters`
+              : c.search
+                ? 'No companies match your search'
+                : 'No companies match the current filters'
+          }
           activeCompanyId={drawerCompany?.id}
           onRowClick={setDrawerCompany}
           actions={{
@@ -115,7 +130,7 @@ export function CompaniesPage() {
       <AddCompanyModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onCreated={async company => {
+        onCreated={async (company) => {
           c.refetch()
           if (company.active) {
             try {
@@ -135,7 +150,7 @@ export function CompaniesPage() {
         open={!!editCompany}
         initialData={editCompany ?? undefined}
         onClose={() => setEditCompany(null)}
-        onUpdated={updated => {
+        onUpdated={(updated) => {
           c.refetch()
           toast.success(`${updated.name} updated`)
         }}

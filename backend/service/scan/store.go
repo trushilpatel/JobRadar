@@ -227,7 +227,18 @@ func (s *scanLogStore) GetScanStats(companyID string) (ScanStatsView, error) {
 	stats.NewToday = newToday
 	stats.NewThisMonth = newThisMonth
 
-	return stats, err
+	var recent []ScanRun
+	if err := s.db.Model(&model.CompanyScanLog{}).
+		Where("company_id = ?", companyID).
+		Order("scanned_at DESC").
+		Limit(10).
+		Select("company_id, scanned_at, jobs_fetched, jobs_new, error, duration_ms").
+		Scan(&recent).Error; err != nil {
+		return stats, err
+	}
+	stats.RecentRuns = recent
+
+	return stats, nil
 }
 
 func (s *scanLogStore) GetJobsScannedToday() (int64, error) {

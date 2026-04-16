@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/pipeline/ats"
-	"github.com/trushilpatel/jobradar/pipeline/llm"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/model"
+	"github.com/trushilpatel/jobradar/pipeline/ats"
+	"github.com/trushilpatel/jobradar/pipeline/llm"
 )
 
 // ── fakes ────────────────────────────────────────────────────────────────────
@@ -40,13 +40,10 @@ type fakeLedger struct {
 	calls []ledgerCall
 }
 
-func (f *fakeLedger) MarkSeen(_, _, _ string) error { return nil }
-func (f *fakeLedger) UpdateSeenReason(_, _ string) error { return nil }
 func (f *fakeLedger) UpdateSeenReasonBatch(ids []string, reason string) error {
 	f.calls = append(f.calls, ledgerCall{ids: ids, reason: reason})
 	return nil
 }
-func (f *fakeLedger) MarkRemovedBatch(_ []string) error { return nil }
 
 type fakePublisher struct {
 	payloads [][]byte

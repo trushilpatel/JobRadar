@@ -21,25 +21,39 @@ interface JobsTableProps {
 }
 
 const EMPTY_MESSAGES: Record<TabKey, string> = {
-  new:     'No new jobs — run a scan to populate the feed',
-  saved:   'No saved jobs yet',
+  new: 'No new jobs — run a scan to populate the feed',
+  saved: 'No saved jobs yet',
   applied: 'No applied jobs yet',
+  interviewing: 'No jobs in interviewing stage',
+  offer: 'No jobs with offers',
 }
 
 export function JobsTable({
-  jobs, total, loading, tab,
-  page, limit,
-  selectedIds, activeJobId,
-  onRowClick, onToggleSelect, onSelectAll,
-  onPageChange, onLimitChange,
+  jobs,
+  total,
+  loading,
+  tab,
+  page,
+  limit,
+  selectedIds,
+  activeJobId,
+  onRowClick,
+  onToggleSelect,
+  onSelectAll,
+  onPageChange,
+  onLimitChange,
 }: JobsTableProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const columns = useMemo(() => buildJobColumns({
-    selectedIds,
-    filteredIds: jobs.map(j => j.id),
-    onToggleSelect,
-    onSelectAll,
-  }), [selectedIds, jobs])
+  const columns = useMemo(
+    () =>
+      buildJobColumns({
+        selectedIds,
+        filteredIds: jobs.map((j) => j.id),
+        onToggleSelect,
+        onSelectAll,
+      }),
+    [selectedIds, jobs]
+  )
 
   return (
     <div className="flex-1 overflow-auto min-w-0">
@@ -48,11 +62,11 @@ export function JobsTable({
         data={jobs}
         loading={loading}
         emptyMessage={EMPTY_MESSAGES[tab]}
-        getRowId={j => j.id}
+        getRowId={(j) => j.id}
         onRowClick={onRowClick}
-        getRowClassName={job => {
+        getRowClassName={(job) => {
           if (selectedIds.has(job.id)) return 'bg-violet-500/[0.06]'
-          if (activeJobId === job.id)  return 'bg-violet-500/[0.08]'
+          if (activeJobId === job.id) return 'bg-violet-500/[0.08]'
           return 'hover:bg-white/[0.03]'
         }}
         serverPagination={{

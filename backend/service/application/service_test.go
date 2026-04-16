@@ -4,19 +4,18 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 	jobsvc "github.com/trushilpatel/jobradar/service/job"
 )
 
 // fakeAppStore is a test double for Store.
 type fakeAppStore struct {
-	apps          []model.JobApplication
-	appsWithJob   []ApplicationWithJob
-	total         int64
-	err           error
-	insertCalled  bool
+	apps         []model.JobApplication
+	appsWithJob  []ApplicationWithJob
+	total        int64
+	err          error
+	insertCalled bool
 }
 
 func (f *fakeAppStore) GetApplicationsByJobID(jobResultID string) ([]model.JobApplication, error) {
@@ -46,28 +45,29 @@ type fakeJobService struct {
 	setStatusCalled bool
 }
 
-func (f *fakeJobService) List(_ jobsvc.JobFilter, _ request.Pagination) ([]model.Job, int, error) {
+func (f *fakeJobService) List(_ jobsvc.JobFilter, _, _ int) ([]model.Job, int, error) {
 	return nil, 0, f.err
 }
-func (f *fakeJobService) Get(_ string) (*model.Job, error) { return f.job, f.err }
+func (f *fakeJobService) Get(_ string) (*model.Job, error)              { return f.job, f.err }
 func (f *fakeJobService) Dismiss(_ string, _ jobsvc.DismissInput) error { return f.err }
 func (f *fakeJobService) SetSaved(_ string, _ bool) error               { return f.err }
 func (f *fakeJobService) SetStatus(_, _ string) error {
 	f.setStatusCalled = true
 	return f.err
 }
-func (f *fakeJobService) SetNotes(_, _ string) error { return f.err }
+func (f *fakeJobService) GetCounts() (*jobsvc.JobCounts, error) { return nil, f.err }
+func (f *fakeJobService) SetNotes(_, _ string) error            { return f.err }
 
 func TestCreate_JobNotFound(t *testing.T) {
 	svc := NewService(&fakeAppStore{}, &fakeJobService{
-		err: response.ErrNotFound.WithMessage("job not found"),
+		err: domain.ErrNotFound.WithMessage("job not found"),
 	})
 
 	_, err := svc.Create("missing", CreateApplicationInput{Stage: model.StageApplied})
 	if err == nil {
 		t.Fatal("expected error for missing job")
 	}
-	var sErr *response.ServiceError
+	var sErr *domain.ServiceError
 	if !errors.As(err, &sErr) || sErr.Code != "NOT_FOUND" {
 		t.Errorf("expected NOT_FOUND error, got %v", err)
 	}
@@ -107,7 +107,7 @@ func TestListAll_Paged(t *testing.T) {
 	appsWithJob := []ApplicationWithJob{{JobTitle: "Backend Eng"}}
 	svc := NewService(&fakeAppStore{appsWithJob: appsWithJob, total: 1}, &fakeJobService{})
 
-	result, total, err := svc.ListAll(request.Pagination{Page: 1, Limit: 20})
+	result, total, err := svc.ListAll(1, 20)
 	if err != nil {
 		t.Fatalf("ListAll() error = %v", err)
 	}

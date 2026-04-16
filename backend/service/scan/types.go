@@ -41,15 +41,26 @@ type ScanQueueItem struct {
 	StartedAt *time.Time `json:"started_at"`
 }
 
+// ScanRun is a single row from company_scan_log, as rendered in the UI.
+type ScanRun struct {
+	CompanyID   string    `json:"company_id"`
+	ScannedAt   time.Time `json:"scanned_at"`
+	JobsFetched int       `json:"jobs_fetched"`
+	JobsNew     int       `json:"jobs_new"`
+	Error       *string   `json:"error"`
+	DurationMs  *int      `json:"duration_ms"`
+}
+
 // ScanStats is a read-only summary of a company's scan history.
 type ScanStats struct {
-	TotalScans    int64    `json:"total_scans"`
-	TotalFetched  int64    `json:"total_fetched"`
-	TotalNew      int64    `json:"total_new"`
-	ErrorCount    int64    `json:"error_count"`
-	AvgDurationMs *float64 `json:"avg_duration_ms"`
-	NewToday      int64    `json:"new_today"`
-	NewThisMonth  int64    `json:"new_this_month"`
+	TotalScans    int64     `json:"total_scans"`
+	TotalFetched  int64     `json:"total_fetched"`
+	TotalNew      int64     `json:"total_new"`
+	ErrorCount    int64     `json:"error_count"`
+	AvgDurationMs *float64  `json:"avg_duration_ms"`
+	NewToday      int64     `json:"new_today"`
+	NewThisMonth  int64     `json:"new_this_month"`
+	RecentRuns    []ScanRun `json:"recent_runs"`
 }
 
 // DailyScanCount holds aggregated scan totals for a given date.

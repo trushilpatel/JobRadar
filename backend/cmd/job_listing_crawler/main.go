@@ -8,15 +8,15 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/config"
-	"github.com/trushilpatel/jobradar/pipeline/ats/google"
 	"github.com/trushilpatel/jobradar/infra/db"
 	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
+	"github.com/trushilpatel/jobradar/pipeline/ats/google"
+	"github.com/trushilpatel/jobradar/pipeline/crawler"
 	companysvc "github.com/trushilpatel/jobradar/service/company"
 	jobsvc "github.com/trushilpatel/jobradar/service/job"
 	scansvc "github.com/trushilpatel/jobradar/service/scan"
-	"github.com/trushilpatel/jobradar/pipeline/crawler"
 )
 
 const pollInterval = 10 * time.Second
@@ -53,6 +53,7 @@ func main() {
 	ledger := jobsvc.NewSeenLedgerStore(database)
 	scanLog := scansvc.NewLogStore(database)
 	queue := scansvc.NewQueueStore(database)
+	recorder := scansvc.NewCrawlerService(scanLog, companies)
 
 	companyDelay := time.Duration(cfg.ScanCompanyDelaySeconds) * time.Second
 	googleCfg := google.Config{
@@ -63,7 +64,7 @@ func main() {
 		EnrichMinMs: cfg.GoogleScraperEnrichMinMs,
 		EnrichMaxMs: cfg.GoogleScraperEnrichMaxMs,
 	}
-	engine := crawler.NewEngine(companies, ledger, scanLog, producer, googleCfg, log)
+	engine := crawler.NewEngine(companies, ledger, recorder, producer, googleCfg, log)
 
 	// Reset any rows stuck in processing from a previous crash.
 	if err := queue.ResetStuck(stuckTimeout); err != nil {

@@ -9,11 +9,11 @@ import (
 	"github.com/trushilpatel/jobradar/config"
 	"github.com/trushilpatel/jobradar/infra/db"
 	"github.com/trushilpatel/jobradar/infra/kafka"
-	"github.com/trushilpatel/jobradar/pipeline/llm"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
-	jobsvc "github.com/trushilpatel/jobradar/service/job"
 	"github.com/trushilpatel/jobradar/pipeline/analyzer"
+	"github.com/trushilpatel/jobradar/pipeline/llm"
+	jobsvc "github.com/trushilpatel/jobradar/service/job"
 )
 
 func main() {
@@ -53,10 +53,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	jobs := jobsvc.NewJobStore(database)
-	ledger := jobsvc.NewSeenLedgerStore(database)
-	snapshot := jobsvc.NewSnapshotStore(database)
-	worker := analyzer.NewWorker(consumer, scorer, jobs, ledger, snapshot, log, cfg.MaxExpYears)
+	jobStore := jobsvc.NewJobStore(database)
+	ledgerStore := jobsvc.NewSeenLedgerStore(database)
+	snapshotStore := jobsvc.NewSnapshotStore(database)
+	pipeline := jobsvc.NewPipelineService(jobStore, ledgerStore, snapshotStore)
+	worker := analyzer.NewWorker(consumer, scorer, pipeline, log, cfg.MaxExpYears)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

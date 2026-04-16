@@ -1,15 +1,14 @@
 package company
 
 import (
-	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 )
 
 // Validator validates user-submitted input for the company domain.
 // It never makes DB calls.
 type Validator interface {
-	ValidateList(filter CompanyFilter, p request.Pagination) error
+	ValidateList(filter CompanyFilter, page, limit int) error
 	ValidateCreate(input CreateCompanyInput) error
 	ValidateUpdate(input UpdateCompanyInput) error
 	ValidateSetAllActive(active *bool) error
@@ -48,30 +47,30 @@ var validAdapters = map[string]bool{
 }
 
 // ValidateList validates list filter and pagination parameters.
-func (v *validator) ValidateList(filter CompanyFilter, p request.Pagination) error {
+func (v *validator) ValidateList(filter CompanyFilter, page, limit int) error {
 	if filter.AdapterType != "" && !validAdapters[filter.AdapterType] {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "adapter_type",
 			Code:    "INVALID_VALUE",
 			Message: "adapter_type is not a recognised adapter",
 		}
 	}
 	if len(filter.Search) > 100 {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "search",
 			Code:    "INVALID_VALUE",
 			Message: "search must be 100 characters or fewer",
 		}
 	}
-	if p.Page < 1 {
-		return &response.ValidationError{
+	if page < 1 {
+		return &domain.ValidationError{
 			Field:   "page",
 			Code:    "INVALID_VALUE",
 			Message: "page must be >= 1",
 		}
 	}
-	if p.Limit < 1 || p.Limit > 100 {
-		return &response.ValidationError{
+	if limit < 1 || limit > 100 {
+		return &domain.ValidationError{
 			Field:   "limit",
 			Code:    "INVALID_VALUE",
 			Message: "limit must be between 1 and 100",
@@ -83,16 +82,16 @@ func (v *validator) ValidateList(filter CompanyFilter, p request.Pagination) err
 // ValidateCreate validates all required fields for company creation.
 func (v *validator) ValidateCreate(input CreateCompanyInput) error {
 	if input.ID == "" {
-		return &response.ValidationError{Field: "id", Code: "REQUIRED", Message: "id is required"}
+		return &domain.ValidationError{Field: "id", Code: "REQUIRED", Message: "id is required"}
 	}
 	if input.Name == "" {
-		return &response.ValidationError{Field: "name", Code: "REQUIRED", Message: "name is required"}
+		return &domain.ValidationError{Field: "name", Code: "REQUIRED", Message: "name is required"}
 	}
 	if !fixedURLAdapters[input.AdapterType] && input.URL == "" {
-		return &response.ValidationError{Field: "url", Code: "REQUIRED", Message: "url is required for this adapter type"}
+		return &domain.ValidationError{Field: "url", Code: "REQUIRED", Message: "url is required for this adapter type"}
 	}
 	if !validAdapters[input.AdapterType] {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "adapter_type",
 			Code:    "INVALID_VALUE",
 			Message: "adapter_type is not a recognised adapter",
@@ -105,14 +104,14 @@ func (v *validator) ValidateCreate(input CreateCompanyInput) error {
 // and adapter_type must be a valid constant if set.
 func (v *validator) ValidateUpdate(input UpdateCompanyInput) error {
 	if input.Name == nil && input.URL == nil && input.AdapterType == nil && input.Active == nil {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "",
 			Code:    "BAD_REQUEST",
 			Message: "at least one field must be provided",
 		}
 	}
 	if input.AdapterType != nil && !validAdapters[*input.AdapterType] {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "adapter_type",
 			Code:    "INVALID_VALUE",
 			Message: "adapter_type is not a recognised adapter",
@@ -124,7 +123,7 @@ func (v *validator) ValidateUpdate(input UpdateCompanyInput) error {
 // ValidateSetAllActive validates that the active pointer is non-nil.
 func (v *validator) ValidateSetAllActive(active *bool) error {
 	if active == nil {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "active",
 			Code:    "REQUIRED",
 			Message: "active (bool) is required",

@@ -70,12 +70,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	p := request.ParsePagination(r)
 
-	if err := h.validator.ValidateListAll(p); err != nil {
+	if err := h.validator.ValidateListAll(p.Page, p.Limit); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
 
-	apps, total, err := h.applications.ListAll(p)
+	apps, total, err := h.applications.ListAll(p.Page, p.Limit)
 	if err != nil {
 		handler.HandleError(w, err)
 		return

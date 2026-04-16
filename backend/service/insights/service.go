@@ -1,6 +1,6 @@
 package insights
 
-import "github.com/trushilpatel/jobradar/api/response"
+import "github.com/trushilpatel/jobradar/domain"
 
 // Service defines all analytics queries for the insights domain.
 type Service interface {
@@ -26,7 +26,7 @@ func NewService(s Store) Service {
 func (s *service) TechStack() (interface{}, error) {
 	data, err := s.store.GetTechStackTrends(15)
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch tech stack")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch tech stack")
 	}
 	return data, nil
 }
@@ -34,7 +34,7 @@ func (s *service) TechStack() (interface{}, error) {
 func (s *service) CompanyActivity() (interface{}, error) {
 	data, err := s.store.GetCompanyActivity()
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch company activity")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch company activity")
 	}
 	return data, nil
 }
@@ -42,7 +42,7 @@ func (s *service) CompanyActivity() (interface{}, error) {
 func (s *service) Funnel() (interface{}, error) {
 	data, err := s.store.GetPipelineFunnel()
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch funnel")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch funnel")
 	}
 	return data, nil
 }
@@ -50,11 +50,11 @@ func (s *service) Funnel() (interface{}, error) {
 func (s *service) Location() (interface{}, error) {
 	countries, err := s.store.GetLocationBreakdown()
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch location breakdown")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch location breakdown")
 	}
 	states, err := s.store.GetUSAStateBreakdown()
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch state breakdown")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch state breakdown")
 	}
 	return map[string]interface{}{
 		"countries": countries,
@@ -69,7 +69,7 @@ func (s *service) Sponsorship(filter InsightsFilter) (interface{}, error) {
 	}
 	data, err := s.store.GetSponsorshipTrend(days)
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch sponsorship trend")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch sponsorship trend")
 	}
 	return data, nil
 }
@@ -77,7 +77,7 @@ func (s *service) Sponsorship(filter InsightsFilter) (interface{}, error) {
 func (s *service) Velocity() (interface{}, error) {
 	data, err := s.store.GetCompanyVelocity(20)
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch company velocity")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch company velocity")
 	}
 	return data, nil
 }
@@ -85,7 +85,7 @@ func (s *service) Velocity() (interface{}, error) {
 func (s *service) RoleCategories() (interface{}, error) {
 	data, err := s.store.GetRoleCategoryBreakdown()
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch role categories")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch role categories")
 	}
 	return data, nil
 }
@@ -93,7 +93,7 @@ func (s *service) RoleCategories() (interface{}, error) {
 func (s *service) GetPipelineCounts() (PipelineCounts, error) {
 	counts, err := s.store.GetPipelineCounts()
 	if err != nil {
-		return PipelineCounts{}, response.ErrInternal.WithMessage("failed to fetch pipeline counts")
+		return PipelineCounts{}, domain.ErrInternal.WithMessage("failed to fetch pipeline counts")
 	}
 	return counts, nil
 }

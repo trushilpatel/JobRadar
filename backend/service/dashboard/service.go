@@ -13,12 +13,13 @@ type Service interface {
 }
 
 type service struct {
-	scanLog    scan.ScanLogReader
+	scanLog     scan.ScanLogReader
 	insightsSvc insights.Service
-	jobCounts  JobCountReader
+	jobCounts   JobCountReader
 }
 
 // JobCountReader is the minimal interface needed to get job counts.
+// GetJobCounts returns new, saved, applied counts respectively.
 type JobCountReader interface {
 	GetJobCounts() (newCount, savedCount, appliedCount int64, err error)
 }

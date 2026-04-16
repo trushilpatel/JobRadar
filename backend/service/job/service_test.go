@@ -35,8 +35,8 @@ func (f *fakeJobStore) GetJobByID(id string) (*model.Job, error) {
 	}
 	return nil, gorm.ErrRecordNotFound
 }
-func (f *fakeJobStore) InsertJob(job *model.Job) error    { return f.err }
-func (f *fakeJobStore) DeleteJob(id string) error         { return f.err }
+func (f *fakeJobStore) InsertJob(job *model.Job) error { return f.err }
+func (f *fakeJobStore) DeleteJob(id string) error      { return f.err }
 func (f *fakeJobStore) UpdateJobStatus(id, status string) error {
 	f.updateStatusCalled = true
 	return f.err
@@ -49,7 +49,7 @@ func (f *fakeJobStore) UpdateJobNotes(id, notes string) error {
 	f.updateNotesCalled = true
 	return f.err
 }
-func (f *fakeJobStore) GetJobCounts() (int64, int64, int64, error) { return 0, 0, 0, f.err }
+func (f *fakeJobStore) GetJobCounts() (*JobCounts, error) { return &JobCounts{}, f.err }
 func (f *fakeJobStore) GetJobsAddedByDay(days int) ([]DailyJobCount, error) {
 	return nil, f.err
 }
@@ -58,14 +58,14 @@ type fakeLedgerWriter struct {
 	err error
 }
 
-func (f *fakeLedgerWriter) MarkSeen(jobID, companyID, reason string) error         { return f.err }
-func (f *fakeLedgerWriter) UpdateSeenReason(jobID, reason string) error            { return f.err }
+func (f *fakeLedgerWriter) MarkSeen(jobID, companyID, reason string) error          { return f.err }
+func (f *fakeLedgerWriter) UpdateSeenReason(jobID, reason string) error             { return f.err }
 func (f *fakeLedgerWriter) UpdateSeenReasonBatch(ids []string, reason string) error { return f.err }
-func (f *fakeLedgerWriter) MarkRemovedBatch(ids []string) error                    { return f.err }
+func (f *fakeLedgerWriter) MarkRemovedBatch(ids []string) error                     { return f.err }
 
 type fakeDiscardStore struct {
-	err           error
-	insertCalled  bool
+	err          error
+	insertCalled bool
 }
 
 func (f *fakeDiscardStore) InsertDiscard(jobResultID, reason, note string) error {
@@ -74,9 +74,9 @@ func (f *fakeDiscardStore) InsertDiscard(jobResultID, reason, note string) error
 }
 
 type fakeSnapshotWriter struct {
-	err           error
-	insertCalled  bool
-	updateCalled  bool
+	err          error
+	insertCalled bool
+	updateCalled bool
 }
 
 func (f *fakeSnapshotWriter) InsertSnapshot(input SnapshotInput) error { return f.err }

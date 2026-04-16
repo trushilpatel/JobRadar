@@ -1,7 +1,7 @@
 package scan
 
 import (
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 )
 
@@ -31,14 +31,14 @@ var validQueueSources = map[string]bool{
 // ValidateListQueue validates filter parameters for listing the queue.
 func (v *validator) ValidateListQueue(filter QueueFilter) error {
 	if filter.Status != "" && !validQueueStatuses[filter.Status] {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
 			Message: "status must be 'queued' or 'processing'",
 		}
 	}
 	if filter.Source != "" && !validQueueSources[filter.Source] {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "source",
 			Code:    "INVALID_VALUE",
 			Message: "source must be 'manual' or 'scheduler'",
@@ -50,7 +50,7 @@ func (v *validator) ValidateListQueue(filter QueueFilter) error {
 // ValidateTriggerScan validates that companyID is non-empty.
 func (v *validator) ValidateTriggerScan(companyID string) error {
 	if companyID == "" {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "company_id",
 			Code:    "REQUIRED",
 			Message: "company_id is required",

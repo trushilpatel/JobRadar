@@ -6,16 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/service/company"
 )
 
 // fakeQueueStore is a test double for ScanQueueStore.
 type fakeQueueStore struct {
-	items       []ScanQueueItem
-	err         error
+	items         []ScanQueueItem
+	err           error
 	enqueueCalled bool
 	removeCalled  bool
 }
@@ -25,13 +24,13 @@ func (f *fakeQueueStore) Enqueue(companyID, source string) error {
 	return f.err
 }
 func (f *fakeQueueStore) ClaimNext(ctx context.Context) (*ScanQueueItem, error) { return nil, f.err }
-func (f *fakeQueueStore) Complete(id string) error                               { return f.err }
+func (f *fakeQueueStore) Complete(id string) error                              { return f.err }
 func (f *fakeQueueStore) Remove(id string) error {
 	f.removeCalled = true
 	return f.err
 }
-func (f *fakeQueueStore) MoveUp(id string) error       { return f.err }
-func (f *fakeQueueStore) MoveDown(id string) error     { return f.err }
+func (f *fakeQueueStore) MoveUp(id string) error           { return f.err }
+func (f *fakeQueueStore) MoveDown(id string) error         { return f.err }
 func (f *fakeQueueStore) ResetStuck(d time.Duration) error { return f.err }
 func (f *fakeQueueStore) ListQueue() ([]ScanQueueItem, error) {
 	return f.items, f.err
@@ -58,7 +57,7 @@ type fakeCompanyService struct {
 	err     error
 }
 
-func (f *fakeCompanyService) List(_ company.CompanyFilter, _ request.Pagination) (company.CompanyListResult, error) {
+func (f *fakeCompanyService) List(_ company.CompanyFilter, _, _ int) (company.CompanyListResult, error) {
 	return company.CompanyListResult{Items: f.views, Total: int64(len(f.views))}, f.err
 }
 func (f *fakeCompanyService) GetAll() ([]company.CompanyView, error) {
@@ -71,8 +70,8 @@ func (f *fakeCompanyService) Create(_ company.CreateCompanyInput) (*model.Compan
 	return f.company, f.err
 }
 func (f *fakeCompanyService) Update(id string, _ company.UpdateCompanyInput) error { return f.err }
-func (f *fakeCompanyService) Delete(id string) error                                { return f.err }
-func (f *fakeCompanyService) SetAllActive(active bool) error                        { return f.err }
+func (f *fakeCompanyService) Delete(id string) error                               { return f.err }
+func (f *fakeCompanyService) SetAllActive(active bool) error                       { return f.err }
 
 func TestTriggerScan_OK(t *testing.T) {
 	q := &fakeQueueStore{}
@@ -90,14 +89,14 @@ func TestTriggerScan_OK(t *testing.T) {
 func TestTriggerScan_CompanyNotFound(t *testing.T) {
 	q := &fakeQueueStore{}
 	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{
-		err: response.ErrNotFound.WithMessage("company not found"),
+		err: domain.ErrNotFound.WithMessage("company not found"),
 	}, Config{})
 
 	err := svc.TriggerScan("missing")
 	if err == nil {
 		t.Fatal("expected error for missing company")
 	}
-	var sErr *response.ServiceError
+	var sErr *domain.ServiceError
 	if !errors.As(err, &sErr) || sErr.Code != "NOT_FOUND" {
 		t.Errorf("expected NOT_FOUND error, got %v", err)
 	}

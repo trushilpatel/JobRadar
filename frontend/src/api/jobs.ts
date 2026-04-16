@@ -10,35 +10,33 @@ export interface JobsPage {
 }
 
 export interface JobFilters {
-  status: 'new' | 'saved' | 'applied'
+  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
   companies?: string[]
   remote?: boolean
-  employTypes?: string[]
-  sponsorship?: boolean
-  noRequirements?: boolean
-  requiresCitizen?: boolean
+  onSite?: boolean
   experienceRanges?: string[]
   daysAdded?: number
 }
 
+export interface JobCounts {
+  new: number
+  saved: number
+  applied: number
+  interviewing: number
+  offer: number
+}
+
 // GET /jobs — all filters pushed to server, no client-side filtering
-export async function fetchJobs(
-  filters: JobFilters,
-  page = 1,
-  limit = 20,
-): Promise<JobsPage> {
+export async function fetchJobs(filters: JobFilters, page = 1, limit = 20): Promise<JobsPage> {
   const p = new URLSearchParams()
   p.set('status', filters.status)
   p.set('page', String(page))
   p.set('limit', String(limit))
 
-  filters.companies?.forEach(c => p.append('companies', c))
+  filters.companies?.forEach((c) => p.append('companies', c))
   if (filters.remote) p.set('remote', 'true')
-  filters.employTypes?.forEach(t => p.append('employ_types', t))
-  if (filters.sponsorship !== undefined) p.set('sponsorship', String(filters.sponsorship))
-  if (filters.noRequirements) p.set('no_requirements', 'true')
-  if (filters.requiresCitizen !== undefined) p.set('requires_citizen', String(filters.requiresCitizen))
-  filters.experienceRanges?.forEach(r => p.append('experience_ranges', r))
+  if (filters.onSite) p.set('on_site', 'true')
+  filters.experienceRanges?.forEach((r) => p.append('experience_ranges', r))
   if (filters.daysAdded) p.set('days_added', String(filters.daysAdded))
 
   const res = await fetch(`${BASE}/jobs?${p}`)
@@ -64,7 +62,10 @@ export async function setJobSaved(id: string, saved: boolean): Promise<void> {
 }
 
 // PATCH /jobs/:id/status
-export async function setJobStatus(id: string, status: 'new' | 'saved' | 'applied'): Promise<void> {
+export async function setJobStatus(
+  id: string,
+  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
+): Promise<void> {
   const res = await fetch(`${BASE}/jobs/${id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -81,6 +82,13 @@ export async function setJobNotes(id: string, notes: string): Promise<void> {
     body: JSON.stringify({ notes }),
   })
   if (!res.ok) throw new Error('Failed to update notes')
+}
+
+// GET /jobs/counts
+export async function fetchJobCounts(): Promise<JobCounts> {
+  const res = await fetch(`${BASE}/jobs/counts`)
+  if (!res.ok) throw new Error('Failed to fetch job counts')
+  return res.json().then((r: { data: JobCounts }) => r.data)
 }
 
 // DELETE /jobs/:id  (dismiss)
@@ -101,7 +109,11 @@ export async function fetchApplications(jobId: string): Promise<JobApplication[]
 }
 
 // POST /jobs/:id/applications
-export async function createApplication(jobId: string, stage: string, note?: string): Promise<void> {
+export async function createApplication(
+  jobId: string,
+  stage: string,
+  note?: string
+): Promise<void> {
   const res = await fetch(`${BASE}/jobs/${jobId}/applications`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

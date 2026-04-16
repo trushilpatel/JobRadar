@@ -20,7 +20,7 @@ type DailyJobCount struct {
 type JobReader interface {
 	GetJobs(filter JobFilter, page, limit int) ([]model.Job, int64, error)
 	GetJobByID(id string) (*model.Job, error)
-	GetJobCounts() (newCount, savedCount, appliedCount int64, err error)
+	GetJobCounts() (*JobCounts, error)
 	GetJobsAddedByDay(days int) ([]DailyJobCount, error)
 }
 
@@ -128,6 +128,11 @@ func (s *jobStore) GetJobs(filter JobFilter, page, limit int) ([]model.Job, int6
 		query = query.Where("remote = ?", *filter.Remote)
 	}
 
+	// On-site (remote = false)
+	if filter.OnSite {
+		query = query.Where("remote = ?", false)
+	}
+
 	// Employment type — OR across values
 	if len(filter.EmployTypes) > 0 {
 		query = query.Where("employ_type IN ?", filter.EmployTypes)
@@ -223,15 +228,39 @@ func (s *jobStore) UpdateJobNotes(id, notes string) error {
 		Update("notes", notes).Error
 }
 
-func (s *jobStore) GetJobCounts() (newCount, savedCount, appliedCount int64, err error) {
-	if err = s.db.Model(&model.Job{}).Where("status = ?", model.JobStatusNew).Count(&newCount).Error; err != nil {
-		return
+func (s *jobStore) GetJobCounts() (*JobCounts, error) {
+	var rows []CountsResult
+	err := s.db.Raw(`
+		SELECT status, COUNT(*) as count
+		FROM job_feed
+		WHERE status IN (?, ?, ?, ?, ?)
+		GROUP BY status
+	`,
+		model.JobStatusNew,
+		model.JobStatusSaved,
+		model.JobStatusApplied,
+		model.JobStatusInterviewing,
+		model.JobStatusOffer,
+	).Scan(&rows).Error
+	if err != nil {
+		return nil, err
 	}
-	if err = s.db.Model(&model.Job{}).Where("status = ?", model.JobStatusSaved).Count(&savedCount).Error; err != nil {
-		return
+	counts := &JobCounts{}
+	for _, r := range rows {
+		switch r.Status {
+		case model.JobStatusNew:
+			counts.New = r.Count
+		case model.JobStatusSaved:
+			counts.Saved = r.Count
+		case model.JobStatusApplied:
+			counts.Applied = r.Count
+		case model.JobStatusInterviewing:
+			counts.Interviewing = r.Count
+		case model.JobStatusOffer:
+			counts.Offer = r.Count
+		}
 	}
-	err = s.db.Model(&model.Job{}).Where("status = ?", model.JobStatusApplied).Count(&appliedCount).Error
-	return
+	return counts, nil
 }
 
 func (s *jobStore) GetJobsAddedByDay(days int) ([]DailyJobCount, error) {

@@ -3,7 +3,6 @@ package application
 import (
 	"testing"
 
-	"github.com/trushilpatel/jobradar/api/request"
 	"github.com/trushilpatel/jobradar/model"
 )
 
@@ -52,16 +51,16 @@ func TestValidateUpdateNote(t *testing.T) {
 func TestValidateListAll(t *testing.T) {
 	v := NewValidator()
 
-	if err := v.ValidateListAll(request.Pagination{Page: 1, Limit: 20}); err != nil {
+	if err := v.ValidateListAll(1, 20); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if err := v.ValidateListAll(request.Pagination{Page: 0, Limit: 20}); err == nil {
+	if err := v.ValidateListAll(0, 20); err == nil {
 		t.Error("expected error for page 0")
 	}
-	if err := v.ValidateListAll(request.Pagination{Page: 1, Limit: 0}); err == nil {
+	if err := v.ValidateListAll(1, 0); err == nil {
 		t.Error("expected error for limit 0")
 	}
-	if err := v.ValidateListAll(request.Pagination{Page: 1, Limit: 101}); err == nil {
+	if err := v.ValidateListAll(1, 101); err == nil {
 		t.Error("expected error for limit 101")
 	}
 }

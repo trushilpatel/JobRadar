@@ -27,6 +27,9 @@ type CompanyWriter interface {
 	UpdateCompany(id string, fields map[string]any) error
 	DeleteCompany(id string) error
 	SetAllCompaniesActive(active bool) error
+	// UpdateScanStatus records the result of a completed scan on the company row.
+	// It updates last_scan_at to now and sets last_scan_status to the given status.
+	UpdateScanStatus(id, status string) error
 }
 
 // Store is the full interface for the company domain.
@@ -127,4 +130,20 @@ func (s *companyStore) GetCompanyCounts() (total, active int64, err error) {
 	}
 	err = s.db.Model(&model.Company{}).Where("active = ?", true).Count(&active).Error
 	return
+}
+
+func (s *companyStore) UpdateScanStatus(id, status string) error {
+	result := s.db.Model(&model.Company{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"last_scan_at":     gorm.Expr("NOW()"),
+			"last_scan_status": status,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

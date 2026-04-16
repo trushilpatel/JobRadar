@@ -4,21 +4,21 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 )
 
 // fakeInsightsStore is a test double for Store.
 type fakeInsightsStore struct {
-	techCounts    []TechCount
-	activity      []CompanyActivityItem
-	funnel        []FunnelStep
-	locations     []LocationCount
-	states        []StateCount
-	sponsorship   []SponsorshipDay
-	velocity      []CompanyVelocity
+	techCounts     []TechCount
+	activity       []CompanyActivityItem
+	funnel         []FunnelStep
+	locations      []LocationCount
+	states         []StateCount
+	sponsorship    []SponsorshipDay
+	velocity       []CompanyVelocity
 	roleCategories []RoleCategoryCount
 	pipelineCounts PipelineCounts
-	err           error
+	err            error
 }
 
 func (f *fakeInsightsStore) GetTechStackTrends(_ int) ([]TechCount, error) {
@@ -62,7 +62,7 @@ func TestTechStack_Error(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var sErr *response.ServiceError
+	var sErr *domain.ServiceError
 	if !errors.As(err, &sErr) || sErr.Status != 500 {
 		t.Errorf("expected 500 ServiceError, got %v", err)
 	}

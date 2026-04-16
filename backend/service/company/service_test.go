@@ -5,8 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 	"gorm.io/gorm"
 )
@@ -78,6 +77,9 @@ func (f *fakeStore) DeleteCompany(id string) error {
 func (f *fakeStore) SetAllCompaniesActive(active bool) error {
 	return f.err
 }
+func (f *fakeStore) UpdateScanStatus(id, status string) error {
+	return f.err
+}
 
 func TestList_ComputesNextScanAt(t *testing.T) {
 	lastScan := time.Now().Add(-1 * time.Hour)
@@ -87,7 +89,7 @@ func TestList_ComputesNextScanAt(t *testing.T) {
 	}
 	svc := NewService(&fakeStore{companies: companies}, Config{ScanIntervalMinutes: 60})
 
-	result, err := svc.List(CompanyFilter{}, request.Pagination{Page: 1, Limit: 20})
+	result, err := svc.List(CompanyFilter{}, 1, 20)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -171,7 +173,7 @@ func TestDelete_ReturnsNotFoundWhenMissing(t *testing.T) {
 		t.Fatal("expected error for missing company")
 	}
 
-	var sErr *response.ServiceError
+	var sErr *domain.ServiceError
 	if !errors.As(err, &sErr) {
 		t.Fatalf("expected ServiceError, got %T: %v", err, err)
 	}
@@ -189,7 +191,7 @@ func TestList_FiltersActiveCompanies(t *testing.T) {
 	svc := NewService(&fakeStore{companies: companies}, Config{})
 
 	active := true
-	result, err := svc.List(CompanyFilter{Active: &active}, request.Pagination{Page: 1, Limit: 20})
+	result, err := svc.List(CompanyFilter{Active: &active}, 1, 20)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

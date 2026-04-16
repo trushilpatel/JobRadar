@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/api/handler"
-	"github.com/trushilpatel/jobradar/api/request"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/service/application"
 	"github.com/trushilpatel/jobradar/service/company"
@@ -140,31 +139,36 @@ func TestRouter_OperationalEndpointsSeparateFromHandlers(t *testing.T) {
 
 type fakeCompanyService struct{}
 
-func (f *fakeCompanyService) List(_ company.CompanyFilter, _ request.Pagination) (company.CompanyListResult, error) {
+func (f *fakeCompanyService) List(_ company.CompanyFilter, _, _ int) (company.CompanyListResult, error) {
 	return company.CompanyListResult{}, nil
 }
 func (f *fakeCompanyService) GetAll() ([]company.CompanyView, error) { return nil, nil }
-func (f *fakeCompanyService) Get(_ string) (*model.Company, error)                         { return nil, nil }
-func (f *fakeCompanyService) Create(_ company.CreateCompanyInput) (*model.Company, error)  { return nil, nil }
-func (f *fakeCompanyService) Update(_ string, _ company.UpdateCompanyInput) error          { return nil }
-func (f *fakeCompanyService) Delete(_ string) error                                        { return nil }
-func (f *fakeCompanyService) SetAllActive(_ bool) error                                    { return nil }
+func (f *fakeCompanyService) Get(_ string) (*model.Company, error)   { return nil, nil }
+func (f *fakeCompanyService) Create(_ company.CreateCompanyInput) (*model.Company, error) {
+	return nil, nil
+}
+func (f *fakeCompanyService) Update(_ string, _ company.UpdateCompanyInput) error { return nil }
+func (f *fakeCompanyService) Delete(_ string) error                               { return nil }
+func (f *fakeCompanyService) SetAllActive(_ bool) error                           { return nil }
 
 type fakeScanService struct{}
 
-func (f *fakeScanService) TriggerScan(_ string) error                                  { return nil }
-func (f *fakeScanService) GetStats(_ string) (*scan.ScanStatsView, error)              { return nil, nil }
-func (f *fakeScanService) ListQueue(_ scan.QueueFilter) ([]scan.QueueEntryView, error) { return nil, nil }
-func (f *fakeScanService) RemoveFromQueue(_ string) error                               { return nil }
-func (f *fakeScanService) MoveUp(_ string) error                                        { return nil }
-func (f *fakeScanService) MoveDown(_ string) error                                      { return nil }
+func (f *fakeScanService) TriggerScan(_ string) error                     { return nil }
+func (f *fakeScanService) GetStats(_ string) (*scan.ScanStatsView, error) { return nil, nil }
+func (f *fakeScanService) ListQueue(_ scan.QueueFilter) ([]scan.QueueEntryView, error) {
+	return nil, nil
+}
+func (f *fakeScanService) RemoveFromQueue(_ string) error { return nil }
+func (f *fakeScanService) MoveUp(_ string) error          { return nil }
+func (f *fakeScanService) MoveDown(_ string) error        { return nil }
 
 type fakeJobService struct{}
 
-func (f *fakeJobService) List(_ job.JobFilter, _ request.Pagination) ([]model.Job, int, error) {
+func (f *fakeJobService) List(_ job.JobFilter, _, _ int) ([]model.Job, int, error) {
 	return nil, 0, nil
 }
 func (f *fakeJobService) Get(_ string) (*model.Job, error)           { return nil, nil }
+func (f *fakeJobService) GetCounts() (*job.JobCounts, error)         { return nil, nil }
 func (f *fakeJobService) Dismiss(_ string, _ job.DismissInput) error { return nil }
 func (f *fakeJobService) SetSaved(_ string, _ bool) error            { return nil }
 func (f *fakeJobService) SetStatus(_, _ string) error                { return nil }
@@ -173,7 +177,7 @@ func (f *fakeJobService) SetNotes(_, _ string) error                 { return ni
 type fakeAppService struct{}
 
 func (f *fakeAppService) ListByJob(_ string) ([]model.JobApplication, error) { return nil, nil }
-func (f *fakeAppService) ListAll(_ request.Pagination) ([]application.ApplicationWithJob, int, error) {
+func (f *fakeAppService) ListAll(_, _ int) ([]application.ApplicationWithJob, int, error) {
 	return nil, 0, nil
 }
 func (f *fakeAppService) Create(_ string, _ application.CreateApplicationInput) (*model.JobApplication, error) {
@@ -184,19 +188,23 @@ func (f *fakeAppService) UpdateNote(_, _ string, _ application.UpdateNoteInput) 
 
 type fakeDashboardService struct{}
 
-func (f *fakeDashboardService) GetStats() (*dashboard.StatsView, error)              { return nil, nil }
-func (f *fakeDashboardService) GetActivity(_ int) ([]dashboard.ActivityView, error)  { return nil, nil }
+func (f *fakeDashboardService) GetStats() (*dashboard.StatsView, error)             { return nil, nil }
+func (f *fakeDashboardService) GetActivity(_ int) ([]dashboard.ActivityView, error) { return nil, nil }
 
 type fakeInsightsService struct{}
 
-func (f *fakeInsightsService) TechStack() (interface{}, error)                               { return nil, nil }
-func (f *fakeInsightsService) CompanyActivity() (interface{}, error)                         { return nil, nil }
-func (f *fakeInsightsService) Funnel() (interface{}, error)                                  { return nil, nil }
-func (f *fakeInsightsService) Location() (interface{}, error)                                { return nil, nil }
-func (f *fakeInsightsService) Sponsorship(_ insights.InsightsFilter) (interface{}, error)    { return nil, nil }
-func (f *fakeInsightsService) Velocity() (interface{}, error)                                { return nil, nil }
-func (f *fakeInsightsService) RoleCategories() (interface{}, error)                          { return nil, nil }
-func (f *fakeInsightsService) GetPipelineCounts() (insights.PipelineCounts, error)          { return insights.PipelineCounts{}, nil }
+func (f *fakeInsightsService) TechStack() (interface{}, error)       { return nil, nil }
+func (f *fakeInsightsService) CompanyActivity() (interface{}, error) { return nil, nil }
+func (f *fakeInsightsService) Funnel() (interface{}, error)          { return nil, nil }
+func (f *fakeInsightsService) Location() (interface{}, error)        { return nil, nil }
+func (f *fakeInsightsService) Sponsorship(_ insights.InsightsFilter) (interface{}, error) {
+	return nil, nil
+}
+func (f *fakeInsightsService) Velocity() (interface{}, error)       { return nil, nil }
+func (f *fakeInsightsService) RoleCategories() (interface{}, error) { return nil, nil }
+func (f *fakeInsightsService) GetPipelineCounts() (insights.PipelineCounts, error) {
+	return insights.PipelineCounts{}, nil
+}
 
 // Ensure fakes implement interfaces.
 var _ company.Service = (*fakeCompanyService)(nil)

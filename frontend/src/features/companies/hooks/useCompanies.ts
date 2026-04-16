@@ -24,13 +24,18 @@ export function useCompanies() {
 
   // Server-side filters — only those the API supports.
   // statusFilter + multi-adapter are applied client-side on the current page.
-  const serverFilters = useMemo<CompanyFilters>(() => ({
-    search: debouncedSearch || undefined,
-    adapterType: adapters.length === 1 ? adapters[0] : undefined,
-    active: activeFilter === 'active' ? true : activeFilter === 'inactive' ? false : undefined,
-  }), [debouncedSearch, adapters, activeFilter])
+  const serverFilters = useMemo<CompanyFilters>(
+    () => ({
+      search: debouncedSearch || undefined,
+      adapterType: adapters.length === 1 ? adapters[0] : undefined,
+      active: activeFilter === 'active' ? true : activeFilter === 'inactive' ? false : undefined,
+    }),
+    [debouncedSearch, adapters, activeFilter]
+  )
 
-  useEffect(() => { setPage(1) }, [serverFilters, statusFilter])
+  useEffect(() => {
+    setPage(1)
+  }, [serverFilters, statusFilter])
 
   const companiesQuery = useQuery({
     queryKey: ['companies', serverFilters, page, limit],
@@ -58,25 +63,30 @@ export function useCompanies() {
   const companies = useMemo(() => {
     let list = rawCompanies
     if (adapters.length > 1) {
-      list = list.filter(c => adapters.includes(c.adapter_type))
+      list = list.filter((c) => adapters.includes(c.adapter_type))
     }
     if (statusFilter !== 'none') {
-      list = list.filter(c => {
+      list = list.filter((c) => {
         const q = queueMap.get(c.id)
         if (statusFilter === 'running') return q === 'processing'
-        if (statusFilter === 'queued')  return q === 'queued'
-        if (statusFilter === 'error')   return c.last_scan_status === 'error'
+        if (statusFilter === 'queued') return q === 'queued'
+        if (statusFilter === 'error') return c.last_scan_status === 'error'
         return true
       })
     }
     return list
   }, [rawCompanies, adapters, statusFilter, queueMap])
 
-  // Counts for filter bar / KPI strip — derived from current page + queue.
+  // Counts for filter bar / KPI strip.
+  // running/queued are derived from queueMap cross-referenced with rawCompanies so
+  // the counts stay consistent with what the status filter will actually show on
+  // the current page. Using queueMap.values() globally would show counts that don't
+  // match the page, making the filter appear broken when the matching company is
+  // on a different page.
   const counts = useMemo(() => {
-    const errors  = rawCompanies.filter(c => c.last_scan_status === 'error').length
-    const running = [...queueMap.values()].filter(v => v === 'processing').length
-    const queued  = [...queueMap.values()].filter(v => v === 'queued').length
+    const errors = rawCompanies.filter((c) => c.last_scan_status === 'error').length
+    const running = rawCompanies.filter((c) => queueMap.get(c.id) === 'processing').length
+    const queued = rawCompanies.filter((c) => queueMap.get(c.id) === 'queued').length
     return { errors, running, queued }
   }, [rawCompanies, queueMap])
 
@@ -100,13 +110,19 @@ export function useCompanies() {
       await Promise.all([companiesQuery.refetch(), queueQuery.refetch()])
     },
 
-    search, handleSearchChange,
-    adapters, setAdapters,
-    activeFilter, setActiveFilter,
-    statusFilter, setStatusFilter,
+    search,
+    handleSearchChange,
+    adapters,
+    setAdapters,
+    activeFilter,
+    setActiveFilter,
+    statusFilter,
+    setStatusFilter,
 
-    page, setPage,
-    limit, setLimit,
+    page,
+    setPage,
+    limit,
+    setLimit,
 
     resetFilters,
   }
