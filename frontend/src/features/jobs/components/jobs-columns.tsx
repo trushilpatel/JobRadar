@@ -14,6 +14,7 @@ export interface JobTableActions {
   onSelectAll: (checked: boolean) => void
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 function IndeterminateCheckbox({
   checked,
   indeterminate,
@@ -32,7 +33,7 @@ function IndeterminateCheckbox({
       ref={ref}
       type="checkbox"
       checked={checked}
-      onChange={e => onChange(e.target.checked)}
+      onChange={(e) => onChange(e.target.checked)}
       className="accent-violet-500 cursor-pointer"
     />
   )
@@ -40,8 +41,8 @@ function IndeterminateCheckbox({
 
 export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknown>[] {
   const { selectedIds, filteredIds, onToggleSelect, onSelectAll } = actions
-  const allSelected = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id))
-  const someSelected = filteredIds.some(id => selectedIds.has(id))
+  const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id))
+  const someSelected = filteredIds.some((id) => selectedIds.has(id))
 
   return [
     {
@@ -56,11 +57,11 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
         />
       ),
       cell: ({ row }) => (
-        <div onClick={e => e.stopPropagation()}>
+        <div onClick={(e) => e.stopPropagation()}>
           <input
             type="checkbox"
             checked={selectedIds.has(row.original.id)}
-            onChange={e => onToggleSelect(row.original.id, e.target.checked)}
+            onChange={(e) => onToggleSelect(row.original.id, e.target.checked)}
             className="accent-violet-500 cursor-pointer"
           />
         </div>
@@ -69,7 +70,7 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
     {
       id: 'company',
       size: 180,
-      accessorFn: row => row.company?.name ?? row.company_id ?? '',
+      accessorFn: (row) => row.company?.name ?? row.company_id ?? '',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Company" />,
       cell: ({ row }) => {
         const name = row.original.company?.name ?? row.original.company_id ?? ''
@@ -117,9 +118,11 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       header: () => <span className="text-slate-400">Salary</span>,
       cell: ({ row }) => {
         const salary = formatSalary(row.original.salary_range)
-        return salary
-          ? <span className="text-xs text-amber-300">{salary}</span>
-          : <span className="text-xs text-slate-600">—</span>
+        return salary ? (
+          <span className="text-xs text-amber-300">{salary}</span>
+        ) : (
+          <span className="text-xs text-slate-600">—</span>
+        )
       },
     },
     {
@@ -127,9 +130,7 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       size: 100,
       header: ({ column }) => <DataTableColumnHeader column={column} title="Added" />,
       cell: ({ getValue }) => (
-        <span className="text-xs text-slate-500">
-          {formatRelativeTime(getValue() as string)}
-        </span>
+        <span className="text-xs text-slate-500">{formatRelativeTime(getValue() as string)}</span>
       ),
     },
   ]

@@ -1,16 +1,14 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core'
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
 import { useDroppable, useDraggable } from '@dnd-kit/core'
 import { X, ExternalLink } from 'lucide-react'
 import type { ApplicationWithJob, ApplicationStage } from '@/types'
-import { fetchAllApplications, updateApplicationStage, updateApplicationNote } from '@/api/applications'
+import {
+  fetchAllApplications,
+  updateApplicationStage,
+  updateApplicationNote,
+} from '@/api/applications'
 import { cn } from '@/lib/utils'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -88,9 +86,7 @@ function AppCard({ app, onClick, isDragging = false }: AppCardProps) {
       <p className="text-sm font-medium text-white leading-snug">{app.company_name}</p>
       <p className="text-xs text-slate-400 mt-0.5 leading-snug">{app.job_title}</p>
       <p className="text-xs text-slate-500 mt-1.5">{formatShortDate(app.stage_at)}</p>
-      {app.note && (
-        <p className="text-xs text-slate-500 italic mt-1 line-clamp-2">{app.note}</p>
-      )}
+      {app.note && <p className="text-xs text-slate-500 italic mt-1 line-clamp-2">{app.note}</p>}
     </div>
   )
 }
@@ -143,7 +139,7 @@ function KanbanColumn({ stage, apps, isDraggingAny, onCardClick, activeId }: Col
             : 'bg-white/[0.02] border border-white/[0.04]'
         )}
       >
-        {apps.map(app => (
+        {apps.map((app) => (
           <AppCard
             key={app.id}
             app={app}
@@ -178,6 +174,7 @@ function ApplicationDetailDrawer({ app, onClose, onNoteChange }: DrawerProps) {
   // Sync note when app changes
   useEffect(() => {
     if (app && app.id !== prevAppId.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNoteValue(app.note ?? '')
       prevAppId.current = app.id
     }
@@ -194,17 +191,16 @@ function ApplicationDetailDrawer({ app, onClose, onNoteChange }: DrawerProps) {
   return (
     <>
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-20 bg-black/30"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 z-20 bg-black/30" onClick={onClose} />
 
       {/* Drawer */}
       <div className="fixed inset-y-0 right-0 z-30 flex flex-col w-full max-w-md bg-[#0d0d14] border-l border-white/[0.07] shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-white/[0.07]">
           <div className="min-w-0 flex-1">
-            <p className="text-base font-semibold text-white leading-tight truncate">{app.job_title}</p>
+            <p className="text-base font-semibold text-white leading-tight truncate">
+              {app.job_title}
+            </p>
             <p className="text-sm text-slate-400 mt-0.5">{app.company_name}</p>
           </div>
           <button
@@ -219,11 +215,15 @@ function ApplicationDetailDrawer({ app, onClose, onNoteChange }: DrawerProps) {
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {/* Stage badge */}
           <div>
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Stage</p>
-            <span className={cn(
-              'inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-white/[0.05] border border-white/[0.07]',
-              STAGE_COLORS[app.stage]
-            )}>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+              Stage
+            </p>
+            <span
+              className={cn(
+                'inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-white/[0.05] border border-white/[0.07]',
+                STAGE_COLORS[app.stage]
+              )}
+            >
               <span className={cn('w-1.5 h-1.5 rounded-full', STAGE_DOT_COLORS[app.stage])} />
               {STAGE_LABELS[app.stage]}
             </span>
@@ -231,16 +231,20 @@ function ApplicationDetailDrawer({ app, onClose, onNoteChange }: DrawerProps) {
 
           {/* Stage date */}
           <div>
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Stage since</p>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">
+              Stage since
+            </p>
             <p className="text-sm text-slate-300">{formatShortDate(app.stage_at)}</p>
           </div>
 
           {/* Notes */}
           <div>
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Notes</p>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+              Notes
+            </p>
             <textarea
               value={noteValue}
-              onChange={e => setNoteValue(e.target.value)}
+              onChange={(e) => setNoteValue(e.target.value)}
               onBlur={handleNoteBlur}
               placeholder="Add notes about this application…"
               rows={5}
@@ -274,9 +278,7 @@ export function ApplicationsPage() {
   const [drawerApp, setDrawerApp] = useState<ApplicationWithJob | null>(null)
   const [activeId, setActiveId] = useState<number | null>(null)
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
-  )
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
   useEffect(() => {
     load()
@@ -305,7 +307,7 @@ export function ApplicationsPage() {
   }, [apps])
 
   const inProgressCount = useMemo(() => {
-    return apps.filter(a => a.stage !== 'rejected' && a.stage !== 'offer').length
+    return apps.filter((a) => a.stage !== 'rejected' && a.stage !== 'offer').length
   }, [apps])
 
   function handleDragStart(event: DragStartEvent) {
@@ -318,39 +320,39 @@ export function ApplicationsPage() {
     if (!over) return
     const appId = active.id as number
     const newStage = over.id as string
-    const app = apps.find(a => a.id === appId)
+    const app = apps.find((a) => a.id === appId)
     if (!app || app.stage === newStage) return
 
     // Optimistic update
-    setApps(prev =>
-      prev.map(a => a.id === appId ? { ...a, stage: newStage as ApplicationStage } : a)
+    setApps((prev) =>
+      prev.map((a) => (a.id === appId ? { ...a, stage: newStage as ApplicationStage } : a))
     )
     // If drawer is open for this app, update it too
     if (drawerApp?.id === appId) {
-      setDrawerApp(d => d ? { ...d, stage: newStage as ApplicationStage } : d)
+      setDrawerApp((d) => (d ? { ...d, stage: newStage as ApplicationStage } : d))
     }
 
     updateApplicationStage(app.job_result_id, appId, newStage).catch(() => {
       // Revert on failure
-      setApps(prev => prev.map(a => a.id === appId ? { ...a, stage: app.stage } : a))
+      setApps((prev) => prev.map((a) => (a.id === appId ? { ...a, stage: app.stage } : a)))
       if (drawerApp?.id === appId) {
-        setDrawerApp(d => d ? { ...d, stage: app.stage } : d)
+        setDrawerApp((d) => (d ? { ...d, stage: app.stage } : d))
       }
     })
   }
 
   function handleNoteChange(appId: number, note: string) {
-    const app = apps.find(a => a.id === appId)
+    const app = apps.find((a) => a.id === appId)
     if (!app) return
-    setApps(prev => prev.map(a => a.id === appId ? { ...a, note } : a))
-    if (drawerApp?.id === appId) setDrawerApp(d => d ? { ...d, note } : d)
+    setApps((prev) => prev.map((a) => (a.id === appId ? { ...a, note } : a)))
+    if (drawerApp?.id === appId) setDrawerApp((d) => (d ? { ...d, note } : d))
     updateApplicationNote(app.job_result_id, appId, note).catch(() => {
       // Revert
-      setApps(prev => prev.map(a => a.id === appId ? { ...a, note: app.note } : a))
+      setApps((prev) => prev.map((a) => (a.id === appId ? { ...a, note: app.note } : a)))
     })
   }
 
-  const activeApp = activeId != null ? apps.find(a => a.id === activeId) : null
+  const activeApp = activeId != null ? apps.find((a) => a.id === activeId) : null
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -370,27 +372,19 @@ export function ApplicationsPage() {
           <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : error ? (
-        <div className="flex-1 flex items-center justify-center text-slate-500">
-          {error}
-        </div>
+        <div className="flex-1 flex items-center justify-center text-slate-500">{error}</div>
       ) : apps.length === 0 ? (
         <div className="flex-1 flex items-center justify-center px-6">
           <div className="text-center">
             <p className="text-slate-400 font-medium">No applications yet</p>
-            <p className="text-slate-500 text-sm mt-1">
-              Mark a job as applied to start tracking
-            </p>
+            <p className="text-slate-500 text-sm mt-1">Mark a job as applied to start tracking</p>
           </div>
         </div>
       ) : (
         <div className="flex-1 overflow-x-auto overflow-y-hidden">
-          <DndContext
-            sensors={sensors}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-          >
+          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="flex gap-4 px-6 py-5 h-full min-h-[calc(100vh-120px)]">
-              {STAGES.map(stage => (
+              {STAGES.map((stage) => (
                 <KanbanColumn
                   key={stage}
                   stage={stage}
@@ -402,9 +396,7 @@ export function ApplicationsPage() {
               ))}
             </div>
 
-            <DragOverlay>
-              {activeApp ? <AppCardOverlay app={activeApp} /> : null}
-            </DragOverlay>
+            <DragOverlay>{activeApp ? <AppCardOverlay app={activeApp} /> : null}</DragOverlay>
           </DndContext>
         </div>
       )}

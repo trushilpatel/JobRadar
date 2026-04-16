@@ -37,10 +37,9 @@ type ScanQueueStore interface {
 	ListQueue() ([]ScanQueueItem, error)
 }
 
-// ScanLogWriter records scan summaries and updates company scan status.
+// ScanLogWriter records scan summaries.
 type ScanLogWriter interface {
 	InsertCompanyScanLog(companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) error
-	UpdateCompanyScanStatus(companyID, status string) error
 }
 
 // ScanLogReader reads scan history for a company.
@@ -259,13 +258,4 @@ func (s *scanLogStore) GetScansByDay(days int) ([]DailyScanCount, error) {
 		Order("date ASC").
 		Scan(&results).Error
 	return results, err
-}
-
-func (s *scanLogStore) UpdateCompanyScanStatus(companyID, status string) error {
-	return s.db.Model(&model.Company{}).
-		Where("id = ?", companyID).
-		Updates(map[string]any{
-			"last_scan_at":     gorm.Expr("NOW()"),
-			"last_scan_status": status,
-		}).Error
 }

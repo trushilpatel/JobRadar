@@ -3,7 +3,6 @@ package job
 import (
 	"testing"
 
-	"github.com/trushilpatel/jobradar/api/request"
 	"github.com/trushilpatel/jobradar/model"
 )
 
@@ -13,25 +12,26 @@ func TestValidateList(t *testing.T) {
 	tests := []struct {
 		name    string
 		filter  JobFilter
-		p       request.Pagination
+		page    int
+		limit   int
 		wantErr bool
 	}{
-		{name: "valid new status", filter: JobFilter{Status: model.JobStatusNew}, p: request.Pagination{Page: 1, Limit: 20}},
-		{name: "valid saved status", filter: JobFilter{Status: model.JobStatusSaved}, p: request.Pagination{Page: 1, Limit: 20}},
-		{name: "valid applied status", filter: JobFilter{Status: model.JobStatusApplied}, p: request.Pagination{Page: 1, Limit: 20}},
-		{name: "valid interviewing status", filter: JobFilter{Status: model.JobStatusInterviewing}, p: request.Pagination{Page: 1, Limit: 20}},
-		{name: "valid offer status", filter: JobFilter{Status: model.JobStatusOffer}, p: request.Pagination{Page: 1, Limit: 20}},
-		{name: "invalid status", filter: JobFilter{Status: "dismissed"}, p: request.Pagination{Page: 1, Limit: 20}, wantErr: true},
-		{name: "page 0 invalid", filter: JobFilter{}, p: request.Pagination{Page: 0, Limit: 20}, wantErr: true},
-		{name: "limit 0 invalid", filter: JobFilter{}, p: request.Pagination{Page: 1, Limit: 0}, wantErr: true},
-		{name: "limit 101 invalid", filter: JobFilter{}, p: request.Pagination{Page: 1, Limit: 101}, wantErr: true},
-		{name: "limit 100 valid", filter: JobFilter{}, p: request.Pagination{Page: 1, Limit: 100}},
-		{name: "empty status valid", filter: JobFilter{}, p: request.Pagination{Page: 1, Limit: 20}},
+		{name: "valid new status", filter: JobFilter{Status: model.JobStatusNew}, page: 1, limit: 20},
+		{name: "valid saved status", filter: JobFilter{Status: model.JobStatusSaved}, page: 1, limit: 20},
+		{name: "valid applied status", filter: JobFilter{Status: model.JobStatusApplied}, page: 1, limit: 20},
+		{name: "valid interviewing status", filter: JobFilter{Status: model.JobStatusInterviewing}, page: 1, limit: 20},
+		{name: "valid offer status", filter: JobFilter{Status: model.JobStatusOffer}, page: 1, limit: 20},
+		{name: "invalid status", filter: JobFilter{Status: "dismissed"}, page: 1, limit: 20, wantErr: true},
+		{name: "page 0 invalid", filter: JobFilter{}, page: 0, limit: 20, wantErr: true},
+		{name: "limit 0 invalid", filter: JobFilter{}, page: 1, limit: 0, wantErr: true},
+		{name: "limit 101 invalid", filter: JobFilter{}, page: 1, limit: 101, wantErr: true},
+		{name: "limit 100 valid", filter: JobFilter{}, page: 1, limit: 100},
+		{name: "empty status valid", filter: JobFilter{}, page: 1, limit: 20},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := v.ValidateList(tc.filter, tc.p)
+			err := v.ValidateList(tc.filter, tc.page, tc.limit)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ValidateList() error = %v, wantErr %v", err, tc.wantErr)
 			}

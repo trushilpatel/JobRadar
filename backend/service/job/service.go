@@ -1,15 +1,14 @@
 package job
 
 import (
-	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/store"
 )
 
 // Service defines all business operations for the job domain.
 type Service interface {
-	List(filter JobFilter, p request.Pagination) ([]model.Job, int, error)
+	List(filter JobFilter, page, limit int) ([]model.Job, int, error)
 	Get(id string) (*model.Job, error)
 	GetCounts() (*JobCounts, error)
 	Dismiss(id string, input DismissInput) error
@@ -36,10 +35,10 @@ func NewService(jobs JobStore, ledger SeenLedgerWriter, discard DiscardStore, sn
 }
 
 // List returns a paginated, filtered list of jobs — all filtering happens at the DB level.
-func (s *service) List(filter JobFilter, p request.Pagination) ([]model.Job, int, error) {
-	jobs, total, err := s.jobs.GetJobs(filter, p.Page, p.Limit)
+func (s *service) List(filter JobFilter, page, limit int) ([]model.Job, int, error) {
+	jobs, total, err := s.jobs.GetJobs(filter, page, limit)
 	if err != nil {
-		return nil, 0, response.ErrInternal.WithMessage("failed to fetch jobs")
+		return nil, 0, domain.ErrInternal.WithMessage("failed to fetch jobs")
 	}
 	return jobs, int(total), nil
 }
@@ -48,7 +47,7 @@ func (s *service) List(filter JobFilter, p request.Pagination) ([]model.Job, int
 func (s *service) GetCounts() (*JobCounts, error) {
 	counts, err := s.jobs.GetJobCounts()
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch job counts")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch job counts")
 	}
 	return counts, nil
 }
@@ -58,9 +57,9 @@ func (s *service) Get(id string) (*model.Job, error) {
 	job, err := s.jobs.GetJobByID(id)
 	if err != nil {
 		if store.IsNotFound(err) {
-			return nil, response.ErrNotFound.WithMessage("job not found")
+			return nil, domain.ErrNotFound.WithMessage("job not found")
 		}
-		return nil, response.ErrInternal.WithMessage("failed to fetch job")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch job")
 	}
 	return job, nil
 }
@@ -73,15 +72,15 @@ func (s *service) Dismiss(id string, input DismissInput) error {
 	}
 
 	if err := s.discard.InsertDiscard(id, input.Reason, input.Note); err != nil {
-		return response.ErrInternal.WithMessage("failed to discard job")
+		return domain.ErrInternal.WithMessage("failed to discard job")
 	}
 
 	if err := s.ledger.UpdateSeenReason(job.JobPostID, model.SeenReasonUserDismissed); err != nil {
-		return response.ErrInternal.WithMessage("failed to update seen ledger")
+		return domain.ErrInternal.WithMessage("failed to update seen ledger")
 	}
 
 	if err := s.jobs.UpdateJobStatus(id, model.JobStatusDismissed); err != nil {
-		return response.ErrInternal.WithMessage("failed to update job status")
+		return domain.ErrInternal.WithMessage("failed to update job status")
 	}
 
 	// Non-fatal: snapshot may not exist for older jobs
@@ -93,7 +92,7 @@ func (s *service) Dismiss(id string, input DismissInput) error {
 // SetSaved updates the saved flag for a job and non-fatally backfills the snapshot.
 func (s *service) SetSaved(id string, saved bool) error {
 	if err := s.jobs.UpdateJobSaved(id, saved); err != nil {
-		return response.ErrInternal.WithMessage("failed to update job")
+		return domain.ErrInternal.WithMessage("failed to update job")
 	}
 	if saved {
 		_ = s.snapshot.UpdateSnapshotAction(id, model.JobStatusSaved)
@@ -104,7 +103,7 @@ func (s *service) SetSaved(id string, saved bool) error {
 // SetStatus updates the status of a job and non-fatally backfills the snapshot if applied.
 func (s *service) SetStatus(id, status string) error {
 	if err := s.jobs.UpdateJobStatus(id, status); err != nil {
-		return response.ErrInternal.WithMessage("failed to update status")
+		return domain.ErrInternal.WithMessage("failed to update status")
 	}
 	if status == model.JobStatusApplied {
 		_ = s.snapshot.UpdateSnapshotAction(id, model.JobStatusApplied)
@@ -115,7 +114,7 @@ func (s *service) SetStatus(id, status string) error {
 // SetNotes updates the notes for a job.
 func (s *service) SetNotes(id, notes string) error {
 	if err := s.jobs.UpdateJobNotes(id, notes); err != nil {
-		return response.ErrInternal.WithMessage("failed to update notes")
+		return domain.ErrInternal.WithMessage("failed to update notes")
 	}
 	return nil
 }

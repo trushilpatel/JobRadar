@@ -17,12 +17,18 @@ interface CompanyDetailDrawerProps {
 }
 
 export function CompanyDetailDrawer({
-  company, queueStatus, onClose, onScan, onEdit, onDelete,
+  company,
+  queueStatus,
+  onClose,
+  onScan,
+  onEdit,
+  onDelete,
 }: CompanyDetailDrawerProps) {
   const [stats, setStats] = useState<ScanStats | null>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStats(null)
     setLoading(true)
     fetchScanStats(company.id)
@@ -32,26 +38,32 @@ export function CompanyDetailDrawer({
   }, [company.id])
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
   const kind: StatusKind =
-    queueStatus === 'processing' ? 'running'
-    : queueStatus === 'queued'   ? 'queued'
-    : company.last_scan_status === 'ok'    ? 'ok'
-    : company.last_scan_status === 'error' ? 'error'
-    : 'pending'
+    queueStatus === 'processing'
+      ? 'running'
+      : queueStatus === 'queued'
+        ? 'queued'
+        : company.last_scan_status === 'ok'
+          ? 'ok'
+          : company.last_scan_status === 'error'
+            ? 'error'
+            : 'pending'
 
   const history: HistoryPoint[] = (stats?.recent_runs ?? [])
     .slice(0, 10)
     .reverse()
-    .map(r => (r.error ? 'err' : 'ok'))
+    .map((r) => (r.error ? 'err' : 'ok'))
 
-  const successCount = history.filter(p => p === 'ok').length
-  const errorCount   = history.filter(p => p === 'err').length
-  const successRate  = history.length ? Math.round(successCount / history.length * 100) : 0
+  const successCount = history.filter((p) => p === 'ok').length
+  const errorCount = history.filter((p) => p === 'err').length
+  const successRate = history.length ? Math.round((successCount / history.length) * 100) : 0
 
   return (
     <div className="flex flex-col h-full bg-[#0d0d14]">
@@ -89,9 +101,7 @@ export function CompanyDetailDrawer({
           <PillBadge>
             Last: {company.last_scan_at ? formatRelativeTime(company.last_scan_at) : '—'}
           </PillBadge>
-          <PillBadge>
-            Next: {formatNext(company.next_scan_at, queueStatus)}
-          </PillBadge>
+          <PillBadge>Next: {formatNext(company.next_scan_at, queueStatus)}</PillBadge>
         </div>
         <div className="flex items-center gap-2 mt-3">
           <button
@@ -130,11 +140,7 @@ export function CompanyDetailDrawer({
 
         <Section title="Activity">
           <div className="grid grid-cols-2 gap-2">
-            <StatTile
-              value={stats?.new_today ?? 0}
-              accent="new"
-              label="Last 24 hours"
-            />
+            <StatTile value={stats?.new_today ?? 0} accent="new" label="Last 24 hours" />
             {/* TODO(backend): expose total open jobs per company in ScanStats */}
             <StatTile value="—" label="Open jobs total" />
           </div>
@@ -155,7 +161,7 @@ export function CompanyDetailDrawer({
             <p className="text-xs text-slate-500">No runs yet</p>
           ) : (
             <div className="space-y-1 text-xs">
-              {(stats?.recent_runs ?? []).slice(0, 6).map(r => (
+              {(stats?.recent_runs ?? []).slice(0, 6).map((r) => (
                 <div
                   key={r.id}
                   className="flex items-center justify-between border-b border-white/[0.04] py-1.5"
@@ -177,8 +183,14 @@ export function CompanyDetailDrawer({
 // ── helpers ────────────────────────────────────────────────────────────────
 
 function Section({
-  title, aside, children,
-}: { title: string; aside?: string; children: React.ReactNode }) {
+  title,
+  aside,
+  children,
+}: {
+  title: string
+  aside?: string
+  children: React.ReactNode
+}) {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -191,8 +203,14 @@ function Section({
 }
 
 function StatTile({
-  value, label, accent,
-}: { value: string | number; label: string; accent?: 'new' }) {
+  value,
+  label,
+  accent,
+}: {
+  value: string | number
+  label: string
+  accent?: 'new'
+}) {
   return (
     <div className="border border-white/[0.07] rounded-lg px-3 py-2.5">
       <div className="flex items-baseline gap-1.5">
@@ -213,12 +231,16 @@ function PillBadge({ children }: { children: React.ReactNode }) {
 }
 
 function safeHost(url: string) {
-  try { return new URL(url).hostname } catch { return url }
+  try {
+    return new URL(url).hostname
+  } catch {
+    return url
+  }
 }
 
 function formatNext(next: string | null, queueStatus?: 'queued' | 'processing') {
   if (queueStatus === 'processing') return 'now'
-  if (queueStatus === 'queued')     return 'up next'
+  if (queueStatus === 'queued') return 'up next'
   if (!next) return '—'
   const ms = new Date(next).getTime() - Date.now()
   if (ms <= 0) return '—'

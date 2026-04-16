@@ -164,7 +164,8 @@ export function JobsPage() {
           onToggleSelect={(id, checked) => {
             setSelectedIds((prev) => {
               const n = new Set(prev)
-              checked ? n.add(id) : n.delete(id)
+              if (checked) n.add(id)
+              else n.delete(id)
               return n
             })
           }}

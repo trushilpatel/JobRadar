@@ -1,0 +1,153 @@
+package job
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/trushilpatel/jobradar/model"
+	"github.com/trushilpatel/jobradar/pipeline/ats"
+	"github.com/trushilpatel/jobradar/pipeline/llm"
+	"gorm.io/datatypes"
+)
+
+// EnrichedJobInput carries all data the analyzer has enriched before writing to DB.
+// It bundles the original RawJob from the ATS and the LLM's structured extraction result.
+type EnrichedJobInput struct {
+	Raw      ats.RawJob
+	Enriched *llm.EnrichResult
+}
+
+// pipelineLedger is the narrow ledger access the pipeline service needs.
+type pipelineLedger interface {
+	HasSeen(jobID string) (bool, error)
+	UpdateSeenReason(jobID, reason string) error
+}
+
+// PipelineService is the interface the analyzer worker depends on.
+// It hides all store interactions behind a single seam.
+type PipelineService interface {
+	// SaveEnrichedJob inserts the job into job_feed, writes to job_analytics snapshot,
+	// and marks the pipeline ledger entry as done.
+	// The caller is responsible for eligibility filtering before calling this method.
+	SaveEnrichedJob(input EnrichedJobInput) error
+
+	// MarkLedgerError marks a pipeline ledger entry with reason='error'.
+	MarkLedgerError(jobID string) error
+
+	// HasSeenJob returns true if the job has already been processed (dedup check).
+	HasSeenJob(jobID string) (bool, error)
+}
+
+type pipelineService struct {
+	jobs     JobWriter
+	ledger   pipelineLedger
+	snapshot SnapshotWriter
+}
+
+// NewPipelineService constructs a PipelineService backed by the provided stores.
+func NewPipelineService(jobs JobWriter, ledger pipelineLedger, snapshot SnapshotWriter) PipelineService {
+	return &pipelineService{jobs: jobs, ledger: ledger, snapshot: snapshot}
+}
+
+// SaveEnrichedJob builds the job row, inserts it into job_feed, writes the analytics
+// snapshot (non-fatal on failure), and marks the pipeline ledger as seen.
+func (p *pipelineService) SaveEnrichedJob(input EnrichedJobInput) error {
+	row, err := buildJobRow(input)
+	if err != nil {
+		return fmt.Errorf("build job row: %w", err)
+	}
+
+	if err := p.jobs.InsertJob(row); err != nil {
+		return fmt.Errorf("insert job: %w", err)
+	}
+
+	// Non-fatal: snapshot write failure is logged by the caller — job is already saved.
+	_ = p.snapshot.InsertSnapshot(SnapshotInput{
+		ID:                row.ID,
+		CompanyID:         input.Raw.CompanyID,
+		Country:           input.Enriched.Country,
+		State:             input.Enriched.State,
+		Remote:            input.Enriched.Remote,
+		Sponsorship:       input.Enriched.Sponsorship,
+		RequiresCitizen:   input.Enriched.RequiresCitizen,
+		SecurityClearance: input.Enriched.SecurityClearance,
+		EmployType:        input.Raw.EmployType,
+		ExperienceYears:   input.Enriched.ExperienceYears,
+		TechStack:         []byte(row.TechStack), // already marshalled by buildJobRow
+		RoleCategory:      input.Enriched.RoleCategory,
+	})
+
+	if err := p.ledger.UpdateSeenReason(input.Raw.ID, model.SeenReasonFetch); err != nil {
+		return fmt.Errorf("mark ledger seen: %w", err)
+	}
+
+	return nil
+}
+
+// MarkLedgerError marks the pipeline ledger entry for jobID with reason='error'.
+func (p *pipelineService) MarkLedgerError(jobID string) error {
+	return p.ledger.UpdateSeenReason(jobID, model.SeenReasonError)
+}
+
+// HasSeenJob returns true if the job has already been processed.
+func (p *pipelineService) HasSeenJob(jobID string) (bool, error) {
+	return p.ledger.HasSeen(jobID)
+}
+
+// buildJobRow maps EnrichedJobInput into a model.Job ready for DB insert.
+// The field mapping mirrors buildJob in the analyzer worker exactly.
+func buildJobRow(input EnrichedJobInput) (*model.Job, error) {
+	raw := input.Raw
+	enriched := input.Enriched
+
+	techStack, err := json.Marshal(enriched.TechStack)
+	if err != nil {
+		return nil, fmt.Errorf("marshal tech_stack: %w", err)
+	}
+
+	responsibilities, err := json.Marshal(enriched.Responsibilities)
+	if err != nil {
+		return nil, fmt.Errorf("marshal responsibilities: %w", err)
+	}
+
+	salaryRange, err := json.Marshal(map[string]any{
+		"min":      enriched.SalaryMin,
+		"max":      enriched.SalaryMax,
+		"currency": enriched.SalaryCurrency,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal salary_range: %w", err)
+	}
+
+	return &model.Job{
+		ID:                uuid.New().String(),
+		JobPostID:         raw.ID,
+		CompanyID:         raw.CompanyID,
+		Title:             raw.Title,
+		Location:          nullableStr(raw.Location),
+		Remote:            enriched.Remote,
+		Country:           nullableStr(enriched.Country),
+		State:             nullableStr(enriched.State),
+		URL:               raw.URL,
+		EmployType:        nullableStr(raw.EmployType),
+		ExperienceYears:   enriched.ExperienceYears,
+		TechStack:         datatypes.JSON(techStack),
+		SalaryRange:       datatypes.JSON(salaryRange),
+		LLMSummary:        nullableStr(enriched.Summary),
+		Sponsorship:       enriched.Sponsorship,
+		RequiresCitizen:   enriched.RequiresCitizen,
+		SecurityClearance: enriched.SecurityClearance,
+		RoleBrief:         nullableStr(enriched.RoleBrief),
+		Responsibilities:  datatypes.JSON(responsibilities),
+		Status:            model.JobStatusNew,
+	}, nil
+}
+
+// nullableStr returns nil if s is empty, otherwise returns a pointer to s.
+func nullableStr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}

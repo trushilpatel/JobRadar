@@ -34,6 +34,7 @@ export function useCompanies() {
   )
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1)
   }, [serverFilters, statusFilter])
 

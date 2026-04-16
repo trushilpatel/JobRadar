@@ -8,6 +8,7 @@
         test-adapter-greenhouse test-adapter-lever test-adapter-ashby \
         docker-up docker-down \
         up down logs build-docker \
+        install-hooks \
         help
 
 # ── Dev ──────────────────────────────────────────────────────────────────────
@@ -127,6 +128,11 @@ logs: ## Tail logs for all services (Ctrl-C to stop)
 
 build-docker: ## Build backend (jobradar_backend) + frontend images without starting
 	DOCKER_BUILDKIT=1 docker-compose build
+
+# ── Setup ─────────────────────────────────────────────────────────────────────
+
+install-hooks: ## Install Husky git hooks (run once after cloning)
+	npm install
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 package dashboard
 
 import (
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/service/insights"
 	"github.com/trushilpatel/jobradar/service/scan"
 )
@@ -37,17 +37,17 @@ func NewService(scanLog scan.ScanLogReader, insightsSvc insights.Service, jobCou
 func (s *service) GetStats() (*StatsView, error) {
 	scannedToday, err := s.scanLog.GetJobsScannedToday()
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch scanned today")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch scanned today")
 	}
 
 	newCount, savedCount, appliedCount, err := s.jobCounts.GetJobCounts()
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch job counts")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch job counts")
 	}
 
 	pipeline, err := s.insightsSvc.GetPipelineCounts()
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch pipeline counts")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch pipeline counts")
 	}
 
 	relevant := newCount + savedCount + appliedCount
@@ -72,7 +72,7 @@ func (s *service) GetStats() (*StatsView, error) {
 func (s *service) GetActivity(days int) ([]ActivityView, error) {
 	scans, err := s.scanLog.GetScansByDay(days)
 	if err != nil {
-		return nil, response.ErrInternal.WithMessage("failed to fetch activity")
+		return nil, domain.ErrInternal.WithMessage("failed to fetch activity")
 	}
 
 	views := make([]ActivityView, len(scans))

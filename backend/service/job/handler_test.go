@@ -9,8 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 )
 
@@ -22,10 +21,10 @@ type fakeJobValidator struct {
 	notesErr   error
 }
 
-func (f *fakeJobValidator) ValidateList(_ JobFilter, _ request.Pagination) error { return f.listErr }
-func (f *fakeJobValidator) ValidateDismiss(_ DismissInput) error                 { return f.dismissErr }
-func (f *fakeJobValidator) ValidateSetStatus(_ string) error                     { return f.statusErr }
-func (f *fakeJobValidator) ValidateSetNotes(_ SetNotesInput) error               { return f.notesErr }
+func (f *fakeJobValidator) ValidateList(_ JobFilter, _, _ int) error { return f.listErr }
+func (f *fakeJobValidator) ValidateDismiss(_ DismissInput) error     { return f.dismissErr }
+func (f *fakeJobValidator) ValidateSetStatus(_ string) error         { return f.statusErr }
+func (f *fakeJobValidator) ValidateSetNotes(_ SetNotesInput) error   { return f.notesErr }
 
 // fakeJobService is a test double for Service.
 type fakeJobService struct {
@@ -35,7 +34,7 @@ type fakeJobService struct {
 	err   error
 }
 
-func (f *fakeJobService) List(_ JobFilter, _ request.Pagination) ([]model.Job, int, error) {
+func (f *fakeJobService) List(_ JobFilter, _, _ int) ([]model.Job, int, error) {
 	return f.jobs, f.total, f.err
 }
 func (f *fakeJobService) Get(_ string) (*model.Job, error)       { return f.job, f.err }
@@ -73,7 +72,7 @@ func TestJobHandlerList_OK(t *testing.T) {
 
 func TestJobHandlerList_ValidationError(t *testing.T) {
 	h := NewHandler(
-		&fakeJobValidator{listErr: &response.ValidationError{Field: "status", Code: "INVALID_VALUE", Message: "bad"}},
+		&fakeJobValidator{listErr: &domain.ValidationError{Field: "status", Code: "INVALID_VALUE", Message: "bad"}},
 		&fakeJobService{},
 	)
 	r := newJobTestRouter(h)
@@ -103,7 +102,7 @@ func TestJobHandlerGet_OK(t *testing.T) {
 func TestJobHandlerGet_NotFound(t *testing.T) {
 	h := NewHandler(
 		&fakeJobValidator{},
-		&fakeJobService{err: response.ErrNotFound.WithMessage("job not found")},
+		&fakeJobService{err: domain.ErrNotFound.WithMessage("job not found")},
 	)
 	r := newJobTestRouter(h)
 
@@ -132,7 +131,7 @@ func TestJobHandlerDismiss_OK(t *testing.T) {
 
 func TestJobHandlerDismiss_ValidationError(t *testing.T) {
 	h := NewHandler(
-		&fakeJobValidator{dismissErr: &response.ValidationError{Field: "reason", Code: "INVALID_VALUE", Message: "bad reason"}},
+		&fakeJobValidator{dismissErr: &domain.ValidationError{Field: "reason", Code: "INVALID_VALUE", Message: "bad reason"}},
 		&fakeJobService{},
 	)
 	r := newJobTestRouter(h)

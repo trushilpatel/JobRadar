@@ -1,14 +1,13 @@
 package job
 
 import (
-	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 )
 
 // Validator validates user-submitted input for the job domain.
 type Validator interface {
-	ValidateList(filter JobFilter, p request.Pagination) error
+	ValidateList(filter JobFilter, page, limit int) error
 	ValidateDismiss(input DismissInput) error
 	ValidateSetStatus(status string) error
 	ValidateSetNotes(input SetNotesInput) error
@@ -41,9 +40,9 @@ var validExperienceRanges = map[string]bool{
 }
 
 // ValidateList validates list filter and pagination parameters.
-func (v *validator) ValidateList(filter JobFilter, p request.Pagination) error {
+func (v *validator) ValidateList(filter JobFilter, page, limit int) error {
 	if filter.Status != "" && !validJobStatuses[filter.Status] {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
 			Message: "status must be 'new', 'saved', 'applied', 'interviewing', or 'offer'",
@@ -51,22 +50,22 @@ func (v *validator) ValidateList(filter JobFilter, p request.Pagination) error {
 	}
 	for _, r := range filter.ExperienceRanges {
 		if !validExperienceRanges[r] {
-			return &response.ValidationError{
+			return &domain.ValidationError{
 				Field:   "experience_ranges",
 				Code:    "INVALID_VALUE",
 				Message: "experience_ranges must be '0-2', '3-5', or '5+'",
 			}
 		}
 	}
-	if p.Page < 1 {
-		return &response.ValidationError{
+	if page < 1 {
+		return &domain.ValidationError{
 			Field:   "page",
 			Code:    "INVALID_VALUE",
 			Message: "page must be >= 1",
 		}
 	}
-	if p.Limit < 1 || p.Limit > 100 {
-		return &response.ValidationError{
+	if limit < 1 || limit > 100 {
+		return &domain.ValidationError{
 			Field:   "limit",
 			Code:    "INVALID_VALUE",
 			Message: "limit must be between 1 and 100",
@@ -78,7 +77,7 @@ func (v *validator) ValidateList(filter JobFilter, p request.Pagination) error {
 // ValidateDismiss validates dismiss reason.
 func (v *validator) ValidateDismiss(input DismissInput) error {
 	if !validDiscardReasons[input.Reason] {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "reason",
 			Code:    "INVALID_VALUE",
 			Message: "reason must be 'user_dismissed' or 'user_not_relevant'",
@@ -90,7 +89,7 @@ func (v *validator) ValidateDismiss(input DismissInput) error {
 // ValidateSetStatus validates that status is a valid user-settable value.
 func (v *validator) ValidateSetStatus(status string) error {
 	if !validJobStatuses[status] {
-		return &response.ValidationError{
+		return &domain.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
 			Message: "status must be 'new', 'saved', 'applied', 'interviewing', or 'offer'",

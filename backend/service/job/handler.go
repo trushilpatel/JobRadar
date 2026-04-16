@@ -73,12 +73,12 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := h.validator.ValidateList(filter, p); err != nil {
+	if err := h.validator.ValidateList(filter, p.Page, p.Limit); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
 
-	jobs, total, err := h.jobs.List(filter, p)
+	jobs, total, err := h.jobs.List(filter, p.Page, p.Limit)
 	if err != nil {
 		handler.HandleError(w, err)
 		return

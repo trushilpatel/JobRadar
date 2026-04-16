@@ -4,8 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/api/response"
+	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 	"gorm.io/gorm"
 )
@@ -91,7 +90,7 @@ func TestList_ReturnsPaged(t *testing.T) {
 	jobs := []model.Job{{ID: "j1"}, {ID: "j2"}}
 	svc := NewService(&fakeJobStore{jobs: jobs, total: 2}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{})
 
-	result, total, err := svc.List(JobFilter{Status: "new"}, request.Pagination{Page: 1, Limit: 20})
+	result, total, err := svc.List(JobFilter{Status: "new"}, 1, 20)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -110,7 +109,7 @@ func TestGet_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing job")
 	}
-	var sErr *response.ServiceError
+	var sErr *domain.ServiceError
 	if !errors.As(err, &sErr) || sErr.Code != "NOT_FOUND" {
 		t.Errorf("expected NOT_FOUND error, got %v", err)
 	}

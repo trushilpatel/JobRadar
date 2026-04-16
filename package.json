@@ -1,0 +1,17 @@
+{
+  "name": "jobradar",
+  "private": true,
+  "scripts": {
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.go": "gofmt -w",
+    "*.{js,jsx,ts,tsx}": "prettier --write",
+    "*.{json,css,md}": "prettier --write"
+  },
+  "devDependencies": {
+    "husky": "^9.0.0",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.3"
+  }
+}
