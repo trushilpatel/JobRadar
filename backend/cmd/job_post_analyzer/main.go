@@ -11,6 +11,7 @@ import (
 	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/pipeline/analyzer"
 	"github.com/trushilpatel/jobradar/pipeline/llm"
 	jobsvc "github.com/trushilpatel/jobradar/service/job"
@@ -19,6 +20,9 @@ import (
 func main() {
 	cfg := config.Load()
 	log := logger.Init("enricher")
+
+	shutdown := tracing.Init("jobradar-enricher", cfg.JaegerEndpoint)
+	defer shutdown()
 
 	database, err := db.Open(cfg)
 	if err != nil {

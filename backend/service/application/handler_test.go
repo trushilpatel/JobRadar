@@ -2,6 +2,7 @@ package application
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -41,7 +42,7 @@ func (f *fakeAppService) ListByJob(_ string) ([]model.JobApplication, error) {
 func (f *fakeAppService) ListAll(_, _ int) ([]ApplicationWithJob, int, error) {
 	return f.appsWithJob, f.total, f.err
 }
-func (f *fakeAppService) Create(_ string, _ CreateApplicationInput) (*model.JobApplication, error) {
+func (f *fakeAppService) Create(_ context.Context, _ string, _ CreateApplicationInput) (*model.JobApplication, error) {
 	return f.app, f.err
 }
 func (f *fakeAppService) UpdateStage(_, _ string, _ UpdateStageInput) error { return f.err }

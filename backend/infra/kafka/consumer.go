@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/twmb/franz-go/pkg/kgo"
-	"github.com/twmb/franz-go/pkg/sasl/plain"
 	"github.com/trushilpatel/jobradar/config"
 	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/sasl/plain"
 )
 
 type Consumer struct {
@@ -43,9 +43,9 @@ func NewConsumer(cfg *config.Config, log logger.Logger, groupID string, topics .
 }
 
 // Poll fetches the next batch of records and calls fn for each one.
-// Commits offsets after fn returns nil. Transient fetch errors are logged
-// and skipped — only context cancellation stops the loop.
-func (c *Consumer) Poll(ctx context.Context, fn func(topic string, value []byte) error) error {
+// fn receives the Kafka record headers so workers can extract trace context via tracing.ExtractKafka.
+// Commits offsets after fn returns nil. Transient fetch errors are logged and skipped.
+func (c *Consumer) Poll(ctx context.Context, fn func(topic string, value []byte, headers []kgo.RecordHeader) error) error {
 	for {
 		fetches := c.client.PollFetches(ctx)
 		if ctx.Err() != nil {
@@ -58,7 +58,7 @@ func (c *Consumer) Poll(ctx context.Context, fn func(topic string, value []byte)
 
 		var lastErr error
 		fetches.EachRecord(func(r *kgo.Record) {
-			if err := fn(r.Topic, r.Value); err != nil {
+			if err := fn(r.Topic, r.Value, r.Headers); err != nil {
 				lastErr = err
 			}
 		})

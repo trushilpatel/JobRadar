@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/trushilpatel/jobradar/domain"
@@ -12,7 +13,7 @@ import (
 type Service interface {
 	ListByJob(jobID string) ([]model.JobApplication, error)
 	ListAll(page, limit int) ([]ApplicationWithJob, int, error)
-	Create(jobID string, input CreateApplicationInput) (*model.JobApplication, error)
+	Create(ctx context.Context, jobID string, input CreateApplicationInput) (*model.JobApplication, error)
 	UpdateStage(jobID, appID string, input UpdateStageInput) error
 	UpdateNote(jobID, appID string, input UpdateNoteInput) error
 }
@@ -47,9 +48,9 @@ func (s *service) ListAll(page, limit int) ([]ApplicationWithJob, int, error) {
 
 // Create inserts a new application stage entry for the given job.
 // Verifies the job exists via job.Service.Get().
-func (s *service) Create(jobID string, input CreateApplicationInput) (*model.JobApplication, error) {
+func (s *service) Create(ctx context.Context, jobID string, input CreateApplicationInput) (*model.JobApplication, error) {
 	// Existence check — returns NOT_FOUND if missing
-	if _, err := s.jobSvc.Get(jobID); err != nil {
+	if _, err := s.jobSvc.Get(ctx, jobID); err != nil {
 		return nil, err
 	}
 
@@ -59,7 +60,7 @@ func (s *service) Create(jobID string, input CreateApplicationInput) (*model.Job
 
 	// When the first stage is added, mark the job as applied (non-fatal)
 	if input.Stage == model.StageApplied {
-		_ = s.jobSvc.SetStatus(jobID, model.JobStatusApplied)
+		_ = s.jobSvc.SetStatus(ctx, jobID, model.JobStatusApplied)
 	}
 
 	app := &model.JobApplication{

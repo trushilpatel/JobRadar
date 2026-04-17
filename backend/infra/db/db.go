@@ -2,6 +2,7 @@ package db
 
 import (
 	"github.com/trushilpatel/jobradar/config"
+	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -12,6 +13,10 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 		Logger: logger.Default.LogMode(logger.Info),
 	})
 	if err != nil {
+		return nil, err
+	}
+
+	if err := db.Use(otelgorm.NewPlugin()); err != nil {
 		return nil, err
 	}
 

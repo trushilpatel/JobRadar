@@ -37,7 +37,7 @@ type fakePipelineService struct {
 	markCalls   []string
 }
 
-func (f *fakePipelineService) SaveEnrichedJob(input jobsvc.EnrichedJobInput) error {
+func (f *fakePipelineService) SaveEnrichedJob(_ context.Context, input jobsvc.EnrichedJobInput) error {
 	if f.saveErr != nil {
 		return f.saveErr
 	}
@@ -45,12 +45,12 @@ func (f *fakePipelineService) SaveEnrichedJob(input jobsvc.EnrichedJobInput) err
 	return nil
 }
 
-func (f *fakePipelineService) MarkLedgerError(id string) error {
+func (f *fakePipelineService) MarkLedgerError(_ context.Context, id string) error {
 	f.markCalls = append(f.markCalls, id)
 	return f.markErr
 }
 
-func (f *fakePipelineService) HasSeenJob(id string) (bool, error) {
+func (f *fakePipelineService) HasSeenJob(_ context.Context, id string) (bool, error) {
 	return f.hasSeen, f.hasSeenErr
 }
 
@@ -111,7 +111,7 @@ func TestEnrich_HappyPath(t *testing.T) {
 
 	// Test the pipeline interaction directly — call SaveEnrichedJob with the right input.
 	input := toEnrichedInput(job, result)
-	if err := pipeline.SaveEnrichedJob(input); err != nil {
+	if err := pipeline.SaveEnrichedJob(context.Background(), input); err != nil {
 		t.Fatalf("SaveEnrichedJob: %v", err)
 	}
 	if len(pipeline.savedInputs) != 1 {
@@ -135,7 +135,7 @@ func TestEnrich_LLMError_MarksError(t *testing.T) {
 	w := makeWorker(scorer, pipeline)
 
 	// Simulate the markError path directly
-	w.markError("ashby-abc123")
+	w.markError(context.Background(), "ashby-abc123")
 
 	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != "ashby-abc123" {
 		t.Errorf("expected markError called with job ID, got %v", pipeline.markCalls)
@@ -154,8 +154,8 @@ func TestEnrich_SaveError_MarksError(t *testing.T) {
 
 	// Simulate the save-failure path
 	input := toEnrichedInput(baseRawJob(), baseEnrichResult())
-	if err := pipeline.SaveEnrichedJob(input); err != nil {
-		w.markError(baseRawJob().ID)
+	if err := pipeline.SaveEnrichedJob(context.Background(), input); err != nil {
+		w.markError(context.Background(), baseRawJob().ID)
 	}
 
 	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != baseRawJob().ID {

@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -45,25 +46,29 @@ type fakeJobService struct {
 	setStatusCalled bool
 }
 
-func (f *fakeJobService) List(_ jobsvc.JobFilter, _, _ int) ([]model.Job, int, error) {
+func (f *fakeJobService) List(_ context.Context, _ jobsvc.JobFilter, _, _ int) ([]model.Job, int, error) {
 	return nil, 0, f.err
 }
-func (f *fakeJobService) Get(_ string) (*model.Job, error)              { return f.job, f.err }
-func (f *fakeJobService) Dismiss(_ string, _ jobsvc.DismissInput) error { return f.err }
-func (f *fakeJobService) SetSaved(_ string, _ bool) error               { return f.err }
-func (f *fakeJobService) SetStatus(_, _ string) error {
+func (f *fakeJobService) Get(_ context.Context, _ string) (*model.Job, error) { return f.job, f.err }
+func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ jobsvc.DismissInput) error {
+	return f.err
+}
+func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error { return f.err }
+func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error {
 	f.setStatusCalled = true
 	return f.err
 }
-func (f *fakeJobService) GetCounts() (*jobsvc.JobCounts, error) { return nil, f.err }
-func (f *fakeJobService) SetNotes(_, _ string) error            { return f.err }
+func (f *fakeJobService) GetCounts(_ context.Context) (*jobsvc.JobCounts, error) {
+	return nil, f.err
+}
+func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error { return f.err }
 
 func TestCreate_JobNotFound(t *testing.T) {
 	svc := NewService(&fakeAppStore{}, &fakeJobService{
 		err: domain.ErrNotFound.WithMessage("job not found"),
 	})
 
-	_, err := svc.Create("missing", CreateApplicationInput{Stage: model.StageApplied})
+	_, err := svc.Create(context.Background(), "missing", CreateApplicationInput{Stage: model.StageApplied})
 	if err == nil {
 		t.Fatal("expected error for missing job")
 	}
@@ -77,7 +82,7 @@ func TestCreate_OK(t *testing.T) {
 	fs := &fakeAppStore{}
 	svc := NewService(fs, &fakeJobService{job: &model.Job{ID: "j1"}})
 
-	app, err := svc.Create("j1", CreateApplicationInput{Stage: model.StagePhoneScreen})
+	app, err := svc.Create(context.Background(), "j1", CreateApplicationInput{Stage: model.StagePhoneScreen})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -94,7 +99,7 @@ func TestCreate_SetsJobApplied(t *testing.T) {
 	jobSvc := &fakeJobService{job: &model.Job{ID: "j1"}}
 	svc := NewService(fs, jobSvc)
 
-	_, err := svc.Create("j1", CreateApplicationInput{Stage: model.StageApplied})
+	_, err := svc.Create(context.Background(), "j1", CreateApplicationInput{Stage: model.StageApplied})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}

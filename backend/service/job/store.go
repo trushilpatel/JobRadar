@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -19,19 +20,19 @@ type DailyJobCount struct {
 
 // JobReader is for the UI/API layer to query enriched jobs.
 type JobReader interface {
-	GetJobs(filter JobFilter, page, limit int) ([]model.Job, int64, error)
-	GetJobByID(id string) (*model.Job, error)
-	GetJobCounts() (*JobCounts, error)
-	GetJobsAddedByDay(days int) ([]DailyJobCount, error)
+	GetJobs(ctx context.Context, filter JobFilter, page, limit int) ([]model.Job, int64, error)
+	GetJobByID(ctx context.Context, id string) (*model.Job, error)
+	GetJobCounts(ctx context.Context) (*JobCounts, error)
+	GetJobsAddedByDay(ctx context.Context, days int) ([]DailyJobCount, error)
 }
 
 // JobWriter is for the LLM enricher to insert completed job results.
 type JobWriter interface {
-	InsertJob(job *model.Job) error
-	DeleteJob(id string) error
-	UpdateJobStatus(id, status string) error
-	UpdateJobSaved(id string, saved bool) error
-	UpdateJobNotes(id, notes string) error
+	InsertJob(ctx context.Context, job *model.Job) error
+	DeleteJob(ctx context.Context, id string) error
+	UpdateJobStatus(ctx context.Context, id, status string) error
+	UpdateJobSaved(ctx context.Context, id string, saved bool) error
+	UpdateJobNotes(ctx context.Context, id, notes string) error
 }
 
 // JobStore composes both for contexts that need full access.
@@ -44,20 +45,20 @@ type JobStore interface {
 
 // SeenLedgerReader checks if a job has already been processed.
 type SeenLedgerReader interface {
-	HasSeen(jobID string) (bool, error)
+	HasSeen(ctx context.Context, jobID string) (bool, error)
 }
 
 // SeenLedgerWriter marks jobs as seen or updates their reason.
 type SeenLedgerWriter interface {
-	MarkSeen(jobID, companyID, reason string) error
-	UpdateSeenReason(jobID, reason string) error
-	UpdateSeenReasonBatch(jobIDs []string, reason string) error
-	MarkRemovedBatch(jobIDs []string) error
+	MarkSeen(ctx context.Context, jobID, companyID, reason string) error
+	UpdateSeenReason(ctx context.Context, jobID, reason string) error
+	UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason string) error
+	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
 }
 
 // SeenLedgerCompanyReader provides company-scoped reads on the ledger.
 type SeenLedgerCompanyReader interface {
-	GetActiveJobIDsByCompany(companyID string) ([]string, error)
+	GetActiveJobIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 }
 
 // SeenLedgerStore composes all ledger interfaces.
@@ -71,7 +72,7 @@ type SeenLedgerStore interface {
 
 // DiscardStore writes dismissed jobs to the discarded table.
 type DiscardStore interface {
-	InsertDiscard(jobResultID, reason, note string) error
+	InsertDiscard(ctx context.Context, jobResultID, reason, note string) error
 }
 
 // --- Snapshot ---
@@ -94,8 +95,8 @@ type SnapshotInput struct {
 
 // SnapshotWriter is used by the enricher and API to record each enriched job.
 type SnapshotWriter interface {
-	InsertSnapshot(input SnapshotInput) error
-	UpdateSnapshotAction(id, action string) error
+	InsertSnapshot(ctx context.Context, input SnapshotInput) error
+	UpdateSnapshotAction(ctx context.Context, id, action string) error
 }
 
 // --- GORM implementations ---
@@ -109,8 +110,8 @@ func NewJobStore(db *gorm.DB) JobStore {
 	return &jobStore{db: db}
 }
 
-func (s *jobStore) GetJobs(filter JobFilter, page, limit int) ([]model.Job, int64, error) {
-	query := s.db.Model(&model.Job{})
+func (s *jobStore) GetJobs(ctx context.Context, filter JobFilter, page, limit int) ([]model.Job, int64, error) {
+	query := s.db.WithContext(ctx).Model(&model.Job{})
 
 	// Status — always applied; "saved" is a boolean flag, not a status value
 	if filter.Status == model.JobStatusSaved {
@@ -186,50 +187,50 @@ func (s *jobStore) GetJobs(filter JobFilter, page, limit int) ([]model.Job, int6
 	return jobs, total, err
 }
 
-func (s *jobStore) GetJobByID(id string) (*model.Job, error) {
+func (s *jobStore) GetJobByID(ctx context.Context, id string) (*model.Job, error) {
 	var job model.Job
-	err := s.db.Preload("Company").Where("id = ?", id).First(&job).Error
+	err := s.db.WithContext(ctx).Preload("Company").Where("id = ?", id).First(&job).Error
 	if err != nil {
 		return nil, err
 	}
 	return &job, nil
 }
 
-func (s *jobStore) InsertJob(job *model.Job) error {
-	return s.db.Create(job).Error
+func (s *jobStore) InsertJob(ctx context.Context, job *model.Job) error {
+	return s.db.WithContext(ctx).Create(job).Error
 }
 
-func (s *jobStore) DeleteJob(id string) error {
-	return s.db.Where("id = ?", id).Delete(&model.Job{}).Error
+func (s *jobStore) DeleteJob(ctx context.Context, id string) error {
+	return s.db.WithContext(ctx).Where("id = ?", id).Delete(&model.Job{}).Error
 }
 
-func (s *jobStore) UpdateJobStatus(id, status string) error {
-	return s.db.Model(&model.Job{}).
+func (s *jobStore) UpdateJobStatus(ctx context.Context, id, status string) error {
+	return s.db.WithContext(ctx).Model(&model.Job{}).
 		Where("id = ?", id).
 		Update("status", status).Error
 }
 
-func (s *jobStore) UpdateJobSaved(id string, saved bool) error {
+func (s *jobStore) UpdateJobSaved(ctx context.Context, id string, saved bool) error {
 	if saved {
-		return s.db.Model(&model.Job{}).
+		return s.db.WithContext(ctx).Model(&model.Job{}).
 			Where("id = ? AND status != ?", id, model.JobStatusApplied).
 			Updates(map[string]any{"saved": true, "status": model.JobStatusSaved}).Error
 	}
-	return s.db.Exec(
+	return s.db.WithContext(ctx).Exec(
 		`UPDATE job_feed SET saved = false, status = CASE WHEN status = ? THEN ? ELSE status END WHERE id = ?`,
 		model.JobStatusSaved, model.JobStatusNew, id,
 	).Error
 }
 
-func (s *jobStore) UpdateJobNotes(id, notes string) error {
-	return s.db.Model(&model.Job{}).
+func (s *jobStore) UpdateJobNotes(ctx context.Context, id, notes string) error {
+	return s.db.WithContext(ctx).Model(&model.Job{}).
 		Where("id = ?", id).
 		Update("notes", notes).Error
 }
 
-func (s *jobStore) GetJobCounts() (*JobCounts, error) {
+func (s *jobStore) GetJobCounts(ctx context.Context) (*JobCounts, error) {
 	var rows []CountsResult
-	err := s.db.Raw(`
+	err := s.db.WithContext(ctx).Raw(`
 		SELECT status, COUNT(*) as count
 		FROM job_feed
 		WHERE status IN (?, ?, ?, ?, ?)
@@ -262,9 +263,9 @@ func (s *jobStore) GetJobCounts() (*JobCounts, error) {
 	return counts, nil
 }
 
-func (s *jobStore) GetJobsAddedByDay(days int) ([]DailyJobCount, error) {
+func (s *jobStore) GetJobsAddedByDay(ctx context.Context, days int) ([]DailyJobCount, error) {
 	var results []DailyJobCount
-	err := s.db.Model(&model.Job{}).
+	err := s.db.WithContext(ctx).Model(&model.Job{}).
 		Select("DATE(added_at) as date, COUNT(*) as count").
 		Where("added_at >= NOW() - ? * INTERVAL '1 day'", days).
 		Group("DATE(added_at)").
@@ -284,52 +285,52 @@ func NewSeenLedgerStore(db *gorm.DB) SeenLedgerStore {
 	return &seenLedgerStore{db: db}
 }
 
-func (s *seenLedgerStore) HasSeen(jobID string) (bool, error) {
+func (s *seenLedgerStore) HasSeen(ctx context.Context, jobID string) (bool, error) {
 	var count int64
-	err := s.db.Model(&model.JobSeenLedger{}).
+	err := s.db.WithContext(ctx).Model(&model.JobSeenLedger{}).
 		Where("job_id = ?", jobID).
 		Count(&count).Error
 	return count > 0, err
 }
 
-func (s *seenLedgerStore) MarkSeen(jobID, companyID, reason string) error {
+func (s *seenLedgerStore) MarkSeen(ctx context.Context, jobID, companyID, reason string) error {
 	row := model.JobSeenLedger{
 		JobID:     jobID,
 		CompanyID: companyID,
 		Reason:    reason,
 	}
-	return s.db.Create(&row).Error
+	return s.db.WithContext(ctx).Create(&row).Error
 }
 
-func (s *seenLedgerStore) UpdateSeenReason(jobID, reason string) error {
-	return s.db.Model(&model.JobSeenLedger{}).
+func (s *seenLedgerStore) UpdateSeenReason(ctx context.Context, jobID, reason string) error {
+	return s.db.WithContext(ctx).Model(&model.JobSeenLedger{}).
 		Where("job_id = ?", jobID).
 		Update("reason", reason).Error
 }
 
-func (s *seenLedgerStore) UpdateSeenReasonBatch(jobIDs []string, reason string) error {
+func (s *seenLedgerStore) UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason string) error {
 	if len(jobIDs) == 0 {
 		return nil
 	}
-	return s.db.Model(&model.JobSeenLedger{}).
+	return s.db.WithContext(ctx).Model(&model.JobSeenLedger{}).
 		Where("job_id IN ?", jobIDs).
 		Update("reason", reason).Error
 }
 
-func (s *seenLedgerStore) MarkRemovedBatch(jobIDs []string) error {
+func (s *seenLedgerStore) MarkRemovedBatch(ctx context.Context, jobIDs []string) error {
 	if len(jobIDs) == 0 {
 		return nil
 	}
 	now := time.Now()
-	return s.db.Model(&model.JobSeenLedger{}).
+	return s.db.WithContext(ctx).Model(&model.JobSeenLedger{}).
 		Where("job_id IN ?", jobIDs).
 		Where("removed_at IS NULL").
 		Update("removed_at", now).Error
 }
 
-func (s *seenLedgerStore) GetActiveJobIDsByCompany(companyID string) ([]string, error) {
+func (s *seenLedgerStore) GetActiveJobIDsByCompany(ctx context.Context, companyID string) ([]string, error) {
 	var ids []string
-	err := s.db.Model(&model.JobSeenLedger{}).
+	err := s.db.WithContext(ctx).Model(&model.JobSeenLedger{}).
 		Where("company_id = ? AND removed_at IS NULL", companyID).
 		Pluck("job_id", &ids).Error
 	return ids, err
@@ -346,7 +347,7 @@ func NewDiscardStore(db *gorm.DB) DiscardStore {
 	return &discardStore{db: db}
 }
 
-func (s *discardStore) InsertDiscard(jobResultID, reason, note string) error {
+func (s *discardStore) InsertDiscard(ctx context.Context, jobResultID, reason, note string) error {
 	var notePtr *string
 	if note != "" {
 		notePtr = &note
@@ -356,14 +357,14 @@ func (s *discardStore) InsertDiscard(jobResultID, reason, note string) error {
 		Reason:      reason,
 		Note:        notePtr,
 	}
-	return s.db.Create(&row).Error
+	return s.db.WithContext(ctx).Create(&row).Error
 }
 
 // --- Tech tag store ---
 
 // TechTagWriter writes normalized technology tags for a job into job_tech_tags.
 type TechTagWriter interface {
-	InsertTechTags(jobID, companyID string, techs []string, taggedAt time.Time) error
+	InsertTechTags(ctx context.Context, jobID, companyID string, techs []string, taggedAt time.Time) error
 }
 
 type techTagStore struct {
@@ -375,7 +376,7 @@ func NewTechTagStore(db *gorm.DB) TechTagWriter {
 	return &techTagStore{db: db}
 }
 
-func (s *techTagStore) InsertTechTags(jobID, companyID string, techs []string, taggedAt time.Time) error {
+func (s *techTagStore) InsertTechTags(ctx context.Context, jobID, companyID string, techs []string, taggedAt time.Time) error {
 	if len(techs) == 0 {
 		return nil
 	}
@@ -388,7 +389,7 @@ func (s *techTagStore) InsertTechTags(jobID, companyID string, techs []string, t
 			TaggedAt:  taggedAt,
 		})
 	}
-	return s.db.
+	return s.db.WithContext(ctx).
 		Clauses(clause.OnConflict{DoNothing: true}).
 		Create(&rows).Error
 }
@@ -404,7 +405,7 @@ func NewSnapshotStore(db *gorm.DB) SnapshotWriter {
 	return &snapshotStore{db: db}
 }
 
-func (s *snapshotStore) InsertSnapshot(input SnapshotInput) error {
+func (s *snapshotStore) InsertSnapshot(ctx context.Context, input SnapshotInput) error {
 	row := model.JobSnapshot{
 		ID:                input.ID,
 		CompanyID:         input.CompanyID,
@@ -428,12 +429,12 @@ func (s *snapshotStore) InsertSnapshot(input SnapshotInput) error {
 	if input.RoleCategory != "" {
 		row.RoleCategory = &input.RoleCategory
 	}
-	return s.db.Create(&row).Error
+	return s.db.WithContext(ctx).Create(&row).Error
 }
 
-func (s *snapshotStore) UpdateSnapshotAction(id, action string) error {
+func (s *snapshotStore) UpdateSnapshotAction(ctx context.Context, id, action string) error {
 	now := time.Now()
-	return s.db.Model(&model.JobSnapshot{}).
+	return s.db.WithContext(ctx).Model(&model.JobSnapshot{}).
 		Where("id = ?", id).
 		Updates(map[string]any{
 			"user_action": action,

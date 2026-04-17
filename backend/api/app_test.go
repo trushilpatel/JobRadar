@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -165,15 +166,15 @@ func (f *fakeScanService) MoveDown(_ string) error        { return nil }
 
 type fakeJobService struct{}
 
-func (f *fakeJobService) List(_ job.JobFilter, _, _ int) ([]model.Job, int, error) {
+func (f *fakeJobService) List(_ context.Context, _ job.JobFilter, _, _ int) ([]model.Job, int, error) {
 	return nil, 0, nil
 }
-func (f *fakeJobService) Get(_ string) (*model.Job, error)           { return nil, nil }
-func (f *fakeJobService) GetCounts() (*job.JobCounts, error)         { return nil, nil }
-func (f *fakeJobService) Dismiss(_ string, _ job.DismissInput) error { return nil }
-func (f *fakeJobService) SetSaved(_ string, _ bool) error            { return nil }
-func (f *fakeJobService) SetStatus(_, _ string) error                { return nil }
-func (f *fakeJobService) SetNotes(_, _ string) error                 { return nil }
+func (f *fakeJobService) Get(_ context.Context, _ string) (*model.Job, error)           { return nil, nil }
+func (f *fakeJobService) GetCounts(_ context.Context) (*job.JobCounts, error)           { return nil, nil }
+func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ job.DismissInput) error { return nil }
+func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error            { return nil }
+func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error                { return nil }
+func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error                 { return nil }
 
 type fakeAppService struct{}
 
@@ -181,7 +182,7 @@ func (f *fakeAppService) ListByJob(_ string) ([]model.JobApplication, error) { r
 func (f *fakeAppService) ListAll(_, _ int) ([]application.ApplicationWithJob, int, error) {
 	return nil, 0, nil
 }
-func (f *fakeAppService) Create(_ string, _ application.CreateApplicationInput) (*model.JobApplication, error) {
+func (f *fakeAppService) Create(_ context.Context, _ string, _ application.CreateApplicationInput) (*model.JobApplication, error) {
 	return nil, nil
 }
 func (f *fakeAppService) UpdateStage(_, _ string, _ application.UpdateStageInput) error { return nil }

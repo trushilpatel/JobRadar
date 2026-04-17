@@ -78,7 +78,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobs, total, err := h.jobs.List(filter, p.Page, p.Limit)
+	jobs, total, err := h.jobs.List(r.Context(), filter, p.Page, p.Limit)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -89,7 +89,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 // GET /jobs/counts
 func (h *Handler) GetCounts(w http.ResponseWriter, r *http.Request) {
-	counts, err := h.jobs.GetCounts()
+	counts, err := h.jobs.GetCounts(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -101,7 +101,7 @@ func (h *Handler) GetCounts(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	job, err := h.jobs.Get(id)
+	job, err := h.jobs.Get(r.Context(), id)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -125,7 +125,7 @@ func (h *Handler) Dismiss(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.jobs.Dismiss(id, input); err != nil {
+	if err := h.jobs.Dismiss(r.Context(), id, input); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -145,7 +145,7 @@ func (h *Handler) SetSaved(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.jobs.SetSaved(id, body.Saved); err != nil {
+	if err := h.jobs.SetSaved(r.Context(), id, body.Saved); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -168,7 +168,7 @@ func (h *Handler) SetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.jobs.SetStatus(id, input.Status); err != nil {
+	if err := h.jobs.SetStatus(r.Context(), id, input.Status); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -191,7 +191,7 @@ func (h *Handler) SetNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.jobs.SetNotes(id, input.Notes); err != nil {
+	if err := h.jobs.SetNotes(r.Context(), id, input.Notes); err != nil {
 		handler.HandleError(w, err)
 		return
 	}

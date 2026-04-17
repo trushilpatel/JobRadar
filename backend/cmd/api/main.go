@@ -12,11 +12,15 @@ import (
 	"github.com/trushilpatel/jobradar/config"
 	"github.com/trushilpatel/jobradar/infra/db"
 	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 )
 
 func main() {
 	cfg := config.Load()
 	log := logger.Init("api")
+
+	shutdown := tracing.Init("jobradar-api", cfg.JaegerEndpoint)
+	defer shutdown()
 
 	database, err := db.Open(cfg)
 	if err != nil {

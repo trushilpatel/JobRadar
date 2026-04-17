@@ -1,6 +1,8 @@
 package crawler
 
 import (
+	"context"
+
 	"github.com/trushilpatel/jobradar/model"
 	scansvc "github.com/trushilpatel/jobradar/service/scan"
 )
@@ -13,10 +15,10 @@ type CompanyReader interface {
 
 // PipelineLedger is the narrow ledger interface the crawler needs.
 type PipelineLedger interface {
-	HasSeen(jobID string) (bool, error)
-	MarkSeen(jobID, companyID, reason string) error
-	GetActiveJobIDsByCompany(companyID string) ([]string, error)
-	MarkRemovedBatch(jobIDs []string) error
+	HasSeen(ctx context.Context, jobID string) (bool, error)
+	MarkSeen(ctx context.Context, jobID, companyID, reason string) error
+	GetActiveJobIDsByCompany(ctx context.Context, companyID string) ([]string, error)
+	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
 }
 
 // ScanRecorder is the interface the crawler uses to record scan outcomes.

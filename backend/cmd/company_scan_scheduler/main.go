@@ -11,6 +11,7 @@ import (
 	"github.com/trushilpatel/jobradar/infra/db"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
 	companysvc "github.com/trushilpatel/jobradar/service/company"
 	scansvc "github.com/trushilpatel/jobradar/service/scan"
@@ -21,6 +22,9 @@ const checkInterval = 1 * time.Minute
 func main() {
 	cfg := config.Load()
 	log := logger.Init("scheduler")
+
+	shutdown := tracing.Init("jobradar-scheduler", cfg.JaegerEndpoint)
+	defer shutdown()
 
 	database, err := db.Open(cfg)
 	if err != nil {

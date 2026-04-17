@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -22,8 +23,8 @@ type EnrichedJobInput struct {
 
 // pipelineLedger is the narrow ledger access the pipeline service needs.
 type pipelineLedger interface {
-	HasSeen(jobID string) (bool, error)
-	UpdateSeenReason(jobID, reason string) error
+	HasSeen(ctx context.Context, jobID string) (bool, error)
+	UpdateSeenReason(ctx context.Context, jobID, reason string) error
 }
 
 // PipelineService is the interface the analyzer worker depends on.
@@ -32,13 +33,13 @@ type PipelineService interface {
 	// SaveEnrichedJob inserts the job into job_feed, writes to job_analytics snapshot,
 	// and marks the pipeline ledger entry as done.
 	// The caller is responsible for eligibility filtering before calling this method.
-	SaveEnrichedJob(input EnrichedJobInput) error
+	SaveEnrichedJob(ctx context.Context, input EnrichedJobInput) error
 
 	// MarkLedgerError marks a pipeline ledger entry with reason='error'.
-	MarkLedgerError(jobID string) error
+	MarkLedgerError(ctx context.Context, jobID string) error
 
 	// HasSeenJob returns true if the job has already been processed (dedup check).
-	HasSeenJob(jobID string) (bool, error)
+	HasSeenJob(ctx context.Context, jobID string) (bool, error)
 }
 
 type pipelineService struct {
@@ -55,18 +56,18 @@ func NewPipelineService(jobs JobWriter, ledger pipelineLedger, snapshot Snapshot
 
 // SaveEnrichedJob builds the job row, inserts it into job_feed, writes the analytics
 // snapshot (non-fatal on failure), and marks the pipeline ledger as seen.
-func (p *pipelineService) SaveEnrichedJob(input EnrichedJobInput) error {
+func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input EnrichedJobInput) error {
 	row, err := buildJobRow(input)
 	if err != nil {
 		return fmt.Errorf("build job row: %w", err)
 	}
 
-	if err := p.jobs.InsertJob(row); err != nil {
+	if err := p.jobs.InsertJob(ctx, row); err != nil {
 		return fmt.Errorf("insert job: %w", err)
 	}
 
 	// Non-fatal: snapshot write failure is logged by the caller — job is already saved.
-	_ = p.snapshot.InsertSnapshot(SnapshotInput{
+	_ = p.snapshot.InsertSnapshot(ctx, SnapshotInput{
 		ID:                row.ID,
 		CompanyID:         input.Raw.CompanyID,
 		Country:           input.Enriched.Country,
@@ -83,10 +84,10 @@ func (p *pipelineService) SaveEnrichedJob(input EnrichedJobInput) error {
 
 	// Non-fatal: write validated+normalized tech tags for trend analysis.
 	if cleaned := techtag.Clean(input.Enriched.TechStack); len(cleaned) > 0 {
-		_ = p.techTags.InsertTechTags(row.ID, input.Raw.CompanyID, cleaned, time.Now())
+		_ = p.techTags.InsertTechTags(ctx, row.ID, input.Raw.CompanyID, cleaned, time.Now())
 	}
 
-	if err := p.ledger.UpdateSeenReason(input.Raw.ID, model.SeenReasonFetch); err != nil {
+	if err := p.ledger.UpdateSeenReason(ctx, input.Raw.ID, model.SeenReasonFetch); err != nil {
 		return fmt.Errorf("mark ledger seen: %w", err)
 	}
 
@@ -94,13 +95,13 @@ func (p *pipelineService) SaveEnrichedJob(input EnrichedJobInput) error {
 }
 
 // MarkLedgerError marks the pipeline ledger entry for jobID with reason='error'.
-func (p *pipelineService) MarkLedgerError(jobID string) error {
-	return p.ledger.UpdateSeenReason(jobID, model.SeenReasonError)
+func (p *pipelineService) MarkLedgerError(ctx context.Context, jobID string) error {
+	return p.ledger.UpdateSeenReason(ctx, jobID, model.SeenReasonError)
 }
 
 // HasSeenJob returns true if the job has already been processed.
-func (p *pipelineService) HasSeenJob(jobID string) (bool, error) {
-	return p.ledger.HasSeen(jobID)
+func (p *pipelineService) HasSeenJob(ctx context.Context, jobID string) (bool, error) {
+	return p.ledger.HasSeen(ctx, jobID)
 }
 
 // buildJobRow maps EnrichedJobInput into a model.Job ready for DB insert.

@@ -40,7 +40,7 @@ type fakeLedger struct {
 	calls []ledgerCall
 }
 
-func (f *fakeLedger) UpdateSeenReasonBatch(ids []string, reason string) error {
+func (f *fakeLedger) UpdateSeenReasonBatch(_ context.Context, ids []string, reason string) error {
 	f.calls = append(f.calls, ledgerCall{ids: ids, reason: reason})
 	return nil
 }
@@ -70,6 +70,14 @@ func makeJob(id string) ats.RawJob {
 	return ats.RawJob{ID: id, Title: "Software Engineer"}
 }
 
+func makeBatch(jobs ...ats.RawJob) []jobWithCtx {
+	batch := make([]jobWithCtx, len(jobs))
+	for i, j := range jobs {
+		batch[i] = jobWithCtx{ctx: context.Background(), job: j}
+	}
+	return batch
+}
+
 // ── tests ────────────────────────────────────────────────────────────────────
 
 func TestFlushBatch_AllRelevant(t *testing.T) {
@@ -78,9 +86,9 @@ func TestFlushBatch_AllRelevant(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.flushBatch(context.Background(), []ats.RawJob{
+	w.flushBatch(context.Background(), makeBatch(
 		makeJob("job-1"), makeJob("job-2"), makeJob("job-3"),
-	})
+	))
 
 	if len(pub.payloads) != 3 {
 		t.Errorf("expected 3 published jobs, got %d", len(pub.payloads))
@@ -96,15 +104,14 @@ func TestFlushBatch_PartialRelevant(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.flushBatch(context.Background(), []ats.RawJob{
+	w.flushBatch(context.Background(), makeBatch(
 		makeJob("job-1"), makeJob("job-2"), makeJob("job-3"),
-	})
+	))
 
 	if len(pub.payloads) != 2 {
 		t.Errorf("expected 2 published jobs, got %d", len(pub.payloads))
 	}
 
-	// Verify published IDs are the relevant ones
 	for _, payload := range pub.payloads {
 		var job ats.RawJob
 		if err := json.Unmarshal(payload, &job); err != nil {
@@ -133,9 +140,9 @@ func TestFlushBatch_ScorerError(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.flushBatch(context.Background(), []ats.RawJob{
+	w.flushBatch(context.Background(), makeBatch(
 		makeJob("job-1"), makeJob("job-2"),
-	})
+	))
 
 	if len(pub.payloads) != 0 {
 		t.Errorf("expected no published jobs on scorer error, got %d", len(pub.payloads))
@@ -158,7 +165,7 @@ func TestFlushBatch_EmptyBatch(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.flushBatch(context.Background(), []ats.RawJob{})
+	w.flushBatch(context.Background(), makeBatch())
 
 	if scorer.calls != 0 {
 		t.Errorf("expected scorer not called on empty batch, got %d calls", scorer.calls)

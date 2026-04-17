@@ -12,6 +12,7 @@ import (
 	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/pipeline/ats/google"
 	"github.com/trushilpatel/jobradar/pipeline/crawler"
 	companysvc "github.com/trushilpatel/jobradar/service/company"
@@ -26,6 +27,9 @@ const heartbeatInterval = 30 * time.Second
 func main() {
 	cfg := config.Load()
 	log := logger.Init("crawler")
+
+	shutdown := tracing.Init("jobradar-crawler", cfg.JaegerEndpoint)
+	defer shutdown()
 
 	database, err := db.Open(cfg)
 	if err != nil {

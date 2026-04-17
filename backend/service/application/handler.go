@@ -58,7 +58,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := h.applications.Create(jobID, input)
+	app, err := h.applications.Create(r.Context(), jobID, input)
 	if err != nil {
 		handler.HandleError(w, err)
 		return

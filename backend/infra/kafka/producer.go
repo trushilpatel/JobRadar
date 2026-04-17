@@ -4,9 +4,10 @@ import (
 	"context"
 	"strings"
 
+	"github.com/trushilpatel/jobradar/config"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl/plain"
-	"github.com/trushilpatel/jobradar/config"
 )
 
 type Producer struct {
@@ -35,10 +36,10 @@ func NewProducer(cfg *config.Config) (*Producer, error) {
 
 func (p *Producer) Publish(ctx context.Context, topic string, value []byte) error {
 	record := &kgo.Record{
-		Topic: topic,
-		Value: value,
+		Topic:   topic,
+		Value:   value,
+		Headers: tracing.InjectKafka(ctx, nil),
 	}
-
 	return p.client.ProduceSync(ctx, record).FirstErr()
 }
 

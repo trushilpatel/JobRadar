@@ -3,6 +3,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/google/wire"
 	"github.com/trushilpatel/jobradar/api"
 	"github.com/trushilpatel/jobradar/config"
@@ -39,7 +41,7 @@ func provideSeenLedgerWriter(s job.SeenLedgerStore) job.SeenLedgerWriter {
 type jobCountReaderAdapter struct{ store job.JobStore }
 
 func (a *jobCountReaderAdapter) GetJobCounts() (int64, int64, int64, error) {
-	counts, err := a.store.GetJobCounts()
+	counts, err := a.store.GetJobCounts(context.Background())
 	if err != nil {
 		return 0, 0, 0, err
 	}

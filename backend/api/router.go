@@ -10,6 +10,7 @@ import (
 	"github.com/trushilpatel/jobradar/api/middleware"
 	"github.com/trushilpatel/jobradar/infra/db"
 	"github.com/trushilpatel/jobradar/infra/logger"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"gorm.io/gorm"
 )
 
@@ -22,6 +23,7 @@ func NewRouter(log logger.Logger, database *gorm.DB, groups []handler.RouteGroup
 	r := chi.NewRouter()
 
 	// Global middleware — runs on every request
+	r.Use(otelhttp.NewMiddleware("jobradar-api")) // root span per request; must be first
 	r.Use(middleware.Logger(log))
 	r.Use(middleware.Metrics())
 	r.Use(chimiddleware.Recoverer)

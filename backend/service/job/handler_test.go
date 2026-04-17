@@ -2,6 +2,7 @@ package job
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -34,15 +35,15 @@ type fakeJobService struct {
 	err   error
 }
 
-func (f *fakeJobService) List(_ JobFilter, _, _ int) ([]model.Job, int, error) {
+func (f *fakeJobService) List(_ context.Context, _ JobFilter, _, _ int) ([]model.Job, int, error) {
 	return f.jobs, f.total, f.err
 }
-func (f *fakeJobService) Get(_ string) (*model.Job, error)       { return f.job, f.err }
-func (f *fakeJobService) GetCounts() (*JobCounts, error)         { return &JobCounts{}, f.err }
-func (f *fakeJobService) Dismiss(_ string, _ DismissInput) error { return f.err }
-func (f *fakeJobService) SetSaved(_ string, _ bool) error        { return f.err }
-func (f *fakeJobService) SetStatus(_, _ string) error            { return f.err }
-func (f *fakeJobService) SetNotes(_, _ string) error             { return f.err }
+func (f *fakeJobService) Get(_ context.Context, _ string) (*model.Job, error)       { return f.job, f.err }
+func (f *fakeJobService) GetCounts(_ context.Context) (*JobCounts, error)           { return &JobCounts{}, f.err }
+func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ DismissInput) error { return f.err }
+func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error        { return f.err }
+func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error            { return f.err }
+func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error             { return f.err }
 
 func newJobTestRouter(h *Handler) *chi.Mux {
 	r := chi.NewRouter()

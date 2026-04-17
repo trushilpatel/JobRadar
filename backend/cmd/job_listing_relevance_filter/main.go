@@ -9,16 +9,20 @@ import (
 	"github.com/trushilpatel/jobradar/config"
 	"github.com/trushilpatel/jobradar/infra/db"
 	"github.com/trushilpatel/jobradar/infra/kafka"
-	"github.com/trushilpatel/jobradar/pipeline/llm"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
-	jobsvc "github.com/trushilpatel/jobradar/service/job"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/pipeline/filter"
+	"github.com/trushilpatel/jobradar/pipeline/llm"
+	jobsvc "github.com/trushilpatel/jobradar/service/job"
 )
 
 func main() {
 	cfg := config.Load()
 	log := logger.Init("filter")
+
+	shutdown := tracing.Init("jobradar-filter", cfg.JaegerEndpoint)
+	defer shutdown()
 
 	database, err := db.Open(cfg)
 	if err != nil {

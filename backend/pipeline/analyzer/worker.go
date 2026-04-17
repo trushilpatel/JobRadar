@@ -12,9 +12,11 @@ import (
 	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/llm"
 	jobsvc "github.com/trushilpatel/jobradar/service/job"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 // enrichConcurrency is the number of jobs processed in parallel.
@@ -59,7 +61,8 @@ func (w *Worker) Run(ctx context.Context) error {
 	sem := make(chan struct{}, enrichConcurrency)
 	var wg sync.WaitGroup
 
-	err := w.consumer.Poll(ctx, func(_ string, value []byte) error {
+	err := w.consumer.Poll(ctx, func(_ string, value []byte, headers []kgo.RecordHeader) error {
+		msgCtx := tracing.ExtractKafka(ctx, headers)
 		var job ats.RawJob
 		if err := json.Unmarshal(value, &job); err != nil {
 			w.log.Warn("malformed message, skipping", logger.Err(err))
@@ -76,7 +79,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			w.enrich(ctx, job)
+			w.enrich(msgCtx, job)
 		}()
 
 		return nil
@@ -103,7 +106,7 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 		content, err = w.fetchContent(ctx, job)
 		if err != nil {
 			jobLog.Error("fetch content failed", err)
-			w.markError(job.ID)
+			w.markError(ctx, job.ID)
 			metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 			return
 		}
@@ -115,7 +118,7 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 	rawText, err := json.Marshal(content)
 	if err != nil {
 		jobLog.Error("marshal content failed", err)
-		w.markError(job.ID)
+		w.markError(ctx, job.ID)
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 		return
 	}
@@ -129,7 +132,7 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 	metrics.EnricherLLMDuration.Observe(time.Since(llmStart).Seconds())
 	if err != nil {
 		jobLog.Error("LLM enrich failed", err)
-		w.markError(job.ID)
+		w.markError(ctx, job.ID)
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 		return
 	}
@@ -137,16 +140,16 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 	// 3. Drop ineligible jobs before writing to DB
 	if reason := w.dropJob(result); reason != "" {
 		jobLog.Info("job dropped", logger.Str("reason", reason))
-		w.markError(job.ID)
+		w.markError(ctx, job.ID)
 		metrics.EnricherJobsTotal.WithLabelValues("dropped").Inc()
 		return
 	}
 
 	// 4. Save via pipeline service (builds job row, inserts, writes snapshot, marks ledger)
 	input := toEnrichedInput(job, result)
-	if err := w.pipeline.SaveEnrichedJob(input); err != nil {
+	if err := w.pipeline.SaveEnrichedJob(ctx, input); err != nil {
 		jobLog.Error("save enriched job failed", err)
-		w.markError(job.ID)
+		w.markError(ctx, job.ID)
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 		return
 	}
@@ -164,8 +167,8 @@ func toEnrichedInput(job ats.RawJob, result *llm.EnrichResult) jobsvc.EnrichedJo
 }
 
 // markError updates the seen_ledger so failed jobs aren't re-processed endlessly.
-func (w *Worker) markError(jobID string) {
-	if err := w.pipeline.MarkLedgerError(jobID); err != nil {
+func (w *Worker) markError(ctx context.Context, jobID string) {
+	if err := w.pipeline.MarkLedgerError(ctx, jobID); err != nil {
 		w.log.Error("failed to mark error in seen_ledger", err, logger.Str(logger.FieldJobID, jobID))
 	}
 }

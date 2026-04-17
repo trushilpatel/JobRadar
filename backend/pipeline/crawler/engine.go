@@ -109,7 +109,7 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 	newCount := 0
 
 	for _, item := range result.Jobs {
-		seen, err := e.ledger.HasSeen(item.ID)
+		seen, err := e.ledger.HasSeen(ctx, item.ID)
 		if err != nil {
 			companyLog.Error("seen_ledger check failed", err, logger.Str(logger.FieldJobID, item.ID))
 			continue
@@ -118,7 +118,7 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 			continue
 		}
 
-		if err := e.ledger.MarkSeen(item.ID, company.ID, model.SeenReasonFetch); err != nil {
+		if err := e.ledger.MarkSeen(ctx, item.ID, company.ID, model.SeenReasonFetch); err != nil {
 			companyLog.Error("failed to mark seen", err, logger.Str(logger.FieldJobID, item.ID))
 			continue
 		}
@@ -134,7 +134,7 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 
 	// Detect removed jobs: diff current scan results against previously known active jobs.
 	// This is important for full-scan adapters (e.g. Google) that return all jobs each time.
-	e.detectRemovedJobs(company.ID, result.Jobs, companyLog)
+	e.detectRemovedJobs(ctx, company.ID, result.Jobs, companyLog)
 
 	elapsed := time.Since(start)
 	metrics.CrawlerScansTotal.WithLabelValues("success").Inc()
@@ -175,9 +175,9 @@ func (e *Engine) publish(ctx context.Context, job ats.RawJob) error {
 // detectRemovedJobs compares the current scan results against previously known
 // active jobs for a company. Any job that was previously seen but is no longer
 // in the current scan gets marked with removed_at in the ledger.
-func (e *Engine) detectRemovedJobs(companyID string, currentJobs []ats.FetchJobsItem, log logger.Logger) {
+func (e *Engine) detectRemovedJobs(ctx context.Context, companyID string, currentJobs []ats.FetchJobsItem, log logger.Logger) {
 	// Get all previously active job IDs for this company
-	previousIDs, err := e.ledger.GetActiveJobIDsByCompany(companyID)
+	previousIDs, err := e.ledger.GetActiveJobIDsByCompany(ctx, companyID)
 	if err != nil {
 		log.Error("failed to load previous job IDs for removal detection", err)
 		return
@@ -204,7 +204,7 @@ func (e *Engine) detectRemovedJobs(companyID string, currentJobs []ats.FetchJobs
 		return
 	}
 
-	if err := e.ledger.MarkRemovedBatch(removedIDs); err != nil {
+	if err := e.ledger.MarkRemovedBatch(ctx, removedIDs); err != nil {
 		log.Error("failed to mark removed jobs", err, logger.Int("count", len(removedIDs)))
 		return
 	}

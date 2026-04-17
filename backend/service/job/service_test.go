@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -22,10 +23,10 @@ type fakeJobStore struct {
 	updateNotesCalled  bool
 }
 
-func (f *fakeJobStore) GetJobs(_ JobFilter, _, _ int) ([]model.Job, int64, error) {
+func (f *fakeJobStore) GetJobs(_ context.Context, _ JobFilter, _, _ int) ([]model.Job, int64, error) {
 	return f.jobs, f.total, f.err
 }
-func (f *fakeJobStore) GetJobByID(id string) (*model.Job, error) {
+func (f *fakeJobStore) GetJobByID(_ context.Context, id string) (*model.Job, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -34,22 +35,24 @@ func (f *fakeJobStore) GetJobByID(id string) (*model.Job, error) {
 	}
 	return nil, gorm.ErrRecordNotFound
 }
-func (f *fakeJobStore) InsertJob(job *model.Job) error { return f.err }
-func (f *fakeJobStore) DeleteJob(id string) error      { return f.err }
-func (f *fakeJobStore) UpdateJobStatus(id, status string) error {
+func (f *fakeJobStore) InsertJob(_ context.Context, job *model.Job) error { return f.err }
+func (f *fakeJobStore) DeleteJob(_ context.Context, id string) error      { return f.err }
+func (f *fakeJobStore) UpdateJobStatus(_ context.Context, id, status string) error {
 	f.updateStatusCalled = true
 	return f.err
 }
-func (f *fakeJobStore) UpdateJobSaved(id string, saved bool) error {
+func (f *fakeJobStore) UpdateJobSaved(_ context.Context, id string, saved bool) error {
 	f.updateSavedCalled = true
 	return f.err
 }
-func (f *fakeJobStore) UpdateJobNotes(id, notes string) error {
+func (f *fakeJobStore) UpdateJobNotes(_ context.Context, id, notes string) error {
 	f.updateNotesCalled = true
 	return f.err
 }
-func (f *fakeJobStore) GetJobCounts() (*JobCounts, error) { return &JobCounts{}, f.err }
-func (f *fakeJobStore) GetJobsAddedByDay(days int) ([]DailyJobCount, error) {
+func (f *fakeJobStore) GetJobCounts(_ context.Context) (*JobCounts, error) {
+	return &JobCounts{}, f.err
+}
+func (f *fakeJobStore) GetJobsAddedByDay(_ context.Context, days int) ([]DailyJobCount, error) {
 	return nil, f.err
 }
 
@@ -57,17 +60,23 @@ type fakeLedgerWriter struct {
 	err error
 }
 
-func (f *fakeLedgerWriter) MarkSeen(jobID, companyID, reason string) error          { return f.err }
-func (f *fakeLedgerWriter) UpdateSeenReason(jobID, reason string) error             { return f.err }
-func (f *fakeLedgerWriter) UpdateSeenReasonBatch(ids []string, reason string) error { return f.err }
-func (f *fakeLedgerWriter) MarkRemovedBatch(ids []string) error                     { return f.err }
+func (f *fakeLedgerWriter) MarkSeen(_ context.Context, jobID, companyID, reason string) error {
+	return f.err
+}
+func (f *fakeLedgerWriter) UpdateSeenReason(_ context.Context, jobID, reason string) error {
+	return f.err
+}
+func (f *fakeLedgerWriter) UpdateSeenReasonBatch(_ context.Context, ids []string, reason string) error {
+	return f.err
+}
+func (f *fakeLedgerWriter) MarkRemovedBatch(_ context.Context, ids []string) error { return f.err }
 
 type fakeDiscardStore struct {
 	err          error
 	insertCalled bool
 }
 
-func (f *fakeDiscardStore) InsertDiscard(jobResultID, reason, note string) error {
+func (f *fakeDiscardStore) InsertDiscard(_ context.Context, jobResultID, reason, note string) error {
 	f.insertCalled = true
 	return f.err
 }
@@ -78,8 +87,10 @@ type fakeSnapshotWriter struct {
 	updateCalled bool
 }
 
-func (f *fakeSnapshotWriter) InsertSnapshot(input SnapshotInput) error { return f.err }
-func (f *fakeSnapshotWriter) UpdateSnapshotAction(id, action string) error {
+func (f *fakeSnapshotWriter) InsertSnapshot(_ context.Context, input SnapshotInput) error {
+	return f.err
+}
+func (f *fakeSnapshotWriter) UpdateSnapshotAction(_ context.Context, id, action string) error {
 	f.updateCalled = true
 	return f.err
 }
@@ -90,7 +101,7 @@ func TestList_ReturnsPaged(t *testing.T) {
 	jobs := []model.Job{{ID: "j1"}, {ID: "j2"}}
 	svc := NewService(&fakeJobStore{jobs: jobs, total: 2}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{})
 
-	result, total, err := svc.List(JobFilter{Status: "new"}, 1, 20)
+	result, total, err := svc.List(context.Background(), JobFilter{Status: "new"}, 1, 20)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -105,7 +116,7 @@ func TestList_ReturnsPaged(t *testing.T) {
 func TestGet_NotFound(t *testing.T) {
 	svc := NewService(&fakeJobStore{}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{})
 
-	_, err := svc.Get("missing")
+	_, err := svc.Get(context.Background(), "missing")
 	if err == nil {
 		t.Fatal("expected error for missing job")
 	}
@@ -123,7 +134,7 @@ func TestDismiss_MultiStep(t *testing.T) {
 	ledger := &fakeLedgerWriter{}
 
 	svc := NewService(js, ledger, discard, snapshot)
-	err := svc.Dismiss("j1", DismissInput{Reason: model.DiscardReasonDismissed})
+	err := svc.Dismiss(context.Background(), "j1", DismissInput{Reason: model.DiscardReasonDismissed})
 	if err != nil {
 		t.Fatalf("Dismiss() error = %v", err)
 	}
@@ -145,7 +156,7 @@ func TestSetSaved_NonFatalSnapshot(t *testing.T) {
 	snapshot := &fakeSnapshotWriter{err: errors.New("snapshot error")} // non-fatal error
 	svc := NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot)
 
-	err := svc.SetSaved("j1", true)
+	err := svc.SetSaved(context.Background(), "j1", true)
 	if err != nil {
 		t.Fatalf("SetSaved() should not return error even if snapshot fails, got: %v", err)
 	}
@@ -159,7 +170,7 @@ func TestSetStatus_BackfillsSnapshotOnApplied(t *testing.T) {
 	snapshot := &fakeSnapshotWriter{}
 	svc := NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot)
 
-	err := svc.SetStatus("j1", model.JobStatusApplied)
+	err := svc.SetStatus(context.Background(), "j1", model.JobStatusApplied)
 	if err != nil {
 		t.Fatalf("SetStatus() error = %v", err)
 	}
@@ -173,7 +184,7 @@ func TestSetStatus_NoSnapshotBackfillForNew(t *testing.T) {
 	snapshot := &fakeSnapshotWriter{}
 	svc := NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot)
 
-	err := svc.SetStatus("j1", model.JobStatusNew)
+	err := svc.SetStatus(context.Background(), "j1", model.JobStatusNew)
 	if err != nil {
 		t.Fatalf("SetStatus() error = %v", err)
 	}

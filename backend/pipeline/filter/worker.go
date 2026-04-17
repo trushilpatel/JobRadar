@@ -8,9 +8,11 @@ import (
 	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/llm"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 // Worker consumes jobs.raw, scores them in batches via LLM,
@@ -45,6 +47,12 @@ func NewWorker(
 	}
 }
 
+// jobWithCtx pairs a raw job with the trace context extracted from its Kafka headers.
+type jobWithCtx struct {
+	ctx context.Context
+	job ats.RawJob
+}
+
 // Run starts consuming jobs.raw and blocks until ctx is cancelled.
 // Jobs are scored in batches of batchSize. If the batch doesn't fill within
 // flushTimeout, whatever is buffered gets flushed — so jobs never sit forever.
@@ -54,23 +62,24 @@ func (w *Worker) Run(ctx context.Context) error {
 		logger.Dur("flush_timeout", w.flushTimeout),
 	)
 
-	var batch []ats.RawJob
+	var batch []jobWithCtx
 	timer := time.NewTimer(w.flushTimeout)
 	defer timer.Stop()
 
 	// jobsCh bridges the Kafka poll goroutine to the batch loop below.
-	jobsCh := make(chan ats.RawJob, w.batchSize*2)
+	jobsCh := make(chan jobWithCtx, w.batchSize*2)
 	errCh := make(chan error, 1)
 
 	go func() {
-		err := w.consumer.Poll(ctx, func(_ string, value []byte) error {
+		err := w.consumer.Poll(ctx, func(_ string, value []byte, headers []kgo.RecordHeader) error {
+			msgCtx := tracing.ExtractKafka(ctx, headers) // continue trace from crawler
 			var job ats.RawJob
 			if err := json.Unmarshal(value, &job); err != nil {
 				w.log.Warn("malformed message, skipping", logger.Err(err))
 				return nil
 			}
 			select {
-			case jobsCh <- job:
+			case jobsCh <- jobWithCtx{ctx: msgCtx, job: job}:
 			case <-ctx.Done():
 			}
 			return nil
@@ -80,8 +89,8 @@ func (w *Worker) Run(ctx context.Context) error {
 
 	for {
 		select {
-		case job := <-jobsCh:
-			batch = append(batch, job)
+		case item := <-jobsCh:
+			batch = append(batch, item)
 			if !timer.Stop() {
 				select {
 				case <-timer.C:
@@ -123,23 +132,34 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 // flushBatch scores a batch of jobs and routes them.
-func (w *Worker) flushBatch(ctx context.Context, batch []ats.RawJob) {
+// ctx is the worker's root context; individual job contexts carry their trace spans.
+func (w *Worker) flushBatch(ctx context.Context, batch []jobWithCtx) {
+	if len(batch) == 0 {
+		return
+	}
+
+	// Use the first job's trace context as the parent for the batch span.
+	batchCtx, span := tracing.Start(batch[0].ctx, "filter.worker.flushBatch")
+	defer tracing.End(span, nil)
+
 	inputs := make([]llm.ScorerInput, len(batch))
-	for i, job := range batch {
-		inputs[i] = llm.ScorerInput{ID: job.ID, Title: job.Title, Location: job.Location}
+	jobs := make([]ats.RawJob, len(batch))
+	for i, item := range batch {
+		inputs[i] = llm.ScorerInput{ID: item.job.ID, Title: item.job.Title, Location: item.job.Location}
+		jobs[i] = item.job
 	}
 
 	start := time.Now()
-	relevantIDs, err := w.scorer.ScoreBatch(ctx, inputs)
+	relevantIDs, err := w.scorer.ScoreBatch(batchCtx, inputs)
 	metrics.FilterLLMDuration.Observe(time.Since(start).Seconds())
 
 	if err != nil {
 		w.log.Error("ScoreBatch failed, marking batch as error", err, logger.Int(logger.FieldBatch, len(batch)))
 		ids := make([]string, len(batch))
-		for i, job := range batch {
-			ids[i] = job.ID
+		for i, item := range batch {
+			ids[i] = item.job.ID
 		}
-		if merr := w.ledger.UpdateSeenReasonBatch(ids, model.SeenReasonError); merr != nil {
+		if merr := w.ledger.UpdateSeenReasonBatch(batchCtx, ids, model.SeenReasonError); merr != nil {
 			w.log.Error("mark error batch failed", merr)
 		}
 		metrics.FilterJobsTotal.WithLabelValues("error").Add(float64(len(batch)))
@@ -152,16 +172,16 @@ func (w *Worker) flushBatch(ctx context.Context, batch []ats.RawJob) {
 	}
 
 	var irrelevantIDs []string
-	for _, job := range batch {
+	for _, job := range jobs {
 		if relevant[job.ID] {
-			w.publishDetail(ctx, job)
+			w.publishDetail(batchCtx, job)
 		} else {
 			irrelevantIDs = append(irrelevantIDs, job.ID)
 		}
 	}
 
 	if len(irrelevantIDs) > 0 {
-		if err := w.ledger.UpdateSeenReasonBatch(irrelevantIDs, model.SeenReasonLLMIrrelevant); err != nil {
+		if err := w.ledger.UpdateSeenReasonBatch(batchCtx, irrelevantIDs, model.SeenReasonLLMIrrelevant); err != nil {
 			w.log.Error("mark irrelevant failed", err)
 		}
 	}

@@ -1,6 +1,7 @@
 package job
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -21,14 +22,16 @@ type pipelineJobWriter struct {
 	notesErr  error
 }
 
-func (f *pipelineJobWriter) InsertJob(job *model.Job) error {
+func (f *pipelineJobWriter) InsertJob(_ context.Context, job *model.Job) error {
 	f.inserted = job
 	return f.insertErr
 }
-func (f *pipelineJobWriter) DeleteJob(_ string) error              { return f.deleteErr }
-func (f *pipelineJobWriter) UpdateJobStatus(_, _ string) error     { return f.statusErr }
-func (f *pipelineJobWriter) UpdateJobSaved(_ string, _ bool) error { return f.savedErr }
-func (f *pipelineJobWriter) UpdateJobNotes(_, _ string) error      { return f.notesErr }
+func (f *pipelineJobWriter) DeleteJob(_ context.Context, _ string) error          { return f.deleteErr }
+func (f *pipelineJobWriter) UpdateJobStatus(_ context.Context, _, _ string) error { return f.statusErr }
+func (f *pipelineJobWriter) UpdateJobSaved(_ context.Context, _ string, _ bool) error {
+	return f.savedErr
+}
+func (f *pipelineJobWriter) UpdateJobNotes(_ context.Context, _, _ string) error { return f.notesErr }
 
 type pipelineLedgerStore struct {
 	hasSeen           bool
@@ -38,10 +41,10 @@ type pipelineLedgerStore struct {
 	updateReasonErr   error
 }
 
-func (f *pipelineLedgerStore) HasSeen(_ string) (bool, error) {
+func (f *pipelineLedgerStore) HasSeen(_ context.Context, _ string) (bool, error) {
 	return f.hasSeen, f.hasSeenErr
 }
-func (f *pipelineLedgerStore) UpdateSeenReason(jobID, reason string) error {
+func (f *pipelineLedgerStore) UpdateSeenReason(_ context.Context, jobID, reason string) error {
 	f.updateReasonJobID = jobID
 	f.updateReasonVal = reason
 	return f.updateReasonErr
@@ -54,11 +57,11 @@ type pipelineSnapshotWriter struct {
 	updateErr    error
 }
 
-func (f *pipelineSnapshotWriter) InsertSnapshot(_ SnapshotInput) error {
+func (f *pipelineSnapshotWriter) InsertSnapshot(_ context.Context, _ SnapshotInput) error {
 	f.insertCalled = true
 	return f.insertErr
 }
-func (f *pipelineSnapshotWriter) UpdateSnapshotAction(_, _ string) error {
+func (f *pipelineSnapshotWriter) UpdateSnapshotAction(_ context.Context, _, _ string) error {
 	f.updateCalled = true
 	return f.updateErr
 }
@@ -67,7 +70,7 @@ type pipelineTechTagWriter struct {
 	insertErr error
 }
 
-func (f *pipelineTechTagWriter) InsertTechTags(_, _ string, _ []string, _ time.Time) error {
+func (f *pipelineTechTagWriter) InsertTechTags(_ context.Context, _, _ string, _ []string, _ time.Time) error {
 	return f.insertErr
 }
 
@@ -122,7 +125,7 @@ func TestSaveEnrichedJob_HappyPath(t *testing.T) {
 	svc := NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
 	input := makeInput()
 
-	if err := svc.SaveEnrichedJob(input); err != nil {
+	if err := svc.SaveEnrichedJob(context.Background(), input); err != nil {
 		t.Fatalf("SaveEnrichedJob() error = %v", err)
 	}
 
@@ -161,7 +164,7 @@ func TestSaveEnrichedJob_InsertJobFails_ReturnsError(t *testing.T) {
 
 	svc := NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
 
-	if err := svc.SaveEnrichedJob(makeInput()); err == nil {
+	if err := svc.SaveEnrichedJob(context.Background(), makeInput()); err == nil {
 		t.Fatal("expected error when InsertJob fails")
 	}
 
@@ -182,7 +185,7 @@ func TestSaveEnrichedJob_SnapshotFailIsNonFatal(t *testing.T) {
 	svc := NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
 
 	// Snapshot failure must not bubble up — job is already saved.
-	if err := svc.SaveEnrichedJob(makeInput()); err != nil {
+	if err := svc.SaveEnrichedJob(context.Background(), makeInput()); err != nil {
 		t.Fatalf("SaveEnrichedJob() should succeed even if snapshot fails, got: %v", err)
 	}
 
@@ -210,7 +213,7 @@ func TestSaveEnrichedJob_NullableFields_EmptyStrings(t *testing.T) {
 	input.Enriched.Summary = ""
 	input.Enriched.RoleBrief = ""
 
-	if err := svc.SaveEnrichedJob(input); err != nil {
+	if err := svc.SaveEnrichedJob(context.Background(), input); err != nil {
 		t.Fatalf("SaveEnrichedJob() error = %v", err)
 	}
 
@@ -242,7 +245,7 @@ func TestMarkLedgerError_CallsLedgerWithErrorReason(t *testing.T) {
 
 	svc := NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
 
-	if err := svc.MarkLedgerError("job-xyz"); err != nil {
+	if err := svc.MarkLedgerError(context.Background(), "job-xyz"); err != nil {
 		t.Fatalf("MarkLedgerError() error = %v", err)
 	}
 
@@ -258,7 +261,7 @@ func TestMarkLedgerError_PropagatesLedgerError(t *testing.T) {
 	ledger := &pipelineLedgerStore{updateReasonErr: errors.New("ledger failure")}
 	svc := NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{})
 
-	if err := svc.MarkLedgerError("job-xyz"); err == nil {
+	if err := svc.MarkLedgerError(context.Background(), "job-xyz"); err == nil {
 		t.Fatal("expected error when ledger fails")
 	}
 }
@@ -267,7 +270,7 @@ func TestHasSeenJob_DelegatesToLedger(t *testing.T) {
 	ledger := &pipelineLedgerStore{hasSeen: true}
 	svc := NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{})
 
-	seen, err := svc.HasSeenJob("job-abc")
+	seen, err := svc.HasSeenJob(context.Background(), "job-abc")
 	if err != nil {
 		t.Fatalf("HasSeenJob() error = %v", err)
 	}
@@ -280,7 +283,7 @@ func TestHasSeenJob_NotSeen(t *testing.T) {
 	ledger := &pipelineLedgerStore{hasSeen: false}
 	svc := NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{})
 
-	seen, err := svc.HasSeenJob("job-new")
+	seen, err := svc.HasSeenJob(context.Background(), "job-new")
 	if err != nil {
 		t.Fatalf("HasSeenJob() error = %v", err)
 	}
@@ -293,7 +296,7 @@ func TestHasSeenJob_PropagatesError(t *testing.T) {
 	ledger := &pipelineLedgerStore{hasSeenErr: errors.New("db error")}
 	svc := NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{})
 
-	_, err := svc.HasSeenJob("job-abc")
+	_, err := svc.HasSeenJob(context.Background(), "job-abc")
 	if err == nil {
 		t.Fatal("expected error from HasSeenJob when ledger fails")
 	}
