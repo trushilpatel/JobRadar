@@ -141,7 +141,7 @@ Job posting text:
 
 Field instructions:
 - experience_years: Extract the minimum years of experience as an integer. Recognize all common phrasings: "3-5 years" → 3, "3+ years" → 3, "at least 3 years" → 3, "minimum 3 years" → 3, "3 to 5 years" → 3, "5 or more years" → 5. Treat "preferred", "ideally", "typically", and "we're looking for" the same as "required" — extract the number regardless. If no explicit number appears, infer from seniority: Entry/Junior/Associate/New Grad → 0, Mid/Mid-Level → 3, Senior/Sr → 5, Staff/Principal → 7. Return null only if no number and no seniority indicator appears anywhere in the posting.
-- tech_stack: array of key tools, languages, and frameworks explicitly mentioned
+- tech_stack: array of specific programming languages, frameworks, databases, cloud platforms, and developer tools explicitly named in the posting. Include: languages (Go, Python, Java, TypeScript), frameworks (React, Django, Spring Boot), databases (PostgreSQL, Redis, MongoDB), cloud services (AWS, GCP, Azure), and dev tools (Docker, Kubernetes, Terraform, Git). Exclude: methodologies (Agile, Scrum, Kanban), soft skills (Communication, Leadership), architectural patterns (REST, MVC, Microservices, CI/CD), and generic office tools (Excel, Word, Microsoft Office). Use canonical names (e.g. "PostgreSQL" not "Postgres", "React" not "ReactJS", "Node.js" not "Node").
 - salary_min, salary_max: integers or null if not stated
 - salary_currency: Extract salary or salary range. if not found null.
 - summary: 2-3 sentence summary of the role only, do not include any information about company
