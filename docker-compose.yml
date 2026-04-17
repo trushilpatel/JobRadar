@@ -96,6 +96,7 @@ services:
       KAFKA_PASSWORD: ""
       LOG_LEVEL: info
       LOG_FORMAT: json
+      JAEGER_ENDPOINT: http://jaeger:4318
     ports:
       - "8080:8080"
     command: ["/app/api"]
@@ -125,6 +126,7 @@ services:
       LOG_LEVEL: info
       LOG_FORMAT: json
       METRICS_ADDR: ":9101"
+      JAEGER_ENDPOINT: http://jaeger:4318
     ports:
       - "9101:9101"
     command: ["/app/scheduler"]
@@ -156,6 +158,7 @@ services:
       LOG_LEVEL: info
       LOG_FORMAT: json
       METRICS_ADDR: ":9102"
+      JAEGER_ENDPOINT: http://jaeger:4318
     ports:
       - "9102:9102"
     command: ["/app/crawler"]
@@ -185,6 +188,7 @@ services:
       LOG_LEVEL: info
       LOG_FORMAT: json
       METRICS_ADDR: ":9103"
+      JAEGER_ENDPOINT: http://jaeger:4318
     ports:
       - "9103:9103"
     command: ["/app/filter"]
@@ -214,6 +218,7 @@ services:
       LOG_LEVEL: info
       LOG_FORMAT: json
       METRICS_ADDR: ":9104"
+      JAEGER_ENDPOINT: http://jaeger:4318
     ports:
       - "9104:9104"
     command: ["/app/enricher"]
@@ -261,57 +266,46 @@ services:
 
   # ── Observability ─────────────────────────────────────────────────────────────
 
-#   loki:
-#     image: grafana/loki:2.9.0
-#     container_name: jobradar_loki
-#     ports:
-#       - "3100:3100"
-#     volumes:
-#       - ./backend/deploy/loki/loki-config.yml:/etc/loki/local-config.yaml
-#       - lokidata:/loki
-#     command: -config.file=/etc/loki/local-config.yaml
-#     restart: unless-stopped
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: jobradar_jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4318:4318"    # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    restart: unless-stopped
 
-#   promtail:
-#     image: grafana/promtail:2.9.0
-#     container_name: jobradar_promtail
-#     volumes:
-#       - ./backend/deploy/loki/promtail-config.yml:/etc/promtail/config.yml
-#       - /var/run/docker.sock:/var/run/docker.sock:ro
-#     command: -config.file=/etc/promtail/config.yml
-#     depends_on:
-#       - loki
-#     restart: unless-stopped
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: jobradar_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./backend/deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheusdata:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    restart: unless-stopped
 
-#   grafana:
-#     image: grafana/grafana:10.4.0
-#     container_name: jobradar_grafana
-#     ports:
-#       - "3001:3000"
-#     volumes:
-#       - ./backend/deploy/loki/grafana-datasources.yml:/etc/grafana/provisioning/datasources/loki.yml
-#       - ./backend/deploy/prometheus/grafana-prometheus-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml
-#       - grafanadata:/var/lib/grafana
-#     environment:
-#       - GF_AUTH_ANONYMOUS_ENABLED=true
-#       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-#     depends_on:
-#       - loki
-#     restart: unless-stopped
-
-#   prometheus:
-#     image: prom/prometheus:v2.51.0
-#     container_name: jobradar_prometheus
-#     ports:
-#       - "9090:9090"
-#     volumes:
-#       - ./backend/deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-#       - prometheusdata:/prometheus
-#     command:
-#       - '--config.file=/etc/prometheus/prometheus.yml'
-#       - '--storage.tsdb.retention.time=15d'
-#     restart: unless-stopped
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: jobradar_grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./backend/deploy/prometheus/grafana-prometheus-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml
+      - grafanadata:/var/lib/grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    depends_on:
+      - prometheus
+    restart: unless-stopped
 
 volumes:
   pgdata:
+  prometheusdata:
+  grafanadata:
 

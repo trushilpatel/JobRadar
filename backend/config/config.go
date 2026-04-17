@@ -51,6 +51,9 @@ type Config struct {
 
 	// Prometheus
 	MetricsAddr string // address for metrics/health HTTP server (workers); API uses :8080
+
+	// Tracing
+	JaegerEndpoint string // OTLP HTTP endpoint, e.g. http://localhost:4318
 }
 
 func Load() *Config {
@@ -92,7 +95,8 @@ func Load() *Config {
 		GoogleScraperEnrichMinMs: getEnvInt("GOOGLE_SCRAPER_ENRICH_MIN", 60000),
 		GoogleScraperEnrichMaxMs: getEnvInt("GOOGLE_SCRAPER_ENRICH_MAX", 120000),
 
-		MetricsAddr: getEnv("METRICS_ADDR", ":9090"),
+		MetricsAddr:    getEnv("METRICS_ADDR", ":9090"),
+		JaegerEndpoint: getEnv("JAEGER_ENDPOINT", "http://localhost:4318"),
 	}
 }
 
