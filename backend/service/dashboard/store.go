@@ -134,11 +134,11 @@ func (s *userDashboardStore) GetWeeklyHiringActivity(weeks int) ([]WeeklyCount, 
 	var results []WeeklyCount
 	err := s.db.Raw(`
 		SELECT
-			DATE_TRUNC('week', scanned_at)::date AS week_start,
-			SUM(jobs_new)                        AS job_count
-		FROM company_scan_log
-		WHERE scanned_at >= NOW() - (? * INTERVAL '1 week')
-		GROUP BY DATE_TRUNC('week', scanned_at)
+			DATE_TRUNC('week', first_seen_at)::date::text AS week_start,
+			COUNT(*)                                       AS job_count
+		FROM job_pipeline_ledger
+		WHERE first_seen_at >= NOW() - (? * INTERVAL '1 week')
+		GROUP BY DATE_TRUNC('week', first_seen_at)
 		ORDER BY week_start ASC
 	`, weeks).Scan(&results).Error
 	return results, err

@@ -98,10 +98,12 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
       <button
         type="button"
         onClick={p.onReset}
-        className="ml-auto text-[11px] text-slate-500 hover:text-slate-300"
+        className="text-[11px] text-slate-500 hover:text-slate-300 px-1"
       >
         Reset
       </button>
+
+      <div className="flex-1" />
 
       <button
         type="button"
