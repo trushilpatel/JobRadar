@@ -1,19 +1,21 @@
 .PHONY: dev dev-frontend dev-backend \
-        build build-frontend build-backend \
-        run-api run-scan run-scorer run-enricher \
+        build build-frontend build-backend clean-frontend \
+        run-api run-crawler run-filter run-enricher run-scheduler \
         migrate scan-google db-truncate lint tsc \
         test test-short test-unit \
         test-api test-workers test-scheduler test-llm \
         test-adapters \
         test-adapter-greenhouse test-adapter-lever test-adapter-ashby \
-        docker-up docker-down \
+        docker-up \
         up rebuild rebuild-backend rebuild-crawler rebuild-frontend down logs build-docker \
         install-hooks \
         help
 
 # ── Dev ──────────────────────────────────────────────────────────────────────
 
-dev: ## Start frontend + API in parallel (requires tmux or runs sequentially)
+dev: ## Start infra in Docker, then run frontend + API on host
+	$(MAKE) docker-up
+	cd backend && go run ./cmd/migrate
 	$(MAKE) -j2 dev-frontend dev-backend
 
 dev-frontend: ## Start Vite dev server
@@ -26,7 +28,10 @@ dev-backend: ## Start API server (hot-reload via go run)
 
 build: build-frontend build-backend ## Build everything
 
-build-frontend: ## Build frontend (tsc + vite)
+clean-frontend: ## Remove frontend build artifacts from host
+	rm -rf frontend/dist
+
+build-frontend: clean-frontend ## Build frontend (tsc + vite)
 	cd frontend && npm run build
 
 build-backend: ## Compile all Go binaries
@@ -37,17 +42,17 @@ build-backend: ## Compile all Go binaries
 run-api: ## Run API server
 	cd backend && go run ./cmd/api
 
-run-scan: ## Run scan worker
-	cd backend && go run ./cmd/scan
+run-crawler: ## Run job listing crawler worker
+	cd backend && go run ./cmd/job_listing_crawler
 
-run-scorer: ## Run LLM scorer worker
-	cd backend && go run ./cmd/scorer
+run-filter: ## Run LLM relevance filter worker
+	cd backend && go run ./cmd/job_listing_relevance_filter
 
-run-enricher: ## Run enricher worker
-	cd backend && go run ./cmd/enricher
+run-enricher: ## Run job post analyzer/enricher worker
+	cd backend && go run ./cmd/job_post_analyzer
 
 run-scheduler: ## Run scan scheduler (enqueues due companies)
-	cd backend && go run ./cmd/scheduler
+	cd backend && go run ./cmd/company_scan_scheduler
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
@@ -80,29 +85,30 @@ test-unit: test-scheduler test-workers test-api ## Run all unit tests (scheduler
 test-scheduler: ## Test company_scan_scheduler
 	cd backend && go test -v ./cmd/company_scan_scheduler/...
 
-test-workers: ## Test all pipeline workers (crawler, relevance filter, enricher)
+test-workers: ## Test all pipeline workers (crawler, filter, enricher)
 	cd backend && go test -v \
-		./internal/worker/job_listing_crawler/... \
-		./internal/worker/job_listing_relevance_filter/... \
-		./internal/worker/job_post_analyzer/...
+		./cmd/job_listing_crawler/... \
+		./pipeline/crawler/... \
+		./pipeline/filter/... \
+		./pipeline/analyzer/...
 
-test-api: ## Test API handlers
-	cd backend && go test -v ./internal/api/handler/...
+test-api: ## Test API handlers and services
+	cd backend && go test -v ./api/... ./service/...
 
 test-llm: ## Test LLM package
-	cd backend && go test -v ./internal/llm/...
+	cd backend && go test -v ./pipeline/llm/...
 
 test-adapters: ## Run all adapter integration tests (Greenhouse + Lever + Ashby hit real APIs)
-	cd backend && go test -v -run "Integration" ./internal/ats_fetcher/greenhouse/... ./internal/ats_fetcher/lever/... ./internal/ats_fetcher/ashby/...
+	cd backend && go test -v -run "Integration" ./pipeline/ats/greenhouse/... ./pipeline/ats/lever/... ./pipeline/ats/ashby/...
 
 test-adapter-greenhouse: ## Run Greenhouse integration tests only
-	cd backend && go test -v -run "Integration" ./internal/ats_fetcher/greenhouse/...
+	cd backend && go test -v -run "Integration" ./pipeline/ats/greenhouse/...
 
 test-adapter-lever: ## Run Lever integration tests only
-	cd backend && go test -v -run "Integration" ./internal/ats_fetcher/lever/...
+	cd backend && go test -v -run "Integration" ./pipeline/ats/lever/...
 
 test-adapter-ashby: ## Run Ashby integration tests only
-	cd backend && go test -v -run "Integration" ./internal/ats_fetcher/ashby/...
+	cd backend && go test -v -run "Integration" ./pipeline/ats/ashby/...
 
 vet: ## Run go vet
 	cd backend && go vet ./...
@@ -110,21 +116,20 @@ vet: ## Run go vet
 # ── Docker (infra only — for local dev) ──────────────────────────────────────
 
 docker-up: ## Start Kafka + Postgres only (for local go run dev)
-	docker-compose up -d postgres kafka
-
-docker-down: ## Stop all docker-compose services
-	docker-compose down
+	docker-compose up -d postgres kafka kafka-init
 
 docker-logs: ## Tail docker-compose logs
 	docker-compose logs -f
 
 # ── Full stack ────────────────────────────────────────────────────────────────
 
-up: ## Start the stack using existing images (fast — no rebuild)
-	docker-compose up -d
+up: ## Start the full stack using existing images (fast — no rebuild)
+	docker-compose --profile workers up -d
 
 rebuild: ## Rebuild all images then start (use after code changes)
-	DOCKER_BUILDKIT=1 docker-compose up -d --build
+	$(MAKE) build-frontend
+	docker volume rm jobradar_kafkadata 2>/dev/null || true
+	DOCKER_BUILDKIT=1 docker-compose --profile workers up -d --build
 
 rebuild-backend: ## Rebuild backend image only (api/scheduler/filter/enricher)
 	DOCKER_BUILDKIT=1 docker-compose up -d --build api scheduler filter enricher migrate
@@ -132,7 +137,9 @@ rebuild-backend: ## Rebuild backend image only (api/scheduler/filter/enricher)
 rebuild-crawler: ## Rebuild crawler image only
 	DOCKER_BUILDKIT=1 docker-compose up -d --build crawler
 
-rebuild-frontend: ## Rebuild frontend image only
+rebuild-frontend: ## Clean, build on host, then rebuild Docker frontend image
+	$(MAKE) clean-frontend
+	cd frontend && npm run build
 	DOCKER_BUILDKIT=1 docker-compose up -d --build frontend
 
 down: ## Stop and remove all containers (keeps volumes)

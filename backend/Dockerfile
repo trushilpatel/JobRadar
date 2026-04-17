@@ -1,6 +1,7 @@
 FROM golang:1.24-alpine AS deps
 
 ENV GOTOOLCHAIN=auto
+ENV CGO_ENABLED=0
 
 WORKDIR /app
 COPY go.mod go.sum ./

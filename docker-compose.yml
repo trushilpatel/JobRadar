@@ -5,6 +5,7 @@ services:
   postgres:
     image: postgres:16
     container_name: jobradar_postgres
+    mem_limit: 256m
     env_file:
       - ./backend/.env
     environment:
@@ -22,38 +23,42 @@ services:
       retries: 10
 
   kafka:
-    image: confluentinc/cp-kafka:7.6.0
+    image: redpandadata/redpanda:v24.3.1
     container_name: jobradar_kafka
+    user: "0"
+    stop_grace_period: 30s
+    command:
+      - redpanda
+      - start
+      - --mode dev-container
+      - --smp 1
+      - --memory 256M
+      - --reserve-memory 0M
+      - --overprovisioned
+      - --kafka-addr internal://0.0.0.0:29092,external://0.0.0.0:9092
+      - --advertise-kafka-addr internal://kafka:29092,external://localhost:9092
     ports:
-      - "9092:9092"   # external (host) — SASL
-    env_file:
-      - ./backend/.env
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
-      # Two listeners: SASL for external (host) use, PLAINTEXT for internal container traffic
-      KAFKA_LISTENERS: SASL_PLAINTEXT://0.0.0.0:9092,PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093
-      KAFKA_ADVERTISED_LISTENERS: SASL_PLAINTEXT://localhost:9092,PLAINTEXT://kafka:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: SASL_PLAINTEXT:SASL_PLAINTEXT,PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
-      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
-      KAFKA_OPTS: "-Djava.security.auth.login.config=/etc/kafka/kafka_server_jaas.conf"
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_LOG_DIRS: /var/lib/kafka/data
-      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
-    volumes:
-      - ./backend/deploy/kafka/entrypoint.sh:/entrypoint.sh
-      - kafkadata:/var/lib/kafka/data
-    entrypoint: ["/bin/bash", "/entrypoint.sh"]
+      - "9092:9092"
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:29092 --list > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 15
-      start_period: 30s
+      start_period: 15s
+
+  kafka-init:
+    image: redpandadata/redpanda:v24.3.1
+    container_name: jobradar_kafka_init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      rpk topic create company.scan_request job_listings.raw job_listings.filtered
+      --brokers kafka:29092
+      --partitions 1
+      --replicas 1
+    restart: "no"
 
   # ── One-shot migration ────────────────────────────────────────────────────────
 
@@ -80,6 +85,7 @@ services:
       dockerfile: Dockerfile
     image: jobradar_backend
     container_name: jobradar_api
+    mem_limit: 128m
     env_file:
       - ./backend/.env
     environment:
@@ -96,8 +102,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -106,6 +112,8 @@ services:
     image: jobradar_backend
     pull_policy: never
     container_name: jobradar_scheduler
+    mem_limit: 128m
+    profiles: [workers]
     env_file:
       - ./backend/.env
     environment:
@@ -123,8 +131,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -135,6 +143,8 @@ services:
       dockerfile: Dockerfile.crawler
     image: jobradar_crawler
     container_name: jobradar_crawler
+    mem_limit: 1g
+    profiles: [workers]
     env_file:
       - ./backend/.env
     environment:
@@ -152,8 +162,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -162,6 +172,8 @@ services:
     image: jobradar_backend
     pull_policy: never
     container_name: jobradar_filter
+    mem_limit: 128m
+    profiles: [workers]
     env_file:
       - ./backend/.env
     environment:
@@ -179,8 +191,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -189,6 +201,8 @@ services:
     image: jobradar_backend
     pull_policy: never
     container_name: jobradar_enricher
+    mem_limit: 128m
+    profiles: [workers]
     env_file:
       - ./backend/.env
     environment:
@@ -206,8 +220,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -300,8 +314,4 @@ services:
 
 volumes:
   pgdata:
-  kafkadata:
-  lokidata:
-  grafanadata:
-  prometheusdata:
 
