@@ -25,8 +25,10 @@ type fakeDashboardService struct {
 	err      error
 }
 
-func (f *fakeDashboardService) GetStats() (*StatsView, error)             { return f.stats, f.err }
-func (f *fakeDashboardService) GetActivity(_ int) ([]ActivityView, error) { return f.activity, f.err }
+func (f *fakeDashboardService) GetStats(_ context.Context) (*StatsView, error) { return f.stats, f.err }
+func (f *fakeDashboardService) GetActivity(_ context.Context, _ int) ([]ActivityView, error) {
+	return f.activity, f.err
+}
 
 func newDashboardTestRouter(h *Handler) *chi.Mux {
 	r := chi.NewRouter()

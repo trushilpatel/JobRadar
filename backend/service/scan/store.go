@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
 	"gorm.io/gorm"
 )
@@ -12,44 +13,44 @@ import (
 type ScanQueueStore interface {
 	// Enqueue inserts a company into the queue. Silently no-ops if the company
 	// already has an active entry (queued or processing).
-	Enqueue(companyID, source string) error
+	Enqueue(ctx context.Context, companyID, source string) error
 
 	// ClaimNext atomically claims the next queued item and marks it processing.
 	// Returns nil, nil if the queue is empty.
 	ClaimNext(ctx context.Context) (*ScanQueueItem, error)
 
 	// Complete removes the queue entry. Call after scan succeeds or fails.
-	Complete(id string) error
+	Complete(ctx context.Context, id string) error
 
 	// Remove deletes a queued entry by ID. No-ops if entry is processing or missing.
-	Remove(id string) error
+	Remove(ctx context.Context, id string) error
 
 	// MoveUp raises this item one position in the queue by increasing its priority.
-	MoveUp(id string) error
+	MoveUp(ctx context.Context, id string) error
 
 	// MoveDown lowers this item one position in the queue.
-	MoveDown(id string) error
+	MoveDown(ctx context.Context, id string) error
 
 	// ResetStuck resets processing rows whose heartbeat (or started_at if no heartbeat yet) is older than staleDur.
-	ResetStuck(staleDur time.Duration) error
+	ResetStuck(ctx context.Context, staleDur time.Duration) error
 
 	// UpdateHeartbeat refreshes the heartbeat timestamp for an in-progress row.
-	UpdateHeartbeat(id string) error
+	UpdateHeartbeat(ctx context.Context, id string) error
 
 	// ListQueue returns all active queue entries ordered by priority DESC, queued_at ASC.
-	ListQueue() ([]ScanQueueItem, error)
+	ListQueue(ctx context.Context) ([]ScanQueueItem, error)
 }
 
 // ScanLogWriter records scan summaries.
 type ScanLogWriter interface {
-	InsertCompanyScanLog(companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) error
+	InsertCompanyScanLog(ctx context.Context, companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) error
 }
 
 // ScanLogReader reads scan history for a company.
 type ScanLogReader interface {
-	GetScanStats(companyID string) (ScanStatsView, error)
-	GetJobsScannedToday() (int64, error)
-	GetScansByDay(days int) ([]DailyScanCount, error)
+	GetScanStats(ctx context.Context, companyID string) (ScanStatsView, error)
+	GetJobsScannedToday(ctx context.Context) (int64, error)
+	GetScansByDay(ctx context.Context, days int) ([]DailyScanCount, error)
 }
 
 // ScanLogStore is the full interface for scan log read+write.
@@ -69,17 +70,21 @@ func NewQueueStore(db *gorm.DB) ScanQueueStore {
 	return &scanQueueStore{db: db}
 }
 
-func (s *scanQueueStore) Enqueue(companyID, source string) error {
-	return s.db.Exec(`
+func (s *scanQueueStore) Enqueue(ctx context.Context, companyID, source string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.Enqueue")
+	defer tracing.End(span, &err)
+	return s.db.WithContext(ctx).Exec(`
 		INSERT INTO company_scan_queue (company_id, source)
 		VALUES (?, ?)
 		ON CONFLICT DO NOTHING
 	`, companyID, source).Error
 }
 
-func (s *scanQueueStore) ClaimNext(ctx context.Context) (*ScanQueueItem, error) {
+func (s *scanQueueStore) ClaimNext(ctx context.Context) (_ *ScanQueueItem, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.ClaimNext")
+	defer tracing.End(span, &err)
 	var item ScanQueueItem
-	err := s.db.WithContext(ctx).Raw(`
+	err = s.db.WithContext(ctx).Raw(`
 		UPDATE company_scan_queue
 		SET status = 'processing', started_at = NOW()
 		WHERE id = (
@@ -100,16 +105,22 @@ func (s *scanQueueStore) ClaimNext(ctx context.Context) (*ScanQueueItem, error) 
 	return &item, nil
 }
 
-func (s *scanQueueStore) Complete(id string) error {
-	return s.db.Exec(`DELETE FROM company_scan_queue WHERE id = ?`, id).Error
+func (s *scanQueueStore) Complete(ctx context.Context, id string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.Complete")
+	defer tracing.End(span, &err)
+	return s.db.WithContext(ctx).Exec(`DELETE FROM company_scan_queue WHERE id = ?`, id).Error
 }
 
-func (s *scanQueueStore) Remove(id string) error {
-	return s.db.Exec(`DELETE FROM company_scan_queue WHERE id = ? AND status = 'queued'`, id).Error
+func (s *scanQueueStore) Remove(ctx context.Context, id string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.Remove")
+	defer tracing.End(span, &err)
+	return s.db.WithContext(ctx).Exec(`DELETE FROM company_scan_queue WHERE id = ? AND status = 'queued'`, id).Error
 }
 
-func (s *scanQueueStore) MoveUp(id string) error {
-	items, err := s.listOrdered()
+func (s *scanQueueStore) MoveUp(ctx context.Context, id string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.MoveUp")
+	defer tracing.End(span, &err)
+	items, err := s.listOrdered(ctx)
 	if err != nil {
 		return err
 	}
@@ -125,11 +136,13 @@ func (s *scanQueueStore) MoveUp(id string) error {
 	}
 	above := items[pos-1]
 	newPriority := above.Priority + 1
-	return s.db.Exec(`UPDATE company_scan_queue SET priority = ? WHERE id = ?`, newPriority, id).Error
+	return s.db.WithContext(ctx).Exec(`UPDATE company_scan_queue SET priority = ? WHERE id = ?`, newPriority, id).Error
 }
 
-func (s *scanQueueStore) MoveDown(id string) error {
-	items, err := s.listOrdered()
+func (s *scanQueueStore) MoveDown(ctx context.Context, id string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.MoveDown")
+	defer tracing.End(span, &err)
+	items, err := s.listOrdered(ctx)
 	if err != nil {
 		return err
 	}
@@ -143,14 +156,15 @@ func (s *scanQueueStore) MoveDown(id string) error {
 	if pos < 0 || pos >= len(items)-1 {
 		return nil
 	}
-	this := items[pos]
 	below := items[pos+1]
-	newPriority := this.Priority + 1
-	return s.db.Exec(`UPDATE company_scan_queue SET priority = ? WHERE id = ?`, newPriority, below.ID).Error
+	newPriority := below.Priority + 1
+	return s.db.WithContext(ctx).Exec(`UPDATE company_scan_queue SET priority = ? WHERE id = ?`, newPriority, below.ID).Error
 }
 
-func (s *scanQueueStore) ResetStuck(staleDur time.Duration) error {
-	return s.db.Exec(`
+func (s *scanQueueStore) ResetStuck(ctx context.Context, staleDur time.Duration) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.ResetStuck")
+	defer tracing.End(span, &err)
+	return s.db.WithContext(ctx).Exec(`
 		UPDATE company_scan_queue
 		SET status = 'queued', started_at = NULL, heartbeat_at = NULL
 		WHERE status = 'processing'
@@ -158,17 +172,21 @@ func (s *scanQueueStore) ResetStuck(staleDur time.Duration) error {
 	`, int(staleDur.Seconds())).Error
 }
 
-func (s *scanQueueStore) UpdateHeartbeat(id string) error {
-	return s.db.Exec(`UPDATE company_scan_queue SET heartbeat_at = NOW() WHERE id = ?`, id).Error
+func (s *scanQueueStore) UpdateHeartbeat(ctx context.Context, id string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.UpdateHeartbeat")
+	defer tracing.End(span, &err)
+	return s.db.WithContext(ctx).Exec(`UPDATE company_scan_queue SET heartbeat_at = NOW() WHERE id = ?`, id).Error
 }
 
-func (s *scanQueueStore) ListQueue() ([]ScanQueueItem, error) {
-	return s.listOrdered()
+func (s *scanQueueStore) ListQueue(ctx context.Context) (_ []ScanQueueItem, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.ListQueue")
+	defer tracing.End(span, &err)
+	return s.listOrdered(ctx)
 }
 
-func (s *scanQueueStore) listOrdered() ([]ScanQueueItem, error) {
+func (s *scanQueueStore) listOrdered(ctx context.Context) ([]ScanQueueItem, error) {
 	var items []ScanQueueItem
-	err := s.db.Raw(`
+	err := s.db.WithContext(ctx).Raw(`
 		SELECT id, company_id, status, source, priority, queued_at, started_at, heartbeat_at
 		FROM company_scan_queue
 		ORDER BY priority DESC, queued_at ASC
@@ -187,7 +205,9 @@ func NewLogStore(db *gorm.DB) ScanLogStore {
 	return &scanLogStore{db: db}
 }
 
-func (s *scanLogStore) InsertCompanyScanLog(companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) error {
+func (s *scanLogStore) InsertCompanyScanLog(ctx context.Context, companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.InsertCompanyScanLog")
+	defer tracing.End(span, &err)
 	row := model.CompanyScanLog{
 		CompanyID:   companyID,
 		JobsFetched: jobsFetched,
@@ -195,10 +215,12 @@ func (s *scanLogStore) InsertCompanyScanLog(companyID string, jobsFetched, jobsN
 		DurationMs:  &durationMs,
 		Error:       errMsg,
 	}
-	return s.db.Create(&row).Error
+	return s.db.WithContext(ctx).Create(&row).Error
 }
 
-func (s *scanLogStore) GetScanStats(companyID string) (ScanStatsView, error) {
+func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ ScanStatsView, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.GetScanStats")
+	defer tracing.End(span, &err)
 	var stats ScanStatsView
 
 	type agg struct {
@@ -209,7 +231,7 @@ func (s *scanLogStore) GetScanStats(companyID string) (ScanStatsView, error) {
 		AvgDurationMs *float64
 	}
 	var a agg
-	err := s.db.Model(&model.CompanyScanLog{}).
+	err = s.db.WithContext(ctx).Model(&model.CompanyScanLog{}).
 		Where("company_id = ?", companyID).
 		Select("COUNT(*) as total_scans, SUM(jobs_fetched) as total_fetched, SUM(jobs_new) as total_new, SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) as error_count, AVG(duration_ms) as avg_duration_ms").
 		Scan(&a).Error
@@ -224,17 +246,17 @@ func (s *scanLogStore) GetScanStats(companyID string) (ScanStatsView, error) {
 	stats.AvgDurationMs = a.AvgDurationMs
 
 	var newToday, newThisMonth int64
-	s.db.Model(&model.CompanyScanLog{}).
+	s.db.WithContext(ctx).Model(&model.CompanyScanLog{}).
 		Where("company_id = ? AND DATE(scanned_at) = CURRENT_DATE", companyID).
 		Select("COALESCE(SUM(jobs_new), 0)").Scan(&newToday)
-	s.db.Model(&model.CompanyScanLog{}).
+	s.db.WithContext(ctx).Model(&model.CompanyScanLog{}).
 		Where("company_id = ? AND DATE_TRUNC('month', scanned_at) = DATE_TRUNC('month', CURRENT_DATE)", companyID).
 		Select("COALESCE(SUM(jobs_new), 0)").Scan(&newThisMonth)
 	stats.NewToday = newToday
 	stats.NewThisMonth = newThisMonth
 
 	var recent []ScanRun
-	if err := s.db.Model(&model.CompanyScanLog{}).
+	if err := s.db.WithContext(ctx).Model(&model.CompanyScanLog{}).
 		Where("company_id = ?", companyID).
 		Order("scanned_at DESC").
 		Limit(10).
@@ -247,18 +269,21 @@ func (s *scanLogStore) GetScanStats(companyID string) (ScanStatsView, error) {
 	return stats, nil
 }
 
-func (s *scanLogStore) GetJobsScannedToday() (int64, error) {
+func (s *scanLogStore) GetJobsScannedToday(ctx context.Context) (_ int64, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.GetJobsScannedToday")
+	defer tracing.End(span, &err)
 	var count int64
-	err := s.db.Model(&model.CompanyScanLog{}).
+	err = s.db.WithContext(ctx).Model(&model.CompanyScanLog{}).
 		Where("DATE(scanned_at) = CURRENT_DATE").
 		Select("COALESCE(SUM(jobs_fetched), 0)").
 		Scan(&count).Error
 	return count, err
 }
 
-func (s *scanLogStore) GetScansByDay(days int) ([]DailyScanCount, error) {
-	var results []DailyScanCount
-	err := s.db.Model(&model.CompanyScanLog{}).
+func (s *scanLogStore) GetScansByDay(ctx context.Context, days int) (results []DailyScanCount, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.GetScansByDay")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Model(&model.CompanyScanLog{}).
 		Select("DATE(scanned_at) as date, SUM(jobs_fetched) as scanned, SUM(jobs_new) as new_jobs").
 		Where("scanned_at >= NOW() - ? * INTERVAL '1 day'", days).
 		Group("DATE(scanned_at)").

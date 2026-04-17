@@ -1,8 +1,10 @@
 package scan
 
 import (
+	"context"
 	"time"
 
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
 )
 
@@ -11,7 +13,7 @@ type CrawlerService interface {
 	// RecordScanResult writes the scan log entry and updates the company's scan status.
 	// companyID is the company being scanned.
 	// result carries the counts and any error message from the crawl.
-	RecordScanResult(companyID string, result ScanResult) error
+	RecordScanResult(ctx context.Context, companyID string, result ScanResult) error
 }
 
 // ScanResult carries the outcome of one company crawl.
@@ -24,7 +26,7 @@ type ScanResult struct {
 
 // companyScanUpdater is the narrow interface for updating company scan status.
 type companyScanUpdater interface {
-	UpdateScanStatus(id, status string) error
+	UpdateScanStatus(ctx context.Context, id, status string) error
 }
 
 type crawlerService struct {
@@ -38,7 +40,9 @@ func NewCrawlerService(log ScanLogWriter, company companyScanUpdater) CrawlerSer
 }
 
 // RecordScanResult writes the scan log entry and updates the company's scan status.
-func (c *crawlerService) RecordScanResult(companyID string, result ScanResult) error {
+func (c *crawlerService) RecordScanResult(ctx context.Context, companyID string, result ScanResult) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.crawlerservice.RecordScanResult")
+	defer tracing.End(span, &err)
 	status := model.ScanStatusOK
 	var errPtr *string
 	if result.ErrMsg != "" {
@@ -47,9 +51,9 @@ func (c *crawlerService) RecordScanResult(companyID string, result ScanResult) e
 	}
 
 	durationMs := int(result.Duration.Milliseconds())
-	if err := c.log.InsertCompanyScanLog(companyID, result.FetchedCount, result.NewCount, durationMs, errPtr); err != nil {
+	if err := c.log.InsertCompanyScanLog(ctx, companyID, result.FetchedCount, result.NewCount, durationMs, errPtr); err != nil {
 		return err
 	}
 
-	return c.company.UpdateScanStatus(companyID, status)
+	return c.company.UpdateScanStatus(ctx, companyID, status)
 }

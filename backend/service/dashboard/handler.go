@@ -41,7 +41,7 @@ func (h *Handler) Register(r chi.Router) {
 
 // GET /dashboard/stats
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.dashboard.GetStats()
+	stats, err := h.dashboard.GetStats(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -63,7 +63,7 @@ func (h *Handler) Activity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	activity, err := h.dashboard.GetActivity(days)
+	activity, err := h.dashboard.GetActivity(r.Context(), days)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -74,7 +74,7 @@ func (h *Handler) Activity(w http.ResponseWriter, r *http.Request) {
 
 // GET /dashboard/progress
 func (h *Handler) Progress(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.userDashboard.GetProgressStats()
+	stats, err := h.userDashboard.GetProgressStats(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -84,7 +84,7 @@ func (h *Handler) Progress(w http.ResponseWriter, r *http.Request) {
 
 // GET /dashboard/market
 func (h *Handler) Market(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.userDashboard.GetMarketStats()
+	stats, err := h.userDashboard.GetMarketStats(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -94,7 +94,7 @@ func (h *Handler) Market(w http.ResponseWriter, r *http.Request) {
 
 // GET /dashboard/heatmap
 func (h *Handler) Heatmap(w http.ResponseWriter, r *http.Request) {
-	counts, err := h.userDashboard.GetHeatmap()
+	counts, err := h.userDashboard.GetHeatmap(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -104,7 +104,7 @@ func (h *Handler) Heatmap(w http.ResponseWriter, r *http.Request) {
 
 // GET /dashboard/interviews
 func (h *Handler) Interviews(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.userDashboard.GetInterviews()
+	rows, err := h.userDashboard.GetInterviews(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -121,7 +121,7 @@ func (h *Handler) Velocity(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	rows, err := h.userDashboard.GetVelocity(limit)
+	rows, err := h.userDashboard.GetVelocity(r.Context(), limit)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -131,7 +131,7 @@ func (h *Handler) Velocity(w http.ResponseWriter, r *http.Request) {
 
 // GET /dashboard/tech-trends
 func (h *Handler) TechTrends(w http.ResponseWriter, r *http.Request) {
-	trends, err := h.userDashboard.GetTechTrends()
+	trends, err := h.userDashboard.GetTechTrends(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return

@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ type fakeScanLogWriter struct {
 	errMsg      *string
 }
 
-func (f *fakeScanLogWriter) InsertCompanyScanLog(companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) error {
+func (f *fakeScanLogWriter) InsertCompanyScanLog(_ context.Context, companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) error {
 	f.called = true
 	f.companyID = companyID
 	f.jobsFetched = jobsFetched
@@ -37,7 +38,7 @@ type fakeCompanyScanUpdater struct {
 	status string
 }
 
-func (f *fakeCompanyScanUpdater) UpdateScanStatus(id, status string) error {
+func (f *fakeCompanyScanUpdater) UpdateScanStatus(_ context.Context, id, status string) error {
 	f.called = true
 	f.id = id
 	f.status = status
@@ -58,7 +59,7 @@ func TestRecordScanResult_HappyPath(t *testing.T) {
 		ErrMsg:       "",
 	}
 
-	err := svc.RecordScanResult("company-1", result)
+	err := svc.RecordScanResult(context.Background(), "company-1", result)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -106,7 +107,7 @@ func TestRecordScanResult_LogWriteFailure(t *testing.T) {
 		ErrMsg:       "",
 	}
 
-	err := svc.RecordScanResult("company-2", result)
+	err := svc.RecordScanResult(context.Background(), "company-2", result)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -133,7 +134,7 @@ func TestRecordScanResult_CompanyUpdateFailure(t *testing.T) {
 		ErrMsg:       "fetch failed: timeout",
 	}
 
-	err := svc.RecordScanResult("company-3", result)
+	err := svc.RecordScanResult(context.Background(), "company-3", result)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

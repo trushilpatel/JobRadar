@@ -62,7 +62,7 @@ func main() {
 }
 
 func enqueuedue(ctx context.Context, log logger.Logger, companies companysvc.SchedulerService, queue scansvc.ScanQueueStore, intervalMinutes int) {
-	due, err := companies.GetCompaniesDueForScan(intervalMinutes)
+	due, err := companies.GetCompaniesDueForScan(ctx, intervalMinutes)
 	if err != nil {
 		log.Error("failed to query due companies", err)
 		return
@@ -74,7 +74,7 @@ func enqueuedue(ctx context.Context, log logger.Logger, companies companysvc.Sch
 	log.Info("companies due for scan", logger.Int("count", len(due)))
 
 	for _, c := range due {
-		if err := queue.Enqueue(c.ID, model.QueueSourceScheduler); err != nil {
+		if err := queue.Enqueue(ctx, c.ID, model.QueueSourceScheduler); err != nil {
 			log.Error("enqueue failed", err, logger.Str(logger.FieldCompany, c.ID))
 			continue
 		}

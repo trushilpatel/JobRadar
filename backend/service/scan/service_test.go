@@ -19,21 +19,21 @@ type fakeQueueStore struct {
 	removeCalled  bool
 }
 
-func (f *fakeQueueStore) Enqueue(companyID, source string) error {
+func (f *fakeQueueStore) Enqueue(_ context.Context, companyID, source string) error {
 	f.enqueueCalled = true
 	return f.err
 }
 func (f *fakeQueueStore) ClaimNext(ctx context.Context) (*ScanQueueItem, error) { return nil, f.err }
-func (f *fakeQueueStore) Complete(id string) error                              { return f.err }
-func (f *fakeQueueStore) Remove(id string) error {
+func (f *fakeQueueStore) Complete(_ context.Context, id string) error           { return f.err }
+func (f *fakeQueueStore) Remove(_ context.Context, id string) error {
 	f.removeCalled = true
 	return f.err
 }
-func (f *fakeQueueStore) MoveUp(id string) error           { return f.err }
-func (f *fakeQueueStore) MoveDown(id string) error         { return f.err }
-func (f *fakeQueueStore) ResetStuck(d time.Duration) error { return f.err }
-func (f *fakeQueueStore) UpdateHeartbeat(id string) error  { return f.err }
-func (f *fakeQueueStore) ListQueue() ([]ScanQueueItem, error) {
+func (f *fakeQueueStore) MoveUp(_ context.Context, id string) error           { return f.err }
+func (f *fakeQueueStore) MoveDown(_ context.Context, id string) error         { return f.err }
+func (f *fakeQueueStore) ResetStuck(_ context.Context, d time.Duration) error { return f.err }
+func (f *fakeQueueStore) UpdateHeartbeat(_ context.Context, id string) error  { return f.err }
+func (f *fakeQueueStore) ListQueue(_ context.Context) ([]ScanQueueItem, error) {
 	return f.items, f.err
 }
 
@@ -43,11 +43,11 @@ type fakeScanLogReader struct {
 	err   error
 }
 
-func (f *fakeScanLogReader) GetScanStats(companyID string) (ScanStatsView, error) {
+func (f *fakeScanLogReader) GetScanStats(_ context.Context, companyID string) (ScanStatsView, error) {
 	return f.stats, f.err
 }
-func (f *fakeScanLogReader) GetJobsScannedToday() (int64, error) { return 0, f.err }
-func (f *fakeScanLogReader) GetScansByDay(days int) ([]DailyScanCount, error) {
+func (f *fakeScanLogReader) GetJobsScannedToday(_ context.Context) (int64, error) { return 0, f.err }
+func (f *fakeScanLogReader) GetScansByDay(_ context.Context, days int) ([]DailyScanCount, error) {
 	return nil, f.err
 }
 
@@ -58,27 +58,31 @@ type fakeCompanyService struct {
 	err     error
 }
 
-func (f *fakeCompanyService) List(_ company.CompanyFilter, _, _ int) (company.CompanyListResult, error) {
+func (f *fakeCompanyService) List(_ context.Context, _ company.CompanyFilter, _, _ int) (company.CompanyListResult, error) {
 	return company.CompanyListResult{Items: f.views, Total: int64(len(f.views))}, f.err
 }
-func (f *fakeCompanyService) GetAll() ([]company.CompanyView, error) {
+func (f *fakeCompanyService) GetAll(_ context.Context) ([]company.CompanyView, error) {
 	return f.views, f.err
 }
-func (f *fakeCompanyService) Get(id string) (*model.Company, error) {
+func (f *fakeCompanyService) Get(_ context.Context, id string) (*model.Company, error) {
 	return f.company, f.err
 }
-func (f *fakeCompanyService) Create(_ company.CreateCompanyInput) (*model.Company, error) {
+func (f *fakeCompanyService) Create(_ context.Context, _ company.CreateCompanyInput) (*model.Company, error) {
 	return f.company, f.err
 }
-func (f *fakeCompanyService) Update(id string, _ company.UpdateCompanyInput) error { return f.err }
-func (f *fakeCompanyService) Delete(id string) error                               { return f.err }
-func (f *fakeCompanyService) SetAllActive(active bool) error                       { return f.err }
+func (f *fakeCompanyService) Update(_ context.Context, id string, _ company.UpdateCompanyInput) error {
+	return f.err
+}
+func (f *fakeCompanyService) Delete(_ context.Context, id string) error { return f.err }
+func (f *fakeCompanyService) SetAllActive(_ context.Context, active bool) error {
+	return f.err
+}
 
 func TestTriggerScan_OK(t *testing.T) {
 	q := &fakeQueueStore{}
 	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{company: &model.Company{ID: "stripe"}}, Config{})
 
-	err := svc.TriggerScan("stripe")
+	err := svc.TriggerScan(context.Background(), "stripe")
 	if err != nil {
 		t.Fatalf("TriggerScan() error = %v", err)
 	}
@@ -93,7 +97,7 @@ func TestTriggerScan_CompanyNotFound(t *testing.T) {
 		err: domain.ErrNotFound.WithMessage("company not found"),
 	}, Config{})
 
-	err := svc.TriggerScan("missing")
+	err := svc.TriggerScan(context.Background(), "missing")
 	if err == nil {
 		t.Fatal("expected error for missing company")
 	}
@@ -119,7 +123,7 @@ func TestListQueue_EnrichesWithCompanyData(t *testing.T) {
 		Config{ScanIntervalMinutes: 60},
 	)
 
-	result, err := svc.ListQueue(QueueFilter{})
+	result, err := svc.ListQueue(context.Background(), QueueFilter{})
 	if err != nil {
 		t.Fatalf("ListQueue() error = %v", err)
 	}
@@ -149,7 +153,7 @@ func TestListQueue_FiltersStatus(t *testing.T) {
 		Config{},
 	)
 
-	result, err := svc.ListQueue(QueueFilter{Status: "queued"})
+	result, err := svc.ListQueue(context.Background(), QueueFilter{Status: "queued"})
 	if err != nil {
 		t.Fatalf("ListQueue() error = %v", err)
 	}
@@ -162,7 +166,7 @@ func TestRemoveFromQueue(t *testing.T) {
 	q := &fakeQueueStore{}
 	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, Config{})
 
-	if err := svc.RemoveFromQueue("q1"); err != nil {
+	if err := svc.RemoveFromQueue(context.Background(), "q1"); err != nil {
 		t.Fatalf("RemoveFromQueue() error = %v", err)
 	}
 	if !q.removeCalled {

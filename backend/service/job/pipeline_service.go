@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/llm"
@@ -56,7 +57,9 @@ func NewPipelineService(jobs JobWriter, ledger pipelineLedger, snapshot Snapshot
 
 // SaveEnrichedJob builds the job row, inserts it into job_feed, writes the analytics
 // snapshot (non-fatal on failure), and marks the pipeline ledger as seen.
-func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input EnrichedJobInput) error {
+func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input EnrichedJobInput) (err error) {
+	ctx, span := tracing.Start(ctx, "job.pipeline.SaveEnrichedJob")
+	defer tracing.End(span, &err)
 	row, err := buildJobRow(input)
 	if err != nil {
 		return fmt.Errorf("build job row: %w", err)
@@ -95,12 +98,16 @@ func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input EnrichedJob
 }
 
 // MarkLedgerError marks the pipeline ledger entry for jobID with reason='error'.
-func (p *pipelineService) MarkLedgerError(ctx context.Context, jobID string) error {
+func (p *pipelineService) MarkLedgerError(ctx context.Context, jobID string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.pipeline.MarkLedgerError")
+	defer tracing.End(span, &err)
 	return p.ledger.UpdateSeenReason(ctx, jobID, model.SeenReasonError)
 }
 
 // HasSeenJob returns true if the job has already been processed.
-func (p *pipelineService) HasSeenJob(ctx context.Context, jobID string) (bool, error) {
+func (p *pipelineService) HasSeenJob(ctx context.Context, jobID string) (_ bool, err error) {
+	ctx, span := tracing.Start(ctx, "job.pipeline.HasSeenJob")
+	defer tracing.End(span, &err)
 	return p.ledger.HasSeen(ctx, jobID)
 }
 

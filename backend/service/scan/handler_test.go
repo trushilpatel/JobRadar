@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,16 +27,16 @@ type fakeScanService struct {
 	err         error
 }
 
-func (f *fakeScanService) TriggerScan(companyID string) error { return f.err }
-func (f *fakeScanService) GetStats(companyID string) (*ScanStatsView, error) {
+func (f *fakeScanService) TriggerScan(_ context.Context, companyID string) error { return f.err }
+func (f *fakeScanService) GetStats(_ context.Context, companyID string) (*ScanStatsView, error) {
 	return f.statsResult, f.err
 }
-func (f *fakeScanService) ListQueue(filter QueueFilter) ([]QueueEntryView, error) {
+func (f *fakeScanService) ListQueue(_ context.Context, filter QueueFilter) ([]QueueEntryView, error) {
 	return f.queueResult, f.err
 }
-func (f *fakeScanService) RemoveFromQueue(entryID string) error { return f.err }
-func (f *fakeScanService) MoveUp(entryID string) error          { return f.err }
-func (f *fakeScanService) MoveDown(entryID string) error        { return f.err }
+func (f *fakeScanService) RemoveFromQueue(_ context.Context, entryID string) error { return f.err }
+func (f *fakeScanService) MoveUp(_ context.Context, entryID string) error          { return f.err }
+func (f *fakeScanService) MoveDown(_ context.Context, entryID string) error        { return f.err }
 
 func newScanTestRouter(h *Handler) *chi.Mux {
 	r := chi.NewRouter()

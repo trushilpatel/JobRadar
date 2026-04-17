@@ -46,7 +46,7 @@ func (h *Handler) ListQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	views, err := h.scans.ListQueue(filter)
+	views, err := h.scans.ListQueue(r.Context(), filter)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -58,7 +58,7 @@ func (h *Handler) ListQueue(w http.ResponseWriter, r *http.Request) {
 // DELETE /companies/queue/:entry_id
 func (h *Handler) RemoveFromQueue(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "entry_id")
-	if err := h.scans.RemoveFromQueue(id); err != nil {
+	if err := h.scans.RemoveFromQueue(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -68,7 +68,7 @@ func (h *Handler) RemoveFromQueue(w http.ResponseWriter, r *http.Request) {
 // POST /companies/queue/:entry_id/move-up
 func (h *Handler) MoveQueueItemUp(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "entry_id")
-	if err := h.scans.MoveUp(id); err != nil {
+	if err := h.scans.MoveUp(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -78,7 +78,7 @@ func (h *Handler) MoveQueueItemUp(w http.ResponseWriter, r *http.Request) {
 // POST /companies/queue/:entry_id/move-down
 func (h *Handler) MoveQueueItemDown(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "entry_id")
-	if err := h.scans.MoveDown(id); err != nil {
+	if err := h.scans.MoveDown(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -94,7 +94,7 @@ func (h *Handler) ScanStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stats, err := h.scans.GetStats(id)
+	stats, err := h.scans.GetStats(r.Context(), id)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -112,7 +112,7 @@ func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.scans.TriggerScan(id); err != nil {
+	if err := h.scans.TriggerScan(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
 		return
 	}

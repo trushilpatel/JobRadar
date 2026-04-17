@@ -19,25 +19,31 @@ type fakeCompanyReader struct {
 	err error
 }
 
-func (f *fakeCompanyReader) GetCompaniesDueForScan(_ int) ([]model.Company, error) {
+func (f *fakeCompanyReader) GetCompaniesDueForScan(_ context.Context, _ int) ([]model.Company, error) {
 	return f.due, f.err
 }
-func (f *fakeCompanyReader) GetActiveCompanies() ([]model.Company, error) { return nil, nil }
-func (f *fakeCompanyReader) GetAllCompanies() ([]model.Company, error)    { return nil, nil }
-func (f *fakeCompanyReader) GetCompanyByID(_ string) (model.Company, error) {
+func (f *fakeCompanyReader) GetActiveCompanies(_ context.Context) ([]model.Company, error) {
+	return nil, nil
+}
+func (f *fakeCompanyReader) GetAllCompanies(_ context.Context) ([]model.Company, error) {
+	return nil, nil
+}
+func (f *fakeCompanyReader) GetCompanyByID(_ context.Context, _ string) (model.Company, error) {
 	return model.Company{}, nil
 }
-func (f *fakeCompanyReader) GetCompanies(_ companysvc.CompanyFilter, _, _ int) ([]model.Company, int64, error) {
+func (f *fakeCompanyReader) GetCompanies(_ context.Context, _ companysvc.CompanyFilter, _, _ int) ([]model.Company, int64, error) {
 	return nil, 0, nil
 }
-func (f *fakeCompanyReader) GetCompanyCounts() (total, active int64, err error) { return 0, 0, nil }
+func (f *fakeCompanyReader) GetCompanyCounts(_ context.Context) (total, active int64, err error) {
+	return 0, 0, nil
+}
 
 type fakeScanQueueStore struct {
 	enqueued []string // company IDs enqueued
 	err      error
 }
 
-func (f *fakeScanQueueStore) Enqueue(companyID, _ string) error {
+func (f *fakeScanQueueStore) Enqueue(_ context.Context, companyID, _ string) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -47,13 +53,17 @@ func (f *fakeScanQueueStore) Enqueue(companyID, _ string) error {
 func (f *fakeScanQueueStore) ClaimNext(_ context.Context) (*scansvc.ScanQueueItem, error) {
 	return nil, f.err
 }
-func (f *fakeScanQueueStore) Complete(_ string) error                     { return f.err }
-func (f *fakeScanQueueStore) ResetStuck(_ time.Duration) error            { return f.err }
-func (f *fakeScanQueueStore) ListQueue() ([]scansvc.ScanQueueItem, error) { return nil, f.err }
-func (f *fakeScanQueueStore) MoveDown(_ string) error                     { return f.err }
-func (f *fakeScanQueueStore) MoveUp(_ string) error                       { return f.err }
-func (f *fakeScanQueueStore) Remove(_ string) error                       { return f.err }
-func (f *fakeScanQueueStore) UpdateHeartbeat(_ string) error              { return f.err }
+func (f *fakeScanQueueStore) Complete(_ context.Context, _ string) error { return f.err }
+func (f *fakeScanQueueStore) ResetStuck(_ context.Context, _ time.Duration) error {
+	return f.err
+}
+func (f *fakeScanQueueStore) ListQueue(_ context.Context) ([]scansvc.ScanQueueItem, error) {
+	return nil, f.err
+}
+func (f *fakeScanQueueStore) MoveDown(_ context.Context, _ string) error        { return f.err }
+func (f *fakeScanQueueStore) MoveUp(_ context.Context, _ string) error          { return f.err }
+func (f *fakeScanQueueStore) Remove(_ context.Context, _ string) error          { return f.err }
+func (f *fakeScanQueueStore) UpdateHeartbeat(_ context.Context, _ string) error { return f.err }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

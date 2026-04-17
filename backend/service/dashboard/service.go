@@ -1,15 +1,18 @@
 package dashboard
 
 import (
+	"context"
+
 	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/service/insights"
 	"github.com/trushilpatel/jobradar/service/scan"
 )
 
 // Service defines all dashboard aggregation operations.
 type Service interface {
-	GetStats() (*StatsView, error)
-	GetActivity(days int) ([]ActivityView, error)
+	GetStats(ctx context.Context) (*StatsView, error)
+	GetActivity(ctx context.Context, days int) ([]ActivityView, error)
 }
 
 type service struct {
@@ -34,8 +37,10 @@ func NewService(scanLog scan.ScanLogReader, insightsSvc insights.Service, jobCou
 }
 
 // GetStats returns aggregated dashboard statistics.
-func (s *service) GetStats() (*StatsView, error) {
-	scannedToday, err := s.scanLog.GetJobsScannedToday()
+func (s *service) GetStats(ctx context.Context) (_ *StatsView, err error) {
+	ctx, span := tracing.Start(ctx, "dashboard.service.GetStats")
+	defer tracing.End(span, &err)
+	scannedToday, err := s.scanLog.GetJobsScannedToday(ctx)
 	if err != nil {
 		return nil, domain.ErrInternal.WithMessage("failed to fetch scanned today")
 	}
@@ -45,7 +50,7 @@ func (s *service) GetStats() (*StatsView, error) {
 		return nil, domain.ErrInternal.WithMessage("failed to fetch job counts")
 	}
 
-	pipeline, err := s.insightsSvc.GetPipelineCounts()
+	pipeline, err := s.insightsSvc.GetPipelineCounts(ctx)
 	if err != nil {
 		return nil, domain.ErrInternal.WithMessage("failed to fetch pipeline counts")
 	}
@@ -69,8 +74,10 @@ func (s *service) GetStats() (*StatsView, error) {
 }
 
 // GetActivity returns per-day scan activity for the given number of days.
-func (s *service) GetActivity(days int) ([]ActivityView, error) {
-	scans, err := s.scanLog.GetScansByDay(days)
+func (s *service) GetActivity(ctx context.Context, days int) (_ []ActivityView, err error) {
+	ctx, span := tracing.Start(ctx, "dashboard.service.GetActivity")
+	defer tracing.End(span, &err)
+	scans, err := s.scanLog.GetScansByDay(ctx, days)
 	if err != nil {
 		return nil, domain.ErrInternal.WithMessage("failed to fetch activity")
 	}

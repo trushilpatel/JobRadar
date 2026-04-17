@@ -9,6 +9,7 @@ import (
 	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/ats/google"
@@ -45,7 +46,7 @@ func NewEngine(
 
 // RunOnce runs one full scan cycle across all active companies.
 func (e *Engine) RunOnce(ctx context.Context) {
-	companies, err := e.companies.GetActiveCompanies()
+	companies, err := e.companies.GetActiveCompanies(ctx)
 	if err != nil {
 		e.log.Error("failed to load companies", err)
 		return
@@ -60,7 +61,9 @@ func (e *Engine) RunOnce(ctx context.Context) {
 // RunForCompany runs a scan for a single company by ID.
 // Used when triggered via the company.scan_request Kafka topic.
 func (e *Engine) RunForCompany(ctx context.Context, companyID string) {
-	company, err := e.companies.GetCompanyByID(companyID)
+	ctx, span := tracing.Start(ctx, "crawler.engine.RunForCompany")
+	defer tracing.End(span, nil)
+	company, err := e.companies.GetCompanyByID(ctx, companyID)
 	if err != nil {
 		e.log.Error("company not found", err, logger.Str(logger.FieldCompany, companyID))
 		return
@@ -80,6 +83,8 @@ func (e *Engine) RunForCompany(ctx context.Context, companyID string) {
 }
 
 func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
+	ctx, span := tracing.Start(ctx, "crawler.engine.scanCompany")
+	defer tracing.End(span, nil)
 	start := time.Now()
 	companyLog := e.log.With(
 		logger.Str(logger.FieldCompany, company.ID),
@@ -224,7 +229,7 @@ func (e *Engine) recordResult(ctx context.Context, companyID string, fetched, ne
 	if errMsg != nil {
 		result.ErrMsg = *errMsg
 	}
-	if err := e.recorder.RecordScanResult(companyID, result); err != nil {
+	if err := e.recorder.RecordScanResult(ctx, companyID, result); err != nil {
 		e.log.Error("failed to record scan result", err, logger.Str(logger.FieldCompany, companyID))
 	}
 }

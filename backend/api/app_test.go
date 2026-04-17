@@ -141,28 +141,36 @@ func TestRouter_OperationalEndpointsSeparateFromHandlers(t *testing.T) {
 
 type fakeCompanyService struct{}
 
-func (f *fakeCompanyService) List(_ company.CompanyFilter, _, _ int) (company.CompanyListResult, error) {
+func (f *fakeCompanyService) List(_ context.Context, _ company.CompanyFilter, _, _ int) (company.CompanyListResult, error) {
 	return company.CompanyListResult{}, nil
 }
-func (f *fakeCompanyService) GetAll() ([]company.CompanyView, error) { return nil, nil }
-func (f *fakeCompanyService) Get(_ string) (*model.Company, error)   { return nil, nil }
-func (f *fakeCompanyService) Create(_ company.CreateCompanyInput) (*model.Company, error) {
+func (f *fakeCompanyService) GetAll(_ context.Context) ([]company.CompanyView, error) {
 	return nil, nil
 }
-func (f *fakeCompanyService) Update(_ string, _ company.UpdateCompanyInput) error { return nil }
-func (f *fakeCompanyService) Delete(_ string) error                               { return nil }
-func (f *fakeCompanyService) SetAllActive(_ bool) error                           { return nil }
+func (f *fakeCompanyService) Get(_ context.Context, _ string) (*model.Company, error) {
+	return nil, nil
+}
+func (f *fakeCompanyService) Create(_ context.Context, _ company.CreateCompanyInput) (*model.Company, error) {
+	return nil, nil
+}
+func (f *fakeCompanyService) Update(_ context.Context, _ string, _ company.UpdateCompanyInput) error {
+	return nil
+}
+func (f *fakeCompanyService) Delete(_ context.Context, _ string) error     { return nil }
+func (f *fakeCompanyService) SetAllActive(_ context.Context, _ bool) error { return nil }
 
 type fakeScanService struct{}
 
-func (f *fakeScanService) TriggerScan(_ string) error                     { return nil }
-func (f *fakeScanService) GetStats(_ string) (*scan.ScanStatsView, error) { return nil, nil }
-func (f *fakeScanService) ListQueue(_ scan.QueueFilter) ([]scan.QueueEntryView, error) {
+func (f *fakeScanService) TriggerScan(_ context.Context, _ string) error { return nil }
+func (f *fakeScanService) GetStats(_ context.Context, _ string) (*scan.ScanStatsView, error) {
 	return nil, nil
 }
-func (f *fakeScanService) RemoveFromQueue(_ string) error { return nil }
-func (f *fakeScanService) MoveUp(_ string) error          { return nil }
-func (f *fakeScanService) MoveDown(_ string) error        { return nil }
+func (f *fakeScanService) ListQueue(_ context.Context, _ scan.QueueFilter) ([]scan.QueueEntryView, error) {
+	return nil, nil
+}
+func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error { return nil }
+func (f *fakeScanService) MoveUp(_ context.Context, _ string) error          { return nil }
+func (f *fakeScanService) MoveDown(_ context.Context, _ string) error        { return nil }
 
 type fakeJobService struct{}
 
@@ -190,21 +198,27 @@ func (f *fakeAppService) UpdateNote(_, _ string, _ application.UpdateNoteInput) 
 
 type fakeDashboardService struct{}
 
-func (f *fakeDashboardService) GetStats() (*dashboard.StatsView, error)             { return nil, nil }
-func (f *fakeDashboardService) GetActivity(_ int) ([]dashboard.ActivityView, error) { return nil, nil }
+func (f *fakeDashboardService) GetStats(_ context.Context) (*dashboard.StatsView, error) {
+	return nil, nil
+}
+func (f *fakeDashboardService) GetActivity(_ context.Context, _ int) ([]dashboard.ActivityView, error) {
+	return nil, nil
+}
 
 type fakeInsightsService struct{}
 
-func (f *fakeInsightsService) TechStack() (interface{}, error)       { return nil, nil }
-func (f *fakeInsightsService) CompanyActivity() (interface{}, error) { return nil, nil }
-func (f *fakeInsightsService) Funnel() (interface{}, error)          { return nil, nil }
-func (f *fakeInsightsService) Location() (interface{}, error)        { return nil, nil }
-func (f *fakeInsightsService) Sponsorship(_ insights.InsightsFilter) (interface{}, error) {
+func (f *fakeInsightsService) TechStack(_ context.Context) (interface{}, error) { return nil, nil }
+func (f *fakeInsightsService) CompanyActivity(_ context.Context) (interface{}, error) {
 	return nil, nil
 }
-func (f *fakeInsightsService) Velocity() (interface{}, error)       { return nil, nil }
-func (f *fakeInsightsService) RoleCategories() (interface{}, error) { return nil, nil }
-func (f *fakeInsightsService) GetPipelineCounts() (insights.PipelineCounts, error) {
+func (f *fakeInsightsService) Funnel(_ context.Context) (interface{}, error)   { return nil, nil }
+func (f *fakeInsightsService) Location(_ context.Context) (interface{}, error) { return nil, nil }
+func (f *fakeInsightsService) Sponsorship(_ context.Context, _ insights.InsightsFilter) (interface{}, error) {
+	return nil, nil
+}
+func (f *fakeInsightsService) Velocity(_ context.Context) (interface{}, error)       { return nil, nil }
+func (f *fakeInsightsService) RoleCategories(_ context.Context) (interface{}, error) { return nil, nil }
+func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insights.PipelineCounts, error) {
 	return insights.PipelineCounts{}, nil
 }
 

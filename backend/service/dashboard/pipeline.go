@@ -35,7 +35,7 @@ func NewPipelineService(store PipelineStore, lag kafka.LagReader) PipelineServic
 }
 
 func (s *pipelineService) GetPipelineStats(ctx context.Context) (*PipelineStats, error) {
-	dbStats, err := s.store.GetPipelineDBStats()
+	dbStats, err := s.store.GetPipelineDBStats(ctx)
 	if err != nil {
 		return nil, domain.ErrInternal.WithMessage("failed to fetch pipeline stats")
 	}

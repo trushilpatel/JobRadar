@@ -1,8 +1,11 @@
 package insights
 
 import (
+	"context"
+
 	"gorm.io/gorm"
 
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
 )
 
@@ -71,15 +74,15 @@ type PipelineCounts struct {
 
 // Store provides aggregated analytics over the job pipeline.
 type Store interface {
-	GetTechStackTrends(limit int) ([]TechCount, error)
-	GetCompanyActivity() ([]CompanyActivityItem, error)
-	GetPipelineFunnel() ([]FunnelStep, error)
-	GetLocationBreakdown() ([]LocationCount, error)
-	GetUSAStateBreakdown() ([]StateCount, error)
-	GetSponsorshipTrend(days int) ([]SponsorshipDay, error)
-	GetCompanyVelocity(limit int) ([]CompanyVelocity, error)
-	GetRoleCategoryBreakdown() ([]RoleCategoryCount, error)
-	GetPipelineCounts() (PipelineCounts, error)
+	GetTechStackTrends(ctx context.Context, limit int) ([]TechCount, error)
+	GetCompanyActivity(ctx context.Context) ([]CompanyActivityItem, error)
+	GetPipelineFunnel(ctx context.Context) ([]FunnelStep, error)
+	GetLocationBreakdown(ctx context.Context) ([]LocationCount, error)
+	GetUSAStateBreakdown(ctx context.Context) ([]StateCount, error)
+	GetSponsorshipTrend(ctx context.Context, days int) ([]SponsorshipDay, error)
+	GetCompanyVelocity(ctx context.Context, limit int) ([]CompanyVelocity, error)
+	GetRoleCategoryBreakdown(ctx context.Context) ([]RoleCategoryCount, error)
+	GetPipelineCounts(ctx context.Context) (PipelineCounts, error)
 }
 
 // --- GORM implementation ---
@@ -93,9 +96,10 @@ func NewStore(db *gorm.DB) Store {
 	return &insightsStore{db: db}
 }
 
-func (s *insightsStore) GetTechStackTrends(limit int) ([]TechCount, error) {
-	var results []TechCount
-	err := s.db.Raw(`
+func (s *insightsStore) GetTechStackTrends(ctx context.Context, limit int) (results []TechCount, err error) {
+	ctx, span := tracing.Start(ctx, "insights.store.GetTechStackTrends")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT tech, COUNT(*) AS count
 		FROM job_feed, jsonb_array_elements_text(tech_stack) AS tech
 		WHERE tech_stack IS NOT NULL
@@ -106,9 +110,10 @@ func (s *insightsStore) GetTechStackTrends(limit int) ([]TechCount, error) {
 	return results, err
 }
 
-func (s *insightsStore) GetCompanyActivity() ([]CompanyActivityItem, error) {
-	var results []CompanyActivityItem
-	err := s.db.Raw(`
+func (s *insightsStore) GetCompanyActivity(ctx context.Context) (results []CompanyActivityItem, err error) {
+	ctx, span := tracing.Start(ctx, "insights.store.GetCompanyActivity")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT
 			c.name AS company_name,
 			TO_CHAR(DATE_TRUNC('week', j.added_at), 'YYYY-MM-DD') AS week,
@@ -121,12 +126,14 @@ func (s *insightsStore) GetCompanyActivity() ([]CompanyActivityItem, error) {
 	return results, err
 }
 
-func (s *insightsStore) GetPipelineFunnel() ([]FunnelStep, error) {
+func (s *insightsStore) GetPipelineFunnel(ctx context.Context) (_ []FunnelStep, err error) {
+	ctx, span := tracing.Start(ctx, "insights.store.GetPipelineFunnel")
+	defer tracing.End(span, &err)
 	var rows []struct {
 		Action *string
 		Count  int
 	}
-	err := s.db.Raw(`
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT user_action AS action, COUNT(*) AS count
 		FROM job_analytics
 		GROUP BY user_action
@@ -152,9 +159,10 @@ func (s *insightsStore) GetPipelineFunnel() ([]FunnelStep, error) {
 	}, nil
 }
 
-func (s *insightsStore) GetLocationBreakdown() ([]LocationCount, error) {
-	var results []LocationCount
-	err := s.db.Raw(`
+func (s *insightsStore) GetLocationBreakdown(ctx context.Context) (results []LocationCount, err error) {
+	ctx, span := tracing.Start(ctx, "insights.store.GetLocationBreakdown")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT COALESCE(country, 'Unknown') AS country, COUNT(*) AS count
 		FROM job_analytics
 		GROUP BY country
@@ -163,9 +171,10 @@ func (s *insightsStore) GetLocationBreakdown() ([]LocationCount, error) {
 	return results, err
 }
 
-func (s *insightsStore) GetUSAStateBreakdown() ([]StateCount, error) {
-	var results []StateCount
-	err := s.db.Raw(`
+func (s *insightsStore) GetUSAStateBreakdown(ctx context.Context) (results []StateCount, err error) {
+	ctx, span := tracing.Start(ctx, "insights.store.GetUSAStateBreakdown")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT COALESCE(state, 'Unknown') AS state, COUNT(*) AS count
 		FROM job_analytics
 		WHERE country = 'USA' AND state IS NOT NULL
@@ -176,9 +185,10 @@ func (s *insightsStore) GetUSAStateBreakdown() ([]StateCount, error) {
 	return results, err
 }
 
-func (s *insightsStore) GetSponsorshipTrend(days int) ([]SponsorshipDay, error) {
-	var results []SponsorshipDay
-	err := s.db.Raw(`
+func (s *insightsStore) GetSponsorshipTrend(ctx context.Context, days int) (results []SponsorshipDay, err error) {
+	ctx, span := tracing.Start(ctx, "insights.store.GetSponsorshipTrend")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT
 			TO_CHAR(snapshotted_at, 'YYYY-MM-DD') AS date,
 			COUNT(*) AS total,
@@ -191,9 +201,10 @@ func (s *insightsStore) GetSponsorshipTrend(days int) ([]SponsorshipDay, error) 
 	return results, err
 }
 
-func (s *insightsStore) GetCompanyVelocity(limit int) ([]CompanyVelocity, error) {
-	var results []CompanyVelocity
-	err := s.db.Raw(`
+func (s *insightsStore) GetCompanyVelocity(ctx context.Context, limit int) (results []CompanyVelocity, err error) {
+	ctx, span := tracing.Start(ctx, "insights.store.GetCompanyVelocity")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Raw(`
 		WITH weekly AS (
 			SELECT
 				s.company_id,
@@ -219,9 +230,10 @@ func (s *insightsStore) GetCompanyVelocity(limit int) ([]CompanyVelocity, error)
 	return results, err
 }
 
-func (s *insightsStore) GetRoleCategoryBreakdown() ([]RoleCategoryCount, error) {
-	var results []RoleCategoryCount
-	err := s.db.Raw(`
+func (s *insightsStore) GetRoleCategoryBreakdown(ctx context.Context) (results []RoleCategoryCount, err error) {
+	ctx, span := tracing.Start(ctx, "insights.store.GetRoleCategoryBreakdown")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT COALESCE(role_category, 'other') AS category, COUNT(*) AS count
 		FROM job_analytics
 		GROUP BY role_category
@@ -230,12 +242,14 @@ func (s *insightsStore) GetRoleCategoryBreakdown() ([]RoleCategoryCount, error) 
 	return results, err
 }
 
-func (s *insightsStore) GetPipelineCounts() (PipelineCounts, error) {
+func (s *insightsStore) GetPipelineCounts(ctx context.Context) (_ PipelineCounts, err error) {
+	ctx, span := tracing.Start(ctx, "insights.store.GetPipelineCounts")
+	defer tracing.End(span, &err)
 	var result struct {
 		Pending int64
 		Errors  int64
 	}
-	err := s.db.Raw(`
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT
 			COUNT(*) FILTER (
 				WHERE l.reason = 'fetch'

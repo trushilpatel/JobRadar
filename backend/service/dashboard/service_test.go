@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -16,11 +17,13 @@ type fakeScanLogReader struct {
 	err          error
 }
 
-func (f *fakeScanLogReader) GetScanStats(_ string) (scan.ScanStatsView, error) {
+func (f *fakeScanLogReader) GetScanStats(_ context.Context, _ string) (scan.ScanStatsView, error) {
 	return scan.ScanStatsView{}, f.err
 }
-func (f *fakeScanLogReader) GetJobsScannedToday() (int64, error) { return f.scannedToday, f.err }
-func (f *fakeScanLogReader) GetScansByDay(_ int) ([]scan.DailyScanCount, error) {
+func (f *fakeScanLogReader) GetJobsScannedToday(_ context.Context) (int64, error) {
+	return f.scannedToday, f.err
+}
+func (f *fakeScanLogReader) GetScansByDay(_ context.Context, _ int) ([]scan.DailyScanCount, error) {
 	return f.scansByDay, f.err
 }
 
@@ -30,16 +33,20 @@ type fakeInsightsService struct {
 	err      error
 }
 
-func (f *fakeInsightsService) TechStack() (interface{}, error)       { return nil, f.err }
-func (f *fakeInsightsService) CompanyActivity() (interface{}, error) { return nil, f.err }
-func (f *fakeInsightsService) Funnel() (interface{}, error)          { return nil, f.err }
-func (f *fakeInsightsService) Location() (interface{}, error)        { return nil, f.err }
-func (f *fakeInsightsService) Sponsorship(_ insights.InsightsFilter) (interface{}, error) {
+func (f *fakeInsightsService) TechStack(_ context.Context) (interface{}, error) { return nil, f.err }
+func (f *fakeInsightsService) CompanyActivity(_ context.Context) (interface{}, error) {
 	return nil, f.err
 }
-func (f *fakeInsightsService) Velocity() (interface{}, error)       { return nil, f.err }
-func (f *fakeInsightsService) RoleCategories() (interface{}, error) { return nil, f.err }
-func (f *fakeInsightsService) GetPipelineCounts() (insights.PipelineCounts, error) {
+func (f *fakeInsightsService) Funnel(_ context.Context) (interface{}, error)   { return nil, f.err }
+func (f *fakeInsightsService) Location(_ context.Context) (interface{}, error) { return nil, f.err }
+func (f *fakeInsightsService) Sponsorship(_ context.Context, _ insights.InsightsFilter) (interface{}, error) {
+	return nil, f.err
+}
+func (f *fakeInsightsService) Velocity(_ context.Context) (interface{}, error) { return nil, f.err }
+func (f *fakeInsightsService) RoleCategories(_ context.Context) (interface{}, error) {
+	return nil, f.err
+}
+func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insights.PipelineCounts, error) {
 	return f.pipeline, f.err
 }
 
@@ -62,7 +69,7 @@ func TestGetStats_OK(t *testing.T) {
 		&fakeJobCountReader{newCount: 5, savedCount: 2, appliedCount: 1},
 	)
 
-	stats, err := svc.GetStats()
+	stats, err := svc.GetStats(context.Background())
 	if err != nil {
 		t.Fatalf("GetStats() error = %v", err)
 	}
@@ -88,7 +95,7 @@ func TestGetStats_Error(t *testing.T) {
 		&fakeJobCountReader{},
 	)
 
-	_, err := svc.GetStats()
+	_, err := svc.GetStats(context.Background())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -109,7 +116,7 @@ func TestGetActivity_OK(t *testing.T) {
 		&fakeJobCountReader{},
 	)
 
-	activity, err := svc.GetActivity(7)
+	activity, err := svc.GetActivity(context.Background(), 7)
 	if err != nil {
 		t.Fatalf("GetActivity() error = %v", err)
 	}

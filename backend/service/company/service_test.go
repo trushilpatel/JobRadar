@@ -1,6 +1,7 @@
 package company
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -21,13 +22,13 @@ type fakeStore struct {
 	createCalled bool
 }
 
-func (f *fakeStore) GetActiveCompanies() ([]model.Company, error) {
+func (f *fakeStore) GetActiveCompanies(_ context.Context) ([]model.Company, error) {
 	return f.companies, f.err
 }
-func (f *fakeStore) GetAllCompanies() ([]model.Company, error) {
+func (f *fakeStore) GetAllCompanies(_ context.Context) ([]model.Company, error) {
 	return f.companies, f.err
 }
-func (f *fakeStore) GetCompanyByID(id string) (model.Company, error) {
+func (f *fakeStore) GetCompanyByID(_ context.Context, id string) (model.Company, error) {
 	for _, c := range f.companies {
 		if c.ID == id {
 			return c, nil
@@ -38,13 +39,13 @@ func (f *fakeStore) GetCompanyByID(id string) (model.Company, error) {
 	}
 	return model.Company{}, gorm.ErrRecordNotFound
 }
-func (f *fakeStore) GetCompaniesDueForScan(intervalMinutes int) ([]model.Company, error) {
+func (f *fakeStore) GetCompaniesDueForScan(_ context.Context, intervalMinutes int) ([]model.Company, error) {
 	return f.companies, f.err
 }
-func (f *fakeStore) GetCompanies(_ CompanyFilter, _, _ int) ([]model.Company, int64, error) {
+func (f *fakeStore) GetCompanies(_ context.Context, _ CompanyFilter, _, _ int) ([]model.Company, int64, error) {
 	return f.companies, int64(len(f.companies)), f.err
 }
-func (f *fakeStore) GetCompanyCounts() (total, active int64, err error) {
+func (f *fakeStore) GetCompanyCounts(_ context.Context) (total, active int64, err error) {
 	active = 0
 	for _, c := range f.companies {
 		if c.Active {
@@ -53,11 +54,11 @@ func (f *fakeStore) GetCompanyCounts() (total, active int64, err error) {
 	}
 	return int64(len(f.companies)), active, f.err
 }
-func (f *fakeStore) CreateCompany(c model.Company) error {
+func (f *fakeStore) CreateCompany(_ context.Context, c model.Company) error {
 	f.createCalled = true
 	return f.err
 }
-func (f *fakeStore) UpdateCompany(id string, fields map[string]any) error {
+func (f *fakeStore) UpdateCompany(_ context.Context, id string, fields map[string]any) error {
 	f.updateCalled = true
 	f.updateFields = fields
 	if f.err != nil {
@@ -70,14 +71,14 @@ func (f *fakeStore) UpdateCompany(id string, fields map[string]any) error {
 	}
 	return gorm.ErrRecordNotFound
 }
-func (f *fakeStore) DeleteCompany(id string) error {
+func (f *fakeStore) DeleteCompany(_ context.Context, id string) error {
 	f.deleteCalled = true
 	return f.err
 }
-func (f *fakeStore) SetAllCompaniesActive(active bool) error {
+func (f *fakeStore) SetAllCompaniesActive(_ context.Context, active bool) error {
 	return f.err
 }
-func (f *fakeStore) UpdateScanStatus(id, status string) error {
+func (f *fakeStore) UpdateScanStatus(_ context.Context, id, status string) error {
 	return f.err
 }
 
@@ -89,7 +90,7 @@ func TestList_ComputesNextScanAt(t *testing.T) {
 	}
 	svc := NewService(&fakeStore{companies: companies}, Config{ScanIntervalMinutes: 60})
 
-	result, err := svc.List(CompanyFilter{}, 1, 20)
+	result, err := svc.List(context.Background(), CompanyFilter{}, 1, 20)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -119,7 +120,7 @@ func TestCreate_SetsLastScanAt(t *testing.T) {
 	fs := &fakeStore{companies: []model.Company{}}
 	svc := NewService(fs, Config{})
 
-	company, err := svc.Create(CreateCompanyInput{
+	company, err := svc.Create(context.Background(), CreateCompanyInput{
 		ID:          "stripe",
 		Name:        "Stripe",
 		URL:         "https://stripe.com/jobs",
@@ -144,7 +145,7 @@ func TestUpdate_NilFieldsSkipped(t *testing.T) {
 	svc := NewService(fs, Config{})
 
 	name := "New Name"
-	err := svc.Update("stripe", UpdateCompanyInput{Name: &name})
+	err := svc.Update(context.Background(), "stripe", UpdateCompanyInput{Name: &name})
 	if err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
@@ -168,7 +169,7 @@ func TestDelete_ReturnsNotFoundWhenMissing(t *testing.T) {
 	fs := &fakeStore{companies: []model.Company{}} // no companies
 	svc := NewService(fs, Config{})
 
-	err := svc.Delete("nonexistent")
+	err := svc.Delete(context.Background(), "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for missing company")
 	}
@@ -191,7 +192,7 @@ func TestList_FiltersActiveCompanies(t *testing.T) {
 	svc := NewService(&fakeStore{companies: companies}, Config{})
 
 	active := true
-	result, err := svc.List(CompanyFilter{Active: &active}, 1, 20)
+	result, err := svc.List(context.Background(), CompanyFilter{Active: &active}, 1, 20)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

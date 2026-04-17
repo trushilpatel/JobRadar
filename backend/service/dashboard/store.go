@@ -1,6 +1,12 @@
 package dashboard
 
-import "gorm.io/gorm"
+import (
+	"context"
+
+	"gorm.io/gorm"
+
+	"github.com/trushilpatel/jobradar/infra/tracing"
+)
 
 // ProgressStats holds aggregated user progress stats for the My Progress panel.
 type ProgressStats struct {
@@ -50,11 +56,11 @@ type techAdoptionRow struct {
 
 // UserDashboardStore provides all DB queries for the user dashboard panels.
 type UserDashboardStore interface {
-	GetProgressStats() (ProgressStats, error)
-	GetMarketStats() (MarketStats, error)
-	GetWeeklyHiringActivity(weeks int) ([]WeeklyCount, error)
-	GetCompanyVelocityDetailed(limit int) ([]CompanyVelocityRow, error)
-	GetTechStackQuarterlyAdoption() ([]techAdoptionRow, error)
+	GetProgressStats(ctx context.Context) (ProgressStats, error)
+	GetMarketStats(ctx context.Context) (MarketStats, error)
+	GetWeeklyHiringActivity(ctx context.Context, weeks int) ([]WeeklyCount, error)
+	GetCompanyVelocityDetailed(ctx context.Context, limit int) ([]CompanyVelocityRow, error)
+	GetTechStackQuarterlyAdoption(ctx context.Context) ([]techAdoptionRow, error)
 }
 
 type userDashboardStore struct {
@@ -66,9 +72,11 @@ func NewUserDashboardStore(db *gorm.DB) UserDashboardStore {
 	return &userDashboardStore{db: db}
 }
 
-func (s *userDashboardStore) GetProgressStats() (ProgressStats, error) {
+func (s *userDashboardStore) GetProgressStats(ctx context.Context) (_ ProgressStats, err error) {
+	ctx, span := tracing.Start(ctx, "dashboard.store.GetProgressStats")
+	defer tracing.End(span, &err)
 	var result ProgressStats
-	err := s.db.Raw(`
+	err = s.db.WithContext(ctx).Raw(`
 		WITH status_counts AS (
 			SELECT
 				COUNT(*) FILTER (WHERE status = 'applied')      AS applied_count,
@@ -104,9 +112,11 @@ func (s *userDashboardStore) GetProgressStats() (ProgressStats, error) {
 	return result, err
 }
 
-func (s *userDashboardStore) GetMarketStats() (MarketStats, error) {
+func (s *userDashboardStore) GetMarketStats(ctx context.Context) (_ MarketStats, err error) {
+	ctx, span := tracing.Start(ctx, "dashboard.store.GetMarketStats")
+	defer tracing.End(span, &err)
 	var result MarketStats
-	err := s.db.Raw(`
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT
 			COUNT(*) FILTER (
 				WHERE added_at >= CURRENT_DATE - INTERVAL '1 day'
@@ -130,9 +140,10 @@ func (s *userDashboardStore) GetMarketStats() (MarketStats, error) {
 	return result, nil
 }
 
-func (s *userDashboardStore) GetWeeklyHiringActivity(weeks int) ([]WeeklyCount, error) {
-	var results []WeeklyCount
-	err := s.db.Raw(`
+func (s *userDashboardStore) GetWeeklyHiringActivity(ctx context.Context, weeks int) (results []WeeklyCount, err error) {
+	ctx, span := tracing.Start(ctx, "dashboard.store.GetWeeklyHiringActivity")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT
 			DATE_TRUNC('week', first_seen_at)::date::text AS week_start,
 			COUNT(*)                                       AS job_count
@@ -144,9 +155,10 @@ func (s *userDashboardStore) GetWeeklyHiringActivity(weeks int) ([]WeeklyCount, 
 	return results, err
 }
 
-func (s *userDashboardStore) GetCompanyVelocityDetailed(limit int) ([]CompanyVelocityRow, error) {
-	var results []CompanyVelocityRow
-	err := s.db.Raw(`
+func (s *userDashboardStore) GetCompanyVelocityDetailed(ctx context.Context, limit int) (results []CompanyVelocityRow, err error) {
+	ctx, span := tracing.Start(ctx, "dashboard.store.GetCompanyVelocityDetailed")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT
 			c.id   AS company_id,
 			c.name AS company_name,
@@ -178,9 +190,10 @@ func (s *userDashboardStore) GetCompanyVelocityDetailed(limit int) ([]CompanyVel
 	return results, err
 }
 
-func (s *userDashboardStore) GetTechStackQuarterlyAdoption() ([]techAdoptionRow, error) {
-	var results []techAdoptionRow
-	err := s.db.Raw(`
+func (s *userDashboardStore) GetTechStackQuarterlyAdoption(ctx context.Context) (results []techAdoptionRow, err error) {
+	ctx, span := tracing.Start(ctx, "dashboard.store.GetTechStackQuarterlyAdoption")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Raw(`
 		WITH quarterly_counts AS (
 			SELECT
 				tech,
@@ -232,7 +245,7 @@ type PipelineDBStats struct {
 
 // PipelineStore provides DB queries for the pipeline strip.
 type PipelineStore interface {
-	GetPipelineDBStats() (PipelineDBStats, error)
+	GetPipelineDBStats(ctx context.Context) (PipelineDBStats, error)
 }
 
 type pipelineStore struct {
@@ -244,9 +257,11 @@ func NewPipelineStore(db *gorm.DB) PipelineStore {
 	return &pipelineStore{db: db}
 }
 
-func (s *pipelineStore) GetPipelineDBStats() (PipelineDBStats, error) {
+func (s *pipelineStore) GetPipelineDBStats(ctx context.Context) (_ PipelineDBStats, err error) {
+	ctx, span := tracing.Start(ctx, "dashboard.store.GetPipelineDBStats")
+	defer tracing.End(span, &err)
 	var result PipelineDBStats
-	err := s.db.Raw(`
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT
 			(SELECT COUNT(*) FROM companies)                                                                              AS total_companies,
 			(SELECT COUNT(*) FROM companies WHERE active = true)                                                          AS active_companies,

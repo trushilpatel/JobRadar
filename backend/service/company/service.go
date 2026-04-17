@@ -1,9 +1,11 @@
 package company
 
 import (
+	"context"
 	"time"
 
 	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/store"
 )
@@ -11,20 +13,20 @@ import (
 // SchedulerService is the narrow interface the company_scan_scheduler binary needs.
 // It exposes only the query the scheduler uses — nothing else.
 type SchedulerService interface {
-	GetCompaniesDueForScan(intervalMinutes int) ([]model.Company, error)
+	GetCompaniesDueForScan(ctx context.Context, intervalMinutes int) ([]model.Company, error)
 }
 
 // Service defines all business operations for the company domain.
 type Service interface {
-	List(filter CompanyFilter, page, limit int) (CompanyListResult, error)
+	List(ctx context.Context, filter CompanyFilter, page, limit int) (CompanyListResult, error)
 	// GetAll returns every company as a view without pagination.
 	// Used by internal workers that need the full set (e.g. scan queue enrichment).
-	GetAll() ([]CompanyView, error)
-	Get(id string) (*model.Company, error)
-	Create(input CreateCompanyInput) (*model.Company, error)
-	Update(id string, input UpdateCompanyInput) error
-	Delete(id string) error
-	SetAllActive(active bool) error
+	GetAll(ctx context.Context) ([]CompanyView, error)
+	Get(ctx context.Context, id string) (*model.Company, error)
+	Create(ctx context.Context, input CreateCompanyInput) (*model.Company, error)
+	Update(ctx context.Context, id string, input UpdateCompanyInput) error
+	Delete(ctx context.Context, id string) error
+	SetAllActive(ctx context.Context, active bool) error
 }
 
 type service struct {
@@ -38,13 +40,15 @@ func NewService(s Store, cfg Config) Service {
 }
 
 // List returns a filtered, paginated page of companies enriched with next_scan_at.
-func (s *service) List(filter CompanyFilter, page, limit int) (CompanyListResult, error) {
-	companies, total, err := s.store.GetCompanies(filter, page, limit)
+func (s *service) List(ctx context.Context, filter CompanyFilter, page, limit int) (_ CompanyListResult, err error) {
+	ctx, span := tracing.Start(ctx, "company.service.List")
+	defer tracing.End(span, &err)
+	companies, total, err := s.store.GetCompanies(ctx, filter, page, limit)
 	if err != nil {
 		return CompanyListResult{}, domain.ErrInternal.WithMessage("failed to fetch companies")
 	}
 
-	_, totalActive, err := s.store.GetCompanyCounts()
+	_, totalActive, err := s.store.GetCompanyCounts(ctx)
 	if err != nil {
 		return CompanyListResult{}, domain.ErrInternal.WithMessage("failed to fetch company counts")
 	}
@@ -67,8 +71,10 @@ func (s *service) List(filter CompanyFilter, page, limit int) (CompanyListResult
 }
 
 // GetAll returns all companies as views without pagination (for internal/worker use).
-func (s *service) GetAll() ([]CompanyView, error) {
-	companies, err := s.store.GetAllCompanies()
+func (s *service) GetAll(ctx context.Context) (_ []CompanyView, err error) {
+	ctx, span := tracing.Start(ctx, "company.service.GetAll")
+	defer tracing.End(span, &err)
+	companies, err := s.store.GetAllCompanies(ctx)
 	if err != nil {
 		return nil, domain.ErrInternal.WithMessage("failed to fetch companies")
 	}
@@ -85,8 +91,10 @@ func (s *service) GetAll() ([]CompanyView, error) {
 }
 
 // Get fetches a single company by ID.
-func (s *service) Get(id string) (*model.Company, error) {
-	c, err := s.store.GetCompanyByID(id)
+func (s *service) Get(ctx context.Context, id string) (_ *model.Company, err error) {
+	ctx, span := tracing.Start(ctx, "company.service.Get")
+	defer tracing.End(span, &err)
+	c, err := s.store.GetCompanyByID(ctx, id)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return nil, domain.ErrNotFound.WithMessage("company not found")
@@ -98,7 +106,9 @@ func (s *service) Get(id string) (*model.Company, error) {
 
 // Create inserts a new company. Sets last_scan_at to now so the scheduler does not
 // immediately pick it up — users trigger the first scan via POST /companies/:id/scan.
-func (s *service) Create(input CreateCompanyInput) (*model.Company, error) {
+func (s *service) Create(ctx context.Context, input CreateCompanyInput) (_ *model.Company, err error) {
+	ctx, span := tracing.Start(ctx, "company.service.Create")
+	defer tracing.End(span, &err)
 	active := true
 	if input.Active != nil {
 		active = *input.Active
@@ -114,14 +124,16 @@ func (s *service) Create(input CreateCompanyInput) (*model.Company, error) {
 		LastScanAt:  &now,
 	}
 
-	if err := s.store.CreateCompany(company); err != nil {
+	if err := s.store.CreateCompany(ctx, company); err != nil {
 		return nil, domain.ErrInternal.WithMessage("failed to create company")
 	}
 	return &company, nil
 }
 
 // Update applies a partial patch to an existing company. Nil fields are skipped.
-func (s *service) Update(id string, input UpdateCompanyInput) error {
+func (s *service) Update(ctx context.Context, id string, input UpdateCompanyInput) (err error) {
+	ctx, span := tracing.Start(ctx, "company.service.Update")
+	defer tracing.End(span, &err)
 	fields := make(map[string]any)
 	if input.Name != nil {
 		fields["name"] = *input.Name
@@ -136,7 +148,7 @@ func (s *service) Update(id string, input UpdateCompanyInput) error {
 		fields["active"] = *input.Active
 	}
 
-	if err := s.store.UpdateCompany(id, fields); err != nil {
+	if err := s.store.UpdateCompany(ctx, id, fields); err != nil {
 		if store.IsNotFound(err) {
 			return domain.ErrNotFound.WithMessage("company not found")
 		}
@@ -146,23 +158,34 @@ func (s *service) Update(id string, input UpdateCompanyInput) error {
 }
 
 // Delete removes a company after verifying it exists.
-func (s *service) Delete(id string) error {
-	if _, err := s.store.GetCompanyByID(id); err != nil {
+func (s *service) Delete(ctx context.Context, id string) (err error) {
+	ctx, span := tracing.Start(ctx, "company.service.Delete")
+	defer tracing.End(span, &err)
+	if _, err := s.store.GetCompanyByID(ctx, id); err != nil {
 		if store.IsNotFound(err) {
 			return domain.ErrNotFound.WithMessage("company not found")
 		}
 		return domain.ErrInternal.WithMessage("failed to fetch company")
 	}
-	if err := s.store.DeleteCompany(id); err != nil {
+	if err := s.store.DeleteCompany(ctx, id); err != nil {
 		return domain.ErrInternal.WithMessage("failed to delete company")
 	}
 	return nil
 }
 
 // SetAllActive sets every company's active flag to the given value.
-func (s *service) SetAllActive(active bool) error {
-	if err := s.store.SetAllCompaniesActive(active); err != nil {
+func (s *service) SetAllActive(ctx context.Context, active bool) (err error) {
+	ctx, span := tracing.Start(ctx, "company.service.SetAllActive")
+	defer tracing.End(span, &err)
+	if err := s.store.SetAllCompaniesActive(ctx, active); err != nil {
 		return domain.ErrInternal.WithMessage("failed to update companies")
 	}
 	return nil
+}
+
+// GetCompaniesDueForScan implements SchedulerService.
+func (s *service) GetCompaniesDueForScan(ctx context.Context, intervalMinutes int) (_ []model.Company, err error) {
+	ctx, span := tracing.Start(ctx, "company.service.GetCompaniesDueForScan")
+	defer tracing.End(span, &err)
+	return s.store.GetCompaniesDueForScan(ctx, intervalMinutes)
 }

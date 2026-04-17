@@ -91,6 +91,8 @@ func (w *Worker) Run(ctx context.Context) error {
 
 // enrich runs the full enrichment pipeline for a single job.
 func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
+	ctx, span := tracing.Start(ctx, "analyzer.worker.enrich")
+	defer tracing.End(span, nil)
 	jobLog := w.log.With(
 		logger.Str(logger.FieldJobID, job.ID),
 		logger.Str("title", job.Title),

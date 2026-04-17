@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -110,7 +111,9 @@ func NewJobStore(db *gorm.DB) JobStore {
 	return &jobStore{db: db}
 }
 
-func (s *jobStore) GetJobs(ctx context.Context, filter JobFilter, page, limit int) ([]model.Job, int64, error) {
+func (s *jobStore) GetJobs(ctx context.Context, filter JobFilter, page, limit int) (_ []model.Job, _ int64, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.GetJobs")
+	defer tracing.End(span, &err)
 	query := s.db.WithContext(ctx).Model(&model.Job{})
 
 	// Status — always applied; "saved" is a boolean flag, not a status value
@@ -183,34 +186,44 @@ func (s *jobStore) GetJobs(ctx context.Context, filter JobFilter, page, limit in
 
 	var jobs []model.Job
 	offset := (page - 1) * limit
-	err := query.Order("added_at DESC").Offset(offset).Limit(limit).Preload("Company").Find(&jobs).Error
+	err = query.Order("added_at DESC").Offset(offset).Limit(limit).Preload("Company").Find(&jobs).Error
 	return jobs, total, err
 }
 
-func (s *jobStore) GetJobByID(ctx context.Context, id string) (*model.Job, error) {
+func (s *jobStore) GetJobByID(ctx context.Context, id string) (_ *model.Job, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.GetJobByID")
+	defer tracing.End(span, &err)
 	var job model.Job
-	err := s.db.WithContext(ctx).Preload("Company").Where("id = ?", id).First(&job).Error
+	err = s.db.WithContext(ctx).Preload("Company").Where("id = ?", id).First(&job).Error
 	if err != nil {
 		return nil, err
 	}
 	return &job, nil
 }
 
-func (s *jobStore) InsertJob(ctx context.Context, job *model.Job) error {
+func (s *jobStore) InsertJob(ctx context.Context, job *model.Job) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.InsertJob")
+	defer tracing.End(span, &err)
 	return s.db.WithContext(ctx).Create(job).Error
 }
 
-func (s *jobStore) DeleteJob(ctx context.Context, id string) error {
+func (s *jobStore) DeleteJob(ctx context.Context, id string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.DeleteJob")
+	defer tracing.End(span, &err)
 	return s.db.WithContext(ctx).Where("id = ?", id).Delete(&model.Job{}).Error
 }
 
-func (s *jobStore) UpdateJobStatus(ctx context.Context, id, status string) error {
+func (s *jobStore) UpdateJobStatus(ctx context.Context, id, status string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.UpdateJobStatus")
+	defer tracing.End(span, &err)
 	return s.db.WithContext(ctx).Model(&model.Job{}).
 		Where("id = ?", id).
 		Update("status", status).Error
 }
 
-func (s *jobStore) UpdateJobSaved(ctx context.Context, id string, saved bool) error {
+func (s *jobStore) UpdateJobSaved(ctx context.Context, id string, saved bool) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.UpdateJobSaved")
+	defer tracing.End(span, &err)
 	if saved {
 		return s.db.WithContext(ctx).Model(&model.Job{}).
 			Where("id = ? AND status != ?", id, model.JobStatusApplied).
@@ -222,15 +235,19 @@ func (s *jobStore) UpdateJobSaved(ctx context.Context, id string, saved bool) er
 	).Error
 }
 
-func (s *jobStore) UpdateJobNotes(ctx context.Context, id, notes string) error {
+func (s *jobStore) UpdateJobNotes(ctx context.Context, id, notes string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.UpdateJobNotes")
+	defer tracing.End(span, &err)
 	return s.db.WithContext(ctx).Model(&model.Job{}).
 		Where("id = ?", id).
 		Update("notes", notes).Error
 }
 
-func (s *jobStore) GetJobCounts(ctx context.Context) (*JobCounts, error) {
+func (s *jobStore) GetJobCounts(ctx context.Context) (_ *JobCounts, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.GetJobCounts")
+	defer tracing.End(span, &err)
 	var rows []CountsResult
-	err := s.db.WithContext(ctx).Raw(`
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT status, COUNT(*) as count
 		FROM job_feed
 		WHERE status IN (?, ?, ?, ?, ?)
@@ -263,9 +280,10 @@ func (s *jobStore) GetJobCounts(ctx context.Context) (*JobCounts, error) {
 	return counts, nil
 }
 
-func (s *jobStore) GetJobsAddedByDay(ctx context.Context, days int) ([]DailyJobCount, error) {
-	var results []DailyJobCount
-	err := s.db.WithContext(ctx).Model(&model.Job{}).
+func (s *jobStore) GetJobsAddedByDay(ctx context.Context, days int) (results []DailyJobCount, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.GetJobsAddedByDay")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Model(&model.Job{}).
 		Select("DATE(added_at) as date, COUNT(*) as count").
 		Where("added_at >= NOW() - ? * INTERVAL '1 day'", days).
 		Group("DATE(added_at)").
@@ -285,15 +303,19 @@ func NewSeenLedgerStore(db *gorm.DB) SeenLedgerStore {
 	return &seenLedgerStore{db: db}
 }
 
-func (s *seenLedgerStore) HasSeen(ctx context.Context, jobID string) (bool, error) {
+func (s *seenLedgerStore) HasSeen(ctx context.Context, jobID string) (_ bool, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.HasSeen")
+	defer tracing.End(span, &err)
 	var count int64
-	err := s.db.WithContext(ctx).Model(&model.JobSeenLedger{}).
+	err = s.db.WithContext(ctx).Model(&model.JobSeenLedger{}).
 		Where("job_id = ?", jobID).
 		Count(&count).Error
 	return count > 0, err
 }
 
-func (s *seenLedgerStore) MarkSeen(ctx context.Context, jobID, companyID, reason string) error {
+func (s *seenLedgerStore) MarkSeen(ctx context.Context, jobID, companyID, reason string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.MarkSeen")
+	defer tracing.End(span, &err)
 	row := model.JobSeenLedger{
 		JobID:     jobID,
 		CompanyID: companyID,
@@ -302,13 +324,17 @@ func (s *seenLedgerStore) MarkSeen(ctx context.Context, jobID, companyID, reason
 	return s.db.WithContext(ctx).Create(&row).Error
 }
 
-func (s *seenLedgerStore) UpdateSeenReason(ctx context.Context, jobID, reason string) error {
+func (s *seenLedgerStore) UpdateSeenReason(ctx context.Context, jobID, reason string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.UpdateSeenReason")
+	defer tracing.End(span, &err)
 	return s.db.WithContext(ctx).Model(&model.JobSeenLedger{}).
 		Where("job_id = ?", jobID).
 		Update("reason", reason).Error
 }
 
-func (s *seenLedgerStore) UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason string) error {
+func (s *seenLedgerStore) UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.UpdateSeenReasonBatch")
+	defer tracing.End(span, &err)
 	if len(jobIDs) == 0 {
 		return nil
 	}
@@ -317,7 +343,9 @@ func (s *seenLedgerStore) UpdateSeenReasonBatch(ctx context.Context, jobIDs []st
 		Update("reason", reason).Error
 }
 
-func (s *seenLedgerStore) MarkRemovedBatch(ctx context.Context, jobIDs []string) error {
+func (s *seenLedgerStore) MarkRemovedBatch(ctx context.Context, jobIDs []string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.MarkRemovedBatch")
+	defer tracing.End(span, &err)
 	if len(jobIDs) == 0 {
 		return nil
 	}
@@ -328,9 +356,10 @@ func (s *seenLedgerStore) MarkRemovedBatch(ctx context.Context, jobIDs []string)
 		Update("removed_at", now).Error
 }
 
-func (s *seenLedgerStore) GetActiveJobIDsByCompany(ctx context.Context, companyID string) ([]string, error) {
-	var ids []string
-	err := s.db.WithContext(ctx).Model(&model.JobSeenLedger{}).
+func (s *seenLedgerStore) GetActiveJobIDsByCompany(ctx context.Context, companyID string) (ids []string, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.GetActiveJobIDsByCompany")
+	defer tracing.End(span, &err)
+	err = s.db.WithContext(ctx).Model(&model.JobSeenLedger{}).
 		Where("company_id = ? AND removed_at IS NULL", companyID).
 		Pluck("job_id", &ids).Error
 	return ids, err
@@ -347,7 +376,9 @@ func NewDiscardStore(db *gorm.DB) DiscardStore {
 	return &discardStore{db: db}
 }
 
-func (s *discardStore) InsertDiscard(ctx context.Context, jobResultID, reason, note string) error {
+func (s *discardStore) InsertDiscard(ctx context.Context, jobResultID, reason, note string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.InsertDiscard")
+	defer tracing.End(span, &err)
 	var notePtr *string
 	if note != "" {
 		notePtr = &note
@@ -376,7 +407,9 @@ func NewTechTagStore(db *gorm.DB) TechTagWriter {
 	return &techTagStore{db: db}
 }
 
-func (s *techTagStore) InsertTechTags(ctx context.Context, jobID, companyID string, techs []string, taggedAt time.Time) error {
+func (s *techTagStore) InsertTechTags(ctx context.Context, jobID, companyID string, techs []string, taggedAt time.Time) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.InsertTechTags")
+	defer tracing.End(span, &err)
 	if len(techs) == 0 {
 		return nil
 	}
@@ -405,7 +438,9 @@ func NewSnapshotStore(db *gorm.DB) SnapshotWriter {
 	return &snapshotStore{db: db}
 }
 
-func (s *snapshotStore) InsertSnapshot(ctx context.Context, input SnapshotInput) error {
+func (s *snapshotStore) InsertSnapshot(ctx context.Context, input SnapshotInput) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.InsertSnapshot")
+	defer tracing.End(span, &err)
 	row := model.JobSnapshot{
 		ID:                input.ID,
 		CompanyID:         input.CompanyID,
@@ -432,7 +467,9 @@ func (s *snapshotStore) InsertSnapshot(ctx context.Context, input SnapshotInput)
 	return s.db.WithContext(ctx).Create(&row).Error
 }
 
-func (s *snapshotStore) UpdateSnapshotAction(ctx context.Context, id, action string) error {
+func (s *snapshotStore) UpdateSnapshotAction(ctx context.Context, id, action string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.UpdateSnapshotAction")
+	defer tracing.End(span, &err)
 	now := time.Now()
 	return s.db.WithContext(ctx).Model(&model.JobSnapshot{}).
 		Where("id = ?", id).

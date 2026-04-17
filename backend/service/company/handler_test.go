@@ -2,6 +2,7 @@ package company
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -35,25 +36,25 @@ type fakeService struct {
 	err          error
 }
 
-func (f *fakeService) List(_ CompanyFilter, _, _ int) (CompanyListResult, error) {
+func (f *fakeService) List(_ context.Context, _ CompanyFilter, _, _ int) (CompanyListResult, error) {
 	return CompanyListResult{Items: f.listResult, Total: int64(len(f.listResult))}, f.err
 }
-func (f *fakeService) GetAll() ([]CompanyView, error) {
+func (f *fakeService) GetAll(_ context.Context) ([]CompanyView, error) {
 	return f.listResult, f.err
 }
-func (f *fakeService) Get(id string) (*model.Company, error) {
+func (f *fakeService) Get(_ context.Context, id string) (*model.Company, error) {
 	return f.getResult, f.err
 }
-func (f *fakeService) Create(_ CreateCompanyInput) (*model.Company, error) {
+func (f *fakeService) Create(_ context.Context, _ CreateCompanyInput) (*model.Company, error) {
 	return f.createResult, f.err
 }
-func (f *fakeService) Update(id string, _ UpdateCompanyInput) error {
+func (f *fakeService) Update(_ context.Context, id string, _ UpdateCompanyInput) error {
 	return f.err
 }
-func (f *fakeService) Delete(id string) error {
+func (f *fakeService) Delete(_ context.Context, id string) error {
 	return f.err
 }
-func (f *fakeService) SetAllActive(active bool) error {
+func (f *fakeService) SetAllActive(_ context.Context, active bool) error {
 	return f.err
 }
 

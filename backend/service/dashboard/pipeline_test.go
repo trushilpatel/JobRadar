@@ -23,7 +23,7 @@ type fakePipelineStore struct {
 	err   error
 }
 
-func (f *fakePipelineStore) GetPipelineDBStats() (PipelineDBStats, error) {
+func (f *fakePipelineStore) GetPipelineDBStats(_ context.Context) (PipelineDBStats, error) {
 	return f.stats, f.err
 }
 

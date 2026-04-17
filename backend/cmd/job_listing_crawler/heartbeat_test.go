@@ -14,7 +14,7 @@ type fakeHeartbeater struct {
 	err   error
 }
 
-func (f *fakeHeartbeater) UpdateHeartbeat(_ string) error {
+func (f *fakeHeartbeater) UpdateHeartbeat(_ context.Context, _ string) error {
 	f.calls.Add(1)
 	return f.err
 }

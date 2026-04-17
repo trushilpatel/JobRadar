@@ -31,7 +31,7 @@ func (h *Handler) Register(r chi.Router) {
 }
 
 func (h *Handler) TechStack(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.TechStack()
+	data, err := h.insights.TechStack(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -40,7 +40,7 @@ func (h *Handler) TechStack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CompanyActivity(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.CompanyActivity()
+	data, err := h.insights.CompanyActivity(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -49,7 +49,7 @@ func (h *Handler) CompanyActivity(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Funnel(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.Funnel()
+	data, err := h.insights.Funnel(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -58,7 +58,7 @@ func (h *Handler) Funnel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Location(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.Location()
+	data, err := h.insights.Location(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -80,7 +80,7 @@ func (h *Handler) Sponsorship(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := h.insights.Sponsorship(filter)
+	data, err := h.insights.Sponsorship(r.Context(), filter)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -89,7 +89,7 @@ func (h *Handler) Sponsorship(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Velocity(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.Velocity()
+	data, err := h.insights.Velocity(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -98,7 +98,7 @@ func (h *Handler) Velocity(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RoleCategories(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.RoleCategories()
+	data, err := h.insights.RoleCategories(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return

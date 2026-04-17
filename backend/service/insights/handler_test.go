@@ -1,6 +1,7 @@
 package insights
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,16 +25,26 @@ type fakeInsightsService struct {
 	err            error
 }
 
-func (f *fakeInsightsService) TechStack() (interface{}, error)       { return f.data, f.err }
-func (f *fakeInsightsService) CompanyActivity() (interface{}, error) { return f.data, f.err }
-func (f *fakeInsightsService) Funnel() (interface{}, error)          { return f.data, f.err }
-func (f *fakeInsightsService) Location() (interface{}, error)        { return f.data, f.err }
-func (f *fakeInsightsService) Sponsorship(_ InsightsFilter) (interface{}, error) {
+func (f *fakeInsightsService) TechStack(_ context.Context) (interface{}, error) {
 	return f.data, f.err
 }
-func (f *fakeInsightsService) Velocity() (interface{}, error)       { return f.data, f.err }
-func (f *fakeInsightsService) RoleCategories() (interface{}, error) { return f.data, f.err }
-func (f *fakeInsightsService) GetPipelineCounts() (PipelineCounts, error) {
+func (f *fakeInsightsService) CompanyActivity(_ context.Context) (interface{}, error) {
+	return f.data, f.err
+}
+func (f *fakeInsightsService) Funnel(_ context.Context) (interface{}, error) { return f.data, f.err }
+func (f *fakeInsightsService) Location(_ context.Context) (interface{}, error) {
+	return f.data, f.err
+}
+func (f *fakeInsightsService) Sponsorship(_ context.Context, _ InsightsFilter) (interface{}, error) {
+	return f.data, f.err
+}
+func (f *fakeInsightsService) Velocity(_ context.Context) (interface{}, error) {
+	return f.data, f.err
+}
+func (f *fakeInsightsService) RoleCategories(_ context.Context) (interface{}, error) {
+	return f.data, f.err
+}
+func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (PipelineCounts, error) {
 	return f.pipelineCounts, f.err
 }
 

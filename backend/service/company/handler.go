@@ -63,7 +63,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.companies.List(filter, p.Page, p.Limit)
+	result, err := h.companies.List(r.Context(), filter, p.Page, p.Limit)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -91,7 +91,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	company, err := h.companies.Create(input)
+	company, err := h.companies.Create(r.Context(), input)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -115,7 +115,7 @@ func (h *Handler) SetAllActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.companies.SetAllActive(*body.Active); err != nil {
+	if err := h.companies.SetAllActive(r.Context(), *body.Active); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -138,7 +138,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.companies.Update(id, input); err != nil {
+	if err := h.companies.Update(r.Context(), id, input); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -150,7 +150,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	if err := h.companies.Delete(id); err != nil {
+	if err := h.companies.Delete(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
 		return
 	}

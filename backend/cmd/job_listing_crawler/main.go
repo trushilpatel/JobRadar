@@ -72,7 +72,7 @@ func main() {
 	engine := crawler.NewEngine(companies, ledger, recorder, producer, googleCfg, log)
 
 	// Reset any rows stuck in processing from a previous crash.
-	if err := queue.ResetStuck(stuckTimeout); err != nil {
+	if err := queue.ResetStuck(ctx, stuckTimeout); err != nil {
 		log.Error("failed to reset stuck queue items", err)
 		// non-fatal: continue
 	}
@@ -89,7 +89,7 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			if err := queue.ResetStuck(stuckTimeout); err != nil {
+			if err := queue.ResetStuck(ctx, stuckTimeout); err != nil {
 				log.Error("failed to reset stuck queue items", err)
 			}
 			pollAndProcess(ctx, log, queue, engine, companyDelay)
@@ -121,7 +121,7 @@ func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.ClaimN
 
 	engine.RunForCompany(ctx, item.CompanyID)
 
-	if err := queue.Complete(item.ID); err != nil {
+	if err := queue.Complete(ctx, item.ID); err != nil {
 		log.Error("failed to complete queue item", err, logger.Str(logger.FieldCompany, item.CompanyID))
 	}
 
@@ -135,7 +135,7 @@ func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.ClaimN
 }
 
 type heartbeater interface {
-	UpdateHeartbeat(id string) error
+	UpdateHeartbeat(ctx context.Context, id string) error
 }
 
 // startHeartbeat ticks every interval and updates heartbeat_at in the DB for the
@@ -148,7 +148,7 @@ func startHeartbeat(ctx context.Context, q heartbeater, id string, interval time
 		for {
 			select {
 			case <-ticker.C:
-				if err := q.UpdateHeartbeat(id); err != nil {
+				if err := q.UpdateHeartbeat(hbCtx, id); err != nil {
 					log.Warn("heartbeat update failed", logger.Str(logger.FieldQueueID, id), logger.Err(err))
 				}
 			case <-hbCtx.Done():

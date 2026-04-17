@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/store"
 )
@@ -37,7 +38,9 @@ func NewService(jobs JobStore, ledger SeenLedgerWriter, discard DiscardStore, sn
 }
 
 // List returns a paginated, filtered list of jobs — all filtering happens at the DB level.
-func (s *service) List(ctx context.Context, filter JobFilter, page, limit int) ([]model.Job, int, error) {
+func (s *service) List(ctx context.Context, filter JobFilter, page, limit int) (_ []model.Job, _ int, err error) {
+	ctx, span := tracing.Start(ctx, "job.service.List")
+	defer tracing.End(span, &err)
 	jobs, total, err := s.jobs.GetJobs(ctx, filter, page, limit)
 	if err != nil {
 		return nil, 0, domain.ErrInternal.WithMessage("failed to fetch jobs")
@@ -46,7 +49,9 @@ func (s *service) List(ctx context.Context, filter JobFilter, page, limit int) (
 }
 
 // GetCounts returns a count of jobs per active status.
-func (s *service) GetCounts(ctx context.Context) (*JobCounts, error) {
+func (s *service) GetCounts(ctx context.Context) (_ *JobCounts, err error) {
+	ctx, span := tracing.Start(ctx, "job.service.GetCounts")
+	defer tracing.End(span, &err)
 	counts, err := s.jobs.GetJobCounts(ctx)
 	if err != nil {
 		return nil, domain.ErrInternal.WithMessage("failed to fetch job counts")
@@ -55,7 +60,9 @@ func (s *service) GetCounts(ctx context.Context) (*JobCounts, error) {
 }
 
 // Get fetches a single job by ID.
-func (s *service) Get(ctx context.Context, id string) (*model.Job, error) {
+func (s *service) Get(ctx context.Context, id string) (_ *model.Job, err error) {
+	ctx, span := tracing.Start(ctx, "job.service.Get")
+	defer tracing.End(span, &err)
 	job, err := s.jobs.GetJobByID(ctx, id)
 	if err != nil {
 		if store.IsNotFound(err) {
@@ -67,7 +74,9 @@ func (s *service) Get(ctx context.Context, id string) (*model.Job, error) {
 }
 
 // Dismiss dismisses a job: records discard, blocks re-entry, hides from feed, and backfills snapshot.
-func (s *service) Dismiss(ctx context.Context, id string, input DismissInput) error {
+func (s *service) Dismiss(ctx context.Context, id string, input DismissInput) (err error) {
+	ctx, span := tracing.Start(ctx, "job.service.Dismiss")
+	defer tracing.End(span, &err)
 	job, err := s.Get(ctx, id)
 	if err != nil {
 		return err
@@ -92,7 +101,9 @@ func (s *service) Dismiss(ctx context.Context, id string, input DismissInput) er
 }
 
 // SetSaved updates the saved flag for a job and non-fatally backfills the snapshot.
-func (s *service) SetSaved(ctx context.Context, id string, saved bool) error {
+func (s *service) SetSaved(ctx context.Context, id string, saved bool) (err error) {
+	ctx, span := tracing.Start(ctx, "job.service.SetSaved")
+	defer tracing.End(span, &err)
 	if err := s.jobs.UpdateJobSaved(ctx, id, saved); err != nil {
 		return domain.ErrInternal.WithMessage("failed to update job")
 	}
@@ -103,7 +114,9 @@ func (s *service) SetSaved(ctx context.Context, id string, saved bool) error {
 }
 
 // SetStatus updates the status of a job and non-fatally backfills the snapshot if applied.
-func (s *service) SetStatus(ctx context.Context, id, status string) error {
+func (s *service) SetStatus(ctx context.Context, id, status string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.service.SetStatus")
+	defer tracing.End(span, &err)
 	if err := s.jobs.UpdateJobStatus(ctx, id, status); err != nil {
 		return domain.ErrInternal.WithMessage("failed to update status")
 	}
@@ -114,7 +127,9 @@ func (s *service) SetStatus(ctx context.Context, id, status string) error {
 }
 
 // SetNotes updates the notes for a job.
-func (s *service) SetNotes(ctx context.Context, id, notes string) error {
+func (s *service) SetNotes(ctx context.Context, id, notes string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.service.SetNotes")
+	defer tracing.End(span, &err)
 	if err := s.jobs.UpdateJobNotes(ctx, id, notes); err != nil {
 		return domain.ErrInternal.WithMessage("failed to update notes")
 	}
