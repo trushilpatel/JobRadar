@@ -38,14 +38,14 @@ type CompanyVelocityRow struct {
 	VelocityTag string  `json:"velocity_tag"` // "spike" | "rising" | "normal"
 }
 
-// techAdoptionRow is the raw query result for tech stack quarterly adoption, before Go classification.
+// techAdoptionRow is the raw query result for tech tag quarterly job counts, before Go classification.
 type techAdoptionRow struct {
-	Tech           string
-	Q1             int
-	Q2             int
-	Q3             int
-	Q4             int
-	TotalCompanies int
+	Tech      string
+	Q1        int
+	Q2        int
+	Q3        int
+	Q4        int
+	TotalJobs int
 }
 
 // UserDashboardStore provides all DB queries for the user dashboard panels.
@@ -134,11 +134,11 @@ func (s *userDashboardStore) GetWeeklyHiringActivity(weeks int) ([]WeeklyCount, 
 	var results []WeeklyCount
 	err := s.db.Raw(`
 		SELECT
-			DATE_TRUNC('week', added_at)::date AS week_start,
-			COUNT(*) AS job_count
-		FROM job_feed
-		WHERE added_at >= NOW() - (? * INTERVAL '1 week')
-		GROUP BY DATE_TRUNC('week', added_at)
+			DATE_TRUNC('week', scanned_at)::date AS week_start,
+			SUM(jobs_new)                        AS job_count
+		FROM company_scan_log
+		WHERE scanned_at >= NOW() - (? * INTERVAL '1 week')
+		GROUP BY DATE_TRUNC('week', scanned_at)
 		ORDER BY week_start ASC
 	`, weeks).Scan(&results).Error
 	return results, err
@@ -181,59 +181,41 @@ func (s *userDashboardStore) GetCompanyVelocityDetailed(limit int) ([]CompanyVel
 func (s *userDashboardStore) GetTechStackQuarterlyAdoption() ([]techAdoptionRow, error) {
 	var results []techAdoptionRow
 	err := s.db.Raw(`
-		WITH total_companies AS (
-			SELECT COUNT(*) AS total FROM companies WHERE active = true
-		),
-		quarterly_unnested AS (
+		WITH quarterly_counts AS (
 			SELECT
 				tech,
-				ja.company_id,
-				CASE
-					WHEN ja.snapshotted_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '9 months')
-					 AND ja.snapshotted_at <  DATE_TRUNC('quarter', NOW() - INTERVAL '6 months')
-					THEN 'q1'
-					WHEN ja.snapshotted_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '6 months')
-					 AND ja.snapshotted_at <  DATE_TRUNC('quarter', NOW() - INTERVAL '3 months')
-					THEN 'q2'
-					WHEN ja.snapshotted_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '3 months')
-					 AND ja.snapshotted_at <  DATE_TRUNC('quarter', NOW())
-					THEN 'q3'
-					WHEN ja.snapshotted_at >= DATE_TRUNC('quarter', NOW())
-					THEN 'q4'
-				END AS quarter
-			FROM job_analytics ja,
-			     jsonb_array_elements_text(ja.tech_stack) AS tech
-			WHERE ja.snapshotted_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '9 months')
-			  AND ja.tech_stack IS NOT NULL
-			  AND ja.tech_stack::text != 'null'
-		),
-		per_quarter_adoption AS (
-			SELECT
-				tech,
-				quarter,
-				COUNT(DISTINCT company_id) AS company_count
-			FROM quarterly_unnested
-			WHERE quarter IS NOT NULL
-			GROUP BY tech, quarter
-		),
-		pivoted AS (
-			SELECT
-				tech,
-				COALESCE(MAX(company_count) FILTER (WHERE quarter = 'q1'), 0) AS q1,
-				COALESCE(MAX(company_count) FILTER (WHERE quarter = 'q2'), 0) AS q2,
-				COALESCE(MAX(company_count) FILTER (WHERE quarter = 'q3'), 0) AS q3,
-				COALESCE(MAX(company_count) FILTER (WHERE quarter = 'q4'), 0) AS q4
-			FROM per_quarter_adoption
+				COUNT(*) FILTER (
+					WHERE tagged_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '9 months')
+					  AND tagged_at <  DATE_TRUNC('quarter', NOW() - INTERVAL '6 months')
+				) AS q1,
+				COUNT(*) FILTER (
+					WHERE tagged_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '6 months')
+					  AND tagged_at <  DATE_TRUNC('quarter', NOW() - INTERVAL '3 months')
+				) AS q2,
+				COUNT(*) FILTER (
+					WHERE tagged_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '3 months')
+					  AND tagged_at <  DATE_TRUNC('quarter', NOW())
+				) AS q3,
+				COUNT(*) FILTER (
+					WHERE tagged_at >= DATE_TRUNC('quarter', NOW())
+				) AS q4
+			FROM job_tech_tags
+			WHERE tagged_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '9 months')
 			GROUP BY tech
+		),
+		total_q4 AS (
+			SELECT COUNT(DISTINCT job_id) AS total
+			FROM job_tech_tags
+			WHERE tagged_at >= DATE_TRUNC('quarter', NOW())
 		)
 		SELECT
-			p.tech,
-			p.q1, p.q2, p.q3, p.q4,
-			t.total AS total_companies
-		FROM pivoted p
-		CROSS JOIN total_companies t
-		WHERE p.q4 > 0
-		ORDER BY p.q4 DESC
+			qc.tech,
+			qc.q1, qc.q2, qc.q3, qc.q4,
+			COALESCE(t.total, 0) AS total_jobs
+		FROM quarterly_counts qc
+		CROSS JOIN total_q4 t
+		WHERE qc.q4 > 0
+		ORDER BY qc.q4 DESC
 	`).Scan(&results).Error
 	return results, err
 }
@@ -271,7 +253,7 @@ func (s *pipelineStore) GetPipelineDBStats() (PipelineDBStats, error) {
 			(SELECT COUNT(*) FROM company_scan_queue WHERE status = 'queued')                                             AS queued,
 			(SELECT COUNT(*) FROM company_scan_queue WHERE status = 'processing')                                         AS crawling,
 			(SELECT COUNT(*) FROM job_feed WHERE added_at >= NOW() - INTERVAL '24 hours' AND status != 'dismissed')      AS new_jobs_24h,
-			(SELECT COUNT(*) FROM job_pipeline_ledger WHERE reason = 'error' AND created_at >= NOW() - INTERVAL '24 hours') AS errors_24h
+			(SELECT COUNT(*) FROM job_pipeline_ledger WHERE reason = 'error' AND first_seen_at >= NOW() - INTERVAL '24 hours') AS errors_24h
 	`).Scan(&result).Error
 	return result, err
 }

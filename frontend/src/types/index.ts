@@ -199,7 +199,7 @@ export interface TechTrendRow {
 }
 
 export interface TechTrends {
-  total_companies: number
+  total_jobs: number
   rising: TechTrendRow[]
   new_entrants: TechTrendRow[]
 }

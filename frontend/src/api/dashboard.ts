@@ -93,7 +93,7 @@ export async function fetchTechTrends(): Promise<TechTrends> {
   if (!res.ok) throw new Error('Failed to fetch tech trends')
   const { data } = await res.json()
   return {
-    total_companies: data?.total_companies ?? 0,
+    total_jobs: data?.total_jobs ?? 0,
     rising: data?.rising ?? [],
     new_entrants: data?.new_entrants ?? [],
   }

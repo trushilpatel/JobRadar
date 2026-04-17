@@ -132,27 +132,27 @@ func classifyVelocity(current, w1, w2, w3 int) (float64, string) {
 	return multiplier, tag
 }
 
-// GetTechTrends returns quarterly tech adoption classified into Rising and New Entrant lists.
+// GetTechTrends returns quarterly tech job-count trends classified into Rising and New Entrant lists.
 func (s *userDashboardService) GetTechTrends() (*TechTrends, error) {
 	rows, err := s.store.GetTechStackQuarterlyAdoption()
 	if err != nil {
 		return nil, domain.ErrInternal.WithMessage("failed to fetch tech trends")
 	}
 
-	var totalCompanies int
+	var totalJobs int
 	if len(rows) > 0 {
-		totalCompanies = rows[0].TotalCompanies
+		totalJobs = rows[0].TotalJobs
 	}
 
 	var rising, newEntrants []TechTrendRow
 
 	for _, r := range rows {
-		if totalCompanies == 0 {
+		if totalJobs == 0 {
 			continue
 		}
 
-		q4Pct := float64(r.Q4) / float64(totalCompanies) * 100
-		q2Pct := float64(r.Q2) / float64(totalCompanies) * 100
+		q4Pct := float64(r.Q4) / float64(totalJobs) * 100
+		q2Pct := float64(r.Q2) / float64(totalJobs) * 100
 
 		row := TechTrendRow{
 			Tech:        r.Tech,
@@ -163,17 +163,17 @@ func (s *userDashboardService) GetTechTrends() (*TechTrends, error) {
 			AdoptionPct: math.Round(q4Pct*10) / 10,
 		}
 
-		// Rising: >15% adoption, was present last quarter, grew >15% QoQ
-		if q4Pct > 15 && r.Q3 > 0 {
+		// Rising: appears in >5% of this quarter's jobs, was present last quarter, grew >15% QoQ
+		if q4Pct > 5 && r.Q3 > 0 {
 			growth := float64(r.Q4-r.Q3) / float64(r.Q3)
 			if growth > 0.15 {
-				row.GrowthPct = math.Round(growth*1000) / 10 // percentage
+				row.GrowthPct = math.Round(growth*1000) / 10
 				rising = append(rising, row)
 			}
 		}
 
-		// New entrant: >15% adoption now, was <5% two quarters ago
-		if q4Pct > 15 && q2Pct < 5 {
+		// New entrant: >5% of this quarter's jobs, was <1% two quarters ago
+		if q4Pct > 5 && q2Pct < 1 {
 			newEntrants = append(newEntrants, row)
 		}
 	}
@@ -187,8 +187,8 @@ func (s *userDashboardService) GetTechTrends() (*TechTrends, error) {
 	}
 
 	return &TechTrends{
-		TotalCompanies: totalCompanies,
-		Rising:         rising,
-		NewEntrants:    newEntrants,
+		TotalJobs:   totalJobs,
+		Rising:      rising,
+		NewEntrants: newEntrants,
 	}, nil
 }

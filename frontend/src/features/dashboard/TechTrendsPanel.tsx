@@ -91,7 +91,7 @@ export function TechTrendsPanel() {
     <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-5">
       <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-slate-500 mb-4">
         tech stack trends — by company adoption
-        {data ? ` · ${data.total_companies} companies watched` : ''}
+        {data ? ` · ${data.total_jobs} jobs analyzed` : ''}
       </p>
 
       {isLoading ? (
@@ -102,7 +102,7 @@ export function TechTrendsPanel() {
           <div className="flex-1 pr-6">
             <p className="text-[13px] font-medium text-white mb-0.5">Rising</p>
             <p className="text-[10px] text-slate-500 pb-2 border-b border-white/[0.05]">
-              &gt;15% of companies · grew &gt;15% vs last quarter
+              &gt;5% of jobs · grew &gt;15% vs last quarter
             </p>
             <ColHeader deltaHeading="growth" />
             {data.rising.length === 0 ? (
@@ -128,7 +128,7 @@ export function TechTrendsPanel() {
           <div className="flex-1 pl-6">
             <p className="text-[13px] font-medium text-white mb-0.5">New entrants</p>
             <p className="text-[10px] text-slate-500 pb-2 border-b border-white/[0.05]">
-              &gt;15% of companies · was &lt;5% last quarter
+              &gt;5% of jobs · was &lt;1% two quarters ago
             </p>
             <ColHeader deltaHeading="% co." />
             {data.new_entrants.length === 0 ? (

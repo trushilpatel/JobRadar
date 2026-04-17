@@ -55,7 +55,7 @@ export function HeatmapPanel() {
   return (
     <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-5">
       <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-slate-500 mb-3">
-        hiring activity — all watched companies
+        new jobs detected — all watched companies
       </p>
 
       {isLoading ? (
