@@ -20,6 +20,9 @@ type fakeScanLogReader struct {
 func (f *fakeScanLogReader) GetScanStats(_ context.Context, _ string) (scan.ScanStatsView, error) {
 	return scan.ScanStatsView{}, f.err
 }
+func (f *fakeScanLogReader) GetScanHistories(_ context.Context, _ []string) (map[string][]bool, error) {
+	return nil, f.err
+}
 func (f *fakeScanLogReader) GetJobsScannedToday(_ context.Context) (int64, error) {
 	return f.scannedToday, f.err
 }
