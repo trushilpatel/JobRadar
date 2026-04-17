@@ -42,7 +42,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		Status:           q.Get("status"),
 		Companies:        q["companies"],         // ?companies=stripe&companies=google
 		EmployTypes:      q["employ_types"],      // ?employ_types=full_time
-		ExperienceRanges: q["experience_ranges"], // ?experience_ranges=0-2&experience_ranges=3-5
+		ExperienceRanges: q["experience_ranges"], // ?experience_ranges=0-5&experience_ranges=5%2B
 	}
 
 	if filter.Status == "" {

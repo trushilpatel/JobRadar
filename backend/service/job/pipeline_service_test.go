@@ -3,6 +3,7 @@ package job
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
@@ -62,10 +63,19 @@ func (f *pipelineSnapshotWriter) UpdateSnapshotAction(_, _ string) error {
 	return f.updateErr
 }
 
+type pipelineTechTagWriter struct {
+	insertErr error
+}
+
+func (f *pipelineTechTagWriter) InsertTechTags(_, _ string, _ []string, _ time.Time) error {
+	return f.insertErr
+}
+
 // Compile-time interface checks.
 var _ JobWriter = (*pipelineJobWriter)(nil)
 var _ pipelineLedger = (*pipelineLedgerStore)(nil)
 var _ SnapshotWriter = (*pipelineSnapshotWriter)(nil)
+var _ TechTagWriter = (*pipelineTechTagWriter)(nil)
 
 // --- Helpers ---
 
@@ -109,7 +119,7 @@ func TestSaveEnrichedJob_HappyPath(t *testing.T) {
 	ledger := &pipelineLedgerStore{}
 	snapshot := &pipelineSnapshotWriter{}
 
-	svc := NewPipelineService(jobs, ledger, snapshot)
+	svc := NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
 	input := makeInput()
 
 	if err := svc.SaveEnrichedJob(input); err != nil {
@@ -149,7 +159,7 @@ func TestSaveEnrichedJob_InsertJobFails_ReturnsError(t *testing.T) {
 	ledger := &pipelineLedgerStore{}
 	snapshot := &pipelineSnapshotWriter{}
 
-	svc := NewPipelineService(jobs, ledger, snapshot)
+	svc := NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
 
 	if err := svc.SaveEnrichedJob(makeInput()); err == nil {
 		t.Fatal("expected error when InsertJob fails")
@@ -169,7 +179,7 @@ func TestSaveEnrichedJob_SnapshotFailIsNonFatal(t *testing.T) {
 	ledger := &pipelineLedgerStore{}
 	snapshot := &pipelineSnapshotWriter{insertErr: errors.New("snapshot error")}
 
-	svc := NewPipelineService(jobs, ledger, snapshot)
+	svc := NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
 
 	// Snapshot failure must not bubble up — job is already saved.
 	if err := svc.SaveEnrichedJob(makeInput()); err != nil {
@@ -190,7 +200,7 @@ func TestSaveEnrichedJob_NullableFields_EmptyStrings(t *testing.T) {
 	ledger := &pipelineLedgerStore{}
 	snapshot := &pipelineSnapshotWriter{}
 
-	svc := NewPipelineService(jobs, ledger, snapshot)
+	svc := NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
 
 	input := makeInput()
 	input.Raw.Location = ""
@@ -230,7 +240,7 @@ func TestMarkLedgerError_CallsLedgerWithErrorReason(t *testing.T) {
 	ledger := &pipelineLedgerStore{}
 	snapshot := &pipelineSnapshotWriter{}
 
-	svc := NewPipelineService(jobs, ledger, snapshot)
+	svc := NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
 
 	if err := svc.MarkLedgerError("job-xyz"); err != nil {
 		t.Fatalf("MarkLedgerError() error = %v", err)
@@ -246,7 +256,7 @@ func TestMarkLedgerError_CallsLedgerWithErrorReason(t *testing.T) {
 
 func TestMarkLedgerError_PropagatesLedgerError(t *testing.T) {
 	ledger := &pipelineLedgerStore{updateReasonErr: errors.New("ledger failure")}
-	svc := NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{})
+	svc := NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{})
 
 	if err := svc.MarkLedgerError("job-xyz"); err == nil {
 		t.Fatal("expected error when ledger fails")
@@ -255,7 +265,7 @@ func TestMarkLedgerError_PropagatesLedgerError(t *testing.T) {
 
 func TestHasSeenJob_DelegatesToLedger(t *testing.T) {
 	ledger := &pipelineLedgerStore{hasSeen: true}
-	svc := NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{})
+	svc := NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{})
 
 	seen, err := svc.HasSeenJob("job-abc")
 	if err != nil {
@@ -268,7 +278,7 @@ func TestHasSeenJob_DelegatesToLedger(t *testing.T) {
 
 func TestHasSeenJob_NotSeen(t *testing.T) {
 	ledger := &pipelineLedgerStore{hasSeen: false}
-	svc := NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{})
+	svc := NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{})
 
 	seen, err := svc.HasSeenJob("job-new")
 	if err != nil {
@@ -281,7 +291,7 @@ func TestHasSeenJob_NotSeen(t *testing.T) {
 
 func TestHasSeenJob_PropagatesError(t *testing.T) {
 	ledger := &pipelineLedgerStore{hasSeenErr: errors.New("db error")}
-	svc := NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{})
+	svc := NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{})
 
 	_, err := svc.HasSeenJob("job-abc")
 	if err == nil {

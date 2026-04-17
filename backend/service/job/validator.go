@@ -34,8 +34,7 @@ var validDiscardReasons = map[string]bool{
 }
 
 var validExperienceRanges = map[string]bool{
-	"0-2": true,
-	"3-5": true,
+	"0-5": true,
 	"5+":  true,
 }
 
@@ -53,7 +52,7 @@ func (v *validator) ValidateList(filter JobFilter, page, limit int) error {
 			return &domain.ValidationError{
 				Field:   "experience_ranges",
 				Code:    "INVALID_VALUE",
-				Message: "experience_ranges must be '0-2', '3-5', or '5+'",
+				Message: "experience_ranges must be '0-5' or '5+'",
 			}
 		}
 	}

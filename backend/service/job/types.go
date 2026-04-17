@@ -11,7 +11,7 @@ type JobFilter struct {
 	Sponsorship      *bool    // sponsorship = true/false
 	NoRequirements   bool     // requires_citizen = false AND security_clearance = false
 	RequiresCitizen  *bool    // requires_citizen = true/false
-	ExperienceRanges []string // "0-2" | "3-5" | "5+" — OR across values
+	ExperienceRanges []string // "0-5" | "5+" — OR across values
 	DaysAdded        *int     // added_at >= NOW() - N days
 }
 

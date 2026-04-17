@@ -56,7 +56,8 @@ func main() {
 	jobStore := jobsvc.NewJobStore(database)
 	ledgerStore := jobsvc.NewSeenLedgerStore(database)
 	snapshotStore := jobsvc.NewSnapshotStore(database)
-	pipeline := jobsvc.NewPipelineService(jobStore, ledgerStore, snapshotStore)
+	techTagStore := jobsvc.NewTechTagStore(database)
+	pipeline := jobsvc.NewPipelineService(jobStore, ledgerStore, snapshotStore, techTagStore)
 	worker := analyzer.NewWorker(consumer, scorer, pipeline, log, cfg.MaxExpYears)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

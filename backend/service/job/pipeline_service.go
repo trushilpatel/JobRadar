@@ -3,11 +3,13 @@ package job
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/llm"
+	"github.com/trushilpatel/jobradar/pipeline/techtag"
 	"gorm.io/datatypes"
 )
 
@@ -43,11 +45,12 @@ type pipelineService struct {
 	jobs     JobWriter
 	ledger   pipelineLedger
 	snapshot SnapshotWriter
+	techTags TechTagWriter
 }
 
 // NewPipelineService constructs a PipelineService backed by the provided stores.
-func NewPipelineService(jobs JobWriter, ledger pipelineLedger, snapshot SnapshotWriter) PipelineService {
-	return &pipelineService{jobs: jobs, ledger: ledger, snapshot: snapshot}
+func NewPipelineService(jobs JobWriter, ledger pipelineLedger, snapshot SnapshotWriter, techTags TechTagWriter) PipelineService {
+	return &pipelineService{jobs: jobs, ledger: ledger, snapshot: snapshot, techTags: techTags}
 }
 
 // SaveEnrichedJob builds the job row, inserts it into job_feed, writes the analytics
@@ -77,6 +80,11 @@ func (p *pipelineService) SaveEnrichedJob(input EnrichedJobInput) error {
 		TechStack:         []byte(row.TechStack), // already marshalled by buildJobRow
 		RoleCategory:      input.Enriched.RoleCategory,
 	})
+
+	// Non-fatal: write validated+normalized tech tags for trend analysis.
+	if cleaned := techtag.Clean(input.Enriched.TechStack); len(cleaned) > 0 {
+		_ = p.techTags.InsertTechTags(row.ID, input.Raw.CompanyID, cleaned, time.Now())
+	}
 
 	if err := p.ledger.UpdateSeenReason(input.Raw.ID, model.SeenReasonFetch); err != nil {
 		return fmt.Errorf("mark ledger seen: %w", err)

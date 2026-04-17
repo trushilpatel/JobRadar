@@ -6,6 +6,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/model"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // --- Job store ---
@@ -158,10 +159,8 @@ func (s *jobStore) GetJobs(filter JobFilter, page, limit int) ([]model.Job, int6
 		var clauses []string
 		for _, r := range filter.ExperienceRanges {
 			switch r {
-			case "0-2":
-				clauses = append(clauses, "experience_years <= 2")
-			case "3-5":
-				clauses = append(clauses, "(experience_years >= 3 AND experience_years <= 5)")
+			case "0-5":
+				clauses = append(clauses, "(experience_years <= 5 OR experience_years IS NULL)")
 			case "5+":
 				clauses = append(clauses, "experience_years > 5")
 			}
@@ -358,6 +357,40 @@ func (s *discardStore) InsertDiscard(jobResultID, reason, note string) error {
 		Note:        notePtr,
 	}
 	return s.db.Create(&row).Error
+}
+
+// --- Tech tag store ---
+
+// TechTagWriter writes normalized technology tags for a job into job_tech_tags.
+type TechTagWriter interface {
+	InsertTechTags(jobID, companyID string, techs []string, taggedAt time.Time) error
+}
+
+type techTagStore struct {
+	db *gorm.DB
+}
+
+// NewTechTagStore constructs a TechTagWriter implementation.
+func NewTechTagStore(db *gorm.DB) TechTagWriter {
+	return &techTagStore{db: db}
+}
+
+func (s *techTagStore) InsertTechTags(jobID, companyID string, techs []string, taggedAt time.Time) error {
+	if len(techs) == 0 {
+		return nil
+	}
+	rows := make([]model.JobTechTag, 0, len(techs))
+	for _, tech := range techs {
+		rows = append(rows, model.JobTechTag{
+			JobID:     jobID,
+			Tech:      tech,
+			CompanyID: companyID,
+			TaggedAt:  taggedAt,
+		})
+	}
+	return s.db.
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&rows).Error
 }
 
 // --- Snapshot store ---
