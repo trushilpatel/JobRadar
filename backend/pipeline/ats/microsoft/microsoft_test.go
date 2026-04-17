@@ -59,15 +59,15 @@ func TestCareersURL(t *testing.T) {
 func TestFetchJobs_SinglePage(t *testing.T) {
 	srv := newTestServer(t, []position{
 		{
-			ID:           1812345678,
-			DisplayJobID: "1812345678",
-			Name:         "Senior Software Engineer",
-			Locations:    []string{"Redmond, Washington, United States"},
-			PostedTs:     1712678400,
-			Department:   "Engineering",
+			ID:                 1812345678,
+			DisplayJobID:       "1812345678",
+			Name:               "Senior Software Engineer",
+			Locations:          []string{"Redmond, Washington, United States"},
+			PostedTs:           1712678400,
+			Department:         "Engineering",
 			WorkLocationOption: "Up to 50% work from home",
-			AtsJobID:     "REQ-12345",
-			PositionURL:  "https://careers.microsoft.com/v2/global/en/job/1812345678/senior-software-engineer",
+			AtsJobID:           "REQ-12345",
+			PositionURL:        "https://careers.microsoft.com/v2/global/en/job/1812345678/senior-software-engineer",
 		},
 	})
 	defer srv.Close()
@@ -346,8 +346,8 @@ func TestFetchJobContent_Success(t *testing.T) {
 
 	m := &Microsoft{baseURL: srv.URL}
 	job := types.RawJob{
-		ID:   "microsoft-1812345678",
-		URL:  fmt.Sprintf("%s/careers/job/1812345678", srv.URL),
+		ID:  "microsoft-1812345678",
+		URL: fmt.Sprintf("%s/careers/job/1812345678", srv.URL),
 	}
 
 	result, err := m.FetchJobContent(context.Background(), job)
@@ -499,6 +499,89 @@ func TestFetchJobs_Real(t *testing.T) {
 	}
 
 	t.Logf("fetched %d jobs; first: %q at %q", len(result.Jobs), j.Title, j.Location)
+}
+
+// ── FetchJobContent — Real integration test ──────────────────────────────────
+// Guard: set TEST_REAL=1 to run. Calls FetchJobs then FetchJobContent on one job.
+
+func TestFetchJobContent_Real(t *testing.T) {
+	if os.Getenv("TEST_REAL") == "" {
+		t.Skip("skipping real API test; set TEST_REAL=1 to run")
+	}
+
+	m := New()
+
+	// Get one page of jobs to find a real position ID.
+	result, err := m.FetchJobs(context.Background(), "")
+	if err != nil {
+		t.Fatalf("FetchJobs error: %v", err)
+	}
+	if len(result.Jobs) == 0 {
+		t.Fatal("no jobs returned — cannot test FetchJobContent")
+	}
+
+	// Construct a RawJob from the first listing.
+	firstJob := result.Jobs[0]
+	rawJob := types.RawJob{
+		ID:      firstJob.ID,
+		URL:     firstJob.URL,
+		Title:   firstJob.Title,
+		Adapter: model.AdapterMicrosoft,
+	}
+
+	content, err := m.FetchJobContent(context.Background(), rawJob)
+	if err != nil {
+		t.Fatalf("FetchJobContent error: %v", err)
+	}
+
+	// Structural checks
+	if content.Title == "" {
+		t.Error("FetchJobContent: Title should not be empty")
+	}
+	if content.Description == "" {
+		t.Error("FetchJobContent: Description should not be empty — jobDescription field missing from detail API?")
+	}
+	if content.Department == "" {
+		t.Log("FetchJobContent: Department is empty (may be normal for some roles)")
+	}
+
+	t.Logf("FetchJobContent result: title=%q dept=%q workplace=%q employ=%q published=%q",
+		content.Title, content.Department, content.WorkplaceType, content.EmploymentType, content.PublishedDate)
+
+	// ── Salary in description audit ──────────────────────────────────────────
+	// Microsoft does not expose a structured salary field — salary info (if any)
+	// is embedded in jobDescription HTML (stripped to plain text).
+	desc := strings.ToLower(content.Description)
+	hasSalary := strings.Contains(desc, "$") || strings.Contains(desc, "salary") ||
+		strings.Contains(desc, "compensation") || strings.Contains(desc, "usd")
+	hasYOE := strings.Contains(desc, "years of experience") || strings.Contains(desc, "year(s) of experience") ||
+		strings.Contains(desc, "years experience")
+
+	t.Logf("[Salary] description contains salary keywords: %v", hasSalary)
+	t.Logf("[YOE]    description contains YOE keywords: %v", hasYOE)
+
+	if !hasSalary {
+		t.Log("[Salary] Microsoft detail API description does not contain salary data for this job — Compensation field will be empty; LLM cannot extract what is not there")
+	}
+	if !hasYOE {
+		t.Log("[YOE] Microsoft detail API description does not contain explicit YOE for this job")
+	}
+
+	// Compensation field is always empty for Microsoft — verify and document.
+	if content.Compensation != "" {
+		t.Logf("[Salary] UNEXPECTED: Compensation is non-empty: %q — update detailToContent() to map this field", content.Compensation)
+	} else {
+		t.Log("[Salary] Compensation field is empty (expected — not in Microsoft position_details API)")
+	}
+
+	t.Logf("Description preview (first 500 chars):\n%s", truncateStr(content.Description, 500))
+}
+
+func truncateStr(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

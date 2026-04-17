@@ -77,13 +77,13 @@ type filterOptionsData struct {
 
 // searchJobsResponse is the top-level JSON from /api/loadSearchJobsResults.
 type searchJobsResponse struct {
-	Status string          `json:"status"`
-	Data   searchJobsData  `json:"data"`
+	Status string         `json:"status"`
+	Data   searchJobsData `json:"data"`
 }
 
 type searchJobsData struct {
-	Results      []uberJob  `json:"results"`
-	TotalResults uberTotal  `json:"totalResults"`
+	Results      []uberJob `json:"results"`
+	TotalResults uberTotal `json:"totalResults"`
 }
 
 // uberTotal mirrors the protobuf Int64Value Uber uses for total counts.
@@ -97,32 +97,32 @@ type uberTotal struct {
 // uberJob is a single job entry in the /api/loadSearchJobsResults response.
 // Description is full Markdown — no separate detail fetch needed.
 type uberJob struct {
-	ID                int           `json:"id"`
-	Title             string        `json:"title"`
-	Description       string        `json:"description"` // Full Markdown
-	Department        string        `json:"department"`
-	Type              string        `json:"type"`
-	ProgramAndPlatform string       `json:"programAndPlatform"`
-	Location          uberLocation  `json:"location"`
-	Featured          bool          `json:"featured"`
-	Level             string        `json:"level"`
-	CreationDate      string        `json:"creationDate"` // ISO 8601
-	OtherLevels       json.RawMessage `json:"otherLevels"`
-	Team              string        `json:"team"`
-	PortalID          string        `json:"portalID"`
-	IsPipeline        bool          `json:"isPipeline"`
-	StatusID          string        `json:"statusID"`
-	StatusName        string        `json:"statusName"`
-	UpdatedDate       string        `json:"updatedDate"` // ISO 8601
-	UniqueSkills      string        `json:"uniqueSkills"`
-	TimeType          string        `json:"timeType"` // "Full-Time", "Part-Time", etc.
-	AllLocations      []uberLocation `json:"allLocations"`
+	ID                 int             `json:"id"`
+	Title              string          `json:"title"`
+	Description        string          `json:"description"` // Full Markdown
+	Department         string          `json:"department"`
+	Type               string          `json:"type"`
+	ProgramAndPlatform string          `json:"programAndPlatform"`
+	Location           uberLocation    `json:"location"`
+	Featured           bool            `json:"featured"`
+	Level              string          `json:"level"`
+	CreationDate       string          `json:"creationDate"` // ISO 8601
+	OtherLevels        json.RawMessage `json:"otherLevels"`
+	Team               string          `json:"team"`
+	PortalID           string          `json:"portalID"`
+	IsPipeline         bool            `json:"isPipeline"`
+	StatusID           string          `json:"statusID"`
+	StatusName         string          `json:"statusName"`
+	UpdatedDate        string          `json:"updatedDate"` // ISO 8601
+	UniqueSkills       string          `json:"uniqueSkills"`
+	TimeType           string          `json:"timeType"` // "Full-Time", "Part-Time", etc.
+	AllLocations       []uberLocation  `json:"allLocations"`
 }
 
 // uberLocation is the structured location object in Uber job responses.
 type uberLocation struct {
-	Country     string `json:"country"`     // ISO alpha-3, e.g. "USA"
-	Region      string `json:"region"`      // state/province, may be null
+	Country     string `json:"country"` // ISO alpha-3, e.g. "USA"
+	Region      string `json:"region"`  // state/province, may be null
 	City        string `json:"city"`
 	CountryName string `json:"countryName"` // human-readable, e.g. "United States"
 }
@@ -257,6 +257,13 @@ func (u *Uber) setHeaders(req *http.Request) {
 // ── Converters ───────────────────────────────────────────────────────────────
 
 func jobToItem(j uberJob) types.FetchJobsItem {
+	description := j.Description
+	if j.Level != "" {
+		// Append Uber's internal level so the LLM enricher can infer seniority.
+		// Level "5" = L5 = Senior SWE; "6" = L6 = Staff; "5B" = between 5 and 6.
+		description += fmt.Sprintf("\n\nUber Level: %s", j.Level)
+	}
+
 	return types.FetchJobsItem{
 		ID:             fmt.Sprintf("%s-%d", model.AdapterUber, j.ID),
 		Title:          j.Title,
@@ -264,9 +271,9 @@ func jobToItem(j uberJob) types.FetchJobsItem {
 		Location:       formatLocation(j.AllLocations, j.Location),
 		EmploymentType: mapTimeType(j.TimeType),
 		FullContent: &types.FullJobContent{
-			Description:   j.Description, // already plain Markdown
+			Description:   description,
 			Department:    j.Department,
-			WorkplaceType: "",   // not available in Uber API
+			WorkplaceType: "", // not available in Uber API
 			PublishedDate: j.CreationDate,
 		},
 	}

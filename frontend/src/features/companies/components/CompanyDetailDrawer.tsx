@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { X, Trash2, RefreshCw, Pencil } from 'lucide-react'
+import { X, Trash2, RefreshCw, Pencil, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Company, ScanStats } from '@/types'
 import { fetchScanStats } from '@/api/companies'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { StatusPill, type StatusKind } from '@/components/ui/status-pill'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
-import { formatRelativeTime } from '@/lib/utils'
+import { cn, formatRelativeTime } from '@/lib/utils'
 
 interface CompanyDetailDrawerProps {
   company: Company
@@ -26,6 +26,16 @@ export function CompanyDetailDrawer({
 }: CompanyDetailDrawerProps) {
   const [stats, setStats] = useState<ScanStats | null>(null)
   const [loading, setLoading] = useState(false)
+  const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set())
+
+  function toggleError(id: number) {
+    setExpandedErrors((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -140,15 +150,19 @@ export function CompanyDetailDrawer({
 
         <Section title="Activity">
           <div className="grid grid-cols-2 gap-2">
-            <StatTile value={stats?.new_today ?? 0} accent="new" label="Last 24 hours" />
-            {/* TODO(backend): expose total open jobs per company in ScanStats */}
-            <StatTile value="—" label="Open jobs total" />
+            <StatTile value={stats?.new_today ?? '—'} accent="new" label="Last 24 hours" />
+            <StatTile value={stats?.new_this_month ?? '—'} accent="new" label="This month" />
           </div>
-        </Section>
-
-        {/* TODO(backend): expose per-company tech-stack trend over last 30 days */}
-        <Section title="Tech trend" aside="last 30d">
-          <p className="text-xs text-slate-500">Not available yet</p>
+          {stats && (
+            <div className="grid grid-cols-3 gap-2 mt-2">
+              <StatTile value={stats.total_scans} label="Total scans" />
+              <StatTile value={stats.error_count} label="Errors" />
+              <StatTile
+                value={stats.avg_duration_ms != null ? formatMs(stats.avg_duration_ms) : '—'}
+                label="Avg time"
+              />
+            </div>
+          )}
         </Section>
 
         <Section title="Recent runs">
@@ -160,16 +174,49 @@ export function CompanyDetailDrawer({
           ) : (stats?.recent_runs ?? []).length === 0 ? (
             <p className="text-xs text-slate-500">No runs yet</p>
           ) : (
-            <div className="space-y-1 text-xs">
-              {(stats?.recent_runs ?? []).slice(0, 6).map((r) => (
-                <div
-                  key={r.id}
-                  className="flex items-center justify-between border-b border-white/[0.04] py-1.5"
-                >
-                  <span className="text-slate-300">{formatRelativeTime(r.scanned_at)}</span>
-                  <span className={r.error ? 'text-red-400' : 'text-emerald-400'}>
-                    {r.error ? `Error · ${truncate(r.error, 40)}` : `OK · ${r.jobs_fetched} jobs`}
-                  </span>
+            <div className="text-xs">
+              {(stats?.recent_runs ?? []).slice(0, 10).map((r) => (
+                <div key={r.id} className="border-b border-white/[0.04]">
+                  <div
+                    className={cn(
+                      'flex items-center justify-between py-1.5',
+                      r.error && 'cursor-pointer'
+                    )}
+                    onClick={() => r.error && toggleError(r.id)}
+                  >
+                    <span className="text-slate-300 flex items-center gap-1.5">
+                      {formatRelativeTime(r.scanned_at)}
+                      {r.duration_ms != null && (
+                        <span className="text-slate-600">{formatMs(r.duration_ms)}</span>
+                      )}
+                    </span>
+                    <span
+                      className={cn(
+                        'flex items-center gap-1',
+                        r.error ? 'text-red-400' : 'text-emerald-400'
+                      )}
+                    >
+                      {r.error ? (
+                        <>
+                          Error
+                          {expandedErrors.has(r.id) ? (
+                            <ChevronUp size={10} />
+                          ) : (
+                            <ChevronDown size={10} />
+                          )}
+                        </>
+                      ) : (
+                        `OK · ${r.jobs_fetched} fetched${r.jobs_new ? ` · ${r.jobs_new} new` : ''}`
+                      )}
+                    </span>
+                  </div>
+                  {r.error && expandedErrors.has(r.id) && (
+                    <div className="pb-2">
+                      <p className="text-[11px] text-red-300 font-mono bg-red-950/20 rounded p-2 break-all leading-relaxed">
+                        {r.error}
+                      </p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -250,6 +297,7 @@ function formatNext(next: string | null, queueStatus?: 'queued' | 'processing') 
   return `in ${hrs}h`
 }
 
-function truncate(s: string, n: number) {
-  return s.length > n ? s.slice(0, n - 1) + '…' : s
+function formatMs(ms: number) {
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  return `${(ms / 1000).toFixed(1)}s`
 }

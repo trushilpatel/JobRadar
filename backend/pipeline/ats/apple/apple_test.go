@@ -60,9 +60,9 @@ func TestFetchJobs_SinglePage(t *testing.T) {
 					Locations: []appleLocation{
 						{City: "Cupertino", StateCode: "CA", CountryCode: "USA"},
 					},
-					PostDateInGMT:     "2026-03-15 00:00:00",
-					Team:              appleTeam{TeamName: "Software and Services", TeamCode: "SWDVR"},
-					Type:              "Regular",
+					PostDateInGMT:       "2026-03-15 00:00:00",
+					Team:                appleTeam{TeamName: "Software and Services", TeamCode: "SWDVR"},
+					Type:                "Regular",
 					StandardWeeklyHours: 40,
 				},
 			},
@@ -534,6 +534,94 @@ func TestFetchJobs_Real(t *testing.T) {
 	}
 
 	t.Logf("fetched %d jobs; first: %q at %q (dept: %q)", len(result.Jobs), j.Title, j.Location, j.FullContent.Department)
+}
+
+// ── Real: salary and experience diagnostic ───────────────────────────────────
+// Verifies what salary/YOE data the live Apple listing API actually returns.
+// Apple exposes no structured salary field — this checks if jobSummary descriptions
+// contain salary or experience text the LLM can extract.
+
+func TestFetchJobs_Real_SalaryAndExperience(t *testing.T) {
+	if os.Getenv("TEST_REAL") == "" {
+		t.Skip("skipping real API test; set TEST_REAL=1 to run")
+	}
+
+	a := New()
+	// Fetch only the first page to keep the test fast.
+	jobs, err := a.fetchJobsPage(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("fetchJobsPage error: %v", err)
+	}
+	if len(jobs) == 0 {
+		t.Fatal("no jobs returned from live Apple API page 1")
+	}
+
+	jobsWithSalary := 0
+	jobsWithYOE := 0
+	var salarySample, yoeSample string
+
+	for _, j := range jobs {
+		if j.FullContent == nil {
+			continue
+		}
+		desc := strings.ToLower(j.FullContent.Description)
+
+		if strings.Contains(desc, "$") || strings.Contains(desc, "salary") ||
+			strings.Contains(desc, "compensation") || strings.Contains(desc, "usd") {
+			jobsWithSalary++
+			if salarySample == "" {
+				idx := strings.Index(desc, "$")
+				if idx < 0 {
+					idx = strings.Index(desc, "salary")
+				}
+				if idx >= 0 {
+					start := idx - 80
+					if start < 0 {
+						start = 0
+					}
+					end := idx + 200
+					if end > len(j.FullContent.Description) {
+						end = len(j.FullContent.Description)
+					}
+					salarySample = fmt.Sprintf("job=%q: ...%s...", j.Title, j.FullContent.Description[start:end])
+				}
+			}
+		}
+
+		for _, pat := range []string{"years of experience", "year(s) of experience", "years experience"} {
+			if strings.Contains(desc, pat) {
+				jobsWithYOE++
+				if yoeSample == "" {
+					if idx := strings.Index(desc, pat); idx >= 0 {
+						start := idx - 80
+						if start < 0 {
+							start = 0
+						}
+						end := idx + 200
+						if end > len(j.FullContent.Description) {
+							end = len(j.FullContent.Description)
+						}
+						yoeSample = fmt.Sprintf("job=%q: ...%s...", j.Title, j.FullContent.Description[start:end])
+					}
+				}
+				break
+			}
+		}
+	}
+
+	t.Logf("[Salary] page-1 jobs: %d total, %d with salary keywords in description", len(jobs), jobsWithSalary)
+	if salarySample != "" {
+		t.Logf("[Salary] sample: %s", salarySample)
+	} else {
+		t.Log("[Salary] Apple jobSummary descriptions do not contain salary data — Compensation field will always be empty")
+	}
+
+	t.Logf("[YOE] page-1 jobs: %d total, %d with YOE keywords in description", len(jobs), jobsWithYOE)
+	if yoeSample != "" {
+		t.Logf("[YOE] sample: %s", yoeSample)
+	} else {
+		t.Log("[YOE] Apple jobSummary descriptions do not contain explicit YOE keywords")
+	}
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

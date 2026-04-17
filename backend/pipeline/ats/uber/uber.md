@@ -37,25 +37,25 @@ Sub-team arrays (values) are informational only — not used by this adapter.
 
 **Departments (as of April 2026):**
 
-| Department                    | Job Count |
-|-------------------------------|-----------|
-| Engineering                   | 388       |
-| Sales & Account Management    | 338       |
-| Operations                    | 163       |
-| Community Operations          | 84        |
-| Data Science                  | 68        |
-| Product                       | 56        |
-| Marketing                     | 39        |
-| Finance & Accounting          | 27        |
-| People & Places               | 27        |
-| University                    | 24        |
-| Business Development          | 23        |
-| Design                        | 13        |
-| Safety, Security & Insurance  | 11        |
-| Legal                         | 9         |
-| Communications                | 5         |
-| Public Policy                 | 3         |
-| **Total**                     | **1,278** |
+| Department                   | Job Count |
+| ---------------------------- | --------- |
+| Engineering                  | 388       |
+| Sales & Account Management   | 338       |
+| Operations                   | 163       |
+| Community Operations         | 84        |
+| Data Science                 | 68        |
+| Product                      | 56        |
+| Marketing                    | 39        |
+| Finance & Accounting         | 27        |
+| People & Places              | 27        |
+| University                   | 24        |
+| Business Development         | 23        |
+| Design                       | 13        |
+| Safety, Security & Insurance | 11        |
+| Legal                        | 9         |
+| Communications               | 5         |
+| Public Policy                | 3         |
+| **Total**                    | **1,278** |
 
 ### 2. Job search (per department)
 
@@ -122,6 +122,7 @@ x-csrf-token: x
 ```
 
 **Key notes:**
+
 - `description` is **full Markdown** — no separate detail fetch needed.
 - `totalResults` is a protobuf Int64 value: `{ low: int32, high: int32, unsigned: bool }`.
   For realistic job counts, `high` is always 0 — use `low` directly.
@@ -154,42 +155,43 @@ the API's global total of 1,278). Dedup by numeric `id` is a safety net only.
 
 ## Field capture
 
-| API field           | Go field            | Type             | Notes                                  |
-|---------------------|---------------------|------------------|----------------------------------------|
-| `id`                | `ID`                | `int`            | Numeric job ID                         |
-| `title`             | `Title`             | `string`         |                                        |
-| `description`       | `Description`       | `string`         | Full Markdown — not HTML               |
-| `department`        | `Department`        | `string`         |                                        |
-| `type`              | `Type`              | `string`         | Usually empty                          |
-| `programAndPlatform`| `ProgramAndPlatform`| `string`         | Usually empty                          |
-| `location`          | `Location`          | `uberLocation`   | Primary location object                |
-| `featured`          | `Featured`          | `bool`           |                                        |
-| `level`             | `Level`             | `string`         | Uber level (e.g. "5", "6")             |
-| `creationDate`      | `CreationDate`      | `string`         | ISO 8601                               |
-| `otherLevels`       | `OtherLevels`       | `json.RawMessage`| Nullable                               |
-| `team`              | `Team`              | `string`         | Sub-team within department             |
-| `portalID`          | `PortalID`          | `string`         | Always "EXTERNAL" for public listings  |
-| `isPipeline`        | `IsPipeline`        | `bool`           |                                        |
-| `statusID`          | `StatusID`          | `string`         |                                        |
-| `statusName`        | `StatusName`        | `string`         |                                        |
-| `updatedDate`       | `UpdatedDate`       | `string`         | ISO 8601                               |
-| `uniqueSkills`      | `UniqueSkills`      | `string`         | Usually empty                          |
-| `timeType`          | `TimeType`          | `string`         | "Full-Time", "Part-Time", etc.         |
-| `allLocations`      | `AllLocations`      | `[]uberLocation` | All locations for multi-location roles |
+| API field            | Go field             | Type              | Notes                                  |
+| -------------------- | -------------------- | ----------------- | -------------------------------------- |
+| `id`                 | `ID`                 | `int`             | Numeric job ID                         |
+| `title`              | `Title`              | `string`          |                                        |
+| `description`        | `Description`        | `string`          | Full Markdown — not HTML               |
+| `department`         | `Department`         | `string`          |                                        |
+| `type`               | `Type`               | `string`          | Usually empty                          |
+| `programAndPlatform` | `ProgramAndPlatform` | `string`          | Usually empty                          |
+| `location`           | `Location`           | `uberLocation`    | Primary location object                |
+| `featured`           | `Featured`           | `bool`            |                                        |
+| `level`              | `Level`              | `string`          | Uber level (e.g. "5", "6")             |
+| `creationDate`       | `CreationDate`       | `string`          | ISO 8601                               |
+| `otherLevels`        | `OtherLevels`        | `json.RawMessage` | Nullable                               |
+| `team`               | `Team`               | `string`          | Sub-team within department             |
+| `portalID`           | `PortalID`           | `string`          | Always "EXTERNAL" for public listings  |
+| `isPipeline`         | `IsPipeline`         | `bool`            |                                        |
+| `statusID`           | `StatusID`           | `string`          |                                        |
+| `statusName`         | `StatusName`         | `string`          |                                        |
+| `updatedDate`        | `UpdatedDate`        | `string`          | ISO 8601                               |
+| `uniqueSkills`       | `UniqueSkills`       | `string`          | Usually empty                          |
+| `timeType`           | `TimeType`           | `string`          | "Full-Time", "Part-Time", etc.         |
+| `allLocations`       | `AllLocations`       | `[]uberLocation`  | All locations for multi-location roles |
 
 ## Field mapping
 
 ### FetchJobs (job → FetchJobsItem)
 
-| API field       | FetchJobsItem field  | Notes                                                    |
-|-----------------|----------------------|----------------------------------------------------------|
-| `id`            | `ID`                 | Prefixed: `uber-{id}` (int → string)                     |
-| `title`         | `Title`              |                                                          |
-| `allLocations`  | `Location`           | Multi: joined with `"; "`. Single: `"City, Region, Country"` |
-| `timeType`      | `EmploymentType`     | Mapped: Full-Time→`full_time`, Part-Time→`part_time`, etc. |
-| `description`   | `FullContent.Description` | Markdown passthrough — no stripping                 |
-| `department`    | `FullContent.Department`  |                                                     |
-| `creationDate`  | `FullContent.PublishedDate` | ISO 8601 string                                   |
+| API field      | FetchJobsItem field         | Notes                                                                                 |
+| -------------- | --------------------------- | ------------------------------------------------------------------------------------- |
+| `id`           | `ID`                        | Prefixed: `uber-{id}` (int → string)                                                  |
+| `title`        | `Title`                     |                                                                                       |
+| `allLocations` | `Location`                  | Multi: joined with `"; "`. Single: `"City, Region, Country"`                          |
+| `timeType`     | `EmploymentType`            | Mapped: Full-Time→`full_time`, Part-Time→`part_time`, etc.                            |
+| `description`  | `FullContent.Description`   | Markdown passthrough + `"\n\nUber Level: <level>"` appended when `level` is non-empty |
+| `level`        | `FullContent.Description`   | Appended as `"Uber Level: <value>"` to expose seniority to LLM enricher               |
+| `department`   | `FullContent.Department`    |                                                                                       |
+| `creationDate` | `FullContent.PublishedDate` | ISO 8601 string                                                                       |
 
 **Note:** `FullContent` is always populated (never nil). This is a **fat adapter**
 — no `ContentFetcher` interface is implemented.
@@ -205,7 +207,7 @@ Prefix is `model.AdapterUber`. The numeric portion is the Uber `id` field format
 ## URL format
 
 | Type         | Pattern                                                             |
-|--------------|---------------------------------------------------------------------|
+| ------------ | ------------------------------------------------------------------- |
 | Careers page | `https://www.uber.com/us/en/careers/list/`                          |
 | Job page     | `https://www.uber.com/careers/list/{id}`                            |
 | Filter API   | `POST https://www.uber.com/api/loadFilterOptions?localeCode=en`     |
@@ -222,7 +224,8 @@ Prefix is `model.AdapterUber`. The numeric portion is the Uber `id` field format
 - **Employment type** defaults to `full_time` when `timeType` is empty or unrecognized.
   Uber does not expose compensation ranges in this API.
 - **Workplace type** is not available in this API (no remote/onsite/hybrid field).
-- `level` contains Uber's internal level system (e.g., "5" = L5 = Software Engineer II).
-  Not mapped to a standard field — stored in `FullContent` if needed downstream.
+- `level` contains Uber's internal level system (e.g., "5" = L5 = Software Engineer II, "5B" = between L5/L6).
+  When non-empty, appended to `FullContent.Description` as `"Uber Level: <value>"` so the LLM
+  enricher can infer seniority and experience requirements.
 - The adapter fetches departments fresh on each run — new departments added by Uber
   are automatically covered without adapter changes.

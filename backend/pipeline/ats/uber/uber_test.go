@@ -352,7 +352,7 @@ func TestMapTimeType(t *testing.T) {
 		{"contract", model.EmployContract},
 		{"Internship", model.EmployInternship},
 		{"internship", model.EmployInternship},
-		{"", model.EmployFullTime},     // empty defaults to full_time
+		{"", model.EmployFullTime},        // empty defaults to full_time
 		{"Unknown", model.EmployFullTime}, // unrecognised defaults to full_time
 	}
 	for _, tc := range tests {
@@ -367,10 +367,10 @@ func TestMapTimeType(t *testing.T) {
 
 func TestFormatLocation(t *testing.T) {
 	tests := []struct {
-		name     string
-		all      []uberLocation
-		primary  uberLocation
-		want     string
+		name    string
+		all     []uberLocation
+		primary uberLocation
+		want    string
 	}{
 		{
 			name:    "single allLocations",
@@ -668,6 +668,7 @@ func TestFetchJobs_FullContentFields(t *testing.T) {
 	if fc == nil {
 		t.Fatal("FullContent must not be nil")
 	}
+	// Level is empty in this fixture, so description should be unchanged.
 	assertEqual(t, "Description", fc.Description, "## About\n\nBuild things at scale.")
 	assertEqual(t, "Department", fc.Department, "Engineering")
 	assertEqual(t, "PublishedDate", fc.PublishedDate, "2026-03-20T10:00:00.000Z")
@@ -678,6 +679,70 @@ func TestFetchJobs_FullContentFields(t *testing.T) {
 	if fc.Compensation != "" {
 		t.Errorf("Compensation should be empty (not in Uber API), got %q", fc.Compensation)
 	}
+}
+
+// ── FetchJobs — Level appended to Description ────────────────────────────────
+
+func TestFetchJobs_LevelAppendedToDescription(t *testing.T) {
+	srv := newTestServer(t, map[string][]uberJob{
+		"Engineering": {
+			{
+				ID:          30001,
+				Title:       "Senior Software Engineer",
+				Description: "**About the Role**\n\nBuild things at scale.",
+				Department:  "Engineering",
+				Level:       "5",
+				TimeType:    "Full-Time",
+			},
+			{
+				ID:          30002,
+				Title:       "Staff Engineer",
+				Description: "Lead architecture.",
+				Department:  "Engineering",
+				Level:       "", // no level
+				TimeType:    "Full-Time",
+			},
+		},
+	})
+	defer srv.Close()
+
+	u := &Uber{baseURL: srv.URL}
+	result, err := u.FetchJobs(context.Background(), "uber")
+	if err != nil {
+		t.Fatalf("FetchJobs error: %v", err)
+	}
+	if len(result.Jobs) != 2 {
+		t.Fatalf("expected 2 jobs, got %d", len(result.Jobs))
+	}
+
+	// Find jobs by title (map order is non-deterministic)
+	var withLevel, withoutLevel *types.FetchJobsItem
+	for i := range result.Jobs {
+		j := &result.Jobs[i]
+		if j.Title == "Senior Software Engineer" {
+			withLevel = j
+		} else {
+			withoutLevel = j
+		}
+	}
+
+	if withLevel == nil || withLevel.FullContent == nil {
+		t.Fatal("job with Level not found or FullContent nil")
+	}
+	if !strings.Contains(withLevel.FullContent.Description, "Uber Level: 5") {
+		t.Errorf("Description should contain 'Uber Level: 5', got: %q", withLevel.FullContent.Description)
+	}
+	if !strings.HasSuffix(withLevel.FullContent.Description, "Uber Level: 5") {
+		t.Error("'Uber Level' should be appended at the end of the description")
+	}
+
+	if withoutLevel == nil || withoutLevel.FullContent == nil {
+		t.Fatal("job without Level not found or FullContent nil")
+	}
+	if strings.Contains(withoutLevel.FullContent.Description, "Uber Level") {
+		t.Errorf("description with empty Level should not contain 'Uber Level', got: %q", withoutLevel.FullContent.Description)
+	}
+	assertEqual(t, "Description without level", withoutLevel.FullContent.Description, "Lead architecture.")
 }
 
 // ── FetchJobs — employment type mapping for all TimeType values ───────────────
@@ -764,6 +829,127 @@ func TestFetchJobs_Real(t *testing.T) {
 	}
 
 	t.Logf("fetched %d jobs; first: %q at %q (dept: %q)", len(result.Jobs), j.Title, j.Location, j.FullContent.Department)
+}
+
+// ── Real: salary and experience diagnostic ───────────────────────────────────
+// Verifies what salary/YOE data the live Uber API actually returns.
+// Also inspects the raw Level field (captured but not forwarded to FullContent).
+
+func TestFetchJobs_Real_SalaryAndExperience(t *testing.T) {
+	if os.Getenv("TEST_REAL") == "" {
+		t.Skip("skipping real API test; set TEST_REAL=1 to run")
+	}
+
+	u := New()
+
+	// Fetch one department's raw jobs to inspect all struct fields including Level.
+	departments, err := u.fetchDepartments(context.Background())
+	if err != nil {
+		t.Fatalf("fetchDepartments error: %v", err)
+	}
+	if len(departments) == 0 {
+		t.Fatal("no departments returned from live Uber API")
+	}
+
+	// Use "Engineering" if available, otherwise the first department.
+	dept := departments[0]
+	for _, d := range departments {
+		if d == "Engineering" {
+			dept = d
+			break
+		}
+	}
+
+	rawJobs, err := u.fetchJobsForDepartment(context.Background(), dept)
+	if err != nil {
+		t.Fatalf("fetchJobsForDepartment(%q) error: %v", dept, err)
+	}
+	if len(rawJobs) == 0 {
+		t.Fatalf("no jobs returned for department %q", dept)
+	}
+
+	// ── Level field audit ────────────────────────────────────────────────────
+	// Level is captured in uberJob but discarded by jobToItem() — never reaches FullContent.
+	levelsFound := 0
+	for _, j := range rawJobs {
+		if j.Level != "" {
+			levelsFound++
+		}
+	}
+	t.Logf("[Level] dept=%q: %d/%d jobs have a non-empty Level field (e.g. %q)",
+		dept, levelsFound, len(rawJobs), rawJobs[0].Level)
+	if levelsFound == 0 {
+		t.Log("[Level] WARNING: Level field is empty for all sampled jobs — may not be populated by Uber API")
+	} else {
+		t.Logf("[Level] Level field is present and now appended to FullContent.Description as 'Uber Level: <value>'")
+	}
+
+	// ── Salary in description audit ──────────────────────────────────────────
+	// Uber does not expose a structured salary field. Salary info (if any)
+	// must be extracted by the LLM from the description Markdown.
+	jobsWithSalary := 0
+	var salarySample string
+	for _, j := range rawJobs {
+		desc := strings.ToLower(j.Description)
+		if strings.Contains(desc, "$") || strings.Contains(desc, "salary") || strings.Contains(desc, "compensation") || strings.Contains(desc, "usd") {
+			jobsWithSalary++
+			if salarySample == "" && len(j.Description) > 0 {
+				// Capture a 400-char preview around the first salary mention
+				if idx := strings.Index(desc, "$"); idx >= 0 {
+					start := idx - 100
+					if start < 0 {
+						start = 0
+					}
+					end := idx + 300
+					if end > len(j.Description) {
+						end = len(j.Description)
+					}
+					salarySample = fmt.Sprintf("job=%q: ...%s...", j.Title, j.Description[start:end])
+				}
+			}
+		}
+	}
+	t.Logf("[Salary] dept=%q: %d/%d jobs contain salary/compensation keywords in description", dept, jobsWithSalary, len(rawJobs))
+	if salarySample != "" {
+		t.Logf("[Salary] sample: %s", salarySample)
+	}
+	if jobsWithSalary == 0 {
+		t.Log("[Salary] Uber API descriptions do not contain salary data — compensation field will always be empty (LLM cannot extract what is not there)")
+	}
+
+	// ── Years of experience in description audit ─────────────────────────────
+	jobsWithYOE := 0
+	var yoeSample string
+	yoePatterns := []string{"years of experience", "year(s) of experience", "years experience", "yoe"}
+	for _, j := range rawJobs {
+		desc := strings.ToLower(j.Description)
+		for _, pat := range yoePatterns {
+			if strings.Contains(desc, pat) {
+				jobsWithYOE++
+				if yoeSample == "" {
+					if idx := strings.Index(desc, pat); idx >= 0 {
+						start := idx - 80
+						if start < 0 {
+							start = 0
+						}
+						end := idx + 200
+						if end > len(j.Description) {
+							end = len(j.Description)
+						}
+						yoeSample = fmt.Sprintf("job=%q: ...%s...", j.Title, j.Description[start:end])
+					}
+				}
+				break
+			}
+		}
+	}
+	t.Logf("[YOE] dept=%q: %d/%d jobs contain years-of-experience keywords in description", dept, jobsWithYOE, len(rawJobs))
+	if yoeSample != "" {
+		t.Logf("[YOE] sample: %s", yoeSample)
+	}
+	if jobsWithYOE == 0 {
+		t.Log("[YOE] Uber API descriptions do not contain YOE keywords — experience field will always require LLM inference from description context")
+	}
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
