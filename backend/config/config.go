@@ -36,6 +36,7 @@ type Config struct {
 	ScanCompanyDelaySeconds   int // sleep between company job-list fetches to avoid being blocked
 	ScorerBatchSize           int // number of job titles sent to LLM per ScoreBatch call
 	ScorerFlushTimeoutSeconds int // flush a partial batch after this many seconds of inactivity
+	ScorerLLMParallelism      int // number of parallel ScoreBatch calls per flush
 
 	TargetRoles []string // e.g. ["Backend Engineer", "Platform Engineer"]
 	YearsExp    int
@@ -82,7 +83,8 @@ func Load() *Config {
 		ScanIntervalMinutes:       getEnvInt("SCAN_INTERVAL_MINUTES", 1440), // default: 24h
 		ScanCompanyDelaySeconds:   getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 60),
 		ScorerBatchSize:           getEnvInt("SCORER_BATCH_SIZE", 50),
-		ScorerFlushTimeoutSeconds: getEnvInt("SCORER_FLUSH_TIMEOUT_SECONDS", 10),
+		ScorerFlushTimeoutSeconds: getEnvInt("SCORER_FLUSH_TIMEOUT_SECONDS", 30),
+		ScorerLLMParallelism:      getEnvInt("SCORER_LLM_PARALLELISM", 5),
 
 		TargetRoles: splitCSV(getEnv("TARGET_ROLES", "Software Engineer")),
 		YearsExp:    getEnvInt("YEARS_EXP", 0),

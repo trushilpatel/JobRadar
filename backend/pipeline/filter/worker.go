@@ -3,6 +3,7 @@ package filter
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/trushilpatel/jobradar/infra/kafka"
@@ -24,6 +25,7 @@ type Worker struct {
 	ledger       FilterLedger
 	batchSize    int
 	flushTimeout time.Duration
+	parallelism  int
 	log          logger.Logger
 }
 
@@ -34,6 +36,7 @@ func NewWorker(
 	ledger FilterLedger,
 	batchSize int,
 	flushTimeoutSeconds int,
+	parallelism int,
 	log logger.Logger,
 ) *Worker {
 	return &Worker{
@@ -43,6 +46,7 @@ func NewWorker(
 		ledger:       ledger,
 		batchSize:    batchSize,
 		flushTimeout: time.Duration(flushTimeoutSeconds) * time.Second,
+		parallelism:  parallelism,
 		log:          log,
 	}
 }
@@ -60,6 +64,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	w.log.Info("worker started",
 		logger.Int("batch_size", w.batchSize),
 		logger.Dur("flush_timeout", w.flushTimeout),
+		logger.Int("llm_parallelism", w.parallelism),
 	)
 
 	var batch []jobWithCtx
@@ -131,8 +136,14 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
-// flushBatch scores a batch of jobs and routes them.
-// ctx is the worker's root context; individual job contexts carry their trace spans.
+// subBatchResult holds the outcome of one parallel ScoreBatch call.
+type subBatchResult struct {
+	relevantIDs []string
+	errorIDs    []string
+}
+
+// flushBatch splits the batch into w.parallelism sub-batches, scores them in
+// parallel via ScoreBatch, then routes relevant jobs and marks irrelevant ones.
 func (w *Worker) flushBatch(ctx context.Context, batch []jobWithCtx) {
 	if len(batch) == 0 {
 		return
@@ -142,41 +153,70 @@ func (w *Worker) flushBatch(ctx context.Context, batch []jobWithCtx) {
 	batchCtx, span := tracing.Start(batch[0].ctx, "filter.worker.flushBatch")
 	defer tracing.End(span, nil)
 
-	inputs := make([]llm.ScorerInput, len(batch))
-	jobs := make([]ats.RawJob, len(batch))
-	for i, item := range batch {
-		inputs[i] = llm.ScorerInput{ID: item.job.ID, Title: item.job.Title, Location: item.job.Location}
-		jobs[i] = item.job
+	subBatches := splitIntoN(batch, w.parallelism)
+	resultCh := make(chan subBatchResult, len(subBatches))
+
+	var wg sync.WaitGroup
+	start := time.Now()
+
+	for _, sub := range subBatches {
+		sub := sub
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			inputs := make([]llm.ScorerInput, len(sub))
+			ids := make([]string, len(sub))
+			for i, item := range sub {
+				inputs[i] = llm.ScorerInput{ID: item.job.ID, Title: item.job.Title, Location: item.job.Location}
+				ids[i] = item.job.ID
+			}
+			relevantIDs, err := w.scorer.ScoreBatch(batchCtx, inputs)
+			if err != nil {
+				w.log.Error("ScoreBatch failed, marking sub-batch as error", err, logger.Int(logger.FieldBatch, len(sub)))
+				resultCh <- subBatchResult{errorIDs: ids}
+				return
+			}
+			resultCh <- subBatchResult{relevantIDs: relevantIDs}
+		}()
 	}
 
-	start := time.Now()
-	relevantIDs, err := w.scorer.ScoreBatch(batchCtx, inputs)
+	wg.Wait()
+	close(resultCh)
 	metrics.FilterLLMDuration.Observe(time.Since(start).Seconds())
 
-	if err != nil {
-		w.log.Error("ScoreBatch failed, marking batch as error", err, logger.Int(logger.FieldBatch, len(batch)))
-		ids := make([]string, len(batch))
-		for i, item := range batch {
-			ids[i] = item.job.ID
-		}
-		if merr := w.ledger.UpdateSeenReasonBatch(batchCtx, ids, model.SeenReasonError); merr != nil {
-			w.log.Error("mark error batch failed", merr)
-		}
-		metrics.FilterJobsTotal.WithLabelValues("error").Add(float64(len(batch)))
-		return
+	// Collect results from all sub-batches
+	var allRelevantIDs []string
+	var allErrorIDs []string
+	for r := range resultCh {
+		allRelevantIDs = append(allRelevantIDs, r.relevantIDs...)
+		allErrorIDs = append(allErrorIDs, r.errorIDs...)
 	}
 
-	relevant := make(map[string]bool, len(relevantIDs))
-	for _, id := range relevantIDs {
+	if len(allErrorIDs) > 0 {
+		if merr := w.ledger.UpdateSeenReasonBatch(batchCtx, allErrorIDs, model.SeenReasonError); merr != nil {
+			w.log.Error("mark error batch failed", merr)
+		}
+		metrics.FilterJobsTotal.WithLabelValues("error").Add(float64(len(allErrorIDs)))
+	}
+
+	relevant := make(map[string]bool, len(allRelevantIDs))
+	for _, id := range allRelevantIDs {
 		relevant[id] = true
+	}
+	errorSet := make(map[string]bool, len(allErrorIDs))
+	for _, id := range allErrorIDs {
+		errorSet[id] = true
 	}
 
 	var irrelevantIDs []string
-	for _, job := range jobs {
-		if relevant[job.ID] {
-			w.publishDetail(batchCtx, job)
+	for _, item := range batch {
+		if errorSet[item.job.ID] {
+			continue
+		}
+		if relevant[item.job.ID] {
+			w.publishDetail(batchCtx, item.job)
 		} else {
-			irrelevantIDs = append(irrelevantIDs, job.ID)
+			irrelevantIDs = append(irrelevantIDs, item.job.ID)
 		}
 	}
 
@@ -186,13 +226,15 @@ func (w *Worker) flushBatch(ctx context.Context, batch []jobWithCtx) {
 		}
 	}
 
-	metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(relevantIDs)))
+	metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(allRelevantIDs)))
 	metrics.FilterJobsTotal.WithLabelValues("irrelevant").Add(float64(len(irrelevantIDs)))
 
 	w.log.Info("batch scored",
 		logger.Int(logger.FieldBatch, len(batch)),
-		logger.Int(logger.FieldRelevant, len(relevantIDs)),
-		logger.Int("irrelevant", len(batch)-len(relevantIDs)),
+		logger.Int(logger.FieldRelevant, len(allRelevantIDs)),
+		logger.Int("irrelevant", len(irrelevantIDs)),
+		logger.Int("errors", len(allErrorIDs)),
+		logger.Int("sub_batches", len(subBatches)),
 	)
 }
 
@@ -205,4 +247,21 @@ func (w *Worker) publishDetail(ctx context.Context, job ats.RawJob) {
 	if err := w.publisher.Publish(ctx, kafka.TopicJobListingsFiltered, payload); err != nil {
 		w.log.Error("publish failed", err, logger.Str(logger.FieldJobID, job.ID))
 	}
+}
+
+// splitIntoN divides s into at most n roughly equal sub-slices.
+func splitIntoN(s []jobWithCtx, n int) [][]jobWithCtx {
+	if n <= 0 || n > len(s) {
+		n = len(s)
+	}
+	size := (len(s) + n - 1) / n // ceil division
+	chunks := make([][]jobWithCtx, 0, n)
+	for i := 0; i < len(s); i += size {
+		end := i + size
+		if end > len(s) {
+			end = len(s)
+		}
+		chunks = append(chunks, s[i:end])
+	}
+	return chunks
 }

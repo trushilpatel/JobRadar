@@ -71,7 +71,7 @@ func main() {
 
 	ledger := jobsvc.NewSeenLedgerStore(database)
 	worker := filter.NewWorker(consumer, producer, scorer, ledger,
-		cfg.ScorerBatchSize, cfg.ScorerFlushTimeoutSeconds, log)
+		cfg.ScorerBatchSize, cfg.ScorerFlushTimeoutSeconds, cfg.ScorerLLMParallelism, log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
