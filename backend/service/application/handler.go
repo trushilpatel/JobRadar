@@ -27,6 +27,7 @@ func (h *Handler) Register(r chi.Router) {
 	r.Patch("/jobs/{id}/applications/{app_id}/stage", h.UpdateStage)
 	r.Patch("/jobs/{id}/applications/{app_id}/note", h.UpdateNote)
 	r.Get("/applications", h.ListAll)
+	r.Patch("/applications/{id}/stage", h.UpdateStageByID)
 }
 
 // GET /jobs/:id/applications
@@ -101,6 +102,30 @@ func (h *Handler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.applications.UpdateStage(jobID, appID, input); err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+
+	handler.Respond(w, http.StatusOK, map[string]string{"app_id": appID, "stage": input.Stage})
+}
+
+// PATCH /applications/:id/stage — top-level shortcut used by the dashboard interviewing tracker
+func (h *Handler) UpdateStageByID(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "id")
+
+	var input UpdateStageInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+
+	if err := h.validator.ValidateUpdateStage(input); err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+
+	// jobID unused by UpdateStage — pass empty string
+	if err := h.applications.UpdateStage("", appID, input); err != nil {
 		handler.HandleError(w, err)
 		return
 	}

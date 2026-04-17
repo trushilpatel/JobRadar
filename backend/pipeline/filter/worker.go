@@ -126,7 +126,7 @@ func (w *Worker) Run(ctx context.Context) error {
 func (w *Worker) flushBatch(ctx context.Context, batch []ats.RawJob) {
 	inputs := make([]llm.ScorerInput, len(batch))
 	for i, job := range batch {
-		inputs[i] = llm.ScorerInput{ID: job.ID, Title: job.Title}
+		inputs[i] = llm.ScorerInput{ID: job.ID, Title: job.Title, Location: job.Location}
 	}
 
 	start := time.Now()

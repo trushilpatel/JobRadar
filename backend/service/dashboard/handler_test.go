@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -34,7 +35,7 @@ func newDashboardTestRouter(h *Handler) *chi.Mux {
 }
 
 func TestDashboardHandlerStats_OK(t *testing.T) {
-	h := NewHandler(&fakeDashboardValidator{}, &fakeDashboardService{stats: &StatsView{}})
+	h := NewHandler(&fakeDashboardValidator{}, &fakeDashboardService{stats: &StatsView{}}, nil, nil)
 	r := newDashboardTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/stats", nil)
@@ -53,6 +54,7 @@ func TestDashboardHandlerStats_ServiceError(t *testing.T) {
 	h := NewHandler(
 		&fakeDashboardValidator{},
 		&fakeDashboardService{err: domain.ErrInternal.WithMessage("db down")},
+		nil, nil,
 	)
 	r := newDashboardTestRouter(h)
 
@@ -69,7 +71,7 @@ func TestDashboardHandlerStats_ServiceError(t *testing.T) {
 }
 
 func TestDashboardHandlerActivity_OK(t *testing.T) {
-	h := NewHandler(&fakeDashboardValidator{}, &fakeDashboardService{activity: []ActivityView{}})
+	h := NewHandler(&fakeDashboardValidator{}, &fakeDashboardService{activity: []ActivityView{}}, nil, nil)
 	r := newDashboardTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/activity?days=7", nil)
@@ -85,6 +87,7 @@ func TestDashboardHandlerActivity_ValidationError(t *testing.T) {
 	h := NewHandler(
 		&fakeDashboardValidator{activityErr: &domain.ValidationError{Field: "days", Code: "INVALID_VALUE", Message: "days must be >= 1"}},
 		&fakeDashboardService{},
+		nil, nil,
 	)
 	r := newDashboardTestRouter(h)
 
@@ -101,6 +104,7 @@ func TestDashboardHandlerActivity_ServiceError(t *testing.T) {
 	h := NewHandler(
 		&fakeDashboardValidator{},
 		&fakeDashboardService{err: domain.ErrInternal.WithMessage("db down")},
+		nil, nil,
 	)
 	r := newDashboardTestRouter(h)
 
@@ -113,6 +117,56 @@ func TestDashboardHandlerActivity_ServiceError(t *testing.T) {
 	}
 }
 
+// fakePipelineService is a test double for PipelineService.
+type fakePipelineService struct {
+	stats *PipelineStats
+	err   error
+}
+
+func (f *fakePipelineService) GetPipelineStats(_ context.Context) (*PipelineStats, error) {
+	return f.stats, f.err
+}
+
+func TestDashboardHandlerPipeline_OK(t *testing.T) {
+	h := NewHandler(
+		&fakeDashboardValidator{},
+		&fakeDashboardService{},
+		nil,
+		&fakePipelineService{stats: &PipelineStats{TotalCompanies: 5, ActiveCompanies: 4}},
+	)
+	r := newDashboardTestRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/pipeline", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("got status %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"data"`) {
+		t.Errorf("body missing data envelope: %s", w.Body.String())
+	}
+}
+
+func TestDashboardHandlerPipeline_ServiceError(t *testing.T) {
+	h := NewHandler(
+		&fakeDashboardValidator{},
+		&fakeDashboardService{},
+		nil,
+		&fakePipelineService{err: domain.ErrInternal.WithMessage("db down")},
+	)
+	r := newDashboardTestRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/pipeline", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("got status %d, want 500", w.Code)
+	}
+}
+
 // Ensure test doubles implement interfaces.
 var _ Validator = (*fakeDashboardValidator)(nil)
 var _ Service = (*fakeDashboardService)(nil)
+var _ PipelineService = (*fakePipelineService)(nil)

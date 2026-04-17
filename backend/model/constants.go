@@ -57,6 +57,20 @@ const (
 	StageRejected    = "rejected"
 )
 
+// ApplicationDisplayStage — UI-facing stage groupings
+const (
+	DisplayStageWaiting      = "Waiting"
+	DisplayStageInterviewing = "Interviewing"
+	DisplayStageOffer        = "Offer received"
+)
+
+// VelocityTag
+const (
+	VelocitySpike  = "spike"
+	VelocityRising = "rising"
+	VelocityNormal = "normal"
+)
+
 // DiscardReason
 const (
 	DiscardReasonDismissed   = "user_dismissed"

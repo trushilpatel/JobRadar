@@ -143,3 +143,74 @@ export interface ActivityEvent {
   description: string
   time: string
 }
+
+// ── User Dashboard ──────────────────────────────────────────────────────────
+
+export interface ProgressStats {
+  applied_count: number
+  awaiting_reply: number
+  interviewing_count: number
+  interviewing_this_week: number
+  offer_count: number
+}
+
+export interface MarketStats {
+  new_since_yesterday: number
+  total_open: number
+  added_this_week: number
+  added_last_week: number
+  weekly_delta: number
+}
+
+export interface WeeklyCount {
+  week_start: string // "YYYY-MM-DD"
+  job_count: number
+}
+
+export interface InterviewRow {
+  application_id: number
+  job_id: string
+  company_name: string
+  job_title: string
+  stage: string
+  display_stage: string
+  stage_at: string
+}
+
+export interface CompanyVelocityRow {
+  company_id: string
+  company_name: string
+  week_current: number
+  week_1: number
+  week_2: number
+  week_3: number
+  multiplier: number
+  velocity_tag: 'spike' | 'rising' | 'normal'
+}
+
+export interface TechTrendRow {
+  tech: string
+  q1: number
+  q2: number
+  q3: number
+  q4: number
+  growth_pct: number
+  adoption_pct: number
+}
+
+export interface TechTrends {
+  total_companies: number
+  rising: TechTrendRow[]
+  new_entrants: TechTrendRow[]
+}
+
+export interface PipelineStats {
+  total_companies: number
+  active_companies: number
+  queued: number
+  crawling: number
+  awaiting_filter: number
+  awaiting_enrichment: number
+  new_jobs_24h: number
+  errors_24h: number
+}

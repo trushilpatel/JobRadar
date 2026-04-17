@@ -10,19 +10,33 @@ import (
 
 // Handler handles HTTP requests for the dashboard domain.
 type Handler struct {
-	validator Validator
-	dashboard Service
+	validator       Validator
+	dashboard       Service
+	userDashboard   UserDashboardService
+	pipelineService PipelineService
 }
 
 // NewHandler constructs a Handler.
-func NewHandler(v Validator, svc Service) *Handler {
-	return &Handler{validator: v, dashboard: svc}
+func NewHandler(v Validator, svc Service, userSvc UserDashboardService, pipelineSvc PipelineService) *Handler {
+	return &Handler{validator: v, dashboard: svc, userDashboard: userSvc, pipelineService: pipelineSvc}
 }
 
 // Register mounts all dashboard routes onto r.
 func (h *Handler) Register(r chi.Router) {
+	// Existing routes — unchanged
 	r.Get("/dashboard/stats", h.Stats)
 	r.Get("/dashboard/activity", h.Activity)
+
+	// User dashboard routes
+	r.Get("/dashboard/progress", h.Progress)
+	r.Get("/dashboard/market", h.Market)
+	r.Get("/dashboard/heatmap", h.Heatmap)
+	r.Get("/dashboard/interviews", h.Interviews)
+	r.Get("/dashboard/velocity", h.Velocity)
+	r.Get("/dashboard/tech-trends", h.TechTrends)
+
+	// Pipeline strip
+	r.Get("/dashboard/pipeline", h.Pipeline)
 }
 
 // GET /dashboard/stats
@@ -56,4 +70,81 @@ func (h *Handler) Activity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handler.Respond(w, http.StatusOK, activity)
+}
+
+// GET /dashboard/progress
+func (h *Handler) Progress(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.userDashboard.GetProgressStats()
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, stats)
+}
+
+// GET /dashboard/market
+func (h *Handler) Market(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.userDashboard.GetMarketStats()
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, stats)
+}
+
+// GET /dashboard/heatmap
+func (h *Handler) Heatmap(w http.ResponseWriter, r *http.Request) {
+	counts, err := h.userDashboard.GetHeatmap()
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, counts)
+}
+
+// GET /dashboard/interviews
+func (h *Handler) Interviews(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.userDashboard.GetInterviews()
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, rows)
+}
+
+// GET /dashboard/velocity?limit=10
+func (h *Handler) Velocity(w http.ResponseWriter, r *http.Request) {
+	limit := 10
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	rows, err := h.userDashboard.GetVelocity(limit)
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, rows)
+}
+
+// GET /dashboard/tech-trends
+func (h *Handler) TechTrends(w http.ResponseWriter, r *http.Request) {
+	trends, err := h.userDashboard.GetTechTrends()
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, trends)
+}
+
+// GET /dashboard/pipeline
+func (h *Handler) Pipeline(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.pipelineService.GetPipelineStats(r.Context())
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, stats)
 }

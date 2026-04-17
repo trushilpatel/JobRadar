@@ -23,7 +23,7 @@ func buildTestApp() *App {
 	scanH := scan.NewHandler(scan.NewValidator(), &fakeScanService{})
 	jobH := job.NewHandler(job.NewValidator(), &fakeJobService{})
 	appH := application.NewHandler(application.NewValidator(), &fakeAppService{})
-	dashH := dashboard.NewHandler(dashboard.NewValidator(), &fakeDashboardService{})
+	dashH := dashboard.NewHandler(dashboard.NewValidator(), &fakeDashboardService{}, nil, nil)
 	insightsH := insights.NewHandler(insights.NewValidator(), &fakeInsightsService{})
 	return NewApp(companyH, scanH, jobH, appH, dashH, insightsH)
 }
@@ -92,6 +92,7 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 		{http.MethodPost, "/companies/{id}/scan"},
 		{http.MethodGet, "/dashboard/stats"},
 		{http.MethodGet, "/dashboard/activity"},
+		{http.MethodGet, "/dashboard/pipeline"},
 		{http.MethodGet, "/insights/tech-stack"},
 		{http.MethodGet, "/insights/company-activity"},
 		{http.MethodGet, "/insights/funnel"},

@@ -9,6 +9,7 @@ package main
 import (
 	"github.com/trushilpatel/jobradar/api"
 	"github.com/trushilpatel/jobradar/config"
+	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/service/application"
 	"github.com/trushilpatel/jobradar/service/company"
 	"github.com/trushilpatel/jobradar/service/dashboard"
@@ -50,7 +51,15 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*api.App, error) {
 	insightsService := insights.NewService(insightsStore)
 	jobCountReader := provideJobCountReader(jobStore)
 	dashboardService := dashboard.NewService(scanLogReader, insightsService, jobCountReader)
-	dashboardHandler := dashboard.NewHandler(dashboardValidator, dashboardService)
+	userDashboardStore := dashboard.NewUserDashboardStore(db)
+	userDashboardService := dashboard.NewUserDashboardService(userDashboardStore, applicationStore)
+	lagReader, err := kafka.NewLagReader(cfg)
+	if err != nil {
+		return nil, err
+	}
+	pipelineStore := dashboard.NewPipelineStore(db)
+	pipelineService := dashboard.NewPipelineService(pipelineStore, lagReader)
+	dashboardHandler := dashboard.NewHandler(dashboardValidator, dashboardService, userDashboardService, pipelineService)
 	insightsValidator := insights.NewValidator()
 	insightsHandler := insights.NewHandler(insightsValidator, insightsService)
 	app := api.NewApp(handler, scanHandler, jobHandler, applicationHandler, dashboardHandler, insightsHandler)

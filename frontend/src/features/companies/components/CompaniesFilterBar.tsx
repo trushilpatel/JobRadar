@@ -14,14 +14,9 @@ interface CompaniesFilterBarProps {
 
   activeFilter: ActiveFilter
   onActiveFilterChange: (v: ActiveFilter) => void
-  totalCount: number
-  activeCount: number
 
   statusFilter: StatusFilter
   onStatusFilterChange: (v: StatusFilter) => void
-  errorCount: number
-  runningCount: number
-  queuedCount: number
 
   bulkToggling: boolean
   bulkAllActive: boolean
@@ -34,8 +29,6 @@ function Divider() {
 }
 
 export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
-  const inactiveCount = Math.max(0, p.totalCount - p.activeCount)
-
   return (
     <div className="px-6 py-3 border-b border-white/[0.07] flex items-center gap-2 flex-wrap">
       {/* Search */}
@@ -43,7 +36,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
         <input
           value={p.search}
-          onChange={e => p.onSearchChange(e.target.value)}
+          onChange={(e) => p.onSearchChange(e.target.value)}
           placeholder="Search companies…"
           className="pl-7 pr-7 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg placeholder-slate-500 focus:outline-none focus:border-violet-500 w-56 text-white"
         />
@@ -65,7 +58,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         selected={p.adapters}
         onChange={p.onAdaptersChange}
         placeholder="All adapters"
-        singularLabel={n => `${n} adapters`}
+        singularLabel={(n) => `${n} adapters`}
         searchPlaceholder="Search adapters…"
         addable
         onAdd={p.onAddAdapter}
@@ -81,9 +74,9 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         value={p.activeFilter}
         onChange={p.onActiveFilterChange}
         options={[
-          { value: 'all',      label: 'All',      count: p.totalCount,   accent: 'violet'  },
-          { value: 'active',   label: 'Active',   count: p.activeCount,  accent: 'emerald' },
-          { value: 'inactive', label: 'Inactive', count: inactiveCount,  accent: 'violet'  },
+          { value: 'all', label: 'All', accent: 'violet' },
+          { value: 'active', label: 'Active', accent: 'emerald' },
+          { value: 'inactive', label: 'Inactive', accent: 'violet' },
         ]}
       />
 
@@ -95,10 +88,10 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         value={p.statusFilter}
         onChange={p.onStatusFilterChange}
         options={[
-          { value: 'none',    label: 'Any',         accent: 'violet' },
-          { value: 'error',   label: '✕ Errors',    count: p.errorCount,   accent: 'red'   },
-          { value: 'running', label: '⟳ Running',   count: p.runningCount, accent: 'blue'  },
-          { value: 'queued',  label: '· Queued',    count: p.queuedCount,  accent: 'amber' },
+          { value: 'none', label: 'Any', accent: 'violet' },
+          { value: 'error', label: '✕ Errors', accent: 'red' },
+          { value: 'running', label: '⟳ Running', accent: 'blue' },
+          { value: 'queued', label: '· Queued', accent: 'amber' },
         ]}
       />
 
@@ -106,7 +99,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         <button
           type="button"
           onClick={p.onBulkToggle}
-          disabled={p.bulkToggling || p.totalCount === 0}
+          disabled={p.bulkToggling}
           className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
         >
           {p.bulkToggling ? <Loader2 size={12} className="animate-spin" /> : <Power size={12} />}

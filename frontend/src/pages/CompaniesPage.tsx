@@ -9,6 +9,7 @@ import {
   useCompanyActions,
   CompaniesHeader,
   CompaniesKpiStrip,
+  PipelineStrip,
   CompaniesFilterBar,
   CompaniesTable,
   CompanyDetailDrawer,
@@ -49,6 +50,8 @@ export function CompaniesPage() {
         onErrorToggle={() => c.setStatusFilter(c.statusFilter === 'error' ? 'none' : 'error')}
       />
 
+      <PipelineStrip />
+
       <CompaniesFilterBar
         search={c.search}
         onSearchChange={c.handleSearchChange}
@@ -60,13 +63,8 @@ export function CompaniesPage() {
         }}
         activeFilter={c.activeFilter}
         onActiveFilterChange={c.setActiveFilter}
-        totalCount={c.total}
-        activeCount={c.totalActive}
         statusFilter={c.statusFilter}
         onStatusFilterChange={c.setStatusFilter}
-        errorCount={c.counts.errors}
-        runningCount={c.counts.running}
-        queuedCount={c.counts.queued}
         bulkToggling={actions.bulkToggling}
         bulkAllActive={bulkAllActive}
         onBulkToggle={() => actions.bulkToggleActive(bulkAllActive)}

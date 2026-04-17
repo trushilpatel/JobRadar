@@ -45,7 +45,11 @@ func (s *geminiScorer) ScoreBatch(ctx context.Context, jobs []ScorerInput) ([]st
 
 	var sb strings.Builder
 	for i, j := range jobs {
-		fmt.Fprintf(&sb, "%d. [%s] %s\n", i+1, j.ID, j.Title)
+		loc := j.Location
+		if loc == "" {
+			loc = "Unknown"
+		}
+		fmt.Fprintf(&sb, "%d. [%s] %s | Location: %s\n", i+1, j.ID, j.Title, loc)
 	}
 
 	roles := strings.Join(s.targetRoles, ", ")
@@ -66,9 +70,11 @@ EXCLUDE: Internships, Co-ops, Apprenticeships, part-time.
 EXCLUDE: Non-engineering roles (Sales, Marketing, Design, Recruiting, Finance, Legal).
 
 LOCATION GUIDELINES
-INCLUDE: Positions explicitly located within the USA.
-INCLUDE: Positions listed as Remote (if the company is US-based or specifies US-remote).
-EXCLUDE: Any positions located outside of the USA
+INCLUDE: Positions with a US city, US state, or "United States" in the location.
+INCLUDE: Positions listed as "Remote" or "Remote - USA" or similar US-remote variants.
+INCLUDE: Positions with no location or "Unknown" location — assume US unless the title signals otherwise.
+EXCLUDE: Positions with a non-US city or country in the location (e.g. London, Toronto, Berlin, Sydney, India, Canada).
+EXCLUDE: Positions that are explicitly "Remote - [non-US country]" or list only non-US locations.
 
 When in doubt, INCLUDE the job. A borderline match included here can be filtered later. A relevant job excluded here is lost permanently.
 
@@ -116,7 +122,8 @@ var enrichSchema = &genai.Schema{
 		},
 	},
 	Required: []string{
-		"tech_stack", "summary", "remote", "country", "sponsorship",
+		"experience_years", "tech_stack", "salary_min", "salary_max", "salary_currency",
+		"summary", "remote", "country", "state", "sponsorship",
 		"requires_citizen", "security_clearance", "role_brief", "responsibilities", "role_category",
 	},
 }
@@ -133,13 +140,13 @@ Job posting text:
 %s
 
 Field instructions:
-- experience_years: minimum years of experience required as integer, or null if not stated
+- experience_years: Extract the minimum years of experience as an integer. Recognize all common phrasings: "3-5 years" → 3, "3+ years" → 3, "at least 3 years" → 3, "minimum 3 years" → 3, "3 to 5 years" → 3, "5 or more years" → 5. Treat "preferred", "ideally", "typically", and "we're looking for" the same as "required" — extract the number regardless. If no explicit number appears, infer from seniority: Entry/Junior/Associate/New Grad → 0, Mid/Mid-Level → 3, Senior/Sr → 5, Staff/Principal → 7. Return null only if no number and no seniority indicator appears anywhere in the posting.
 - tech_stack: array of key tools, languages, and frameworks explicitly mentioned
 - salary_min, salary_max: integers or null if not stated
 - salary_currency: Extract salary or salary range. if not found null.
 - summary: 2-3 sentence summary of the role only, do not include any information about company
 - remote: true if remote or hybrid, false if fully on-site
-- country: country where candidate must be based (e.g. "USA", "Canada"). Empty string if no restriction.
+- country: country where the candidate must be based. Use "USA" for any US city, US state, or "United States". Use the country name (e.g. "Canada", "UK") if the posting explicitly restricts to a non-US location. Empty string only if the posting has no location restriction at all (worldwide remote, no country mentioned).
 - state: US state abbreviation if restricted (e.g. "CA"), null otherwise
 - sponsorship: false ONLY if the posting contains explicit language such as "no sponsorship", "will not sponsor", "sponsorship not available", "must be authorized to work", "does not offer visa sponsorship", or similar denial phrases. Default true if not mentioned.
 - requires_citizen: true ONLY if the posting explicitly states "US Citizen", "US Citizenship required", "must be a US citizen", "Green Card required", or "must have permanent residency". Default false if not mentioned.

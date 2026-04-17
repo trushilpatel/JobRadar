@@ -13,7 +13,7 @@ FAILED=0
 
 # ── Format staged files (gofmt + prettier) ───────────────────────────────────
 info "Formatting staged files..."
-if npx lint-staged; then
+if ./node_modules/.bin/lint-staged; then
   pass "Formatting"
 else
   fail "Formatting failed"

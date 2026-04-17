@@ -3,10 +3,11 @@ package llm
 import "context"
 
 // ScorerInput is the minimal job data sent to the LLM for batch scoring.
-// We send title + id only — no full job text. Cheap and fast.
+// We send title + location + id — no full job text. Cheap and fast.
 type ScorerInput struct {
-	ID    string
-	Title string
+	ID       string
+	Title    string
+	Location string
 }
 
 // EnrichInput is the full job text sent to the LLM for detail extraction.

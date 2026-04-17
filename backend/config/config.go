@@ -73,8 +73,8 @@ func Load() *Config {
 		LLMModel:      getEnv("LLM_MODEL", "gemini-3.1-flash-lite-preview"),
 		LLMRateLimits: LLMRateLimits{
 			RPM:   getEnvInt("LLM_RPM", 15),
-			RPD:   getEnvInt("LLM_RPD", 500),
-			TPMIn: getEnvInt("LLM_TPM", 250000),
+			RPD:   getEnvInt("LLM_RPD", 1500),
+			TPMIn: getEnvInt("LLM_TPM", 1000000),
 		},
 		ScanIntervalMinutes:       getEnvInt("SCAN_INTERVAL_MINUTES", 1440), // default: 24h
 		ScanCompanyDelaySeconds:   getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 60),
