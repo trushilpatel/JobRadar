@@ -24,6 +24,7 @@ const (
 	FieldMethod   = "method"
 	FieldPath     = "path"
 	FieldStatus   = "status"
+	FieldQueueID  = "queue_id"
 )
 
 // Str creates a string field.

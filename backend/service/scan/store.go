@@ -30,8 +30,11 @@ type ScanQueueStore interface {
 	// MoveDown lowers this item one position in the queue.
 	MoveDown(id string) error
 
-	// ResetStuck resets processing rows that started more than staleDur ago.
+	// ResetStuck resets processing rows whose heartbeat (or started_at if no heartbeat yet) is older than staleDur.
 	ResetStuck(staleDur time.Duration) error
+
+	// UpdateHeartbeat refreshes the heartbeat timestamp for an in-progress row.
+	UpdateHeartbeat(id string) error
 
 	// ListQueue returns all active queue entries ordered by priority DESC, queued_at ASC.
 	ListQueue() ([]ScanQueueItem, error)
@@ -86,7 +89,7 @@ func (s *scanQueueStore) ClaimNext(ctx context.Context) (*ScanQueueItem, error) 
 			LIMIT 1
 			FOR UPDATE SKIP LOCKED
 		)
-		RETURNING id, company_id, status, source, priority, queued_at, started_at
+		RETURNING id, company_id, status, source, priority, queued_at, started_at, heartbeat_at
 	`).Scan(&item).Error
 	if err != nil {
 		return nil, err
@@ -149,10 +152,14 @@ func (s *scanQueueStore) MoveDown(id string) error {
 func (s *scanQueueStore) ResetStuck(staleDur time.Duration) error {
 	return s.db.Exec(`
 		UPDATE company_scan_queue
-		SET status = 'queued', started_at = NULL
+		SET status = 'queued', started_at = NULL, heartbeat_at = NULL
 		WHERE status = 'processing'
-		  AND started_at < NOW() - INTERVAL '1 second' * ?
+		  AND COALESCE(heartbeat_at, started_at) < NOW() - INTERVAL '1 second' * ?
 	`, int(staleDur.Seconds())).Error
+}
+
+func (s *scanQueueStore) UpdateHeartbeat(id string) error {
+	return s.db.Exec(`UPDATE company_scan_queue SET heartbeat_at = NOW() WHERE id = ?`, id).Error
 }
 
 func (s *scanQueueStore) ListQueue() ([]ScanQueueItem, error) {
@@ -162,7 +169,7 @@ func (s *scanQueueStore) ListQueue() ([]ScanQueueItem, error) {
 func (s *scanQueueStore) listOrdered() ([]ScanQueueItem, error) {
 	var items []ScanQueueItem
 	err := s.db.Raw(`
-		SELECT id, company_id, status, source, priority, queued_at, started_at
+		SELECT id, company_id, status, source, priority, queued_at, started_at, heartbeat_at
 		FROM company_scan_queue
 		ORDER BY priority DESC, queued_at ASC
 	`).Scan(&items).Error

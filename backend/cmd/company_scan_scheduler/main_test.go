@@ -22,9 +22,11 @@ type fakeCompanyReader struct {
 func (f *fakeCompanyReader) GetCompaniesDueForScan(_ int) ([]model.Company, error) {
 	return f.due, f.err
 }
-func (f *fakeCompanyReader) GetActiveCompanies() ([]model.Company, error)   { return nil, nil }
-func (f *fakeCompanyReader) GetAllCompanies() ([]model.Company, error)      { return nil, nil }
-func (f *fakeCompanyReader) GetCompanyByID(_ string) (model.Company, error) { return model.Company{}, nil }
+func (f *fakeCompanyReader) GetActiveCompanies() ([]model.Company, error) { return nil, nil }
+func (f *fakeCompanyReader) GetAllCompanies() ([]model.Company, error)    { return nil, nil }
+func (f *fakeCompanyReader) GetCompanyByID(_ string) (model.Company, error) {
+	return model.Company{}, nil
+}
 func (f *fakeCompanyReader) GetCompanies(_ companysvc.CompanyFilter, _, _ int) ([]model.Company, int64, error) {
 	return nil, 0, nil
 }
@@ -45,12 +47,13 @@ func (f *fakeScanQueueStore) Enqueue(companyID, _ string) error {
 func (f *fakeScanQueueStore) ClaimNext(_ context.Context) (*scansvc.ScanQueueItem, error) {
 	return nil, f.err
 }
-func (f *fakeScanQueueStore) Complete(_ string) error              { return f.err }
-func (f *fakeScanQueueStore) ResetStuck(_ time.Duration) error    { return f.err }
+func (f *fakeScanQueueStore) Complete(_ string) error                     { return f.err }
+func (f *fakeScanQueueStore) ResetStuck(_ time.Duration) error            { return f.err }
 func (f *fakeScanQueueStore) ListQueue() ([]scansvc.ScanQueueItem, error) { return nil, f.err }
-func (f *fakeScanQueueStore) MoveDown(_ string) error { return f.err }
-func (f *fakeScanQueueStore) MoveUp(_ string) error   { return f.err }
-func (f *fakeScanQueueStore) Remove(_ string) error   { return f.err }
+func (f *fakeScanQueueStore) MoveDown(_ string) error                     { return f.err }
+func (f *fakeScanQueueStore) MoveUp(_ string) error                       { return f.err }
+func (f *fakeScanQueueStore) Remove(_ string) error                       { return f.err }
+func (f *fakeScanQueueStore) UpdateHeartbeat(_ string) error              { return f.err }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

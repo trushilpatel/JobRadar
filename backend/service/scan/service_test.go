@@ -32,6 +32,7 @@ func (f *fakeQueueStore) Remove(id string) error {
 func (f *fakeQueueStore) MoveUp(id string) error           { return f.err }
 func (f *fakeQueueStore) MoveDown(id string) error         { return f.err }
 func (f *fakeQueueStore) ResetStuck(d time.Duration) error { return f.err }
+func (f *fakeQueueStore) UpdateHeartbeat(id string) error  { return f.err }
 func (f *fakeQueueStore) ListQueue() ([]ScanQueueItem, error) {
 	return f.items, f.err
 }

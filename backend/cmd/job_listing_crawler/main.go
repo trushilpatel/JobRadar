@@ -20,7 +20,8 @@ import (
 )
 
 const pollInterval = 10 * time.Second
-const stuckTimeout = 30 * time.Minute
+const stuckTimeout = 120 * time.Second
+const heartbeatInterval = 30 * time.Second
 
 func main() {
 	cfg := config.Load()
@@ -78,11 +79,15 @@ func main() {
 	pollAndProcess(ctx, log, queue, engine, companyDelay)
 
 	ticker := time.NewTicker(pollInterval)
+
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
+			if err := queue.ResetStuck(stuckTimeout); err != nil {
+				log.Error("failed to reset stuck queue items", err)
+			}
 			pollAndProcess(ctx, log, queue, engine, companyDelay)
 		case <-ctx.Done():
 			log.Info("shutting down")
@@ -91,7 +96,7 @@ func main() {
 	}
 }
 
-func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.ScanQueueStore, engine *crawler.Engine, companyDelay time.Duration) {
+func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.ClaimNexter, engine *crawler.Engine, companyDelay time.Duration) {
 	item, err := queue.ClaimNext(ctx)
 	if err != nil {
 		log.Error("failed to claim queue item", err)
@@ -107,6 +112,9 @@ func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.ScanQu
 		logger.Str("source", item.Source),
 	)
 
+	stopHeartbeat := startHeartbeat(ctx, queue, item.ID, heartbeatInterval, log)
+	defer stopHeartbeat()
+
 	engine.RunForCompany(ctx, item.CompanyID)
 
 	if err := queue.Complete(item.ID); err != nil {
@@ -120,4 +128,29 @@ func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.ScanQu
 		case <-ctx.Done():
 		}
 	}
+}
+
+type heartbeater interface {
+	UpdateHeartbeat(id string) error
+}
+
+// startHeartbeat ticks every interval and updates heartbeat_at in the DB for the
+// given queue row. Call the returned stop func (or defer it) to end the goroutine.
+func startHeartbeat(ctx context.Context, q heartbeater, id string, interval time.Duration, log logger.Logger) func() {
+	hbCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := q.UpdateHeartbeat(id); err != nil {
+					log.Warn("heartbeat update failed", logger.Str(logger.FieldQueueID, id), logger.Err(err))
+				}
+			case <-hbCtx.Done():
+				return
+			}
+		}
+	}()
+	return cancel
 }
