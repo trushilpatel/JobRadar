@@ -1,14 +1,20 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { Building2, Briefcase, LayoutDashboard, Send, BarChart2, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import {
+  Building2,
+  Briefcase,
+  LayoutDashboard,
+  BarChart2,
+  ChevronsLeft,
+  ChevronsRight,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const nav: { to: string; label: string; icon: React.ReactNode }[] = [
-  { to: '/dashboard',    label: 'Dashboard',    icon: <LayoutDashboard size={16} /> },
-  { to: '/companies',    label: 'Companies',    icon: <Building2 size={16} /> },
-  { to: '/jobs',         label: 'Jobs',         icon: <Briefcase size={16} /> },
-  { to: '/applications', label: 'Applications', icon: <Send size={16} /> },
-  { to: '/insights',     label: 'Insights',     icon: <BarChart2 size={16} /> },
+  { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
+  { to: '/companies', label: 'Companies', icon: <Building2 size={16} /> },
+  { to: '/jobs', label: 'Jobs', icon: <Briefcase size={16} /> },
+  { to: '/insights', label: 'Insights', icon: <BarChart2 size={16} /> },
 ]
 
 export function Sidebar() {
@@ -22,10 +28,12 @@ export function Sidebar() {
       )}
     >
       {/* Logo + collapse toggle */}
-      <div className={cn(
-        'flex items-center border-b border-white/[0.07] h-[57px]',
-        collapsed ? 'justify-center px-0' : 'justify-between px-5'
-      )}>
+      <div
+        className={cn(
+          'flex items-center border-b border-white/[0.07] h-[57px]',
+          collapsed ? 'justify-center px-0' : 'justify-between px-5'
+        )}
+      >
         {!collapsed && (
           <div>
             <span className="text-white font-semibold tracking-tight">JobRadar</span>
@@ -33,7 +41,7 @@ export function Sidebar() {
           </div>
         )}
         <button
-          onClick={() => setCollapsed(v => !v)}
+          onClick={() => setCollapsed((v) => !v)}
           className="p-1.5 text-slate-500 hover:text-white hover:bg-white/[0.06] rounded-md transition-colors shrink-0"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >

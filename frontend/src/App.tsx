@@ -6,7 +6,6 @@ import { Sidebar } from '@/components/Sidebar'
 import { CompaniesPage } from '@/pages/CompaniesPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { JobsPage } from '@/pages/JobsPage'
-import { ApplicationsPage } from '@/pages/ApplicationsPage'
 import { InsightsPage } from '@/pages/InsightsPage'
 
 export default function App() {
@@ -22,7 +21,6 @@ export default function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/companies" element={<CompaniesPage />} />
               <Route path="/jobs" element={<JobsPage />} />
-              <Route path="/applications" element={<ApplicationsPage />} />
               <Route path="/insights" element={<InsightsPage />} />
             </Routes>
           </main>
