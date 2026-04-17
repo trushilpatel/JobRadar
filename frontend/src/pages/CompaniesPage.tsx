@@ -8,7 +8,6 @@ import {
   useCompanies,
   useCompanyActions,
   CompaniesHeader,
-  CompaniesKpiStrip,
   PipelineStrip,
   CompaniesFilterBar,
   CompaniesTable,
@@ -33,24 +32,16 @@ export function CompaniesPage() {
       <CompaniesHeader
         total={c.total}
         totalActive={c.totalActive}
-        errorCount={c.counts.errors}
         loading={c.loading}
         onRefresh={c.refetch}
         onAddClick={() => setAddOpen(true)}
-        onErrorBadgeClick={() => c.setStatusFilter(c.statusFilter === 'error' ? 'none' : 'error')}
       />
 
-      <CompaniesKpiStrip
-        total={c.total}
-        totalActive={c.totalActive}
-        running={c.counts.running}
-        queued={c.counts.queued}
-        errors={c.counts.errors}
+      <PipelineStrip
+        errorCount={c.counts.errors}
         errorFilterActive={c.statusFilter === 'error'}
         onErrorToggle={() => c.setStatusFilter(c.statusFilter === 'error' ? 'none' : 'error')}
       />
-
-      <PipelineStrip />
 
       <CompaniesFilterBar
         search={c.search}

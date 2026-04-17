@@ -55,7 +55,7 @@ interface JobFiltersProps {
   onReset: () => void
 }
 
-const EXP_OPTIONS = ['0-2', '3-5', '5+'] as const
+const EXP_OPTIONS = ['0-5', '5+'] as const
 const DATE_OPTIONS: { value: DateFilter; label: string }[] = [
   { value: 'all', label: 'Any' },
   { value: '7d', label: '7d' },
@@ -111,7 +111,7 @@ export function JobFilters({
 
       {EXP_OPTIONS.map((opt) => (
         <FilterPill key={opt} active={expFilter.includes(opt)} onClick={() => toggleExp(opt)}>
-          {opt === '5+' ? '5+ yrs' : `${opt} yrs`}
+          {opt === '5+' ? '5+ yrs' : '≤ 5 yrs'}
         </FilterPill>
       ))}
 

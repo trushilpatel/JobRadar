@@ -95,24 +95,23 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         ]}
       />
 
-      <span className="ml-auto flex items-center gap-3">
-        <button
-          type="button"
-          onClick={p.onBulkToggle}
-          disabled={p.bulkToggling}
-          className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-        >
-          {p.bulkToggling ? <Loader2 size={12} className="animate-spin" /> : <Power size={12} />}
-          {p.bulkAllActive ? 'Deactivate all' : 'Activate all'}
-        </button>
-        <button
-          type="button"
-          onClick={p.onReset}
-          className="text-[11px] text-slate-500 hover:text-slate-300"
-        >
-          Reset
-        </button>
-      </span>
+      <button
+        type="button"
+        onClick={p.onReset}
+        className="ml-auto text-[11px] text-slate-500 hover:text-slate-300"
+      >
+        Reset
+      </button>
+
+      <button
+        type="button"
+        onClick={p.onBulkToggle}
+        disabled={p.bulkToggling}
+        className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+      >
+        {p.bulkToggling ? <Loader2 size={12} className="animate-spin" /> : <Power size={12} />}
+        {p.bulkAllActive ? 'Deactivate all' : 'Activate all'}
+      </button>
     </div>
   )
 }

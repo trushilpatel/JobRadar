@@ -13,7 +13,7 @@ export function useJobs() {
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
   const [remoteFilter, setRemoteFilter] = useState(false)
   const [onSiteFilter, setOnSiteFilter] = useState(false)
-  const [expFilter, setExpFilter] = useState<string[]>(['0-2', '3-5'])
+  const [expFilter, setExpFilter] = useState<string[]>([])
   const [dateFilter, setDateFilter] = useState<DateFilter>('all')
 
   // Search
@@ -77,7 +77,7 @@ export function useJobs() {
     setSelectedCompanies([])
     setRemoteFilter(false)
     setOnSiteFilter(false)
-    setExpFilter(['0-2', '3-5'])
+    setExpFilter([])
     setDateFilter('all')
     setPage(1)
   }

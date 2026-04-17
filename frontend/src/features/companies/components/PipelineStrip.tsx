@@ -45,10 +45,22 @@ function Skeleton() {
   )
 }
 
-function PipelineContent({ stats }: { stats: PipelineStats }) {
+interface PipelineContentProps {
+  stats: PipelineStats
+  errorCount: number
+  errorFilterActive: boolean
+  onErrorToggle: () => void
+}
+
+function PipelineContent({
+  stats,
+  errorCount,
+  errorFilterActive,
+  onErrorToggle,
+}: PipelineContentProps) {
   return (
-    <div className="flex items-center">
-      <Stage label="Total Companies" value={stats.total_companies} />
+    <div className="flex items-center w-full">
+      <Stage label="Total" value={stats.total_companies} />
       <Arrow />
       <Stage label="Active" value={stats.active_companies} valueClass="text-emerald-400" />
       <Arrow />
@@ -64,23 +76,51 @@ function PipelineContent({ stats }: { stats: PipelineStats }) {
         valueClass="text-violet-400"
       />
       <Arrow />
-      <Stage label="New Jobs" value={stats.new_jobs_24h} valueClass="text-emerald-400" />
+      <Stage label="New Jobs (24h)" value={stats.new_jobs_24h} valueClass="text-emerald-400" />
 
-      {stats.errors_24h > 0 && (
-        <span className="ml-6 text-[11px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-2.5 py-1 whitespace-nowrap">
-          ⚠ {stats.errors_24h} {stats.errors_24h === 1 ? 'Error' : 'Errors'}
-        </span>
+      {errorCount > 0 && (
+        <button
+          type="button"
+          onClick={onErrorToggle}
+          className={cn(
+            'ml-auto text-[11px] font-medium rounded-full px-2.5 py-1 whitespace-nowrap border transition-colors',
+            errorFilterActive
+              ? 'text-red-300 bg-red-500/20 border-red-500/40'
+              : 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20'
+          )}
+        >
+          ⚠ {errorCount} {errorCount === 1 ? 'scan error' : 'scan errors'}
+        </button>
       )}
     </div>
   )
 }
 
-export function PipelineStrip() {
+interface PipelineStripProps {
+  errorCount: number
+  errorFilterActive: boolean
+  onErrorToggle: () => void
+}
+
+export function PipelineStrip({
+  errorCount,
+  errorFilterActive,
+  onErrorToggle,
+}: PipelineStripProps) {
   const { data, isLoading } = usePipelineStats()
 
   return (
     <div className="px-6 py-3 border-b border-white/[0.07] overflow-x-auto">
-      {isLoading || !data ? <Skeleton /> : <PipelineContent stats={data} />}
+      {isLoading || !data ? (
+        <Skeleton />
+      ) : (
+        <PipelineContent
+          stats={data}
+          errorCount={errorCount}
+          errorFilterActive={errorFilterActive}
+          onErrorToggle={onErrorToggle}
+        />
+      )}
     </div>
   )
 }

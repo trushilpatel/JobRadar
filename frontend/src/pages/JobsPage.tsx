@@ -59,7 +59,7 @@ export function JobsPage() {
     jobs.selectedCompanies.length > 0,
     jobs.remoteFilter,
     jobs.onSiteFilter,
-    JSON.stringify(jobs.expFilter) !== JSON.stringify(['0-2', '3-5']),
+    jobs.expFilter.length > 0,
     jobs.dateFilter !== 'all',
   ].filter(Boolean).length
 
