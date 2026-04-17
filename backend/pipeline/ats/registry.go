@@ -3,6 +3,7 @@ package ats
 import (
 	"fmt"
 
+	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/apple"
 	"github.com/trushilpatel/jobradar/pipeline/ats/ashby"
@@ -21,12 +22,12 @@ import (
 // type-assert to check (see job_post_analyzer).
 // For the Google adapter, use RegistryWithGoogleConfig to pass scraper settings.
 func Registry(adapterType string) (Adapter, error) {
-	return RegistryWithGoogleConfig(adapterType, google.Config{})
+	return RegistryWithGoogleConfig(adapterType, google.Config{}, logger.NewNoop())
 }
 
-// RegistryWithGoogleConfig is like Registry but passes scraper config to the
-// Google adapter. For all other adapter types the googleCfg is ignored.
-func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config) (Adapter, error) {
+// RegistryWithGoogleConfig is like Registry but passes scraper config and a logger
+// to the Google adapter. For all other adapter types googleCfg and log are ignored.
+func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config, log logger.Logger) (Adapter, error) {
 	switch adapterType {
 	case model.AdapterGreenhouse:
 		return &greenhouse.Greenhouse{}, nil
@@ -38,7 +39,7 @@ func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config) (Adap
 		if googleCfg == (google.Config{}) {
 			return google.NewDefault(), nil
 		}
-		return google.New(googleCfg), nil
+		return google.New(googleCfg, log), nil
 	case model.AdapterNetflix:
 		return netflix.New(), nil
 	case model.AdapterUber:

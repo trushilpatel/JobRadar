@@ -86,7 +86,7 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 		logger.Str("name", company.Name),
 	)
 
-	adp, err := ats.RegistryWithGoogleConfig(company.AdapterType, e.googleCfg)
+	adp, err := ats.RegistryWithGoogleConfig(company.AdapterType, e.googleCfg, companyLog)
 	if err != nil {
 		errMsg := fmt.Sprintf("no adapter for type %q: %v", company.AdapterType, err)
 		companyLog.Error("no adapter found", err)

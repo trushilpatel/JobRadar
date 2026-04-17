@@ -1,13 +1,13 @@
 .PHONY: dev dev-frontend dev-backend \
         build build-frontend build-backend \
         run-api run-scan run-scorer run-enricher \
-        migrate db-truncate lint tsc \
+        migrate scan-google db-truncate lint tsc \
         test test-short test-unit \
         test-api test-workers test-scheduler test-llm \
         test-adapters \
         test-adapter-greenhouse test-adapter-lever test-adapter-ashby \
         docker-up docker-down \
-        up down logs build-docker \
+        up rebuild rebuild-backend rebuild-crawler rebuild-frontend down logs build-docker \
         install-hooks \
         help
 
@@ -53,6 +53,9 @@ run-scheduler: ## Run scan scheduler (enqueues due companies)
 
 migrate: ## Run database migrations (goose up)
 	cd backend && go run ./cmd/migrate
+
+scan-google: ## Manually trigger a Google careers scan (bypasses cooldown)
+	curl -s -X POST http://localhost:8080/companies/google/scan | jq .
 
 db-truncate: ## Truncate all tables except companies (keeps company list intact)
 	docker exec -it jobradar_postgres psql -U postgres -d jobradar -c \
@@ -117,8 +120,20 @@ docker-logs: ## Tail docker-compose logs
 
 # ── Full stack ────────────────────────────────────────────────────────────────
 
-up: ## Build backend + frontend images and start the entire stack
+up: ## Start the stack using existing images (fast — no rebuild)
+	docker-compose up -d
+
+rebuild: ## Rebuild all images then start (use after code changes)
 	DOCKER_BUILDKIT=1 docker-compose up -d --build
+
+rebuild-backend: ## Rebuild backend image only (api/scheduler/filter/enricher)
+	DOCKER_BUILDKIT=1 docker-compose up -d --build api scheduler filter enricher migrate
+
+rebuild-crawler: ## Rebuild crawler image only
+	DOCKER_BUILDKIT=1 docker-compose up -d --build crawler
+
+rebuild-frontend: ## Rebuild frontend image only
+	DOCKER_BUILDKIT=1 docker-compose up -d --build frontend
 
 down: ## Stop and remove all containers (keeps volumes)
 	docker-compose down

@@ -26,3 +26,6 @@ coverage.out
 # Google scraper local test output
 backend/internal/ats_fetcher/google/scraper/jobs.json
 backend/internal/ats_fetcher/google/scraper/logs.json
+
+# Git Worktrees (isolated agent workspaces)
+.worktrees/

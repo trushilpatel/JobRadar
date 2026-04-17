@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
 )
 
@@ -32,7 +33,7 @@ func TestNew_StoresConfig(t *testing.T) {
 		EnrichMinMs: 3000,
 		EnrichMaxMs: 5000,
 	}
-	g := New(cfg)
+	g := New(cfg, logger.NewNoop())
 	if g.cfg.MinDelayMs != 5000 {
 		t.Errorf("MinDelayMs: got %d, want 5000", g.cfg.MinDelayMs)
 	}
@@ -257,7 +258,7 @@ func TestConvertToPipelineTypes_NilFullContentWhenScraperTimedOut(t *testing.T) 
 // ── FetchJobs — scraper not found ───────────────────────────────────────────
 
 func TestFetchJobs_ScraperNotFound(t *testing.T) {
-	g := &Google{cfg: defaultConfig(), scraperDir: "/nonexistent/path"}
+	g := &Google{cfg: defaultConfig(), log: logger.NewNoop(), scraperDir: "/nonexistent/path"}
 	_, err := g.FetchJobs(context.Background(), "google")
 	if err == nil {
 		t.Fatal("expected error when scraper not found")
@@ -293,7 +294,7 @@ func TestFetchJobs_MockScraper_Success(t *testing.T) {
 	`
 	writeScript(t, dir, fakeScript)
 
-	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	g := &Google{cfg: defaultConfig(), log: logger.NewNoop(), scraperDir: dir}
 	result, err := g.FetchJobs(context.Background(), "google")
 	if err != nil {
 		t.Fatalf("FetchJobs failed: %v", err)
@@ -321,7 +322,7 @@ func TestFetchJobs_MockScraper_EmptyResult(t *testing.T) {
 	dir := t.TempDir()
 	writeScript(t, dir, `process.stdout.write("[]");`)
 
-	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	g := &Google{cfg: defaultConfig(), log: logger.NewNoop(), scraperDir: dir}
 	result, err := g.FetchJobs(context.Background(), "google")
 	if err != nil {
 		t.Fatalf("FetchJobs failed: %v", err)
@@ -335,7 +336,7 @@ func TestFetchJobs_MockScraper_ErrorResponse(t *testing.T) {
 	dir := t.TempDir()
 	writeScript(t, dir, `process.stdout.write(JSON.stringify({error: "page blocked"})); process.exit(1);`)
 
-	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	g := &Google{cfg: defaultConfig(), log: logger.NewNoop(), scraperDir: dir}
 	_, err := g.FetchJobs(context.Background(), "google")
 	if err == nil {
 		t.Fatal("expected error when scraper returns error")
@@ -346,7 +347,7 @@ func TestFetchJobs_MockScraper_InvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	writeScript(t, dir, `process.stdout.write("this is not json");`)
 
-	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	g := &Google{cfg: defaultConfig(), log: logger.NewNoop(), scraperDir: dir}
 	_, err := g.FetchJobs(context.Background(), "google")
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
@@ -381,7 +382,7 @@ func TestFetchJobs_MockScraper_MultipleJobs(t *testing.T) {
 	`
 	writeScript(t, dir, fakeScript)
 
-	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	g := &Google{cfg: defaultConfig(), log: logger.NewNoop(), scraperDir: dir}
 	result, err := g.FetchJobs(context.Background(), "google")
 	if err != nil {
 		t.Fatalf("FetchJobs failed: %v", err)
@@ -411,7 +412,7 @@ func TestFetchJobs_MockScraper_MissingFullContent(t *testing.T) {
 	`
 	writeScript(t, dir, fakeScript)
 
-	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	g := &Google{cfg: defaultConfig(), log: logger.NewNoop(), scraperDir: dir}
 	result, err := g.FetchJobs(context.Background(), "google")
 	if err != nil {
 		t.Fatalf("FetchJobs failed: %v", err)
@@ -456,6 +457,7 @@ func TestFetchJobs_ConfigPassedToNode(t *testing.T) {
 			EnrichMinMs: 1000,
 			EnrichMaxMs: 2000,
 		},
+		log:        logger.NewNoop(),
 		scraperDir: dir,
 	}
 	result, err := g.FetchJobs(context.Background(), "google")
@@ -478,7 +480,7 @@ func TestFetchJobs_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	g := &Google{cfg: defaultConfig(), log: logger.NewNoop(), scraperDir: dir}
 	_, err := g.FetchJobs(ctx, "google")
 	if err == nil {
 		t.Fatal("expected error when context is cancelled")
@@ -488,7 +490,7 @@ func TestFetchJobs_ContextCancelled(t *testing.T) {
 // ── resolveScraperDir ────────────────────────────────────────────────────────
 
 func TestResolveScraperDir_ExplicitOverride(t *testing.T) {
-	g := &Google{scraperDir: "/explicit/path"}
+	g := &Google{log: logger.NewNoop(), scraperDir: "/explicit/path"}
 	if got := g.resolveScraperDir(); got != "/explicit/path" {
 		t.Errorf("resolveScraperDir() = %q, want /explicit/path", got)
 	}
@@ -498,7 +500,7 @@ func TestResolveScraperDir_EnvVar(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("GOOGLE_SCRAPER_DIR", dir)
 
-	g := &Google{}
+	g := &Google{log: logger.NewNoop()}
 	if got := g.resolveScraperDir(); got != dir {
 		t.Errorf("resolveScraperDir() = %q, want %q (from GOOGLE_SCRAPER_DIR)", got, dir)
 	}
@@ -506,7 +508,7 @@ func TestResolveScraperDir_EnvVar(t *testing.T) {
 
 func TestResolveScraperDir_ExplicitTakesPrecedenceOverEnv(t *testing.T) {
 	t.Setenv("GOOGLE_SCRAPER_DIR", "/from-env")
-	g := &Google{scraperDir: "/explicit"}
+	g := &Google{log: logger.NewNoop(), scraperDir: "/explicit"}
 	if got := g.resolveScraperDir(); got != "/explicit" {
 		t.Errorf("expected explicit override to win, got %q", got)
 	}
@@ -553,7 +555,7 @@ func TestFetchJobs_MockScraper_ErrorInBodyExitZero(t *testing.T) {
 	dir := t.TempDir()
 	writeScript(t, dir, `process.stdout.write(JSON.stringify({error: "blocked by captcha"}));`)
 
-	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	g := &Google{cfg: defaultConfig(), log: logger.NewNoop(), scraperDir: dir}
 	_, err := g.FetchJobs(context.Background(), "google")
 	if err == nil {
 		t.Fatal("expected error for error-body response with exit 0")
@@ -568,7 +570,7 @@ func TestFetchJobs_MockScraper_EmptyStdout(t *testing.T) {
 	dir := t.TempDir()
 	writeScript(t, dir, `// writes nothing`)
 
-	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	g := &Google{cfg: defaultConfig(), log: logger.NewNoop(), scraperDir: dir}
 	_, err := g.FetchJobs(context.Background(), "google")
 	if err == nil {
 		t.Fatal("expected error for empty scraper stdout")
@@ -599,7 +601,7 @@ func TestFetchJobs_MockScraper_ExtraFields(t *testing.T) {
 	`
 	writeScript(t, dir, fakeScript)
 
-	g := &Google{cfg: defaultConfig(), scraperDir: dir}
+	g := &Google{cfg: defaultConfig(), log: logger.NewNoop(), scraperDir: dir}
 	result, err := g.FetchJobs(context.Background(), "google")
 	if err != nil {
 		t.Fatalf("FetchJobs failed with extra fields: %v", err)
@@ -630,7 +632,7 @@ func TestFetchJobs_MockScraper_EmploymentTypes(t *testing.T) {
 			}]));`
 			writeScript(t, dir, script)
 
-			g := &Google{cfg: defaultConfig(), scraperDir: dir}
+			g := &Google{cfg: defaultConfig(), log: logger.NewNoop(), scraperDir: dir}
 			result, err := g.FetchJobs(context.Background(), "google")
 			if err != nil {
 				t.Fatalf("FetchJobs failed: %v", err)
