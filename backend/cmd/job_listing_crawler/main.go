@@ -58,7 +58,7 @@ func main() {
 	ledger := jobsvc.NewSeenLedgerStore(database)
 	scanLog := scansvc.NewLogStore(database)
 	queue := scansvc.NewQueueStore(database)
-	recorder := scansvc.NewCrawlerService(scanLog, companies)
+	recorder := scansvc.NewCrawlerService(scanLog)
 
 	companyDelay := time.Duration(cfg.ScanCompanyDelaySeconds) * time.Second
 	googleCfg := google.Config{

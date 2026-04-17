@@ -1,10 +1,17 @@
 package company
 
 import (
+	"context"
 	"time"
 
 	"github.com/trushilpatel/jobradar/model"
 )
+
+// ScanHistoryReader is the narrow interface the company service needs to populate
+// per-company scan history in list responses. Implemented by scan.ScanLogStore.
+type ScanHistoryReader interface {
+	GetScanHistories(ctx context.Context, companyIDs []string) (map[string][]bool, error)
+}
 
 // Config holds per-service configuration for the company domain.
 type Config struct {
@@ -25,10 +32,13 @@ type CompanyListResult struct {
 	TotalActive int64 // total active companies (always unfiltered)
 }
 
-// CompanyView embeds a Company and adds the computed next_scan_at field.
+// CompanyView embeds a Company and adds computed fields.
 type CompanyView struct {
 	model.Company
 	NextScanAt *time.Time `json:"next_scan_at"`
+	// ScanHistory holds the last ≤10 scan outcomes ordered oldest→newest.
+	// true=success, false=error. nil when history is unavailable.
+	ScanHistory []bool `json:"scan_history,omitempty"`
 }
 
 // CreateCompanyInput is the validated input for creating a new company.

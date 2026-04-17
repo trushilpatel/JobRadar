@@ -32,8 +32,6 @@ export function CompaniesPage() {
       <CompaniesHeader
         total={c.total}
         totalActive={c.totalActive}
-        loading={c.loading}
-        onRefresh={c.refetch}
         onAddClick={() => setAddOpen(true)}
       />
 

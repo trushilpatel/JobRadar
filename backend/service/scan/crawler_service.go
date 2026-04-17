@@ -24,22 +24,17 @@ type ScanResult struct {
 	ErrMsg       string // empty string means success
 }
 
-// companyScanUpdater is the narrow interface for updating company scan status.
-type companyScanUpdater interface {
-	UpdateScanStatus(ctx context.Context, id, status string) error
-}
-
 type crawlerService struct {
-	log     ScanLogWriter      // writes company_scan_log rows
-	company companyScanUpdater // updates companies.last_scan_at + last_scan_status
+	log ScanLogWriter // writes company_scan_log rows + updates company status atomically
 }
 
-// NewCrawlerService constructs a CrawlerService from a log writer and a company scan updater.
-func NewCrawlerService(log ScanLogWriter, company companyScanUpdater) CrawlerService {
-	return &crawlerService{log: log, company: company}
+// NewCrawlerService constructs a CrawlerService.
+func NewCrawlerService(log ScanLogWriter) CrawlerService {
+	return &crawlerService{log: log}
 }
 
-// RecordScanResult writes the scan log entry and updates the company's scan status.
+// RecordScanResult atomically writes the scan log entry and updates the company's
+// last_scan_at / last_scan_status in a single transaction.
 func (c *crawlerService) RecordScanResult(ctx context.Context, companyID string, result ScanResult) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.crawlerservice.RecordScanResult")
 	defer tracing.End(span, &err)
@@ -49,11 +44,6 @@ func (c *crawlerService) RecordScanResult(ctx context.Context, companyID string,
 		status = model.ScanStatusError
 		errPtr = &result.ErrMsg
 	}
-
 	durationMs := int(result.Duration.Milliseconds())
-	if err := c.log.InsertCompanyScanLog(ctx, companyID, result.FetchedCount, result.NewCount, durationMs, errPtr); err != nil {
-		return err
-	}
-
-	return c.company.UpdateScanStatus(ctx, companyID, status)
+	return c.log.RecordScanResult(ctx, companyID, status, result.FetchedCount, result.NewCount, durationMs, errPtr)
 }

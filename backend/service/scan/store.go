@@ -44,11 +44,18 @@ type ScanQueueStore interface {
 // ScanLogWriter records scan summaries.
 type ScanLogWriter interface {
 	InsertCompanyScanLog(ctx context.Context, companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) error
+	// RecordScanResult atomically writes the scan log row and updates the company's
+	// last_scan_at / last_scan_status in a single transaction.
+	// status must be "ok" or "error".
+	RecordScanResult(ctx context.Context, companyID, status string, jobsFetched, jobsNew, durationMs int, errMsg *string) error
 }
 
 // ScanLogReader reads scan history for a company.
 type ScanLogReader interface {
 	GetScanStats(ctx context.Context, companyID string) (ScanStatsView, error)
+	// GetScanHistories returns the last ≤10 scan outcomes for each company in companyIDs,
+	// ordered oldest→newest. true=success, false=error.
+	GetScanHistories(ctx context.Context, companyIDs []string) (map[string][]bool, error)
 	GetJobsScannedToday(ctx context.Context) (int64, error)
 	GetScansByDay(ctx context.Context, days int) ([]DailyScanCount, error)
 }
@@ -267,6 +274,65 @@ func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ Sc
 	stats.RecentRuns = recent
 
 	return stats, nil
+}
+
+func (s *scanLogStore) RecordScanResult(ctx context.Context, companyID, status string, jobsFetched, jobsNew, durationMs int, errMsg *string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.RecordScanResult")
+	defer tracing.End(span, &err)
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		row := model.CompanyScanLog{
+			CompanyID:   companyID,
+			JobsFetched: jobsFetched,
+			JobsNew:     jobsNew,
+			DurationMs:  &durationMs,
+			Error:       errMsg,
+		}
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		return tx.Model(&model.Company{}).
+			Where("id = ?", companyID).
+			Updates(map[string]any{
+				"last_scan_at":     gorm.Expr("NOW()"),
+				"last_scan_status": status,
+			}).Error
+	})
+}
+
+func (s *scanLogStore) GetScanHistories(ctx context.Context, companyIDs []string) (_ map[string][]bool, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.GetScanHistories")
+	defer tracing.End(span, &err)
+
+	if len(companyIDs) == 0 {
+		return map[string][]bool{}, nil
+	}
+
+	type row struct {
+		CompanyID string
+		Success   bool
+	}
+
+	var rows []row
+	err = s.db.WithContext(ctx).Raw(`
+		SELECT company_id, (error IS NULL) AS success
+		FROM (
+			SELECT company_id, error,
+			       ROW_NUMBER() OVER (PARTITION BY company_id ORDER BY scanned_at DESC) AS rn
+			FROM company_scan_log
+			WHERE company_id = ANY(?)
+		) ranked
+		WHERE rn <= 10
+		ORDER BY company_id, rn DESC
+	`, companyIDs).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string][]bool, len(companyIDs))
+	for _, r := range rows {
+		result[r.CompanyID] = append(result[r.CompanyID], r.Success)
+	}
+	return result, nil
 }
 
 func (s *scanLogStore) GetJobsScannedToday(ctx context.Context) (_ int64, err error) {

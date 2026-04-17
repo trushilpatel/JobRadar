@@ -82,18 +82,24 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
       size: 100,
       enableSorting: false,
       header: () => <span className="text-slate-400">Last 10 scans</span>,
-      // TODO(backend): list endpoint doesn't return per-company history.
-      // For now we render a single bar derived from last_scan_status.
       cell: ({ row }) => {
         const c = row.original
         const q = actions.queueMap.get(c.id)
-        let latest: HistoryPoint | null = null
-        if (q === 'processing') latest = 'run'
-        else if (c.last_scan_status === 'ok') latest = 'ok'
-        else if (c.last_scan_status === 'error') latest = 'err'
-        if (!latest) return <ScanHistoryBar history={[]} />
-        const idle: HistoryPoint[] = Array(HISTORY_SLOTS - 1).fill('idle')
-        return <ScanHistoryBar history={[...idle, latest]} />
+
+        // Real history from scan_history field (oldest → newest).
+        const history: HistoryPoint[] = (c.scan_history ?? []).map((ok) => (ok ? 'ok' : 'err'))
+
+        // Pad to HISTORY_SLOTS with idle on the left.
+        const padded: HistoryPoint[] = Array(Math.max(0, HISTORY_SLOTS - history.length))
+          .fill('idle' as HistoryPoint)
+          .concat(history)
+
+        // Override the rightmost slot if currently running.
+        if (q === 'processing' && padded.length > 0) {
+          padded[padded.length - 1] = 'run'
+        }
+
+        return <ScanHistoryBar history={padded} />
       },
     },
 

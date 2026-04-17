@@ -1,3 +1,4 @@
+import { AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PipelineStats } from '@/types'
 import { usePipelineStats } from '../hooks/usePipelineStats'
@@ -107,12 +108,17 @@ export function PipelineStrip({
   errorFilterActive,
   onErrorToggle,
 }: PipelineStripProps) {
-  const { data, isLoading } = usePipelineStats()
+  const { data, isLoading, isError } = usePipelineStats()
 
   return (
     <div className="px-6 py-3 border-b border-white/[0.07] overflow-x-auto">
-      {isLoading || !data ? (
+      {isLoading ? (
         <Skeleton />
+      ) : isError || !data ? (
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <AlertCircle size={13} className="text-red-400/70" />
+          Pipeline stats unavailable
+        </div>
       ) : (
         <PipelineContent
           stats={data}

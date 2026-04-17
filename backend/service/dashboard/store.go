@@ -241,6 +241,9 @@ type PipelineDBStats struct {
 	Crawling        int64
 	NewJobs24h      int64
 	Errors24h       int64
+	// PipelinePending: jobs crawled (reason='fetch') but not yet written to job_feed.
+	// Used as the DB-based proxy for awaiting_filter when Kafka lag is unavailable.
+	PipelinePending int64
 }
 
 // PipelineStore provides DB queries for the pipeline strip.
@@ -268,7 +271,8 @@ func (s *pipelineStore) GetPipelineDBStats(ctx context.Context) (_ PipelineDBSta
 			(SELECT COUNT(*) FROM company_scan_queue WHERE status = 'queued')                                             AS queued,
 			(SELECT COUNT(*) FROM company_scan_queue WHERE status = 'processing')                                         AS crawling,
 			(SELECT COUNT(*) FROM job_feed WHERE added_at >= NOW() - INTERVAL '24 hours' AND status != 'dismissed')      AS new_jobs_24h,
-			(SELECT COUNT(*) FROM job_pipeline_ledger WHERE reason = 'error' AND first_seen_at >= NOW() - INTERVAL '24 hours') AS errors_24h
+			(SELECT COUNT(*) FROM job_pipeline_ledger WHERE reason = 'error' AND first_seen_at >= NOW() - INTERVAL '24 hours') AS errors_24h,
+			(SELECT COUNT(*) FROM job_pipeline_ledger WHERE reason = 'fetch' AND job_id NOT IN (SELECT job_post_id FROM job_feed)) AS pipeline_pending
 	`).Scan(&result).Error
 	return result, err
 }

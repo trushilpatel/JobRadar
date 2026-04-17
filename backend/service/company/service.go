@@ -30,16 +30,18 @@ type Service interface {
 }
 
 type service struct {
-	store  Store
-	config Config
+	store       Store
+	config      Config
+	scanHistory ScanHistoryReader
 }
 
 // NewService constructs a Service implementation.
-func NewService(s Store, cfg Config) Service {
-	return &service{store: s, config: cfg}
+func NewService(s Store, cfg Config, scanHistory ScanHistoryReader) Service {
+	return &service{store: s, config: cfg, scanHistory: scanHistory}
 }
 
-// List returns a filtered, paginated page of companies enriched with next_scan_at.
+// List returns a filtered, paginated page of companies enriched with next_scan_at
+// and scan_history (last ≤10 scan outcomes from company_scan_log).
 func (s *service) List(ctx context.Context, filter CompanyFilter, page, limit int) (_ CompanyListResult, err error) {
 	ctx, span := tracing.Start(ctx, "company.service.List")
 	defer tracing.End(span, &err)
@@ -53,6 +55,17 @@ func (s *service) List(ctx context.Context, filter CompanyFilter, page, limit in
 		return CompanyListResult{}, domain.ErrInternal.WithMessage("failed to fetch company counts")
 	}
 
+	// Fetch real scan history for this page of companies in a single query.
+	ids := make([]string, len(companies))
+	for i, c := range companies {
+		ids[i] = c.ID
+	}
+	histories, err := s.scanHistory.GetScanHistories(ctx, ids)
+	if err != nil {
+		// Non-fatal: degrade gracefully — scan history is cosmetic.
+		histories = map[string][]bool{}
+	}
+
 	views := make([]CompanyView, 0, len(companies))
 	for _, c := range companies {
 		v := CompanyView{Company: c}
@@ -60,6 +73,7 @@ func (s *service) List(ctx context.Context, filter CompanyFilter, page, limit in
 			t := c.LastScanAt.Add(time.Duration(s.config.ScanIntervalMinutes) * time.Minute)
 			v.NextScanAt = &t
 		}
+		v.ScanHistory = histories[c.ID] // nil if no runs yet
 		views = append(views, v)
 	}
 

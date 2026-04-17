@@ -36,10 +36,10 @@ func TestPipelineService_GetPipelineStats_OK(t *testing.T) {
 			Crawling:        1,
 			NewJobs24h:      5,
 			Errors24h:       0,
+			PipelinePending: 12,
 		}},
 		&fakeLagReader{lags: map[string]int64{
-			"job-listing-relevance-filter": 12,
-			"job-post-analyzer":            3,
+			"job-post-analyzer": 3,
 		}},
 	)
 
@@ -50,9 +50,9 @@ func TestPipelineService_GetPipelineStats_OK(t *testing.T) {
 	if stats.TotalCompanies != 10 {
 		t.Errorf("TotalCompanies = %d, want 10", stats.TotalCompanies)
 	}
-	// Each Kafka group is wired to the correct output field.
+	// AwaitingFilter comes from DB (pipeline_pending), not Kafka lag.
 	if stats.AwaitingFilter != 12 {
-		t.Errorf("AwaitingFilter = %d, want 12 (job-listing-relevance-filter lag)", stats.AwaitingFilter)
+		t.Errorf("AwaitingFilter = %d, want 12 (pipeline_pending from DB)", stats.AwaitingFilter)
 	}
 	if stats.AwaitingEnrichment != 3 {
 		t.Errorf("AwaitingEnrichment = %d, want 3 (job-post-analyzer lag)", stats.AwaitingEnrichment)

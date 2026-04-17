@@ -40,10 +40,10 @@ func (s *pipelineService) GetPipelineStats(ctx context.Context) (*PipelineStats,
 		return nil, domain.ErrInternal.WithMessage("failed to fetch pipeline stats")
 	}
 
-	awaitingFilter, err := s.lag.GetLag(ctx, "job-listing-relevance-filter", kafka.TopicJobListingsRaw)
-	if err != nil {
-		awaitingFilter = 0 // degrade gracefully if Kafka is unavailable
-	}
+	// Use DB-based count as primary source for awaiting_filter: jobs that have been
+	// crawled (reason='fetch') but are not yet in job_feed. This is more reliable
+	// than Kafka consumer-group lag which returns 0 when workers haven't committed offsets.
+	awaitingFilter := dbStats.PipelinePending
 
 	awaitingEnrichment, err := s.lag.GetLag(ctx, "job-post-analyzer", kafka.TopicJobListingsFiltered)
 	if err != nil {
