@@ -15,19 +15,19 @@ import (
 
 // Config holds the Meta scraper settings sourced from the central config.
 type Config struct {
-	MinDelayMs  int // min delay between page navigations in ms
-	MaxDelayMs  int // max delay between page navigations in ms
-	TimeoutMs   int // overall scraper timeout in ms
-	MaxJobs     int // max jobs to fetch, 0 = all
+	MinDelayMs int // min delay between page navigations in ms
+	MaxDelayMs int // max delay between page navigations in ms
+	TimeoutMs  int // overall scraper timeout in ms
+	MaxJobs    int // max jobs to fetch, 0 = all
 }
 
 // defaultConfig returns sensible production defaults.
 func defaultConfig() Config {
 	return Config{
-		MinDelayMs: 3000,      // 3s between jobs
-		MaxDelayMs: 8000,      // 8s between jobs
-		TimeoutMs:  3600000,   // 1 hour total
-		MaxJobs:    0,         // no limit
+		MinDelayMs: 3000,    // 3s between jobs
+		MaxDelayMs: 8000,    // 8s between jobs
+		TimeoutMs:  3600000, // 1 hour total
+		MaxJobs:    0,       // no limit
 	}
 }
 
@@ -66,11 +66,11 @@ func (m *Meta) CareersURL(_ string) string {
 
 // scraperJob mirrors the JSON output from scrape.js.
 type scraperJob struct {
-	ID          string              `json:"id"`           // "meta-123456"
+	ID          string              `json:"id"` // "meta-123456"
 	Title       string              `json:"title"`
 	URL         string              `json:"url"`
 	Location    string              `json:"location"`
-	EmployType  string              `json:"employ_type"`  // normalized: full_time, contract, etc.
+	EmployType  string              `json:"employ_type"` // normalized: full_time, contract, etc.
 	FullContent *scraperFullContent `json:"full_content,omitempty"`
 }
 

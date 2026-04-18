@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/trushilpatel/jobradar/pipeline/ats/types"
 	"github.com/trushilpatel/jobradar/model"
+	"github.com/trushilpatel/jobradar/pipeline/ats/types"
 )
 
 type Greenhouse struct {

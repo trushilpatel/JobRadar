@@ -199,6 +199,7 @@ export interface TechTrendRow {
   q4: number
   growth_pct: number
   adoption_pct: number
+  is_new: boolean
 }
 
 export interface TechTrends {

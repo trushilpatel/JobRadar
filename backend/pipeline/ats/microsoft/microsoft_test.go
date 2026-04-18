@@ -105,7 +105,7 @@ func TestFetchJobs_MultiPage_Pagination(t *testing.T) {
 
 		start := 0
 		if s := r.URL.Query().Get("start"); s != "" {
-			fmt.Sscanf(s, "%d", &start)
+			_, _ = fmt.Sscanf(s, "%d", &start)
 		}
 
 		// Return 20 jobs for start=0, 20 for start=20, 10 for start=40 (end of pagination)
@@ -141,7 +141,7 @@ func TestFetchJobs_MultiPage_Pagination(t *testing.T) {
 		}
 
 		pageCount++
-		json.NewEncoder(w).Encode(searchResponse{
+		_ = json.NewEncoder(w).Encode(searchResponse{
 			Status: "success",
 			Data: searchResponseData{
 				Count:     50,
@@ -205,7 +205,7 @@ func TestFetchJobs_HTTPError(t *testing.T) {
 func TestFetchJobs_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`not valid json`))
+		_, _ = w.Write([]byte(`not valid json`))
 	}))
 	defer srv.Close()
 
@@ -294,7 +294,7 @@ func TestFetchJobs_LocationFilter(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		capturedURL = r.URL.String()
-		json.NewEncoder(w).Encode(searchResponse{
+		_ = json.NewEncoder(w).Encode(searchResponse{
 			Status: "success",
 			Data: searchResponseData{
 				Count:     0,
@@ -305,7 +305,7 @@ func TestFetchJobs_LocationFilter(t *testing.T) {
 	defer srv.Close()
 
 	m := &Microsoft{baseURL: srv.URL}
-	m.FetchJobs(context.Background(), "")
+	_, _ = m.FetchJobs(context.Background(), "")
 
 	// The searchURL encodes spaces as + (x-www-form-urlencoded) and commas as %2C.
 	// Check that the location filter is present in the URL.
@@ -327,7 +327,7 @@ func TestFetchJobContent_Success(t *testing.T) {
 			return
 		}
 
-		json.NewEncoder(w).Encode(positionDetail{
+		_ = json.NewEncoder(w).Encode(positionDetail{
 			ID:                         1812345678,
 			DisplayJobID:               "1812345678",
 			Name:                       "Senior Software Engineer",
@@ -400,7 +400,7 @@ func TestFetchJobContent_HTTPError(t *testing.T) {
 func TestFetchJobContent_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`not json`))
+		_, _ = w.Write([]byte(`not json`))
 	}))
 	defer srv.Close()
 
@@ -594,11 +594,11 @@ func newTestServer(t *testing.T, positions []position) *httptest.Server {
 
 		start := 0
 		if s := r.URL.Query().Get("start"); s != "" {
-			fmt.Sscanf(s, "%d", &start)
+			_, _ = fmt.Sscanf(s, "%d", &start)
 		}
 
 		// Return all positions for simplicity (real API handles pagination)
-		json.NewEncoder(w).Encode(searchResponse{
+		_ = json.NewEncoder(w).Encode(searchResponse{
 			Status: "success",
 			Data: searchResponseData{
 				Count:     len(positions),

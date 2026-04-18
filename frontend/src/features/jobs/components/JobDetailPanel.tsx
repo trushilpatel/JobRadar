@@ -6,10 +6,11 @@ import {
   DollarSign,
   Bookmark,
   BookmarkCheck,
-  Send,
   Trash2,
+  Send,
   TrendingUp,
   Award,
+  MapPin,
 } from 'lucide-react'
 import type { Job } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
@@ -43,7 +44,7 @@ export function JobDetailPanel({
     <div className="flex flex-col flex-1 min-h-0 bg-[#0d0d14]">
       {/* Header */}
       <div className="px-5 pt-4 pb-3 border-b border-white/[0.07]">
-        {/* Top-right action buttons */}
+        {/* Top-right: dismiss + close */}
         <div className="flex items-center justify-end gap-1 mb-3">
           <button
             onClick={() => onDismiss(job)}
@@ -65,19 +66,26 @@ export function JobDetailPanel({
           <CompanyAvatar name={companyName} size="md" />
           <div className="min-w-0">
             <p className="text-base font-semibold text-white leading-tight">{job.title}</p>
-            <p className="text-sm text-slate-400 mt-0.5">
-              {companyName} · {job.location ?? 'Location unknown'}
-            </p>
+            <p className="text-sm text-slate-400 mt-0.5">{companyName}</p>
           </div>
         </div>
 
-        {/* Badges */}
+        {/* Row 1: exp · location · salary · employ type */}
         <div className="flex flex-wrap gap-2 mb-3">
-          {job.remote && (
+          {job.experience_years != null && (
+            <span className="text-xs text-slate-400 bg-white/[0.05] border border-white/[0.07] px-2.5 py-1 rounded-lg">
+              {job.experience_years}+ yrs exp
+            </span>
+          )}
+          {job.remote ? (
             <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
               <Wifi size={11} /> Remote
             </span>
-          )}
+          ) : job.location ? (
+            <span className="flex items-center gap-1 text-xs text-slate-400 bg-white/[0.05] border border-white/[0.07] px-2.5 py-1 rounded-lg">
+              <MapPin size={11} /> {job.location}
+            </span>
+          ) : null}
           {salary && (
             <span className="flex items-center gap-1 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">
               <DollarSign size={11} /> {salary}
@@ -88,14 +96,9 @@ export function JobDetailPanel({
               <Briefcase size={11} /> {job.employ_type.replace('_', ' ')}
             </span>
           )}
-          {job.experience_years != null && (
-            <span className="text-xs text-slate-400 bg-white/[0.05] border border-white/[0.07] px-2.5 py-1 rounded-lg">
-              {job.experience_years}+ yrs exp
-            </span>
-          )}
         </div>
 
-        {/* Actions */}
+        {/* Row 2: open posting · save · status dropdown */}
         <div className="flex items-center gap-2 flex-wrap">
           <a
             href={job.url}
@@ -106,7 +109,6 @@ export function JobDetailPanel({
             <ExternalLink size={12} /> Open posting
           </a>
 
-          {/* Save button — show for new/saved */}
           {(job.status === 'new' || job.status === 'saved') &&
             (job.saved ? (
               <button
@@ -124,7 +126,6 @@ export function JobDetailPanel({
               </button>
             ))}
 
-          {/* Advancement buttons */}
           {(job.status === 'new' || job.status === 'saved') && (
             <button
               onClick={() => onApply(job)}

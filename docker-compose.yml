@@ -27,6 +27,8 @@ services:
     container_name: jobradar_kafka
     user: "0"
     stop_grace_period: 30s
+    volumes:
+      - redpandadata:/var/lib/redpanda/data
     command:
       - redpanda
       - start
@@ -308,4 +310,5 @@ volumes:
   pgdata:
   prometheusdata:
   grafanadata:
+  redpandadata:
 

@@ -10,13 +10,13 @@ import (
 // RawJob is the Kafka message published to job_listings.raw.
 // Set by the scan engine after FetchJobs returns — never by the adapter itself.
 type RawJob struct {
-	ID          string          `json:"id"`                       // e.g. "greenhouse-12345"
-	CompanyID   string          `json:"company_id"`               // UUID from companies table
-	Adapter     string          `json:"adapter"`                  // "greenhouse", "lever", "ashby", etc.
+	ID          string          `json:"id"`         // e.g. "greenhouse-12345"
+	CompanyID   string          `json:"company_id"` // UUID from companies table
+	Adapter     string          `json:"adapter"`    // "greenhouse", "lever", "ashby", etc.
 	Title       string          `json:"title"`
 	Location    string          `json:"location"`
 	URL         string          `json:"url"`
-	EmployType  string          `json:"employ_type"`              // full_time, contract, part_time, internship
+	EmployType  string          `json:"employ_type"` // full_time, contract, part_time, internship
 	FullContent *FullJobContent `json:"full_content,omitempty"`
 }
 

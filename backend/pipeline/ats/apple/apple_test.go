@@ -185,7 +185,7 @@ func TestFetchJobs_MalformedHTML(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`<html><body>No hydration data here</body></html>`))
+		_, _ = w.Write([]byte(`<html><body>No hydration data here</body></html>`))
 	}))
 	defer srv.Close()
 
@@ -651,7 +651,7 @@ func newTestServer(t *testing.T, pages []pageConfig) *httptest.Server {
 		}
 
 		var page int
-		fmt.Sscanf(pageStr, "%d", &page)
+		_, _ = fmt.Sscanf(pageStr, "%d", &page)
 
 		jobs, ok := pageMap[page]
 		if !ok || jobs == nil {
@@ -683,7 +683,7 @@ window.__staticRouterHydrationData = %s;
 
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(html))
+		_, _ = w.Write([]byte(html))
 	}))
 }
 

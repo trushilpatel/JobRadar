@@ -44,8 +44,9 @@ type TechTrendRow struct {
 	Q2          int     `json:"q2"`           // 2 quarters ago
 	Q3          int     `json:"q3"`           // 1 quarter ago
 	Q4          int     `json:"q4"`           // current quarter
-	GrowthPct   float64 `json:"growth_pct"`   // for Rising: (q4-q3)/q3 * 100
+	GrowthPct   float64 `json:"growth_pct"`   // for Rising: (q4-q3)/q3 * 100; 0 when IsNew=true
 	AdoptionPct float64 `json:"adoption_pct"` // q4 / total_jobs * 100
+	IsNew       bool    `json:"is_new"`       // true when Q3=0 (no prior-quarter baseline)
 }
 
 // TechTrends holds the full tech stack trend response.

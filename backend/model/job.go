@@ -26,10 +26,10 @@ type Job struct {
 	LLMSummary      *string        `json:"llm_summary"`
 
 	// LLM-enriched fields
-	Sponsorship       bool    `gorm:"not null;default:false" json:"sponsorship"`
-	RequiresCitizen   bool    `gorm:"not null;default:false" json:"requires_citizen"`
-	SecurityClearance bool    `gorm:"not null;default:false" json:"security_clearance"`
-	RoleBrief         *string `json:"role_brief"`
+	Sponsorship       bool           `gorm:"not null;default:false" json:"sponsorship"`
+	RequiresCitizen   bool           `gorm:"not null;default:false" json:"requires_citizen"`
+	SecurityClearance bool           `gorm:"not null;default:false" json:"security_clearance"`
+	RoleBrief         *string        `json:"role_brief"`
 	Responsibilities  datatypes.JSON `json:"responsibilities"`
 
 	Status string  `gorm:"not null;default:'new'" json:"status"`

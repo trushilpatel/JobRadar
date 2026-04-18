@@ -36,7 +36,7 @@ func TestGreenhouse_FetchJobs(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(fakeResp))
+		_, _ = w.Write([]byte(fakeResp))
 	}))
 	defer srv.Close()
 
@@ -76,7 +76,7 @@ func TestGreenhouse_FetchJobs(t *testing.T) {
 func TestGreenhouse_FetchJobs_Empty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"jobs":[]}`))
+		_, _ = w.Write([]byte(`{"jobs":[]}`))
 	}))
 	defer srv.Close()
 
@@ -106,7 +106,7 @@ func TestGreenhouse_FetchJobs_HTTPError(t *testing.T) {
 func TestGreenhouse_FetchJobs_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`not json`))
+		_, _ = w.Write([]byte(`not json`))
 	}))
 	defer srv.Close()
 
@@ -132,7 +132,7 @@ func TestGreenhouse_FetchJobs_UsesSlug(t *testing.T) {
 		capturedPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"jobs":[]}`))
+		_, _ = w.Write([]byte(`{"jobs":[]}`))
 	}))
 	defer srv.Close()
 
@@ -174,7 +174,7 @@ func TestGreenhouse_FetchJobContent(t *testing.T) {
 		capturedPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(fakeJSON)
+		_, _ = w.Write(fakeJSON)
 	}))
 	defer srv.Close()
 

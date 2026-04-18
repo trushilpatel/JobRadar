@@ -1,0 +1,23 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck      # ensures error return values are always handled
+    - govet         # reports suspicious constructs (same as go vet)
+    - staticcheck   # correctness + performance checks (includes gosimple)
+  settings:
+    errcheck:
+      check-type-assertions: true
+      exclude-functions:
+        - (io.Closer).Close
+
+# v2: formatters are separate from linters
+formatters:
+  enable:
+    - gofmt         # enforces standard Go formatting
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck

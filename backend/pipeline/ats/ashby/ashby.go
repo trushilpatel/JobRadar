@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/trushilpatel/jobradar/pipeline/ats/types"
 	"github.com/trushilpatel/jobradar/model"
+	"github.com/trushilpatel/jobradar/pipeline/ats/types"
 )
 
 // Documentation
@@ -141,25 +141,25 @@ type jobInfoResponse struct {
 }
 
 type apiJob struct {
-	ID                     string           `json:"id"`
-	Title                  string           `json:"title"`
-	Confidential           bool             `json:"confidential"`
-	Status                 string           `json:"status"`
-	EmploymentType         string           `json:"employmentType"`
-	LocationID             string           `json:"locationId,omitempty"`
-	DepartmentID           string           `json:"departmentId,omitempty"`
-	DefaultInterviewPlanID string           `json:"defaultInterviewPlanId,omitempty"`
-	InterviewPlanIDs       []string         `json:"interviewPlanIds,omitempty"`
-	CustomFields           []customField    `json:"customFields,omitempty"`
-	JobPostingIDs          []string         `json:"jobPostingIds,omitempty"`
-	CustomRequisitionID    string           `json:"customRequisitionId,omitempty"`
-	BrandID                string           `json:"brandId,omitempty"`
-	HiringTeam             []hiringTeam     `json:"hiringTeam,omitempty"`
-	Author                 *author          `json:"author,omitempty"`
-	CreatedAt              string           `json:"createdAt,omitempty"`
-	UpdatedAt              string           `json:"updatedAt,omitempty"`
-	OpenedAt               string           `json:"openedAt,omitempty"`
-	ClosedAt               string           `json:"closedAt,omitempty"`
+	ID                     string        `json:"id"`
+	Title                  string        `json:"title"`
+	Confidential           bool          `json:"confidential"`
+	Status                 string        `json:"status"`
+	EmploymentType         string        `json:"employmentType"`
+	LocationID             string        `json:"locationId,omitempty"`
+	DepartmentID           string        `json:"departmentId,omitempty"`
+	DefaultInterviewPlanID string        `json:"defaultInterviewPlanId,omitempty"`
+	InterviewPlanIDs       []string      `json:"interviewPlanIds,omitempty"`
+	CustomFields           []customField `json:"customFields,omitempty"`
+	JobPostingIDs          []string      `json:"jobPostingIds,omitempty"`
+	CustomRequisitionID    string        `json:"customRequisitionId,omitempty"`
+	BrandID                string        `json:"brandId,omitempty"`
+	HiringTeam             []hiringTeam  `json:"hiringTeam,omitempty"`
+	Author                 *author       `json:"author,omitempty"`
+	CreatedAt              string        `json:"createdAt,omitempty"`
+	UpdatedAt              string        `json:"updatedAt,omitempty"`
+	OpenedAt               string        `json:"openedAt,omitempty"`
+	ClosedAt               string        `json:"closedAt,omitempty"`
 	// Expanded fields — only present when expand:["location","compensation"] is requested
 	Location     *apiLocation     `json:"location,omitempty"`
 	Compensation *apiCompensation `json:"compensation,omitempty"`

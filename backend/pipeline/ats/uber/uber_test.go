@@ -208,7 +208,7 @@ func TestFetchJobs_SearchJobsHTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		if strings.Contains(r.URL.Path, "loadFilterOptions") {
-			json.NewEncoder(w).Encode(filterOptionsResponse{
+			_ = json.NewEncoder(w).Encode(filterOptionsResponse{
 				Data: filterOptionsData{Department: map[string][]string{"Engineering": {}}},
 			})
 			return
@@ -230,7 +230,7 @@ func TestFetchJobs_SearchJobsHTTPError(t *testing.T) {
 func TestFetchJobs_MalformedFilterJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`not json`))
+		_, _ = w.Write([]byte(`not json`))
 	}))
 	defer srv.Close()
 
@@ -246,7 +246,7 @@ func TestFetchJobs_MalformedFilterJSON(t *testing.T) {
 func TestFetchJobs_ContextCancelled(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(filterOptionsResponse{
+		_ = json.NewEncoder(w).Encode(filterOptionsResponse{
 			Data: filterOptionsData{Department: map[string][]string{"Engineering": {}}},
 		})
 	}))
@@ -269,17 +269,17 @@ func TestFetchJobs_CSRFHeaderSent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedCSRF = r.Header.Get("x-csrf-token")
 		if strings.Contains(r.URL.Path, "loadFilterOptions") {
-			json.NewEncoder(w).Encode(filterOptionsResponse{
+			_ = json.NewEncoder(w).Encode(filterOptionsResponse{
 				Data: filterOptionsData{Department: map[string][]string{}},
 			})
 			return
 		}
-		json.NewEncoder(w).Encode(searchJobsResponse{})
+		_ = json.NewEncoder(w).Encode(searchJobsResponse{})
 	}))
 	defer srv.Close()
 
 	u := &Uber{baseURL: srv.URL}
-	u.FetchJobs(context.Background(), "uber")
+	_, _ = u.FetchJobs(context.Background(), "uber")
 
 	if capturedCSRF == "" {
 		t.Error("x-csrf-token header must be present in all requests")
@@ -496,20 +496,20 @@ func TestFetchJobs_SearchRequestBodyStructure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.String(), "loadFilterOptions") {
-			json.NewEncoder(w).Encode(filterOptionsResponse{
+			_ = json.NewEncoder(w).Encode(filterOptionsResponse{
 				Data: filterOptionsData{Department: map[string][]string{"Engineering": {}}},
 			})
 			return
 		}
 		// Capture and decode the request body
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &capturedBody)
-		json.NewEncoder(w).Encode(searchJobsResponse{})
+		_ = json.Unmarshal(body, &capturedBody)
+		_ = json.NewEncoder(w).Encode(searchJobsResponse{})
 	}))
 	defer srv.Close()
 
 	u := &Uber{baseURL: srv.URL}
-	u.FetchJobs(context.Background(), "uber")
+	_, _ = u.FetchJobs(context.Background(), "uber")
 
 	if capturedBody.Params.Limit != 1000 {
 		t.Errorf("params.limit = %d, want 1000", capturedBody.Params.Limit)
@@ -533,18 +533,18 @@ func TestFetchJobs_ContentTypeHeaderSent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.String(), "loadFilterOptions") {
-			json.NewEncoder(w).Encode(filterOptionsResponse{
+			_ = json.NewEncoder(w).Encode(filterOptionsResponse{
 				Data: filterOptionsData{Department: map[string][]string{"Engineering": {}}},
 			})
 			return
 		}
 		capturedContentType = r.Header.Get("Content-Type")
-		json.NewEncoder(w).Encode(searchJobsResponse{})
+		_ = json.NewEncoder(w).Encode(searchJobsResponse{})
 	}))
 	defer srv.Close()
 
 	u := &Uber{baseURL: srv.URL}
-	u.FetchJobs(context.Background(), "uber")
+	_, _ = u.FetchJobs(context.Background(), "uber")
 
 	if capturedContentType != "application/json" {
 		t.Errorf("Content-Type = %q, want %q", capturedContentType, "application/json")
@@ -556,7 +556,7 @@ func TestFetchJobs_ContentTypeHeaderSent(t *testing.T) {
 func TestFetchDepartments_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{not valid json`))
+		_, _ = w.Write([]byte(`{not valid json`))
 	}))
 	defer srv.Close()
 
@@ -575,7 +575,7 @@ func TestFetchDepartments_MalformedJSON(t *testing.T) {
 func TestFetchJobsForDepartment_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{not valid json`))
+		_, _ = w.Write([]byte(`{not valid json`))
 	}))
 	defer srv.Close()
 
@@ -615,7 +615,7 @@ func TestFetchJobs_ContextCancelledBetweenDepartments(t *testing.T) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.String(), "loadFilterOptions") {
-			json.NewEncoder(w).Encode(filterOptionsResponse{
+			_ = json.NewEncoder(w).Encode(filterOptionsResponse{
 				Data: filterOptionsData{Department: map[string][]string{
 					"Dept1": {},
 					"Dept2": {},
@@ -624,7 +624,7 @@ func TestFetchJobs_ContextCancelledBetweenDepartments(t *testing.T) {
 			})
 			return
 		}
-		json.NewEncoder(w).Encode(searchJobsResponse{})
+		_ = json.NewEncoder(w).Encode(searchJobsResponse{})
 	}))
 	defer srv.Close()
 
@@ -967,7 +967,7 @@ func newTestServer(t *testing.T, deptJobs map[string][]uberJob) *httptest.Server
 			for d := range deptJobs {
 				depts[d] = []string{} // sub-teams not needed
 			}
-			json.NewEncoder(w).Encode(filterOptionsResponse{
+			_ = json.NewEncoder(w).Encode(filterOptionsResponse{
 				Data: filterOptionsData{Department: depts},
 			})
 			return
@@ -975,7 +975,7 @@ func newTestServer(t *testing.T, deptJobs map[string][]uberJob) *httptest.Server
 
 		if strings.Contains(r.URL.String(), "loadSearchJobsResults") {
 			var reqBody searchJobsRequest
-			json.NewDecoder(r.Body).Decode(&reqBody)
+			_ = json.NewDecoder(r.Body).Decode(&reqBody)
 
 			var jobs []uberJob
 			if len(reqBody.Params.Department) > 0 {
@@ -985,7 +985,7 @@ func newTestServer(t *testing.T, deptJobs map[string][]uberJob) *httptest.Server
 				jobs = []uberJob{}
 			}
 
-			json.NewEncoder(w).Encode(searchJobsResponse{
+			_ = json.NewEncoder(w).Encode(searchJobsResponse{
 				Data: searchJobsData{
 					Results:      jobs,
 					TotalResults: uberTotal{Low: len(jobs)},

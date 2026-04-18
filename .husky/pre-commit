@@ -20,8 +20,20 @@ else
   FAILED=1
 fi
 
-# ── Backend: Go unit tests ────────────────────────────────────────────────────
+# ── Backend: Go lint + unit tests ────────────────────────────────────────────
 if git diff --cached --name-only | grep -q '^backend/'; then
+  info "Backend changed — running Go lint (changed files only)..."
+  if command -v golangci-lint >/dev/null 2>&1; then
+    if (cd backend && golangci-lint run --config ../.github/.golangci.yml --new-from-rev=HEAD --timeout 2m); then
+      pass "Go lint"
+    else
+      fail "Go lint failed"
+      FAILED=1
+    fi
+  else
+    info "golangci-lint not found — skipping (install via: brew install golangci-lint)"
+  fi
+
   info "Backend changed — running Go unit tests..."
   if (cd backend && go test -short ./...); then
     pass "Go unit tests"
@@ -30,7 +42,7 @@ if git diff --cached --name-only | grep -q '^backend/'; then
     FAILED=1
   fi
 else
-  info "No backend changes — skipping Go tests"
+  info "No backend changes — skipping Go lint and tests"
 fi
 
 # ── Frontend: lint + type-check ───────────────────────────────────────────────

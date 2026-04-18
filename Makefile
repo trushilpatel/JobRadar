@@ -1,7 +1,7 @@
 .PHONY: dev dev-frontend dev-backend \
         build build-frontend build-backend clean-frontend \
         run-api run-crawler run-filter run-enricher run-scheduler \
-        migrate scan-google db-truncate lint tsc \
+        migrate scan-google db-truncate lint lint-go tsc \
         test test-short test-unit \
         test-api test-workers test-scheduler test-llm \
         test-adapters \
@@ -70,6 +70,20 @@ db-truncate: ## Truncate all tables except companies (keeps company list intact)
 
 lint: ## Run ESLint on frontend
 	cd frontend && npm run lint
+
+lint-go: ## Run golangci-lint on backend (matches CI config)
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+		echo "golangci-lint not found — install via: brew install golangci-lint"; \
+		exit 1; \
+	}
+	cd backend && golangci-lint run --config ../.github/.golangci.yml --timeout 5m
+
+lint-go-fast: ## Lint only files changed vs main branch
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+		echo "golangci-lint not found — install via: brew install golangci-lint"; \
+		exit 1; \
+	}
+	cd backend && golangci-lint run --config ../.github/.golangci.yml --new-from-rev=main --timeout 2m
 
 tsc: ## Type-check frontend without emitting
 	cd frontend && npx tsc --noEmit

@@ -66,9 +66,9 @@ type nextDataResponse struct {
 
 // jobListingItem represents one job in the listing page.
 type jobListingItem struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	URL       string `json:"url"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	URL        string `json:"url"`
 	Department struct {
 		Name string `json:"name"`
 	} `json:"department"`
@@ -90,17 +90,17 @@ type jobLocation struct {
 // jobDetailData represents the apiData object from the detail page.
 // Uses flexible field names to handle API variations.
 type jobDetailData struct {
-	ID              string          `json:"id"`
-	Title           string          `json:"title"`
-	DescriptionHTML string          `json:"descriptionHtml"`
-	Description     string          `json:"description"`
-	JobDescription  string          `json:"jobDescription"`
-	Body            string          `json:"body"`
-	Compensation    string          `json:"compensation"`
-	CompensationRng string          `json:"compensationRange"`
-	Salary          string          `json:"salary"`
-	WorkplaceType   string          `json:"workplaceType"`
-	WorkplaceTyp    string          `json:"workplace_type"`
+	ID              string `json:"id"`
+	Title           string `json:"title"`
+	DescriptionHTML string `json:"descriptionHtml"`
+	Description     string `json:"description"`
+	JobDescription  string `json:"jobDescription"`
+	Body            string `json:"body"`
+	Compensation    string `json:"compensation"`
+	CompensationRng string `json:"compensationRange"`
+	Salary          string `json:"salary"`
+	WorkplaceType   string `json:"workplaceType"`
+	WorkplaceTyp    string `json:"workplace_type"`
 	Department      struct {
 		Name string `json:"name"`
 	} `json:"department"`
