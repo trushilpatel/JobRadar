@@ -13,29 +13,36 @@ import (
 
 // fakeQueueStore is a test double for ScanQueueStore.
 type fakeQueueStore struct {
-	items         []ScanQueueItem
-	err           error
-	enqueueCalled bool
-	removeCalled  bool
+	items            []ScanQueueItem
+	err              error
+	enqueueCalled    bool
+	removeCalled     bool
+	enqueueDueResult int
+	enqueueDueCalled bool
+	resetStuckCalled bool
 }
 
 func (f *fakeQueueStore) Enqueue(_ context.Context, _, _ string) error {
 	f.enqueueCalled = true
 	return f.err
 }
-func (f *fakeQueueStore) EnqueueDue(_ context.Context, _ int, _ string) (string, error) {
-	return "", f.err
+func (f *fakeQueueStore) EnqueueDue(_ context.Context, _ int, _ string) (int, error) {
+	f.enqueueDueCalled = true
+	return f.enqueueDueResult, f.err
 }
-func (f *fakeQueueStore) ClaimNext(ctx context.Context) (*ScanQueueItem, error) { return nil, f.err }
-func (f *fakeQueueStore) Complete(_ context.Context, id string) error           { return f.err }
-func (f *fakeQueueStore) Remove(_ context.Context, id string) error {
+func (f *fakeQueueStore) ClaimNext(_ context.Context) (*ScanQueueItem, error) { return nil, f.err }
+func (f *fakeQueueStore) Complete(_ context.Context, _ string) error          { return f.err }
+func (f *fakeQueueStore) Remove(_ context.Context, _ string) error {
 	f.removeCalled = true
 	return f.err
 }
-func (f *fakeQueueStore) MoveUp(_ context.Context, id string) error           { return f.err }
-func (f *fakeQueueStore) MoveDown(_ context.Context, id string) error         { return f.err }
-func (f *fakeQueueStore) ResetStuck(_ context.Context, d time.Duration) error { return f.err }
-func (f *fakeQueueStore) UpdateHeartbeat(_ context.Context, id string) error  { return f.err }
+func (f *fakeQueueStore) MoveUp(_ context.Context, _ string) error   { return f.err }
+func (f *fakeQueueStore) MoveDown(_ context.Context, _ string) error { return f.err }
+func (f *fakeQueueStore) ResetStuck(_ context.Context, _ time.Duration) error {
+	f.resetStuckCalled = true
+	return f.err
+}
+func (f *fakeQueueStore) UpdateHeartbeat(_ context.Context, _ string) error { return f.err }
 func (f *fakeQueueStore) ListQueue(_ context.Context) ([]ScanQueueItem, error) {
 	return f.items, f.err
 }
@@ -177,6 +184,75 @@ func TestRemoveFromQueue(t *testing.T) {
 	}
 	if !q.removeCalled {
 		t.Error("expected Remove to be called")
+	}
+}
+
+func TestEnqueueDue_EnqueuesAll(t *testing.T) {
+	q := &fakeQueueStore{enqueueDueResult: 3}
+	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, Config{})
+
+	n, err := svc.EnqueueDue(context.Background(), 1440)
+	if err != nil {
+		t.Fatalf("EnqueueDue() error = %v", err)
+	}
+	if n != 3 {
+		t.Errorf("expected count 3, got %d", n)
+	}
+	if !q.enqueueDueCalled {
+		t.Error("expected EnqueueDue to be called on store")
+	}
+}
+
+func TestEnqueueDue_NoDueCompanies(t *testing.T) {
+	q := &fakeQueueStore{enqueueDueResult: 0}
+	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, Config{})
+
+	n, err := svc.EnqueueDue(context.Background(), 1440)
+	if err != nil {
+		t.Fatalf("EnqueueDue() error = %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 when none due, got %d", n)
+	}
+}
+
+func TestEnqueueDue_StoreError(t *testing.T) {
+	q := &fakeQueueStore{err: errors.New("db down")}
+	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, Config{})
+
+	_, err := svc.EnqueueDue(context.Background(), 1440)
+	if err == nil {
+		t.Fatal("expected error on store failure")
+	}
+	var sErr *domain.ServiceError
+	if !errors.As(err, &sErr) || sErr.Code != "INTERNAL" {
+		t.Errorf("expected INTERNAL error, got %v", err)
+	}
+}
+
+func TestResetStuck_OK(t *testing.T) {
+	q := &fakeQueueStore{}
+	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, Config{})
+
+	if err := svc.ResetStuck(context.Background(), 30*time.Minute); err != nil {
+		t.Fatalf("ResetStuck() error = %v", err)
+	}
+	if !q.resetStuckCalled {
+		t.Error("expected ResetStuck to be called on store")
+	}
+}
+
+func TestResetStuck_StoreError(t *testing.T) {
+	q := &fakeQueueStore{err: errors.New("db down")}
+	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, Config{})
+
+	err := svc.ResetStuck(context.Background(), 30*time.Minute)
+	if err == nil {
+		t.Fatal("expected error on store failure")
+	}
+	var sErr *domain.ServiceError
+	if !errors.As(err, &sErr) || sErr.Code != "INTERNAL" {
+		t.Errorf("expected INTERNAL error, got %v", err)
 	}
 }
 

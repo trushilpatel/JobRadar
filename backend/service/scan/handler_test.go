@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/domain"
@@ -38,6 +39,8 @@ func (f *fakeScanService) ListQueue(_ context.Context, filter QueueFilter) ([]Qu
 func (f *fakeScanService) RemoveFromQueue(_ context.Context, entryID string) error { return f.err }
 func (f *fakeScanService) MoveUp(_ context.Context, entryID string) error          { return f.err }
 func (f *fakeScanService) MoveDown(_ context.Context, entryID string) error        { return f.err }
+func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (int, error)        { return 0, f.err }
+func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error     { return f.err }
 
 func newScanTestRouter(h *Handler) *chi.Mux {
 	r := chi.NewRouter()

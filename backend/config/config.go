@@ -88,8 +88,9 @@ type GoogleScraperConfig struct {
 }
 
 type SchedulerConfig struct {
-	ScanIntervalMinutes int
-	StuckTimeoutMinutes int
+	ScanIntervalMinutes  int
+	StuckTimeoutMinutes  int
+	CheckIntervalSeconds int
 }
 
 // Validate returns an error if any required scheduler config values are invalid.
@@ -99,6 +100,9 @@ func (c SchedulerConfig) Validate() error {
 	}
 	if c.StuckTimeoutMinutes <= 0 {
 		return fmt.Errorf("config: SCHEDULER_STUCK_TIMEOUT_MINUTES must be > 0, got %d", c.StuckTimeoutMinutes)
+	}
+	if c.CheckIntervalSeconds <= 0 {
+		return fmt.Errorf("config: SCHEDULER_CHECK_INTERVAL_SECONDS must be > 0, got %d", c.CheckIntervalSeconds)
 	}
 	return nil
 }
@@ -167,8 +171,9 @@ func Load() *Config {
 			},
 		},
 		Scheduler: SchedulerConfig{
-			ScanIntervalMinutes: getEnvInt("SCAN_INTERVAL_MINUTES", 1440),
-			StuckTimeoutMinutes: getEnvInt("SCHEDULER_STUCK_TIMEOUT_MINUTES", 30),
+			ScanIntervalMinutes:  getEnvInt("SCAN_INTERVAL_MINUTES", 1440),
+			StuckTimeoutMinutes:  getEnvInt("SCHEDULER_STUCK_TIMEOUT_MINUTES", 30),
+			CheckIntervalSeconds: getEnvInt("SCHEDULER_CHECK_INTERVAL_SECONDS", 60),
 		},
 		Observability: ObservabilityConfig{
 			MetricsAddr:    getEnv("METRICS_ADDR", ":9090"),

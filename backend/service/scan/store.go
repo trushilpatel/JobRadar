@@ -15,11 +15,11 @@ type ScanQueueStore interface {
 	// already has an active entry (queued or processing).
 	Enqueue(ctx context.Context, companyID, source string) error
 
-	// EnqueueDue atomically finds exactly one company that is due for a scan
-	// (active, last_scan_at past the interval, not already in the queue) and
-	// inserts it. Returns the enqueued company ID, or "" if no company is due.
-	// Safe for concurrent callers — uses FOR UPDATE SKIP LOCKED on companies.
-	EnqueueDue(ctx context.Context, intervalMinutes int, source string) (string, error)
+	// EnqueueDue atomically enqueues all companies currently due for a scan
+	// (active, last_scan_at past the interval, not already queued) in one query.
+	// Returns the number of companies enqueued. Safe for concurrent callers —
+	// uses FOR UPDATE SKIP LOCKED so two instances never double-enqueue.
+	EnqueueDue(ctx context.Context, intervalMinutes int, source string) (int, error)
 
 	// ClaimNext atomically claims the next queued item and marks it processing.
 	// Returns nil, nil if the queue is empty.
@@ -93,10 +93,10 @@ func (s *scanQueueStore) Enqueue(ctx context.Context, companyID, source string) 
 	`, companyID, source).Error
 }
 
-func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, source string) (_ string, err error) {
+func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, source string) (_ int, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.EnqueueDue")
 	defer tracing.End(span, &err)
-	var companyID string
+	var ids []string
 	err = s.db.WithContext(ctx).Raw(`
 		INSERT INTO company_scan_queue (company_id, source)
 		SELECT id, ?
@@ -105,12 +105,11 @@ func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, so
 		  AND (last_scan_at IS NULL OR last_scan_at + (? * INTERVAL '1 minute') <= NOW())
 		  AND NOT EXISTS (SELECT 1 FROM company_scan_queue WHERE company_id = companies.id)
 		ORDER BY last_scan_at ASC NULLS FIRST
-		LIMIT 1
 		FOR UPDATE SKIP LOCKED
 		ON CONFLICT DO NOTHING
 		RETURNING company_id
-	`, source, intervalMinutes).Scan(&companyID).Error
-	return companyID, err
+	`, source, intervalMinutes).Scan(&ids).Error
+	return len(ids), err
 }
 
 func (s *scanQueueStore) ClaimNext(ctx context.Context) (_ *ScanQueueItem, err error) {

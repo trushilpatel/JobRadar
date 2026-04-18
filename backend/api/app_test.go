@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/model"
@@ -168,9 +169,11 @@ func (f *fakeScanService) GetStats(_ context.Context, _ string) (*scan.ScanStats
 func (f *fakeScanService) ListQueue(_ context.Context, _ scan.QueueFilter) ([]scan.QueueEntryView, error) {
 	return nil, nil
 }
-func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error { return nil }
-func (f *fakeScanService) MoveUp(_ context.Context, _ string) error          { return nil }
-func (f *fakeScanService) MoveDown(_ context.Context, _ string) error        { return nil }
+func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error   { return nil }
+func (f *fakeScanService) MoveUp(_ context.Context, _ string) error            { return nil }
+func (f *fakeScanService) MoveDown(_ context.Context, _ string) error          { return nil }
+func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (int, error)    { return 0, nil }
+func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error { return nil }
 
 type fakeJobService struct{}
 

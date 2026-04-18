@@ -10,8 +10,15 @@ import (
 	"github.com/trushilpatel/jobradar/service/company"
 )
 
+// SchedulerService is the narrow interface the scheduler worker depends on.
+type SchedulerService interface {
+	EnqueueDue(ctx context.Context, intervalMinutes int) (int, error)
+	ResetStuck(ctx context.Context, staleDur time.Duration) error
+}
+
 // Service defines all business operations for the scan domain.
 type Service interface {
+	SchedulerService
 	TriggerScan(ctx context.Context, companyID string) error
 	TriggerScanAll(ctx context.Context) (int, error)
 	GetStats(ctx context.Context, companyID string) (*ScanStatsView, error)
@@ -21,8 +28,39 @@ type Service interface {
 	MoveDown(ctx context.Context, entryID string) error
 }
 
+// schedulerService implements SchedulerService. Embedded by service so the
+// logic lives in one place and both constructors share it.
+type schedulerService struct {
+	queue ScanQueueStore
+}
+
+// NewSchedulerService constructs the minimal service the scheduler worker needs.
+// Use this in cmd/company_scan_scheduler — no company or log dependencies required.
+func NewSchedulerService(queue ScanQueueStore) SchedulerService {
+	return &schedulerService{queue: queue}
+}
+
+func (s *schedulerService) EnqueueDue(ctx context.Context, intervalMinutes int) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "scan.service.EnqueueDue")
+	defer tracing.End(span, &err)
+	n, err := s.queue.EnqueueDue(ctx, intervalMinutes, model.QueueSourceScheduler)
+	if err != nil {
+		return 0, domain.ErrInternal.WithMessage("failed to enqueue due companies")
+	}
+	return n, nil
+}
+
+func (s *schedulerService) ResetStuck(ctx context.Context, staleDur time.Duration) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.service.ResetStuck")
+	defer tracing.End(span, &err)
+	if err := s.queue.ResetStuck(ctx, staleDur); err != nil {
+		return domain.ErrInternal.WithMessage("failed to reset stuck queue entries")
+	}
+	return nil
+}
+
 type service struct {
-	queue      ScanQueueStore
+	*schedulerService
 	scanLog    ScanLogReader
 	companySvc company.Service
 	config     Config
@@ -31,10 +69,10 @@ type service struct {
 // NewService constructs a Service implementation.
 func NewService(queue ScanQueueStore, scanLog ScanLogReader, companySvc company.Service, cfg Config) Service {
 	return &service{
-		queue:      queue,
-		scanLog:    scanLog,
-		companySvc: companySvc,
-		config:     cfg,
+		schedulerService: &schedulerService{queue: queue},
+		scanLog:          scanLog,
+		companySvc:       companySvc,
+		config:           cfg,
 	}
 }
 
