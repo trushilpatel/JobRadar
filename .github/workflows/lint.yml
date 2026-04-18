@@ -1,0 +1,73 @@
+name: Lint
+
+# Runs on every push to an open PR targeting main
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Go lint ──────────────────────────────────────────────────────────────────
+  lint-go:
+    name: Lint Go
+    runs-on: ubuntu-latest
+
+    steps:
+      # fetch-depth: 1 = shallow clone (only latest commit, not full git history)
+      # Faster checkout, especially as the repo grows
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Install Go version from go.mod
+      # cache: false — golangci-lint-action manages its own cache for modules +
+      # build cache + lint results, so setup-go caching would double up
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: false
+
+      # golangci-lint-action caches three things automatically:
+      #   1. The golangci-lint binary itself
+      #   2. ~/go/pkg/mod (module downloads)
+      #   3. ~/.cache/go-build (compiled packages)
+      # On a cache hit, repeat runs on unchanged code take ~10-20s
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          working-directory: backend
+          args: --config ../.github/.golangci.yml --timeout 5m
+
+  # ── Frontend lint ─────────────────────────────────────────────────────────
+  lint-frontend:
+    name: Lint Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # cache: 'npm' caches ~/.npm (the global npm package cache)
+      # When npm ci runs, it pulls packages from ~/.npm instead of the internet
+      # Cache key is derived from package-lock.json — busts only when deps change
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      # npm ci = clean install from lockfile (faster + reproducible vs npm install)
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+
+      # ESLint uses eslint.config.js (flat config)
+      - name: Run ESLint
+        run: npm run lint
+        working-directory: frontend
+
+      # Type check without emitting — catches errors ESLint misses
+      - name: TypeScript check
+        run: npx tsc --noEmit
+        working-directory: frontend
