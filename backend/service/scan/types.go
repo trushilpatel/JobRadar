@@ -1,7 +1,6 @@
 package scan
 
 import (
-	"context"
 	"time"
 )
 
@@ -73,11 +72,3 @@ type DailyScanCount struct {
 
 // ScanStatsView is an alias for ScanStats.
 type ScanStatsView = ScanStats
-
-// ClaimNexter is the minimal interface needed by the crawler to claim queue items.
-type ClaimNexter interface {
-	ClaimNext(ctx context.Context) (*ScanQueueItem, error)
-	Complete(ctx context.Context, id string) error
-	ResetStuck(ctx context.Context, staleDur time.Duration) error
-	UpdateHeartbeat(ctx context.Context, id string) error
-}

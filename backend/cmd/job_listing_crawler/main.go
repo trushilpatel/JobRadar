@@ -22,10 +22,6 @@ import (
 	scansvc "github.com/trushilpatel/jobradar/service/scan"
 )
 
-const pollInterval = 10 * time.Second
-const stuckTimeout = 120 * time.Second
-const heartbeatInterval = 30 * time.Second
-
 func main() {
 	cfg := config.Load()
 	log := logger.Init("crawler")
@@ -56,13 +52,23 @@ func main() {
 	}
 	defer producer.Close()
 
-	companies := companysvc.NewStore(database)
-	ledger := jobsvc.NewSeenLedgerStore(database)
+	// --- Stores (wiring layer only) ---
+	companyStore := companysvc.NewStore(database)
+	ledgerStore := jobsvc.NewSeenLedgerStore(database)
 	scanLog := scansvc.NewLogStore(database)
-	queue := scansvc.NewQueueStore(database)
-	recorder := scansvc.NewCrawlerService(scanLog)
+	queueStore := scansvc.NewQueueStore(database)
 
+	// --- Services (what workers depend on) ---
+	companies := companysvc.NewCrawlerReader(companyStore)
+	ledger := jobsvc.NewLedgerService(ledgerStore)
+	recorder := scansvc.NewCrawlerService(scanLog)
+	queue := scansvc.NewCrawlerQueueService(queueStore)
+
+	pollInterval := time.Duration(cfg.Crawler.PollIntervalSeconds) * time.Second
+	stuckTimeout := time.Duration(cfg.Crawler.StuckTimeoutSeconds) * time.Second
+	heartbeatInterval := time.Duration(cfg.Crawler.HeartbeatIntervalSeconds) * time.Second
 	companyDelay := time.Duration(cfg.Crawler.CompanyDelaySeconds) * time.Second
+
 	googleCfg := google.Config{
 		MinDelayMs:  cfg.Crawler.Google.MinDelayMs,
 		MaxDelayMs:  cfg.Crawler.Google.MaxDelayMs,
@@ -76,7 +82,6 @@ func main() {
 	// Reset any rows stuck in processing from a previous crash.
 	if err := queue.ResetStuck(ctx, stuckTimeout); err != nil {
 		log.Error("failed to reset stuck queue items", err)
-		// non-fatal: continue
 	}
 
 	log.Info("worker started", logger.Dur("poll_interval", pollInterval))
@@ -89,7 +94,7 @@ func main() {
 		go func() {
 			defer wg.Done()
 			defer atomic.StoreInt32(&active, 0)
-			pollAndProcess(ctx, log, queue, engine, companyDelay)
+			pollAndProcess(ctx, log, queue, engine, companyDelay, heartbeatInterval)
 		}()
 	}
 
@@ -119,7 +124,7 @@ func main() {
 	}
 }
 
-func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.ClaimNexter, engine *crawler.Engine, companyDelay time.Duration) {
+func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.CrawlerQueueService, engine *crawler.Engine, companyDelay, heartbeatInterval time.Duration) {
 	item, err := queue.ClaimNext(ctx)
 	if err != nil {
 		log.Error("failed to claim queue item", err)
@@ -153,13 +158,9 @@ func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.ClaimN
 	}
 }
 
-type heartbeater interface {
-	UpdateHeartbeat(ctx context.Context, id string) error
-}
-
 // startHeartbeat ticks every interval and updates heartbeat_at in the DB for the
 // given queue row. Call the returned stop func (or defer it) to end the goroutine.
-func startHeartbeat(ctx context.Context, q heartbeater, id string, interval time.Duration, log logger.Logger) func() {
+func startHeartbeat(ctx context.Context, q scansvc.CrawlerQueueService, id string, interval time.Duration, log logger.Logger) func() {
 	hbCtx, cancel := context.WithCancel(ctx)
 	go func() {
 		ticker := time.NewTicker(interval)

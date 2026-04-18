@@ -7,24 +7,21 @@ import (
 	scansvc "github.com/trushilpatel/jobradar/service/scan"
 )
 
-// CompanyReader is the narrow read interface the crawler needs for companies.
+// CompanyReader is the narrow company interface the crawler engine depends on.
 type CompanyReader interface {
-	GetActiveCompanies(ctx context.Context) ([]model.Company, error)
-	GetCompanyByID(ctx context.Context, id string) (model.Company, error)
+	GetByID(ctx context.Context, id string) (model.Company, error)
+	GetActive(ctx context.Context) ([]model.Company, error)
 }
 
-// PipelineLedger is the narrow ledger interface the crawler needs.
+// PipelineLedger is the narrow ledger interface the crawler engine depends on.
 type PipelineLedger interface {
-	HasSeen(ctx context.Context, jobID string) (bool, error)
 	HasSeenBatch(ctx context.Context, jobIDs []string) (map[string]bool, error)
-	MarkSeen(ctx context.Context, jobID, companyID, reason string) error
 	MarkSeenBatch(ctx context.Context, jobIDs []string, companyID, reason string) error
 	GetActiveJobIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
 }
 
-// ScanRecorder is the interface the crawler uses to record scan outcomes.
-// This replaces the old separate scanLog + companyScan fields.
+// ScanRecorder is the interface the crawler engine uses to record scan outcomes.
 type ScanRecorder interface {
 	RecordScanResult(ctx context.Context, companyID string, result scansvc.ScanResult) error
 }

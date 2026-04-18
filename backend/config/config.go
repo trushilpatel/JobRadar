@@ -74,8 +74,11 @@ type EnricherConfig struct {
 }
 
 type CrawlerConfig struct {
-	CompanyDelaySeconds int
-	Google              GoogleScraperConfig
+	CompanyDelaySeconds      int
+	PollIntervalSeconds      int
+	StuckTimeoutSeconds      int
+	HeartbeatIntervalSeconds int
+	Google                   GoogleScraperConfig
 }
 
 type GoogleScraperConfig struct {
@@ -160,7 +163,10 @@ func Load() *Config {
 			},
 		},
 		Crawler: CrawlerConfig{
-			CompanyDelaySeconds: getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 15),
+			CompanyDelaySeconds:      getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 15),
+			PollIntervalSeconds:      getEnvInt("CRAWLER_POLL_INTERVAL_SECONDS", 10),
+			StuckTimeoutSeconds:      getEnvInt("CRAWLER_STUCK_TIMEOUT_SECONDS", 120),
+			HeartbeatIntervalSeconds: getEnvInt("CRAWLER_HEARTBEAT_INTERVAL_SECONDS", 30),
 			Google: GoogleScraperConfig{
 				MinDelayMs:  getEnvInt("GOOGLE_SCRAPER_MIN_DELAY", 120000),
 				MaxDelayMs:  getEnvInt("GOOGLE_SCRAPER_MAX_DELAY", 240000),

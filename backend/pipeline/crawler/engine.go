@@ -44,25 +44,11 @@ func NewEngine(
 	}
 }
 
-// RunOnce runs one full scan cycle across all active companies.
-func (e *Engine) RunOnce(ctx context.Context) {
-	companies, err := e.companies.GetActiveCompanies(ctx)
-	if err != nil {
-		e.log.Error("failed to load companies", err)
-		return
-	}
-	e.log.Info("starting scan cycle", logger.Int("active_companies", len(companies)))
-	for _, company := range companies {
-		e.scanCompany(ctx, company)
-	}
-	e.log.Info("scan cycle complete")
-}
-
 // RunForCompany runs a scan for a single company by ID.
 func (e *Engine) RunForCompany(ctx context.Context, companyID string) {
 	ctx, span := tracing.Start(ctx, "crawler.engine.RunForCompany")
 	defer tracing.End(span, nil)
-	company, err := e.companies.GetCompanyByID(ctx, companyID)
+	company, err := e.companies.GetByID(ctx, companyID)
 	if err != nil {
 		e.log.Error("company not found", err, logger.Str(logger.FieldCompany, companyID))
 		return
