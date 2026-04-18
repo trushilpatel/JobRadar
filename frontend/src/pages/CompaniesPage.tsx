@@ -8,7 +8,6 @@ import {
   useCompanies,
   useCompanyActions,
   CompaniesHeader,
-  PipelineStrip,
   CompaniesFilterBar,
   CompaniesTable,
   CompanyDetailDrawer,
@@ -30,12 +29,6 @@ export function CompaniesPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <CompaniesHeader
-        total={c.total}
-        totalActive={c.totalActive}
-        onAddClick={() => setAddOpen(true)}
-      />
-
-      <PipelineStrip
         errorCount={c.counts.errors}
         errorFilterActive={c.statusFilter === 'error'}
         onErrorToggle={() => c.setStatusFilter(c.statusFilter === 'error' ? 'none' : 'error')}
@@ -58,6 +51,7 @@ export function CompaniesPage() {
         bulkAllActive={bulkAllActive}
         onBulkToggle={() => actions.bulkToggleActive(bulkAllActive)}
         onReset={c.resetFilters}
+        onAddClick={() => setAddOpen(true)}
       />
 
       <div className="flex-1 flex min-h-0 overflow-hidden">

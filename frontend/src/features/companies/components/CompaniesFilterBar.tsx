@@ -1,4 +1,4 @@
-import { Search, Filter, Power, Loader2, X } from 'lucide-react'
+import { Search, Filter, Power, Loader2, X, Plus } from 'lucide-react'
 import { SegmentedSwitch } from '@/components/ui/segmented-switch'
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
 import type { ActiveFilter, StatusFilter } from '@/features/companies/hooks/useCompanies'
@@ -22,6 +22,8 @@ interface CompaniesFilterBarProps {
   bulkAllActive: boolean
   onBulkToggle: () => void
   onReset: () => void
+
+  onAddClick: () => void
 }
 
 function Divider() {
@@ -30,89 +32,98 @@ function Divider() {
 
 export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
   return (
-    <div className="px-6 py-3 border-b border-white/[0.07] flex items-center gap-2 flex-wrap">
-      {/* Search */}
-      <div className="relative">
-        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-        <input
-          value={p.search}
-          onChange={(e) => p.onSearchChange(e.target.value)}
-          placeholder="Search companies…"
-          className="pl-7 pr-7 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg placeholder-slate-500 focus:outline-none focus:border-violet-500 w-56 text-white"
+    <div className="px-6 py-3 border-b border-white/[0.07] flex items-center gap-2">
+      {/* Left: filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            value={p.search}
+            onChange={(e) => p.onSearchChange(e.target.value)}
+            placeholder="Search companies…"
+            className="pl-7 pr-7 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg placeholder-slate-500 focus:outline-none focus:border-violet-500 w-56 text-white"
+          />
+          {p.search && (
+            <button
+              type="button"
+              onClick={() => p.onSearchChange('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
+        <MultiSelectDropdown
+          aria-label="Filter by adapter"
+          options={p.adapterOptions}
+          selected={p.adapters}
+          onChange={p.onAdaptersChange}
+          placeholder="All adapters"
+          singularLabel={(n) => `${n} adapters`}
+          searchPlaceholder="Search adapters…"
+          addable
+          onAdd={p.onAddAdapter}
+          addPlaceholder="Add new adapter…"
+          leadingIcon={<Filter size={12} />}
         />
-        {p.search && (
-          <button
-            type="button"
-            onClick={() => p.onSearchChange('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-          >
-            <X size={12} />
-          </button>
-        )}
+
+        <Divider />
+
+        <SegmentedSwitch
+          aria-label="Active state"
+          value={p.activeFilter}
+          onChange={p.onActiveFilterChange}
+          options={[
+            { value: 'all', label: 'All', accent: 'violet' },
+            { value: 'active', label: 'Active', accent: 'emerald' },
+            { value: 'inactive', label: 'Inactive', accent: 'violet' },
+          ]}
+        />
+
+        <Divider />
+
+        <SegmentedSwitch
+          aria-label="Status filter"
+          value={p.statusFilter}
+          onChange={(v) => p.onStatusFilterChange(p.statusFilter === v ? 'none' : v)}
+          options={[
+            { value: 'error', label: '✕ Errors', accent: 'red' },
+            { value: 'running', label: '⟳ Running', accent: 'blue' },
+            { value: 'queued', label: '· Queued', accent: 'amber' },
+          ]}
+        />
+
+        <button
+          type="button"
+          onClick={p.onReset}
+          className="text-[11px] text-slate-500 hover:text-slate-300 px-1"
+        >
+          Reset
+        </button>
       </div>
 
-      {/* Adapters */}
-      <MultiSelectDropdown
-        aria-label="Filter by adapter"
-        options={p.adapterOptions}
-        selected={p.adapters}
-        onChange={p.onAdaptersChange}
-        placeholder="All adapters"
-        singularLabel={(n) => `${n} adapters`}
-        searchPlaceholder="Search adapters…"
-        addable
-        onAdd={p.onAddAdapter}
-        addPlaceholder="Add new adapter…"
-        leadingIcon={<Filter size={12} />}
-      />
+      {/* Center: activate all */}
+      <div className="flex-1 flex items-center justify-center">
+        <button
+          type="button"
+          onClick={p.onBulkToggle}
+          disabled={p.bulkToggling}
+          className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {p.bulkToggling ? <Loader2 size={12} className="animate-spin" /> : <Power size={12} />}
+          {p.bulkAllActive ? 'Deactivate all' : 'Activate all'}
+        </button>
+      </div>
 
-      <Divider />
-
-      {/* Active state */}
-      <SegmentedSwitch
-        aria-label="Active state"
-        value={p.activeFilter}
-        onChange={p.onActiveFilterChange}
-        options={[
-          { value: 'all', label: 'All', accent: 'violet' },
-          { value: 'active', label: 'Active', accent: 'emerald' },
-          { value: 'inactive', label: 'Inactive', accent: 'violet' },
-        ]}
-      />
-
-      <Divider />
-
-      {/* Status */}
-      <SegmentedSwitch
-        aria-label="Status filter"
-        value={p.statusFilter}
-        onChange={p.onStatusFilterChange}
-        options={[
-          { value: 'none', label: 'Any', accent: 'violet' },
-          { value: 'error', label: '✕ Errors', accent: 'red' },
-          { value: 'running', label: '⟳ Running', accent: 'blue' },
-          { value: 'queued', label: '· Queued', accent: 'amber' },
-        ]}
-      />
-
+      {/* Right: add company */}
       <button
         type="button"
-        onClick={p.onReset}
-        className="text-[11px] text-slate-500 hover:text-slate-300 px-1"
+        onClick={p.onAddClick}
+        className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors shrink-0"
       >
-        Reset
-      </button>
-
-      <div className="flex-1" />
-
-      <button
-        type="button"
-        onClick={p.onBulkToggle}
-        disabled={p.bulkToggling}
-        className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-      >
-        {p.bulkToggling ? <Loader2 size={12} className="animate-spin" /> : <Power size={12} />}
-        {p.bulkAllActive ? 'Deactivate all' : 'Activate all'}
+        <Plus size={12} />
+        Add Company
       </button>
     </div>
   )

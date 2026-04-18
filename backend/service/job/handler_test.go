@@ -192,6 +192,66 @@ func TestJobHandlerGetCounts_OK(t *testing.T) {
 	}
 }
 
+// capturingValidator records the filter passed to ValidateList for inspection.
+type capturingValidator struct {
+	filter JobFilter
+}
+
+func (c *capturingValidator) ValidateList(f JobFilter, _, _ int) error {
+	c.filter = f
+	return nil
+}
+func (c *capturingValidator) ValidateDismiss(_ DismissInput) error   { return nil }
+func (c *capturingValidator) ValidateSetStatus(_ string) error       { return nil }
+func (c *capturingValidator) ValidateSetNotes(_ SetNotesInput) error { return nil }
+
+func TestJobHandlerList_ExperienceRangesParsed(t *testing.T) {
+	capturing := &capturingValidator{}
+	h := NewHandler(capturing, &fakeJobService{})
+	r := newJobTestRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/jobs?experience_ranges=0-2&experience_ranges=5%2B", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("got status %d, want 200", w.Code)
+	}
+	if len(capturing.filter.ExperienceRanges) != 2 {
+		t.Fatalf("expected 2 parsed ranges, got %d", len(capturing.filter.ExperienceRanges))
+	}
+	r0 := capturing.filter.ExperienceRanges[0]
+	if r0.Min != 0 || r0.Max == nil || *r0.Max != 2 {
+		t.Errorf("range[0] = {Min:%d Max:%v}, want {0 2}", r0.Min, r0.Max)
+	}
+	r1 := capturing.filter.ExperienceRanges[1]
+	if r1.Min != 5 || r1.Max != nil {
+		t.Errorf("range[1] = {Min:%d Max:%v}, want {5 nil}", r1.Min, r1.Max)
+	}
+}
+
+func TestJobHandlerList_ExperienceRangesInvalidDropped(t *testing.T) {
+	capturing := &capturingValidator{}
+	h := NewHandler(capturing, &fakeJobService{})
+	r := newJobTestRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/jobs?experience_ranges=bad&experience_ranges=2-5", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("got status %d, want 200", w.Code)
+	}
+	if len(capturing.filter.ExperienceRanges) != 1 {
+		t.Fatalf("expected 1 range (invalid dropped), got %d", len(capturing.filter.ExperienceRanges))
+	}
+	r0 := capturing.filter.ExperienceRanges[0]
+	if r0.Min != 2 || r0.Max == nil || *r0.Max != 5 {
+		t.Errorf("range[0] = {Min:%d Max:%v}, want {2 5}", r0.Min, r0.Max)
+	}
+}
+
 // Ensure test doubles implement interfaces.
 var _ Validator = (*fakeJobValidator)(nil)
+var _ Validator = (*capturingValidator)(nil)
 var _ Service = (*fakeJobService)(nil)

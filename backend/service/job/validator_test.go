@@ -27,6 +27,11 @@ func TestValidateList(t *testing.T) {
 		{name: "limit 101 invalid", filter: JobFilter{}, page: 1, limit: 101, wantErr: true},
 		{name: "limit 100 valid", filter: JobFilter{}, page: 1, limit: 100},
 		{name: "empty status valid", filter: JobFilter{}, page: 1, limit: 20},
+		{name: "valid exp 0-2", filter: JobFilter{ExperienceRanges: []ExperienceRange{{Min: 0, Max: ptr(2)}}}, page: 1, limit: 20},
+		{name: "valid exp 2-5", filter: JobFilter{ExperienceRanges: []ExperienceRange{{Min: 2, Max: ptr(5)}}}, page: 1, limit: 20},
+		{name: "valid exp 5+", filter: JobFilter{ExperienceRanges: []ExperienceRange{{Min: 5}}}, page: 1, limit: 20},
+		{name: "invalid exp max <= min", filter: JobFilter{ExperienceRanges: []ExperienceRange{{Min: 5, Max: ptr(3)}}}, page: 1, limit: 20, wantErr: true},
+		{name: "invalid exp negative min", filter: JobFilter{ExperienceRanges: []ExperienceRange{{Min: -1, Max: ptr(2)}}}, page: 1, limit: 20, wantErr: true},
 	}
 
 	for _, tc := range tests {
@@ -38,6 +43,8 @@ func TestValidateList(t *testing.T) {
 		})
 	}
 }
+
+func ptr(n int) *int { return &n }
 
 func TestValidateDismiss(t *testing.T) {
 	v := NewValidator()

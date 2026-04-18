@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { RefreshCw, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import type { Job } from '@/types'
 import { ResizeHandle } from '@/components/ui/resize-handle'
 import {
@@ -78,32 +78,6 @@ export function JobsPage() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-white/[0.07]">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-lg font-semibold text-white">Jobs</h1>
-          <span className="text-xs text-slate-400">
-            {displayTotal} job{displayTotal !== 1 ? 's' : ''}
-            {activeFilterCount > 0 && (
-              <>
-                {' '}
-                ·{' '}
-                <span className="text-violet-300">
-                  {activeFilterCount} selected filter{activeFilterCount !== 1 ? 's' : ''}
-                </span>
-              </>
-            )}
-          </span>
-        </div>
-        <button
-          onClick={() => jobs.refetch()}
-          className="p-2 text-slate-400 hover:text-white bg-white/5 border border-white/10 rounded-lg transition-colors"
-          title="Refresh"
-        >
-          <RefreshCw size={14} className={jobs.isLoading ? 'animate-spin' : ''} />
-        </button>
-      </div>
-
       <JobStatusTabs
         tab={jobs.tab}
         onChange={(t) => {
@@ -111,6 +85,23 @@ export function JobsPage() {
           jobs.setPage(1)
         }}
         counts={jobs.counts}
+        leftSlot={
+          <div className="flex items-baseline gap-3">
+            <h1 className="text-lg font-semibold text-white">Jobs</h1>
+            <span className="text-xs text-slate-400">
+              {displayTotal} job{displayTotal !== 1 ? 's' : ''}
+              {activeFilterCount > 0 && (
+                <>
+                  {' '}
+                  ·{' '}
+                  <span className="text-violet-300">
+                    {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''}
+                  </span>
+                </>
+              )}
+            </span>
+          </div>
+        }
       />
 
       <JobFilters

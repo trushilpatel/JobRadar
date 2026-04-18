@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/api/handler"
@@ -38,11 +39,18 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	p := request.ParsePagination(r)
 	q := r.URL.Query()
 
+	var expRanges []ExperienceRange
+	for _, raw := range q["experience_ranges"] {
+		if r, ok := parseExperienceRange(raw); ok {
+			expRanges = append(expRanges, r)
+		}
+	}
+
 	filter := JobFilter{
 		Status:           q.Get("status"),
-		Companies:        q["companies"],         // ?companies=stripe&companies=google
-		EmployTypes:      q["employ_types"],      // ?employ_types=full_time
-		ExperienceRanges: q["experience_ranges"], // ?experience_ranges=0-5&experience_ranges=5%2B
+		Companies:        q["companies"],    // ?companies=stripe&companies=google
+		EmployTypes:      q["employ_types"], // ?employ_types=full_time
+		ExperienceRanges: expRanges,
 	}
 
 	if filter.Status == "" {
@@ -197,4 +205,24 @@ func (h *Handler) SetNotes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handler.Respond(w, http.StatusOK, map[string]string{"notes": input.Notes})
+}
+
+func parseExperienceRange(s string) (ExperienceRange, bool) {
+	if strings.HasSuffix(s, "+") {
+		min, err := strconv.Atoi(strings.TrimSuffix(s, "+"))
+		if err != nil || min < 0 {
+			return ExperienceRange{}, false
+		}
+		return ExperienceRange{Min: min}, true
+	}
+	parts := strings.SplitN(s, "-", 2)
+	if len(parts) != 2 {
+		return ExperienceRange{}, false
+	}
+	min, err1 := strconv.Atoi(parts[0])
+	max, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil || min < 0 || max <= min {
+		return ExperienceRange{}, false
+	}
+	return ExperienceRange{Min: min, Max: &max}, true
 }

@@ -161,16 +161,24 @@ func (s *jobStore) GetJobs(ctx context.Context, filter JobFilter, page, limit in
 	// Experience ranges — OR across selected bands
 	if len(filter.ExperienceRanges) > 0 {
 		var clauses []string
+		var args []interface{}
 		for _, r := range filter.ExperienceRanges {
-			switch r {
-			case "0-5":
-				clauses = append(clauses, "(experience_years <= 5 OR experience_years IS NULL)")
-			case "5+":
-				clauses = append(clauses, "experience_years > 5")
+			if r.Max != nil {
+				if r.Min == 0 {
+					// lowest band: include NULL (unknown experience level)
+					clauses = append(clauses, "(experience_years <= ? OR experience_years IS NULL)")
+					args = append(args, *r.Max)
+				} else {
+					clauses = append(clauses, "(experience_years > ? AND experience_years <= ?)")
+					args = append(args, r.Min, *r.Max)
+				}
+			} else {
+				clauses = append(clauses, "experience_years > ?")
+				args = append(args, r.Min)
 			}
 		}
 		if len(clauses) > 0 {
-			query = query.Where("(" + strings.Join(clauses, " OR ") + ")")
+			query = query.Where("("+strings.Join(clauses, " OR ")+")", args...)
 		}
 	}
 

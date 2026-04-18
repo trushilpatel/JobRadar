@@ -33,11 +33,6 @@ var validDiscardReasons = map[string]bool{
 	model.DiscardReasonNotRelevant: true,
 }
 
-var validExperienceRanges = map[string]bool{
-	"0-5": true,
-	"5+":  true,
-}
-
 // ValidateList validates list filter and pagination parameters.
 func (v *validator) ValidateList(filter JobFilter, page, limit int) error {
 	if filter.Status != "" && !validJobStatuses[filter.Status] {
@@ -48,11 +43,18 @@ func (v *validator) ValidateList(filter JobFilter, page, limit int) error {
 		}
 	}
 	for _, r := range filter.ExperienceRanges {
-		if !validExperienceRanges[r] {
+		if r.Min < 0 {
 			return &domain.ValidationError{
 				Field:   "experience_ranges",
 				Code:    "INVALID_VALUE",
-				Message: "experience_ranges must be '0-5' or '5+'",
+				Message: "experience range min must be >= 0",
+			}
+		}
+		if r.Max != nil && *r.Max <= r.Min {
+			return &domain.ValidationError{
+				Field:   "experience_ranges",
+				Code:    "INVALID_VALUE",
+				Message: "experience range max must be > min",
 			}
 		}
 	}

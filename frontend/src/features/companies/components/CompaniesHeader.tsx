@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react'
-import { Plus, RefreshCw, Timer } from 'lucide-react'
+import { RefreshCw, Timer } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { PipelineStrip } from './PipelineStrip'
 
 const AUTO_REFRESH_KEY = 'companies-auto-refresh'
 const AUTO_REFRESH_INTERVAL_MS = 30_000
 
 interface CompaniesHeaderProps {
-  total: number
-  totalActive: number
-  onAddClick: () => void
+  errorCount: number
+  errorFilterActive: boolean
+  onErrorToggle: () => void
 }
 
-export function CompaniesHeader({ total, totalActive, onAddClick }: CompaniesHeaderProps) {
+export function CompaniesHeader({
+  errorCount,
+  errorFilterActive,
+  onErrorToggle,
+}: CompaniesHeaderProps) {
   const [autoRefresh, setAutoRefresh] = useState(
     () => localStorage.getItem(AUTO_REFRESH_KEY) === 'true'
   )
@@ -31,15 +36,29 @@ export function CompaniesHeader({ total, totalActive, onAddClick }: CompaniesHea
   }
 
   return (
-    <div className="flex items-center justify-between px-6 py-3 border-b border-white/[0.07]">
-      <div className="flex items-baseline gap-3">
-        <h1 className="text-lg font-semibold text-white">Companies</h1>
-        <span className="text-xs text-slate-400">
-          {total} tracked · <span className="text-emerald-400">{totalActive} active</span>
-        </span>
+    <div className="flex items-center px-6 py-3 border-b border-white/[0.07] gap-6">
+      <h1 className="text-lg font-semibold text-white shrink-0">Companies</h1>
+
+      <div className="flex items-center flex-1 overflow-x-auto">
+        <PipelineStrip />
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 shrink-0">
+        {errorCount > 0 && (
+          <button
+            type="button"
+            onClick={onErrorToggle}
+            className={cn(
+              'text-[11px] font-medium rounded-full px-2.5 py-1 whitespace-nowrap border transition-colors',
+              errorFilterActive
+                ? 'text-red-300 bg-red-500/20 border-red-500/40'
+                : 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20'
+            )}
+          >
+            ⚠ {errorCount} {errorCount === 1 ? 'scan error' : 'scan errors'}
+          </button>
+        )}
+
         <button
           type="button"
           onClick={toggleAutoRefresh}
@@ -66,15 +85,6 @@ export function CompaniesHeader({ total, totalActive, onAddClick }: CompaniesHea
           className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white transition-colors"
         >
           <RefreshCw size={14} />
-        </button>
-
-        <button
-          type="button"
-          onClick={onAddClick}
-          className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-        >
-          <Plus size={12} />
-          Add Company
         </button>
       </div>
     </div>
