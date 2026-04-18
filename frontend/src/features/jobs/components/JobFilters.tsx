@@ -58,6 +58,7 @@ interface JobFiltersProps {
 const EXP_OPTIONS = ['0-2', '2-5', '5+'] as const
 const DATE_OPTIONS: { value: DateFilter; label: string }[] = [
   { value: 'all', label: 'Any' },
+  { value: '24h', label: '24h' },
   { value: '7d', label: '7d' },
   { value: '30d', label: '30d' },
 ]

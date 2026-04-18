@@ -57,7 +57,7 @@ func (f *fakePipelineService) HasSeenJob(_ context.Context, id string) (bool, er
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func makeWorker(scorer *fakeScorer, pipeline *fakePipelineService) *Worker {
-	return NewWorker(nil, scorer, pipeline, logger.NewNoop(), 0)
+	return NewWorker(nil, scorer, pipeline, logger.NewNoop(), 0, 5)
 }
 
 func baseRawJob() ats.RawJob {
@@ -193,7 +193,7 @@ func TestDropJob_SecurityClearance(t *testing.T) {
 }
 
 func TestDropJob_ExperienceExceedsMax(t *testing.T) {
-	w := NewWorker(nil, &fakeScorer{}, &fakePipelineService{}, logger.NewNoop(), 3)
+	w := NewWorker(nil, &fakeScorer{}, &fakePipelineService{}, logger.NewNoop(), 3, 5)
 	exp := 5
 	result := &llm.EnrichResult{Sponsorship: true, ExperienceYears: &exp}
 	if reason := w.dropJob(result); reason == "" {
@@ -253,7 +253,7 @@ func TestEnrich_SkipsFetchWhenFullContentPresent(t *testing.T) {
 	}}
 	pipeline := &fakePipelineService{}
 
-	w := NewWorker(nil, scorer, pipeline, logger.NewNoop(), 0)
+	w := NewWorker(nil, scorer, pipeline, logger.NewNoop(), 0, 5)
 	// Replace the default HTTP client with one that will fail if called.
 	w.client = &http.Client{Transport: transport}
 

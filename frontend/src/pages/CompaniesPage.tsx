@@ -50,6 +50,8 @@ export function CompaniesPage() {
         bulkToggling={actions.bulkToggling}
         bulkAllActive={bulkAllActive}
         onBulkToggle={() => actions.bulkToggleActive(bulkAllActive)}
+        runningAll={actions.runningAll}
+        onRunAll={actions.scanAll}
         onReset={c.resetFilters}
         onAddClick={() => setAddOpen(true)}
       />

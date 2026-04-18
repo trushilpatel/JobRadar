@@ -69,6 +69,7 @@ export function JobsTable({
           if (activeJobId === job.id) return 'bg-violet-500/[0.08]'
           return 'hover:bg-white/[0.03]'
         }}
+        onSortingChange={() => onPageChange(1)}
         serverPagination={{
           page,
           limit,

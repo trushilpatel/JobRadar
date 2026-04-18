@@ -1,41 +1,18 @@
-import {
-  X,
-  ExternalLink,
-  Wifi,
-  Briefcase,
-  DollarSign,
-  Bookmark,
-  BookmarkCheck,
-  Trash2,
-  Send,
-  TrendingUp,
-  Award,
-  MapPin,
-} from 'lucide-react'
-import type { Job } from '@/types'
+import { X, ExternalLink, Wifi, Briefcase, DollarSign, Trash2, MapPin } from 'lucide-react'
+import type { Job, JobStatus } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
 import { formatSalary } from '@/services/jobs.service'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
+import { StatusSelect } from '@/features/jobs/components/StatusSelect'
 
 interface JobDetailPanelProps {
   job: Job
   onClose: () => void
-  onSave: (job: Job) => void
-  onApply: (job: Job) => void
-  onMarkInterviewing: (job: Job) => void
-  onMarkOffer: (job: Job) => void
+  onStatusChange: (job: Job, status: JobStatus) => void
   onDismiss: (job: Job) => void
 }
 
-export function JobDetailPanel({
-  job,
-  onClose,
-  onSave,
-  onApply,
-  onMarkInterviewing,
-  onMarkOffer,
-  onDismiss,
-}: JobDetailPanelProps) {
+export function JobDetailPanel({ job, onClose, onStatusChange, onDismiss }: JobDetailPanelProps) {
   const salary = formatSalary(job.salary_range)
   const techStack: string[] = Array.isArray(job.tech_stack) ? job.tech_stack : []
   const companyName = job.company?.name ?? job.company_id ?? ''
@@ -98,7 +75,7 @@ export function JobDetailPanel({
           )}
         </div>
 
-        {/* Row 2: open posting · save · status dropdown */}
+        {/* Row 2: open posting + status dropdown */}
         <div className="flex items-center gap-2 flex-wrap">
           <a
             href={job.url}
@@ -109,47 +86,7 @@ export function JobDetailPanel({
             <ExternalLink size={12} /> Open posting
           </a>
 
-          {(job.status === 'new' || job.status === 'saved') &&
-            (job.saved ? (
-              <button
-                onClick={() => onSave(job)}
-                className="flex items-center gap-1.5 text-xs text-violet-300 bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 px-2.5 py-1.5 rounded-lg transition-colors"
-              >
-                <BookmarkCheck size={12} /> Saved
-              </button>
-            ) : (
-              <button
-                onClick={() => onSave(job)}
-                className="flex items-center gap-1.5 text-xs text-white bg-violet-600 hover:bg-violet-500 px-2.5 py-1.5 rounded-lg transition-colors"
-              >
-                <Bookmark size={12} /> Save
-              </button>
-            ))}
-
-          {(job.status === 'new' || job.status === 'saved') && (
-            <button
-              onClick={() => onApply(job)}
-              className="flex items-center gap-1.5 text-xs text-white bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1.5 rounded-lg transition-colors"
-            >
-              <Send size={12} /> Mark applied
-            </button>
-          )}
-          {job.status === 'applied' && (
-            <button
-              onClick={() => onMarkInterviewing(job)}
-              className="flex items-center gap-1.5 text-xs text-white bg-blue-600 hover:bg-blue-500 px-2.5 py-1.5 rounded-lg transition-colors"
-            >
-              <TrendingUp size={12} /> Mark interviewing
-            </button>
-          )}
-          {job.status === 'interviewing' && (
-            <button
-              onClick={() => onMarkOffer(job)}
-              className="flex items-center gap-1.5 text-xs text-white bg-amber-600 hover:bg-amber-500 px-2.5 py-1.5 rounded-lg transition-colors"
-            >
-              <Award size={12} /> Mark offer
-            </button>
-          )}
+          <StatusSelect status={job.status} onChange={(status) => onStatusChange(job, status)} />
         </div>
       </div>
 

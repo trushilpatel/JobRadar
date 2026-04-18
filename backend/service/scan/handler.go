@@ -29,6 +29,9 @@ func (h *Handler) Register(r chi.Router) {
 	r.Post("/companies/queue/{entry_id}/move-up", h.MoveQueueItemUp)
 	r.Post("/companies/queue/{entry_id}/move-down", h.MoveQueueItemDown)
 
+	// Bulk scan
+	r.Post("/companies/scan-all", h.TriggerScanAll)
+
 	// Per-company scan operations
 	r.Get("/companies/{id}/scan-stats", h.ScanStats)
 	r.Post("/companies/{id}/scan", h.TriggerScan)
@@ -83,6 +86,16 @@ func (h *Handler) MoveQueueItemDown(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handler.Respond(w, http.StatusOK, map[string]string{"id": id})
+}
+
+// POST /companies/scan-all
+func (h *Handler) TriggerScanAll(w http.ResponseWriter, r *http.Request) {
+	count, err := h.scans.TriggerScanAll(r.Context())
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusAccepted, map[string]any{"queued": count})
 }
 
 // GET /companies/:id/scan-stats

@@ -30,13 +30,19 @@ type Config struct {
 	LLMProvider   string // "gemini"
 	LLMAPIKey     string
 	LLMModel      string // e.g. "gemini-3.1-flash-lite", "claude-haiku-4-5-20251001"
-	LLMRateLimits LLMRateLimits
 
-	ScanIntervalMinutes       int // how often the scan worker runs a full sweep
-	ScanCompanyDelaySeconds   int // sleep between company job-list fetches to avoid being blocked
-	ScorerBatchSize           int // number of job titles sent to LLM per ScoreBatch call
-	ScorerFlushTimeoutSeconds int // flush a partial batch after this many seconds of inactivity
-	ScorerLLMParallelism      int // number of parallel ScoreBatch calls per flush
+	ScanIntervalMinutes     int // how often the scan worker runs a full sweep
+	ScanCompanyDelaySeconds int // sleep between company job-list fetches to avoid being blocked
+
+	// Filter worker
+	FilterBatchSize           int // number of job titles sent to LLM per ScoreBatch call
+	FilterFlushTimeoutSeconds int // flush a partial batch after this many seconds of inactivity
+	FilterLLMParallelism      int // number of parallel ScoreBatch calls per flush
+	FilterRateLimits          LLMRateLimits
+
+	// Enricher worker
+	EnricherConcurrency int // number of jobs enriched concurrently (page fetch + LLM)
+	EnricherRateLimits  LLMRateLimits
 
 	TargetRoles []string // e.g. ["Backend Engineer", "Platform Engineer"]
 	YearsExp    int
@@ -63,28 +69,34 @@ func Load() *Config {
 	}
 
 	return &Config{
-		DBHost:        getEnv("DB_HOST", "localhost"),
-		DBPort:        getEnv("DB_PORT", "5432"),
-		DBUser:        getEnv("DB_USER", "postgres"),
-		DBPassword:    getEnv("DB_PASSWORD", "postgres"),
-		DBName:        getEnv("DB_NAME", "jobradar"),
-		DBSSLMode:     getEnv("DB_SSLMODE", "disable"),
-		KafkaBrokers:  getEnv("KAFKA_BROKERS", "localhost:9092"),
-		KafkaUser:     getEnv("KAFKA_USER", ""),
-		KafkaPassword: getEnv("KAFKA_PASSWORD", ""),
-		LLMProvider:   getEnv("LLM_PROVIDER", "gemini"),
-		LLMAPIKey:     getEnv("LLM_API_KEY", ""),
-		LLMModel:      getEnv("LLM_MODEL", "gemini-3.1-flash-lite-preview"),
-		LLMRateLimits: LLMRateLimits{
-			RPM:   getEnvInt("LLM_RPM", 15),
-			RPD:   getEnvInt("LLM_RPD", 1500),
-			TPMIn: getEnvInt("LLM_TPM", 1000000),
-		},
+		DBHost:                    getEnv("DB_HOST", "localhost"),
+		DBPort:                    getEnv("DB_PORT", "5432"),
+		DBUser:                    getEnv("DB_USER", "postgres"),
+		DBPassword:                getEnv("DB_PASSWORD", "postgres"),
+		DBName:                    getEnv("DB_NAME", "jobradar"),
+		DBSSLMode:                 getEnv("DB_SSLMODE", "disable"),
+		KafkaBrokers:              getEnv("KAFKA_BROKERS", "localhost:9092"),
+		KafkaUser:                 getEnv("KAFKA_USER", ""),
+		KafkaPassword:             getEnv("KAFKA_PASSWORD", ""),
+		LLMProvider:               getEnv("LLM_PROVIDER", "gemini"),
+		LLMAPIKey:                 getEnv("LLM_API_KEY", ""),
+		LLMModel:                  getEnv("LLM_MODEL", "gemini-3.1-flash-lite-preview"),
 		ScanIntervalMinutes:       getEnvInt("SCAN_INTERVAL_MINUTES", 1440), // default: 24h
-		ScanCompanyDelaySeconds:   getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 60),
-		ScorerBatchSize:           getEnvInt("SCORER_BATCH_SIZE", 50),
-		ScorerFlushTimeoutSeconds: getEnvInt("SCORER_FLUSH_TIMEOUT_SECONDS", 30),
-		ScorerLLMParallelism:      getEnvInt("SCORER_LLM_PARALLELISM", 5),
+		ScanCompanyDelaySeconds:   getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 15),
+		FilterBatchSize:           getEnvInt("FILTER_BATCH_SIZE", 50),
+		FilterFlushTimeoutSeconds: getEnvInt("FILTER_FLUSH_TIMEOUT_SECONDS", 30),
+		FilterLLMParallelism:      getEnvInt("FILTER_LLM_PARALLELISM", 5),
+		FilterRateLimits: LLMRateLimits{
+			RPM:   getEnvInt("FILTER_RPM", 15),
+			RPD:   getEnvInt("FILTER_RPD", 1500),
+			TPMIn: getEnvInt("FILTER_TPM", 1000000),
+		},
+		EnricherConcurrency: getEnvInt("ENRICHER_CONCURRENCY", 5),
+		EnricherRateLimits: LLMRateLimits{
+			RPM:   getEnvInt("ENRICHER_RPM", 15),
+			RPD:   getEnvInt("ENRICHER_RPD", 1500),
+			TPMIn: getEnvInt("ENRICHER_TPM", 1000000),
+		},
 
 		TargetRoles: splitCSV(getEnv("TARGET_ROLES", "Software Engineer")),
 		YearsExp:    getEnvInt("YEARS_EXP", 0),

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { fetchMarket } from '@/api/dashboard'
 import { cn } from '@/lib/utils'
 
@@ -7,26 +8,48 @@ function StatCol({
   value,
   sub,
   valueClass,
+  onClick,
 }: {
   label: string
   value: number
   sub: string
   valueClass: string
+  onClick?: () => void
 }) {
   return (
-    <div className="flex-1 flex flex-col gap-1 px-5 first:pl-0 last:pr-0">
+    <div
+      className={cn(
+        'flex-1 flex flex-col gap-1 px-5 first:pl-0 last:pr-0',
+        onClick && 'cursor-pointer group'
+      )}
+      onClick={onClick}
+    >
       <span className="text-[10px] font-medium uppercase tracking-[0.07em] text-slate-500">
         {label}
       </span>
-      <span className={cn('text-[36px] font-medium leading-none tabular-nums', valueClass)}>
+      <span
+        className={cn(
+          'text-[36px] font-medium leading-none tabular-nums',
+          valueClass,
+          onClick && 'group-hover:opacity-80 transition-opacity'
+        )}
+      >
         {value}
       </span>
-      <span className="text-[11px] text-slate-500">{sub}</span>
+      <span
+        className={cn(
+          'text-[11px] text-slate-500',
+          onClick && 'group-hover:text-slate-400 transition-colors'
+        )}
+      >
+        {sub}
+      </span>
     </div>
   )
 }
 
 export function MarketPanel() {
+  const navigate = useNavigate()
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-market'],
     queryFn: fetchMarket,
@@ -58,6 +81,7 @@ export function MarketPanel() {
             value={data.new_since_yesterday}
             sub="since yesterday"
             valueClass="text-blue-400"
+            onClick={() => navigate('/jobs', { state: { dateFilter: '24h' } })}
           />
           <div className="w-px bg-white/[0.07] self-stretch" />
           <StatCol

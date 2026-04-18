@@ -47,9 +47,9 @@ func main() {
 		YearsExp:    cfg.YearsExp,
 		Log:         log,
 		Limits: llm.RateLimits{
-			RPM:   cfg.LLMRateLimits.RPM,
-			RPD:   cfg.LLMRateLimits.RPD,
-			TPMIn: cfg.LLMRateLimits.TPMIn,
+			RPM:   cfg.EnricherRateLimits.RPM,
+			RPD:   cfg.EnricherRateLimits.RPD,
+			TPMIn: cfg.EnricherRateLimits.TPMIn,
 		},
 	})
 	if err != nil {
@@ -62,7 +62,7 @@ func main() {
 	snapshotStore := jobsvc.NewSnapshotStore(database)
 	techTagStore := jobsvc.NewTechTagStore(database)
 	pipeline := jobsvc.NewPipelineService(jobStore, ledgerStore, snapshotStore, techTagStore)
-	worker := analyzer.NewWorker(consumer, scorer, pipeline, log, cfg.MaxExpYears)
+	worker := analyzer.NewWorker(consumer, scorer, pipeline, log, cfg.MaxExpYears, cfg.EnricherConcurrency)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

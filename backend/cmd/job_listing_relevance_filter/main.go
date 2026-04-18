@@ -59,9 +59,9 @@ func main() {
 		YearsExp:    cfg.YearsExp,
 		Log:         log,
 		Limits: llm.RateLimits{
-			RPM:   cfg.LLMRateLimits.RPM,
-			RPD:   cfg.LLMRateLimits.RPD,
-			TPMIn: cfg.LLMRateLimits.TPMIn,
+			RPM:   cfg.FilterRateLimits.RPM,
+			RPD:   cfg.FilterRateLimits.RPD,
+			TPMIn: cfg.FilterRateLimits.TPMIn,
 		},
 	})
 	if err != nil {
@@ -71,7 +71,7 @@ func main() {
 
 	ledger := jobsvc.NewSeenLedgerStore(database)
 	worker := filter.NewWorker(consumer, producer, scorer, ledger,
-		cfg.ScorerBatchSize, cfg.ScorerFlushTimeoutSeconds, cfg.ScorerLLMParallelism, log)
+		cfg.FilterBatchSize, cfg.FilterFlushTimeoutSeconds, cfg.FilterLLMParallelism, log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

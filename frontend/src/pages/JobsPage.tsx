@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
-import type { Job } from '@/types'
+import type { Job, JobStatus } from '@/types'
 import { ResizeHandle } from '@/components/ui/resize-handle'
 import {
   useJobs,
@@ -21,22 +21,8 @@ export function JobsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [panelWidth, setPanelWidth] = useState(440)
 
-  function handleSave(job: Job) {
-    actions.save.mutate({ id: job.id, saved: !job.saved })
-  }
-
-  function handleApply(job: Job) {
-    actions.apply.mutate(job.id)
-    if (activeJob?.id === job.id) setActiveJob(null)
-  }
-
-  function handleMarkInterviewing(job: Job) {
-    actions.markInterviewing.mutate(job.id)
-    if (activeJob?.id === job.id) setActiveJob(null)
-  }
-
-  function handleMarkOffer(job: Job) {
-    actions.markOffer.mutate(job.id)
+  function handleStatusChange(job: Job, status: JobStatus) {
+    actions.setStatus.mutate({ id: job.id, status })
     if (activeJob?.id === job.id) setActiveJob(null)
   }
 
@@ -180,10 +166,7 @@ export function JobsPage() {
               <JobDetailPanel
                 job={activeJob}
                 onClose={() => setActiveJob(null)}
-                onSave={handleSave}
-                onApply={handleApply}
-                onMarkInterviewing={handleMarkInterviewing}
-                onMarkOffer={handleMarkOffer}
+                onStatusChange={handleStatusChange}
                 onDismiss={(job) => setDismissTarget(job)}
               />
             </div>

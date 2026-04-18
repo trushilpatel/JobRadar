@@ -13,6 +13,7 @@ import (
 // Service defines all business operations for the scan domain.
 type Service interface {
 	TriggerScan(ctx context.Context, companyID string) error
+	TriggerScanAll(ctx context.Context) (int, error)
 	GetStats(ctx context.Context, companyID string) (*ScanStatsView, error)
 	ListQueue(ctx context.Context, filter QueueFilter) ([]QueueEntryView, error)
 	RemoveFromQueue(ctx context.Context, entryID string) error
@@ -48,6 +49,28 @@ func (s *service) TriggerScan(ctx context.Context, companyID string) (err error)
 		return domain.ErrInternal.WithMessage("failed to trigger scan")
 	}
 	return nil
+}
+
+// TriggerScanAll enqueues a manual scan for every active company.
+// Returns the number of companies successfully enqueued.
+func (s *service) TriggerScanAll(ctx context.Context) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "scan.service.TriggerScanAll")
+	defer tracing.End(span, &err)
+	companies, err := s.companySvc.GetAll(ctx)
+	if err != nil {
+		return 0, domain.ErrInternal.WithMessage("failed to fetch companies")
+	}
+	var count int
+	for _, c := range companies {
+		if !c.Active {
+			continue
+		}
+		if err := s.queue.Enqueue(ctx, c.ID, model.QueueSourceManual); err != nil {
+			continue
+		}
+		count++
+	}
+	return count, nil
 }
 
 // GetStats returns a summary of scan history for the given company.

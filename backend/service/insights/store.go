@@ -102,7 +102,7 @@ func (s *insightsStore) GetTechStackTrends(ctx context.Context, limit int) (resu
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT tech, COUNT(*) AS count
 		FROM job_feed, jsonb_array_elements_text(tech_stack) AS tech
-		WHERE tech_stack IS NOT NULL
+		WHERE tech_stack IS NOT NULL AND jsonb_typeof(tech_stack) = 'array'
 		GROUP BY tech
 		ORDER BY count DESC
 		LIMIT ?

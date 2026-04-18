@@ -1,11 +1,16 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
 import { fetchJobs, fetchJobCounts, type JobFilters } from '@/api/jobs'
 
 export type TabKey = 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
-export type DateFilter = 'all' | '7d' | '30d'
+export type DateFilter = 'all' | '24h' | '7d' | '30d'
 
 export function useJobs() {
+  const location = useLocation()
+  const initialDateFilter: DateFilter =
+    (location.state as { dateFilter?: DateFilter } | null)?.dateFilter ?? 'all'
+
   // Tab
   const [tab, setTab] = useState<TabKey>('new')
 
@@ -14,7 +19,7 @@ export function useJobs() {
   const [remoteFilter, setRemoteFilter] = useState(false)
   const [onSiteFilter, setOnSiteFilter] = useState(false)
   const [expFilter, setExpFilter] = useState<string[]>([])
-  const [dateFilter, setDateFilter] = useState<DateFilter>('all')
+  const [dateFilter, setDateFilter] = useState<DateFilter>(initialDateFilter)
 
   // Search
   const [searchQuery, setSearchQuery] = useState('')
@@ -31,7 +36,8 @@ export function useJobs() {
       remote: remoteFilter || undefined,
       onSite: onSiteFilter || undefined,
       experienceRanges: expFilter.length > 0 ? expFilter : undefined,
-      daysAdded: dateFilter === '7d' ? 7 : dateFilter === '30d' ? 30 : undefined,
+      daysAdded:
+        dateFilter === '24h' ? 1 : dateFilter === '7d' ? 7 : dateFilter === '30d' ? 30 : undefined,
     }),
     [tab, selectedCompanies, remoteFilter, onSiteFilter, expFilter, dateFilter]
   )

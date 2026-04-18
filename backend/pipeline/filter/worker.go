@@ -153,7 +153,24 @@ func (w *Worker) flushBatch(ctx context.Context, batch []jobWithCtx) {
 	batchCtx, span := tracing.Start(batch[0].ctx, "filter.worker.flushBatch")
 	defer tracing.End(span, nil)
 
-	subBatches := splitIntoN(batch, w.parallelism)
+	// Only use as many parallel calls as needed to keep each sub-batch at the
+	// target size. Avoids firing w.parallelism LLM calls for a tiny partial batch.
+	maxParallelism := w.parallelism
+	if maxParallelism < 1 {
+		maxParallelism = 1
+	}
+	targetSubBatchSize := w.batchSize / maxParallelism
+	if targetSubBatchSize < 1 {
+		targetSubBatchSize = 1
+	}
+	parallelism := len(batch) / targetSubBatchSize
+	if parallelism < 1 {
+		parallelism = 1
+	} else if parallelism > maxParallelism {
+		parallelism = maxParallelism
+	}
+
+	subBatches := splitIntoN(batch, parallelism)
 	resultCh := make(chan subBatchResult, len(subBatches))
 
 	var wg sync.WaitGroup

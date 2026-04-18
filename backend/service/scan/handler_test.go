@@ -28,6 +28,7 @@ type fakeScanService struct {
 }
 
 func (f *fakeScanService) TriggerScan(_ context.Context, companyID string) error { return f.err }
+func (f *fakeScanService) TriggerScanAll(_ context.Context) (int, error)         { return 0, f.err }
 func (f *fakeScanService) GetStats(_ context.Context, companyID string) (*ScanStatsView, error) {
 	return f.statsResult, f.err
 }

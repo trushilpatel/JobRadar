@@ -8,7 +8,14 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Pagination } from '@/components/ui/pagination'
 import { cn } from '@/lib/utils'
 
@@ -36,6 +43,8 @@ interface DataTableProps<TData> {
   getRowClassName?: (row: TData) => string
   /** When provided, renders server-side pagination controls below the table */
   serverPagination?: ServerPagination
+  /** Called when the sort order changes — use to reset to page 1 */
+  onSortingChange?: () => void
 }
 
 export function DataTable<TData>({
@@ -48,6 +57,7 @@ export function DataTable<TData>({
   selectedId,
   getRowClassName,
   serverPagination,
+  onSortingChange,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([])
 
@@ -55,7 +65,10 @@ export function DataTable<TData>({
     data,
     columns,
     state: { sorting },
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      setSorting(updater)
+      onSortingChange?.()
+    },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getRowId,
@@ -81,10 +94,13 @@ export function DataTable<TData>({
     <div className="flex flex-col">
       <Table>
         <TableHeader>
-          {table.getHeaderGroups().map(hg => (
+          {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id} className="border-b border-white/[0.07]">
-              {hg.headers.map(header => (
-                <TableHead key={header.id} style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}>
+              {hg.headers.map((header) => (
+                <TableHead
+                  key={header.id}
+                  style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
+                >
                   {header.isPlaceholder
                     ? null
                     : flexRender(header.column.columnDef.header, header.getContext())}
@@ -94,21 +110,20 @@ export function DataTable<TData>({
           ))}
         </TableHeader>
         <TableBody>
-          {table.getRowModel().rows.map(row => {
+          {table.getRowModel().rows.map((row) => {
             const isSelected = selectedId !== undefined && getRowId?.(row.original) === selectedId
             const rowBg = getRowClassName
               ? getRowClassName(row.original)
-              : isSelected ? 'bg-violet-500/[0.08]' : 'hover:bg-white/[0.02]'
+              : isSelected
+                ? 'bg-violet-500/[0.08]'
+                : 'hover:bg-white/[0.02]'
             return (
               <TableRow
                 key={row.id}
                 onClick={() => onRowClick?.(row.original)}
-                className={cn(
-                  onRowClick && 'cursor-pointer',
-                  rowBg,
-                )}
+                className={cn(onRowClick && 'cursor-pointer', rowBg)}
               >
-                {row.getVisibleCells().map(cell => (
+                {row.getVisibleCells().map((cell) => (
                   <TableCell key={cell.id}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
@@ -161,13 +176,17 @@ export function DataTableColumnHeader<TData, TValue>({
       onClick={column.getToggleSortingHandler()}
       className={cn(
         'inline-flex items-center gap-1 text-slate-400 hover:text-white transition-colors select-none',
-        className,
+        className
       )}
     >
       {title}
-      {sorted === 'asc'  ? <ChevronUp size={12} />   :
-       sorted === 'desc' ? <ChevronDown size={12} />  :
-                           <ChevronsUpDown size={12} className="opacity-40" />}
+      {sorted === 'asc' ? (
+        <ChevronUp size={12} />
+      ) : sorted === 'desc' ? (
+        <ChevronDown size={12} />
+      ) : (
+        <ChevronsUpDown size={12} className="opacity-40" />
+      )}
     </button>
   )
 }

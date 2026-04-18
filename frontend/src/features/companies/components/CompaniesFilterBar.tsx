@@ -1,4 +1,4 @@
-import { Search, Filter, Power, Loader2, X, Plus } from 'lucide-react'
+import { Search, Filter, Power, Loader2, X, Plus, Play } from 'lucide-react'
 import { SegmentedSwitch } from '@/components/ui/segmented-switch'
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
 import type { ActiveFilter, StatusFilter } from '@/features/companies/hooks/useCompanies'
@@ -21,6 +21,8 @@ interface CompaniesFilterBarProps {
   bulkToggling: boolean
   bulkAllActive: boolean
   onBulkToggle: () => void
+  runningAll: boolean
+  onRunAll: () => void
   onReset: () => void
 
   onAddClick: () => void
@@ -103,8 +105,8 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         </button>
       </div>
 
-      {/* Center: activate all */}
-      <div className="flex-1 flex items-center justify-center">
+      {/* Center: bulk actions */}
+      <div className="flex-1 flex items-center justify-center gap-2">
         <button
           type="button"
           onClick={p.onBulkToggle}
@@ -113,6 +115,15 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         >
           {p.bulkToggling ? <Loader2 size={12} className="animate-spin" /> : <Power size={12} />}
           {p.bulkAllActive ? 'Deactivate all' : 'Activate all'}
+        </button>
+        <button
+          type="button"
+          onClick={p.onRunAll}
+          disabled={p.runningAll}
+          className="flex items-center gap-1.5 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {p.runningAll ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+          Run all
         </button>
       </div>
 

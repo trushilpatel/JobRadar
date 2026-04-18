@@ -19,11 +19,6 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// enrichConcurrency is the number of jobs processed in parallel.
-// Page fetches (up to 15s each) dominate latency, so concurrency here
-// is the main throughput lever. LLM calls are still rate-limited globally.
-const enrichConcurrency = 5
-
 // Worker consumes jobs.raw_detail, fetches the full job page,
 // runs LLM enrichment, and writes the final row to the job table.
 type Worker struct {
@@ -33,6 +28,7 @@ type Worker struct {
 	client      *http.Client
 	log         logger.Logger
 	maxExpYears int
+	concurrency int
 }
 
 func NewWorker(
@@ -41,6 +37,7 @@ func NewWorker(
 	pipeline jobsvc.PipelineService,
 	log logger.Logger,
 	maxExpYears int,
+	concurrency int,
 ) *Worker {
 	return &Worker{
 		consumer:    consumer,
@@ -49,6 +46,7 @@ func NewWorker(
 		client:      &http.Client{Timeout: 15 * time.Second},
 		log:         log,
 		maxExpYears: maxExpYears,
+		concurrency: concurrency,
 	}
 }
 
@@ -56,9 +54,9 @@ func NewWorker(
 // Jobs are processed concurrently up to enrichConcurrency — page fetches
 // dominate latency so parallelism here is the main throughput lever.
 func (w *Worker) Run(ctx context.Context) error {
-	w.log.Info("worker started", logger.Int("concurrency", enrichConcurrency))
+	w.log.Info("worker started", logger.Int("concurrency", w.concurrency))
 
-	sem := make(chan struct{}, enrichConcurrency)
+	sem := make(chan struct{}, w.concurrency)
 	var wg sync.WaitGroup
 
 	err := w.consumer.Poll(ctx, func(_ string, value []byte, headers []kgo.RecordHeader) error {

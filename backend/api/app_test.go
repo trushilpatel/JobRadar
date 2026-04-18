@@ -161,6 +161,7 @@ func (f *fakeCompanyService) SetAllActive(_ context.Context, _ bool) error { ret
 type fakeScanService struct{}
 
 func (f *fakeScanService) TriggerScan(_ context.Context, _ string) error { return nil }
+func (f *fakeScanService) TriggerScanAll(_ context.Context) (int, error) { return 0, nil }
 func (f *fakeScanService) GetStats(_ context.Context, _ string) (*scan.ScanStatsView, error) {
 	return nil, nil
 }

@@ -3,15 +3,15 @@ import type { Company, ScanStats, QueueEntry } from '@/types'
 const BASE = '/api'
 
 export interface CompanyFilters {
-  active?: boolean        // true = active only, false = inactive only, undefined = all
-  adapterType?: string    // e.g. 'greenhouse', 'lever'
-  search?: string         // ILIKE name match
+  active?: boolean // true = active only, false = inactive only, undefined = all
+  adapterType?: string // e.g. 'greenhouse', 'lever'
+  search?: string // ILIKE name match
 }
 
 export interface CompaniesPage {
   data: Company[]
-  total: number           // total matching filter
-  total_active: number    // always: total active companies (for header stats)
+  total: number // total matching filter
+  total_active: number // always: total active companies (for header stats)
   page: number
   limit: number
 }
@@ -19,7 +19,7 @@ export interface CompaniesPage {
 export async function fetchCompanies(
   filters: CompanyFilters = {},
   page = 1,
-  limit = 20,
+  limit = 20
 ): Promise<CompaniesPage> {
   const p = new URLSearchParams()
   p.set('page', String(page))
@@ -81,6 +81,12 @@ export async function triggerScan(id: string): Promise<void> {
     const body = await res.json().catch(() => ({}))
     throw new Error(body.error?.message ?? 'Failed to trigger scan')
   }
+}
+
+export async function triggerScanAll(): Promise<{ queued: number }> {
+  const res = await fetch(`${BASE}/companies/scan-all`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to trigger scan all')
+  return res.json().then((r: { data: { queued: number } }) => r.data)
 }
 
 export async function setAllCompaniesActive(active: boolean): Promise<void> {
