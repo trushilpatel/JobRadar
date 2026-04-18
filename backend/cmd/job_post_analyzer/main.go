@@ -42,7 +42,7 @@ func main() {
 	scorer, err := llm.NewScorer(llm.ScorerOptions{
 		Provider:    cfg.LLMProvider,
 		APIKey:      cfg.LLMAPIKey,
-		Model:       cfg.LLMModel,
+		Model:       cfg.EnricherLLMModel,
 		TargetRoles: cfg.TargetRoles,
 		YearsExp:    cfg.YearsExp,
 		Log:         log,

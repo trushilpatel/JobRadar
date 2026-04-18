@@ -18,18 +18,20 @@ type LLMRateLimits struct {
 }
 
 type Config struct {
-	DBHost        string
-	DBPort        string
-	DBUser        string
-	DBPassword    string
-	DBName        string
-	DBSSLMode     string
-	KafkaBrokers  string
-	KafkaUser     string
-	KafkaPassword string
-	LLMProvider   string // "gemini"
-	LLMAPIKey     string
-	LLMModel      string // e.g. "gemini-3.1-flash-lite", "claude-haiku-4-5-20251001"
+	DBHost           string
+	DBPort           string
+	DBUser           string
+	DBPassword       string
+	DBName           string
+	DBSSLMode        string
+	KafkaBrokers     string
+	KafkaUser        string
+	KafkaPassword    string
+	LLMProvider      string // "gemini"
+	LLMAPIKey        string
+	LLMModel         string // fallback model if worker-specific model is not set
+	FilterLLMModel   string // model used by the relevance filter worker
+	EnricherLLMModel string // model used by the job post analyzer worker
 
 	ScanIntervalMinutes     int // how often the scan worker runs a full sweep
 	ScanCompanyDelaySeconds int // sleep between company job-list fetches to avoid being blocked
@@ -81,6 +83,8 @@ func Load() *Config {
 		LLMProvider:               getEnv("LLM_PROVIDER", "gemini"),
 		LLMAPIKey:                 getEnv("LLM_API_KEY", ""),
 		LLMModel:                  getEnv("LLM_MODEL", "gemini-3.1-flash-lite-preview"),
+		FilterLLMModel:            getEnvWithFallback("FILTER_LLM_MODEL", "LLM_MODEL", "gemini-3.1-flash-lite-preview"),
+		EnricherLLMModel:          getEnvWithFallback("ENRICHER_LLM_MODEL", "LLM_MODEL", "gemma-4-31b-it"),
 		ScanIntervalMinutes:       getEnvInt("SCAN_INTERVAL_MINUTES", 1440), // default: 24h
 		ScanCompanyDelaySeconds:   getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 15),
 		FilterBatchSize:           getEnvInt("FILTER_BATCH_SIZE", 50),
@@ -126,6 +130,16 @@ func getEnv(key, fallback string) string {
 		return val
 	}
 	return fallback
+}
+
+func getEnvWithFallback(key, fallbackKey, defaultVal string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	if val := os.Getenv(fallbackKey); val != "" {
+		return val
+	}
+	return defaultVal
 }
 
 func getEnvInt(key string, fallback int) int {

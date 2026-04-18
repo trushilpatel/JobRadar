@@ -235,15 +235,15 @@ func (s *userDashboardStore) GetTechStackQuarterlyAdoption(ctx context.Context) 
 
 // PipelineDBStats holds the DB-sourced counts for the pipeline strip.
 type PipelineDBStats struct {
-	TotalCompanies  int64
-	ActiveCompanies int64
-	Queued          int64
-	Crawling        int64
-	NewJobs24h      int64
-	Errors24h       int64
+	TotalCompanies  int64 `gorm:"column:total_companies"`
+	ActiveCompanies int64 `gorm:"column:active_companies"`
+	Queued          int64 `gorm:"column:queued"`
+	Crawling        int64 `gorm:"column:crawling"`
+	NewJobs24h      int64 `gorm:"column:new_jobs_24h"`
+	Errors24h       int64 `gorm:"column:errors_24h"`
 	// PipelinePending: jobs crawled (reason='fetch') but not yet written to job_feed.
 	// Used as the DB-based proxy for awaiting_filter when Kafka lag is unavailable.
-	PipelinePending int64
+	PipelinePending int64 `gorm:"column:pipeline_pending"`
 }
 
 // PipelineStore provides DB queries for the pipeline strip.
