@@ -100,6 +100,12 @@ type SnapshotWriter interface {
 	UpdateSnapshotAction(ctx context.Context, id, action string) error
 }
 
+// ApplicationWriter is a narrow write interface used by the job service to
+// auto-insert application tracker rows when a job is advanced to applied/interviewing.
+type ApplicationWriter interface {
+	InsertApplication(jobResultID, stage, note string) error
+}
+
 // --- GORM implementations ---
 
 type jobStore struct {

@@ -58,61 +58,61 @@ type listResponse struct {
 // position mirrors a single entry in the Eightfold positions array.
 // id and timestamps are numbers in the real API — not strings.
 type position struct {
-	ID                  int64            `json:"id"`
-	Name                string           `json:"name"`
-	PostingName         string           `json:"posting_name"`
-	Location            string           `json:"location"`
-	Locations           []string         `json:"locations"`
-	Hot                 int              `json:"hot"`
-	Department          string           `json:"department"`
-	BusinessUnit        string           `json:"business_unit"`
-	TUpdate             int64            `json:"t_update"`
-	TCreate             int64            `json:"t_create"`
-	AtsJobID            string           `json:"ats_job_id"`
-	DisplayJobID        string           `json:"display_job_id"`
-	Type                string           `json:"type"`
-	IDLocale            string           `json:"id_locale"`
-	Locale              string           `json:"locale"`
-	JobDescription      string           `json:"job_description"`
-	Stars               float64          `json:"stars"`
-	LocationFlexibility string           `json:"location_flexibility"`
-	WorkLocationOption  string           `json:"work_location_option"`
-	CanonicalURL        string           `json:"canonicalPositionUrl"`
-	IsPrivate           bool             `json:"isPrivate"`
-	MedallionProgram    json.RawMessage  `json:"medallionProgram"`
+	ID                  int64           `json:"id"`
+	Name                string          `json:"name"`
+	PostingName         string          `json:"posting_name"`
+	Location            string          `json:"location"`
+	Locations           []string        `json:"locations"`
+	Hot                 int             `json:"hot"`
+	Department          string          `json:"department"`
+	BusinessUnit        string          `json:"business_unit"`
+	TUpdate             int64           `json:"t_update"`
+	TCreate             int64           `json:"t_create"`
+	AtsJobID            string          `json:"ats_job_id"`
+	DisplayJobID        string          `json:"display_job_id"`
+	Type                string          `json:"type"`
+	IDLocale            string          `json:"id_locale"`
+	Locale              string          `json:"locale"`
+	JobDescription      string          `json:"job_description"`
+	Stars               float64         `json:"stars"`
+	LocationFlexibility string          `json:"location_flexibility"`
+	WorkLocationOption  string          `json:"work_location_option"`
+	CanonicalURL        string          `json:"canonicalPositionUrl"`
+	IsPrivate           bool            `json:"isPrivate"`
+	MedallionProgram    json.RawMessage `json:"medallionProgram"`
 }
 
 // positionDetail is the JSON returned by /api/apply/v2/jobs/{id}.
 // The response is flat — the position fields are at the top level (no wrapper).
 // Includes all list fields plus a few detail-only fields.
 type positionDetail struct {
-	ID                     int64            `json:"id"`
-	Name                   string           `json:"name"`
-	PostingName            string           `json:"posting_name"`
-	Location               string           `json:"location"`
-	Locations              []string         `json:"locations"`
-	Hot                    int              `json:"hot"`
-	Department             string           `json:"department"`
-	BusinessUnit           string           `json:"business_unit"`
-	TUpdate                int64            `json:"t_update"`
-	TCreate                int64            `json:"t_create"`
-	AtsJobID               string           `json:"ats_job_id"`
-	DisplayJobID           string           `json:"display_job_id"`
-	Type                   string           `json:"type"`
-	IDLocale               string           `json:"id_locale"`
-	Locale                 string           `json:"locale"`
-	JobDescription         string           `json:"job_description"`
-	Stars                  float64          `json:"stars"`
-	LocationFlexibility    string           `json:"location_flexibility"`
-	WorkLocationOption     string           `json:"work_location_option"`
-	CanonicalURL           string           `json:"canonicalPositionUrl"`
-	IsPrivate              bool             `json:"isPrivate"`
-	MedallionProgram       json.RawMessage  `json:"medallionProgram"`
+	ID                  int64           `json:"id"`
+	Name                string          `json:"name"`
+	PostingName         string          `json:"posting_name"`
+	Location            string          `json:"location"`
+	Locations           []string        `json:"locations"`
+	Hot                 int             `json:"hot"`
+	Department          string          `json:"department"`
+	BusinessUnit        string          `json:"business_unit"`
+	TUpdate             int64           `json:"t_update"`
+	TCreate             int64           `json:"t_create"`
+	AtsJobID            string          `json:"ats_job_id"`
+	DisplayJobID        string          `json:"display_job_id"`
+	Type                string          `json:"type"`
+	IDLocale            string          `json:"id_locale"`
+	Locale              string          `json:"locale"`
+	JobDescription      string          `json:"job_description"`
+	Stars               float64         `json:"stars"`
+	LocationFlexibility string          `json:"location_flexibility"`
+	WorkLocationOption  string          `json:"work_location_option"`
+	CanonicalURL        string          `json:"canonicalPositionUrl"`
+	IsPrivate           bool            `json:"isPrivate"`
+	MedallionProgram    json.RawMessage `json:"medallionProgram"`
 	// Detail-only fields
-	PreApplyInfoBanner     json.RawMessage  `json:"preApplyInfoBanner"`
-	CustomJD               json.RawMessage  `json:"custom_JD"`
-	HideUploadResumeOption bool             `json:"hideUploadResumeOption"`
-	URLs                   json.RawMessage  `json:"urls"`
+	PreApplyInfoBanner     json.RawMessage `json:"preApplyInfoBanner"`
+	CustomJD               json.RawMessage `json:"custom_JD"`
+	HideUploadResumeOption bool            `json:"hideUploadResumeOption"`
+	URLs                   json.RawMessage `json:"urls"`
 }
 
 // ── Adapter implementation (FetchJobs) ──────────────────────────────────────

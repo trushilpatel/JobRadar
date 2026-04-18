@@ -195,7 +195,7 @@ func TestAshby_FetchJobContent_FakeServer(t *testing.T) {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(fakeBody)
+		_, _ = w.Write(fakeBody)
 	}))
 	defer srv.Close()
 

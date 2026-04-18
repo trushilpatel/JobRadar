@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/trushilpatel/jobradar/pipeline/ats/types"
 	"github.com/trushilpatel/jobradar/model"
+	"github.com/trushilpatel/jobradar/pipeline/ats/types"
 )
 
 type Lever struct {
@@ -34,11 +34,11 @@ func (l *Lever) apiURL(path string) string {
 // ── Internal API response structs ────────────────────────────────────────────
 
 type fetchJobsResponse []struct {
-	ID        string `json:"id"`
-	Text      string `json:"text"`      // job title
-	HostedURL string `json:"hostedUrl"` // hosted web URL
-	ApplyURL  string `json:"applyUrl"`  // direct application form URL
-	Country   string `json:"country"`   // ISO 3166-1 alpha-2, nullable
+	ID         string `json:"id"`
+	Text       string `json:"text"`      // job title
+	HostedURL  string `json:"hostedUrl"` // hosted web URL
+	ApplyURL   string `json:"applyUrl"`  // direct application form URL
+	Country    string `json:"country"`   // ISO 3166-1 alpha-2, nullable
 	Categories struct {
 		Location     string   `json:"location"`
 		Commitment   string   `json:"commitment"` // e.g. "Full-time", "Contract"

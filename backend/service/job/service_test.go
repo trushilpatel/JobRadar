@@ -98,7 +98,7 @@ func (f *fakeSnapshotWriter) UpdateSnapshotAction(_ context.Context, id, action 
 
 func TestList_ReturnsPaged(t *testing.T) {
 	jobs := []model.Job{{ID: "j1"}, {ID: "j2"}}
-	svc := NewService(&fakeJobStore{jobs: jobs, total: 2}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{})
+	svc := NewService(&fakeJobStore{jobs: jobs, total: 2}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{}, &fakeApplicationWriter{})
 
 	result, total, err := svc.List(context.Background(), JobFilter{Status: "new"}, 1, 20)
 	if err != nil {
@@ -113,7 +113,7 @@ func TestList_ReturnsPaged(t *testing.T) {
 }
 
 func TestGet_NotFound(t *testing.T) {
-	svc := NewService(&fakeJobStore{}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{})
+	svc := NewService(&fakeJobStore{}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{}, &fakeApplicationWriter{})
 
 	_, err := svc.Get(context.Background(), "missing")
 	if err == nil {
@@ -132,7 +132,7 @@ func TestDismiss_MultiStep(t *testing.T) {
 	snapshot := &fakeSnapshotWriter{}
 	ledger := &fakeLedgerWriter{}
 
-	svc := NewService(js, ledger, discard, snapshot)
+	svc := NewService(js, ledger, discard, snapshot, &fakeApplicationWriter{})
 	err := svc.Dismiss(context.Background(), "j1", DismissInput{Reason: model.DiscardReasonDismissed})
 	if err != nil {
 		t.Fatalf("Dismiss() error = %v", err)
@@ -153,7 +153,7 @@ func TestDismiss_MultiStep(t *testing.T) {
 func TestSetSaved_NonFatalSnapshot(t *testing.T) {
 	js := &fakeJobStore{}
 	snapshot := &fakeSnapshotWriter{err: errors.New("snapshot error")} // non-fatal error
-	svc := NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot)
+	svc := NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
 
 	err := svc.SetSaved(context.Background(), "j1", true)
 	if err != nil {
@@ -167,7 +167,7 @@ func TestSetSaved_NonFatalSnapshot(t *testing.T) {
 func TestSetStatus_BackfillsSnapshotOnApplied(t *testing.T) {
 	js := &fakeJobStore{}
 	snapshot := &fakeSnapshotWriter{}
-	svc := NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot)
+	svc := NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
 
 	err := svc.SetStatus(context.Background(), "j1", model.JobStatusApplied)
 	if err != nil {
@@ -181,7 +181,7 @@ func TestSetStatus_BackfillsSnapshotOnApplied(t *testing.T) {
 func TestSetStatus_NoSnapshotBackfillForNew(t *testing.T) {
 	js := &fakeJobStore{}
 	snapshot := &fakeSnapshotWriter{}
-	svc := NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot)
+	svc := NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
 
 	err := svc.SetStatus(context.Background(), "j1", model.JobStatusNew)
 	if err != nil {
@@ -192,8 +192,17 @@ func TestSetStatus_NoSnapshotBackfillForNew(t *testing.T) {
 	}
 }
 
+type fakeApplicationWriter struct {
+	err error
+}
+
+func (f *fakeApplicationWriter) InsertApplication(jobResultID, stage, note string) error {
+	return f.err
+}
+
 // Ensure test doubles implement interfaces.
 var _ JobStore = (*fakeJobStore)(nil)
 var _ SeenLedgerWriter = (*fakeLedgerWriter)(nil)
 var _ DiscardStore = (*fakeDiscardStore)(nil)
 var _ SnapshotWriter = (*fakeSnapshotWriter)(nil)
+var _ ApplicationWriter = (*fakeApplicationWriter)(nil)

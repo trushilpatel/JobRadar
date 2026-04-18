@@ -179,7 +179,7 @@ func (s *geminiScorer) generate(ctx context.Context, prompt string, maxOutputTok
 	model.ResponseSchema = schema
 
 	temp := float32(0.0)
-	model.GenerationConfig.Temperature = &temp
+	model.Temperature = &temp
 
 	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {

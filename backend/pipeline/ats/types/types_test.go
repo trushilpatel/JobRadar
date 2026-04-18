@@ -12,13 +12,13 @@ import (
 // do not know about FullContent must not see a new field in the message.
 func TestRawJob_FullContentOmitEmpty(t *testing.T) {
 	job := RawJob{
-		ID:        "greenhouse-1",
-		CompanyID: "company-abc",
-		Adapter:   "greenhouse",
-		Title:     "Software Engineer",
-		Location:  "San Francisco, CA",
-		URL:       "https://example.com/jobs/1",
-		EmployType: "full_time",
+		ID:          "greenhouse-1",
+		CompanyID:   "company-abc",
+		Adapter:     "greenhouse",
+		Title:       "Software Engineer",
+		Location:    "San Francisco, CA",
+		URL:         "https://example.com/jobs/1",
+		EmployType:  "full_time",
 		FullContent: nil,
 	}
 
@@ -38,12 +38,12 @@ func TestRawJob_FullContentOmitEmpty(t *testing.T) {
 // to an identical value.
 func TestRawJob_FullContentRoundTrip(t *testing.T) {
 	original := RawJob{
-		ID:        "lever-42",
-		CompanyID: "company-xyz",
-		Adapter:   "lever",
-		Title:     "Staff Engineer",
-		Location:  "Remote",
-		URL:       "https://jobs.lever.co/co/42",
+		ID:         "lever-42",
+		CompanyID:  "company-xyz",
+		Adapter:    "lever",
+		Title:      "Staff Engineer",
+		Location:   "Remote",
+		URL:        "https://jobs.lever.co/co/42",
 		EmployType: "full_time",
 		FullContent: &FullJobContent{
 			Description:   "Build distributed systems.",

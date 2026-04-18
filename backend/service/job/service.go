@@ -21,19 +21,21 @@ type Service interface {
 }
 
 type service struct {
-	jobs     JobStore
-	ledger   SeenLedgerWriter
-	discard  DiscardStore
-	snapshot SnapshotWriter
+	jobs      JobStore
+	ledger    SeenLedgerWriter
+	discard   DiscardStore
+	snapshot  SnapshotWriter
+	appWriter ApplicationWriter
 }
 
 // NewService constructs a Service implementation.
-func NewService(jobs JobStore, ledger SeenLedgerWriter, discard DiscardStore, snapshot SnapshotWriter) Service {
+func NewService(jobs JobStore, ledger SeenLedgerWriter, discard DiscardStore, snapshot SnapshotWriter, appWriter ApplicationWriter) Service {
 	return &service{
-		jobs:     jobs,
-		ledger:   ledger,
-		discard:  discard,
-		snapshot: snapshot,
+		jobs:      jobs,
+		ledger:    ledger,
+		discard:   discard,
+		snapshot:  snapshot,
+		appWriter: appWriter,
 	}
 }
 
@@ -113,15 +115,22 @@ func (s *service) SetSaved(ctx context.Context, id string, saved bool) (err erro
 	return nil
 }
 
-// SetStatus updates the status of a job and non-fatally backfills the snapshot if applied.
+// SetStatus updates the status of a job, backfills the snapshot, and auto-inserts
+// an application tracker row so the dashboard InterviewingPanel stays in sync.
 func (s *service) SetStatus(ctx context.Context, id, status string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.service.SetStatus")
 	defer tracing.End(span, &err)
 	if err := s.jobs.UpdateJobStatus(ctx, id, status); err != nil {
 		return domain.ErrInternal.WithMessage("failed to update status")
 	}
-	if status == model.JobStatusApplied {
+	switch status {
+	case model.JobStatusApplied:
 		_ = s.snapshot.UpdateSnapshotAction(ctx, id, model.JobStatusApplied)
+		_ = s.appWriter.InsertApplication(id, model.StageApplied, "")
+	case model.JobStatusInterviewing:
+		_ = s.appWriter.InsertApplication(id, model.StagePhoneScreen, "")
+	case model.JobStatusOffer:
+		_ = s.appWriter.InsertApplication(id, model.StageOffer, "")
 	}
 	return nil
 }

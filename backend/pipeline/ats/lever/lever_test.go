@@ -199,7 +199,7 @@ func TestLever_FetchJobContent(t *testing.T) {
 		capturedPath = r.URL.Path + "?" + r.URL.RawQuery
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(fakeJSON)
+		_, _ = w.Write(fakeJSON)
 	}))
 	defer srv.Close()
 
@@ -268,7 +268,7 @@ func TestLever_FetchJobContent_SalaryRangeFallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(fakeJSON)
+		_, _ = w.Write(fakeJSON)
 	}))
 	defer srv.Close()
 
@@ -302,7 +302,7 @@ func TestLever_FetchJobContent_AdditionalPlainAppended(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(fakeJSON)
+		_, _ = w.Write(fakeJSON)
 	}))
 	defer srv.Close()
 

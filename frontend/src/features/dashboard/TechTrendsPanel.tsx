@@ -112,10 +112,10 @@ export function TechTrendsPanel() {
                 <TechRow
                   key={row.tech}
                   row={row}
-                  deltaLabel={`+${Math.round(row.growth_pct)}%`}
+                  deltaLabel={row.is_new ? 'New' : `+${Math.round(row.growth_pct)}%`}
                   activeColor="#534ab7"
                   dimColor="#221f4a"
-                  deltaClass="text-violet-400"
+                  deltaClass={row.is_new ? 'text-emerald-400' : 'text-violet-400'}
                 />
               ))
             )}

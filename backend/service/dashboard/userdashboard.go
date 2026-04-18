@@ -177,11 +177,16 @@ func (s *userDashboardService) GetTechTrends(ctx context.Context) (_ *TechTrends
 			AdoptionPct: math.Round(q4Pct*10) / 10,
 		}
 
-		// Rising: appears in >5% of this quarter's jobs, was present last quarter, grew >15% QoQ
-		if q4Pct > 5 && r.Q3 > 0 {
-			growth := float64(r.Q4-r.Q3) / float64(r.Q3)
-			if growth > 0.15 {
-				row.GrowthPct = math.Round(growth*1000) / 10
+		// Rising: appears in >5% of this quarter's jobs and either grew >15% QoQ or is brand-new this quarter.
+		if q4Pct > 5 {
+			if r.Q3 > 0 {
+				growth := float64(r.Q4-r.Q3) / float64(r.Q3)
+				if growth > 0.15 {
+					row.GrowthPct = math.Round(growth*1000) / 10
+					rising = append(rising, row)
+				}
+			} else {
+				row.IsNew = true
 				rising = append(rising, row)
 			}
 		}

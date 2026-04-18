@@ -230,7 +230,7 @@ func TestFetchJobs_SearchJobsHTTPError(t *testing.T) {
 func TestFetchJobs_MalformedFilterJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`not json`))
+		_, _ = w.Write([]byte(`not json`))
 	}))
 	defer srv.Close()
 
@@ -556,7 +556,7 @@ func TestFetchJobs_ContentTypeHeaderSent(t *testing.T) {
 func TestFetchDepartments_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{not valid json`))
+		_, _ = w.Write([]byte(`{not valid json`))
 	}))
 	defer srv.Close()
 
@@ -575,7 +575,7 @@ func TestFetchDepartments_MalformedJSON(t *testing.T) {
 func TestFetchJobsForDepartment_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{not valid json`))
+		_, _ = w.Write([]byte(`{not valid json`))
 	}))
 	defer srv.Close()
 

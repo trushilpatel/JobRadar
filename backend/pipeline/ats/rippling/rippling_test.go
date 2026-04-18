@@ -76,7 +76,7 @@ func TestFetchJobs_SingleUSJob(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(html))
+		_, _ = w.Write([]byte(html))
 	}))
 	defer srv.Close()
 
@@ -132,7 +132,7 @@ func TestFetchJobs_FiltersNonUSJobs(t *testing.T) {
 	}))
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(html))
+		_, _ = w.Write([]byte(html))
 	}))
 	defer srv.Close()
 
@@ -179,7 +179,7 @@ func TestFetchJobs_AllNonUSJobs(t *testing.T) {
 	}))
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(html))
+		_, _ = w.Write([]byte(html))
 	}))
 	defer srv.Close()
 
@@ -216,7 +216,7 @@ func TestFetchJobs_HTTPError(t *testing.T) {
 
 func TestFetchJobs_MalformedHTML(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`<html><body>No next data here</body></html>`))
+		_, _ = w.Write([]byte(`<html><body>No next data here</body></html>`))
 	}))
 	defer srv.Close()
 
@@ -259,7 +259,7 @@ func TestFetchJobs_MultipleLocations(t *testing.T) {
 	}))
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(html))
+		_, _ = w.Write([]byte(html))
 	}))
 	defer srv.Close()
 
@@ -311,7 +311,7 @@ func TestFetchJobs_IDFormat(t *testing.T) {
 	}))
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(html))
+		_, _ = w.Write([]byte(html))
 	}))
 	defer srv.Close()
 
@@ -350,7 +350,7 @@ func TestFetchJobs_FullContentNil(t *testing.T) {
 	}))
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(html))
+		_, _ = w.Write([]byte(html))
 	}))
 	defer srv.Close()
 
@@ -369,12 +369,12 @@ func TestFetchJobs_FullContentNil(t *testing.T) {
 
 func TestFetchJobContent_Success(t *testing.T) {
 	detailHTML := buildNextJSHTMLDetail(t, nextDetailJSON(map[string]interface{}{
-		"id":                "job-uuid-1",
-		"title":             "Senior Software Engineer",
-		"descriptionHtml":   "<h2>About the role</h2><p>Build amazing systems.</p>",
-		"compensation":      "$180,000 - $245,000 USD/year",
-		"workplaceType":     "ON_SITE",
-		"createdAt":         "2026-03-01T00:00:00.000Z",
+		"id":              "job-uuid-1",
+		"title":           "Senior Software Engineer",
+		"descriptionHtml": "<h2>About the role</h2><p>Build amazing systems.</p>",
+		"compensation":    "$180,000 - $245,000 USD/year",
+		"workplaceType":   "ON_SITE",
+		"createdAt":       "2026-03-01T00:00:00.000Z",
 		"department": map[string]string{
 			"name": "Engineering",
 		},
@@ -388,7 +388,7 @@ func TestFetchJobContent_Success(t *testing.T) {
 	}))
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(detailHTML))
+		_, _ = w.Write([]byte(detailHTML))
 	}))
 	defer srv.Close()
 
@@ -435,7 +435,7 @@ func TestFetchJobContent_HTTPError(t *testing.T) {
 func TestFetchJobContent_MalformedHTML(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Returns HTML with no __NEXT_DATA__; should fallback to StripHTML
-		w.Write([]byte(`<html><body><h1>Job Page</h1><p>No structured data here</p></body></html>`))
+		_, _ = w.Write([]byte(`<html><body><h1>Job Page</h1><p>No structured data here</p></body></html>`))
 	}))
 	defer srv.Close()
 

@@ -87,7 +87,7 @@ func TestFetchJobs_SinglePage(t *testing.T) {
 
 		resp := listResponse{Positions: positions, Count: len(positions)}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -147,7 +147,7 @@ func TestFetchJobs_Pagination(t *testing.T) {
 
 		resp := listResponse{Positions: positions, Count: 4}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -172,7 +172,7 @@ func TestFetchJobs_Empty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := listResponse{Positions: []position{}, Count: 0}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -209,7 +209,7 @@ func TestFetchJobs_HTTPError(t *testing.T) {
 func TestFetchJobs_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`this is not json`))
+		_, _ = w.Write([]byte(`this is not json`))
 	}))
 	defer srv.Close()
 
@@ -225,7 +225,7 @@ func TestFetchJobs_MalformedJSON(t *testing.T) {
 func TestFetchJobs_ContextCancelled(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"positions":[],"count":0}`))
+		_, _ = w.Write([]byte(`{"positions":[],"count":0}`))
 	}))
 	defer srv.Close()
 
@@ -254,7 +254,7 @@ func TestFetchJobs_LocationFallbackToLocations(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := listResponse{Positions: positions, Count: 1}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -282,7 +282,7 @@ func TestFetchJobs_FallbackURL(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := listResponse{Positions: positions, Count: 1}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -318,7 +318,7 @@ func TestFetchJobContent_Success(t *testing.T) {
 
 		// Real detail endpoint returns positionDetail flat — no {"position": ...} wrapper.
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(detail)
+		_ = json.NewEncoder(w).Encode(detail)
 	}))
 	defer srv.Close()
 
@@ -379,7 +379,7 @@ func TestFetchJobContent_HTTPError(t *testing.T) {
 func TestFetchJobContent_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{bad json`))
+		_, _ = w.Write([]byte(`{bad json`))
 	}))
 	defer srv.Close()
 
@@ -415,7 +415,7 @@ func TestFetchJobContent_IDWithoutPrefix(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Real detail endpoint: flat positionDetail, no wrapper.
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(detail)
+		_ = json.NewEncoder(w).Encode(detail)
 	}))
 	defer srv.Close()
 
@@ -514,7 +514,7 @@ func TestFetchJobs_ExactPageBoundary(t *testing.T) {
 		}
 		resp := listResponse{Positions: positions, Count: 6}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -539,7 +539,7 @@ func TestFetchJobs_HLParamSent(t *testing.T) {
 		capturedHL = r.URL.Query().Get("hl")
 		resp := listResponse{Positions: []position{}, Count: 0}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -563,7 +563,7 @@ func TestFetchJobContent_LocationFallbackToLocations(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(detail)
+		_ = json.NewEncoder(w).Encode(detail)
 	}))
 	defer srv.Close()
 
@@ -588,7 +588,7 @@ func TestFetchJobContent_FallbackURL(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(detail)
+		_ = json.NewEncoder(w).Encode(detail)
 	}))
 	defer srv.Close()
 
@@ -655,7 +655,7 @@ func TestFetchJobContent_DomainParamSent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedDomain = r.URL.Query().Get("domain")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(detail)
+		_ = json.NewEncoder(w).Encode(detail)
 	}))
 	defer srv.Close()
 

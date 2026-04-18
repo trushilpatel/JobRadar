@@ -27,8 +27,8 @@ func TestNew_StoresConfig(t *testing.T) {
 	cfg := Config{
 		MinDelayMs: 2000,
 		MaxDelayMs: 5000,
-		TimeoutMs: 60000,
-		MaxJobs:   10,
+		TimeoutMs:  60000,
+		MaxJobs:    10,
 	}
 	m := New(cfg)
 	if m.cfg.MinDelayMs != 2000 {
@@ -439,8 +439,8 @@ func TestFetchJobs_ConfigPassedToNode(t *testing.T) {
 		cfg: Config{
 			MinDelayMs: 2000,
 			MaxDelayMs: 5000,
-			TimeoutMs: 120000,
-			MaxJobs:   50,
+			TimeoutMs:  120000,
+			MaxJobs:    50,
 		},
 		scraperDir: dir,
 	}

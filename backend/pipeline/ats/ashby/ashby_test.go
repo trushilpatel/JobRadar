@@ -91,7 +91,7 @@ func TestAshby_FetchJobs(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(fakeResp))
+		_, _ = w.Write([]byte(fakeResp))
 	}))
 	defer srv.Close()
 
@@ -149,7 +149,7 @@ func TestAshby_FetchJobs_HTTPError(t *testing.T) {
 func TestAshby_FetchJobs_EmptyBoard(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data":{"jobBoardWithTeams":{"jobPostings":[]}}}`))
+		_, _ = w.Write([]byte(`{"data":{"jobBoardWithTeams":{"jobPostings":[]}}}`))
 	}))
 	defer srv.Close()
 
@@ -183,7 +183,7 @@ func TestAshby_FetchJobContent(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(fakeJSON)
+		_, _ = w.Write(fakeJSON)
 	}))
 	defer srv.Close()
 
@@ -222,7 +222,7 @@ func TestAshby_FetchJobContent(t *testing.T) {
 func TestAshby_FetchJobContent_NotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data":{"jobPosting":null}}`))
+		_, _ = w.Write([]byte(`{"data":{"jobPosting":null}}`))
 	}))
 	defer srv.Close()
 
@@ -290,7 +290,7 @@ func TestAshby_FetchJobsViaAPI(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(fakeJSON)
+		_, _ = w.Write(fakeJSON)
 	}))
 	defer srv.Close()
 
@@ -371,7 +371,7 @@ func TestAshby_FetchJobContentViaAPI(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(fakeJSON)
+		_, _ = w.Write(fakeJSON)
 	}))
 	defer srv.Close()
 
@@ -427,7 +427,7 @@ func TestAshby_FetchJobContentViaAPI_EmptyID(t *testing.T) {
 func TestAshby_FetchJobContentViaAPI_NotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"success":false,"results":{"id":""}}`))
+		_, _ = w.Write([]byte(`{"success":false,"results":{"id":""}}`))
 	}))
 	defer srv.Close()
 

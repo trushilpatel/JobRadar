@@ -78,6 +78,13 @@ lint-go: ## Run golangci-lint on backend (matches CI config)
 	}
 	cd backend && golangci-lint run --config ../.github/.golangci.yml --timeout 5m
 
+lint-go-fast: ## Lint only files changed vs main branch
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+		echo "golangci-lint not found — install via: brew install golangci-lint"; \
+		exit 1; \
+	}
+	cd backend && golangci-lint run --config ../.github/.golangci.yml --new-from-rev=main --timeout 2m
+
 tsc: ## Type-check frontend without emitting
 	cd frontend && npx tsc --noEmit
 

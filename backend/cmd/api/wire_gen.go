@@ -42,10 +42,11 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*api.App, error) {
 	seenLedgerWriter := provideSeenLedgerWriter(seenLedgerStore)
 	discardStore := job.NewDiscardStore(db)
 	snapshotWriter := job.NewSnapshotStore(db)
-	jobService := job.NewService(jobStore, seenLedgerWriter, discardStore, snapshotWriter)
+	applicationStore := application.NewStore(db)
+	jobAppWriter := provideJobApplicationWriter(applicationStore)
+	jobService := job.NewService(jobStore, seenLedgerWriter, discardStore, snapshotWriter, jobAppWriter)
 	jobHandler := job.NewHandler(jobValidator, jobService)
 	applicationValidator := application.NewValidator()
-	applicationStore := application.NewStore(db)
 	applicationService := application.NewService(applicationStore, jobService)
 	applicationHandler := application.NewHandler(applicationValidator, applicationService)
 	dashboardValidator := dashboard.NewValidator()
@@ -105,4 +106,10 @@ func (a *jobCountReaderAdapter) GetJobCounts() (int64, int64, int64, error) {
 // interface needed by dashboard.Service.
 func provideJobCountReader(s job.JobStore) dashboard.JobCountReader {
 	return &jobCountReaderAdapter{store: s}
+}
+
+// provideJobApplicationWriter binds application.Store to the job.ApplicationWriter interface
+// so job.Service can auto-insert tracker rows when status advances to applied/interviewing/offer.
+func provideJobApplicationWriter(s application.Store) job.ApplicationWriter {
+	return s
 }
