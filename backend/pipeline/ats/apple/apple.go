@@ -54,7 +54,7 @@ func (a *Apple) CareersURL(_ string) string {
 
 // hydrationData is the structure of window.__staticRouterHydrationData from Apple's pages.
 type hydrationData struct {
-	LoaderData loaderData `json:"loaderData"`
+	LoaderData loaderData  `json:"loaderData"`
 	ActionData interface{} `json:"actionData"`
 	Errors     interface{} `json:"errors"`
 }
@@ -70,19 +70,19 @@ type searchData struct {
 
 // appleJob represents a single job in the searchResults array.
 type appleJob struct {
-	ID                        string        `json:"id"`                        // e.g. "200647207-3543"
-	PositionID                string        `json:"positionId"`                // numeric ID
-	PostingTitle              string        `json:"postingTitle"`              // e.g. "Software Engineer"
-	TransformedPostingTitle   string        `json:"transformedPostingTitle"`   // e.g. "software-engineer" (URL slug)
-	JobSummary                string        `json:"jobSummary"`                // HTML description
-	Locations                 []appleLocation `json:"locations"`               // job locations
-	PostDateInGMT             string        `json:"postDateInGMT"`             // e.g. "2026-03-15 00:00:00"
-	Team                      appleTeam     `json:"team"`                      // department info
-	HomeOffice                bool          `json:"homeOffice"`
-	StandardWeeklyHours       int           `json:"standardWeeklyHours"`
-	Type                      string        `json:"type"`                      // "Regular", "Part-Time", "Contract", "Intern"
-	ReqID                     string        `json:"reqId"`                     // requirement ID
-	IsMultiLocation           bool          `json:"isMultiLocation"`
+	ID                      string          `json:"id"`                      // e.g. "200647207-3543"
+	PositionID              string          `json:"positionId"`              // numeric ID
+	PostingTitle            string          `json:"postingTitle"`            // e.g. "Software Engineer"
+	TransformedPostingTitle string          `json:"transformedPostingTitle"` // e.g. "software-engineer" (URL slug)
+	JobSummary              string          `json:"jobSummary"`              // HTML description
+	Locations               []appleLocation `json:"locations"`               // job locations
+	PostDateInGMT           string          `json:"postDateInGMT"`           // e.g. "2026-03-15 00:00:00"
+	Team                    appleTeam       `json:"team"`                    // department info
+	HomeOffice              bool            `json:"homeOffice"`
+	StandardWeeklyHours     int             `json:"standardWeeklyHours"`
+	Type                    string          `json:"type"`  // "Regular", "Part-Time", "Contract", "Intern"
+	ReqID                   string          `json:"reqId"` // requirement ID
+	IsMultiLocation         bool            `json:"isMultiLocation"`
 }
 
 // appleLocation represents a single location in the job's locations array.

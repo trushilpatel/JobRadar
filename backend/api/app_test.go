@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/api/handler"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/service/application"
 	"github.com/trushilpatel/jobradar/service/company"
@@ -48,8 +47,8 @@ func TestApp_Handlers_NoneAreNil(t *testing.T) {
 func TestApp_Handlers_AllImplementRouteGroup(t *testing.T) {
 	app := buildTestApp()
 	for i, g := range app.Handlers() {
-		if _, ok := g.(handler.RouteGroup); !ok {
-			t.Errorf("handler[%d] does not implement RouteGroup", i)
+		if g == nil {
+			t.Errorf("handler[%d] is nil", i)
 		}
 	}
 }

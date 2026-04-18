@@ -31,10 +31,6 @@ const (
 
 	// userAgent mimics a real browser — Uber's CDN blocks Go-http-client UA with 403.
 	userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-
-	// maxJobsPerDept is a safeguard — if any single department ever exceeds
-	// this, we log a warning rather than silently truncating.
-	maxJobsPerDept = 999
 )
 
 // Uber implements types.Adapter by calling Uber's internal Next.js API.

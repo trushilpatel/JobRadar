@@ -83,7 +83,6 @@ func (f *fakeDiscardStore) InsertDiscard(_ context.Context, jobResultID, reason,
 
 type fakeSnapshotWriter struct {
 	err          error
-	insertCalled bool
 	updateCalled bool
 }
 

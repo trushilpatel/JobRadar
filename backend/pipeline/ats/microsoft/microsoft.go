@@ -20,9 +20,6 @@ const (
 
 	// userAgent mimics a real browser to avoid 403s on Go-http-client UA.
 	userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-
-	// US location filter as required by the Microsoft API
-	locationFilter = "United States, Multiple Locations, Multiple Locations"
 )
 
 // Microsoft implements types.Adapter, types.ContentFetcher, and types.URLProvider
@@ -55,52 +52,52 @@ func (m *Microsoft) CareersURL(_ string) string {
 
 // searchResponse is the top-level JSON from /api/pcsx/search.
 type searchResponse struct {
-	Status  any                   `json:"status"`
-	Error   string                `json:"error"`
-	Data    searchResponseData    `json:"data"`
+	Status any                `json:"status"`
+	Error  string             `json:"error"`
+	Data   searchResponseData `json:"data"`
 }
 
 type searchResponseData struct {
-	Count      int         `json:"count"`
-	Positions  []position  `json:"positions"`
-	FilterDef  interface{} `json:"filterDef"`
-	SortBy     interface{} `json:"sortBy"`
+	Count          int         `json:"count"`
+	Positions      []position  `json:"positions"`
+	FilterDef      interface{} `json:"filterDef"`
+	SortBy         interface{} `json:"sortBy"`
 	AppliedFilters interface{} `json:"appliedFilters"`
 }
 
 // position mirrors a single entry in the Microsoft positions array.
 type position struct {
-	ID                   int64             `json:"id"`
-	DisplayJobID         string            `json:"displayJobId"`
-	Name                 string            `json:"name"`
-	Locations            []string          `json:"locations"`
+	ID                    int64               `json:"id"`
+	DisplayJobID          string              `json:"displayJobId"`
+	Name                  string              `json:"name"`
+	Locations             []string            `json:"locations"`
 	StandardizedLocations map[string][]string `json:"standardizedLocations"`
-	PostedTs             int64             `json:"postedTs"`
-	Department           string            `json:"department"`
-	WorkLocationOption   string            `json:"workLocationOption"`
-	AtsJobID             string            `json:"atsJobId"`
-	PositionURL          string            `json:"positionUrl"`
+	PostedTs              int64               `json:"postedTs"`
+	Department            string              `json:"department"`
+	WorkLocationOption    string              `json:"workLocationOption"`
+	AtsJobID              string              `json:"atsJobId"`
+	PositionURL           string              `json:"positionUrl"`
 }
 
 // positionDetail is the JSON returned by /api/pcsx/position_details.
 // Includes all list fields plus additional detail-only fields.
 type positionDetail struct {
-	ID                          int64               `json:"id"`
-	DisplayJobID                string              `json:"displayJobId"`
-	Name                        string              `json:"name"`
-	Locations                   []string            `json:"locations"`
-	PostedTs                    int64               `json:"postedTs"`
-	Department                  string              `json:"department"`
-	WorkLocationOption          string              `json:"workLocationOption"`
-	JobDescription              string              `json:"jobDescription"`
-	Location                    string              `json:"location"`
-	EfcustomTextWorkSite        []string            `json:"efcustomTextWorkSite"`
-	EfcustomTextEmploymentType  []string            `json:"efcustomTextEmploymentType"`
-	EfcustomTextRoletype        []string            `json:"efcustomTextRoletype"`
-	EfcustomTextRequiredTravel  []string            `json:"efcustomTextRequiredTravel"`
-	PublicURL                   string              `json:"publicUrl"`
-	AtsJobID                    string              `json:"atsJobId"`
-	PositionURL                 string              `json:"positionUrl"`
+	ID                         int64    `json:"id"`
+	DisplayJobID               string   `json:"displayJobId"`
+	Name                       string   `json:"name"`
+	Locations                  []string `json:"locations"`
+	PostedTs                   int64    `json:"postedTs"`
+	Department                 string   `json:"department"`
+	WorkLocationOption         string   `json:"workLocationOption"`
+	JobDescription             string   `json:"jobDescription"`
+	Location                   string   `json:"location"`
+	EfcustomTextWorkSite       []string `json:"efcustomTextWorkSite"`
+	EfcustomTextEmploymentType []string `json:"efcustomTextEmploymentType"`
+	EfcustomTextRoletype       []string `json:"efcustomTextRoletype"`
+	EfcustomTextRequiredTravel []string `json:"efcustomTextRequiredTravel"`
+	PublicURL                  string   `json:"publicUrl"`
+	AtsJobID                   string   `json:"atsJobId"`
+	PositionURL                string   `json:"positionUrl"`
 }
 
 // ── Adapter implementation (FetchJobs) ──────────────────────────────────────
@@ -233,14 +230,6 @@ func positionToItem(p position) types.FetchJobsItem {
 		loc = strings.Join(p.Locations, "; ")
 	}
 
-	// Use positionUrl from the listing; if empty, construct it
-	jobURL := p.PositionURL
-	if jobURL == "" {
-		jobURL = fmt.Sprintf("https://careers.microsoft.com/v2/global/en/job/%s", p.DisplayJobID)
-	}
-
-	// Store the int64 ID in the URL for later extraction by FetchJobContent
-	// This allows us to have the int64 ID available when we need to call position_details
 	internalURL := fmt.Sprintf("https://apply.careers.microsoft.com/careers/job/%d", p.ID)
 
 	return types.FetchJobsItem{
@@ -266,15 +255,15 @@ func detailToContent(p positionDetail) types.FetchJobContentResponse {
 	}
 
 	return types.FetchJobContentResponse{
-		ID:            fmt.Sprintf("%s-%s", model.AdapterMicrosoft, p.DisplayJobID),
-		Title:         p.Name,
-		Location:      loc,
-		URL:           jobURL,
-		Description:   types.StripHTML(p.JobDescription),
-		Department:    p.Department,
-		WorkplaceType: p.WorkLocationOption,
+		ID:             fmt.Sprintf("%s-%s", model.AdapterMicrosoft, p.DisplayJobID),
+		Title:          p.Name,
+		Location:       loc,
+		URL:            jobURL,
+		Description:    types.StripHTML(p.JobDescription),
+		Department:     p.Department,
+		WorkplaceType:  p.WorkLocationOption,
 		EmploymentType: mapEmploymentType(p.EfcustomTextEmploymentType),
-		PublishedDate: unixToRFC3339(p.PostedTs),
+		PublishedDate:  unixToRFC3339(p.PostedTs),
 	}
 }
 

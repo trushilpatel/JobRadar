@@ -105,7 +105,7 @@ func TestFetchJobs_MultiPage_Pagination(t *testing.T) {
 
 		start := 0
 		if s := r.URL.Query().Get("start"); s != "" {
-			fmt.Sscanf(s, "%d", &start)
+			_, _ = fmt.Sscanf(s, "%d", &start)
 		}
 
 		// Return 20 jobs for start=0, 20 for start=20, 10 for start=40 (end of pagination)
@@ -305,7 +305,7 @@ func TestFetchJobs_LocationFilter(t *testing.T) {
 	defer srv.Close()
 
 	m := &Microsoft{baseURL: srv.URL}
-	m.FetchJobs(context.Background(), "")
+	_, _ = m.FetchJobs(context.Background(), "")
 
 	// The searchURL encodes spaces as + (x-www-form-urlencoded) and commas as %2C.
 	// Check that the location filter is present in the URL.
@@ -594,7 +594,7 @@ func newTestServer(t *testing.T, positions []position) *httptest.Server {
 
 		start := 0
 		if s := r.URL.Query().Get("start"); s != "" {
-			fmt.Sscanf(s, "%d", &start)
+			_, _ = fmt.Sscanf(s, "%d", &start)
 		}
 
 		// Return all positions for simplicity (real API handles pagination)

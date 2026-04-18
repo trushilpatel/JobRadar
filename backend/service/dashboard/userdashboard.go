@@ -62,7 +62,7 @@ func (s *userDashboardService) GetHeatmap(ctx context.Context) (_ []WeeklyCount,
 
 // GetInterviews returns active applications mapped to InterviewRow, excluding rejected.
 func (s *userDashboardService) GetInterviews(ctx context.Context) (_ []InterviewRow, err error) {
-	ctx, span := tracing.Start(ctx, "dashboard.userdashboard.GetInterviews")
+	_, span := tracing.Start(ctx, "dashboard.userdashboard.GetInterviews")
 	defer tracing.End(span, &err)
 	apps, err := s.appStore.GetLatestApplicationsWithJob()
 	if err != nil {

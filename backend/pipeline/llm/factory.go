@@ -15,7 +15,7 @@ type ScorerOptions struct {
 	Model       string // provider-specific model name, e.g. "Gemini-3.1-Flash-Lite"
 	TargetRoles []string
 	YearsExp    int
-	Limits      RateLimits  // zero value = no rate limiting
+	Limits      RateLimits    // zero value = no rate limiting
 	Log         logger.Logger // used by the rate limiter; noop if nil
 }
 

@@ -458,8 +458,8 @@ func TestStripPrefix(t *testing.T) {
 	}{
 		{"netflix-790298021069", "790298021069"},
 		{"netflix-abc-def", "abc-def"},
-		{"790298021069", "790298021069"},      // no prefix — pass through
-		{"greenhouse-999", "greenhouse-999"},  // wrong prefix — pass through
+		{"790298021069", "790298021069"},     // no prefix — pass through
+		{"greenhouse-999", "greenhouse-999"}, // wrong prefix — pass through
 	}
 	for _, tc := range tests {
 		got := stripPrefix(tc.input)
@@ -544,7 +544,7 @@ func TestFetchJobs_HLParamSent(t *testing.T) {
 	defer srv.Close()
 
 	n := &Netflix{baseURL: srv.URL, domain: "netflix.com", pageSize: 10}
-	n.FetchJobs(context.Background(), "netflix")
+	_, _ = n.FetchJobs(context.Background(), "netflix")
 
 	if capturedHL != "en" {
 		t.Errorf("hl query param = %q, want %q", capturedHL, "en")
@@ -661,7 +661,7 @@ func TestFetchJobContent_DomainParamSent(t *testing.T) {
 
 	n := &Netflix{baseURL: srv.URL, domain: "testdomain.com", pageSize: 10}
 	job := types.RawJob{ID: "netflix-77777", Adapter: "netflix"}
-	n.FetchJobContent(context.Background(), job)
+	_, _ = n.FetchJobContent(context.Background(), job)
 
 	if capturedDomain != "testdomain.com" {
 		t.Errorf("domain query param = %q, want %q", capturedDomain, "testdomain.com")

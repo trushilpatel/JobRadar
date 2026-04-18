@@ -54,7 +54,7 @@ func TestLever_FetchJobs(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(fakeResp))
+		_, _ = w.Write([]byte(fakeResp))
 	}))
 	defer srv.Close()
 
@@ -101,7 +101,7 @@ func TestLever_FetchJobs(t *testing.T) {
 func TestLever_FetchJobs_Empty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`[]`))
+		_, _ = w.Write([]byte(`[]`))
 	}))
 	defer srv.Close()
 
@@ -131,7 +131,7 @@ func TestLever_FetchJobs_HTTPError(t *testing.T) {
 func TestLever_FetchJobs_MalformedJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`not json`))
+		_, _ = w.Write([]byte(`not json`))
 	}))
 	defer srv.Close()
 

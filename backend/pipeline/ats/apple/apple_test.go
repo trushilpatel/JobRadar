@@ -651,7 +651,7 @@ func newTestServer(t *testing.T, pages []pageConfig) *httptest.Server {
 		}
 
 		var page int
-		fmt.Sscanf(pageStr, "%d", &page)
+		_, _ = fmt.Sscanf(pageStr, "%d", &page)
 
 		jobs, ok := pageMap[page]
 		if !ok || jobs == nil {

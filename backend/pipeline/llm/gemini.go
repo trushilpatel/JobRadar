@@ -174,9 +174,9 @@ Field instructions:
 
 func (s *geminiScorer) generate(ctx context.Context, prompt string, maxOutputTokens int32, schema *genai.Schema) (string, error) {
 	model := s.client.GenerativeModel(s.modelName)
-	model.GenerationConfig.MaxOutputTokens = &maxOutputTokens
-	model.GenerationConfig.ResponseMIMEType = "application/json"
-	model.GenerationConfig.ResponseSchema = schema
+	model.MaxOutputTokens = &maxOutputTokens
+	model.ResponseMIMEType = "application/json"
+	model.ResponseSchema = schema
 
 	temp := float32(0.0)
 	model.GenerationConfig.Temperature = &temp

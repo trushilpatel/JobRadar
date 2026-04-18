@@ -8,6 +8,8 @@ linters:
   settings:
     errcheck:
       check-type-assertions: true
+      exclude-functions:
+        - (io.Closer).Close
 
 # v2: formatters are separate from linters
 formatters:
