@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -79,11 +81,23 @@ func main() {
 
 	log.Info("worker started", logger.Dur("poll_interval", pollInterval))
 
-	// Poll once immediately on startup, then on every tick.
-	pollAndProcess(ctx, log, queue, engine, companyDelay)
+	var wg sync.WaitGroup
+	var active int32 // 0=idle, 1=scan in progress
+
+	startScan := func() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer atomic.StoreInt32(&active, 0)
+			pollAndProcess(ctx, log, queue, engine, companyDelay)
+		}()
+	}
+
+	// Poll once immediately on startup.
+	atomic.StoreInt32(&active, 1)
+	startScan()
 
 	ticker := time.NewTicker(pollInterval)
-
 	defer ticker.Stop()
 
 	for {
@@ -92,9 +106,14 @@ func main() {
 			if err := queue.ResetStuck(ctx, stuckTimeout); err != nil {
 				log.Error("failed to reset stuck queue items", err)
 			}
-			pollAndProcess(ctx, log, queue, engine, companyDelay)
+			if !atomic.CompareAndSwapInt32(&active, 0, 1) {
+				log.Debug("scan in progress, skipping tick")
+				continue
+			}
+			startScan()
 		case <-ctx.Done():
 			log.Info("shutting down")
+			wg.Wait()
 			return
 		}
 	}

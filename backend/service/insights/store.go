@@ -251,12 +251,10 @@ func (s *insightsStore) GetPipelineCounts(ctx context.Context) (_ PipelineCounts
 	}
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT
-			COUNT(*) FILTER (
-				WHERE l.reason = 'fetch'
-				AND NOT EXISTS (SELECT 1 FROM job_feed j WHERE j.job_post_id = l.job_id)
-			) AS pending,
+			COUNT(*) FILTER (WHERE l.reason = 'fetch' AND j.job_post_id IS NULL) AS pending,
 			COUNT(*) FILTER (WHERE l.reason = 'error') AS errors
 		FROM job_pipeline_ledger l
+		LEFT JOIN job_feed j ON j.job_post_id = l.job_id
 	`).Scan(&result).Error
 	return PipelineCounts{Pending: result.Pending, Errors: result.Errors}, err
 }

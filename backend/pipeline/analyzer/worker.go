@@ -53,38 +53,39 @@ func NewWorker(
 // Run starts consuming jobs.raw_detail and blocks until ctx is cancelled.
 // Jobs are processed concurrently up to enrichConcurrency — page fetches
 // dominate latency so parallelism here is the main throughput lever.
+// Offsets are committed only after every goroutine in the batch completes,
+// guaranteeing at-least-once delivery.
 func (w *Worker) Run(ctx context.Context) error {
 	w.log.Info("worker started", logger.Int("concurrency", w.concurrency))
 
 	sem := make(chan struct{}, w.concurrency)
-	var wg sync.WaitGroup
 
-	err := w.consumer.Poll(ctx, func(_ string, value []byte, headers []kgo.RecordHeader) error {
-		msgCtx := tracing.ExtractKafka(ctx, headers)
-		var job ats.RawJob
-		if err := json.Unmarshal(value, &job); err != nil {
-			w.log.Warn("malformed message, skipping", logger.Err(err))
-			return nil
+	return w.consumer.PollBatch(ctx, func(records []*kgo.Record) error {
+		var wg sync.WaitGroup
+		for _, r := range records {
+			msgCtx := tracing.ExtractKafka(ctx, r.Headers)
+			var job ats.RawJob
+			if err := json.Unmarshal(r.Value, &job); err != nil {
+				w.log.Warn("malformed message, skipping", logger.Err(err))
+				continue
+			}
+
+			w.log.Debug("job received",
+				logger.Str(logger.FieldJobID, job.ID),
+				logger.Str("title", job.Title),
+			)
+
+			sem <- struct{}{}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer func() { <-sem }()
+				w.enrich(msgCtx, job)
+			}()
 		}
-
-		w.log.Debug("job received",
-			logger.Str(logger.FieldJobID, job.ID),
-			logger.Str("title", job.Title),
-		)
-
-		sem <- struct{}{} // block if all workers are busy
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }()
-			w.enrich(msgCtx, job)
-		}()
-
+		wg.Wait() // all enrichments complete before returning nil → commit fires
 		return nil
 	})
-
-	wg.Wait() // drain in-flight enrichments before returning
-	return err
 }
 
 // enrich runs the full enrichment pipeline for a single job.

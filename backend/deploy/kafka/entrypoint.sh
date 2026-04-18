@@ -28,7 +28,7 @@ security.protocol=SASL_PLAINTEXT
 sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="${KAFKA_USER}" password="${KAFKA_PASSWORD}";
 PROPS
 
-for TOPIC in company.scan_request job_listings.raw job_listings.filtered; do
+for TOPIC in job_listings.raw job_listings.filtered; do
   kafka-topics --bootstrap-server localhost:9092 \
     --command-config /tmp/client.properties \
     --create --if-not-exists \

@@ -59,7 +59,6 @@ func (e *Engine) RunOnce(ctx context.Context) {
 }
 
 // RunForCompany runs a scan for a single company by ID.
-// Used when triggered via the company.scan_request Kafka topic.
 func (e *Engine) RunForCompany(ctx context.Context, companyID string) {
 	ctx, span := tracing.Start(ctx, "crawler.engine.RunForCompany")
 	defer tracing.End(span, nil)

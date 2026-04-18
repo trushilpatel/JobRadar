@@ -72,6 +72,39 @@ func (c *Consumer) Poll(ctx context.Context, fn func(topic string, value []byte,
 	}
 }
 
+// PollBatch fetches the next batch of records and calls fn with all records at once.
+// fn must return nil only after all processing for the batch is complete — offsets are
+// committed after fn returns, guaranteeing at-least-once delivery even with async work.
+func (c *Consumer) PollBatch(ctx context.Context, fn func(records []*kgo.Record) error) error {
+	for {
+		fetches := c.client.PollFetches(ctx)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err := fetches.Err(); err != nil {
+			c.log.Warn("fetch error, retrying", logger.Err(err))
+			continue
+		}
+
+		var records []*kgo.Record
+		fetches.EachRecord(func(r *kgo.Record) {
+			records = append(records, r)
+		})
+
+		if len(records) == 0 {
+			continue
+		}
+
+		if err := fn(records); err != nil {
+			return err
+		}
+
+		if err := c.client.CommitUncommittedOffsets(ctx); err != nil {
+			return err
+		}
+	}
+}
+
 func (c *Consumer) Close() {
 	c.client.Close()
 }

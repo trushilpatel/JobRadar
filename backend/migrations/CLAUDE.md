@@ -41,6 +41,10 @@ Files are numbered sequentially: `001_`, `002_`, etc.
 | add uber adapter type | `020_add_uber_adapter.sql` |
 | add microsoft/rippling/apple/meta adapter types | `021_add_new_adapters.sql` |
 | seed microsoft/meta/apple/rippling company rows | `022_seed_new_companies.sql` |
+| job status interviewing/offer | `023_job_status_interviewing_offer.sql` |
+| `company_scan_queue.heartbeat_at` | `024_scan_queue_heartbeat.sql` |
+| job tech tags | `025_job_tech_tags.sql` |
+| backfill job tech tags | `026_backfill_job_tech_tags.sql` |
 
 ## Rules
 
