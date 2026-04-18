@@ -31,12 +31,14 @@ jobs:
       #   2. ~/go/pkg/mod (module downloads)
       #   3. ~/.cache/go-build (compiled packages)
       # On a cache hit, repeat runs on unchanged code take ~10-20s
+      # v7 is required for golangci-lint v2 (v6 only supports v1)
+      # --path-mode=abs required when using working-directory in v7
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.1.6
+          version: v2.11.4
           working-directory: backend
-          args: --config ../.github/.golangci.yml --timeout 5m
+          args: --config ../.github/.golangci.yml --timeout 5m --path-mode=abs
 
   # ── Frontend lint ─────────────────────────────────────────────────────────
   lint-frontend:
