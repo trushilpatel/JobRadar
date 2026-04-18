@@ -1,17 +1,16 @@
+version: "2"
+
 linters:
   enable:
     - errcheck      # ensures error return values are always handled
     - govet         # reports suspicious constructs (same as go vet)
     - staticcheck   # correctness + performance checks (includes gosimple)
     - gofmt         # enforces standard Go formatting
-
-linters-settings:
-  errcheck:
-    # Also check errors from type assertions like x.(T)
-    check-type-assertions: true
+  settings:
+    errcheck:
+      check-type-assertions: true
 
 issues:
-  # Don't report issues in test files for some linters
   exclude-rules:
     - path: _test\.go
       linters:
