@@ -4,6 +4,7 @@
         migrate scan-google db-truncate lint lint-go tsc \
         test test-short test-unit \
         test-api test-workers test-scheduler test-llm \
+        fmt \
         test-adapters \
         test-adapter-greenhouse test-adapter-lever test-adapter-ashby \
         docker-up \
@@ -77,6 +78,9 @@ lint-go: ## Run golangci-lint on backend (matches CI config)
 		exit 1; \
 	}
 	cd backend && golangci-lint run --config ../.github/.golangci.yml --timeout 5m
+
+fmt: ## Format all Go files with gofmt
+	cd backend && go fmt ./...
 
 lint-go-fast: ## Lint only files changed vs main branch
 	@command -v golangci-lint >/dev/null 2>&1 || { \

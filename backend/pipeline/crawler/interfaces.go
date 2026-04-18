@@ -16,7 +16,9 @@ type CompanyReader interface {
 // PipelineLedger is the narrow ledger interface the crawler needs.
 type PipelineLedger interface {
 	HasSeen(ctx context.Context, jobID string) (bool, error)
+	HasSeenBatch(ctx context.Context, jobIDs []string) (map[string]bool, error)
 	MarkSeen(ctx context.Context, jobID, companyID, reason string) error
+	MarkSeenBatch(ctx context.Context, jobIDs []string, companyID, reason string) error
 	GetActiveJobIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
 }

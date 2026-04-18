@@ -46,9 +46,6 @@ func (f *fakeStore) GetCompanyByID(_ context.Context, id string) (model.Company,
 	}
 	return model.Company{}, gorm.ErrRecordNotFound
 }
-func (f *fakeStore) GetCompaniesDueForScan(_ context.Context, intervalMinutes int) ([]model.Company, error) {
-	return f.companies, f.err
-}
 func (f *fakeStore) GetCompanies(_ context.Context, _ CompanyFilter, _, _ int) ([]model.Company, int64, error) {
 	return f.companies, int64(len(f.companies)), f.err
 }

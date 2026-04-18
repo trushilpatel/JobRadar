@@ -47,11 +47,13 @@ type JobStore interface {
 // SeenLedgerReader checks if a job has already been processed.
 type SeenLedgerReader interface {
 	HasSeen(ctx context.Context, jobID string) (bool, error)
+	HasSeenBatch(ctx context.Context, jobIDs []string) (map[string]bool, error)
 }
 
 // SeenLedgerWriter marks jobs as seen or updates their reason.
 type SeenLedgerWriter interface {
 	MarkSeen(ctx context.Context, jobID, companyID, reason string) error
+	MarkSeenBatch(ctx context.Context, jobIDs []string, companyID, reason string) error
 	UpdateSeenReason(ctx context.Context, jobID, reason string) error
 	UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason string) error
 	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
@@ -327,6 +329,26 @@ func (s *seenLedgerStore) HasSeen(ctx context.Context, jobID string) (_ bool, er
 	return count > 0, err
 }
 
+func (s *seenLedgerStore) HasSeenBatch(ctx context.Context, jobIDs []string) (_ map[string]bool, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.HasSeenBatch")
+	defer tracing.End(span, &err)
+	if len(jobIDs) == 0 {
+		return map[string]bool{}, nil
+	}
+	var found []string
+	err = s.db.WithContext(ctx).Model(&model.JobSeenLedger{}).
+		Where("job_id IN ?", jobIDs).
+		Pluck("job_id", &found).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]bool, len(jobIDs))
+	for _, id := range found {
+		result[id] = true
+	}
+	return result, nil
+}
+
 func (s *seenLedgerStore) MarkSeen(ctx context.Context, jobID, companyID, reason string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.MarkSeen")
 	defer tracing.End(span, &err)
@@ -336,6 +358,21 @@ func (s *seenLedgerStore) MarkSeen(ctx context.Context, jobID, companyID, reason
 		Reason:    reason,
 	}
 	return s.db.WithContext(ctx).Create(&row).Error
+}
+
+func (s *seenLedgerStore) MarkSeenBatch(ctx context.Context, jobIDs []string, companyID, reason string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.MarkSeenBatch")
+	defer tracing.End(span, &err)
+	if len(jobIDs) == 0 {
+		return nil
+	}
+	rows := make([]model.JobSeenLedger, len(jobIDs))
+	for i, id := range jobIDs {
+		rows[i] = model.JobSeenLedger{JobID: id, CompanyID: companyID, Reason: reason}
+	}
+	return s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		CreateInBatches(rows, 500).Error
 }
 
 func (s *seenLedgerStore) UpdateSeenReason(ctx context.Context, jobID, reason string) (err error) {

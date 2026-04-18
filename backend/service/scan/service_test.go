@@ -19,9 +19,12 @@ type fakeQueueStore struct {
 	removeCalled  bool
 }
 
-func (f *fakeQueueStore) Enqueue(_ context.Context, companyID, source string) error {
+func (f *fakeQueueStore) Enqueue(_ context.Context, _, _ string) error {
 	f.enqueueCalled = true
 	return f.err
+}
+func (f *fakeQueueStore) EnqueueDue(_ context.Context, _ int, _ string) (string, error) {
+	return "", f.err
 }
 func (f *fakeQueueStore) ClaimNext(ctx context.Context) (*ScanQueueItem, error) { return nil, f.err }
 func (f *fakeQueueStore) Complete(_ context.Context, id string) error           { return f.err }

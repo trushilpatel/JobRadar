@@ -50,6 +50,11 @@ func (f *fakePipelineService) MarkLedgerError(_ context.Context, id string) erro
 	return f.markErr
 }
 
+func (f *fakePipelineService) MarkLedgerIrrelevant(_ context.Context, id string) error {
+	f.markCalls = append(f.markCalls, id)
+	return f.markErr
+}
+
 func (f *fakePipelineService) HasSeenJob(_ context.Context, id string) (bool, error) {
 	return f.hasSeen, f.hasSeenErr
 }
@@ -250,6 +255,7 @@ func TestEnrich_SkipsFetchWhenFullContentPresent(t *testing.T) {
 		Remote:      true,
 		Country:     "USA",
 		Sponsorship: true,
+		RoleMatch:   true,
 	}}
 	pipeline := &fakePipelineService{}
 

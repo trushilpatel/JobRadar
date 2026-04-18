@@ -71,6 +71,28 @@ var SchedulerCompaniesEnqueuedTotal = prometheus.NewCounter(prometheus.CounterOp
 	Help: "Total companies enqueued for scanning by the scheduler.",
 })
 
+// SchedulerRunDuration tracks how long each full enqueue pass takes.
+var SchedulerRunDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+	Name:    "scheduler_run_duration_seconds",
+	Help:    "Duration of a full scheduler enqueue pass (time to exhaust all due companies).",
+	Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5},
+})
+
+// SchedulerErrorsTotal counts errors encountered during scheduler runs, by reason.
+// Reason values: "enqueue_due", "reset_stuck".
+var SchedulerErrorsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "scheduler_errors_total",
+	Help: "Total errors encountered by the scheduler, by reason.",
+}, []string{"reason"})
+
+// SchedulerStuckChecksTotal counts how many stuck-detection passes completed
+// without error. Each increment represents one successful ResetStuck call,
+// not one row — use this as a liveness signal for the stuck-detection path.
+var SchedulerStuckChecksTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "scheduler_stuck_checks_total",
+	Help: "Total stuck-detection passes completed by the scheduler without error.",
+})
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 func init() {
@@ -85,6 +107,9 @@ func init() {
 		EnricherJobsTotal,
 		EnricherLLMDuration,
 		SchedulerCompaniesEnqueuedTotal,
+		SchedulerRunDuration,
+		SchedulerErrorsTotal,
+		SchedulerStuckChecksTotal,
 	)
 }
 

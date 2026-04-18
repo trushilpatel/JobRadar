@@ -37,6 +37,8 @@ type EnrichResult struct {
 	RoleBrief        string   `json:"role_brief"`
 	Responsibilities []string `json:"responsibilities"`
 	RoleCategory     string   `json:"role_category"` // backend | frontend | fullstack | devops | ml | data | other
+	// Role alignment check
+	RoleMatch bool `json:"role_match"` // true if the job aligns with the configured target roles
 }
 
 // Scorer is the interface for LLM-based job relevance scoring and enrichment.

@@ -139,6 +139,12 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 	}
 
 	// 3. Drop ineligible jobs before writing to DB
+	if !result.RoleMatch {
+		jobLog.Info("job dropped: role mismatch", logger.Str("title", job.Title))
+		w.markIrrelevant(ctx, job.ID)
+		metrics.EnricherJobsTotal.WithLabelValues("dropped").Inc()
+		return
+	}
 	if reason := w.dropJob(result); reason != "" {
 		jobLog.Info("job dropped", logger.Str("reason", reason))
 		w.markError(ctx, job.ID)
@@ -171,6 +177,13 @@ func toEnrichedInput(job ats.RawJob, result *llm.EnrichResult) jobsvc.EnrichedJo
 func (w *Worker) markError(ctx context.Context, jobID string) {
 	if err := w.pipeline.MarkLedgerError(ctx, jobID); err != nil {
 		w.log.Error("failed to mark error in seen_ledger", err, logger.Str(logger.FieldJobID, jobID))
+	}
+}
+
+// markIrrelevant marks a job as llm_irrelevant so it is skipped cleanly without counting as an error.
+func (w *Worker) markIrrelevant(ctx context.Context, jobID string) {
+	if err := w.pipeline.MarkLedgerIrrelevant(ctx, jobID); err != nil {
+		w.log.Error("failed to mark irrelevant in seen_ledger", err, logger.Str(logger.FieldJobID, jobID))
 	}
 }
 

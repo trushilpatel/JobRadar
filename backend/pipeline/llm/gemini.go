@@ -63,20 +63,23 @@ You are a job relevance filter for a software engineer with the following profil
 Evaluate each job title and location to return the IDs of jobs that are a plausible match.
 
 SENIORITY GUIDELINES
-INCLUDE: Junior, Mid-level, Senior, Software Engineer I/II/III, SWE, Backend, Frontend, Fullstack, Platform, Infrastructure, DevOps, SRE, Data Engineer, ML Engineer, and similar IC (Individual Contributor) roles.
-INCLUDE: Ambiguous or unclear seniority - prefer false positives over false negatives.
-EXCLUDE: Systems Administrator, IT support, Staff, Principal, Distinguished, Fellow, Architect (standalone), Director, VP, C-suite, Head of Engineering, or any role that is explicitly a people manager with no IC track.
+INCLUDE: Junior, Mid-level, Senior, Software Engineer I/II/III, SWE, Backend, Frontend, Fullstack, Platform, Infrastructure, DevOps, SRE, Data Engineer, ML Engineer, Research Engineer, Research Scientist, Data Scientist, Applied Scientist, Solutions Architect, Cloud Architect, Data Platform Architect, and similar computer science IC roles.
+EXCLUDE: Staff [X], Principal [X], Distinguished, Fellow, Director, VP, C-suite, Head of Engineering, or any role that is explicitly a people manager with no IC track. This includes titles like "Staff Software Engineer", "Principal Software Engineer" — the Staff/Principal prefix overrides the engineering keyword.
 EXCLUDE: Internships, Co-ops, Apprenticeships, part-time.
-EXCLUDE: Non-engineering roles (Sales, Marketing, Design, Recruiting, Finance, Legal).
+EXCLUDE: Non-CS roles — Sales, Account Executive, Account Manager, Account Director, Pre-Sales, Marketing, Recruiting, Finance, Legal, Customer Success, Solutions Consultant, Delivery Consultant, Implementation Consultant, Program Manager, Technical Program Manager, SDR, Operations Manager, Field Operations, Communications Lead, Strategy, Brand.
+EXCLUDE: Non-CS engineering — Mechanical Engineer, Electrical Engineer, Turbomachinery, Hardware Assembly, Civil Engineer, or any engineering role not related to computer science or software systems.
+EXCLUDE: Non-CS analyst roles — Payroll Analyst, Workday Analyst, Finance Analyst, Compliance Analyst, Audio Analyst, or any analyst role not related to software, data, or security.
+EXCLUDE: Systems Administrator, IT Support.
 
 LOCATION GUIDELINES
 INCLUDE: Positions with a US city, US state, or "United States" in the location.
 INCLUDE: Positions listed as "Remote" or "Remote - USA" or similar US-remote variants.
-INCLUDE: Positions with no location or "Unknown" location — assume US unless the title signals otherwise.
+INCLUDE: Positions with no location or "Unknown" location — assume US.
 EXCLUDE: Positions with a non-US city or country in the location (e.g. London, Toronto, Berlin, Sydney, India, Canada).
 EXCLUDE: Positions that are explicitly "Remote - [non-US country]" or list only non-US locations.
+EXCLUDE: Positions with multi-region location strings like "Home based - EMEA", "Home based - Worldwide", "Americas; EMEA", or similar patterns that do not explicitly include the US.
 
-When in doubt, INCLUDE the job. A borderline match included here can be filtered later. A relevant job excluded here is lost permanently.
+When in doubt, EXCLUDE the job. Precision matters — irrelevant jobs that pass here waste enrichment budget and pollute the feed.
 
 Return a JSON array of matching job IDs. Return an empty array if none match.
 
@@ -120,21 +123,24 @@ var enrichSchema = &genai.Schema{
 			Type: genai.TypeString,
 			Enum: []string{"backend", "frontend", "fullstack", "devops", "ml", "data", "other"},
 		},
+		"role_match": {Type: genai.TypeBoolean},
 	},
 	Required: []string{
 		"experience_years", "tech_stack", "salary_min", "salary_max", "salary_currency",
 		"summary", "remote", "country", "state", "sponsorship",
 		"requires_citizen", "security_clearance", "role_brief", "responsibilities", "role_category",
+		"role_match",
 	},
 }
 
 func (s *geminiScorer) Enrich(ctx context.Context, input EnrichInput) (*EnrichResult, error) {
-	// Restoration of your second prompt with mandatory JSON guardrails at the top
+	targetRoles := strings.Join(s.targetRoles, ", ")
 	prompt := fmt.Sprintf(`Return ONLY raw JSON. No markdown formatting.
 
 Extract structured information from the following job posting. Strictly evaluate the text provided without using external knowledge or making assumptions about company policies not explicitly stated in the content.
 
 Job ID: %s
+Target roles: %s
 
 Job posting text:
 %s
@@ -153,8 +159,9 @@ Field instructions:
 - security_clearance: true if the posting mentions any security clearance in any form — required, preferred, or eligibility to obtain. This includes: "US Person", "Secret", "Top Secret", "TS/SCI", "clearance required", "must obtain clearance", "eligible to obtain clearance", "ability to obtain", "active clearance", "U.S. security clearance", or any mention of clearance levels. When in doubt, set true. Default false ONLY if the word "clearance" does not appear at all.
 - role_brief: one sentence technical mission of the role
 - responsibilities: array of concise strings, one key technical responsibility per element, no noise
-- role_category: one of backend, frontend, fullstack, devops, ml, data, other`,
-		input.ID, input.RawText,
+- role_category: one of backend, frontend, fullstack, devops, ml, data, other
+- role_match: true if this job is a genuine match for the target roles (%s). Evaluate the full job title, responsibilities, and required skills. Return false if the role is clearly non-engineering (e.g. Sales, Account Executive, Program Manager, Marketing), non-CS engineering (e.g. Mechanical, Electrical), or requires a specialisation unrelated to the target roles. When genuinely ambiguous, return true.`,
+		input.ID, targetRoles, input.RawText, targetRoles,
 	)
 
 	raw, err := s.generate(ctx, prompt, 1024, enrichSchema)

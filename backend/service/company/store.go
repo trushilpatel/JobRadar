@@ -14,9 +14,6 @@ type CompanyReader interface {
 	GetActiveCompanies(ctx context.Context) ([]model.Company, error)
 	GetAllCompanies(ctx context.Context) ([]model.Company, error)
 	GetCompanyByID(ctx context.Context, id string) (model.Company, error)
-	// GetCompaniesDueForScan returns active companies whose last_scan_at is NULL
-	// or older than intervalMinutes ago. Used by the scheduler binary.
-	GetCompaniesDueForScan(ctx context.Context, intervalMinutes int) ([]model.Company, error)
 	// GetCompanies returns a filtered, paginated slice and the total matching count.
 	GetCompanies(ctx context.Context, filter CompanyFilter, page, limit int) ([]model.Company, int64, error)
 	// GetCompanyCounts returns (total, total_active) across all companies,
@@ -104,16 +101,6 @@ func (s *companyStore) SetAllCompaniesActive(ctx context.Context, active bool) (
 	ctx, span := tracing.Start(ctx, "company.store.SetAllCompaniesActive")
 	defer tracing.End(span, &err)
 	return s.db.WithContext(ctx).Model(&model.Company{}).Where("1 = 1").Update("active", active).Error
-}
-
-func (s *companyStore) GetCompaniesDueForScan(ctx context.Context, intervalMinutes int) (companies []model.Company, err error) {
-	ctx, span := tracing.Start(ctx, "company.store.GetCompaniesDueForScan")
-	defer tracing.End(span, &err)
-	err = s.db.WithContext(ctx).Where(
-		"active = true AND (last_scan_at IS NULL OR last_scan_at + (? * INTERVAL '1 minute') <= NOW())",
-		intervalMinutes,
-	).Find(&companies).Error
-	return companies, err
 }
 
 func (s *companyStore) GetCompanies(ctx context.Context, filter CompanyFilter, page, limit int) (_ []model.Company, _ int64, err error) {

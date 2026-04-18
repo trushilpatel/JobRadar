@@ -85,72 +85,96 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 	ctx, span := tracing.Start(ctx, "crawler.engine.scanCompany")
 	defer tracing.End(span, nil)
 	start := time.Now()
-	companyLog := e.log.With(
+	log := e.log.With(
 		logger.Str(logger.FieldCompany, company.ID),
 		logger.Str("name", company.Name),
 	)
 
-	adp, err := ats.RegistryWithGoogleConfig(company.AdapterType, e.googleCfg, companyLog)
+	result, err := e.fetchJobs(ctx, company, log)
 	if err != nil {
-		errMsg := fmt.Sprintf("no adapter for type %q: %v", company.AdapterType, err)
-		companyLog.Error("no adapter found", err)
-		e.recordResult(ctx, company.ID, 0, 0, time.Since(start), &errMsg)
-
-		metrics.CrawlerScansTotal.WithLabelValues("error").Inc()
-		return
-	}
-
-	result, err := adp.FetchJobs(ctx, company.ID)
-	if err != nil {
-		errMsg := fmt.Sprintf("fetch failed: %v", err)
-		companyLog.Error("fetch jobs failed", err)
+		errMsg := err.Error()
 		e.recordResult(ctx, company.ID, 0, 0, time.Since(start), &errMsg)
 		metrics.CrawlerScansTotal.WithLabelValues("error").Inc()
 		return
 	}
 
-	fetched := len(result.Jobs)
-	newCount := 0
-
-	for _, item := range result.Jobs {
-		seen, err := e.ledger.HasSeen(ctx, item.ID)
-		if err != nil {
-			companyLog.Error("seen_ledger check failed", err, logger.Str(logger.FieldJobID, item.ID))
-			continue
-		}
-		if seen {
-			continue
-		}
-
-		if err := e.ledger.MarkSeen(ctx, item.ID, company.ID, model.SeenReasonFetch); err != nil {
-			companyLog.Error("failed to mark seen", err, logger.Str(logger.FieldJobID, item.ID))
-			continue
-		}
-
-		rawJob := toRawJob(item, company.ID, company.AdapterType)
-		if err := e.publish(ctx, rawJob); err != nil {
-			companyLog.Error("publish failed", err, logger.Str(logger.FieldJobID, item.ID))
-			continue
-		}
-
-		newCount++
-	}
-
-	// Detect removed jobs: diff current scan results against previously known active jobs.
-	// This is important for full-scan adapters (e.g. Google) that return all jobs each time.
-	e.detectRemovedJobs(ctx, company.ID, result.Jobs, companyLog)
+	newCount := e.publishNewJobs(ctx, result.Jobs, company, log)
+	e.detectRemovedJobs(ctx, company.ID, result.Jobs, log)
 
 	elapsed := time.Since(start)
 	metrics.CrawlerScansTotal.WithLabelValues("success").Inc()
-	metrics.CrawlerJobsFetchedTotal.Add(float64(fetched))
+	metrics.CrawlerJobsFetchedTotal.Add(float64(len(result.Jobs)))
 	metrics.CrawlerScanDuration.Observe(elapsed.Seconds())
 
-	companyLog.Info("scan complete",
-		logger.Int(logger.FieldFetched, fetched),
+	log.Info("scan complete",
+		logger.Int(logger.FieldFetched, len(result.Jobs)),
 		logger.Int(logger.FieldNew, newCount),
 		logger.Dur(logger.FieldDuration, elapsed.Round(time.Millisecond)),
 	)
-	e.recordResult(ctx, company.ID, fetched, newCount, elapsed, nil)
+	e.recordResult(ctx, company.ID, len(result.Jobs), newCount, elapsed, nil)
+}
+
+func (e *Engine) fetchJobs(ctx context.Context, company model.Company, log logger.Logger) (ats.FetchJobsResponse, error) {
+	adp, err := ats.RegistryWithGoogleConfig(company.AdapterType, e.googleCfg, log)
+	if err != nil {
+		log.Error("no adapter found", err)
+		return ats.FetchJobsResponse{}, fmt.Errorf("no adapter for type %q: %w", company.AdapterType, err)
+	}
+	result, err := adp.FetchJobs(ctx, company.ID)
+	if err != nil {
+		log.Error("fetch jobs failed", err)
+		return ats.FetchJobsResponse{}, fmt.Errorf("fetch failed: %w", err)
+	}
+	return result, nil
+}
+
+func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, company model.Company, log logger.Logger) int {
+	if len(jobs) == 0 {
+		return 0
+	}
+
+	ids := make([]string, len(jobs))
+	for i, j := range jobs {
+		ids[i] = j.ID
+	}
+
+	seenMap, err := e.ledger.HasSeenBatch(ctx, ids)
+	if err != nil {
+		log.Error("batch seen check failed", err)
+		return 0
+	}
+
+	var newJobs []ats.FetchJobsItem
+	for _, job := range jobs {
+		if !seenMap[job.ID] {
+			newJobs = append(newJobs, job)
+		}
+	}
+	if len(newJobs) == 0 {
+		return 0
+	}
+
+	// Publish first, collect IDs that made it to Kafka.
+	// MarkSeenBatch runs only after — if the process crashes between publish and mark,
+	// the next scan re-publishes those jobs. Downstream filter handles duplicates.
+	var publishedIDs []string
+	for _, job := range newJobs {
+		if err := e.publish(ctx, toRawJob(job, company.ID, company.AdapterType)); err != nil {
+			log.Error("publish failed", err, logger.Str(logger.FieldJobID, job.ID))
+			continue
+		}
+		publishedIDs = append(publishedIDs, job.ID)
+	}
+	if len(publishedIDs) == 0 {
+		return 0
+	}
+
+	if err := e.ledger.MarkSeenBatch(ctx, publishedIDs, company.ID, model.SeenReasonFetch); err != nil {
+		// Jobs are in Kafka but not marked seen — next scan will re-publish them.
+		// Downstream filter deduplicates by job_id so this is safe.
+		log.Error("batch mark seen failed (jobs published, will be re-sent on next scan)", err)
+	}
+	return len(publishedIDs)
 }
 
 // toRawJob converts a FetchJobsItem into the RawJob Kafka message.

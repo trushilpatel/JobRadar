@@ -10,12 +10,6 @@ import (
 	"github.com/trushilpatel/jobradar/store"
 )
 
-// SchedulerService is the narrow interface the company_scan_scheduler binary needs.
-// It exposes only the query the scheduler uses — nothing else.
-type SchedulerService interface {
-	GetCompaniesDueForScan(ctx context.Context, intervalMinutes int) ([]model.Company, error)
-}
-
 // Service defines all business operations for the company domain.
 type Service interface {
 	List(ctx context.Context, filter CompanyFilter, page, limit int) (CompanyListResult, error)
@@ -195,11 +189,4 @@ func (s *service) SetAllActive(ctx context.Context, active bool) (err error) {
 		return domain.ErrInternal.WithMessage("failed to update companies")
 	}
 	return nil
-}
-
-// GetCompaniesDueForScan implements SchedulerService.
-func (s *service) GetCompaniesDueForScan(ctx context.Context, intervalMinutes int) (_ []model.Company, err error) {
-	ctx, span := tracing.Start(ctx, "company.service.GetCompaniesDueForScan")
-	defer tracing.End(span, &err)
-	return s.store.GetCompaniesDueForScan(ctx, intervalMinutes)
 }

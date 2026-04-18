@@ -7,77 +7,52 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/infra/logger"
-	"github.com/trushilpatel/jobradar/model"
-	companysvc "github.com/trushilpatel/jobradar/service/company"
 	scansvc "github.com/trushilpatel/jobradar/service/scan"
 )
 
-// ── fakes ─────────────────────────────────────────────────────────────────────
-
-type fakeCompanyReader struct {
-	due []model.Company
-	err error
-}
-
-func (f *fakeCompanyReader) GetCompaniesDueForScan(_ context.Context, _ int) ([]model.Company, error) {
-	return f.due, f.err
-}
-func (f *fakeCompanyReader) GetActiveCompanies(_ context.Context) ([]model.Company, error) {
-	return nil, nil
-}
-func (f *fakeCompanyReader) GetAllCompanies(_ context.Context) ([]model.Company, error) {
-	return nil, nil
-}
-func (f *fakeCompanyReader) GetCompanyByID(_ context.Context, _ string) (model.Company, error) {
-	return model.Company{}, nil
-}
-func (f *fakeCompanyReader) GetCompanies(_ context.Context, _ companysvc.CompanyFilter, _, _ int) ([]model.Company, int64, error) {
-	return nil, 0, nil
-}
-func (f *fakeCompanyReader) GetCompanyCounts(_ context.Context) (total, active int64, err error) {
-	return 0, 0, nil
-}
-
+// fakeScanQueueStore is a test double for scansvc.ScanQueueStore.
+// EnqueueDue returns company IDs one at a time, then "" to signal no more due.
 type fakeScanQueueStore struct {
-	enqueued []string // company IDs enqueued
-	err      error
+	companyIDs []string
+	idx        int
+	err        error
+	enqueued   []string
 }
 
-func (f *fakeScanQueueStore) Enqueue(_ context.Context, companyID, _ string) error {
+func (f *fakeScanQueueStore) EnqueueDue(_ context.Context, _ int, _ string) (string, error) {
 	if f.err != nil {
-		return f.err
+		return "", f.err
 	}
-	f.enqueued = append(f.enqueued, companyID)
-	return nil
+	if f.idx >= len(f.companyIDs) {
+		return "", nil
+	}
+	id := f.companyIDs[f.idx]
+	f.idx++
+	f.enqueued = append(f.enqueued, id)
+	return id, nil
 }
+func (f *fakeScanQueueStore) Enqueue(_ context.Context, _, _ string) error { return f.err }
 func (f *fakeScanQueueStore) ClaimNext(_ context.Context) (*scansvc.ScanQueueItem, error) {
 	return nil, f.err
 }
-func (f *fakeScanQueueStore) Complete(_ context.Context, _ string) error { return f.err }
-func (f *fakeScanQueueStore) ResetStuck(_ context.Context, _ time.Duration) error {
-	return f.err
-}
+func (f *fakeScanQueueStore) Complete(_ context.Context, _ string) error          { return f.err }
+func (f *fakeScanQueueStore) Remove(_ context.Context, _ string) error            { return f.err }
+func (f *fakeScanQueueStore) MoveUp(_ context.Context, _ string) error            { return f.err }
+func (f *fakeScanQueueStore) MoveDown(_ context.Context, _ string) error          { return f.err }
+func (f *fakeScanQueueStore) ResetStuck(_ context.Context, _ time.Duration) error { return f.err }
+func (f *fakeScanQueueStore) UpdateHeartbeat(_ context.Context, _ string) error   { return f.err }
 func (f *fakeScanQueueStore) ListQueue(_ context.Context) ([]scansvc.ScanQueueItem, error) {
 	return nil, f.err
 }
-func (f *fakeScanQueueStore) MoveDown(_ context.Context, _ string) error        { return f.err }
-func (f *fakeScanQueueStore) MoveUp(_ context.Context, _ string) error          { return f.err }
-func (f *fakeScanQueueStore) Remove(_ context.Context, _ string) error          { return f.err }
-func (f *fakeScanQueueStore) UpdateHeartbeat(_ context.Context, _ string) error { return f.err }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-func company(id, name string) model.Company {
-	return model.Company{ID: id, Name: name}
-}
+var _ scansvc.ScanQueueStore = (*fakeScanQueueStore)(nil)
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
-func TestEnqueueDue_NoCompaniesDue(t *testing.T) {
-	reader := &fakeCompanyReader{due: []model.Company{}}
+func TestEnqueueDue_NoDueCompanies(t *testing.T) {
 	q := &fakeScanQueueStore{}
 
-	enqueuedue(context.Background(), logger.NewNoop(), reader, q, 1440)
+	enqueuedue(context.Background(), logger.NewNoop(), q, 1440)
 
 	if len(q.enqueued) != 0 {
 		t.Errorf("expected no enqueues, got %d", len(q.enqueued))
@@ -85,14 +60,11 @@ func TestEnqueueDue_NoCompaniesDue(t *testing.T) {
 }
 
 func TestEnqueueDue_EnqueuesAllDueCompanies(t *testing.T) {
-	reader := &fakeCompanyReader{due: []model.Company{
-		company("company-1", "Acme"),
-		company("company-2", "Globex"),
-		company("company-3", "Initech"),
-	}}
-	q := &fakeScanQueueStore{}
+	q := &fakeScanQueueStore{
+		companyIDs: []string{"company-1", "company-2", "company-3"},
+	}
 
-	enqueuedue(context.Background(), logger.NewNoop(), reader, q, 1440)
+	enqueuedue(context.Background(), logger.NewNoop(), q, 1440)
 
 	if len(q.enqueued) != 3 {
 		t.Fatalf("expected 3 enqueues, got %d", len(q.enqueued))
@@ -105,28 +77,86 @@ func TestEnqueueDue_EnqueuesAllDueCompanies(t *testing.T) {
 	}
 }
 
-func TestEnqueueDue_StoreError_EnqueuesNothing(t *testing.T) {
-	reader := &fakeCompanyReader{err: errors.New("db down")}
-	q := &fakeScanQueueStore{}
+func TestEnqueueDue_StoreError_StopsImmediately(t *testing.T) {
+	q := &fakeScanQueueStore{err: errors.New("db down")}
 
-	enqueuedue(context.Background(), logger.NewNoop(), reader, q, 1440)
+	enqueuedue(context.Background(), logger.NewNoop(), q, 1440)
 
 	if len(q.enqueued) != 0 {
 		t.Errorf("expected no enqueues on store error, got %d", len(q.enqueued))
 	}
 }
 
-func TestEnqueueDue_EnqueueError_ContinuesToNext(t *testing.T) {
-	reader := &fakeCompanyReader{due: []model.Company{
-		company("company-1", "Acme"),
-		company("company-2", "Globex"),
-	}}
-	q := &fakeScanQueueStore{err: errors.New("queue full")}
+func TestEnqueueDue_ReturnsCount(t *testing.T) {
+	q := &fakeScanQueueStore{
+		companyIDs: []string{"a", "b"},
+	}
 
-	// Should not panic — logs and continues
-	enqueuedue(context.Background(), logger.NewNoop(), reader, q, 1440)
+	n := enqueuedue(context.Background(), logger.NewNoop(), q, 1440)
 
-	if len(q.enqueued) != 0 {
-		t.Errorf("expected no successful enqueues, got %d", len(q.enqueued))
+	if n != 2 {
+		t.Errorf("expected count=2, got %d", n)
 	}
 }
+
+func TestEnqueueDue_CancelledContext_StopsMidLoop(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Fake store with many IDs — cancel after the first one to verify early exit.
+	q := &fakeScanQueueStore{
+		companyIDs: []string{"c1", "c2", "c3", "c4", "c5"},
+	}
+
+	// Wrap EnqueueDue to cancel the context after the first successful call.
+	original := q
+
+	wrapping := &cancelAfterNStore{inner: original, cancelAfter: 1, cancel: cancel}
+
+	n := enqueuedue(ctx, logger.NewNoop(), wrapping, 1440)
+
+	// Should stop after 1 (the cancelled call) or 2 (cancel races the check).
+	// The important invariant: must not process all 5.
+	if n >= len(q.companyIDs) {
+		t.Errorf("expected early exit on cancelled context, but got count=%d (all companies enqueued)", n)
+	}
+}
+
+func TestResetStuck_StoreError_LogsAndContinues(t *testing.T) {
+	q := &fakeScanQueueStore{err: errors.New("db down")}
+	// Should not panic — error is logged and swallowed.
+	resetStuck(context.Background(), logger.NewNoop(), q, 30*time.Minute)
+}
+
+// cancelAfterNStore wraps a fakeScanQueueStore and cancels the context after N enqueues.
+type cancelAfterNStore struct {
+	inner       *fakeScanQueueStore
+	cancelAfter int
+	cancel      context.CancelFunc
+	count       int
+}
+
+func (c *cancelAfterNStore) EnqueueDue(ctx context.Context, interval int, source string) (string, error) {
+	id, err := c.inner.EnqueueDue(ctx, interval, source)
+	if id != "" {
+		c.count++
+		if c.count >= c.cancelAfter {
+			c.cancel()
+		}
+	}
+	return id, err
+}
+func (c *cancelAfterNStore) Enqueue(_ context.Context, _, _ string) error { return nil }
+func (c *cancelAfterNStore) ClaimNext(_ context.Context) (*scansvc.ScanQueueItem, error) {
+	return nil, nil
+}
+func (c *cancelAfterNStore) Complete(_ context.Context, _ string) error          { return nil }
+func (c *cancelAfterNStore) Remove(_ context.Context, _ string) error            { return nil }
+func (c *cancelAfterNStore) MoveUp(_ context.Context, _ string) error            { return nil }
+func (c *cancelAfterNStore) MoveDown(_ context.Context, _ string) error          { return nil }
+func (c *cancelAfterNStore) ResetStuck(_ context.Context, _ time.Duration) error { return nil }
+func (c *cancelAfterNStore) UpdateHeartbeat(_ context.Context, _ string) error   { return nil }
+func (c *cancelAfterNStore) ListQueue(_ context.Context) ([]scansvc.ScanQueueItem, error) {
+	return nil, nil
+}
+
+var _ scansvc.ScanQueueStore = (*cancelAfterNStore)(nil)

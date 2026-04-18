@@ -39,6 +39,9 @@ type PipelineService interface {
 	// MarkLedgerError marks a pipeline ledger entry with reason='error'.
 	MarkLedgerError(ctx context.Context, jobID string) error
 
+	// MarkLedgerIrrelevant marks a pipeline ledger entry with reason='llm_irrelevant'.
+	MarkLedgerIrrelevant(ctx context.Context, jobID string) error
+
 	// HasSeenJob returns true if the job has already been processed (dedup check).
 	HasSeenJob(ctx context.Context, jobID string) (bool, error)
 }
@@ -102,6 +105,13 @@ func (p *pipelineService) MarkLedgerError(ctx context.Context, jobID string) (er
 	ctx, span := tracing.Start(ctx, "job.pipeline.MarkLedgerError")
 	defer tracing.End(span, &err)
 	return p.ledger.UpdateSeenReason(ctx, jobID, model.SeenReasonError)
+}
+
+// MarkLedgerIrrelevant marks the pipeline ledger entry for jobID with reason='llm_irrelevant'.
+func (p *pipelineService) MarkLedgerIrrelevant(ctx context.Context, jobID string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.pipeline.MarkLedgerIrrelevant")
+	defer tracing.End(span, &err)
+	return p.ledger.UpdateSeenReason(ctx, jobID, model.SeenReasonLLMIrrelevant)
 }
 
 // HasSeenJob returns true if the job has already been processed.

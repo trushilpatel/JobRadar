@@ -15,6 +15,12 @@ type ScanQueueStore interface {
 	// already has an active entry (queued or processing).
 	Enqueue(ctx context.Context, companyID, source string) error
 
+	// EnqueueDue atomically finds exactly one company that is due for a scan
+	// (active, last_scan_at past the interval, not already in the queue) and
+	// inserts it. Returns the enqueued company ID, or "" if no company is due.
+	// Safe for concurrent callers — uses FOR UPDATE SKIP LOCKED on companies.
+	EnqueueDue(ctx context.Context, intervalMinutes int, source string) (string, error)
+
 	// ClaimNext atomically claims the next queued item and marks it processing.
 	// Returns nil, nil if the queue is empty.
 	ClaimNext(ctx context.Context) (*ScanQueueItem, error)
@@ -85,6 +91,26 @@ func (s *scanQueueStore) Enqueue(ctx context.Context, companyID, source string) 
 		VALUES (?, ?)
 		ON CONFLICT DO NOTHING
 	`, companyID, source).Error
+}
+
+func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, source string) (_ string, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.EnqueueDue")
+	defer tracing.End(span, &err)
+	var companyID string
+	err = s.db.WithContext(ctx).Raw(`
+		INSERT INTO company_scan_queue (company_id, source)
+		SELECT id, ?
+		FROM companies
+		WHERE active = true
+		  AND (last_scan_at IS NULL OR last_scan_at + (? * INTERVAL '1 minute') <= NOW())
+		  AND NOT EXISTS (SELECT 1 FROM company_scan_queue WHERE company_id = companies.id)
+		ORDER BY last_scan_at ASC NULLS FIRST
+		LIMIT 1
+		FOR UPDATE SKIP LOCKED
+		ON CONFLICT DO NOTHING
+		RETURNING company_id
+	`, source, intervalMinutes).Scan(&companyID).Error
+	return companyID, err
 }
 
 func (s *scanQueueStore) ClaimNext(ctx context.Context) (_ *ScanQueueItem, err error) {
@@ -163,9 +189,10 @@ func (s *scanQueueStore) MoveDown(ctx context.Context, id string) (err error) {
 	if pos < 0 || pos >= len(items)-1 {
 		return nil
 	}
+	// Lower id's priority below the next item so it sorts after it (ORDER BY priority DESC).
 	below := items[pos+1]
-	newPriority := below.Priority + 1
-	return s.db.WithContext(ctx).Exec(`UPDATE company_scan_queue SET priority = ? WHERE id = ?`, newPriority, below.ID).Error
+	newPriority := below.Priority - 1
+	return s.db.WithContext(ctx).Exec(`UPDATE company_scan_queue SET priority = ? WHERE id = ?`, newPriority, id).Error
 }
 
 func (s *scanQueueStore) ResetStuck(ctx context.Context, staleDur time.Duration) (err error) {
@@ -228,52 +255,65 @@ func (s *scanLogStore) InsertCompanyScanLog(ctx context.Context, companyID strin
 func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ ScanStatsView, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.GetScanStats")
 	defer tracing.End(span, &err)
+
 	var stats ScanStatsView
 
-	type agg struct {
-		TotalScans    int64
-		TotalFetched  int64
-		TotalNew      int64
-		ErrorCount    int64
-		AvgDurationMs *float64
-	}
-	var a agg
-	err = s.db.WithContext(ctx).Model(&model.CompanyScanLog{}).
-		Where("company_id = ?", companyID).
-		Select("COUNT(*) as total_scans, SUM(jobs_fetched) as total_fetched, SUM(jobs_new) as total_new, SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) as error_count, AVG(duration_ms) as avg_duration_ms").
-		Scan(&a).Error
-	if err != nil {
-		return stats, err
-	}
+	// All three queries run inside one read transaction so every value comes
+	// from the same consistent snapshot of company_scan_log.
+	txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		type agg struct {
+			TotalScans    int64
+			TotalFetched  int64
+			TotalNew      int64
+			ErrorCount    int64
+			AvgDurationMs *float64
+		}
+		var a agg
+		if err := tx.Model(&model.CompanyScanLog{}).
+			Where("company_id = ?", companyID).
+			Select("COUNT(*) as total_scans, SUM(jobs_fetched) as total_fetched, SUM(jobs_new) as total_new, SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) as error_count, AVG(duration_ms) as avg_duration_ms").
+			Scan(&a).Error; err != nil {
+			return err
+		}
+		stats.TotalScans = a.TotalScans
+		stats.TotalFetched = a.TotalFetched
+		stats.TotalNew = a.TotalNew
+		stats.ErrorCount = a.ErrorCount
+		stats.AvgDurationMs = a.AvgDurationMs
 
-	stats.TotalScans = a.TotalScans
-	stats.TotalFetched = a.TotalFetched
-	stats.TotalNew = a.TotalNew
-	stats.ErrorCount = a.ErrorCount
-	stats.AvgDurationMs = a.AvgDurationMs
+		var newToday int64
+		if err := tx.Model(&model.CompanyScanLog{}).
+			Where("company_id = ? AND DATE(scanned_at) = CURRENT_DATE", companyID).
+			Select("COALESCE(SUM(jobs_new), 0)").
+			Scan(&newToday).Error; err != nil {
+			return err
+		}
+		stats.NewToday = newToday
 
-	var newToday, newThisMonth int64
-	s.db.WithContext(ctx).Model(&model.CompanyScanLog{}).
-		Where("company_id = ? AND DATE(scanned_at) = CURRENT_DATE", companyID).
-		Select("COALESCE(SUM(jobs_new), 0)").Scan(&newToday)
-	s.db.WithContext(ctx).Model(&model.CompanyScanLog{}).
-		Where("company_id = ? AND DATE_TRUNC('month', scanned_at) = DATE_TRUNC('month', CURRENT_DATE)", companyID).
-		Select("COALESCE(SUM(jobs_new), 0)").Scan(&newThisMonth)
-	stats.NewToday = newToday
-	stats.NewThisMonth = newThisMonth
+		var newThisMonth int64
+		if err := tx.Model(&model.CompanyScanLog{}).
+			Where("company_id = ? AND DATE_TRUNC('month', scanned_at) = DATE_TRUNC('month', CURRENT_DATE)", companyID).
+			Select("COALESCE(SUM(jobs_new), 0)").
+			Scan(&newThisMonth).Error; err != nil {
+			return err
+		}
+		stats.NewThisMonth = newThisMonth
 
-	var recent []ScanRun
-	if err := s.db.WithContext(ctx).Model(&model.CompanyScanLog{}).
-		Where("company_id = ?", companyID).
-		Order("scanned_at DESC").
-		Limit(10).
-		Select("company_id, scanned_at, jobs_fetched, jobs_new, error, duration_ms").
-		Scan(&recent).Error; err != nil {
-		return stats, err
-	}
-	stats.RecentRuns = recent
+		var recent []ScanRun
+		if err := tx.Model(&model.CompanyScanLog{}).
+			Where("company_id = ?", companyID).
+			Order("scanned_at DESC").
+			Limit(10).
+			Select("company_id, scanned_at, jobs_fetched, jobs_new, error, duration_ms").
+			Scan(&recent).Error; err != nil {
+			return err
+		}
+		stats.RecentRuns = recent
 
-	return stats, nil
+		return nil
+	})
+
+	return stats, txErr
 }
 
 func (s *scanLogStore) RecordScanResult(ctx context.Context, companyID, status string, jobsFetched, jobsNew, durationMs int, errMsg *string) (err error) {
