@@ -23,16 +23,16 @@ func main() {
 	cfg := config.Load()
 	log := logger.Init("scheduler")
 
-	shutdown := tracing.Init("jobradar-scheduler", cfg.JaegerEndpoint)
+	shutdown := tracing.Init("jobradar-scheduler", cfg.Observability.JaegerEndpoint)
 	defer shutdown()
 
-	database, err := db.Open(cfg)
+	database, err := db.Open(cfg.DB)
 	if err != nil {
 		log.Error("db open failed", err)
 		os.Exit(1)
 	}
 
-	go metrics.Serve(cfg.MetricsAddr, func() error { return db.Ping(database) })
+	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -41,11 +41,11 @@ func main() {
 	queue := scansvc.NewQueueStore(database)
 
 	log.Info("started",
-		logger.Int("scan_interval_minutes", cfg.ScanIntervalMinutes),
+		logger.Int("scan_interval_minutes", cfg.Scheduler.ScanIntervalMinutes),
 		logger.Dur("check_interval", checkInterval),
 	)
 
-	enqueuedue(ctx, log, companies, queue, cfg.ScanIntervalMinutes)
+	enqueuedue(ctx, log, companies, queue, cfg.Scheduler.ScanIntervalMinutes)
 
 	ticker := time.NewTicker(checkInterval)
 	defer ticker.Stop()
@@ -53,7 +53,7 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			enqueuedue(ctx, log, companies, queue, cfg.ScanIntervalMinutes)
+			enqueuedue(ctx, log, companies, queue, cfg.Scheduler.ScanIntervalMinutes)
 		case <-ctx.Done():
 			log.Info("shutting down")
 			return

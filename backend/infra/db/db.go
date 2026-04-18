@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func Open(cfg *config.Config) (*gorm.DB, error) {
+func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(cfg.DSN()), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})

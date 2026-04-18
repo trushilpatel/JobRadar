@@ -3,94 +3,79 @@
 ## Structure
 
 ```
-router.go           — mounts all routes, applies global middleware
+router.go           — NewRouter: mounts global middleware, operational endpoints, delegates to RouteGroups
 handler/
-  respond.go        — shared respond() and respondError() helpers
-  jobs.go           — JobHandler
-  applications.go   — ApplicationHandler
-  companies.go      — CompanyHandler
-  dashboard.go      — DashboardHandler
-  insights.go       — InsightsHandler
+  handler.go        — RouteGroup interface
+  respond.go        — Respond[T], RespondPaged[T], RespondError, HandleError helpers
 middleware/
   logger.go         — logs method, path, status, duration per request
+  metrics.go        — Prometheus request counter + latency histogram
+request/            — shared request parsing helpers
+response/           — shared response type helpers
 ```
 
-## respond helpers (always use these)
+## RouteGroup pattern
+
+Each service package implements `handler.RouteGroup` and registers its own routes:
 
 ```go
-respond(w, http.StatusOK, payload)           // any status + any body
-respondError(w, http.StatusBadRequest, "msg") // writes {"error": "msg"}
+type RouteGroup interface {
+    Register(r chi.Router)
+}
+```
+
+`NewRouter` accepts `[]handler.RouteGroup` and calls `Register` on each. To add a new resource: create a handler in the service package, implement `RouteGroup`, and add it to the Wire provider set. `NewRouter` never needs to change.
+
+## Respond helpers (always use these)
+
+```go
+handler.Respond(w, http.StatusOK, payload)           // typed JSON response
+handler.RespondPaged(w, items, total, page, limit)   // paginated JSON
+handler.HandleError(w, err)                          // maps domain errors → HTTP status automatically
 ```
 
 Never write `json.NewEncoder` or `w.WriteHeader` directly in handlers.
 
-## Validation pattern
+## Error mapping
 
-Validate at the handler level before touching the store.
-Use a `map[string]bool` for enum checks:
+Handlers call `handler.HandleError(w, err)`. The helper inspects the error:
+
+- `*domain.ValidationError` → 400 Bad Request
+- `*domain.ServiceError` → uses `.Status` field (404, 409, 400, 500)
+- anything else → 500 Internal Server Error
+
+Service methods return typed domain errors using sentinels in `domain/errors.go`:
 
 ```go
-valid := map[string]bool{
-    model.JobStatusNew:     true,
-    model.JobStatusSaved:   true,
-    model.JobStatusApplied: true,
-}
-if !valid[body.Status] {
-    respondError(w, http.StatusBadRequest, "invalid status value")
+return domain.ErrNotFound.WithMessage("job not found")   // 404
+return domain.ErrInternal.WithMessage("db failed")       // 500
+```
+
+## Validation pattern
+
+Validate at the handler level via the domain's `Validator` before calling the service:
+
+```go
+if err := h.validator.ValidateDismiss(input); err != nil {
+    handler.HandleError(w, err)  // ValidationError → 400
     return
 }
 ```
 
-## Routes
+## Operational endpoints
 
-```
-GET    /jobs
-GET    /jobs/:id
-PATCH  /jobs/:id/save
-PATCH  /jobs/:id/status
-PATCH  /jobs/:id/notes
-DELETE /jobs/:id                          — sets status=dismissed, backfills snapshot
-GET    /jobs/:id/applications
-POST   /jobs/:id/applications
-PATCH  /jobs/:id/applications/:app_id/stage
-PATCH  /jobs/:id/applications/:app_id/note
-GET    /applications
+Served by the router directly (not by any RouteGroup):
 
-GET    /companies
-GET    /companies/queue                 — active scan queue entries (queued + processing)
-POST   /companies
-PATCH  /companies/:id
-DELETE /companies/:id
-GET    /companies/:id/scan-stats
-POST   /companies/:id/scan              — always enqueues; manual triggers bypass the cooldown
+- `GET /health` — always 200
+- `GET /ready` — 200 if DB ping succeeds, 503 otherwise
+- `GET /metrics` — Prometheus scrape endpoint
 
-GET    /dashboard/stats
-GET    /dashboard/activity?days=N
+## Routes (by service package)
 
-GET    /insights/tech-stack
-GET    /insights/company-activity
-GET    /insights/funnel
-GET    /insights/location
-GET    /insights/sponsorship?days=N
-GET    /insights/velocity
-GET    /insights/role-categories
-```
+Routes are defined in each service package's `handler.go`. See each package for the full route table.
 
-## Manual scan rule
-
-`CompanyHandler` holds `store.ScanQueueStore` (not `kafka.Publisher`).
-`POST /companies/:id/scan` enforces the same `SCAN_INTERVAL_MINUTES` cooldown as the scheduler — returns 429 if `company.LastScanAt` is within the interval. If the cooldown passes, it calls `queue.Enqueue`.
-
-`queue.Enqueue` uses `ON CONFLICT DO NOTHING` — calling it for a company already in the queue is safe and silently no-ops.
-
-## Snapshot backfill rule
-
-`JobHandler` holds a `store.SnapshotWriter`. After any user action that changes job state, backfill the snapshot — but always non-fatally (`_ =`):
-
-```go
-_ = h.snapshot.UpdateSnapshotAction(id, "saved")    // PATCH /save
-_ = h.snapshot.UpdateSnapshotAction(id, "applied")  // PATCH /status → applied
-_ = h.snapshot.UpdateSnapshotAction(id, "dismissed") // DELETE
-```
-
-Snapshot rows may not exist for jobs enriched before migration 011 — that's expected.
+- Job routes: `service/job/handler.go`
+- Company routes: `service/company/handler.go`
+- Application routes: `service/application/handler.go`
+- Dashboard routes: `service/dashboard/handler.go`
+- Insights routes: `service/insights/handler.go`

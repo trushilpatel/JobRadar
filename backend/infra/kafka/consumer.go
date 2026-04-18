@@ -15,9 +15,9 @@ type Consumer struct {
 	log    logger.Logger
 }
 
-func NewConsumer(cfg *config.Config, log logger.Logger, groupID string, topics ...string) (*Consumer, error) {
+func NewConsumer(cfg config.KafkaConfig, log logger.Logger, groupID string, topics ...string) (*Consumer, error) {
 	opts := []kgo.Opt{
-		kgo.SeedBrokers(strings.Split(cfg.KafkaBrokers, ",")...),
+		kgo.SeedBrokers(strings.Split(cfg.Brokers, ",")...),
 		kgo.ConsumerGroup(groupID),
 		kgo.ConsumeTopics(topics...),
 		// For a brand-new consumer group with no committed offsets, start from
@@ -26,10 +26,10 @@ func NewConsumer(cfg *config.Config, log logger.Logger, groupID string, topics .
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 	}
 
-	if cfg.KafkaUser != "" && cfg.KafkaPassword != "" {
+	if cfg.User != "" && cfg.Password != "" {
 		opts = append(opts, kgo.SASL(plain.Auth{
-			User: cfg.KafkaUser,
-			Pass: cfg.KafkaPassword,
+			User: cfg.User,
+			Pass: cfg.Password,
 		}.AsMechanism()))
 	}
 

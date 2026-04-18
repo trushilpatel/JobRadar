@@ -21,14 +21,14 @@ type lagReader struct {
 }
 
 // NewLagReader creates a long-lived Kafka admin client for lag queries.
-func NewLagReader(cfg *config.Config) (LagReader, error) {
+func NewLagReader(cfg config.KafkaConfig) (LagReader, error) {
 	opts := []kgo.Opt{
-		kgo.SeedBrokers(strings.Split(cfg.KafkaBrokers, ",")...),
+		kgo.SeedBrokers(strings.Split(cfg.Brokers, ",")...),
 	}
-	if cfg.KafkaUser != "" && cfg.KafkaPassword != "" {
+	if cfg.User != "" && cfg.Password != "" {
 		opts = append(opts, kgo.SASL(plain.Auth{
-			User: cfg.KafkaUser,
-			Pass: cfg.KafkaPassword,
+			User: cfg.User,
+			Pass: cfg.Password,
 		}.AsMechanism()))
 	}
 	client, err := kgo.NewClient(opts...)

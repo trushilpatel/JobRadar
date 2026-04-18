@@ -17,12 +17,16 @@ import (
 	"gorm.io/gorm"
 )
 
+func provideKafkaConfig(cfg *config.Config) config.KafkaConfig {
+	return cfg.Kafka
+}
+
 func provideCompanyConfig(cfg *config.Config) company.Config {
-	return company.Config{ScanIntervalMinutes: cfg.ScanIntervalMinutes}
+	return company.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
 }
 
 func provideScanConfig(cfg *config.Config) scan.Config {
-	return scan.Config{ScanIntervalMinutes: cfg.ScanIntervalMinutes}
+	return scan.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
 }
 
 // provideScanLogReader binds ScanLogStore (returned by NewLogStore) to the ScanLogReader interface
@@ -54,13 +58,21 @@ func provideJobCountReader(s job.JobStore) dashboard.JobCountReader {
 	return &jobCountReaderAdapter{store: s}
 }
 
+// provideJobApplicationWriter binds application.Store to the job.ApplicationWriter interface
+// so job.Service can auto-insert tracker rows when status advances to applied/interviewing/offer.
+func provideJobApplicationWriter(s application.Store) job.ApplicationWriter {
+	return s
+}
+
 func InitializeApp(db *gorm.DB, cfg *config.Config) (*api.App, error) {
 	wire.Build(
+		provideKafkaConfig,
 		provideCompanyConfig,
 		provideScanConfig,
 		provideScanLogReader,
 		provideSeenLedgerWriter,
 		provideJobCountReader,
+		provideJobApplicationWriter,
 		company.ProviderSet,
 		scan.ProviderSet,
 		job.ProviderSet,

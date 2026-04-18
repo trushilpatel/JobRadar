@@ -96,7 +96,7 @@ func init() {
 //
 // Call from main() in a goroutine before starting the worker:
 //
-//	go metrics.Serve(cfg.MetricsAddr, func() error { return db.Ping(database) })
+//	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
 func Serve(addr string, readyFn func() error) {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())

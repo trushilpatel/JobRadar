@@ -21,30 +21,30 @@ func main() {
 	cfg := config.Load()
 	log := logger.Init("filter")
 
-	shutdown := tracing.Init("jobradar-filter", cfg.JaegerEndpoint)
+	shutdown := tracing.Init("jobradar-filter", cfg.Observability.JaegerEndpoint)
 	defer shutdown()
 
-	database, err := db.Open(cfg)
+	database, err := db.Open(cfg.DB)
 	if err != nil {
 		log.Error("db open failed", err)
 		os.Exit(1)
 	}
 
-	go metrics.Serve(cfg.MetricsAddr, func() error { return db.Ping(database) })
+	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
 
-	if err := kafka.EnsureTopics(context.Background(), cfg, kafka.TopicJobListingsRaw, kafka.TopicJobListingsFiltered); err != nil {
+	if err := kafka.EnsureTopics(context.Background(), cfg.Kafka, kafka.TopicJobListingsRaw, kafka.TopicJobListingsFiltered); err != nil {
 		log.Error("kafka topics failed", err)
 		os.Exit(1)
 	}
 
-	consumer, err := kafka.NewConsumer(cfg, log, "job-listing-relevance-filter", kafka.TopicJobListingsRaw)
+	consumer, err := kafka.NewConsumer(cfg.Kafka, log, "job-listing-relevance-filter", kafka.TopicJobListingsRaw)
 	if err != nil {
 		log.Error("kafka consumer failed", err)
 		os.Exit(1)
 	}
 	defer consumer.Close()
 
-	producer, err := kafka.NewProducer(cfg)
+	producer, err := kafka.NewProducer(cfg.Kafka)
 	if err != nil {
 		log.Error("kafka producer failed", err)
 		os.Exit(1)
@@ -52,16 +52,16 @@ func main() {
 	defer producer.Close()
 
 	scorer, err := llm.NewScorer(llm.ScorerOptions{
-		Provider:    cfg.LLMProvider,
-		APIKey:      cfg.LLMAPIKey,
-		Model:       cfg.FilterLLMModel,
-		TargetRoles: cfg.TargetRoles,
-		YearsExp:    cfg.YearsExp,
+		Provider:    cfg.LLM.Provider,
+		APIKey:      cfg.LLM.APIKey,
+		Model:       cfg.Filter.Model,
+		TargetRoles: cfg.LLM.TargetRoles,
+		YearsExp:    cfg.LLM.YearsExp,
 		Log:         log,
 		Limits: llm.RateLimits{
-			RPM:   cfg.FilterRateLimits.RPM,
-			RPD:   cfg.FilterRateLimits.RPD,
-			TPMIn: cfg.FilterRateLimits.TPMIn,
+			RPM:   cfg.Filter.RateLimits.RPM,
+			RPD:   cfg.Filter.RateLimits.RPD,
+			TPMIn: cfg.Filter.RateLimits.TPMIn,
 		},
 	})
 	if err != nil {
@@ -71,7 +71,7 @@ func main() {
 
 	ledger := jobsvc.NewSeenLedgerStore(database)
 	worker := filter.NewWorker(consumer, producer, scorer, ledger,
-		cfg.FilterBatchSize, cfg.FilterFlushTimeoutSeconds, cfg.FilterLLMParallelism, log)
+		cfg.Filter.BatchSize, cfg.Filter.FlushTimeoutSeconds, cfg.Filter.LLMParallelism, log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

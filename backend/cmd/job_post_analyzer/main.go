@@ -21,18 +21,18 @@ func main() {
 	cfg := config.Load()
 	log := logger.Init("enricher")
 
-	shutdown := tracing.Init("jobradar-enricher", cfg.JaegerEndpoint)
+	shutdown := tracing.Init("jobradar-enricher", cfg.Observability.JaegerEndpoint)
 	defer shutdown()
 
-	database, err := db.Open(cfg)
+	database, err := db.Open(cfg.DB)
 	if err != nil {
 		log.Error("db open failed", err)
 		os.Exit(1)
 	}
 
-	go metrics.Serve(cfg.MetricsAddr, func() error { return db.Ping(database) })
+	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
 
-	consumer, err := kafka.NewConsumer(cfg, log, "job-post-analyzer", kafka.TopicJobListingsFiltered)
+	consumer, err := kafka.NewConsumer(cfg.Kafka, log, "job-post-analyzer", kafka.TopicJobListingsFiltered)
 	if err != nil {
 		log.Error("kafka consumer failed", err)
 		os.Exit(1)
@@ -40,16 +40,16 @@ func main() {
 	defer consumer.Close()
 
 	scorer, err := llm.NewScorer(llm.ScorerOptions{
-		Provider:    cfg.LLMProvider,
-		APIKey:      cfg.LLMAPIKey,
-		Model:       cfg.EnricherLLMModel,
-		TargetRoles: cfg.TargetRoles,
-		YearsExp:    cfg.YearsExp,
+		Provider:    cfg.LLM.Provider,
+		APIKey:      cfg.LLM.APIKey,
+		Model:       cfg.Enricher.Model,
+		TargetRoles: cfg.LLM.TargetRoles,
+		YearsExp:    cfg.LLM.YearsExp,
 		Log:         log,
 		Limits: llm.RateLimits{
-			RPM:   cfg.EnricherRateLimits.RPM,
-			RPD:   cfg.EnricherRateLimits.RPD,
-			TPMIn: cfg.EnricherRateLimits.TPMIn,
+			RPM:   cfg.Enricher.RateLimits.RPM,
+			RPD:   cfg.Enricher.RateLimits.RPD,
+			TPMIn: cfg.Enricher.RateLimits.TPMIn,
 		},
 	})
 	if err != nil {
@@ -62,7 +62,7 @@ func main() {
 	snapshotStore := jobsvc.NewSnapshotStore(database)
 	techTagStore := jobsvc.NewTechTagStore(database)
 	pipeline := jobsvc.NewPipelineService(jobStore, ledgerStore, snapshotStore, techTagStore)
-	worker := analyzer.NewWorker(consumer, scorer, pipeline, log, cfg.MaxExpYears, cfg.EnricherConcurrency)
+	worker := analyzer.NewWorker(consumer, scorer, pipeline, log, cfg.Enricher.MaxExpYears, cfg.Enricher.Concurrency)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

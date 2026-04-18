@@ -28,26 +28,26 @@ func main() {
 	cfg := config.Load()
 	log := logger.Init("crawler")
 
-	shutdown := tracing.Init("jobradar-crawler", cfg.JaegerEndpoint)
+	shutdown := tracing.Init("jobradar-crawler", cfg.Observability.JaegerEndpoint)
 	defer shutdown()
 
-	database, err := db.Open(cfg)
+	database, err := db.Open(cfg.DB)
 	if err != nil {
 		log.Error("db open failed", err)
 		os.Exit(1)
 	}
 
-	go metrics.Serve(cfg.MetricsAddr, func() error { return db.Ping(database) })
+	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := kafka.EnsureTopics(ctx, cfg, kafka.TopicJobListingsRaw); err != nil {
+	if err := kafka.EnsureTopics(ctx, cfg.Kafka, kafka.TopicJobListingsRaw); err != nil {
 		log.Error("kafka topics failed", err)
 		os.Exit(1)
 	}
 
-	producer, err := kafka.NewProducer(cfg)
+	producer, err := kafka.NewProducer(cfg.Kafka)
 	if err != nil {
 		log.Error("kafka producer failed", err)
 		os.Exit(1)
@@ -60,14 +60,14 @@ func main() {
 	queue := scansvc.NewQueueStore(database)
 	recorder := scansvc.NewCrawlerService(scanLog)
 
-	companyDelay := time.Duration(cfg.ScanCompanyDelaySeconds) * time.Second
+	companyDelay := time.Duration(cfg.Crawler.CompanyDelaySeconds) * time.Second
 	googleCfg := google.Config{
-		MinDelayMs:  cfg.GoogleScraperMinDelayMs,
-		MaxDelayMs:  cfg.GoogleScraperMaxDelayMs,
-		TimeoutMs:   cfg.GoogleScraperTimeoutMs,
-		MaxPages:    cfg.GoogleScraperMaxPages,
-		EnrichMinMs: cfg.GoogleScraperEnrichMinMs,
-		EnrichMaxMs: cfg.GoogleScraperEnrichMaxMs,
+		MinDelayMs:  cfg.Crawler.Google.MinDelayMs,
+		MaxDelayMs:  cfg.Crawler.Google.MaxDelayMs,
+		TimeoutMs:   cfg.Crawler.Google.TimeoutMs,
+		MaxPages:    cfg.Crawler.Google.MaxPages,
+		EnrichMinMs: cfg.Crawler.Google.EnrichMinMs,
+		EnrichMaxMs: cfg.Crawler.Google.EnrichMaxMs,
 	}
 	engine := crawler.NewEngine(companies, ledger, recorder, producer, googleCfg, log)
 

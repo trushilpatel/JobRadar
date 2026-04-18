@@ -18,7 +18,7 @@ var ensureTopicsBackoff = []time.Duration{2 * time.Second, 5 * time.Second, 10 *
 // Retries with backoff to tolerate Kafka finishing its startup after the
 // healthcheck has already passed.
 // Call this once at startup before any producer or consumer is used.
-func EnsureTopics(ctx context.Context, cfg *config.Config, topics ...string) error {
+func EnsureTopics(ctx context.Context, cfg config.KafkaConfig, topics ...string) error {
 	var lastErr error
 	for i, delay := range append([]time.Duration{0}, ensureTopicsBackoff...) {
 		if i > 0 {
@@ -35,15 +35,15 @@ func EnsureTopics(ctx context.Context, cfg *config.Config, topics ...string) err
 	return lastErr
 }
 
-func ensureTopicsOnce(ctx context.Context, cfg *config.Config, topics ...string) error {
+func ensureTopicsOnce(ctx context.Context, cfg config.KafkaConfig, topics ...string) error {
 	opts := []kgo.Opt{
-		kgo.SeedBrokers(strings.Split(cfg.KafkaBrokers, ",")...),
+		kgo.SeedBrokers(strings.Split(cfg.Brokers, ",")...),
 	}
 
-	if cfg.KafkaUser != "" && cfg.KafkaPassword != "" {
+	if cfg.User != "" && cfg.Password != "" {
 		opts = append(opts, kgo.SASL(plain.Auth{
-			User: cfg.KafkaUser,
-			Pass: cfg.KafkaPassword,
+			User: cfg.User,
+			Pass: cfg.Password,
 		}.AsMechanism()))
 	}
 

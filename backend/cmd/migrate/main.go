@@ -16,7 +16,7 @@ import (
 func main() {
 	cfg := config.Load()
 
-	db, err := sql.Open("pgx", cfg.DSN())
+	db, err := sql.Open("pgx", cfg.DB.DSN())
 	if err != nil {
 		log.Fatalf("failed to open db: %v", err)
 	}

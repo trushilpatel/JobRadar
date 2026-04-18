@@ -14,15 +14,15 @@ type Producer struct {
 	client *kgo.Client
 }
 
-func NewProducer(cfg *config.Config) (*Producer, error) {
+func NewProducer(cfg config.KafkaConfig) (*Producer, error) {
 	opts := []kgo.Opt{
-		kgo.SeedBrokers(strings.Split(cfg.KafkaBrokers, ",")...),
+		kgo.SeedBrokers(strings.Split(cfg.Brokers, ",")...),
 	}
 
-	if cfg.KafkaUser != "" && cfg.KafkaPassword != "" {
+	if cfg.User != "" && cfg.Password != "" {
 		opts = append(opts, kgo.SASL(plain.Auth{
-			User: cfg.KafkaUser,
-			Pass: cfg.KafkaPassword,
+			User: cfg.User,
+			Pass: cfg.Password,
 		}.AsMechanism()))
 	}
 

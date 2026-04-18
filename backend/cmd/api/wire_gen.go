@@ -56,7 +56,8 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*api.App, error) {
 	dashboardService := dashboard.NewService(scanLogReader, insightsService, jobCountReader)
 	userDashboardStore := dashboard.NewUserDashboardStore(db)
 	userDashboardService := dashboard.NewUserDashboardService(userDashboardStore, applicationStore)
-	lagReader, err := kafka.NewLagReader(cfg)
+	kafkaConfig := provideKafkaConfig(cfg)
+	lagReader, err := kafka.NewLagReader(kafkaConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -71,12 +72,16 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*api.App, error) {
 
 // wire.go:
 
+func provideKafkaConfig(cfg *config.Config) config.KafkaConfig {
+	return cfg.Kafka
+}
+
 func provideCompanyConfig(cfg *config.Config) company.Config {
-	return company.Config{ScanIntervalMinutes: cfg.ScanIntervalMinutes}
+	return company.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
 }
 
 func provideScanConfig(cfg *config.Config) scan.Config {
-	return scan.Config{ScanIntervalMinutes: cfg.ScanIntervalMinutes}
+	return scan.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
 }
 
 // provideScanLogReader binds ScanLogStore (returned by NewLogStore) to the ScanLogReader interface
