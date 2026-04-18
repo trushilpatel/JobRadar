@@ -2,10 +2,8 @@ linters:
   enable:
     - errcheck      # ensures error return values are always handled
     - govet         # reports suspicious constructs (same as go vet)
-    - staticcheck   # broad suite of correctness and performance checks
-    - unused        # finds unused code (functions, types, variables)
+    - staticcheck   # correctness + performance checks (includes gosimple)
     - gofmt         # enforces standard Go formatting
-    - gosimple      # suggests code simplifications
 
 linters-settings:
   errcheck:
