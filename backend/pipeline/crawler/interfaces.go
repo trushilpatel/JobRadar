@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/trushilpatel/jobradar/model"
-	scansvc "github.com/trushilpatel/jobradar/service/scan"
+	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
 // CompanyReader is the narrow company interface the crawler engine depends on.
@@ -23,5 +23,5 @@ type PipelineLedger interface {
 
 // ScanRecorder is the interface the crawler engine uses to record scan outcomes.
 type ScanRecorder interface {
-	RecordScanResult(ctx context.Context, companyID string, result scansvc.ScanResult) error
+	RecordScanResult(ctx context.Context, companyID string, result dto.ScanResult) error
 }

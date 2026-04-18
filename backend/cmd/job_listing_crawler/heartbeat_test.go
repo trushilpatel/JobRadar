@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/infra/logger"
-	scansvc "github.com/trushilpatel/jobradar/service/scan"
+	"github.com/trushilpatel/jobradar/service/scan/dto"
+	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 // fakeQueue is a test double for scansvc.CrawlerQueueService.
@@ -17,9 +18,9 @@ type fakeQueue struct {
 	err   error
 }
 
-func (f *fakeQueue) ClaimNext(_ context.Context) (*scansvc.ScanQueueItem, error) { return nil, nil }
-func (f *fakeQueue) Complete(_ context.Context, _ string) error                  { return nil }
-func (f *fakeQueue) ResetStuck(_ context.Context, _ time.Duration) error         { return nil }
+func (f *fakeQueue) ClaimNext(_ context.Context) (*dto.ScanQueueItem, error) { return nil, nil }
+func (f *fakeQueue) Complete(_ context.Context, _ string) error              { return nil }
+func (f *fakeQueue) ResetStuck(_ context.Context, _ time.Duration) error     { return nil }
 func (f *fakeQueue) UpdateHeartbeat(_ context.Context, _ string) error {
 	f.calls.Add(1)
 	return f.err

@@ -14,14 +14,15 @@ import (
 	"github.com/trushilpatel/jobradar/service/dashboard"
 	"github.com/trushilpatel/jobradar/service/insights"
 	"github.com/trushilpatel/jobradar/service/job"
-	"github.com/trushilpatel/jobradar/service/scan"
+	"github.com/trushilpatel/jobradar/service/scan/dto"
+	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 // buildTestApp creates an App with all real validators and nil-safe fake services.
 // We only need the route tree, not actual DB calls.
 func buildTestApp() *App {
 	companyH := company.NewHandler(company.NewValidator(), &fakeCompanyService{})
-	scanH := scan.NewHandler(scan.NewValidator(), &fakeScanService{})
+	scanH := scansvc.NewRestService(scansvc.NewValidator(), &fakeScanService{})
 	jobH := job.NewHandler(job.NewValidator(), &fakeJobService{})
 	appH := application.NewHandler(application.NewValidator(), &fakeAppService{})
 	dashH := dashboard.NewHandler(dashboard.NewValidator(), &fakeDashboardService{}, nil, nil)
@@ -163,10 +164,10 @@ type fakeScanService struct{}
 
 func (f *fakeScanService) TriggerScan(_ context.Context, _ string) error { return nil }
 func (f *fakeScanService) TriggerScanAll(_ context.Context) (int, error) { return 0, nil }
-func (f *fakeScanService) GetStats(_ context.Context, _ string) (*scan.ScanStatsView, error) {
+func (f *fakeScanService) GetStats(_ context.Context, _ string) (*dto.ScanStatsView, error) {
 	return nil, nil
 }
-func (f *fakeScanService) ListQueue(_ context.Context, _ scan.QueueFilter) ([]scan.QueueEntryView, error) {
+func (f *fakeScanService) ListQueue(_ context.Context, _ dto.QueueFilter) ([]dto.QueueEntryView, error) {
 	return nil, nil
 }
 func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error   { return nil }
@@ -227,7 +228,7 @@ func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insights.Pip
 
 // Ensure fakes implement interfaces.
 var _ company.Service = (*fakeCompanyService)(nil)
-var _ scan.Service = (*fakeScanService)(nil)
+var _ scansvc.Service = (*fakeScanService)(nil)
 var _ job.Service = (*fakeJobService)(nil)
 var _ application.Service = (*fakeAppService)(nil)
 var _ dashboard.Service = (*fakeDashboardService)(nil)

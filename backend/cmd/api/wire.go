@@ -14,6 +14,7 @@ import (
 	"github.com/trushilpatel/jobradar/service/insights"
 	"github.com/trushilpatel/jobradar/service/job"
 	"github.com/trushilpatel/jobradar/service/scan"
+	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 	"gorm.io/gorm"
 )
 
@@ -25,13 +26,13 @@ func provideCompanyConfig(cfg *config.Config) company.Config {
 	return company.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
 }
 
-func provideScanConfig(cfg *config.Config) scan.Config {
-	return scan.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
+func provideScanConfig(cfg *config.Config) scansvc.Config {
+	return scansvc.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
 }
 
 // provideScanLogReader binds ScanLogStore (returned by NewLogStore) to the ScanLogReader interface
 // needed by dashboard.Service.
-func provideScanLogReader(s scan.ScanLogStore) scan.ScanLogReader {
+func provideScanLogReader(s scansvc.ScanLogStore) scansvc.ScanLogReader {
 	return s
 }
 

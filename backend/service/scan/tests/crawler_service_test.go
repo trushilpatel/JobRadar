@@ -5,6 +5,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/trushilpatel/jobradar/service/scan/dto"
+	svc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 // --- fakes ---
@@ -40,16 +43,16 @@ func (f *fakeScanLogWriter) RecordScanResult(_ context.Context, companyID, statu
 
 func TestRecordScanResult_HappyPath(t *testing.T) {
 	logWriter := &fakeScanLogWriter{}
-	svc := NewCrawlerService(logWriter)
+	service := svc.NewCrawlerService(logWriter)
 
-	result := ScanResult{
+	result := dto.ScanResult{
 		FetchedCount: 10,
 		NewCount:     3,
 		Duration:     500 * time.Millisecond,
 		ErrMsg:       "",
 	}
 
-	err := svc.RecordScanResult(context.Background(), "company-1", result)
+	err := service.RecordScanResult(context.Background(), "company-1", result)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -79,15 +82,15 @@ func TestRecordScanResult_HappyPath(t *testing.T) {
 func TestRecordScanResult_StoreFailure(t *testing.T) {
 	writeErr := errors.New("db write failed")
 	logWriter := &fakeScanLogWriter{err: writeErr}
-	svc := NewCrawlerService(logWriter)
+	service := svc.NewCrawlerService(logWriter)
 
-	result := ScanResult{
+	result := dto.ScanResult{
 		FetchedCount: 5,
 		NewCount:     1,
 		Duration:     200 * time.Millisecond,
 	}
 
-	err := svc.RecordScanResult(context.Background(), "company-2", result)
+	err := service.RecordScanResult(context.Background(), "company-2", result)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -98,16 +101,16 @@ func TestRecordScanResult_StoreFailure(t *testing.T) {
 
 func TestRecordScanResult_ErrorScan(t *testing.T) {
 	logWriter := &fakeScanLogWriter{}
-	svc := NewCrawlerService(logWriter)
+	service := svc.NewCrawlerService(logWriter)
 
-	result := ScanResult{
+	result := dto.ScanResult{
 		FetchedCount: 7,
 		NewCount:     2,
 		Duration:     300 * time.Millisecond,
 		ErrMsg:       "fetch failed: timeout",
 	}
 
-	err := svc.RecordScanResult(context.Background(), "company-3", result)
+	err := service.RecordScanResult(context.Background(), "company-3", result)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

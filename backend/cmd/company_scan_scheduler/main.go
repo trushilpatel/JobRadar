@@ -13,7 +13,7 @@ import (
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	scansvc "github.com/trushilpatel/jobradar/service/scan"
+	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 const (

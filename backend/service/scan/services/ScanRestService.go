@@ -1,28 +1,29 @@
-package scan
+package services
 
 import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/api/handler"
+	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
-// Handler handles HTTP requests for the scan domain.
+// RestService handles HTTP requests for the scan domain.
 // It mounts under /companies alongside the company handler.
-type Handler struct {
+type RestService struct {
 	validator Validator
 	scans     Service
 }
 
-// NewHandler constructs a Handler.
-func NewHandler(v Validator, svc Service) *Handler {
-	return &Handler{validator: v, scans: svc}
+// NewRestService constructs a RestService.
+func NewRestService(v Validator, svc Service) *RestService {
+	return &RestService{validator: v, scans: svc}
 }
 
 // Register mounts scan-specific routes under /companies.
 // Routes are mounted at the top level (not as a sub-router) to avoid conflicts
 // when both CompanyHandler and ScanHandler mount under /companies.
-func (h *Handler) Register(r chi.Router) {
+func (h *RestService) Register(r chi.Router) {
 	// Queue management
 	r.Get("/companies/queue", h.ListQueue)
 	r.Delete("/companies/queue/{entry_id}", h.RemoveFromQueue)
@@ -38,8 +39,8 @@ func (h *Handler) Register(r chi.Router) {
 }
 
 // GET /companies/queue
-func (h *Handler) ListQueue(w http.ResponseWriter, r *http.Request) {
-	filter := QueueFilter{
+func (h *RestService) ListQueue(w http.ResponseWriter, r *http.Request) {
+	filter := dto.QueueFilter{
 		Status: r.URL.Query().Get("status"),
 		Source: r.URL.Query().Get("source"),
 	}
@@ -59,7 +60,7 @@ func (h *Handler) ListQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 // DELETE /companies/queue/:entry_id
-func (h *Handler) RemoveFromQueue(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) RemoveFromQueue(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "entry_id")
 	if err := h.scans.RemoveFromQueue(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
@@ -69,7 +70,7 @@ func (h *Handler) RemoveFromQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /companies/queue/:entry_id/move-up
-func (h *Handler) MoveQueueItemUp(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) MoveQueueItemUp(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "entry_id")
 	if err := h.scans.MoveUp(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
@@ -79,7 +80,7 @@ func (h *Handler) MoveQueueItemUp(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /companies/queue/:entry_id/move-down
-func (h *Handler) MoveQueueItemDown(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) MoveQueueItemDown(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "entry_id")
 	if err := h.scans.MoveDown(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
@@ -89,7 +90,7 @@ func (h *Handler) MoveQueueItemDown(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /companies/scan-all
-func (h *Handler) TriggerScanAll(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) TriggerScanAll(w http.ResponseWriter, r *http.Request) {
 	count, err := h.scans.TriggerScanAll(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
@@ -99,7 +100,7 @@ func (h *Handler) TriggerScanAll(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /companies/:id/scan-stats
-func (h *Handler) ScanStats(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) ScanStats(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	if err := h.validator.ValidateTriggerScan(id); err != nil {
@@ -117,7 +118,7 @@ func (h *Handler) ScanStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /companies/:id/scan
-func (h *Handler) TriggerScan(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	if err := h.validator.ValidateTriggerScan(id); err != nil {

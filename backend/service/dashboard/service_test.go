@@ -7,18 +7,19 @@ import (
 
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/service/insights"
-	"github.com/trushilpatel/jobradar/service/scan"
+	"github.com/trushilpatel/jobradar/service/scan/dto"
+	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 // fakeScanLogReader is a test double for scan.ScanLogReader.
 type fakeScanLogReader struct {
 	scannedToday int64
-	scansByDay   []scan.DailyScanCount
+	scansByDay   []dto.DailyScanCount
 	err          error
 }
 
-func (f *fakeScanLogReader) GetScanStats(_ context.Context, _ string) (scan.ScanStatsView, error) {
-	return scan.ScanStatsView{}, f.err
+func (f *fakeScanLogReader) GetScanStats(_ context.Context, _ string) (dto.ScanStatsView, error) {
+	return dto.ScanStatsView{}, f.err
 }
 func (f *fakeScanLogReader) GetScanHistories(_ context.Context, _ []string) (map[string][]bool, error) {
 	return nil, f.err
@@ -26,7 +27,7 @@ func (f *fakeScanLogReader) GetScanHistories(_ context.Context, _ []string) (map
 func (f *fakeScanLogReader) GetJobsScannedToday(_ context.Context) (int64, error) {
 	return f.scannedToday, f.err
 }
-func (f *fakeScanLogReader) GetScansByDay(_ context.Context, _ int) ([]scan.DailyScanCount, error) {
+func (f *fakeScanLogReader) GetScansByDay(_ context.Context, _ int) ([]dto.DailyScanCount, error) {
 	return f.scansByDay, f.err
 }
 
@@ -111,7 +112,7 @@ func TestGetStats_Error(t *testing.T) {
 func TestGetActivity_OK(t *testing.T) {
 	svc := NewService(
 		&fakeScanLogReader{
-			scansByDay: []scan.DailyScanCount{
+			scansByDay: []dto.DailyScanCount{
 				{Date: "2026-04-13", Scanned: 5, NewJobs: 3},
 			},
 		},
@@ -132,6 +133,6 @@ func TestGetActivity_OK(t *testing.T) {
 }
 
 // Ensure test doubles implement interfaces.
-var _ scan.ScanLogReader = (*fakeScanLogReader)(nil)
+var _ scansvc.ScanLogReader = (*fakeScanLogReader)(nil)
 var _ insights.Service = (*fakeInsightsService)(nil)
 var _ JobCountReader = (*fakeJobCountReader)(nil)

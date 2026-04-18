@@ -13,7 +13,7 @@ import (
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/ats/google"
-	scansvc "github.com/trushilpatel/jobradar/service/scan"
+	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
 // Engine crawls company careers pages, deduplicates jobs, and publishes new ones to Kafka.
@@ -230,7 +230,7 @@ func (e *Engine) detectRemovedJobs(ctx context.Context, companyID string, curren
 }
 
 func (e *Engine) recordResult(ctx context.Context, companyID string, fetched, newCount int, duration time.Duration, errMsg *string) {
-	result := scansvc.ScanResult{
+	result := dto.ScanResult{
 		FetchedCount: fetched,
 		NewCount:     newCount,
 		Duration:     duration,

@@ -19,7 +19,7 @@ import (
 	"github.com/trushilpatel/jobradar/pipeline/crawler"
 	companysvc "github.com/trushilpatel/jobradar/service/company"
 	jobsvc "github.com/trushilpatel/jobradar/service/job"
-	scansvc "github.com/trushilpatel/jobradar/service/scan"
+	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 func main() {

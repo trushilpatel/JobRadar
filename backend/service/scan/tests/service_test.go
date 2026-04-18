@@ -9,11 +9,13 @@ import (
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/service/company"
+	"github.com/trushilpatel/jobradar/service/scan/dto"
+	svc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 // fakeQueueStore is a test double for ScanQueueStore.
 type fakeQueueStore struct {
-	items            []ScanQueueItem
+	items            []dto.ScanQueueItem
 	err              error
 	enqueueCalled    bool
 	removeCalled     bool
@@ -30,8 +32,8 @@ func (f *fakeQueueStore) EnqueueDue(_ context.Context, _ int, _ string) (int, er
 	f.enqueueDueCalled = true
 	return f.enqueueDueResult, f.err
 }
-func (f *fakeQueueStore) ClaimNext(_ context.Context) (*ScanQueueItem, error) { return nil, f.err }
-func (f *fakeQueueStore) Complete(_ context.Context, _ string) error          { return f.err }
+func (f *fakeQueueStore) ClaimNext(_ context.Context) (*dto.ScanQueueItem, error) { return nil, f.err }
+func (f *fakeQueueStore) Complete(_ context.Context, _ string) error              { return f.err }
 func (f *fakeQueueStore) Remove(_ context.Context, _ string) error {
 	f.removeCalled = true
 	return f.err
@@ -43,24 +45,24 @@ func (f *fakeQueueStore) ResetStuck(_ context.Context, _ time.Duration) error {
 	return f.err
 }
 func (f *fakeQueueStore) UpdateHeartbeat(_ context.Context, _ string) error { return f.err }
-func (f *fakeQueueStore) ListQueue(_ context.Context) ([]ScanQueueItem, error) {
+func (f *fakeQueueStore) ListQueue(_ context.Context) ([]dto.ScanQueueItem, error) {
 	return f.items, f.err
 }
 
 // fakeScanLogReader is a test double for ScanLogReader.
 type fakeScanLogReader struct {
-	stats ScanStatsView
+	stats dto.ScanStatsView
 	err   error
 }
 
-func (f *fakeScanLogReader) GetScanStats(_ context.Context, companyID string) (ScanStatsView, error) {
+func (f *fakeScanLogReader) GetScanStats(_ context.Context, companyID string) (dto.ScanStatsView, error) {
 	return f.stats, f.err
 }
 func (f *fakeScanLogReader) GetScanHistories(_ context.Context, _ []string) (map[string][]bool, error) {
 	return nil, f.err
 }
 func (f *fakeScanLogReader) GetJobsScannedToday(_ context.Context) (int64, error) { return 0, f.err }
-func (f *fakeScanLogReader) GetScansByDay(_ context.Context, days int) ([]DailyScanCount, error) {
+func (f *fakeScanLogReader) GetScansByDay(_ context.Context, days int) ([]dto.DailyScanCount, error) {
 	return nil, f.err
 }
 
@@ -93,9 +95,9 @@ func (f *fakeCompanyService) SetAllActive(_ context.Context, active bool) error 
 
 func TestTriggerScan_OK(t *testing.T) {
 	q := &fakeQueueStore{}
-	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{company: &model.Company{ID: "stripe"}}, Config{})
+	service := svc.NewService(q, &fakeScanLogReader{}, &fakeCompanyService{company: &model.Company{ID: "stripe"}}, svc.Config{})
 
-	err := svc.TriggerScan(context.Background(), "stripe")
+	err := service.TriggerScan(context.Background(), "stripe")
 	if err != nil {
 		t.Fatalf("TriggerScan() error = %v", err)
 	}
@@ -106,11 +108,11 @@ func TestTriggerScan_OK(t *testing.T) {
 
 func TestTriggerScan_CompanyNotFound(t *testing.T) {
 	q := &fakeQueueStore{}
-	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{
+	service := svc.NewService(q, &fakeScanLogReader{}, &fakeCompanyService{
 		err: domain.ErrNotFound.WithMessage("company not found"),
-	}, Config{})
+	}, svc.Config{})
 
-	err := svc.TriggerScan(context.Background(), "missing")
+	err := service.TriggerScan(context.Background(), "missing")
 	if err == nil {
 		t.Fatal("expected error for missing company")
 	}
@@ -122,21 +124,21 @@ func TestTriggerScan_CompanyNotFound(t *testing.T) {
 
 func TestListQueue_EnrichesWithCompanyData(t *testing.T) {
 	lastScan := time.Now().Add(-1 * time.Hour)
-	items := []ScanQueueItem{
+	items := []dto.ScanQueueItem{
 		{ID: "q1", CompanyID: "stripe", Status: "queued", Source: "manual", QueuedAt: time.Now()},
 	}
 	views := []company.CompanyView{
 		{Company: model.Company{ID: "stripe", Name: "Stripe", AdapterType: "greenhouse", LastScanAt: &lastScan}},
 	}
 
-	svc := NewService(
+	service := svc.NewService(
 		&fakeQueueStore{items: items},
 		&fakeScanLogReader{},
 		&fakeCompanyService{views: views},
-		Config{ScanIntervalMinutes: 60},
+		svc.Config{ScanIntervalMinutes: 60},
 	)
 
-	result, err := svc.ListQueue(context.Background(), QueueFilter{})
+	result, err := service.ListQueue(context.Background(), dto.QueueFilter{})
 	if err != nil {
 		t.Fatalf("ListQueue() error = %v", err)
 	}
@@ -155,18 +157,18 @@ func TestListQueue_EnrichesWithCompanyData(t *testing.T) {
 }
 
 func TestListQueue_FiltersStatus(t *testing.T) {
-	items := []ScanQueueItem{
+	items := []dto.ScanQueueItem{
 		{ID: "q1", CompanyID: "c1", Status: "queued", Source: "manual"},
 		{ID: "q2", CompanyID: "c2", Status: "processing", Source: "manual"},
 	}
-	svc := NewService(
+	service := svc.NewService(
 		&fakeQueueStore{items: items},
 		&fakeScanLogReader{},
 		&fakeCompanyService{views: []company.CompanyView{}},
-		Config{},
+		svc.Config{},
 	)
 
-	result, err := svc.ListQueue(context.Background(), QueueFilter{Status: "queued"})
+	result, err := service.ListQueue(context.Background(), dto.QueueFilter{Status: "queued"})
 	if err != nil {
 		t.Fatalf("ListQueue() error = %v", err)
 	}
@@ -177,9 +179,9 @@ func TestListQueue_FiltersStatus(t *testing.T) {
 
 func TestRemoveFromQueue(t *testing.T) {
 	q := &fakeQueueStore{}
-	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, Config{})
+	service := svc.NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, svc.Config{})
 
-	if err := svc.RemoveFromQueue(context.Background(), "q1"); err != nil {
+	if err := service.RemoveFromQueue(context.Background(), "q1"); err != nil {
 		t.Fatalf("RemoveFromQueue() error = %v", err)
 	}
 	if !q.removeCalled {
@@ -189,9 +191,9 @@ func TestRemoveFromQueue(t *testing.T) {
 
 func TestEnqueueDue_EnqueuesAll(t *testing.T) {
 	q := &fakeQueueStore{enqueueDueResult: 3}
-	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, Config{})
+	service := svc.NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, svc.Config{})
 
-	n, err := svc.EnqueueDue(context.Background(), 1440)
+	n, err := service.EnqueueDue(context.Background(), 1440)
 	if err != nil {
 		t.Fatalf("EnqueueDue() error = %v", err)
 	}
@@ -205,9 +207,9 @@ func TestEnqueueDue_EnqueuesAll(t *testing.T) {
 
 func TestEnqueueDue_NoDueCompanies(t *testing.T) {
 	q := &fakeQueueStore{enqueueDueResult: 0}
-	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, Config{})
+	service := svc.NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, svc.Config{})
 
-	n, err := svc.EnqueueDue(context.Background(), 1440)
+	n, err := service.EnqueueDue(context.Background(), 1440)
 	if err != nil {
 		t.Fatalf("EnqueueDue() error = %v", err)
 	}
@@ -218,9 +220,9 @@ func TestEnqueueDue_NoDueCompanies(t *testing.T) {
 
 func TestEnqueueDue_StoreError(t *testing.T) {
 	q := &fakeQueueStore{err: errors.New("db down")}
-	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, Config{})
+	service := svc.NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, svc.Config{})
 
-	_, err := svc.EnqueueDue(context.Background(), 1440)
+	_, err := service.EnqueueDue(context.Background(), 1440)
 	if err == nil {
 		t.Fatal("expected error on store failure")
 	}
@@ -232,9 +234,9 @@ func TestEnqueueDue_StoreError(t *testing.T) {
 
 func TestResetStuck_OK(t *testing.T) {
 	q := &fakeQueueStore{}
-	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, Config{})
+	service := svc.NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, svc.Config{})
 
-	if err := svc.ResetStuck(context.Background(), 30*time.Minute); err != nil {
+	if err := service.ResetStuck(context.Background(), 30*time.Minute); err != nil {
 		t.Fatalf("ResetStuck() error = %v", err)
 	}
 	if !q.resetStuckCalled {
@@ -244,9 +246,9 @@ func TestResetStuck_OK(t *testing.T) {
 
 func TestResetStuck_StoreError(t *testing.T) {
 	q := &fakeQueueStore{err: errors.New("db down")}
-	svc := NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, Config{})
+	service := svc.NewService(q, &fakeScanLogReader{}, &fakeCompanyService{}, svc.Config{})
 
-	err := svc.ResetStuck(context.Background(), 30*time.Minute)
+	err := service.ResetStuck(context.Background(), 30*time.Minute)
 	if err == nil {
 		t.Fatal("expected error on store failure")
 	}
@@ -257,6 +259,6 @@ func TestResetStuck_StoreError(t *testing.T) {
 }
 
 // Ensure test doubles implement their interfaces.
-var _ ScanQueueStore = (*fakeQueueStore)(nil)
-var _ ScanLogReader = (*fakeScanLogReader)(nil)
+var _ svc.ScanQueueStore = (*fakeQueueStore)(nil)
+var _ svc.ScanLogReader = (*fakeScanLogReader)(nil)
 var _ company.Service = (*fakeCompanyService)(nil)

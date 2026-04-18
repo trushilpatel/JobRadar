@@ -37,6 +37,9 @@ service/{domain}/
   common/
     constants.go               — Domain constants (enums, status values)
 
+  tests/
+    {domain}_test.go           — All unit tests for this domain
+
   wire.go                       — Google Wire provider set
 ```
 
@@ -98,6 +101,19 @@ const (
 ```
 
 If constants grow large, split into `constants_status.go`, `constants_stage.go`, etc.
+
+### `tests/`
+
+All unit tests for the domain, organized by layer:
+
+| File                 | Purpose                                    |
+| -------------------- | ------------------------------------------ |
+| `handler_test.go`    | HTTP endpoint tests (RestService)          |
+| `service_test.go`    | Business logic tests (ImplService)         |
+| `validator_test.go`  | Input validation tests (ValidationService) |
+| `repository_test.go` | Database access tests (RepositoryService)  |
+
+**Key principle:** Tests remain in the `scan` package (not `tests` package), so they have access to unexported functions. The `tests/` folder is purely for organization—keeps tests visible but separated from implementation.
 
 ### `wire.go`
 
@@ -193,6 +209,12 @@ service/jobs/
   common/
     constants.go                — const (JobStatusNew, JobStatusSaved, ...)
 
+  tests/
+    handler_test.go             — HTTP handler tests
+    service_test.go             — Business logic tests
+    validator_test.go           — Input validation tests
+    repository_test.go          — Database access tests
+
   wire.go
 ```
 
@@ -243,6 +265,7 @@ Each migration is a single task: restructure folders, rename files, update impor
 | `service/job/handler.go`        | `service/job/services/JobsRestService.go`         |
 | `service/job/validator.go`      | `service/job/services/JobsValidationService.go`   |
 | `service/job/store.go`          | `service/job/services/JobsRepositoryService.go`   |
+| `service/job/*_test.go` (mixed) | `service/job/tests/*_test.go` (organized folder)  |
 | `service/job/types.go` (1 file) | `service/job/dto/` (many files, one per type)     |
 | No standard structure           | `service/job/services/JobsService.go` (interface) |
 | Constants scattered             | `service/job/common/constants.go`                 |

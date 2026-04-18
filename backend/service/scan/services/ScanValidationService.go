@@ -1,13 +1,14 @@
-package scan
+package services
 
 import (
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
+	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
 // Validator validates user-submitted input for the scan domain.
 type Validator interface {
-	ValidateListQueue(filter QueueFilter) error
+	ValidateListQueue(filter dto.QueueFilter) error
 	ValidateTriggerScan(companyID string) error
 }
 
@@ -29,7 +30,7 @@ var validQueueSources = map[string]bool{
 }
 
 // ValidateListQueue validates filter parameters for listing the queue.
-func (v *validator) ValidateListQueue(filter QueueFilter) error {
+func (v *validator) ValidateListQueue(filter dto.QueueFilter) error {
 	if filter.Status != "" && !validQueueStatuses[filter.Status] {
 		return &domain.ValidationError{
 			Field:   "status",

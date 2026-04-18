@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/infra/logger"
-	scansvc "github.com/trushilpatel/jobradar/service/scan"
+	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 // fakeSchedulerService is a test double for scansvc.SchedulerService.

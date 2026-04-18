@@ -1,4 +1,4 @@
-package scan
+package services
 
 import (
 	"context"
@@ -8,24 +8,12 @@ import (
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/service/company"
+	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
-// SchedulerService is the narrow interface the scheduler worker depends on.
-type SchedulerService interface {
-	EnqueueDue(ctx context.Context, intervalMinutes int) (int, error)
-	ResetStuck(ctx context.Context, staleDur time.Duration) error
-}
-
-// Service defines all business operations for the scan domain.
-type Service interface {
-	SchedulerService
-	TriggerScan(ctx context.Context, companyID string) error
-	TriggerScanAll(ctx context.Context) (int, error)
-	GetStats(ctx context.Context, companyID string) (*ScanStatsView, error)
-	ListQueue(ctx context.Context, filter QueueFilter) ([]QueueEntryView, error)
-	RemoveFromQueue(ctx context.Context, entryID string) error
-	MoveUp(ctx context.Context, entryID string) error
-	MoveDown(ctx context.Context, entryID string) error
+// Config holds per-service configuration for the scan domain.
+type Config struct {
+	ScanIntervalMinutes int
 }
 
 // schedulerService implements SchedulerService. Embedded by service so the
@@ -112,7 +100,7 @@ func (s *service) TriggerScanAll(ctx context.Context) (_ int, err error) {
 }
 
 // GetStats returns a summary of scan history for the given company.
-func (s *service) GetStats(ctx context.Context, companyID string) (_ *ScanStatsView, err error) {
+func (s *service) GetStats(ctx context.Context, companyID string) (_ *dto.ScanStatsView, err error) {
 	ctx, span := tracing.Start(ctx, "scan.service.GetStats")
 	defer tracing.End(span, &err)
 	stats, err := s.scanLog.GetScanStats(ctx, companyID)
@@ -123,7 +111,7 @@ func (s *service) GetStats(ctx context.Context, companyID string) (_ *ScanStatsV
 }
 
 // ListQueue returns all active queue entries enriched with company name, adapter, and next_scan_at.
-func (s *service) ListQueue(ctx context.Context, filter QueueFilter) (_ []QueueEntryView, err error) {
+func (s *service) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ []dto.QueueEntryView, err error) {
 	ctx, span := tracing.Start(ctx, "scan.service.ListQueue")
 	defer tracing.End(span, &err)
 	items, err := s.queue.ListQueue(ctx)
@@ -141,7 +129,7 @@ func (s *service) ListQueue(ctx context.Context, filter QueueFilter) (_ []QueueE
 		companyMap[c.ID] = c
 	}
 
-	views := make([]QueueEntryView, 0, len(items))
+	views := make([]dto.QueueEntryView, 0, len(items))
 	for _, item := range items {
 		// Apply status filter if set
 		if filter.Status != "" && item.Status != filter.Status {
@@ -152,7 +140,7 @@ func (s *service) ListQueue(ctx context.Context, filter QueueFilter) (_ []QueueE
 			continue
 		}
 
-		v := QueueEntryView{
+		v := dto.QueueEntryView{
 			ID:        item.ID,
 			CompanyID: item.CompanyID,
 			Status:    item.Status,

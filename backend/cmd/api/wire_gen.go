@@ -17,7 +17,7 @@ import (
 	"github.com/trushilpatel/jobradar/service/dashboard"
 	"github.com/trushilpatel/jobradar/service/insights"
 	"github.com/trushilpatel/jobradar/service/job"
-	"github.com/trushilpatel/jobradar/service/scan"
+	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 	"gorm.io/gorm"
 )
 
@@ -27,15 +27,15 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*api.App, error) {
 	validator := company.NewValidator()
 	store := company.NewStore(db)
 	companyConfig := provideCompanyConfig(cfg)
-	scanQueueStore := scan.NewQueueStore(db)
-	scanLogStore := scan.NewLogStore(db)
+	scanQueueStore := scansvc.NewQueueStore(db)
+	scanLogStore := scansvc.NewLogStore(db)
 	scanLogReader := provideScanLogReader(scanLogStore)
 	service := company.NewService(store, companyConfig, scanLogStore)
 	handler := company.NewHandler(validator, service)
-	scanValidator := scan.NewValidator()
+	scanValidator := scansvc.NewValidator()
 	scanConfig := provideScanConfig(cfg)
-	scanService := scan.NewService(scanQueueStore, scanLogReader, service, scanConfig)
-	scanHandler := scan.NewHandler(scanValidator, scanService)
+	scanService := scansvc.NewService(scanQueueStore, scanLogReader, service, scanConfig)
+	scanHandler := scansvc.NewRestService(scanValidator, scanService)
 	jobValidator := job.NewValidator()
 	jobStore := job.NewJobStore(db)
 	seenLedgerStore := job.NewSeenLedgerStore(db)
@@ -80,13 +80,13 @@ func provideCompanyConfig(cfg *config.Config) company.Config {
 	return company.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
 }
 
-func provideScanConfig(cfg *config.Config) scan.Config {
-	return scan.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
+func provideScanConfig(cfg *config.Config) scansvc.Config {
+	return scansvc.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
 }
 
 // provideScanLogReader binds ScanLogStore (returned by NewLogStore) to the ScanLogReader interface
 // needed by dashboard.Service.
-func provideScanLogReader(s scan.ScanLogStore) scan.ScanLogReader {
+func provideScanLogReader(s scansvc.ScanLogStore) scansvc.ScanLogReader {
 	return s
 }
 

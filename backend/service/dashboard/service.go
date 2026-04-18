@@ -6,7 +6,7 @@ import (
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/service/insights"
-	"github.com/trushilpatel/jobradar/service/scan"
+	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 // Service defines all dashboard aggregation operations.
@@ -16,7 +16,7 @@ type Service interface {
 }
 
 type service struct {
-	scanLog     scan.ScanLogReader
+	scanLog     scansvc.ScanLogReader
 	insightsSvc insights.Service
 	jobCounts   JobCountReader
 }
@@ -28,7 +28,7 @@ type JobCountReader interface {
 }
 
 // NewService constructs a Service implementation.
-func NewService(scanLog scan.ScanLogReader, insightsSvc insights.Service, jobCounts JobCountReader) Service {
+func NewService(scanLog scansvc.ScanLogReader, insightsSvc insights.Service, jobCounts JobCountReader) Service {
 	return &service{
 		scanLog:     scanLog,
 		insightsSvc: insightsSvc,

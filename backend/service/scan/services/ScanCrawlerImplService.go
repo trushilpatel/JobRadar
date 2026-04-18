@@ -1,11 +1,11 @@
-package scan
+package services
 
 import (
 	"context"
-	"time"
 
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
+	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
 // CrawlerService is the interface the crawler engine depends on for recording scan outcomes.
@@ -13,15 +13,7 @@ type CrawlerService interface {
 	// RecordScanResult writes the scan log entry and updates the company's scan status.
 	// companyID is the company being scanned.
 	// result carries the counts and any error message from the crawl.
-	RecordScanResult(ctx context.Context, companyID string, result ScanResult) error
-}
-
-// ScanResult carries the outcome of one company crawl.
-type ScanResult struct {
-	FetchedCount int
-	NewCount     int
-	Duration     time.Duration
-	ErrMsg       string // empty string means success
+	RecordScanResult(ctx context.Context, companyID string, result dto.ScanResult) error
 }
 
 type crawlerService struct {
@@ -35,7 +27,7 @@ func NewCrawlerService(log ScanLogWriter) CrawlerService {
 
 // RecordScanResult atomically writes the scan log entry and updates the company's
 // last_scan_at / last_scan_status in a single transaction.
-func (c *crawlerService) RecordScanResult(ctx context.Context, companyID string, result ScanResult) (err error) {
+func (c *crawlerService) RecordScanResult(ctx context.Context, companyID string, result dto.ScanResult) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.crawlerservice.RecordScanResult")
 	defer tracing.End(span, &err)
 	status := model.ScanStatusOK

@@ -7,14 +7,14 @@ import (
 	"github.com/trushilpatel/jobradar/service/dashboard"
 	"github.com/trushilpatel/jobradar/service/insights"
 	"github.com/trushilpatel/jobradar/service/job"
-	"github.com/trushilpatel/jobradar/service/scan"
+	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 // App holds all domain handlers wired together.
 // Dependencies are injected by Wire (or manually in tests/main.go).
 type App struct {
 	companyHandler     *company.Handler
-	scanHandler        *scan.Handler
+	scanHandler        *scansvc.RestService
 	jobHandler         *job.Handler
 	applicationHandler *application.Handler
 	dashboardHandler   *dashboard.Handler
@@ -25,7 +25,7 @@ type App struct {
 // Wire generates the call to this function in wire_gen.go.
 func NewApp(
 	companyHandler *company.Handler,
-	scanHandler *scan.Handler,
+	scanHandler *scansvc.RestService,
 	jobHandler *job.Handler,
 	applicationHandler *application.Handler,
 	dashboardHandler *dashboard.Handler,
