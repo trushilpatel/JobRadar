@@ -15,8 +15,8 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | Path                           | What lives there                                                                  |
 | ------------------------------ | --------------------------------------------------------------------------------- |
 | `backend/cmd/`                 | Binary entry points — one per worker + api                                        |
-| `backend/config/`              | Config struct + env var loading via godotenv                                      |
-| `backend/domain/`              | Shared error types: ServiceError, ValidationError, sentinel errors                |
+| `backend/common/config/`       | Config struct + env var loading via godotenv                                      |
+| `backend/common/domain/`       | Shared error types: ServiceError, ValidationError, sentinel errors                |
 | `backend/pipeline/`            | The entire data pipeline                                                          |
 | `backend/pipeline/ats/`        | Careers page fetchers (Greenhouse, Lever, Ashby, Google, Netflix, Uber)           |
 | `backend/pipeline/crawler/`    | Polls scan queue, fetches careers pages, publishes raw jobs                       |
@@ -92,13 +92,14 @@ new → dismissed          (user dismisses — job row kept for FK integrity, hi
 ## Key rules (detail in subdirectory CLAUDE.md files)
 
 - Workers depend on **interfaces**, never concrete types
-- All DB access goes through store interfaces defined in each service's `{Table}Repository.go` — no raw GORM outside those files
-- Domain errors come from `domain/` (`domain.ErrNotFound`, `domain.ErrInternal`, etc.) — never use `fmt.Errorf` for sentinel errors that handlers inspect
+- All DB access goes through `{Domain}RepositoryService.go` — no raw GORM outside those files
+- Domain errors come from `common/domain/` (`domain.ErrNotFound`, `domain.ErrInternal`, etc.) — never use `fmt.Errorf` for sentinel errors that handlers inspect
 - All typed values (status, stage, reason) use constants from the owning service's `common/` package — never raw strings
 - Insights query `job_analytics`, not `job_feed` — snapshot rows are never deleted
 - job_listing_relevance_filter batch failures mark jobs as `error` in `job_pipeline_ledger` — never re-queue to Kafka
 - All logging goes through `infra/logger.Logger` — never use stdlib `log` package directly
 - Field keys must use constants from `infra/logger/fields.go` — never raw strings
+- Each service domain follows the decorator chain pattern — see `backend/service/CLAUDE.md`
 
 ## Implementation workflow
 
