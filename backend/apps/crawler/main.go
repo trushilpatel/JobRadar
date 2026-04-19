@@ -104,18 +104,18 @@ func runLoop(ctx context.Context, cfg *config.Config, log logger.Logger, queue s
 	log.Info("worker started", logger.Dur("poll_interval", pollInterval))
 
 	var wg sync.WaitGroup
-	var active int32
+	var active atomic.Bool
 
 	startScan := func() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer atomic.StoreInt32(&active, 0)
+			defer active.Store(false)
 			pollAndProcess(ctx, log, queue, engine, companyDelay, heartbeatInterval)
 		}()
 	}
 
-	atomic.StoreInt32(&active, 1)
+	active.Store(true)
 	startScan()
 
 	ticker := time.NewTicker(pollInterval)
@@ -127,7 +127,7 @@ func runLoop(ctx context.Context, cfg *config.Config, log logger.Logger, queue s
 			if err := queue.ResetStuck(ctx, stuckTimeout); err != nil {
 				log.Error("failed to reset stuck queue items", err)
 			}
-			if !atomic.CompareAndSwapInt32(&active, 0, 1) {
+			if !active.CompareAndSwap(false, true) {
 				log.Debug("scan in progress, skipping tick")
 				continue
 			}
