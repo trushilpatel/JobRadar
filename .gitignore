@@ -3,6 +3,15 @@ bin/
 *.exe
 *.out
 
+# Go build output — binaries dropped in backend/ by `go build ./apps/...`
+backend/api
+backend/scheduler
+backend/crawler
+backend/filter
+backend/analyzer
+backend/enricher
+backend/migrate
+
 # Go build cache
 /vendor/
 
