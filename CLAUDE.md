@@ -16,13 +16,12 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | ------------------------------ | --------------------------------------------------------------------------------- |
 | `backend/cmd/`                 | Binary entry points — one per worker + api                                        |
 | `backend/common/config/`       | Config struct + env var loading via godotenv                                      |
-| `backend/common/domain/`       | Shared error types: ServiceError, ValidationError, sentinel errors                |
+| `backend/common/domain/`       | Shared error types: ServiceError, ValidationError, sentinel errors + `IsNotFound` |
 | `backend/pipeline/`            | The entire data pipeline                                                          |
 | `backend/pipeline/ats/`        | Careers page fetchers (Greenhouse, Lever, Ashby, Google, Netflix, Uber)           |
 | `backend/pipeline/crawler/`    | Polls scan queue, fetches careers pages, publishes raw jobs                       |
 | `backend/pipeline/filter/`     | Scores batches via LLM, routes relevant jobs                                      |
 | `backend/pipeline/analyzer/`   | Fetches full job page, LLM enriches, writes to job_feed                           |
-| `backend/pipeline/llm/`        | LLM scorer interface + Gemini implementation                                      |
 | `backend/pipeline/techtag/`    | Normalizes and deduplicates raw tech_stack strings from LLM                       |
 | `backend/service/`             | Feature-slice packages — each owns handler + service + store + models + validator |
 | `backend/service/job/`         | Job listing operations — models in `job/models/` (package `jobmodel`)             |
@@ -31,7 +30,7 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `backend/service/dashboard/`   | Dashboard stats + pipeline status                                                 |
 | `backend/service/insights/`    | Analytics and insights queries                                                    |
 | `backend/service/scan/`        | Scan result recording — models in `scan/models/` (package `scanmodel`)            |
-| `backend/store/`               | `IsNotFound(err)` helper only — store interfaces now live in each service package |
+| `backend/service/llm/`         | LLM business logic — `JobsRelevanceFilter` + `JobPostEnricher` interfaces, Gemini impl, prompts |
 | `backend/api/`                 | Router, respond helpers, middleware, RouteGroup interface                         |
 | `backend/infra/`               | Infrastructure plumbing (db, kafka, logger, metrics, tracing)                     |
 | `backend/infra/tracing/`       | OTel tracing init, Start/End span helpers, Kafka propagation                      |

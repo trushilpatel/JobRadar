@@ -10,7 +10,7 @@ Every `main.go` follows this order:
 3. Open DB
 4. Call `kafka.EnsureTopics` (if producing) — **before** creating the producer
 5. Create Kafka producer/consumer (pass `log` to `kafka.NewConsumer`)
-6. Create LLM scorer (if needed, pass `Log: log` in `ScorerOptions`)
+6. Create LLM scorer (if needed, call `llmservices.NewScorer(llmservices.Options{..., Log: log})`)
 7. Create stores
 8. Create worker/handler (pass `log` to constructor)
 9. Set up signal context

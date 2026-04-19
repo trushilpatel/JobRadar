@@ -17,7 +17,8 @@ func NewJobStore(db *gorm.DB) *jobStore { return &jobStore{db: db} }
 
 Same rule applies to Kafka, LLM, and Logger:
 - Workers depend on `infra/kafka.Publisher`, not `*kafka.Producer`
-- Workers depend on `pipeline/llm.Scorer`, not `*geminiScorer`
+- Filter worker depends on `service/llm/services.JobsRelevanceFilter`, not `*geminiScorer`
+- Analyzer worker depends on `service/llm/services.JobPostEnricher`, not `*geminiScorer`
 - Workers depend on `infra/logger.Logger`, not `*logger.zerologLogger`
 
 This means any worker can be tested by passing a fake implementation. Use `logger.NewNoop()` in tests to suppress output without any setup.
