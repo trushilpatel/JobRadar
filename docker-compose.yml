@@ -239,7 +239,7 @@ services:
   google-scraper:
     build:
       context: ./backend/apps/crawler/ats/google/scraper
-      dockerfile: ../infra/Dockerfile
+      dockerfile: Dockerfile
     image: jobradar_google_scraper
     container_name: jobradar_google_scraper
     environment:
@@ -259,7 +259,7 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: ../infra/Dockerfile
+      dockerfile: Dockerfile
     container_name: jobradar_frontend
     ports:
       - "3000:80"
