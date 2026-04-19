@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/platform/logger"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 

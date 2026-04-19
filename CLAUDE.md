@@ -30,10 +30,10 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `backend/service/insights/`       | Analytics and insights queries                                                    |
 | `backend/service/scan/`           | Scan result recording — models in `scan/models/` (package `scanmodel`)            |
 | `backend/service/llm/`            | LLM business logic — `JobsRelevanceFilter` + `JobPostEnricher` interfaces, Gemini impl, prompts |
-| `backend/infra/`                  | Infrastructure plumbing (db, kafka, logger, metrics, tracing)                     |
-| `backend/infra/tracing/`          | OTel tracing init, Start/End span helpers, Kafka propagation                      |
+| `backend/platform/`                  | Infrastructure plumbing (db, kafka, logger, metrics, tracing)                     |
+| `backend/platform/tracing/`          | OTel tracing init, Start/End span helpers, Kafka propagation                      |
 | `backend/migrations/`             | goose SQL migration files                                                         |
-| `backend/deploy/`                 | Docker / Kafka / Loki / Prometheus entrypoint scripts                             |
+| `infra/`                          | Dockerfiles + Loki/Prometheus/Kafka ops configs                                   |
 
 ## Workers
 
@@ -94,8 +94,8 @@ new → dismissed          (user dismisses — job row kept for FK integrity, hi
 - All typed values (status, stage, reason) use constants from the owning service's `common/` package — never raw strings
 - Insights query `job_analytics`, not `job_feed` — snapshot rows are never deleted
 - job_listing_relevance_filter batch failures mark jobs as `error` in `job_pipeline_ledger` — never re-queue to Kafka
-- All logging goes through `infra/logger.Logger` — never use stdlib `log` package directly
-- Field keys must use constants from `infra/logger/fields.go` — never raw strings
+- All logging goes through `platform/logger.Logger` — never use stdlib `log` package directly
+- Field keys must use constants from `platform/logger/fields.go` — never raw strings
 - Each service domain follows the decorator chain pattern — see `backend/service/CLAUDE.md`
 
 ## Implementation workflow
@@ -119,7 +119,7 @@ These extend the rules in `.claude/rules/backend-solid.md` and `.claude/rules/ba
 - Prefer composition; keep interfaces small and focused — one interface per concern
 - Add new behaviour via new types/functions; do not modify working code to accommodate it
 - Every abstraction must be reusable and extendable without touching existing implementations
-- Error handling: wrap with `fmt.Errorf("context: %w", err)` at every layer; log only at top-level boundaries via `infra/logger.Logger`
+- Error handling: wrap with `fmt.Errorf("context: %w", err)` at every layer; log only at top-level boundaries via `platform/logger.Logger`
 - API responses: always use `Respond[T]`, `RespondPaged[T]`, `RespondError` helpers — never write raw `json.NewEncoder` directly in handlers
 
 ## Frontend code standards

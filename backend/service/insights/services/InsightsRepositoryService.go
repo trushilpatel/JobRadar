@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/infra/tracing"
+	"github.com/trushilpatel/jobradar/platform/tracing"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"gorm.io/gorm"

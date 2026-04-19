@@ -19,6 +19,7 @@ type ApplicationWithJob struct {
 type ApplicationService interface {
 	ListByJob(jobID string) ([]appmodel.JobApplication, error)
 	ListAll(page, limit int) ([]ApplicationWithJob, int, error)
+	ListActive() ([]ApplicationWithJob, error)
 	Create(ctx context.Context, jobID string, input dto.CreateApplicationInput) (*appmodel.JobApplication, error)
 	UpdateStage(jobID, appID string, input dto.UpdateStageInput) error
 	UpdateNote(jobID, appID string, input dto.UpdateNoteInput) error
@@ -44,6 +45,10 @@ func (b *BaseService) ListByJob(jobID string) ([]appmodel.JobApplication, error)
 
 func (b *BaseService) ListAll(page, limit int) ([]ApplicationWithJob, int, error) {
 	return b.next.ListAll(page, limit)
+}
+
+func (b *BaseService) ListActive() ([]ApplicationWithJob, error) {
+	return b.next.ListActive()
 }
 
 func (b *BaseService) Create(ctx context.Context, jobID string, input dto.CreateApplicationInput) (*appmodel.JobApplication, error) {

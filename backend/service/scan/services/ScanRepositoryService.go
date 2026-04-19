@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/infra/tracing"
+	"github.com/trushilpatel/jobradar/platform/tracing"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"github.com/trushilpatel/jobradar/service/scan/dto"

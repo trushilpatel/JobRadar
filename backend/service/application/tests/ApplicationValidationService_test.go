@@ -19,6 +19,7 @@ func (n *noopService) ListByJob(_ string) ([]appmodel.JobApplication, error) {
 func (n *noopService) ListAll(_, _ int) ([]svc.ApplicationWithJob, int, error) {
 	return nil, 0, nil
 }
+func (n *noopService) ListActive() ([]svc.ApplicationWithJob, error) { return nil, nil }
 func (n *noopService) Create(_ context.Context, _ string, _ dto.CreateApplicationInput) (*appmodel.JobApplication, error) {
 	return &appmodel.JobApplication{}, nil
 }

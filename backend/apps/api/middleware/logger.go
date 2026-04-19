@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/platform/logger"
 )
 
 // Logger returns an HTTP middleware that logs each request's method, path,

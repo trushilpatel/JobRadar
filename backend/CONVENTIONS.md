@@ -16,16 +16,16 @@ func NewJobStore(db *gorm.DB) *jobStore { return &jobStore{db: db} }
 ## Interface-first everywhere
 
 Same rule applies to Kafka, LLM, and Logger:
-- Workers depend on `infra/kafka.Publisher`, not `*kafka.Producer`
+- Workers depend on `platform/kafka.Publisher`, not `*kafka.Producer`
 - Filter worker depends on `service/llm/services.JobsRelevanceFilter`, not `*geminiScorer`
 - Analyzer worker depends on `service/llm/services.JobPostEnricher`, not `*geminiScorer`
-- Workers depend on `infra/logger.Logger`, not `*logger.zerologLogger`
+- Workers depend on `platform/logger.Logger`, not `*logger.zerologLogger`
 
 This means any worker can be tested by passing a fake implementation. Use `logger.NewNoop()` in tests to suppress output without any setup.
 
 ## Logging
 
-All packages use `infra/logger.Logger` — never stdlib `log`. Workers receive the logger via constructor injection.
+All packages use `platform/logger.Logger` — never stdlib `log`. Workers receive the logger via constructor injection.
 
 ```go
 // correct — inject at construction, use structured fields
@@ -54,7 +54,7 @@ jobLog := w.log.With(
 - `Warn` — recoverable issues: malformed messages, flush timeouts, rate limit waits
 - `Error` — actual failures: DB write failed, LLM failed, publish failed
 
-**Field keys** must use constants from `infra/logger/fields.go` — never raw strings:
+**Field keys** must use constants from `platform/logger/fields.go` — never raw strings:
 
 ```go
 logger.FieldJobID    // "job_id"

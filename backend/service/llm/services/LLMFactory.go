@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/platform/logger"
 	llmcommon "github.com/trushilpatel/jobradar/service/llm/common"
 )
 

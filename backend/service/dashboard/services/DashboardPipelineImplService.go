@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/infra/kafka"
+	"github.com/trushilpatel/jobradar/platform/kafka"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 )
 

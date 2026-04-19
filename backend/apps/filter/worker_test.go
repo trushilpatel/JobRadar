@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
-	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/platform/logger"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 )

@@ -1,4 +1,4 @@
-# infra/logger/ — Structured logging
+# platform/logger/ — Structured logging
 
 ## Package layout
 

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/types"
-	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/platform/logger"
 )
 
 // ── CareersURL ──────────────────────────────────────────────────────────────

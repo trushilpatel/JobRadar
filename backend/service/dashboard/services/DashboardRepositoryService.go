@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/trushilpatel/jobradar/infra/tracing"
+	"github.com/trushilpatel/jobradar/platform/tracing"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 )
 

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/infra/metrics"
+	"github.com/trushilpatel/jobradar/platform/metrics"
 )
 
 // Metrics returns a middleware that records Prometheus HTTP metrics after each request.

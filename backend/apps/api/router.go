@@ -8,8 +8,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/apps/api/middleware"
-	"github.com/trushilpatel/jobradar/infra/db"
-	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/platform/db"
+	"github.com/trushilpatel/jobradar/platform/logger"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"gorm.io/gorm"
 )

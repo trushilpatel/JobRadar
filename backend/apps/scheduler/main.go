@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/config"
-	"github.com/trushilpatel/jobradar/infra/db"
-	"github.com/trushilpatel/jobradar/infra/logger"
-	"github.com/trushilpatel/jobradar/infra/metrics"
-	"github.com/trushilpatel/jobradar/infra/tracing"
+	"github.com/trushilpatel/jobradar/platform/db"
+	"github.com/trushilpatel/jobradar/platform/logger"
+	"github.com/trushilpatel/jobradar/platform/metrics"
+	"github.com/trushilpatel/jobradar/platform/tracing"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 

@@ -230,6 +230,7 @@ func (f *fakeAppService) ListByJob(_ string) ([]appmodel.JobApplication, error) 
 func (f *fakeAppService) ListAll(_, _ int) ([]appsvc.ApplicationWithJob, int, error) {
 	return nil, 0, nil
 }
+func (f *fakeAppService) ListActive() ([]appsvc.ApplicationWithJob, error) { return nil, nil }
 func (f *fakeAppService) Create(_ context.Context, _ string, _ application.CreateApplicationInput) (*appmodel.JobApplication, error) {
 	return nil, nil
 }

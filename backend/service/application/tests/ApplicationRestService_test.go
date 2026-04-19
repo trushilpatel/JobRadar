@@ -32,6 +32,9 @@ func (f *fakeService) ListByJob(_ string) ([]appmodel.JobApplication, error) {
 func (f *fakeService) ListAll(_, _ int) ([]svc.ApplicationWithJob, int, error) {
 	return f.appsWithJob, f.total, f.err
 }
+func (f *fakeService) ListActive() ([]svc.ApplicationWithJob, error) {
+	return f.appsWithJob, f.err
+}
 func (f *fakeService) Create(_ context.Context, _ string, _ dto.CreateApplicationInput) (*appmodel.JobApplication, error) {
 	return f.app, f.err
 }

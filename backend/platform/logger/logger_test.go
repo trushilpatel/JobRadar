@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/infra/logger"
+	"github.com/trushilpatel/jobradar/platform/logger"
 )
 
 // Compile-time checks: both implementations must satisfy the Logger interface.

@@ -31,6 +31,9 @@ func (f *fakeApplicationService) ListByJob(_ string) ([]appmodel.JobApplication,
 func (f *fakeApplicationService) ListAll(_, _ int) ([]svc.ApplicationWithJob, int, error) {
 	return f.appsWithJob, int(f.total), f.err
 }
+func (f *fakeApplicationService) ListActive() ([]svc.ApplicationWithJob, error) {
+	return f.appsWithJob, f.err
+}
 func (f *fakeApplicationService) Create(_ context.Context, _ string, _ dto.CreateApplicationInput) (*appmodel.JobApplication, error) {
 	f.insertCalled = true
 	return f.app, f.err

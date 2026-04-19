@@ -7,11 +7,11 @@ import (
 	"syscall"
 
 	"github.com/trushilpatel/jobradar/common/config"
-	"github.com/trushilpatel/jobradar/infra/db"
-	"github.com/trushilpatel/jobradar/infra/kafka"
-	"github.com/trushilpatel/jobradar/infra/logger"
-	"github.com/trushilpatel/jobradar/infra/metrics"
-	"github.com/trushilpatel/jobradar/infra/tracing"
+	"github.com/trushilpatel/jobradar/platform/db"
+	"github.com/trushilpatel/jobradar/platform/kafka"
+	"github.com/trushilpatel/jobradar/platform/logger"
+	"github.com/trushilpatel/jobradar/platform/metrics"
+	"github.com/trushilpatel/jobradar/platform/tracing"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 )

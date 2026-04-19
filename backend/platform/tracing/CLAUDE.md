@@ -1,4 +1,4 @@
-# infra/tracing/ — OpenTelemetry tracing
+# platform/tracing/ — OpenTelemetry tracing
 
 ## Init
 

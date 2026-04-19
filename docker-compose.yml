@@ -85,7 +85,7 @@ services:
   api:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: ../infra/Dockerfile
     image: jobradar_backend
     container_name: jobradar_api
     mem_limit: 128m
@@ -145,7 +145,7 @@ services:
   crawler:
     build:
       context: ./backend
-      dockerfile: Dockerfile.crawler
+      dockerfile: ../infra/Dockerfile.crawler
     image: jobradar_crawler
     container_name: jobradar_crawler
     mem_limit: 1g
@@ -238,8 +238,8 @@ services:
 
   google-scraper:
     build:
-      context: ./backend/pipeline/ats/google/scraper
-      dockerfile: Dockerfile
+      context: ./backend/apps/crawler/ats/google/scraper
+      dockerfile: ../infra/Dockerfile
     image: jobradar_google_scraper
     container_name: jobradar_google_scraper
     environment:
@@ -259,7 +259,7 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: ../infra/Dockerfile
     container_name: jobradar_frontend
     ports:
       - "3000:80"
@@ -285,7 +285,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./backend/deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheusdata:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -298,7 +298,7 @@ services:
   #   ports:
   #     - "3001:3000"
   #   volumes:
-  #     - ./backend/deploy/prometheus/grafana-prometheus-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml
+  #     - ./infra/prometheus/grafana-prometheus-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml
   #     - grafanadata:/var/lib/grafana
   #   environment:
   #     - GF_AUTH_ANONYMOUS_ENABLED=true

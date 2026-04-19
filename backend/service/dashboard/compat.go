@@ -3,7 +3,7 @@ package dashboard
 import (
 	"gorm.io/gorm"
 
-	"github.com/trushilpatel/jobradar/infra/kafka"
+	"github.com/trushilpatel/jobradar/platform/kafka"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 	"github.com/trushilpatel/jobradar/service/dashboard/services"
 	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"

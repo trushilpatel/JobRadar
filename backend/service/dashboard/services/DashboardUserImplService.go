@@ -5,7 +5,7 @@ import (
 	"math"
 
 	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/infra/tracing"
+	"github.com/trushilpatel/jobradar/platform/tracing"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 	insightscommon "github.com/trushilpatel/jobradar/service/insights/common"
@@ -57,16 +57,13 @@ func (s *userDashboardImplService) GetHeatmap(ctx context.Context) (_ []dto.Week
 func (s *userDashboardImplService) GetInterviews(ctx context.Context) (_ []dto.InterviewRow, err error) {
 	_, span := tracing.Start(ctx, "dashboard.userdashboard.GetInterviews")
 	defer tracing.End(span, &err)
-	apps, _, err := s.appStore.ListAll(1, 1000)
+	apps, err := s.appStore.ListActive()
 	if err != nil {
 		return nil, domain.ErrInternal.WithMessage("failed to fetch interviews")
 	}
 
 	rows := make([]dto.InterviewRow, 0, len(apps))
 	for _, a := range apps {
-		if a.Stage == appcommon.StageRejected {
-			continue
-		}
 		rows = append(rows, dto.InterviewRow{
 			ApplicationID: a.ID,
 			JobID:         a.JobResultID,

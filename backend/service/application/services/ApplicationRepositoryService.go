@@ -40,6 +40,23 @@ func (s *applicationRepository) ListAll(page, limit int) ([]ApplicationWithJob, 
 	return apps, int(total), nil
 }
 
+func (s *applicationRepository) ListActive() ([]ApplicationWithJob, error) {
+	var results []ApplicationWithJob
+	err := s.db.Raw(`
+		SELECT DISTINCT ON (ja.job_result_id)
+			ja.*,
+			j.title as job_title,
+			j.company_id,
+			c.name as company_name
+		FROM job_application_tracker ja
+		JOIN job_feed j ON ja.job_result_id = j.id
+		JOIN companies c ON j.company_id = c.id
+		WHERE ja.stage != ?
+		ORDER BY ja.job_result_id, ja.stage_at DESC
+	`, appcommon.StageRejected).Scan(&results).Error
+	return results, err
+}
+
 func (s *applicationRepository) Create(_ context.Context, jobResultID string, input dto.CreateApplicationInput) (*appmodel.JobApplication, error) {
 	if err := s.insertApplication(jobResultID, input.Stage, input.Note); err != nil {
 		return nil, err
