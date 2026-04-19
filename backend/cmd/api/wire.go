@@ -8,11 +8,13 @@ import (
 	"github.com/google/wire"
 	"github.com/trushilpatel/jobradar/api"
 	"github.com/trushilpatel/jobradar/config"
+	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/service/application"
 	"github.com/trushilpatel/jobradar/service/company"
 	"github.com/trushilpatel/jobradar/service/dashboard"
-	"github.com/trushilpatel/jobradar/service/insights"
+	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
 	"github.com/trushilpatel/jobradar/service/job"
+	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	"github.com/trushilpatel/jobradar/service/scan"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 	"gorm.io/gorm"
@@ -36,14 +38,20 @@ func provideScanLogReader(s scansvc.ScanLogStore) scansvc.ScanLogReader {
 	return s
 }
 
-// provideSeenLedgerWriter binds SeenLedgerStore (returned by NewSeenLedgerStore) to the
-// SeenLedgerWriter interface needed by job.Service.
-func provideSeenLedgerWriter(s job.SeenLedgerStore) job.SeenLedgerWriter {
+// provideScanHistoryReader binds ScanLogStore to the ScanHistoryReader interface
+// needed by company.Service.
+func provideScanHistoryReader(s scansvc.ScanLogStore) company.ScanHistoryReader {
 	return s
 }
 
-// jobCountReaderAdapter wraps job.JobStore to satisfy the dashboard.JobCountReader interface.
-type jobCountReaderAdapter struct{ store job.JobStore }
+// provideSeenLedgerWriter binds SeenLedgerStore (returned by NewSeenLedgerStore) to the
+// SeenLedgerWriter interface needed by job.Service.
+func provideSeenLedgerWriter(s jobsvc.SeenLedgerStore) jobsvc.SeenLedgerWriter {
+	return s
+}
+
+// jobCountReaderAdapter wraps jobsvc.JobStore to satisfy the dashboard.JobCountReader interface.
+type jobCountReaderAdapter struct{ store jobsvc.JobStore }
 
 func (a *jobCountReaderAdapter) GetJobCounts() (int64, int64, int64, error) {
 	counts, err := a.store.GetJobCounts(context.Background())
@@ -55,31 +63,37 @@ func (a *jobCountReaderAdapter) GetJobCounts() (int64, int64, int64, error) {
 
 // provideJobCountReader binds JobStore (returned by NewJobStore) to the JobCountReader
 // interface needed by dashboard.Service.
-func provideJobCountReader(s job.JobStore) dashboard.JobCountReader {
+func provideJobCountReader(s jobsvc.JobStore) dashboard.JobCountReader {
 	return &jobCountReaderAdapter{store: s}
 }
 
-// provideJobApplicationWriter binds application.Store to the job.ApplicationWriter interface
+// provideJobApplicationWriter binds application.Store to the jobsvc.ApplicationWriter interface
 // so job.Service can auto-insert tracker rows when status advances to applied/interviewing/offer.
-func provideJobApplicationWriter(s application.Store) job.ApplicationWriter {
+func provideJobApplicationWriter(s application.Store) jobsvc.ApplicationWriter {
 	return s
+}
+
+// provideLagReader creates a Kafka LagReader from the config.
+func provideLagReader(cfg *config.Config) (kafka.LagReader, error) {
+	return kafka.NewLagReader(cfg.Kafka)
 }
 
 func InitializeApp(db *gorm.DB, cfg *config.Config) (*api.App, error) {
 	wire.Build(
-		provideKafkaConfig,
 		provideCompanyConfig,
 		provideScanConfig,
 		provideScanLogReader,
+		provideScanHistoryReader,
 		provideSeenLedgerWriter,
 		provideJobCountReader,
 		provideJobApplicationWriter,
+		provideLagReader,
 		company.ProviderSet,
 		scan.ProviderSet,
 		job.ProviderSet,
 		application.ProviderSet,
 		dashboard.ProviderSet,
-		insights.ProviderSet,
+		insightssvc.ProviderSet,
 		api.NewApp,
 	)
 	return nil, nil

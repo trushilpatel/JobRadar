@@ -8,65 +8,67 @@ package main
 
 import (
 	"context"
-
 	"github.com/trushilpatel/jobradar/api"
 	"github.com/trushilpatel/jobradar/config"
 	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/service/application"
+	services3 "github.com/trushilpatel/jobradar/service/application/services"
 	"github.com/trushilpatel/jobradar/service/company"
+	"github.com/trushilpatel/jobradar/service/company/services"
 	"github.com/trushilpatel/jobradar/service/dashboard"
-	"github.com/trushilpatel/jobradar/service/insights"
-	"github.com/trushilpatel/jobradar/service/job"
-	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
+	services4 "github.com/trushilpatel/jobradar/service/dashboard/services"
+	services5 "github.com/trushilpatel/jobradar/service/insights/services"
+	services2 "github.com/trushilpatel/jobradar/service/scan/services"
+	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	"gorm.io/gorm"
 )
 
 // Injectors from wire.go:
 
 func InitializeApp(db *gorm.DB, cfg *config.Config) (*api.App, error) {
-	validator := company.NewValidator()
-	store := company.NewStore(db)
-	companyConfig := provideCompanyConfig(cfg)
-	scanQueueStore := scansvc.NewQueueStore(db)
-	scanLogStore := scansvc.NewLogStore(db)
+	validator := services.NewValidator()
+	store := services.NewStore(db)
+	commonConfig := provideCompanyConfig(cfg)
+	scanLogStore := services2.NewLogStore(db)
+	scanHistoryReader := provideScanHistoryReader(scanLogStore)
+	service := services.NewService(store, commonConfig, scanHistoryReader)
+	v := services.NewHandler(validator, service)
+	servicesValidator := services2.NewValidator()
+	scanQueueStore := services2.NewQueueStore(db)
 	scanLogReader := provideScanLogReader(scanLogStore)
-	service := company.NewService(store, companyConfig, scanLogStore)
-	handler := company.NewHandler(validator, service)
-	scanValidator := scansvc.NewValidator()
-	scanConfig := provideScanConfig(cfg)
-	scanService := scansvc.NewService(scanQueueStore, scanLogReader, service, scanConfig)
-	scanHandler := scansvc.NewRestService(scanValidator, scanService)
-	jobValidator := job.NewValidator()
-	jobStore := job.NewJobStore(db)
-	seenLedgerStore := job.NewSeenLedgerStore(db)
+	servicesConfig := provideScanConfig(cfg)
+	servicesService := services2.NewService(scanQueueStore, scanLogReader, service, servicesConfig)
+	restService := services2.NewRestService(servicesValidator, servicesService)
+	jobValidator := jobsvc.NewValidator()
+	jobStore := jobsvc.NewJobStore(db)
+	seenLedgerStore := jobsvc.NewSeenLedgerStore(db)
 	seenLedgerWriter := provideSeenLedgerWriter(seenLedgerStore)
-	discardStore := job.NewDiscardStore(db)
-	snapshotWriter := job.NewSnapshotStore(db)
-	applicationStore := application.NewStore(db)
-	jobAppWriter := provideJobApplicationWriter(applicationStore)
-	jobService := job.NewService(jobStore, seenLedgerWriter, discardStore, snapshotWriter, jobAppWriter)
-	jobHandler := job.NewHandler(jobValidator, jobService)
-	applicationValidator := application.NewValidator()
-	applicationService := application.NewService(applicationStore, jobService)
-	applicationHandler := application.NewHandler(applicationValidator, applicationService)
-	dashboardValidator := dashboard.NewValidator()
-	insightsStore := insights.NewStore(db)
-	insightsService := insights.NewService(insightsStore)
+	discardStore := jobsvc.NewDiscardStore(db)
+	snapshotWriter := jobsvc.NewSnapshotStore(db)
+	v2 := services3.NewApplicationRepositoryService(db)
+	applicationWriter := provideJobApplicationWriter(v2)
+	jobService := jobsvc.NewService(jobStore, seenLedgerWriter, discardStore, snapshotWriter, applicationWriter)
+	handler := jobsvc.NewHandler(jobValidator, jobService)
+	applicationValidationService := services3.NewApplicationValidationService()
+	applicationService := services3.NewApplicationImplService(v2, jobService)
+	v3 := services3.NewApplicationRestHandler(applicationValidationService, applicationService)
+	dashboardValidationService := services4.NewDashboardValidationService()
+	servicesStore := services5.NewRepositoryService(db)
+	v4 := services5.NewImplService(servicesStore)
 	jobCountReader := provideJobCountReader(jobStore)
-	dashboardService := dashboard.NewService(scanLogReader, insightsService, jobCountReader)
-	userDashboardStore := dashboard.NewUserDashboardStore(db)
-	userDashboardService := dashboard.NewUserDashboardService(userDashboardStore, applicationStore)
-	kafkaConfig := provideKafkaConfig(cfg)
-	lagReader, err := kafka.NewLagReader(kafkaConfig)
+	dashboardService := services4.NewDashboardImplService(scanLogReader, v4, jobCountReader)
+	userDashboardStore := services4.NewUserDashboardStore(db)
+	userDashboardService := services4.NewUserDashboardService(userDashboardStore, v2)
+	pipelineStore := services4.NewPipelineStore(db)
+	lagReader, err := provideLagReader(cfg)
 	if err != nil {
 		return nil, err
 	}
-	pipelineStore := dashboard.NewPipelineStore(db)
-	pipelineService := dashboard.NewPipelineService(pipelineStore, lagReader)
-	dashboardHandler := dashboard.NewHandler(dashboardValidator, dashboardService, userDashboardService, pipelineService)
-	insightsValidator := insights.NewValidator()
-	insightsHandler := insights.NewHandler(insightsValidator, insightsService)
-	app := api.NewApp(handler, scanHandler, jobHandler, applicationHandler, dashboardHandler, insightsHandler)
+	pipelineService := services4.NewPipelineService(pipelineStore, lagReader)
+	v5 := services4.NewDashboardRestService(dashboardValidationService, dashboardService, userDashboardService, pipelineService)
+	validator2 := services5.NewValidationService()
+	v6 := services5.NewRestService(validator2, v4)
+	app := api.NewApp(v, restService, handler, v3, v5, v6)
 	return app, nil
 }
 
@@ -80,24 +82,30 @@ func provideCompanyConfig(cfg *config.Config) company.Config {
 	return company.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
 }
 
-func provideScanConfig(cfg *config.Config) scansvc.Config {
-	return scansvc.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
+func provideScanConfig(cfg *config.Config) services2.Config {
+	return services2.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
 }
 
 // provideScanLogReader binds ScanLogStore (returned by NewLogStore) to the ScanLogReader interface
 // needed by dashboard.Service.
-func provideScanLogReader(s scansvc.ScanLogStore) scansvc.ScanLogReader {
+func provideScanLogReader(s services2.ScanLogStore) services2.ScanLogReader {
+	return s
+}
+
+// provideScanHistoryReader binds ScanLogStore to the ScanHistoryReader interface
+// needed by company.Service.
+func provideScanHistoryReader(s services2.ScanLogStore) company.ScanHistoryReader {
 	return s
 }
 
 // provideSeenLedgerWriter binds SeenLedgerStore (returned by NewSeenLedgerStore) to the
 // SeenLedgerWriter interface needed by job.Service.
-func provideSeenLedgerWriter(s job.SeenLedgerStore) job.SeenLedgerWriter {
+func provideSeenLedgerWriter(s jobsvc.SeenLedgerStore) jobsvc.SeenLedgerWriter {
 	return s
 }
 
-// jobCountReaderAdapter wraps job.JobStore to satisfy the dashboard.JobCountReader interface.
-type jobCountReaderAdapter struct{ store job.JobStore }
+// jobCountReaderAdapter wraps jobsvc.JobStore to satisfy the dashboard.JobCountReader interface.
+type jobCountReaderAdapter struct{ store jobsvc.JobStore }
 
 func (a *jobCountReaderAdapter) GetJobCounts() (int64, int64, int64, error) {
 	counts, err := a.store.GetJobCounts(context.Background())
@@ -109,12 +117,17 @@ func (a *jobCountReaderAdapter) GetJobCounts() (int64, int64, int64, error) {
 
 // provideJobCountReader binds JobStore (returned by NewJobStore) to the JobCountReader
 // interface needed by dashboard.Service.
-func provideJobCountReader(s job.JobStore) dashboard.JobCountReader {
+func provideJobCountReader(s jobsvc.JobStore) dashboard.JobCountReader {
 	return &jobCountReaderAdapter{store: s}
 }
 
-// provideJobApplicationWriter binds application.Store to the job.ApplicationWriter interface
+// provideJobApplicationWriter binds application.Store to the jobsvc.ApplicationWriter interface
 // so job.Service can auto-insert tracker rows when status advances to applied/interviewing/offer.
-func provideJobApplicationWriter(s application.Store) job.ApplicationWriter {
+func provideJobApplicationWriter(s application.Store) jobsvc.ApplicationWriter {
 	return s
+}
+
+// provideLagReader creates a Kafka LagReader from the config.
+func provideLagReader(cfg *config.Config) (kafka.LagReader, error) {
+	return kafka.NewLagReader(cfg.Kafka)
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	atstypes "github.com/trushilpatel/jobradar/pipeline/ats/types"
 	"github.com/trushilpatel/jobradar/pipeline/llm"
-	jobsvc "github.com/trushilpatel/jobradar/service/job"
+	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 )
 
 // ── fakes ────────────────────────────────────────────────────────────────────
@@ -33,11 +33,11 @@ type fakePipelineService struct {
 	markErr     error
 	hasSeen     bool
 	hasSeenErr  error
-	savedInputs []jobsvc.EnrichedJobInput
+	savedInputs []jobdto.EnrichedJobInput
 	markCalls   []string
 }
 
-func (f *fakePipelineService) SaveEnrichedJob(_ context.Context, input jobsvc.EnrichedJobInput) error {
+func (f *fakePipelineService) SaveEnrichedJob(_ context.Context, input jobdto.EnrichedJobInput) error {
 	if f.saveErr != nil {
 		return f.saveErr
 	}

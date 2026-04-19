@@ -5,8 +5,8 @@ import (
 	"github.com/trushilpatel/jobradar/service/application"
 	"github.com/trushilpatel/jobradar/service/company"
 	"github.com/trushilpatel/jobradar/service/dashboard"
-	"github.com/trushilpatel/jobradar/service/insights"
-	"github.com/trushilpatel/jobradar/service/job"
+	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
+	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
@@ -15,10 +15,10 @@ import (
 type App struct {
 	companyHandler     *company.Handler
 	scanHandler        *scansvc.RestService
-	jobHandler         *job.Handler
+	jobHandler         *jobsvc.Handler
 	applicationHandler *application.Handler
 	dashboardHandler   *dashboard.Handler
-	insightsHandler    *insights.Handler
+	insightsHandler    *insightssvc.RestService
 }
 
 // NewApp constructs the App from fully-wired domain handlers.
@@ -26,10 +26,10 @@ type App struct {
 func NewApp(
 	companyHandler *company.Handler,
 	scanHandler *scansvc.RestService,
-	jobHandler *job.Handler,
+	jobHandler *jobsvc.Handler,
 	applicationHandler *application.Handler,
 	dashboardHandler *dashboard.Handler,
-	insightsHandler *insights.Handler,
+	insightsHandler *insightssvc.RestService,
 ) *App {
 	return &App{
 		companyHandler:     companyHandler,

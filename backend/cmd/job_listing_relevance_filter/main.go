@@ -14,7 +14,7 @@ import (
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/pipeline/filter"
 	"github.com/trushilpatel/jobradar/pipeline/llm"
-	jobsvc "github.com/trushilpatel/jobradar/service/job"
+	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
 
 func main() {

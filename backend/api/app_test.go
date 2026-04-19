@@ -12,8 +12,10 @@ import (
 	"github.com/trushilpatel/jobradar/service/application"
 	"github.com/trushilpatel/jobradar/service/company"
 	"github.com/trushilpatel/jobradar/service/dashboard"
-	"github.com/trushilpatel/jobradar/service/insights"
-	"github.com/trushilpatel/jobradar/service/job"
+	insightsdto "github.com/trushilpatel/jobradar/service/insights/dto"
+	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
+	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
+	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
@@ -23,10 +25,10 @@ import (
 func buildTestApp() *App {
 	companyH := company.NewHandler(company.NewValidator(), &fakeCompanyService{})
 	scanH := scansvc.NewRestService(scansvc.NewValidator(), &fakeScanService{})
-	jobH := job.NewHandler(job.NewValidator(), &fakeJobService{})
+	jobH := jobsvc.NewHandler(jobsvc.NewValidator(), &fakeJobService{})
 	appH := application.NewHandler(application.NewValidator(), &fakeAppService{})
 	dashH := dashboard.NewHandler(dashboard.NewValidator(), &fakeDashboardService{}, nil, nil)
-	insightsH := insights.NewHandler(insights.NewValidator(), &fakeInsightsService{})
+	insightsH := insightssvc.NewRestService(insightssvc.NewValidationService(), &fakeInsightsService{})
 	return NewApp(companyH, scanH, jobH, appH, dashH, insightsH)
 }
 
@@ -178,15 +180,17 @@ func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error {
 
 type fakeJobService struct{}
 
-func (f *fakeJobService) List(_ context.Context, _ job.JobFilter, _, _ int) ([]model.Job, int, error) {
+func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]model.Job, int, error) {
 	return nil, 0, nil
 }
-func (f *fakeJobService) Get(_ context.Context, _ string) (*model.Job, error)           { return nil, nil }
-func (f *fakeJobService) GetCounts(_ context.Context) (*job.JobCounts, error)           { return nil, nil }
-func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ job.DismissInput) error { return nil }
-func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error            { return nil }
-func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error                { return nil }
-func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error                 { return nil }
+func (f *fakeJobService) Get(_ context.Context, _ string) (*model.Job, error)    { return nil, nil }
+func (f *fakeJobService) GetCounts(_ context.Context) (*jobdto.JobCounts, error) { return nil, nil }
+func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error {
+	return nil
+}
+func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error { return nil }
+func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error     { return nil }
+func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error      { return nil }
 
 type fakeAppService struct{}
 
@@ -217,19 +221,19 @@ func (f *fakeInsightsService) CompanyActivity(_ context.Context) (interface{}, e
 }
 func (f *fakeInsightsService) Funnel(_ context.Context) (interface{}, error)   { return nil, nil }
 func (f *fakeInsightsService) Location(_ context.Context) (interface{}, error) { return nil, nil }
-func (f *fakeInsightsService) Sponsorship(_ context.Context, _ insights.InsightsFilter) (interface{}, error) {
+func (f *fakeInsightsService) Sponsorship(_ context.Context, _ insightsdto.InsightsFilter) (interface{}, error) {
 	return nil, nil
 }
 func (f *fakeInsightsService) Velocity(_ context.Context) (interface{}, error)       { return nil, nil }
 func (f *fakeInsightsService) RoleCategories(_ context.Context) (interface{}, error) { return nil, nil }
-func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insights.PipelineCounts, error) {
-	return insights.PipelineCounts{}, nil
+func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insightsdto.PipelineCounts, error) {
+	return insightsdto.PipelineCounts{}, nil
 }
 
 // Ensure fakes implement interfaces.
 var _ company.Service = (*fakeCompanyService)(nil)
 var _ scansvc.Service = (*fakeScanService)(nil)
-var _ job.Service = (*fakeJobService)(nil)
+var _ jobsvc.Service = (*fakeJobService)(nil)
 var _ application.Service = (*fakeAppService)(nil)
 var _ dashboard.Service = (*fakeDashboardService)(nil)
-var _ insights.Service = (*fakeInsightsService)(nil)
+var _ insightssvc.Service = (*fakeInsightsService)(nil)

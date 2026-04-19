@@ -18,7 +18,7 @@ import (
 	"github.com/trushilpatel/jobradar/pipeline/ats/google"
 	"github.com/trushilpatel/jobradar/pipeline/crawler"
 	companysvc "github.com/trushilpatel/jobradar/service/company"
-	jobsvc "github.com/trushilpatel/jobradar/service/job"
+	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 

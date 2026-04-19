@@ -15,7 +15,8 @@ import (
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/llm"
-	jobsvc "github.com/trushilpatel/jobradar/service/job"
+	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
+	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -165,9 +166,9 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 	jobLog.Info("enriched and saved")
 }
 
-// toEnrichedInput builds a jobsvc.EnrichedJobInput from the raw job and LLM result.
-func toEnrichedInput(job ats.RawJob, result *llm.EnrichResult) jobsvc.EnrichedJobInput {
-	return jobsvc.EnrichedJobInput{
+// toEnrichedInput builds a jobdto.EnrichedJobInput from the raw job and LLM result.
+func toEnrichedInput(job ats.RawJob, result *llm.EnrichResult) jobdto.EnrichedJobInput {
+	return jobdto.EnrichedJobInput{
 		Raw:      job,
 		Enriched: result,
 	}
