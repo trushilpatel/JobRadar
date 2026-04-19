@@ -14,9 +14,10 @@ import (
 	"github.com/trushilpatel/jobradar/infra/metrics"
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
-	"github.com/trushilpatel/jobradar/pipeline/llm"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
+	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
+	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -24,7 +25,7 @@ import (
 // runs LLM enrichment, and writes the final row to the job table.
 type Worker struct {
 	consumer    *kafka.Consumer
-	scorer      llm.Scorer
+	scorer      llmcore.JobPostEnricher
 	pipeline    jobsvc.PipelineService
 	client      *http.Client
 	log         logger.Logger
@@ -34,7 +35,7 @@ type Worker struct {
 
 func NewWorker(
 	consumer *kafka.Consumer,
-	scorer llm.Scorer,
+	scorer llmcore.JobPostEnricher,
 	pipeline jobsvc.PipelineService,
 	log logger.Logger,
 	maxExpYears int,
@@ -127,7 +128,7 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 
 	// 2. Send to LLM for structured extraction
 	llmStart := time.Now()
-	result, err := w.scorer.Enrich(ctx, llm.EnrichInput{
+	result, err := w.scorer.Enrich(ctx, llmdto.JobPostEnrichInput{
 		ID:      job.ID,
 		RawText: string(rawText),
 	})
@@ -167,7 +168,7 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 }
 
 // toEnrichedInput builds a jobdto.EnrichedJobInput from the raw job and LLM result.
-func toEnrichedInput(job ats.RawJob, result *llm.EnrichResult) jobdto.EnrichedJobInput {
+func toEnrichedInput(job ats.RawJob, result *llmdto.JobPostEnrichResult) jobdto.EnrichedJobInput {
 	return jobdto.EnrichedJobInput{
 		Raw:      job,
 		Enriched: result,
@@ -240,7 +241,7 @@ func (w *Worker) fetchPage(ctx context.Context, url string) (string, error) {
 
 // dropJob returns a non-empty reason string if the job should be discarded.
 // It never writes to the DB — the caller decides what to do with the reason.
-func (w *Worker) dropJob(e *llm.EnrichResult) string {
+func (w *Worker) dropJob(e *llmdto.JobPostEnrichResult) string {
 	if !e.Sponsorship {
 		return "no sponsorship"
 	}

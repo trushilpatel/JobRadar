@@ -11,8 +11,9 @@ import (
 	"github.com/trushilpatel/jobradar/infra/metrics"
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
-	"github.com/trushilpatel/jobradar/pipeline/llm"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
+	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
+	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -21,7 +22,7 @@ import (
 type Worker struct {
 	consumer     *kafka.Consumer
 	publisher    kafka.Publisher
-	scorer       llm.Scorer
+	scorer       llmcore.JobsRelevanceFilter
 	ledger       FilterLedger
 	batchSize    int
 	flushTimeout time.Duration
@@ -32,7 +33,7 @@ type Worker struct {
 func NewWorker(
 	consumer *kafka.Consumer,
 	publisher kafka.Publisher,
-	scorer llm.Scorer,
+	scorer llmcore.JobsRelevanceFilter,
 	ledger FilterLedger,
 	batchSize int,
 	flushTimeoutSeconds int,
@@ -181,10 +182,10 @@ func (w *Worker) flushBatch(ctx context.Context, batch []jobWithCtx) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			inputs := make([]llm.ScorerInput, len(sub))
+			inputs := make([]llmdto.JobsRelevanceFilterInput, len(sub))
 			ids := make([]string, len(sub))
 			for i, item := range sub {
-				inputs[i] = llm.ScorerInput{ID: item.job.ID, Title: item.job.Title, Location: item.job.Location}
+				inputs[i] = llmdto.JobsRelevanceFilterInput{ID: item.job.ID, Title: item.job.Title, Location: item.job.Location}
 				ids[i] = item.job.ID
 			}
 			relevantIDs, err := w.scorer.ScoreBatch(batchCtx, inputs)

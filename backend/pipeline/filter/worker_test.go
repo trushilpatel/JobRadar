@@ -7,8 +7,8 @@ import (
 
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
-	"github.com/trushilpatel/jobradar/pipeline/llm"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
+	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 )
 
 // ── fakes ────────────────────────────────────────────────────────────────────
@@ -19,7 +19,7 @@ type fakeScorer struct {
 	calls       int
 }
 
-func (f *fakeScorer) ScoreBatch(_ context.Context, jobs []llm.ScorerInput) ([]string, error) {
+func (f *fakeScorer) ScoreBatch(_ context.Context, jobs []llmdto.JobsRelevanceFilterInput) ([]string, error) {
 	if len(jobs) == 0 {
 		return nil, nil
 	}
@@ -27,9 +27,6 @@ func (f *fakeScorer) ScoreBatch(_ context.Context, jobs []llm.ScorerInput) ([]st
 	return f.relevantIDs, f.err
 }
 
-func (f *fakeScorer) Enrich(_ context.Context, _ llm.EnrichInput) (*llm.EnrichResult, error) {
-	return nil, nil
-}
 
 type ledgerCall struct {
 	ids    []string

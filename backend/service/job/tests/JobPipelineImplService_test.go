@@ -8,7 +8,7 @@ import (
 
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
-	"github.com/trushilpatel/jobradar/pipeline/llm"
+	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -97,7 +97,7 @@ func makeInput() jobdto.EnrichedJobInput {
 			URL:        "https://example.com/jobs/123",
 			EmployType: jobcommon.EmployFullTime,
 		},
-		Enriched: &llm.EnrichResult{
+		Enriched: &llmdto.JobPostEnrichResult{
 			ExperienceYears:   &expYears,
 			TechStack:         []string{"Go", "PostgreSQL"},
 			SalaryMin:         &salMin,

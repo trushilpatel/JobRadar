@@ -10,21 +10,18 @@ import (
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	atstypes "github.com/trushilpatel/jobradar/pipeline/ats/types"
-	"github.com/trushilpatel/jobradar/pipeline/llm"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
+	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 )
 
 // ── fakes ────────────────────────────────────────────────────────────────────
 
 type fakeScorer struct {
-	result *llm.EnrichResult
+	result *llmdto.JobPostEnrichResult
 	err    error
 }
 
-func (f *fakeScorer) ScoreBatch(_ context.Context, _ []llm.ScorerInput) ([]string, error) {
-	return nil, nil
-}
-func (f *fakeScorer) Enrich(_ context.Context, _ llm.EnrichInput) (*llm.EnrichResult, error) {
+func (f *fakeScorer) Enrich(_ context.Context, _ llmdto.JobPostEnrichInput) (*llmdto.JobPostEnrichResult, error) {
 	return f.result, f.err
 }
 
@@ -75,8 +72,8 @@ func baseRawJob() ats.RawJob {
 	}
 }
 
-func baseEnrichResult() *llm.EnrichResult {
-	return &llm.EnrichResult{
+func baseEnrichResult() *llmdto.JobPostEnrichResult {
+	return &llmdto.JobPostEnrichResult{
 		TechStack:    []string{"Go", "K8s"},
 		Remote:       true,
 		Country:      "USA",
@@ -175,7 +172,7 @@ func TestEnrich_SaveError_MarksError(t *testing.T) {
 
 func TestDropJob_NoSponsorship(t *testing.T) {
 	w := makeWorker(&fakeScorer{}, &fakePipelineService{})
-	result := &llm.EnrichResult{Sponsorship: false}
+	result := &llmdto.JobPostEnrichResult{Sponsorship: false}
 	if reason := w.dropJob(result); reason == "" {
 		t.Error("expected drop reason for no sponsorship")
 	}
@@ -183,7 +180,7 @@ func TestDropJob_NoSponsorship(t *testing.T) {
 
 func TestDropJob_RequiresCitizen(t *testing.T) {
 	w := makeWorker(&fakeScorer{}, &fakePipelineService{})
-	result := &llm.EnrichResult{Sponsorship: true, RequiresCitizen: true}
+	result := &llmdto.JobPostEnrichResult{Sponsorship: true, RequiresCitizen: true}
 	if reason := w.dropJob(result); reason == "" {
 		t.Error("expected drop reason for requires citizen")
 	}
@@ -191,7 +188,7 @@ func TestDropJob_RequiresCitizen(t *testing.T) {
 
 func TestDropJob_SecurityClearance(t *testing.T) {
 	w := makeWorker(&fakeScorer{}, &fakePipelineService{})
-	result := &llm.EnrichResult{Sponsorship: true, SecurityClearance: true}
+	result := &llmdto.JobPostEnrichResult{Sponsorship: true, SecurityClearance: true}
 	if reason := w.dropJob(result); reason == "" {
 		t.Error("expected drop reason for security clearance")
 	}
@@ -200,7 +197,7 @@ func TestDropJob_SecurityClearance(t *testing.T) {
 func TestDropJob_ExperienceExceedsMax(t *testing.T) {
 	w := NewWorker(nil, &fakeScorer{}, &fakePipelineService{}, logger.NewNoop(), 3, 5)
 	exp := 5
-	result := &llm.EnrichResult{Sponsorship: true, ExperienceYears: &exp}
+	result := &llmdto.JobPostEnrichResult{Sponsorship: true, ExperienceYears: &exp}
 	if reason := w.dropJob(result); reason == "" {
 		t.Error("expected drop reason for experience exceeds max")
 	}
@@ -219,16 +216,13 @@ func TestDropJob_EligibleJob(t *testing.T) {
 // capturingScorer records the last EnrichInput it received so tests can assert
 // on what was passed to the LLM.
 type capturingScorer struct {
-	result      *llm.EnrichResult
+	result      *llmdto.JobPostEnrichResult
 	err         error
-	lastInput   llm.EnrichInput
+	lastInput   llmdto.JobPostEnrichInput
 	enrichCalls int
 }
 
-func (c *capturingScorer) ScoreBatch(_ context.Context, _ []llm.ScorerInput) ([]string, error) {
-	return nil, nil
-}
-func (c *capturingScorer) Enrich(_ context.Context, input llm.EnrichInput) (*llm.EnrichResult, error) {
+func (c *capturingScorer) Enrich(_ context.Context, input llmdto.JobPostEnrichInput) (*llmdto.JobPostEnrichResult, error) {
 	c.lastInput = input
 	c.enrichCalls++
 	return c.result, c.err
@@ -250,7 +244,7 @@ func (ft *failingTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
 // meaning no HTTP request is made and the LLM receives the pre-fetched content.
 func TestEnrich_SkipsFetchWhenFullContentPresent(t *testing.T) {
 	transport := &failingTransport{}
-	scorer := &capturingScorer{result: &llm.EnrichResult{
+	scorer := &capturingScorer{result: &llmdto.JobPostEnrichResult{
 		TechStack:   []string{"Go"},
 		Remote:      true,
 		Country:     "USA",

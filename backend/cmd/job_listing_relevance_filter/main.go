@@ -13,8 +13,8 @@ import (
 	"github.com/trushilpatel/jobradar/infra/metrics"
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/pipeline/filter"
-	"github.com/trushilpatel/jobradar/pipeline/llm"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
+	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 )
 
 func main() {
@@ -51,14 +51,14 @@ func main() {
 	}
 	defer producer.Close()
 
-	scorer, err := llm.NewScorer(llm.ScorerOptions{
+	scorer, err := llmcore.NewScorer(llmcore.Options{
 		Provider:    cfg.LLM.Provider,
 		APIKey:      cfg.LLM.APIKey,
 		Model:       cfg.Filter.Model,
 		TargetRoles: cfg.LLM.TargetRoles,
 		YearsExp:    cfg.LLM.YearsExp,
 		Log:         log,
-		Limits: llm.RateLimits{
+		Limits: llmcore.RateLimits{
 			RPM:   cfg.Filter.RateLimits.RPM,
 			RPD:   cfg.Filter.RateLimits.RPD,
 			TPMIn: cfg.Filter.RateLimits.TPMIn,
