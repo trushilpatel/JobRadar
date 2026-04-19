@@ -6,10 +6,9 @@ import (
 
 	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
+	"github.com/trushilpatel/jobradar/service/job/dto"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
-	"github.com/trushilpatel/jobradar/service/job/dto"
-	"github.com/trushilpatel/jobradar/store"
 	"gorm.io/gorm"
 )
 
@@ -249,7 +248,7 @@ func (r *repositoryService) Get(ctx context.Context, id string) (_ *jobmodel.Job
 	defer tracing.End(span, &err)
 	job, err := r.store.GetJobByID(ctx, id)
 	if err != nil {
-		if store.IsNotFound(err) {
+		if domain.IsNotFound(err) {
 			return nil, domain.ErrNotFound.WithMessage("job not found")
 		}
 		return nil, domain.ErrInternal.WithMessage("failed to fetch job")

@@ -21,7 +21,7 @@ Services return typed errors by calling `.WithMessage()` on a sentinel:
 
 ```go
 // service layer
-if store.IsNotFound(err) {
+if domain.IsNotFound(err) {
     return nil, domain.ErrNotFound.WithMessage("job not found")
 }
 return nil, domain.ErrInternal.WithMessage("failed to fetch job")

@@ -6,7 +6,6 @@ import (
 	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
-	"github.com/trushilpatel/jobradar/store"
 )
 
 // CrawlerReader is the narrow company read interface for the crawler pipeline.
@@ -29,7 +28,7 @@ func (r *crawlerReader) GetByID(ctx context.Context, id string) (_ companymodel.
 	defer tracing.End(span, &err)
 	c, err := r.store.GetCompanyByID(ctx, id)
 	if err != nil {
-		if store.IsNotFound(err) {
+		if domain.IsNotFound(err) {
 			return companymodel.Company{}, domain.ErrNotFound.WithMessage("company not found")
 		}
 		return companymodel.Company{}, domain.ErrInternal.WithMessage("failed to fetch company")

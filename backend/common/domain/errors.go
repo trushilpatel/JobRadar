@@ -1,6 +1,11 @@
 package domain
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+
+	"gorm.io/gorm"
+)
 
 // ValidationError is returned by validators for malformed or out-of-range input.
 type ValidationError struct {
@@ -35,3 +40,8 @@ var (
 	ErrBadRequest = &ServiceError{Code: "BAD_REQUEST", Status: 400}
 	ErrInternal   = &ServiceError{Code: "INTERNAL", Status: 500}
 )
+
+// IsNotFound reports whether err is a GORM record-not-found error.
+func IsNotFound(err error) bool {
+	return errors.Is(err, gorm.ErrRecordNotFound)
+}

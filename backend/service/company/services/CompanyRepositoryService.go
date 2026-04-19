@@ -8,7 +8,6 @@ import (
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
-	"github.com/trushilpatel/jobradar/store"
 	"gorm.io/gorm"
 )
 
@@ -214,7 +213,7 @@ func (r *repositoryService) Get(ctx context.Context, id string) (_ *companymodel
 	defer tracing.End(span, &err)
 	c, err := r.store.GetCompanyByID(ctx, id)
 	if err != nil {
-		if store.IsNotFound(err) {
+		if domain.IsNotFound(err) {
 			return nil, domain.ErrNotFound.WithMessage("company not found")
 		}
 		return nil, domain.ErrInternal.WithMessage("failed to fetch company")
@@ -261,7 +260,7 @@ func (r *repositoryService) Update(ctx context.Context, id string, input company
 		fields["active"] = *input.Active
 	}
 	if err := r.store.UpdateCompany(ctx, id, fields); err != nil {
-		if store.IsNotFound(err) {
+		if domain.IsNotFound(err) {
 			return domain.ErrNotFound.WithMessage("company not found")
 		}
 		return domain.ErrInternal.WithMessage("failed to update company")
@@ -273,7 +272,7 @@ func (r *repositoryService) Delete(ctx context.Context, id string) (err error) {
 	ctx, span := tracing.Start(ctx, "company.repository.Delete")
 	defer tracing.End(span, &err)
 	if _, err := r.store.GetCompanyByID(ctx, id); err != nil {
-		if store.IsNotFound(err) {
+		if domain.IsNotFound(err) {
 			return domain.ErrNotFound.WithMessage("company not found")
 		}
 		return domain.ErrInternal.WithMessage("failed to fetch company")
