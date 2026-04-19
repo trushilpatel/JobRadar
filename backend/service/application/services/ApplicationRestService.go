@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/api/handler"
-	"github.com/trushilpatel/jobradar/api/request"
+	"github.com/trushilpatel/jobradar/apps/api/handler"
+	"github.com/trushilpatel/jobradar/apps/api/request"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 )
 

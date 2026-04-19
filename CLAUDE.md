@@ -12,40 +12,38 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 
 ## Directory map
 
-| Path                           | What lives there                                                                  |
-| ------------------------------ | --------------------------------------------------------------------------------- |
-| `backend/cmd/`                 | Binary entry points — one per worker + api                                        |
-| `backend/common/config/`       | Config struct + env var loading via godotenv                                      |
-| `backend/common/domain/`       | Shared error types: ServiceError, ValidationError, sentinel errors + `IsNotFound` |
-| `backend/pipeline/`            | The entire data pipeline                                                          |
-| `backend/pipeline/ats/`        | Careers page fetchers (Greenhouse, Lever, Ashby, Google, Netflix, Uber)           |
-| `backend/pipeline/crawler/`    | Polls scan queue, fetches careers pages, publishes raw jobs                       |
-| `backend/pipeline/filter/`     | Scores batches via LLM, routes relevant jobs                                      |
-| `backend/pipeline/analyzer/`   | Fetches full job page, LLM enriches, writes to job_feed                           |
-| `backend/pipeline/techtag/`    | Normalizes and deduplicates raw tech_stack strings from LLM                       |
-| `backend/service/`             | Feature-slice packages — each owns handler + service + store + models + validator |
-| `backend/service/job/`         | Job listing operations — models in `job/models/` (package `jobmodel`)             |
-| `backend/service/company/`     | Company CRUD + scan trigger — models in `company/models/` (package `companymodel`)|
-| `backend/service/application/` | Application tracking — models in `application/models/` (package `appmodel`)       |
-| `backend/service/dashboard/`   | Dashboard stats + pipeline status                                                 |
-| `backend/service/insights/`    | Analytics and insights queries                                                    |
-| `backend/service/scan/`        | Scan result recording — models in `scan/models/` (package `scanmodel`)            |
-| `backend/service/llm/`         | LLM business logic — `JobsRelevanceFilter` + `JobPostEnricher` interfaces, Gemini impl, prompts |
-| `backend/api/`                 | Router, respond helpers, middleware, RouteGroup interface                         |
-| `backend/infra/`               | Infrastructure plumbing (db, kafka, logger, metrics, tracing)                     |
-| `backend/infra/tracing/`       | OTel tracing init, Start/End span helpers, Kafka propagation                      |
-| `backend/migrations/`          | goose SQL migration files                                                         |
-| `backend/deploy/`              | Docker / Kafka / Loki / Prometheus entrypoint scripts                             |
+| Path                              | What lives there                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------- |
+| `backend/apps/crawler/`           | Crawler binary + engine + ATS adapters (Greenhouse, Lever, Ashby, Google, etc.)  |
+| `backend/apps/scheduler/`         | Scheduler binary — enqueues companies due for a scan                             |
+| `backend/apps/filter/`            | Filter binary + worker — LLM batch scoring, routes relevant jobs                 |
+| `backend/apps/analyzer/`          | Analyzer binary + worker + techtag normalizer — LLM enrichment, writes job_feed  |
+| `backend/apps/api/`               | API binary + router + handlers + middleware + request/response helpers            |
+| `backend/apps/migrate/`           | Migration runner binary                                                           |
+| `backend/common/config/`          | Config struct + env var loading via godotenv                                      |
+| `backend/common/domain/`          | Shared error types: ServiceError, ValidationError, sentinel errors + `IsNotFound` |
+| `backend/service/`                | Feature-slice packages — each owns handler + service + store + models + validator |
+| `backend/service/job/`            | Job listing operations — models in `job/models/` (package `jobmodel`)             |
+| `backend/service/company/`        | Company CRUD + scan trigger — models in `company/models/` (package `companymodel`)|
+| `backend/service/application/`    | Application tracking — models in `application/models/` (package `appmodel`)       |
+| `backend/service/dashboard/`      | Dashboard stats + pipeline status                                                 |
+| `backend/service/insights/`       | Analytics and insights queries                                                    |
+| `backend/service/scan/`           | Scan result recording — models in `scan/models/` (package `scanmodel`)            |
+| `backend/service/llm/`            | LLM business logic — `JobsRelevanceFilter` + `JobPostEnricher` interfaces, Gemini impl, prompts |
+| `backend/infra/`                  | Infrastructure plumbing (db, kafka, logger, metrics, tracing)                     |
+| `backend/infra/tracing/`          | OTel tracing init, Start/End span helpers, Kafka propagation                      |
+| `backend/migrations/`             | goose SQL migration files                                                         |
+| `backend/deploy/`                 | Docker / Kafka / Loki / Prometheus entrypoint scripts                             |
 
 ## Workers
 
-| Binary                             | Role                                                                                              |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `cmd/company_scan_scheduler`       | Queries DB for companies due for a scan, inserts into `company_scan_queue`                        |
-| `cmd/job_listing_crawler`          | Polls `company_scan_queue` (DB), fetches careers pages, publishes to `job_listings.raw`           |
-| `cmd/job_listing_relevance_filter` | Scores batches via LLM, routes relevant to `job_listings.filtered`                                |
-| `cmd/job_post_analyzer`            | Fetches full job page (or uses pre-fetched FullContent), LLM enriches, writes to `job_feed` table |
-| `cmd/api`                          | REST API on `:8080`                                                                               |
+| Binary                    | Role                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------- |
+| `apps/scheduler`          | Queries DB for companies due for a scan, inserts into `company_scan_queue`                        |
+| `apps/crawler`            | Polls `company_scan_queue` (DB), fetches careers pages, publishes to `job_listings.raw`           |
+| `apps/filter`             | Scores batches via LLM, routes relevant to `job_listings.filtered`                                |
+| `apps/analyzer`           | Fetches full job page (or uses pre-fetched FullContent), LLM enriches, writes to `job_feed` table |
+| `apps/api`                | REST API on `:8080`                                                                               |
 
 ## Database tables
 

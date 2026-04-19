@@ -1,7 +1,7 @@
 package dto
 
 import (
-	"github.com/trushilpatel/jobradar/pipeline/ats"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 )
 

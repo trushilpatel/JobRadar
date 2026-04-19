@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
-	"github.com/trushilpatel/jobradar/pipeline/techtag"
+	"github.com/trushilpatel/jobradar/apps/analyzer/techtag"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	"gorm.io/datatypes"
