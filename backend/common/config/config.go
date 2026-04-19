@@ -163,8 +163,8 @@ func Load() *Config {
 			},
 		},
 		Crawler: CrawlerConfig{
-			CompanyDelaySeconds:      getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 15),
-			PollIntervalSeconds:      getEnvInt("CRAWLER_POLL_INTERVAL_SECONDS", 10),
+			CompanyDelaySeconds:      getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 30),
+			PollIntervalSeconds:      getEnvInt("CRAWLER_POLL_INTERVAL_SECONDS", 60),
 			StuckTimeoutSeconds:      getEnvInt("CRAWLER_STUCK_TIMEOUT_SECONDS", 120),
 			HeartbeatIntervalSeconds: getEnvInt("CRAWLER_HEARTBEAT_INTERVAL_SECONDS", 30),
 			Google: GoogleScraperConfig{

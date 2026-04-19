@@ -161,7 +161,7 @@ rebuild-console: ## Rebuild console image only (build happens inside Docker)
 	DOCKER_BUILDKIT=1 docker-compose up -d --build console
 
 down: ## Stop and remove all containers (keeps volumes)
-	docker-compose down
+	docker-compose --profile workers down --remove-orphans
 
 logs: ## Tail logs for all services (Ctrl-C to stop)
 	docker-compose logs -f

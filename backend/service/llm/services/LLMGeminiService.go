@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/genai"
+
 	llmcommon "github.com/trushilpatel/jobradar/service/llm/common"
 	"github.com/trushilpatel/jobradar/service/llm/dto"
 	"github.com/trushilpatel/jobradar/service/llm/prompts"
-	"google.golang.org/api/option"
 )
 
 type geminiScorer struct {
@@ -21,7 +21,10 @@ type geminiScorer struct {
 }
 
 func newGeminiScorer(ctx context.Context, apiKey, modelName string, targetRoles []string, yearsExp int) (Scorer, error) {
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("gemini: create client: %w", err)
 	}
@@ -33,7 +36,7 @@ func newGeminiScorer(ctx context.Context, apiKey, modelName string, targetRoles 
 	}, nil
 }
 
-// ── ScoreBatch ───────────────────────────────────────────────────────────────
+// ── ScoreBatch ────────────────────────────────────────────────────────────────
 
 var scoreBatchSchema = &genai.Schema{
 	Type:  genai.TypeArray,
@@ -68,20 +71,20 @@ func (s *geminiScorer) ScoreBatch(ctx context.Context, jobs []dto.JobsRelevanceF
 	return ids, nil
 }
 
-// ── Enrich ───────────────────────────────────────────────────────────────────
+// ── Enrich ────────────────────────────────────────────────────────────────────
 
 var enrichSchema = &genai.Schema{
 	Type: genai.TypeObject,
 	Properties: map[string]*genai.Schema{
-		"experience_years":   {Type: genai.TypeInteger, Nullable: true},
+		"experience_years":   {Type: genai.TypeInteger, Nullable: boolPtr(true)},
 		"tech_stack":         {Type: genai.TypeArray, Items: &genai.Schema{Type: genai.TypeString}},
-		"salary_min":         {Type: genai.TypeInteger, Nullable: true},
-		"salary_max":         {Type: genai.TypeInteger, Nullable: true},
-		"salary_currency":    {Type: genai.TypeString, Nullable: true},
+		"salary_min":         {Type: genai.TypeInteger, Nullable: boolPtr(true)},
+		"salary_max":         {Type: genai.TypeInteger, Nullable: boolPtr(true)},
+		"salary_currency":    {Type: genai.TypeString, Nullable: boolPtr(true)},
 		"summary":            {Type: genai.TypeString},
 		"remote":             {Type: genai.TypeBoolean},
 		"country":            {Type: genai.TypeString},
-		"state":              {Type: genai.TypeString, Nullable: true},
+		"state":              {Type: genai.TypeString, Nullable: boolPtr(true)},
 		"sponsorship":        {Type: genai.TypeBoolean},
 		"requires_citizen":   {Type: genai.TypeBoolean},
 		"security_clearance": {Type: genai.TypeBoolean},
@@ -117,36 +120,34 @@ func (s *geminiScorer) Enrich(ctx context.Context, input dto.JobPostEnrichInput)
 	return &out, nil
 }
 
-// ── shared generate helper ───────────────────────────────────────────────────
+// ── shared generate helper ────────────────────────────────────────────────────
 
 func (s *geminiScorer) generate(ctx context.Context, prompt string, maxOutputTokens int32, schema *genai.Schema) (string, error) {
-	model := s.client.GenerativeModel(s.modelName)
-	model.MaxOutputTokens = &maxOutputTokens
-	model.ResponseMIMEType = "application/json"
-	model.ResponseSchema = schema
-
 	temp := float32(0.0)
-	model.Temperature = &temp
-
-	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	resp, err := s.client.Models.GenerateContent(
+		ctx,
+		s.modelName,
+		[]*genai.Content{genai.NewContentFromText(prompt, genai.RoleUser)},
+		&genai.GenerateContentConfig{
+			MaxOutputTokens:  maxOutputTokens,
+			ResponseMIMEType: "application/json",
+			ResponseSchema:   schema,
+			Temperature:      &temp,
+		},
+	)
 	if err != nil {
 		return "", err
 	}
-	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
+
+	text := resp.Text()
+	if text == "" {
 		return "", fmt.Errorf("empty response from model")
 	}
 
-	var fullText strings.Builder
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if t, ok := part.(genai.Text); ok {
-			fullText.WriteString(string(t))
-		}
-	}
-
-	return s.cleanJSON(fullText.String()), nil
+	return cleanJSON(text), nil
 }
 
-func (s *geminiScorer) cleanJSON(text string) string {
+func cleanJSON(text string) string {
 	text = strings.ReplaceAll(text, "\u00a0", " ")
 	text = strings.TrimSpace(text)
 
@@ -159,3 +160,5 @@ func (s *geminiScorer) cleanJSON(text string) string {
 
 	return text
 }
+
+func boolPtr(b bool) *bool { return &b }

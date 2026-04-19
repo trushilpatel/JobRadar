@@ -300,20 +300,22 @@ services:
       - '--storage.tsdb.retention.time=15d'
     restart: unless-stopped
 
-  # grafana:
-  #   image: grafana/grafana:10.4.0
-  #   container_name: jobradar_grafana
-  #   ports:
-  #     - "3001:3000"
-  #   volumes:
-  #     - ./infra/prometheus/grafana-prometheus-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml
-  #     - grafanadata:/var/lib/grafana
-  #   environment:
-  #     - GF_AUTH_ANONYMOUS_ENABLED=true
-  #     - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-  #   depends_on:
-  #     - prometheus
-  #   restart: unless-stopped
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: jobradar_grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./infra/prometheus/grafana-prometheus-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml
+      - ./infra/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafanadata:/var/lib/grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    depends_on:
+      - prometheus
+    restart: unless-stopped
 
 volumes:
   pgdata:
