@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/trushilpatel/jobradar/infra/tracing"
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/apps/analyzer/techtag"
+	"github.com/trushilpatel/jobradar/infra/tracing"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"gorm.io/datatypes"
 )
 

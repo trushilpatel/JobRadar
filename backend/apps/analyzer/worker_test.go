@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	atstypes "github.com/trushilpatel/jobradar/apps/crawler/ats/types"
+	"github.com/trushilpatel/jobradar/infra/logger"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 )

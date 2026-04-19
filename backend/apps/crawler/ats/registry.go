@@ -3,7 +3,6 @@ package ats
 import (
 	"fmt"
 
-	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/apple"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/ashby"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
@@ -14,6 +13,7 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/netflix"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/rippling"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/uber"
+	"github.com/trushilpatel/jobradar/infra/logger"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 )
 

@@ -6,8 +6,8 @@ import (
 
 	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/service/job/dto"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
+	"github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"gorm.io/gorm"
 )

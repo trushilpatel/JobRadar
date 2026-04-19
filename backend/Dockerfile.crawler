@@ -11,7 +11,7 @@ COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    go build -o /out/crawler ./cmd/job_listing_crawler
+    go build -o /out/crawler ./apps/crawler
 
 FROM mcr.microsoft.com/playwright:v1.59.1-noble
 
@@ -21,10 +21,10 @@ WORKDIR /app
 
 COPY --from=go-builder /out/crawler /app/crawler
 
-COPY pipeline/ats/google/scraper/package.json pipeline/ats/google/scraper/package-lock.json* /app/scraper/
+COPY apps/crawler/ats/google/scraper/package.json apps/crawler/ats/google/scraper/package-lock.json* /app/scraper/
 RUN --mount=type=cache,target=/root/.npm \
     cd /app/scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --production --cache /root/.npm
-COPY pipeline/ats/google/scraper/scrape.js /app/scraper/
+COPY apps/crawler/ats/google/scraper/scrape.js /app/scraper/
 
 ENV GOOGLE_SCRAPER_DIR=/app/scraper
 

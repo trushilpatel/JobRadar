@@ -16,14 +16,14 @@
 
 dev: ## Start infra in Docker, then run frontend + API on host
 	$(MAKE) docker-up
-	cd backend && go run ./cmd/migrate
+	cd backend && go run ./apps/migrate
 	$(MAKE) -j2 dev-frontend dev-backend
 
 dev-frontend: ## Start Vite dev server
 	cd frontend && npm run dev
 
 dev-backend: ## Start API server (hot-reload via go run)
-	cd backend && go run ./cmd/api
+	cd backend && go run ./apps/api
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 
@@ -41,24 +41,24 @@ build-backend: ## Compile all Go binaries
 # ── Run individual workers ────────────────────────────────────────────────────
 
 run-api: ## Run API server
-	cd backend && go run ./cmd/api
+	cd backend && go run ./apps/api
 
 run-crawler: ## Run job listing crawler worker
-	cd backend && go run ./cmd/job_listing_crawler
+	cd backend && go run ./apps/crawler
 
 run-filter: ## Run LLM relevance filter worker
-	cd backend && go run ./cmd/job_listing_relevance_filter
+	cd backend && go run ./apps/filter
 
 run-enricher: ## Run job post analyzer/enricher worker
-	cd backend && go run ./cmd/job_post_analyzer
+	cd backend && go run ./apps/analyzer
 
 run-scheduler: ## Run scan scheduler (enqueues due companies)
-	cd backend && go run ./cmd/company_scan_scheduler
+	cd backend && go run ./apps/scheduler
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
 migrate: ## Run database migrations (goose up)
-	cd backend && go run ./cmd/migrate
+	cd backend && go run ./apps/migrate
 
 scan-google: ## Manually trigger a Google careers scan (bypasses cooldown)
 	curl -s -X POST http://localhost:8080/companies/google/scan | jq .
@@ -101,32 +101,32 @@ test-short: ## Run unit tests only — no real HTTP calls, fast
 test-unit: test-scheduler test-workers test-api ## Run all unit tests (scheduler + workers + api) — no real connections
 
 test-scheduler: ## Test company_scan_scheduler
-	cd backend && go test -v ./cmd/company_scan_scheduler/...
+	cd backend && go test -v ./apps/scheduler/...
 
 test-workers: ## Test all pipeline workers (crawler, filter, enricher)
 	cd backend && go test -v \
-		./cmd/job_listing_crawler/... \
-		./pipeline/crawler/... \
-		./pipeline/filter/... \
-		./pipeline/analyzer/...
+		./apps/crawler/... \
+		./apps/crawler/... \
+		./apps/filter/... \
+		./apps/analyzer/...
 
 test-api: ## Test API handlers and services
-	cd backend && go test -v ./api/... ./service/...
+	cd backend && go test -v ./apps/api/... ./service/...
 
 test-llm: ## Test LLM package
-	cd backend && go test -v ./pipeline/llm/...
+	cd backend && go test -v ./service/llm/...
 
 test-adapters: ## Run all adapter integration tests (Greenhouse + Lever + Ashby hit real APIs)
-	cd backend && go test -v -run "Integration" ./pipeline/ats/greenhouse/... ./pipeline/ats/lever/... ./pipeline/ats/ashby/...
+	cd backend && go test -v -run "Integration" ./apps/crawler/ats/greenhouse/... ./apps/crawler/ats/lever/... ./apps/crawler/ats/ashby/...
 
 test-adapter-greenhouse: ## Run Greenhouse integration tests only
-	cd backend && go test -v -run "Integration" ./pipeline/ats/greenhouse/...
+	cd backend && go test -v -run "Integration" ./apps/crawler/ats/greenhouse/...
 
 test-adapter-lever: ## Run Lever integration tests only
-	cd backend && go test -v -run "Integration" ./pipeline/ats/lever/...
+	cd backend && go test -v -run "Integration" ./apps/crawler/ats/lever/...
 
 test-adapter-ashby: ## Run Ashby integration tests only
-	cd backend && go test -v -run "Integration" ./pipeline/ats/ashby/...
+	cd backend && go test -v -run "Integration" ./apps/crawler/ats/ashby/...
 
 vet: ## Run go vet
 	cd backend && go vet ./...

@@ -16,8 +16,8 @@ import (
 	"github.com/trushilpatel/jobradar/service/dashboard"
 	services4 "github.com/trushilpatel/jobradar/service/dashboard/services"
 	services5 "github.com/trushilpatel/jobradar/service/insights/services"
-	services2 "github.com/trushilpatel/jobradar/service/scan/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
+	services2 "github.com/trushilpatel/jobradar/service/scan/services"
 	"gorm.io/gorm"
 )
 

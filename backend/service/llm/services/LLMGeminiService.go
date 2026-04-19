@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
+	llmcommon "github.com/trushilpatel/jobradar/service/llm/common"
 	"github.com/trushilpatel/jobradar/service/llm/dto"
 	"github.com/trushilpatel/jobradar/service/llm/prompts"
-	llmcommon "github.com/trushilpatel/jobradar/service/llm/common"
 	"google.golang.org/api/option"
 )
 

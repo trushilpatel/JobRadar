@@ -17,11 +17,11 @@ import (
 
 // fakeApplicationService is a test double for ApplicationService (used as "next" for ImplService).
 type fakeApplicationService struct {
-	apps        []appmodel.JobApplication
-	appsWithJob []svc.ApplicationWithJob
-	app         *appmodel.JobApplication
-	total       int64
-	err         error
+	apps         []appmodel.JobApplication
+	appsWithJob  []svc.ApplicationWithJob
+	app          *appmodel.JobApplication
+	total        int64
+	err          error
 	insertCalled bool
 }
 

@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
-	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
+	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 )
 
 // --- Test doubles (local to this file) ---

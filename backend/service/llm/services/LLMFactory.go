@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	llmcommon "github.com/trushilpatel/jobradar/service/llm/common"
 	"github.com/trushilpatel/jobradar/infra/logger"
+	llmcommon "github.com/trushilpatel/jobradar/service/llm/common"
 )
 
 // Options holds everything needed to build and configure a Scorer.

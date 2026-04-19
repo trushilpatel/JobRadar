@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/infra/logger"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 )
@@ -26,7 +26,6 @@ func (f *fakeScorer) ScoreBatch(_ context.Context, jobs []llmdto.JobsRelevanceFi
 	f.calls++
 	return f.relevantIDs, f.err
 }
-
 
 type ledgerCall struct {
 	ids    []string

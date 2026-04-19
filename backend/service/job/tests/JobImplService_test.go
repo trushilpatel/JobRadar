@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/trushilpatel/jobradar/common/domain"
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	"gorm.io/gorm"
 )

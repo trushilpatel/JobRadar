@@ -17,13 +17,15 @@ type noopService struct{}
 func (n *noopService) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
 	return nil, 0, nil
 }
-func (n *noopService) Get(_ context.Context, _ string) (*jobmodel.Job, error)      { return nil, nil }
-func (n *noopService) GetCounts(_ context.Context) (*jobdto.JobCounts, error)      { return &jobdto.JobCounts{}, nil }
+func (n *noopService) Get(_ context.Context, _ string) (*jobmodel.Job, error) { return nil, nil }
+func (n *noopService) GetCounts(_ context.Context) (*jobdto.JobCounts, error) {
+	return &jobdto.JobCounts{}, nil
+}
 func (n *noopService) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error { return nil }
-func (n *noopService) SetSaved(_ context.Context, _ string, _ bool) error          { return nil }
-func (n *noopService) SetStatus(_ context.Context, _, _ string) error              { return nil }
-func (n *noopService) SetNotes(_ context.Context, _, _ string) error               { return nil }
-func (n *noopService) MarkApplied(_ context.Context, _ string) error               { return nil }
+func (n *noopService) SetSaved(_ context.Context, _ string, _ bool) error               { return nil }
+func (n *noopService) SetStatus(_ context.Context, _, _ string) error                   { return nil }
+func (n *noopService) SetNotes(_ context.Context, _, _ string) error                    { return nil }
+func (n *noopService) MarkApplied(_ context.Context, _ string) error                    { return nil }
 
 var _ jobsvc.Service = (*noopService)(nil)
 

@@ -13,18 +13,18 @@ import (
 // Used to back the validationService in unit tests.
 type noopService struct{}
 
-func (n *noopService) TriggerScan(_ context.Context, _ string) error         { return nil }
-func (n *noopService) TriggerScanAll(_ context.Context) (int, error)          { return 0, nil }
+func (n *noopService) TriggerScan(_ context.Context, _ string) error { return nil }
+func (n *noopService) TriggerScanAll(_ context.Context) (int, error) { return 0, nil }
 func (n *noopService) GetStats(_ context.Context, _ string) (*dto.ScanStatsView, error) {
 	return &dto.ScanStatsView{}, nil
 }
 func (n *noopService) ListQueue(_ context.Context, _ dto.QueueFilter) ([]dto.QueueEntryView, error) {
 	return nil, nil
 }
-func (n *noopService) RemoveFromQueue(_ context.Context, _ string) error         { return nil }
-func (n *noopService) MoveUp(_ context.Context, _ string) error                  { return nil }
-func (n *noopService) MoveDown(_ context.Context, _ string) error                { return nil }
-func (n *noopService) EnqueueDue(_ context.Context, _ int) (int, error)          { return 0, nil }
+func (n *noopService) RemoveFromQueue(_ context.Context, _ string) error   { return nil }
+func (n *noopService) MoveUp(_ context.Context, _ string) error            { return nil }
+func (n *noopService) MoveDown(_ context.Context, _ string) error          { return nil }
+func (n *noopService) EnqueueDue(_ context.Context, _ int) (int, error)    { return 0, nil }
 func (n *noopService) ResetStuck(_ context.Context, _ time.Duration) error { return nil }
 
 var _ svc.Service = (*noopService)(nil)

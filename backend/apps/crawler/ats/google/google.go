@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/types"
+	"github.com/trushilpatel/jobradar/infra/logger"
 )
 
 // Config holds the Google scraper settings sourced from the central config.

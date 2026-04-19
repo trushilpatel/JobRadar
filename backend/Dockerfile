@@ -14,11 +14,11 @@ COPY . .
 # Parallel stages each get their own isolated cache — one stage is faster.
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    go build -o /out/api       ./cmd/api && \
-    go build -o /out/migrate   ./cmd/migrate && \
-    go build -o /out/scheduler ./cmd/company_scan_scheduler && \
-    go build -o /out/filter    ./cmd/job_listing_relevance_filter && \
-    go build -o /out/enricher  ./cmd/job_post_analyzer
+    go build -o /out/api       ./apps/api && \
+    go build -o /out/migrate   ./apps/migrate && \
+    go build -o /out/scheduler ./apps/scheduler && \
+    go build -o /out/filter    ./apps/filter && \
+    go build -o /out/enricher  ./apps/analyzer
 
 # ── Final image ───────────────────────────────────────────────────────────────
 

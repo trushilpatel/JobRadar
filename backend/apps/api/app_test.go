@@ -8,19 +8,19 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/service/application"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	appsvc "github.com/trushilpatel/jobradar/service/application/services"
-	companymodel "github.com/trushilpatel/jobradar/service/company/models"
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
-	"github.com/trushilpatel/jobradar/service/application"
 	"github.com/trushilpatel/jobradar/service/company"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	"github.com/trushilpatel/jobradar/service/dashboard"
-	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 	dashboarddto "github.com/trushilpatel/jobradar/service/dashboard/dto"
+	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 	insightsdto "github.com/trushilpatel/jobradar/service/insights/dto"
 	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
@@ -212,7 +212,7 @@ type fakeJobService struct{}
 func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
 	return nil, 0, nil
 }
-func (f *fakeJobService) Get(_ context.Context, _ string) (*jobmodel.Job, error)    { return nil, nil }
+func (f *fakeJobService) Get(_ context.Context, _ string) (*jobmodel.Job, error) { return nil, nil }
 func (f *fakeJobService) GetCounts(_ context.Context) (*jobdto.JobCounts, error) { return nil, nil }
 func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error {
 	return nil

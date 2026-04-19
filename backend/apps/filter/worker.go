@@ -6,14 +6,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
-	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
+	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 

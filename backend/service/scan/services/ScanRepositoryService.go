@@ -7,8 +7,8 @@ import (
 
 	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
+	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 	scanmodel "github.com/trushilpatel/jobradar/service/scan/models"
 	"gorm.io/gorm"

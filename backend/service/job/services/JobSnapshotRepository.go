@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/service/job/dto"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"gorm.io/gorm"
 )
 

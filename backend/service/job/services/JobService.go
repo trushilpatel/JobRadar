@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/service/job/dto"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 )
 
 // Service defines all business operations for the job domain.

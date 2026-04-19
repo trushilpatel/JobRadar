@@ -11,9 +11,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/common/domain"
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
 
@@ -187,13 +187,17 @@ func (c *capturingService) List(_ context.Context, f jobdto.JobFilter, _, _ int)
 	c.filter = f
 	return nil, 0, nil
 }
-func (c *capturingService) Get(_ context.Context, _ string) (*jobmodel.Job, error)         { return nil, nil }
-func (c *capturingService) GetCounts(_ context.Context) (*jobdto.JobCounts, error)         { return &jobdto.JobCounts{}, nil }
-func (c *capturingService) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error { return nil }
-func (c *capturingService) SetSaved(_ context.Context, _ string, _ bool) error             { return nil }
-func (c *capturingService) SetStatus(_ context.Context, _, _ string) error                 { return nil }
-func (c *capturingService) SetNotes(_ context.Context, _, _ string) error                  { return nil }
-func (c *capturingService) MarkApplied(_ context.Context, _ string) error                  { return nil }
+func (c *capturingService) Get(_ context.Context, _ string) (*jobmodel.Job, error) { return nil, nil }
+func (c *capturingService) GetCounts(_ context.Context) (*jobdto.JobCounts, error) {
+	return &jobdto.JobCounts{}, nil
+}
+func (c *capturingService) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error {
+	return nil
+}
+func (c *capturingService) SetSaved(_ context.Context, _ string, _ bool) error { return nil }
+func (c *capturingService) SetStatus(_ context.Context, _, _ string) error     { return nil }
+func (c *capturingService) SetNotes(_ context.Context, _, _ string) error      { return nil }
+func (c *capturingService) MarkApplied(_ context.Context, _ string) error      { return nil }
 
 var _ jobsvc.Service = (*capturingService)(nil)
 

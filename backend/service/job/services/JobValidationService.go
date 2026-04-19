@@ -5,8 +5,8 @@ import (
 
 	"github.com/trushilpatel/jobradar/common/domain"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/service/job/dto"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 )
 
 type validationService struct {
