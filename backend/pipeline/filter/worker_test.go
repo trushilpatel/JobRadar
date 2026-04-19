@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/trushilpatel/jobradar/infra/logger"
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/llm"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 // ── fakes ────────────────────────────────────────────────────────────────────
@@ -126,8 +126,8 @@ func TestFlushBatch_PartialRelevant(t *testing.T) {
 		t.Fatalf("expected 1 ledger call, got %d", len(ledger.calls))
 	}
 	call := ledger.calls[0]
-	if call.reason != model.SeenReasonLLMIrrelevant {
-		t.Errorf("expected reason %q, got %q", model.SeenReasonLLMIrrelevant, call.reason)
+	if call.reason != jobcommon.SeenReasonLLMIrrelevant {
+		t.Errorf("expected reason %q, got %q", jobcommon.SeenReasonLLMIrrelevant, call.reason)
 	}
 	if len(call.ids) != 1 || call.ids[0] != "job-2" {
 		t.Errorf("expected irrelevant IDs [job-2], got %v", call.ids)
@@ -151,8 +151,8 @@ func TestFlushBatch_ScorerError(t *testing.T) {
 		t.Fatalf("expected 1 ledger call, got %d", len(ledger.calls))
 	}
 	call := ledger.calls[0]
-	if call.reason != model.SeenReasonError {
-		t.Errorf("expected reason %q, got %q", model.SeenReasonError, call.reason)
+	if call.reason != jobcommon.SeenReasonError {
+		t.Errorf("expected reason %q, got %q", jobcommon.SeenReasonError, call.reason)
 	}
 	if len(call.ids) != 2 {
 		t.Errorf("expected 2 error IDs, got %v", call.ids)

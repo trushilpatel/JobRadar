@@ -10,8 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 // ── Interface compliance ────────────────────────────────────────────────────
@@ -86,7 +87,7 @@ func TestFetchJobs_SinglePage(t *testing.T) {
 	assertEqual(t, "Title", j.Title, "Software Engineer")
 	assertEqual(t, "Location", j.Location, "Cupertino, CA")
 	assertEqual(t, "URL", j.URL, "https://jobs.apple.com/en-us/details/200647207-3543/software-engineer")
-	assertEqual(t, "EmploymentType", j.EmploymentType, model.EmployFullTime)
+	assertEqual(t, "EmploymentType", j.EmploymentType, jobcommon.EmployFullTime)
 
 	if j.FullContent == nil {
 		t.Fatal("FullContent must not be nil — Apple is a fat adapter")
@@ -219,7 +220,7 @@ func TestFetchJobs_IDFormat(t *testing.T) {
 		t.Fatalf("FetchJobs error: %v", err)
 	}
 
-	expectedID := fmt.Sprintf("%s-200647207-3543", model.AdapterApple)
+	expectedID := fmt.Sprintf("%s-200647207-3543", companycommon.AdapterApple)
 	if result.Jobs[0].ID != expectedID {
 		t.Errorf("ID = %q, want %q", result.Jobs[0].ID, expectedID)
 	}
@@ -406,16 +407,16 @@ func TestMapJobType(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"Regular", model.EmployFullTime},
-		{"regular", model.EmployFullTime},
-		{"", model.EmployFullTime},
-		{"Part-Time", model.EmployPartTime},
-		{"part-time", model.EmployPartTime},
-		{"Contract", model.EmployContract},
-		{"contract", model.EmployContract},
-		{"Intern", model.EmployInternship},
-		{"intern", model.EmployInternship},
-		{"Unknown", model.EmployFullTime}, // unrecognised defaults to full_time
+		{"Regular", jobcommon.EmployFullTime},
+		{"regular", jobcommon.EmployFullTime},
+		{"", jobcommon.EmployFullTime},
+		{"Part-Time", jobcommon.EmployPartTime},
+		{"part-time", jobcommon.EmployPartTime},
+		{"Contract", jobcommon.EmployContract},
+		{"contract", jobcommon.EmployContract},
+		{"Intern", jobcommon.EmployInternship},
+		{"intern", jobcommon.EmployInternship},
+		{"Unknown", jobcommon.EmployFullTime}, // unrecognised defaults to full_time
 	}
 	for _, tc := range tests {
 		got := mapJobType(tc.input)

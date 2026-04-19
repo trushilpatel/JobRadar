@@ -2,7 +2,7 @@ package services
 
 import (
 	"github.com/trushilpatel/jobradar/domain"
-	"github.com/trushilpatel/jobradar/model"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 )
 
@@ -14,16 +14,16 @@ func NewValidator() Validator {
 }
 
 var validJobStatuses = map[string]bool{
-	model.JobStatusNew:          true,
-	model.JobStatusSaved:        true,
-	model.JobStatusApplied:      true,
-	model.JobStatusInterviewing: true,
-	model.JobStatusOffer:        true,
+	jobcommon.JobStatusNew:          true,
+	jobcommon.JobStatusSaved:        true,
+	jobcommon.JobStatusApplied:      true,
+	jobcommon.JobStatusInterviewing: true,
+	jobcommon.JobStatusOffer:        true,
 }
 
 var validDiscardReasons = map[string]bool{
-	model.DiscardReasonDismissed:   true,
-	model.DiscardReasonNotRelevant: true,
+	jobcommon.DiscardReasonDismissed:   true,
+	jobcommon.DiscardReasonNotRelevant: true,
 }
 
 // ValidateList validates list filter and pagination parameters.

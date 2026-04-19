@@ -8,8 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 const (
@@ -210,7 +211,7 @@ func extractHydrationData(body string) (string, error) {
 // jobToItem converts an appleJob to a FetchJobsItem with FullContent populated.
 func jobToItem(job appleJob) types.FetchJobsItem {
 	return types.FetchJobsItem{
-		ID:             fmt.Sprintf("%s-%s", model.AdapterApple, job.ID),
+		ID:             fmt.Sprintf("%s-%s", companycommon.AdapterApple, job.ID),
 		Title:          job.PostingTitle,
 		URL:            fmt.Sprintf(publicJobURLTemplate, defaultBaseURL, job.ID, job.TransformedPostingTitle),
 		Location:       formatLocation(job.Locations),
@@ -257,15 +258,15 @@ func formatSingleLocation(loc appleLocation) string {
 func mapJobType(jobType string) string {
 	switch strings.ToLower(strings.TrimSpace(jobType)) {
 	case "regular", "":
-		return model.EmployFullTime
+		return jobcommon.EmployFullTime
 	case "part-time":
-		return model.EmployPartTime
+		return jobcommon.EmployPartTime
 	case "contract":
-		return model.EmployContract
+		return jobcommon.EmployContract
 	case "intern":
-		return model.EmployInternship
+		return jobcommon.EmployInternship
 	default:
-		return model.EmployFullTime
+		return jobcommon.EmployFullTime
 	}
 }
 

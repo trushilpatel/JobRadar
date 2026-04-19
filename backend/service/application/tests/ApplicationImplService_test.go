@@ -7,6 +7,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
+	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	svc "github.com/trushilpatel/jobradar/service/application/services"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
@@ -32,6 +33,9 @@ func (f *fakeRepository) InsertApplication(jobResultID, stage, note string) erro
 	f.insertCalled = true
 	return f.err
 }
+func (f *fakeRepository) InsertAppliedApplication(_ string) error      { return f.err }
+func (f *fakeRepository) InsertInterviewingApplication(_ string) error { return f.err }
+func (f *fakeRepository) InsertOfferApplication(_ string) error        { return f.err }
 func (f *fakeRepository) GetLatestApplicationsWithJob() ([]svc.ApplicationWithJob, error) {
 	return f.appsWithJob, f.err
 }
@@ -46,7 +50,7 @@ type fakeJobService struct {
 	job *model.Job
 	err error
 
-	setStatusCalled bool
+	markAppliedCalled bool
 }
 
 func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]model.Job, int, error) {
@@ -57,21 +61,22 @@ func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ jobdto.DismissIn
 	return f.err
 }
 func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error { return f.err }
-func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error {
-	f.setStatusCalled = true
-	return f.err
-}
+func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error     { return f.err }
 func (f *fakeJobService) GetCounts(_ context.Context) (*jobdto.JobCounts, error) {
 	return nil, f.err
 }
 func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error { return f.err }
+func (f *fakeJobService) MarkApplied(_ context.Context, _ string) error {
+	f.markAppliedCalled = true
+	return f.err
+}
 
 func TestCreate_JobNotFound(t *testing.T) {
 	service := svc.NewApplicationImplService(&fakeRepository{}, &fakeJobService{
 		err: domain.ErrNotFound.WithMessage("job not found"),
 	})
 
-	_, err := service.Create(context.Background(), "missing", dto.CreateApplicationInput{Stage: model.StageApplied})
+	_, err := service.Create(context.Background(), "missing", dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	if err == nil {
 		t.Fatal("expected error for missing job")
 	}
@@ -85,15 +90,15 @@ func TestCreate_OK(t *testing.T) {
 	fr := &fakeRepository{}
 	service := svc.NewApplicationImplService(fr, &fakeJobService{job: &model.Job{ID: "j1"}})
 
-	app, err := service.Create(context.Background(), "j1", dto.CreateApplicationInput{Stage: model.StagePhoneScreen})
+	app, err := service.Create(context.Background(), "j1", dto.CreateApplicationInput{Stage: appcommon.StagePhoneScreen})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 	if !fr.insertCalled {
 		t.Error("expected InsertApplication to be called")
 	}
-	if app.Stage != model.StagePhoneScreen {
-		t.Errorf("expected stage %q, got %q", model.StagePhoneScreen, app.Stage)
+	if app.Stage != appcommon.StagePhoneScreen {
+		t.Errorf("expected stage %q, got %q", appcommon.StagePhoneScreen, app.Stage)
 	}
 }
 
@@ -102,12 +107,12 @@ func TestCreate_SetsJobApplied(t *testing.T) {
 	jobService := &fakeJobService{job: &model.Job{ID: "j1"}}
 	service := svc.NewApplicationImplService(fr, jobService)
 
-	_, err := service.Create(context.Background(), "j1", dto.CreateApplicationInput{Stage: model.StageApplied})
+	_, err := service.Create(context.Background(), "j1", dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	if !jobService.setStatusCalled {
-		t.Error("expected SetStatus to be called when stage is 'applied'")
+	if !jobService.markAppliedCalled {
+		t.Error("expected MarkApplied to be called when stage is 'applied'")
 	}
 }
 

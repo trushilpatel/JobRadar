@@ -10,9 +10,9 @@ import (
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/llm"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -210,7 +210,7 @@ func (w *Worker) flushBatch(ctx context.Context, batch []jobWithCtx) {
 	}
 
 	if len(allErrorIDs) > 0 {
-		if merr := w.ledger.UpdateSeenReasonBatch(batchCtx, allErrorIDs, model.SeenReasonError); merr != nil {
+		if merr := w.ledger.UpdateSeenReasonBatch(batchCtx, allErrorIDs, jobcommon.SeenReasonError); merr != nil {
 			w.log.Error("mark error batch failed", merr)
 		}
 		metrics.FilterJobsTotal.WithLabelValues("error").Add(float64(len(allErrorIDs)))
@@ -238,7 +238,7 @@ func (w *Worker) flushBatch(ctx context.Context, batch []jobWithCtx) {
 	}
 
 	if len(irrelevantIDs) > 0 {
-		if err := w.ledger.UpdateSeenReasonBatch(batchCtx, irrelevantIDs, model.SeenReasonLLMIrrelevant); err != nil {
+		if err := w.ledger.UpdateSeenReasonBatch(batchCtx, irrelevantIDs, jobcommon.SeenReasonLLMIrrelevant); err != nil {
 			w.log.Error("mark irrelevant failed", err)
 		}
 	}

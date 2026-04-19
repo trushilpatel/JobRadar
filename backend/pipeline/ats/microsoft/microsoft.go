@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 const (
@@ -233,12 +234,12 @@ func positionToItem(p position) types.FetchJobsItem {
 	internalURL := fmt.Sprintf("https://apply.careers.microsoft.com/careers/job/%d", p.ID)
 
 	return types.FetchJobsItem{
-		ID:             fmt.Sprintf("%s-%s", model.AdapterMicrosoft, p.DisplayJobID),
+		ID:             fmt.Sprintf("%s-%s", companycommon.AdapterMicrosoft, p.DisplayJobID),
 		Title:          p.Name,
 		URL:            internalURL, // Store internal URL for ID extraction
 		Location:       loc,
-		EmploymentType: model.EmployFullTime, // Default — detailed type comes from FetchJobContent
-		FullContent:    nil,                  // thin adapter — detail fetched later
+		EmploymentType: jobcommon.EmployFullTime, // Default — detailed type comes from FetchJobContent
+		FullContent:    nil,                      // thin adapter — detail fetched later
 	}
 }
 
@@ -255,7 +256,7 @@ func detailToContent(p positionDetail) types.FetchJobContentResponse {
 	}
 
 	return types.FetchJobContentResponse{
-		ID:             fmt.Sprintf("%s-%s", model.AdapterMicrosoft, p.DisplayJobID),
+		ID:             fmt.Sprintf("%s-%s", companycommon.AdapterMicrosoft, p.DisplayJobID),
 		Title:          p.Name,
 		Location:       loc,
 		URL:            jobURL,
@@ -286,21 +287,21 @@ func extractPositionID(url string) int64 {
 // model employment constants.
 func mapEmploymentType(empTypes []string) string {
 	if len(empTypes) == 0 {
-		return model.EmployFullTime // default
+		return jobcommon.EmployFullTime // default
 	}
 
 	empType := empTypes[0]
 	switch strings.TrimSpace(empType) {
 	case "Full-Time":
-		return model.EmployFullTime
+		return jobcommon.EmployFullTime
 	case "Part-Time":
-		return model.EmployPartTime
+		return jobcommon.EmployPartTime
 	case "Contract":
-		return model.EmployContract
+		return jobcommon.EmployContract
 	case "Intern", "Internship":
-		return model.EmployInternship
+		return jobcommon.EmployInternship
 	default:
-		return model.EmployFullTime
+		return jobcommon.EmployFullTime
 	}
 }
 

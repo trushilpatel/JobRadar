@@ -6,6 +6,7 @@ import (
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	"github.com/trushilpatel/jobradar/store"
 )
@@ -78,16 +79,16 @@ func (s *service) Dismiss(ctx context.Context, id string, input dto.DismissInput
 		return domain.ErrInternal.WithMessage("failed to discard job")
 	}
 
-	if err := s.ledger.UpdateSeenReason(ctx, job.JobPostID, model.SeenReasonUserDismissed); err != nil {
+	if err := s.ledger.UpdateSeenReason(ctx, job.JobPostID, jobcommon.SeenReasonUserDismissed); err != nil {
 		return domain.ErrInternal.WithMessage("failed to update seen ledger")
 	}
 
-	if err := s.jobs.UpdateJobStatus(ctx, id, model.JobStatusDismissed); err != nil {
+	if err := s.jobs.UpdateJobStatus(ctx, id, jobcommon.JobStatusDismissed); err != nil {
 		return domain.ErrInternal.WithMessage("failed to update job status")
 	}
 
 	// Non-fatal: snapshot may not exist for older jobs
-	_ = s.snapshot.UpdateSnapshotAction(ctx, id, model.JobStatusDismissed)
+	_ = s.snapshot.UpdateSnapshotAction(ctx, id, jobcommon.JobStatusDismissed)
 
 	return nil
 }
@@ -100,7 +101,7 @@ func (s *service) SetSaved(ctx context.Context, id string, saved bool) (err erro
 		return domain.ErrInternal.WithMessage("failed to update job")
 	}
 	if saved {
-		_ = s.snapshot.UpdateSnapshotAction(ctx, id, model.JobStatusSaved)
+		_ = s.snapshot.UpdateSnapshotAction(ctx, id, jobcommon.JobStatusSaved)
 	}
 	return nil
 }
@@ -114,13 +115,13 @@ func (s *service) SetStatus(ctx context.Context, id, status string) (err error) 
 		return domain.ErrInternal.WithMessage("failed to update status")
 	}
 	switch status {
-	case model.JobStatusApplied:
-		_ = s.snapshot.UpdateSnapshotAction(ctx, id, model.JobStatusApplied)
-		_ = s.appWriter.InsertApplication(id, model.StageApplied, "")
-	case model.JobStatusInterviewing:
-		_ = s.appWriter.InsertApplication(id, model.StagePhoneScreen, "")
-	case model.JobStatusOffer:
-		_ = s.appWriter.InsertApplication(id, model.StageOffer, "")
+	case jobcommon.JobStatusApplied:
+		_ = s.snapshot.UpdateSnapshotAction(ctx, id, jobcommon.JobStatusApplied)
+		_ = s.appWriter.InsertAppliedApplication(id)
+	case jobcommon.JobStatusInterviewing:
+		_ = s.appWriter.InsertInterviewingApplication(id)
+	case jobcommon.JobStatusOffer:
+		_ = s.appWriter.InsertOfferApplication(id)
 	}
 	return nil
 }
@@ -133,4 +134,12 @@ func (s *service) SetNotes(ctx context.Context, id, notes string) (err error) {
 		return domain.ErrInternal.WithMessage("failed to update notes")
 	}
 	return nil
+}
+
+// MarkApplied advances the job status to "applied". It is a convenience method
+// so callers (e.g. application service) do not need to import job domain constants.
+func (s *service) MarkApplied(ctx context.Context, id string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.service.MarkApplied")
+	defer tracing.End(span, &err)
+	return s.SetStatus(ctx, id, jobcommon.JobStatusApplied)
 }

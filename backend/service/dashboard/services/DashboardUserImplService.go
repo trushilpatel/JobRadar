@@ -6,9 +6,10 @@ import (
 
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/service/application"
+	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
+	insightscommon "github.com/trushilpatel/jobradar/service/insights/common"
 )
 
 // UserDashboardImplService implements UserDashboardService.
@@ -63,7 +64,7 @@ func (s *UserDashboardImplService) GetInterviews(ctx context.Context) (_ []dto.I
 
 	rows := make([]dto.InterviewRow, 0, len(apps))
 	for _, a := range apps {
-		if a.Stage == model.StageRejected {
+		if a.Stage == appcommon.StageRejected {
 			continue
 		}
 		rows = append(rows, dto.InterviewRow{
@@ -82,12 +83,12 @@ func (s *UserDashboardImplService) GetInterviews(ctx context.Context) (_ []dto.I
 // toDisplayStage maps a raw DB application stage to its UI display label.
 func toDisplayStage(stage string) string {
 	switch stage {
-	case model.StageApplied:
-		return model.DisplayStageWaiting
-	case model.StagePhoneScreen, model.StageTechnical, model.StageFinalRound:
-		return model.DisplayStageInterviewing
-	case model.StageOffer:
-		return model.DisplayStageOffer
+	case appcommon.StageApplied:
+		return appcommon.DisplayStageWaiting
+	case appcommon.StagePhoneScreen, appcommon.StageTechnical, appcommon.StageFinalRound:
+		return appcommon.DisplayStageInterviewing
+	case appcommon.StageOffer:
+		return appcommon.DisplayStageOffer
 	default:
 		return stage
 	}
@@ -127,11 +128,11 @@ func classifyVelocity(current, w1, w2, w3 int) (float64, string) {
 	var tag string
 	switch {
 	case multiplier >= 2.5:
-		tag = model.VelocitySpike
+		tag = insightscommon.VelocitySpike
 	case multiplier >= 1.3:
-		tag = model.VelocityRising
+		tag = insightscommon.VelocityRising
 	default:
-		tag = model.VelocityNormal
+		tag = insightscommon.VelocityNormal
 	}
 	return multiplier, tag
 }

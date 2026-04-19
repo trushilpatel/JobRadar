@@ -11,8 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 // ── Interface compliance ────────────────────────────────────────────────────
@@ -85,11 +86,11 @@ func TestFetchJobs_SingleDepartment(t *testing.T) {
 	}
 
 	j0 := result.Jobs[0]
-	assertEqual(t, "ID", j0.ID, fmt.Sprintf("%s-10001", model.AdapterUber))
+	assertEqual(t, "ID", j0.ID, fmt.Sprintf("%s-10001", companycommon.AdapterUber))
 	assertEqual(t, "Title", j0.Title, "Senior Software Engineer")
 	assertEqual(t, "Location", j0.Location, "San Francisco, California, United States")
 	assertEqual(t, "URL", j0.URL, "https://www.uber.com/careers/list/10001")
-	assertEqual(t, "EmploymentType", j0.EmploymentType, model.EmployFullTime)
+	assertEqual(t, "EmploymentType", j0.EmploymentType, jobcommon.EmployFullTime)
 
 	if j0.FullContent == nil {
 		t.Fatal("FullContent must not be nil — Uber is a fat adapter")
@@ -343,17 +344,17 @@ func TestMapTimeType(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"Full-Time", model.EmployFullTime},
-		{"full-time", model.EmployFullTime},
-		{"FULL-TIME", model.EmployFullTime},
-		{"Part-Time", model.EmployPartTime},
-		{"part-time", model.EmployPartTime},
-		{"Contract", model.EmployContract},
-		{"contract", model.EmployContract},
-		{"Internship", model.EmployInternship},
-		{"internship", model.EmployInternship},
-		{"", model.EmployFullTime},        // empty defaults to full_time
-		{"Unknown", model.EmployFullTime}, // unrecognised defaults to full_time
+		{"Full-Time", jobcommon.EmployFullTime},
+		{"full-time", jobcommon.EmployFullTime},
+		{"FULL-TIME", jobcommon.EmployFullTime},
+		{"Part-Time", jobcommon.EmployPartTime},
+		{"part-time", jobcommon.EmployPartTime},
+		{"Contract", jobcommon.EmployContract},
+		{"contract", jobcommon.EmployContract},
+		{"Internship", jobcommon.EmployInternship},
+		{"internship", jobcommon.EmployInternship},
+		{"", jobcommon.EmployFullTime},        // empty defaults to full_time
+		{"Unknown", jobcommon.EmployFullTime}, // unrecognised defaults to full_time
 	}
 	for _, tc := range tests {
 		got := mapTimeType(tc.input)
@@ -752,11 +753,11 @@ func TestFetchJobs_EmploymentTypeMapping(t *testing.T) {
 		timeType string
 		want     string
 	}{
-		{"Full-Time", model.EmployFullTime},
-		{"Part-Time", model.EmployPartTime},
-		{"Contract", model.EmployContract},
-		{"Internship", model.EmployInternship},
-		{"", model.EmployFullTime},
+		{"Full-Time", jobcommon.EmployFullTime},
+		{"Part-Time", jobcommon.EmployPartTime},
+		{"Contract", jobcommon.EmployContract},
+		{"Internship", jobcommon.EmployInternship},
+		{"", jobcommon.EmployFullTime},
 	}
 
 	for _, tc := range cases {

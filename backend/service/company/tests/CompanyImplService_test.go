@@ -8,7 +8,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
-	"github.com/trushilpatel/jobradar/service/company/common"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	"gorm.io/gorm"
@@ -95,7 +95,7 @@ func TestList_ComputesNextScanAt(t *testing.T) {
 		{ID: "c1", Name: "C1", LastScanAt: &lastScan},
 		{ID: "c2", Name: "C2", LastScanAt: nil},
 	}
-	svc := companysvc.NewService(&fakeStore{companies: companies}, common.Config{ScanIntervalMinutes: 60}, &fakeScanHistoryReader{})
+	svc := companysvc.NewService(&fakeStore{companies: companies}, companycommon.Config{ScanIntervalMinutes: 60}, &fakeScanHistoryReader{})
 
 	result, err := svc.List(context.Background(), companydto.CompanyFilter{}, 1, 20)
 	if err != nil {
@@ -125,13 +125,13 @@ func TestList_ComputesNextScanAt(t *testing.T) {
 func TestCreate_SetsLastScanAt(t *testing.T) {
 	before := time.Now()
 	fs := &fakeStore{companies: []model.Company{}}
-	svc := companysvc.NewService(fs, common.Config{}, &fakeScanHistoryReader{})
+	svc := companysvc.NewService(fs, companycommon.Config{}, &fakeScanHistoryReader{})
 
 	company, err := svc.Create(context.Background(), companydto.CreateCompanyInput{
 		ID:          "stripe",
 		Name:        "Stripe",
 		URL:         "https://stripe.com/jobs",
-		AdapterType: model.AdapterGreenhouse,
+		AdapterType: companycommon.AdapterGreenhouse,
 	})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -149,7 +149,7 @@ func TestCreate_SetsLastScanAt(t *testing.T) {
 
 func TestUpdate_NilFieldsSkipped(t *testing.T) {
 	fs := &fakeStore{companies: []model.Company{{ID: "stripe"}}}
-	svc := companysvc.NewService(fs, common.Config{}, &fakeScanHistoryReader{})
+	svc := companysvc.NewService(fs, companycommon.Config{}, &fakeScanHistoryReader{})
 
 	name := "New Name"
 	err := svc.Update(context.Background(), "stripe", companydto.UpdateCompanyInput{Name: &name})
@@ -174,7 +174,7 @@ func TestUpdate_NilFieldsSkipped(t *testing.T) {
 
 func TestDelete_ReturnsNotFoundWhenMissing(t *testing.T) {
 	fs := &fakeStore{companies: []model.Company{}} // no companies
-	svc := companysvc.NewService(fs, common.Config{}, &fakeScanHistoryReader{})
+	svc := companysvc.NewService(fs, companycommon.Config{}, &fakeScanHistoryReader{})
 
 	err := svc.Delete(context.Background(), "nonexistent")
 	if err == nil {
@@ -196,7 +196,7 @@ func TestList_FiltersActiveCompanies(t *testing.T) {
 	companies := []model.Company{
 		{ID: "c1", Active: true},
 	}
-	svc := companysvc.NewService(&fakeStore{companies: companies}, common.Config{}, &fakeScanHistoryReader{})
+	svc := companysvc.NewService(&fakeStore{companies: companies}, companycommon.Config{}, &fakeScanHistoryReader{})
 
 	active := true
 	result, err := svc.List(context.Background(), companydto.CompanyFilter{Active: &active}, 1, 20)

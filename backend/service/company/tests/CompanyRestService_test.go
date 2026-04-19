@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 )
@@ -104,7 +105,7 @@ func TestHandlerCreate_OK(t *testing.T) {
 	r := newTestRouter(h)
 
 	body, _ := json.Marshal(companydto.CreateCompanyInput{
-		ID: "stripe", Name: "Stripe", URL: "https://example.com", AdapterType: model.AdapterGreenhouse,
+		ID: "stripe", Name: "Stripe", URL: "https://example.com", AdapterType: companycommon.AdapterGreenhouse,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/companies", bytes.NewReader(body))
 	w := httptest.NewRecorder()
@@ -123,7 +124,7 @@ func TestHandlerCreate_ServiceError(t *testing.T) {
 	r := newTestRouter(h)
 
 	body, _ := json.Marshal(companydto.CreateCompanyInput{
-		ID: "stripe", Name: "Stripe", URL: "https://example.com", AdapterType: model.AdapterGreenhouse,
+		ID: "stripe", Name: "Stripe", URL: "https://example.com", AdapterType: companycommon.AdapterGreenhouse,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/companies", bytes.NewReader(body))
 	w := httptest.NewRecorder()

@@ -7,6 +7,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	"gorm.io/gorm"
@@ -106,6 +107,9 @@ type fakeApplicationWriter struct {
 func (f *fakeApplicationWriter) InsertApplication(jobResultID, stage, note string) error {
 	return f.err
 }
+func (f *fakeApplicationWriter) InsertAppliedApplication(_ string) error      { return f.err }
+func (f *fakeApplicationWriter) InsertInterviewingApplication(_ string) error { return f.err }
+func (f *fakeApplicationWriter) InsertOfferApplication(_ string) error        { return f.err }
 
 // --- Tests ---
 
@@ -146,7 +150,7 @@ func TestDismiss_MultiStep(t *testing.T) {
 	ledger := &fakeLedgerWriter{}
 
 	svc := jobsvc.NewService(js, ledger, discard, snapshot, &fakeApplicationWriter{})
-	err := svc.Dismiss(context.Background(), "j1", jobdto.DismissInput{Reason: model.DiscardReasonDismissed})
+	err := svc.Dismiss(context.Background(), "j1", jobdto.DismissInput{Reason: jobcommon.DiscardReasonDismissed})
 	if err != nil {
 		t.Fatalf("Dismiss() error = %v", err)
 	}
@@ -182,7 +186,7 @@ func TestSetStatus_BackfillsSnapshotOnApplied(t *testing.T) {
 	snapshot := &fakeSnapshotWriter{}
 	svc := jobsvc.NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
 
-	err := svc.SetStatus(context.Background(), "j1", model.JobStatusApplied)
+	err := svc.SetStatus(context.Background(), "j1", jobcommon.JobStatusApplied)
 	if err != nil {
 		t.Fatalf("SetStatus() error = %v", err)
 	}
@@ -196,7 +200,7 @@ func TestSetStatus_NoSnapshotBackfillForNew(t *testing.T) {
 	snapshot := &fakeSnapshotWriter{}
 	svc := jobsvc.NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
 
-	err := svc.SetStatus(context.Background(), "j1", model.JobStatusNew)
+	err := svc.SetStatus(context.Background(), "j1", jobcommon.JobStatusNew)
 	if err != nil {
 		t.Fatalf("SetStatus() error = %v", err)
 	}

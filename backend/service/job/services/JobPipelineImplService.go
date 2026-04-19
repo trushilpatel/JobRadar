@@ -10,6 +10,7 @@ import (
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/techtag"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	"gorm.io/datatypes"
 )
@@ -67,7 +68,7 @@ func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.Enriche
 		_ = p.techTags.InsertTechTags(ctx, row.ID, input.Raw.CompanyID, cleaned, time.Now())
 	}
 
-	if err := p.ledger.UpdateSeenReason(ctx, input.Raw.ID, model.SeenReasonFetch); err != nil {
+	if err := p.ledger.UpdateSeenReason(ctx, input.Raw.ID, jobcommon.SeenReasonFetch); err != nil {
 		return fmt.Errorf("mark ledger seen: %w", err)
 	}
 
@@ -78,14 +79,14 @@ func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.Enriche
 func (p *pipelineService) MarkLedgerError(ctx context.Context, jobID string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.pipeline.MarkLedgerError")
 	defer tracing.End(span, &err)
-	return p.ledger.UpdateSeenReason(ctx, jobID, model.SeenReasonError)
+	return p.ledger.UpdateSeenReason(ctx, jobID, jobcommon.SeenReasonError)
 }
 
 // MarkLedgerIrrelevant marks the pipeline ledger entry for jobID with reason='llm_irrelevant'.
 func (p *pipelineService) MarkLedgerIrrelevant(ctx context.Context, jobID string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.pipeline.MarkLedgerIrrelevant")
 	defer tracing.End(span, &err)
-	return p.ledger.UpdateSeenReason(ctx, jobID, model.SeenReasonLLMIrrelevant)
+	return p.ledger.UpdateSeenReason(ctx, jobID, jobcommon.SeenReasonLLMIrrelevant)
 }
 
 // HasSeenJob returns true if the job has already been processed.
@@ -139,7 +140,7 @@ func buildJobRow(input dto.EnrichedJobInput) (*model.Job, error) {
 		SecurityClearance: enriched.SecurityClearance,
 		RoleBrief:         nullableStr(enriched.RoleBrief),
 		Responsibilities:  datatypes.JSON(responsibilities),
-		Status:            model.JobStatusNew,
+		Status:            jobcommon.JobStatusNew,
 	}, nil
 }
 

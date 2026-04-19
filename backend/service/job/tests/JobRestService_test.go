@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
@@ -56,6 +57,7 @@ func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ jobdto.DismissIn
 func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error { return f.err }
 func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error     { return f.err }
 func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error      { return f.err }
+func (f *fakeJobService) MarkApplied(_ context.Context, _ string) error      { return f.err }
 
 func newJobTestRouter(h *jobsvc.Handler) *chi.Mux {
 	r := chi.NewRouter()
@@ -132,7 +134,7 @@ func TestJobHandlerDismiss_OK(t *testing.T) {
 	h := jobsvc.NewHandler(&fakeJobValidator{}, &fakeJobService{})
 	r := newJobTestRouter(h)
 
-	body, _ := json.Marshal(jobdto.DismissInput{Reason: model.DiscardReasonDismissed})
+	body, _ := json.Marshal(jobdto.DismissInput{Reason: jobcommon.DiscardReasonDismissed})
 	req := httptest.NewRequest(http.MethodDelete, "/jobs/j1", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -163,7 +165,7 @@ func TestJobHandlerSetStatus_OK(t *testing.T) {
 	h := jobsvc.NewHandler(&fakeJobValidator{}, &fakeJobService{})
 	r := newJobTestRouter(h)
 
-	body, _ := json.Marshal(jobdto.SetStatusInput{Status: model.JobStatusApplied})
+	body, _ := json.Marshal(jobdto.SetStatusInput{Status: jobcommon.JobStatusApplied})
 	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/status", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

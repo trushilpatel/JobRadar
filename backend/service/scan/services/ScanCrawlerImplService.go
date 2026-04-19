@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
+	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
@@ -30,10 +30,10 @@ func NewCrawlerService(log ScanLogWriter) CrawlerService {
 func (c *crawlerService) RecordScanResult(ctx context.Context, companyID string, result dto.ScanResult) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.crawlerservice.RecordScanResult")
 	defer tracing.End(span, &err)
-	status := model.ScanStatusOK
+	status := scancommon.ScanStatusOK
 	var errPtr *string
 	if result.ErrMsg != "" {
-		status = model.ScanStatusError
+		status = scancommon.ScanStatusError
 		errPtr = &result.ErrMsg
 	}
 	durationMs := int(result.Duration.Milliseconds())

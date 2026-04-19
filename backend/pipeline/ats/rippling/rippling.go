@@ -8,8 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 const (
@@ -160,7 +161,7 @@ func (r *Rippling) FetchJobs(ctx context.Context, _ string) (types.FetchJobsResp
 			continue
 		}
 
-		itemID := fmt.Sprintf("%s-%s", model.AdapterRippling, job.ID)
+		itemID := fmt.Sprintf("%s-%s", companycommon.AdapterRippling, job.ID)
 		if seen[itemID] {
 			continue // dedup
 		}
@@ -174,8 +175,8 @@ func (r *Rippling) FetchJobs(ctx context.Context, _ string) (types.FetchJobsResp
 			Title:          job.Name,
 			URL:            job.URL,
 			Location:       location,
-			EmploymentType: model.EmployFullTime, // default; Rippling doesn't expose this in listing
-			FullContent:    nil,                  // thin adapter — detail fetched later
+			EmploymentType: jobcommon.EmployFullTime, // default; Rippling doesn't expose this in listing
+			FullContent:    nil,                      // thin adapter — detail fetched later
 		})
 	}
 
@@ -381,7 +382,7 @@ func formatAllLocations(locations []jobLocation) string {
 
 // stripPrefix removes the "rippling-" prefix from a RawJob.ID to get the UUID.
 func stripPrefix(id string) string {
-	const prefix = model.AdapterRippling + "-"
+	const prefix = companycommon.AdapterRippling + "-"
 	if strings.HasPrefix(id, prefix) {
 		return id[len(prefix):]
 	}

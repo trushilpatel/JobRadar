@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 const (
@@ -239,7 +240,7 @@ func positionToItem(p position) types.FetchJobsItem {
 	}
 
 	return types.FetchJobsItem{
-		ID:             fmt.Sprintf("%s-%d", model.AdapterNetflix, p.ID),
+		ID:             fmt.Sprintf("%s-%d", companycommon.AdapterNetflix, p.ID),
 		Title:          p.Name,
 		URL:            jobURL,
 		Location:       loc,
@@ -260,7 +261,7 @@ func detailToContent(p positionDetail) types.FetchJobContentResponse {
 	}
 
 	return types.FetchJobContentResponse{
-		ID:            fmt.Sprintf("%s-%d", model.AdapterNetflix, p.ID),
+		ID:            fmt.Sprintf("%s-%d", companycommon.AdapterNetflix, p.ID),
 		Title:         p.Name,
 		Location:      loc,
 		URL:           jobURL,
@@ -276,7 +277,7 @@ func detailToContent(p positionDetail) types.FetchJobContentResponse {
 // stripPrefix removes the "netflix-" prefix from a RawJob.ID to get the
 // Eightfold numeric position ID as a string.
 func stripPrefix(id string) string {
-	const prefix = model.AdapterNetflix + "-"
+	const prefix = companycommon.AdapterNetflix + "-"
 	if strings.HasPrefix(id, prefix) {
 		return id[len(prefix):]
 	}
@@ -299,13 +300,13 @@ func unixToRFC3339(ts int64) string {
 func normalizeWorkLocation(opt string) string {
 	switch strings.ToLower(opt) {
 	case "remote":
-		return model.EmployFullTime // default assumption for Netflix roles
+		return jobcommon.EmployFullTime // default assumption for Netflix roles
 	case "onsite", "on-site":
-		return model.EmployFullTime
+		return jobcommon.EmployFullTime
 	case "hybrid":
-		return model.EmployFullTime
+		return jobcommon.EmployFullTime
 	default:
-		return model.EmployFullTime
+		return jobcommon.EmployFullTime
 	}
 }
 

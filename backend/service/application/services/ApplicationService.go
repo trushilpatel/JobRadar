@@ -37,6 +37,9 @@ type ApplicationRepositoryService interface {
 	GetApplicationsByJobID(jobResultID string) ([]model.JobApplication, error)
 	GetApplicationsByJobIDPaged(jobResultID string, page, limit int) ([]model.JobApplication, int64, error)
 	InsertApplication(jobResultID, stage, note string) error
+	InsertAppliedApplication(jobResultID string) error
+	InsertInterviewingApplication(jobResultID string) error
+	InsertOfferApplication(jobResultID string) error
 	GetLatestApplicationsWithJob() ([]ApplicationWithJob, error)
 	GetLatestApplicationsWithJobPaged(page, limit int) ([]ApplicationWithJob, int64, error)
 	UpdateApplicationStage(id int64, stage string) error

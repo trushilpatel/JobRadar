@@ -2,6 +2,7 @@ package services
 
 import (
 	"github.com/trushilpatel/jobradar/model"
+	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"gorm.io/gorm"
 )
 
@@ -88,6 +89,21 @@ func (s *applicationRepository) GetLatestApplicationsWithJobPaged(page, limit in
 		LIMIT ? OFFSET ?
 	`, limit, offset).Scan(&results).Error
 	return results, total, err
+}
+
+// InsertAppliedApplication implements job.ApplicationWriter — inserts an "applied" stage row.
+func (s *applicationRepository) InsertAppliedApplication(jobResultID string) error {
+	return s.InsertApplication(jobResultID, appcommon.StageApplied, "")
+}
+
+// InsertInterviewingApplication implements job.ApplicationWriter — inserts a "phone_screen" stage row.
+func (s *applicationRepository) InsertInterviewingApplication(jobResultID string) error {
+	return s.InsertApplication(jobResultID, appcommon.StagePhoneScreen, "")
+}
+
+// InsertOfferApplication implements job.ApplicationWriter — inserts an "offer" stage row.
+func (s *applicationRepository) InsertOfferApplication(jobResultID string) error {
+	return s.InsertApplication(jobResultID, appcommon.StageOffer, "")
 }
 
 func (s *applicationRepository) UpdateApplicationStage(id int64, stage string) error {

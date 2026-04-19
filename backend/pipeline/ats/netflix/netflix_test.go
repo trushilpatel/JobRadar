@@ -11,8 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 // ── Interface compliance ────────────────────────────────────────────────────
@@ -630,13 +631,13 @@ func TestNormalizeWorkLocation(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"remote", model.EmployFullTime},
-		{"REMOTE", model.EmployFullTime},
-		{"onsite", model.EmployFullTime},
-		{"on-site", model.EmployFullTime},
-		{"hybrid", model.EmployFullTime},
-		{"", model.EmployFullTime},
-		{"unknown_value", model.EmployFullTime},
+		{"remote", jobcommon.EmployFullTime},
+		{"REMOTE", jobcommon.EmployFullTime},
+		{"onsite", jobcommon.EmployFullTime},
+		{"on-site", jobcommon.EmployFullTime},
+		{"hybrid", jobcommon.EmployFullTime},
+		{"", jobcommon.EmployFullTime},
+		{"unknown_value", jobcommon.EmployFullTime},
 	}
 	for _, tc := range cases {
 		got := normalizeWorkLocation(tc.input)
@@ -722,7 +723,7 @@ func TestFetchJobContent_Real(t *testing.T) {
 	first := listResult.Jobs[0]
 	job := types.RawJob{
 		ID:      first.ID,
-		Adapter: model.AdapterNetflix,
+		Adapter: companycommon.AdapterNetflix,
 		URL:     first.URL,
 	}
 

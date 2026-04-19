@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 // ── Interface compliance ────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ func TestFetchJobs_SingleUSJob(t *testing.T) {
 	assertEqual(t, "Title", job.Title, "Software Engineer")
 	assertEqual(t, "Location", job.Location, "San Francisco, CA")
 	assertEqual(t, "URL", job.URL, "https://ats.rippling.com/rippling/jobs/job-uuid-1")
-	assertEqual(t, "EmploymentType", job.EmploymentType, model.EmployFullTime)
+	assertEqual(t, "EmploymentType", job.EmploymentType, jobcommon.EmployFullTime)
 	if job.FullContent != nil {
 		t.Error("FullContent should be nil for thin adapter")
 	}

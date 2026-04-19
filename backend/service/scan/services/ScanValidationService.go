@@ -2,7 +2,7 @@ package services
 
 import (
 	"github.com/trushilpatel/jobradar/domain"
-	"github.com/trushilpatel/jobradar/model"
+	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
@@ -20,13 +20,13 @@ func NewValidator() Validator {
 }
 
 var validQueueStatuses = map[string]bool{
-	model.QueueStatusQueued:     true,
-	model.QueueStatusProcessing: true,
+	scancommon.QueueStatusQueued:     true,
+	scancommon.QueueStatusProcessing: true,
 }
 
 var validQueueSources = map[string]bool{
-	model.QueueSourceScheduler: true,
-	model.QueueSourceManual:    true,
+	scancommon.QueueSourceScheduler: true,
+	scancommon.QueueSourceManual:    true,
 }
 
 // ValidateListQueue validates filter parameters for listing the queue.

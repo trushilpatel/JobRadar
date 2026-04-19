@@ -24,6 +24,9 @@ type Service interface {
 	SetSaved(ctx context.Context, id string, saved bool) error
 	SetStatus(ctx context.Context, id, status string) error
 	SetNotes(ctx context.Context, id, notes string) error
+	// MarkApplied advances the job status to "applied" without requiring callers to
+	// import job domain constants.
+	MarkApplied(ctx context.Context, id string) error
 }
 
 // LedgerService is the interface pipeline workers use for job dedup and removal tracking.
@@ -32,6 +35,16 @@ type LedgerService interface {
 	MarkSeenBatch(ctx context.Context, jobIDs []string, companyID, reason string) error
 	GetActiveJobIDsByCompany(ctx context.Context, companyID string) ([]string, error)
 	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
+}
+
+// ApplicationWriter is a narrow write interface used by the job service to
+// auto-insert application tracker rows when a job is advanced to applied/interviewing/offer.
+// Each method encapsulates the stage constant so callers don't need to import
+// application domain constants.
+type ApplicationWriter interface {
+	InsertAppliedApplication(jobResultID string) error
+	InsertInterviewingApplication(jobResultID string) error
+	InsertOfferApplication(jobResultID string) error
 }
 
 // PipelineService is the interface the analyzer worker depends on.

@@ -8,8 +8,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 type Lever struct {
@@ -53,7 +54,7 @@ func (r fetchJobsResponse) toFetchJobsResponse() types.FetchJobsResponse {
 	items := make([]types.FetchJobsItem, 0, len(r))
 	for _, j := range r {
 		items = append(items, types.FetchJobsItem{
-			ID:             fmt.Sprintf("%s-%s", model.AdapterLever, j.ID),
+			ID:             fmt.Sprintf("%s-%s", companycommon.AdapterLever, j.ID),
 			Title:          j.Text,
 			Location:       j.Categories.Location,
 			URL:            j.HostedURL,
@@ -153,7 +154,7 @@ func (r *fetchJobContentResponse) toFetchJobContentResponse() types.FetchJobCont
 	}
 
 	return types.FetchJobContentResponse{
-		ID:             fmt.Sprintf("%s-%s", model.AdapterLever, r.ID),
+		ID:             fmt.Sprintf("%s-%s", companycommon.AdapterLever, r.ID),
 		Title:          r.Text,
 		Location:       r.Categories.Location,
 		URL:            r.HostedURL,
@@ -171,13 +172,13 @@ func (r *fetchJobContentResponse) toFetchJobContentResponse() types.FetchJobCont
 func normalizeLeverCommitment(c string) string {
 	switch strings.ToLower(c) {
 	case "full-time", "fulltime", "full time":
-		return model.EmployFullTime
+		return jobcommon.EmployFullTime
 	case "part-time", "parttime", "part time":
-		return model.EmployPartTime
+		return jobcommon.EmployPartTime
 	case "contract", "contractor":
-		return model.EmployContract
+		return jobcommon.EmployContract
 	case "internship", "intern":
-		return model.EmployInternship
+		return jobcommon.EmployInternship
 	default:
 		return ""
 	}

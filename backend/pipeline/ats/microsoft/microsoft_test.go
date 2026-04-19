@@ -10,8 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 // ── Interface compliance ────────────────────────────────────────────────────
@@ -83,13 +84,13 @@ func TestFetchJobs_SinglePage(t *testing.T) {
 	}
 
 	j := result.Jobs[0]
-	assertEqual(t, "ID", j.ID, fmt.Sprintf("%s-1812345678", model.AdapterMicrosoft))
+	assertEqual(t, "ID", j.ID, fmt.Sprintf("%s-1812345678", companycommon.AdapterMicrosoft))
 	assertEqual(t, "Title", j.Title, "Senior Software Engineer")
 	assertEqual(t, "Location", j.Location, "Redmond, Washington, United States")
 	if !strings.HasPrefix(j.URL, "https://apply.careers.microsoft.com/careers/job/") {
 		t.Errorf("URL should have internal format, got %q", j.URL)
 	}
-	assertEqual(t, "EmploymentType", j.EmploymentType, model.EmployFullTime)
+	assertEqual(t, "EmploymentType", j.EmploymentType, jobcommon.EmployFullTime)
 
 	if j.FullContent != nil {
 		t.Fatal("FullContent must be nil — Microsoft is a thin adapter")
@@ -355,11 +356,11 @@ func TestFetchJobContent_Success(t *testing.T) {
 		t.Fatalf("FetchJobContent error: %v", err)
 	}
 
-	assertEqual(t, "ID", result.ID, fmt.Sprintf("%s-1812345678", model.AdapterMicrosoft))
+	assertEqual(t, "ID", result.ID, fmt.Sprintf("%s-1812345678", companycommon.AdapterMicrosoft))
 	assertEqual(t, "Title", result.Title, "Senior Software Engineer")
 	assertEqual(t, "Location", result.Location, "Redmond, Washington, United States")
 	assertEqual(t, "Department", result.Department, "Engineering")
-	assertEqual(t, "EmploymentType", result.EmploymentType, model.EmployFullTime)
+	assertEqual(t, "EmploymentType", result.EmploymentType, jobcommon.EmployFullTime)
 	assertEqual(t, "WorkplaceType", result.WorkplaceType, "Up to 50% work from home")
 
 	// Verify HTML was stripped
@@ -422,14 +423,14 @@ func TestMapEmploymentType(t *testing.T) {
 		input []string
 		want  string
 	}{
-		{[]string{"Full-Time"}, model.EmployFullTime},
-		{[]string{"Part-Time"}, model.EmployPartTime},
-		{[]string{"Contract"}, model.EmployContract},
-		{[]string{"Intern"}, model.EmployInternship},
-		{[]string{"Internship"}, model.EmployInternship},
-		{[]string{""}, model.EmployFullTime},
-		{[]string{"Unknown"}, model.EmployFullTime},
-		{[]string{}, model.EmployFullTime},
+		{[]string{"Full-Time"}, jobcommon.EmployFullTime},
+		{[]string{"Part-Time"}, jobcommon.EmployPartTime},
+		{[]string{"Contract"}, jobcommon.EmployContract},
+		{[]string{"Intern"}, jobcommon.EmployInternship},
+		{[]string{"Internship"}, jobcommon.EmployInternship},
+		{[]string{""}, jobcommon.EmployFullTime},
+		{[]string{"Unknown"}, jobcommon.EmployFullTime},
+		{[]string{}, jobcommon.EmployFullTime},
 	}
 
 	for _, tc := range tests {
@@ -526,7 +527,7 @@ func TestFetchJobContent_Real(t *testing.T) {
 		ID:      firstJob.ID,
 		URL:     firstJob.URL,
 		Title:   firstJob.Title,
-		Adapter: model.AdapterMicrosoft,
+		Adapter: companycommon.AdapterMicrosoft,
 	}
 
 	content, err := m.FetchJobContent(context.Background(), rawJob)

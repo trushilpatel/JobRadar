@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 )
 
 type Greenhouse struct {
@@ -59,7 +59,7 @@ func (r *fetchJobsResponse) toFetchJobsResponse() types.FetchJobsResponse {
 	items := make([]types.FetchJobsItem, 0, len(r.Jobs))
 	for _, j := range r.Jobs {
 		items = append(items, types.FetchJobsItem{
-			ID:       fmt.Sprintf("%s-%d", model.AdapterGreenhouse, j.ID),
+			ID:       fmt.Sprintf("%s-%d", companycommon.AdapterGreenhouse, j.ID),
 			Title:    j.Title,
 			Location: j.Location.Name,
 			URL:      j.AbsoluteURL,
@@ -101,7 +101,7 @@ func (r *fetchJobContentResponse) toFetchJobContentResponse() types.FetchJobCont
 		comp = fmt.Sprintf("$%d – $%d %s", p.MinCents/100, p.MaxCents/100, p.CurrencyType)
 	}
 	return types.FetchJobContentResponse{
-		ID:            fmt.Sprintf("%s-%d", model.AdapterGreenhouse, r.ID),
+		ID:            fmt.Sprintf("%s-%d", companycommon.AdapterGreenhouse, r.ID),
 		Title:         r.Title,
 		Location:      r.Location.Name,
 		URL:           r.AbsoluteURL,

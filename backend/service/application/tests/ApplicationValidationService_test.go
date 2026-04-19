@@ -3,7 +3,7 @@ package application
 import (
 	"testing"
 
-	"github.com/trushilpatel/jobradar/model"
+	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	svc "github.com/trushilpatel/jobradar/service/application/services"
 )
@@ -12,8 +12,8 @@ func TestValidateCreate(t *testing.T) {
 	v := svc.NewApplicationValidationService()
 
 	validStages := []string{
-		model.StageApplied, model.StagePhoneScreen, model.StageTechnical,
-		model.StageFinalRound, model.StageOffer, model.StageRejected,
+		appcommon.StageApplied, appcommon.StagePhoneScreen, appcommon.StageTechnical,
+		appcommon.StageFinalRound, appcommon.StageOffer, appcommon.StageRejected,
 	}
 	for _, stage := range validStages {
 		if err := v.ValidateCreate(dto.CreateApplicationInput{Stage: stage}); err != nil {
@@ -31,7 +31,7 @@ func TestValidateCreate(t *testing.T) {
 func TestValidateUpdateStage(t *testing.T) {
 	v := svc.NewApplicationValidationService()
 
-	if err := v.ValidateUpdateStage(dto.UpdateStageInput{Stage: model.StageOffer}); err != nil {
+	if err := v.ValidateUpdateStage(dto.UpdateStageInput{Stage: appcommon.StageOffer}); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 	if err := v.ValidateUpdateStage(dto.UpdateStageInput{Stage: "bad"}); err == nil {

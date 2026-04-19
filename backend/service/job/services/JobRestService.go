@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/api/handler"
 	"github.com/trushilpatel/jobradar/api/request"
-	"github.com/trushilpatel/jobradar/model"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 )
 
@@ -55,7 +55,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if filter.Status == "" {
-		filter.Status = model.JobStatusNew
+		filter.Status = jobcommon.JobStatusNew
 	}
 
 	if v := q.Get("remote"); v == "true" {

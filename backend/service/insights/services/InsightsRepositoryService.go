@@ -5,8 +5,8 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 type repositoryService struct {
@@ -75,9 +75,9 @@ func (s *repositoryService) GetPipelineFunnel(ctx context.Context) (_ []dto.Funn
 
 	return []dto.FunnelStep{
 		{Stage: "enriched", Count: total},
-		{Stage: model.JobStatusSaved, Count: counts[model.JobStatusSaved]},
-		{Stage: model.JobStatusApplied, Count: counts[model.JobStatusApplied]},
-		{Stage: model.JobStatusDismissed, Count: counts[model.JobStatusDismissed]},
+		{Stage: jobcommon.JobStatusSaved, Count: counts[jobcommon.JobStatusSaved]},
+		{Stage: jobcommon.JobStatusApplied, Count: counts[jobcommon.JobStatusApplied]},
+		{Stage: jobcommon.JobStatusDismissed, Count: counts[jobcommon.JobStatusDismissed]},
 	}, nil
 }
 

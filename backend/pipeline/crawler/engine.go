@@ -13,6 +13,7 @@ import (
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/ats/google"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
@@ -155,7 +156,7 @@ func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, c
 		return 0
 	}
 
-	if err := e.ledger.MarkSeenBatch(ctx, publishedIDs, company.ID, model.SeenReasonFetch); err != nil {
+	if err := e.ledger.MarkSeenBatch(ctx, publishedIDs, company.ID, jobcommon.SeenReasonFetch); err != nil {
 		// Jobs are in Kafka but not marked seen — next scan will re-publish them.
 		// Downstream filter deduplicates by job_id so this is safe.
 		log.Error("batch mark seen failed (jobs published, will be re-sent on next scan)", err)

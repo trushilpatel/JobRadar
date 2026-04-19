@@ -2,7 +2,7 @@ package services
 
 import (
 	"github.com/trushilpatel/jobradar/domain"
-	"github.com/trushilpatel/jobradar/model"
+	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 )
 
@@ -14,12 +14,12 @@ func NewApplicationValidationService() ApplicationValidationService {
 }
 
 var validStages = map[string]bool{
-	model.StageApplied:     true,
-	model.StagePhoneScreen: true,
-	model.StageTechnical:   true,
-	model.StageFinalRound:  true,
-	model.StageOffer:       true,
-	model.StageRejected:    true,
+	appcommon.StageApplied:     true,
+	appcommon.StagePhoneScreen: true,
+	appcommon.StageTechnical:   true,
+	appcommon.StageFinalRound:  true,
+	appcommon.StageOffer:       true,
+	appcommon.StageRejected:    true,
 }
 
 // ValidateCreate validates the stage value for application creation.

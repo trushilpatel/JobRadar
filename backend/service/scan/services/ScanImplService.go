@@ -6,8 +6,8 @@ import (
 
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/service/company"
+	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
@@ -31,7 +31,7 @@ func NewSchedulerService(queue ScanQueueStore) SchedulerService {
 func (s *schedulerService) EnqueueDue(ctx context.Context, intervalMinutes int) (_ int, err error) {
 	ctx, span := tracing.Start(ctx, "scan.service.EnqueueDue")
 	defer tracing.End(span, &err)
-	n, err := s.queue.EnqueueDue(ctx, intervalMinutes, model.QueueSourceScheduler)
+	n, err := s.queue.EnqueueDue(ctx, intervalMinutes, scancommon.QueueSourceScheduler)
 	if err != nil {
 		return 0, domain.ErrInternal.WithMessage("failed to enqueue due companies")
 	}
@@ -71,7 +71,7 @@ func (s *service) TriggerScan(ctx context.Context, companyID string) (err error)
 	if _, err := s.companySvc.Get(ctx, companyID); err != nil {
 		return err // already a ServiceError from company.Service
 	}
-	if err := s.queue.Enqueue(ctx, companyID, model.QueueSourceManual); err != nil {
+	if err := s.queue.Enqueue(ctx, companyID, scancommon.QueueSourceManual); err != nil {
 		return domain.ErrInternal.WithMessage("failed to trigger scan")
 	}
 	return nil
@@ -91,7 +91,7 @@ func (s *service) TriggerScanAll(ctx context.Context) (_ int, err error) {
 		if !c.Active {
 			continue
 		}
-		if err := s.queue.Enqueue(ctx, c.ID, model.QueueSourceManual); err != nil {
+		if err := s.queue.Enqueue(ctx, c.ID, scancommon.QueueSourceManual); err != nil {
 			continue
 		}
 		count++

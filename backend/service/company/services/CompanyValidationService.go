@@ -2,7 +2,7 @@ package services
 
 import (
 	"github.com/trushilpatel/jobradar/domain"
-	"github.com/trushilpatel/jobradar/model"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 )
 
@@ -16,26 +16,26 @@ func NewValidator() Validator {
 // fixedURLAdapters lists adapters whose target URL is hard-coded in the scraper.
 // When creating a company with one of these adapters, the URL field is optional.
 var fixedURLAdapters = map[string]bool{
-	model.AdapterGoogle:    true,
-	model.AdapterNetflix:   true,
-	model.AdapterUber:      true,
-	model.AdapterApple:     true,
-	model.AdapterMeta:      true,
-	model.AdapterMicrosoft: true,
-	model.AdapterRippling:  true,
+	companycommon.AdapterGoogle:    true,
+	companycommon.AdapterNetflix:   true,
+	companycommon.AdapterUber:      true,
+	companycommon.AdapterApple:     true,
+	companycommon.AdapterMeta:      true,
+	companycommon.AdapterMicrosoft: true,
+	companycommon.AdapterRippling:  true,
 }
 
 var validAdapters = map[string]bool{
-	model.AdapterGreenhouse: true,
-	model.AdapterLever:      true,
-	model.AdapterAshby:      true,
-	model.AdapterGoogle:     true,
-	model.AdapterNetflix:    true,
-	model.AdapterUber:       true,
-	model.AdapterApple:      true,
-	model.AdapterMeta:       true,
-	model.AdapterMicrosoft:  true,
-	model.AdapterRippling:   true,
+	companycommon.AdapterGreenhouse: true,
+	companycommon.AdapterLever:      true,
+	companycommon.AdapterAshby:      true,
+	companycommon.AdapterGoogle:     true,
+	companycommon.AdapterNetflix:    true,
+	companycommon.AdapterUber:       true,
+	companycommon.AdapterApple:      true,
+	companycommon.AdapterMeta:       true,
+	companycommon.AdapterMicrosoft:  true,
+	companycommon.AdapterRippling:   true,
 }
 
 // ValidateList validates list filter and pagination parameters.

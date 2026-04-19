@@ -6,14 +6,38 @@ Each subdirectory is a fully self-contained vertical slice for one domain.
 
 Every service package has the same layout:
 
-| File           | Role                                                                         |
-| -------------- | ---------------------------------------------------------------------------- |
-| `service.go`   | Service interface + implementation; all business logic lives here            |
-| `store.go`     | Store interfaces (what the service needs from the DB) + GORM implementations |
-| `handler.go`   | HTTP handler — implements `handler.RouteGroup`, delegates to Service         |
-| `types.go`     | Domain types: input/output structs, filter types                             |
-| `validator.go` | Input validation — called by handler before service                          |
-| `wire.go`      | Wire provider set for this domain                                            |
+```
+{domain}/
+├── wire.go                            # Wire ProviderSet — re-exports constructors from services/
+├── common/
+│   └── {Domain}ServiceConstants.go    # Domain constants (package common)
+├── dto/
+│   └── {TypeName}.go                  # One file per input/output type (package dto)
+├── services/
+│   ├── {Domain}Service.go             # All service-level interfaces: Service, Validator, LedgerService, cross-service writers
+│   ├── {Domain}ImplService.go         # Business logic implementation
+│   ├── {Domain}RestService.go         # HTTP handler — implements handler.RouteGroup
+│   ├── {Domain}ValidationService.go   # Input validation
+│   ├── {Table}Repository.go           # One file per DB table: store interface + GORM implementation
+│   └── {Domain}*ImplService.go        # Additional impl files for sub-services (Pipeline, Ledger, etc.)
+└── tests/
+    └── {Domain}{Role}_test.go         # Tests mirroring the services/ file they cover
+```
+
+**Repository file naming:** use the table's logical name, not the domain prefix — e.g. `JobFeedRepository.go`, `JobSeenLedgerRepository.go`, `JobSnapshotRepository.go`. Each file owns exactly one DB table.
+
+### Root wire.go pattern
+
+```go
+package {domain}
+
+import (
+    "github.com/google/wire"
+    svc "github.com/trushilpatel/jobradar/service/{domain}/services"
+)
+
+var ProviderSet = wire.NewSet(svc.NewRestService, svc.NewValidator, svc.NewService, ...)
+```
 
 ## Packages
 
@@ -35,8 +59,9 @@ Every service package has the same layout:
 
 ## Store layer rules
 
-- Store interfaces are defined in `{domain}/store.go` — the service only depends on the interfaces it needs
-- GORM implementations live in the same file — no separate package for implementations
+- One repository file per DB table — `{Table}Repository.go` — containing the store interface(s) and GORM implementation for that table only
+- Cross-service writer interfaces (e.g. `ApplicationWriter` in the job service) live in `{Domain}Service.go`, not in a repository file, because they are service-level dependencies, not DB table implementations
+- GORM implementations live in the same file as their interface — no separate package for implementations
 - All store methods take `context.Context` and use `tracing.Start`/`tracing.End`
 - Use `store.IsNotFound(err)` to distinguish "not found" from real errors
 
@@ -48,4 +73,4 @@ Every service package has the same layout:
 
 ## Wire
 
-Each package exports a `ProviderSet` for Google Wire. The root `cmd/api/wire.go` composes all provider sets.
+Each package root exports a `ProviderSet` for Google Wire via `wire.go`. The root `cmd/api/wire.go` composes all provider sets. Constructors are always imported from the `services/` subpackage.

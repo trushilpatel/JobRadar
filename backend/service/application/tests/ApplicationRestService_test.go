@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
+	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	svc "github.com/trushilpatel/jobradar/service/application/services"
 )
@@ -70,11 +71,11 @@ func TestHandlerList_OK(t *testing.T) {
 }
 
 func TestHandlerCreate_OK(t *testing.T) {
-	app := &model.JobApplication{Stage: model.StageApplied}
+	app := &model.JobApplication{Stage: appcommon.StageApplied}
 	h := svc.NewApplicationRestHandler(&fakeValidator{}, &fakeService{app: app})
 	r := newTestRouter(h)
 
-	body, _ := json.Marshal(dto.CreateApplicationInput{Stage: model.StageApplied})
+	body, _ := json.Marshal(dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	req := httptest.NewRequest(http.MethodPost, "/jobs/j1/applications", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -91,7 +92,7 @@ func TestHandlerCreate_NotFound(t *testing.T) {
 	)
 	r := newTestRouter(h)
 
-	body, _ := json.Marshal(dto.CreateApplicationInput{Stage: model.StageApplied})
+	body, _ := json.Marshal(dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	req := httptest.NewRequest(http.MethodPost, "/jobs/missing/applications", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

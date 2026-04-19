@@ -8,8 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 const (
@@ -261,7 +262,7 @@ func jobToItem(j uberJob) types.FetchJobsItem {
 	}
 
 	return types.FetchJobsItem{
-		ID:             fmt.Sprintf("%s-%d", model.AdapterUber, j.ID),
+		ID:             fmt.Sprintf("%s-%d", companycommon.AdapterUber, j.ID),
 		Title:          j.Title,
 		URL:            fmt.Sprintf(jobURLTemplate, defaultBaseURL, j.ID),
 		Location:       formatLocation(j.AllLocations, j.Location),
@@ -315,15 +316,15 @@ func formatSingleLocation(loc uberLocation) string {
 func mapTimeType(tt string) string {
 	switch strings.ToLower(strings.TrimSpace(tt)) {
 	case "full-time":
-		return model.EmployFullTime
+		return jobcommon.EmployFullTime
 	case "part-time":
-		return model.EmployPartTime
+		return jobcommon.EmployPartTime
 	case "contract":
-		return model.EmployContract
+		return jobcommon.EmployContract
 	case "internship":
-		return model.EmployInternship
+		return jobcommon.EmployInternship
 	default:
-		return model.EmployFullTime
+		return jobcommon.EmployFullTime
 	}
 }
 

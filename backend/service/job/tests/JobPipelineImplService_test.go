@@ -9,6 +9,7 @@ import (
 	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/llm"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
@@ -94,7 +95,7 @@ func makeInput() jobdto.EnrichedJobInput {
 			Title:      "Software Engineer",
 			Location:   "San Francisco, CA",
 			URL:        "https://example.com/jobs/123",
-			EmployType: model.EmployFullTime,
+			EmployType: jobcommon.EmployFullTime,
 		},
 		Enriched: &llm.EnrichResult{
 			ExperienceYears:   &expYears,
@@ -137,8 +138,8 @@ func TestSaveEnrichedJob_HappyPath(t *testing.T) {
 	if jobs.inserted.JobPostID != input.Raw.ID {
 		t.Errorf("JobPostID = %q, want %q", jobs.inserted.JobPostID, input.Raw.ID)
 	}
-	if jobs.inserted.Status != model.JobStatusNew {
-		t.Errorf("Status = %q, want %q", jobs.inserted.Status, model.JobStatusNew)
+	if jobs.inserted.Status != jobcommon.JobStatusNew {
+		t.Errorf("Status = %q, want %q", jobs.inserted.Status, jobcommon.JobStatusNew)
 	}
 	if jobs.inserted.ID == "" {
 		t.Error("expected a non-empty job ID (uuid)")
@@ -153,8 +154,8 @@ func TestSaveEnrichedJob_HappyPath(t *testing.T) {
 	if ledger.updateReasonJobID != input.Raw.ID {
 		t.Errorf("ledger marked job ID = %q, want %q", ledger.updateReasonJobID, input.Raw.ID)
 	}
-	if ledger.updateReasonVal != model.SeenReasonFetch {
-		t.Errorf("ledger marked reason = %q, want %q", ledger.updateReasonVal, model.SeenReasonFetch)
+	if ledger.updateReasonVal != jobcommon.SeenReasonFetch {
+		t.Errorf("ledger marked reason = %q, want %q", ledger.updateReasonVal, jobcommon.SeenReasonFetch)
 	}
 }
 
@@ -194,8 +195,8 @@ func TestSaveEnrichedJob_SnapshotFailIsNonFatal(t *testing.T) {
 		t.Error("expected job to be inserted despite snapshot failure")
 	}
 	// Ledger should still be marked.
-	if ledger.updateReasonVal != model.SeenReasonFetch {
-		t.Errorf("ledger reason = %q, want %q", ledger.updateReasonVal, model.SeenReasonFetch)
+	if ledger.updateReasonVal != jobcommon.SeenReasonFetch {
+		t.Errorf("ledger reason = %q, want %q", ledger.updateReasonVal, jobcommon.SeenReasonFetch)
 	}
 }
 
@@ -253,8 +254,8 @@ func TestMarkLedgerError_CallsLedgerWithErrorReason(t *testing.T) {
 	if ledger.updateReasonJobID != "job-xyz" {
 		t.Errorf("ledger job ID = %q, want %q", ledger.updateReasonJobID, "job-xyz")
 	}
-	if ledger.updateReasonVal != model.SeenReasonError {
-		t.Errorf("ledger reason = %q, want %q", ledger.updateReasonVal, model.SeenReasonError)
+	if ledger.updateReasonVal != jobcommon.SeenReasonError {
+		t.Errorf("ledger reason = %q, want %q", ledger.updateReasonVal, jobcommon.SeenReasonError)
 	}
 }
 

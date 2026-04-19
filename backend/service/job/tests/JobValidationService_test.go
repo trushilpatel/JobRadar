@@ -3,7 +3,7 @@ package services_test
 import (
 	"testing"
 
-	"github.com/trushilpatel/jobradar/model"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
@@ -18,11 +18,11 @@ func TestValidateList(t *testing.T) {
 		limit   int
 		wantErr bool
 	}{
-		{name: "valid new status", filter: jobdto.JobFilter{Status: model.JobStatusNew}, page: 1, limit: 20},
-		{name: "valid saved status", filter: jobdto.JobFilter{Status: model.JobStatusSaved}, page: 1, limit: 20},
-		{name: "valid applied status", filter: jobdto.JobFilter{Status: model.JobStatusApplied}, page: 1, limit: 20},
-		{name: "valid interviewing status", filter: jobdto.JobFilter{Status: model.JobStatusInterviewing}, page: 1, limit: 20},
-		{name: "valid offer status", filter: jobdto.JobFilter{Status: model.JobStatusOffer}, page: 1, limit: 20},
+		{name: "valid new status", filter: jobdto.JobFilter{Status: jobcommon.JobStatusNew}, page: 1, limit: 20},
+		{name: "valid saved status", filter: jobdto.JobFilter{Status: jobcommon.JobStatusSaved}, page: 1, limit: 20},
+		{name: "valid applied status", filter: jobdto.JobFilter{Status: jobcommon.JobStatusApplied}, page: 1, limit: 20},
+		{name: "valid interviewing status", filter: jobdto.JobFilter{Status: jobcommon.JobStatusInterviewing}, page: 1, limit: 20},
+		{name: "valid offer status", filter: jobdto.JobFilter{Status: jobcommon.JobStatusOffer}, page: 1, limit: 20},
 		{name: "invalid status", filter: jobdto.JobFilter{Status: "dismissed"}, page: 1, limit: 20, wantErr: true},
 		{name: "page 0 invalid", filter: jobdto.JobFilter{}, page: 0, limit: 20, wantErr: true},
 		{name: "limit 0 invalid", filter: jobdto.JobFilter{}, page: 1, limit: 0, wantErr: true},
@@ -51,10 +51,10 @@ func ptrInt(n int) *int { return &n }
 func TestValidateDismiss(t *testing.T) {
 	v := jobsvc.NewValidator()
 
-	if err := v.ValidateDismiss(jobdto.DismissInput{Reason: model.DiscardReasonDismissed}); err != nil {
+	if err := v.ValidateDismiss(jobdto.DismissInput{Reason: jobcommon.DiscardReasonDismissed}); err != nil {
 		t.Errorf("unexpected error for valid reason: %v", err)
 	}
-	if err := v.ValidateDismiss(jobdto.DismissInput{Reason: model.DiscardReasonNotRelevant}); err != nil {
+	if err := v.ValidateDismiss(jobdto.DismissInput{Reason: jobcommon.DiscardReasonNotRelevant}); err != nil {
 		t.Errorf("unexpected error for valid reason: %v", err)
 	}
 	if err := v.ValidateDismiss(jobdto.DismissInput{Reason: "bad_reason"}); err == nil {
@@ -68,22 +68,22 @@ func TestValidateDismiss(t *testing.T) {
 func TestValidateSetStatus(t *testing.T) {
 	v := jobsvc.NewValidator()
 
-	if err := v.ValidateSetStatus(model.JobStatusNew); err != nil {
+	if err := v.ValidateSetStatus(jobcommon.JobStatusNew); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if err := v.ValidateSetStatus(model.JobStatusSaved); err != nil {
+	if err := v.ValidateSetStatus(jobcommon.JobStatusSaved); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if err := v.ValidateSetStatus(model.JobStatusApplied); err != nil {
+	if err := v.ValidateSetStatus(jobcommon.JobStatusApplied); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if err := v.ValidateSetStatus(model.JobStatusInterviewing); err != nil {
+	if err := v.ValidateSetStatus(jobcommon.JobStatusInterviewing); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if err := v.ValidateSetStatus(model.JobStatusOffer); err != nil {
+	if err := v.ValidateSetStatus(jobcommon.JobStatusOffer); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if err := v.ValidateSetStatus(model.JobStatusDismissed); err == nil {
+	if err := v.ValidateSetStatus(jobcommon.JobStatusDismissed); err == nil {
 		t.Error("expected error for dismissed status")
 	}
 	if err := v.ValidateSetStatus(""); err == nil {

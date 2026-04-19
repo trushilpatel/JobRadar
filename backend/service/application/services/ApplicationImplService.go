@@ -6,6 +6,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/model"
+	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
@@ -51,8 +52,8 @@ func (s *applicationImpl) Create(ctx context.Context, jobID string, input dto.Cr
 	}
 
 	// When the first stage is added, mark the job as applied (non-fatal)
-	if input.Stage == model.StageApplied {
-		_ = s.jobSvc.SetStatus(ctx, jobID, model.JobStatusApplied)
+	if input.Stage == appcommon.StageApplied {
+		_ = s.jobSvc.MarkApplied(ctx, jobID)
 	}
 
 	app := &model.JobApplication{

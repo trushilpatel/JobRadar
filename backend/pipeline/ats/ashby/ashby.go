@@ -9,8 +9,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/types"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
 // Documentation
@@ -52,7 +53,7 @@ func (a *Ashby) CareersURL(id string) string {
 }
 
 func ashbyRawID(id string) string {
-	prefix := model.AdapterAshby + "-"
+	prefix := companycommon.AdapterAshby + "-"
 	return strings.TrimPrefix(id, prefix)
 }
 
@@ -82,7 +83,7 @@ func (r *fetchJobsResponse) toFetchJobsResponse(slug string) types.FetchJobsResp
 			location = fmt.Sprintf("%s (%s)", j.LocationName, j.WorkplaceType)
 		}
 		items = append(items, types.FetchJobsItem{
-			ID:             fmt.Sprintf("%s-%s", model.AdapterAshby, j.ID),
+			ID:             fmt.Sprintf("%s-%s", companycommon.AdapterAshby, j.ID),
 			Title:          j.Title,
 			Location:       location,
 			URL:            fmt.Sprintf("https://jobs.ashbyhq.com/%s/%s", slug, j.ID),
@@ -114,7 +115,7 @@ func (r *fetchJobContentResponse) toFetchJobContentResponse() types.FetchJobCont
 		location = fmt.Sprintf("%s (%s)", p.LocationName, p.WorkplaceType)
 	}
 	return types.FetchJobContentResponse{
-		ID:             fmt.Sprintf("%s-%s", model.AdapterAshby, p.ID),
+		ID:             fmt.Sprintf("%s-%s", companycommon.AdapterAshby, p.ID),
 		Title:          p.Title,
 		Location:       location,
 		Description:    types.StripHTML(p.DescriptionHtml),
@@ -217,7 +218,7 @@ func (r *jobListResponse) toAPIFetchJobsResponse() types.FetchJobsResponse {
 			}
 		}
 		items = append(items, types.FetchJobsItem{
-			ID:             fmt.Sprintf("%s-%s", model.AdapterAshby, j.ID),
+			ID:             fmt.Sprintf("%s-%s", companycommon.AdapterAshby, j.ID),
 			Title:          j.Title,
 			Location:       location,
 			URL:            "",
@@ -242,7 +243,7 @@ func (r *jobInfoResponse) toAPIFetchJobContentResponse() types.FetchJobContentRe
 		comp = j.Compensation.CompensationTiers[0].TierSummary
 	}
 	return types.FetchJobContentResponse{
-		ID:             fmt.Sprintf("%s-%s", model.AdapterAshby, j.ID),
+		ID:             fmt.Sprintf("%s-%s", companycommon.AdapterAshby, j.ID),
 		Title:          j.Title,
 		Location:       location,
 		WorkplaceType:  workplaceType,
@@ -256,13 +257,13 @@ func (r *jobInfoResponse) toAPIFetchJobContentResponse() types.FetchJobContentRe
 func normalizeAshbyEmploymentType(t string) string {
 	switch t {
 	case "FullTime":
-		return model.EmployFullTime
+		return jobcommon.EmployFullTime
 	case "PartTime":
-		return model.EmployPartTime
+		return jobcommon.EmployPartTime
 	case "Contract", "Contractor":
-		return model.EmployContract
+		return jobcommon.EmployContract
 	case "Intern", "Internship":
-		return model.EmployInternship
+		return jobcommon.EmployInternship
 	default:
 		return ""
 	}

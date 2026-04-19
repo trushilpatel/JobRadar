@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/trushilpatel/jobradar/infra/logger"
-	"github.com/trushilpatel/jobradar/model"
 	"github.com/trushilpatel/jobradar/pipeline/ats/apple"
 	"github.com/trushilpatel/jobradar/pipeline/ats/ashby"
 	"github.com/trushilpatel/jobradar/pipeline/ats/google"
@@ -15,6 +14,7 @@ import (
 	"github.com/trushilpatel/jobradar/pipeline/ats/netflix"
 	"github.com/trushilpatel/jobradar/pipeline/ats/rippling"
 	"github.com/trushilpatel/jobradar/pipeline/ats/uber"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 )
 
 // Registry returns the correct Adapter for a given adapter_type string.
@@ -29,28 +29,28 @@ func Registry(adapterType string) (Adapter, error) {
 // to the Google adapter. For all other adapter types googleCfg and log are ignored.
 func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config, log logger.Logger) (Adapter, error) {
 	switch adapterType {
-	case model.AdapterGreenhouse:
+	case companycommon.AdapterGreenhouse:
 		return &greenhouse.Greenhouse{}, nil
-	case model.AdapterLever:
+	case companycommon.AdapterLever:
 		return &lever.Lever{}, nil
-	case model.AdapterAshby:
+	case companycommon.AdapterAshby:
 		return &ashby.Ashby{}, nil
-	case model.AdapterGoogle:
+	case companycommon.AdapterGoogle:
 		if googleCfg == (google.Config{}) {
 			return google.NewDefault(), nil
 		}
 		return google.New(googleCfg, log), nil
-	case model.AdapterNetflix:
+	case companycommon.AdapterNetflix:
 		return netflix.New(), nil
-	case model.AdapterUber:
+	case companycommon.AdapterUber:
 		return uber.New(), nil
-	case model.AdapterMicrosoft:
+	case companycommon.AdapterMicrosoft:
 		return microsoft.New(), nil
-	case model.AdapterRippling:
+	case companycommon.AdapterRippling:
 		return rippling.New(), nil
-	case model.AdapterApple:
+	case companycommon.AdapterApple:
 		return apple.New(), nil
-	case model.AdapterMeta:
+	case companycommon.AdapterMeta:
 		return meta.NewDefault(), nil
 	default:
 		return nil, fmt.Errorf("unknown adapter type: %s", adapterType)

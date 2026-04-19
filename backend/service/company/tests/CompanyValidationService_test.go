@@ -3,7 +3,7 @@ package company_test
 import (
 	"testing"
 
-	"github.com/trushilpatel/jobradar/model"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 )
@@ -21,25 +21,25 @@ func TestValidateCreate(t *testing.T) {
 	}{
 		{
 			name:  "valid greenhouse company",
-			input: companydto.CreateCompanyInput{ID: "stripe", Name: "Stripe", URL: "https://stripe.com/jobs", AdapterType: model.AdapterGreenhouse},
+			input: companydto.CreateCompanyInput{ID: "stripe", Name: "Stripe", URL: "https://stripe.com/jobs", AdapterType: companycommon.AdapterGreenhouse},
 		},
 		{
 			name:  "valid fixed-URL adapter without URL",
-			input: companydto.CreateCompanyInput{ID: "google", Name: "Google", AdapterType: model.AdapterGoogle},
+			input: companydto.CreateCompanyInput{ID: "google", Name: "Google", AdapterType: companycommon.AdapterGoogle},
 		},
 		{
 			name:    "missing id",
-			input:   companydto.CreateCompanyInput{Name: "Stripe", URL: "https://example.com", AdapterType: model.AdapterGreenhouse},
+			input:   companydto.CreateCompanyInput{Name: "Stripe", URL: "https://example.com", AdapterType: companycommon.AdapterGreenhouse},
 			wantErr: true,
 		},
 		{
 			name:    "missing name",
-			input:   companydto.CreateCompanyInput{ID: "stripe", URL: "https://example.com", AdapterType: model.AdapterGreenhouse},
+			input:   companydto.CreateCompanyInput{ID: "stripe", URL: "https://example.com", AdapterType: companycommon.AdapterGreenhouse},
 			wantErr: true,
 		},
 		{
 			name:    "missing url for non-fixed adapter",
-			input:   companydto.CreateCompanyInput{ID: "stripe", Name: "Stripe", AdapterType: model.AdapterGreenhouse},
+			input:   companydto.CreateCompanyInput{ID: "stripe", Name: "Stripe", AdapterType: companycommon.AdapterGreenhouse},
 			wantErr: true,
 		},
 		{
@@ -49,11 +49,11 @@ func TestValidateCreate(t *testing.T) {
 		},
 		{
 			name:  "netflix fixed adapter no URL",
-			input: companydto.CreateCompanyInput{ID: "netflix", Name: "Netflix", AdapterType: model.AdapterNetflix},
+			input: companydto.CreateCompanyInput{ID: "netflix", Name: "Netflix", AdapterType: companycommon.AdapterNetflix},
 		},
 		{
 			name:  "rippling fixed adapter no URL",
-			input: companydto.CreateCompanyInput{ID: "rippling", Name: "Rippling", AdapterType: model.AdapterRippling},
+			input: companydto.CreateCompanyInput{ID: "rippling", Name: "Rippling", AdapterType: companycommon.AdapterRippling},
 		},
 	}
 
@@ -85,7 +85,7 @@ func TestValidateUpdate(t *testing.T) {
 		},
 		{
 			name:  "valid adapter_type update",
-			input: companydto.UpdateCompanyInput{AdapterType: strPtr(model.AdapterLever)},
+			input: companydto.UpdateCompanyInput{AdapterType: strPtr(companycommon.AdapterLever)},
 		},
 		{
 			name:    "no fields provided",
@@ -120,7 +120,7 @@ func TestValidateList(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "empty filter", filter: companydto.CompanyFilter{}, page: 1, limit: 20},
-		{name: "valid adapter_type", filter: companydto.CompanyFilter{AdapterType: model.AdapterGreenhouse}, page: 1, limit: 20},
+		{name: "valid adapter_type", filter: companydto.CompanyFilter{AdapterType: companycommon.AdapterGreenhouse}, page: 1, limit: 20},
 		{name: "valid active filter", filter: companydto.CompanyFilter{Active: boolPtr(true)}, page: 1, limit: 20},
 		{name: "invalid adapter_type", filter: companydto.CompanyFilter{AdapterType: "bogus"}, page: 1, limit: 20, wantErr: true},
 		{name: "page zero", filter: companydto.CompanyFilter{}, page: 0, limit: 20, wantErr: true},
