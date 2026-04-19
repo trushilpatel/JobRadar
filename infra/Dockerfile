@@ -11,7 +11,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY . .
 
 # All binaries built in one RUN so they share a single go-build cache mount.
-# Parallel stages each get their own isolated cache — one stage is faster.
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     go build -o /out/api       ./apps/api && \
@@ -31,3 +30,6 @@ COPY --from=go-builder /out/scheduler /app/
 COPY --from=go-builder /out/filter    /app/
 COPY --from=go-builder /out/enricher  /app/
 COPY migrations/ /app/migrations/
+
+ARG GIT_SHA=dev
+LABEL org.opencontainers.image.revision="${GIT_SHA}"

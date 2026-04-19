@@ -1,3 +1,6 @@
+GIT_SHA ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
+export GIT_SHA
+
 .PHONY: dev dev-frontend dev-backend \
         build build-frontend build-backend clean-frontend \
         run-api run-crawler run-filter run-enricher run-scheduler \
@@ -32,7 +35,7 @@ build: build-frontend build-backend ## Build everything
 clean-frontend: ## Remove frontend build artifacts from host
 	rm -rf frontend/dist
 
-build-frontend: clean-frontend ## Build frontend (tsc + vite)
+build-frontend: clean-frontend ## Build frontend on host (local preview only — Docker builds its own via Dockerfile)
 	cd frontend && npm run build
 
 build-backend: ## Compile all Go binaries
@@ -145,7 +148,6 @@ up: ## Start the full stack using existing images (fast — no rebuild)
 	docker-compose --profile workers up -d
 
 rebuild: ## Rebuild all images then start (use after code changes)
-	$(MAKE) build-frontend
 	docker volume rm jobradar_kafkadata 2>/dev/null || true
 	DOCKER_BUILDKIT=1 docker-compose --profile workers up -d --build
 
@@ -155,9 +157,7 @@ rebuild-backend: ## Rebuild backend image only (api/scheduler/filter/enricher)
 rebuild-crawler: ## Rebuild crawler image only
 	DOCKER_BUILDKIT=1 docker-compose up -d --build crawler
 
-rebuild-frontend: ## Clean, build on host, then rebuild Docker frontend image
-	$(MAKE) clean-frontend
-	cd frontend && npm run build
+rebuild-frontend: ## Rebuild Docker frontend image (build happens inside Docker)
 	DOCKER_BUILDKIT=1 docker-compose up -d --build frontend
 
 down: ## Stop and remove all containers (keeps volumes)
@@ -166,7 +166,7 @@ down: ## Stop and remove all containers (keeps volumes)
 logs: ## Tail logs for all services (Ctrl-C to stop)
 	docker-compose logs -f
 
-build-docker: ## Build backend (jobradar_backend) + frontend images without starting
+build-docker: ## Build all images without starting (GIT_SHA=$(GIT_SHA) baked into labels)
 	DOCKER_BUILDKIT=1 docker-compose build
 
 # ── Setup ─────────────────────────────────────────────────────────────────────

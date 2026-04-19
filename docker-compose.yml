@@ -86,6 +86,8 @@ services:
     build:
       context: ./backend
       dockerfile: ../infra/Dockerfile
+      args:
+        GIT_SHA: "${GIT_SHA:-dev}"
     image: jobradar_backend
     container_name: jobradar_api
     mem_limit: 128m
@@ -146,6 +148,8 @@ services:
     build:
       context: ./backend
       dockerfile: ../infra/Dockerfile.crawler
+      args:
+        GIT_SHA: "${GIT_SHA:-dev}"
     image: jobradar_crawler
     container_name: jobradar_crawler
     mem_limit: 1g
@@ -240,6 +244,8 @@ services:
     build:
       context: ./backend/apps/crawler/ats/google/scraper
       dockerfile: Dockerfile
+      args:
+        GIT_SHA: "${GIT_SHA:-dev}"
     image: jobradar_google_scraper
     container_name: jobradar_google_scraper
     environment:
@@ -260,6 +266,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        GIT_SHA: "${GIT_SHA:-dev}"
     container_name: jobradar_frontend
     ports:
       - "3000:80"
