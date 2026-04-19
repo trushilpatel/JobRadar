@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/common/domain"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"

@@ -3,7 +3,7 @@ package company
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	"github.com/trushilpatel/jobradar/store"

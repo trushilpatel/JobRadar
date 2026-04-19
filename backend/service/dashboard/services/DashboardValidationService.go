@@ -1,6 +1,6 @@
 package services
 
-import "github.com/trushilpatel/jobradar/domain"
+import "github.com/trushilpatel/jobradar/common/domain"
 
 // DashboardValidationService validates user-submitted input for the dashboard domain.
 type DashboardValidationService interface {

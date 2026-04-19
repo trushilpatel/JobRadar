@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trushilpatel/jobradar/config"
+	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/infra/db"
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"

@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/trushilpatel/jobradar/api/response"
-	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/common/domain"
 )
 
 // Respond writes a JSON envelope response with a typed data payload.

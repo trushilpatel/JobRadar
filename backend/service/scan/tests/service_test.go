@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/common/domain"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	"github.com/trushilpatel/jobradar/service/company"
 	"github.com/trushilpatel/jobradar/service/scan/dto"

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/common/domain"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"

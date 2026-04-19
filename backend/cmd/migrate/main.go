@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/pressly/goose/v3"
-	"github.com/trushilpatel/jobradar/config"
+	"github.com/trushilpatel/jobradar/common/config"
 	_ "gorm.io/driver/postgres"
 
 	_ "github.com/jackc/pgx/v5/stdlib"

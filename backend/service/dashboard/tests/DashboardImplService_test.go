@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/service/dashboard/services"
 	insightsdto "github.com/trushilpatel/jobradar/service/insights/dto"
 	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"

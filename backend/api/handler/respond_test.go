@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/common/domain"
 )
 
 func TestHandleError(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/wire"
 	"github.com/trushilpatel/jobradar/api"
-	"github.com/trushilpatel/jobradar/config"
+	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/service/application"
 	"github.com/trushilpatel/jobradar/service/company"

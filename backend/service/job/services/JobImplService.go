@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"

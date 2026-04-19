@@ -4,7 +4,7 @@ import (
 	"context"
 	"math"
 
-	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
 	"github.com/trushilpatel/jobradar/service/application"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"

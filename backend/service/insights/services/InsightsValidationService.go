@@ -1,7 +1,7 @@
 package services
 
 import (
-	"github.com/trushilpatel/jobradar/domain"
+	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 )
 
