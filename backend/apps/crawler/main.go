@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/db"
@@ -25,48 +27,56 @@ func main() {
 	cfg := config.Load()
 	log := logger.Init("crawler")
 
-	shutdown := tracing.Init("jobradar-crawler", cfg.Observability.JaegerEndpoint)
-	defer shutdown()
-
-	database, err := db.Open(cfg.DB)
-	if err != nil {
-		log.Error("db open failed", err)
-		os.Exit(1)
-	}
-
-	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
+	stopTracing := tracing.Init("jobradar-crawler", cfg.Observability.JaegerEndpoint)
+	defer stopTracing()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	database, producer, err := initInfra(ctx, cfg, log)
+	if err != nil {
+		os.Exit(1)
+	}
+	defer producer.Close()
+
+	engine, queue := buildEngine(database, producer, cfg, log)
+
+	runLoop(ctx, cfg, log, queue, engine)
+}
+
+func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gorm.DB, *kafka.Producer, error) {
+	database, err := db.Open(cfg.DB)
+	if err != nil {
+		log.Error("db open failed", err)
+		return nil, nil, err
+	}
+
+	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
+
 	if err := kafka.EnsureTopics(ctx, cfg.Kafka, kafka.TopicJobListingsRaw); err != nil {
 		log.Error("kafka topics failed", err)
-		os.Exit(1)
+		return nil, nil, err
 	}
 
 	producer, err := kafka.NewProducer(cfg.Kafka)
 	if err != nil {
 		log.Error("kafka producer failed", err)
-		os.Exit(1)
+		return nil, nil, err
 	}
-	defer producer.Close()
 
-	// --- Stores (wiring layer only) ---
+	return database, producer, nil
+}
+
+func buildEngine(database *gorm.DB, producer *kafka.Producer, cfg *config.Config, log logger.Logger) (*Engine, scansvc.CrawlerQueueService) {
 	companyStore := companysvc.NewStore(database)
 	ledgerStore := jobsvc.NewSeenLedgerStore(database)
 	scanLog := scansvc.NewLogStore(database)
 	queueStore := scansvc.NewQueueStore(database)
 
-	// --- Services (what workers depend on) ---
 	companies := companysvc.NewCrawlerReader(companyStore)
 	ledger := jobsvc.NewLedgerService(ledgerStore)
 	recorder := scansvc.NewCrawlerService(scanLog)
 	queue := scansvc.NewCrawlerQueueService(queueStore)
-
-	pollInterval := time.Duration(cfg.Crawler.PollIntervalSeconds) * time.Second
-	stuckTimeout := time.Duration(cfg.Crawler.StuckTimeoutSeconds) * time.Second
-	heartbeatInterval := time.Duration(cfg.Crawler.HeartbeatIntervalSeconds) * time.Second
-	companyDelay := time.Duration(cfg.Crawler.CompanyDelaySeconds) * time.Second
 
 	googleCfg := google.Config{
 		MinDelayMs:  cfg.Crawler.Google.MinDelayMs,
@@ -76,9 +86,17 @@ func main() {
 		EnrichMinMs: cfg.Crawler.Google.EnrichMinMs,
 		EnrichMaxMs: cfg.Crawler.Google.EnrichMaxMs,
 	}
-	engine := NewEngine(companies, ledger, recorder, producer, googleCfg, log)
 
-	// Reset any rows stuck in processing from a previous crash.
+	engine := NewEngine(companies, ledger, recorder, producer, googleCfg, log)
+	return engine, queue
+}
+
+func runLoop(ctx context.Context, cfg *config.Config, log logger.Logger, queue scansvc.CrawlerQueueService, engine *Engine) {
+	pollInterval := time.Duration(cfg.Crawler.PollIntervalSeconds) * time.Second
+	stuckTimeout := time.Duration(cfg.Crawler.StuckTimeoutSeconds) * time.Second
+	heartbeatInterval := time.Duration(cfg.Crawler.HeartbeatIntervalSeconds) * time.Second
+	companyDelay := time.Duration(cfg.Crawler.CompanyDelaySeconds) * time.Second
+
 	if err := queue.ResetStuck(ctx, stuckTimeout); err != nil {
 		log.Error("failed to reset stuck queue items", err)
 	}
@@ -86,7 +104,7 @@ func main() {
 	log.Info("worker started", logger.Dur("poll_interval", pollInterval))
 
 	var wg sync.WaitGroup
-	var active int32 // 0=idle, 1=scan in progress
+	var active int32
 
 	startScan := func() {
 		wg.Add(1)
@@ -97,7 +115,6 @@ func main() {
 		}()
 	}
 
-	// Poll once immediately on startup.
 	atomic.StoreInt32(&active, 1)
 	startScan()
 
@@ -157,8 +174,6 @@ func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.Crawle
 	}
 }
 
-// startHeartbeat ticks every interval and updates heartbeat_at in the DB for the
-// given queue row. Call the returned stop func (or defer it) to end the goroutine.
 func startHeartbeat(ctx context.Context, q scansvc.CrawlerQueueService, id string, interval time.Duration, log logger.Logger) func() {
 	hbCtx, cancel := context.WithCancel(ctx)
 	go func() {
