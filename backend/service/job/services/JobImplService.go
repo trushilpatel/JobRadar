@@ -5,7 +5,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	"github.com/trushilpatel/jobradar/store"
@@ -31,7 +31,7 @@ func NewService(jobs JobStore, ledger SeenLedgerWriter, discard DiscardStore, sn
 }
 
 // List returns a paginated, filtered list of jobs — all filtering happens at the DB level.
-func (s *service) List(ctx context.Context, filter dto.JobFilter, page, limit int) (_ []model.Job, _ int, err error) {
+func (s *service) List(ctx context.Context, filter dto.JobFilter, page, limit int) (_ []jobmodel.Job, _ int, err error) {
 	ctx, span := tracing.Start(ctx, "job.service.List")
 	defer tracing.End(span, &err)
 	jobs, total, err := s.jobs.GetJobs(ctx, filter, page, limit)
@@ -53,7 +53,7 @@ func (s *service) GetCounts(ctx context.Context) (_ *dto.JobCounts, err error) {
 }
 
 // Get fetches a single job by ID.
-func (s *service) Get(ctx context.Context, id string) (_ *model.Job, err error) {
+func (s *service) Get(ctx context.Context, id string) (_ *jobmodel.Job, err error) {
 	ctx, span := tracing.Start(ctx, "job.service.Get")
 	defer tracing.End(span, &err)
 	job, err := s.jobs.GetJobByID(ctx, id)

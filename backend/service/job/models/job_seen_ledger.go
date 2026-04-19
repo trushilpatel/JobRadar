@@ -1,6 +1,10 @@
-package model
+package jobmodel
 
-import "time"
+import (
+	"time"
+
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
+)
 
 type JobSeenLedger struct {
 	JobID       string     `gorm:"primaryKey"`
@@ -9,7 +13,7 @@ type JobSeenLedger struct {
 	Reason      string     `gorm:"not null"`
 	RemovedAt   *time.Time `gorm:"column:removed_at"`
 
-	Company Company `gorm:"foreignKey:CompanyID"`
+	Company companymodel.Company `gorm:"foreignKey:CompanyID"`
 }
 
 func (JobSeenLedger) TableName() string {

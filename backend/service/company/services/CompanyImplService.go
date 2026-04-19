@@ -6,7 +6,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	"github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	"github.com/trushilpatel/jobradar/store"
@@ -88,7 +88,7 @@ func (s *service) GetAll(ctx context.Context) (_ []companydto.CompanyView, err e
 }
 
 // Get fetches a single company by ID.
-func (s *service) Get(ctx context.Context, id string) (_ *model.Company, err error) {
+func (s *service) Get(ctx context.Context, id string) (_ *companymodel.Company, err error) {
 	ctx, span := tracing.Start(ctx, "company.service.Get")
 	defer tracing.End(span, &err)
 	c, err := s.store.GetCompanyByID(ctx, id)
@@ -103,7 +103,7 @@ func (s *service) Get(ctx context.Context, id string) (_ *model.Company, err err
 
 // Create inserts a new company. Sets last_scan_at to now so the scheduler does not
 // immediately pick it up — users trigger the first scan via POST /companies/:id/scan.
-func (s *service) Create(ctx context.Context, input companydto.CreateCompanyInput) (_ *model.Company, err error) {
+func (s *service) Create(ctx context.Context, input companydto.CreateCompanyInput) (_ *companymodel.Company, err error) {
 	ctx, span := tracing.Start(ctx, "company.service.Create")
 	defer tracing.End(span, &err)
 	active := true
@@ -112,7 +112,7 @@ func (s *service) Create(ctx context.Context, input companydto.CreateCompanyInpu
 	}
 
 	now := time.Now()
-	company := model.Company{
+	company := companymodel.Company{
 		ID:          input.ID,
 		Name:        input.Name,
 		URL:         input.URL,

@@ -16,7 +16,7 @@ defer shutdown()
 Use `tracing.Start` / `tracing.End` for all service and store methods. The pattern requires a named return error:
 
 ```go
-func (s *service) Get(ctx context.Context, id string) (_ *model.Job, err error) {
+func (s *jobStore) GetJobByID(ctx context.Context, id string) (_ *jobmodel.Job, err error) {
     ctx, span := tracing.Start(ctx, "job.service.Get")
     defer tracing.End(span, &err)
     // ...

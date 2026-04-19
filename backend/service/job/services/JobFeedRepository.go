@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	"gorm.io/gorm"
@@ -13,15 +13,15 @@ import (
 
 // JobReader is for the UI/API layer to query enriched jobs.
 type JobReader interface {
-	GetJobs(ctx context.Context, filter dto.JobFilter, page, limit int) ([]model.Job, int64, error)
-	GetJobByID(ctx context.Context, id string) (*model.Job, error)
+	GetJobs(ctx context.Context, filter dto.JobFilter, page, limit int) ([]jobmodel.Job, int64, error)
+	GetJobByID(ctx context.Context, id string) (*jobmodel.Job, error)
 	GetJobCounts(ctx context.Context) (*dto.JobCounts, error)
 	GetJobsAddedByDay(ctx context.Context, days int) ([]dto.DailyJobCount, error)
 }
 
 // JobWriter is for the LLM enricher to insert completed job results.
 type JobWriter interface {
-	InsertJob(ctx context.Context, job *model.Job) error
+	InsertJob(ctx context.Context, job *jobmodel.Job) error
 	DeleteJob(ctx context.Context, id string) error
 	UpdateJobStatus(ctx context.Context, id, status string) error
 	UpdateJobSaved(ctx context.Context, id string, saved bool) error
@@ -42,10 +42,10 @@ func NewJobStore(db *gorm.DB) JobStore {
 	return &jobStore{db: db}
 }
 
-func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, page, limit int) (_ []model.Job, _ int64, err error) {
+func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, page, limit int) (_ []jobmodel.Job, _ int64, err error) {
 	ctx, span := tracing.Start(ctx, "job.store.GetJobs")
 	defer tracing.End(span, &err)
-	query := s.db.WithContext(ctx).Model(&model.Job{})
+	query := s.db.WithContext(ctx).Model(&jobmodel.Job{})
 
 	// Status — always applied; "saved" is a boolean flag, not a status value
 	if filter.Status == jobcommon.JobStatusSaved {
@@ -113,16 +113,16 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, page, limi
 		return nil, 0, err
 	}
 
-	var jobs []model.Job
+	var jobs []jobmodel.Job
 	offset := (page - 1) * limit
 	err = query.Order("added_at DESC").Offset(offset).Limit(limit).Preload("Company").Find(&jobs).Error
 	return jobs, total, err
 }
 
-func (s *jobStore) GetJobByID(ctx context.Context, id string) (_ *model.Job, err error) {
+func (s *jobStore) GetJobByID(ctx context.Context, id string) (_ *jobmodel.Job, err error) {
 	ctx, span := tracing.Start(ctx, "job.store.GetJobByID")
 	defer tracing.End(span, &err)
-	var job model.Job
+	var job jobmodel.Job
 	err = s.db.WithContext(ctx).Preload("Company").Where("id = ?", id).First(&job).Error
 	if err != nil {
 		return nil, err
@@ -130,7 +130,7 @@ func (s *jobStore) GetJobByID(ctx context.Context, id string) (_ *model.Job, err
 	return &job, nil
 }
 
-func (s *jobStore) InsertJob(ctx context.Context, job *model.Job) (err error) {
+func (s *jobStore) InsertJob(ctx context.Context, job *jobmodel.Job) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.InsertJob")
 	defer tracing.End(span, &err)
 	return s.db.WithContext(ctx).Create(job).Error
@@ -139,13 +139,13 @@ func (s *jobStore) InsertJob(ctx context.Context, job *model.Job) (err error) {
 func (s *jobStore) DeleteJob(ctx context.Context, id string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.DeleteJob")
 	defer tracing.End(span, &err)
-	return s.db.WithContext(ctx).Where("id = ?", id).Delete(&model.Job{}).Error
+	return s.db.WithContext(ctx).Where("id = ?", id).Delete(&jobmodel.Job{}).Error
 }
 
 func (s *jobStore) UpdateJobStatus(ctx context.Context, id, status string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.UpdateJobStatus")
 	defer tracing.End(span, &err)
-	return s.db.WithContext(ctx).Model(&model.Job{}).
+	return s.db.WithContext(ctx).Model(&jobmodel.Job{}).
 		Where("id = ?", id).
 		Update("status", status).Error
 }
@@ -154,7 +154,7 @@ func (s *jobStore) UpdateJobSaved(ctx context.Context, id string, saved bool) (e
 	ctx, span := tracing.Start(ctx, "job.store.UpdateJobSaved")
 	defer tracing.End(span, &err)
 	if saved {
-		return s.db.WithContext(ctx).Model(&model.Job{}).
+		return s.db.WithContext(ctx).Model(&jobmodel.Job{}).
 			Where("id = ? AND status != ?", id, jobcommon.JobStatusApplied).
 			Updates(map[string]any{"saved": true, "status": jobcommon.JobStatusSaved}).Error
 	}
@@ -167,7 +167,7 @@ func (s *jobStore) UpdateJobSaved(ctx context.Context, id string, saved bool) (e
 func (s *jobStore) UpdateJobNotes(ctx context.Context, id, notes string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.UpdateJobNotes")
 	defer tracing.End(span, &err)
-	return s.db.WithContext(ctx).Model(&model.Job{}).
+	return s.db.WithContext(ctx).Model(&jobmodel.Job{}).
 		Where("id = ?", id).
 		Update("notes", notes).Error
 }
@@ -212,7 +212,7 @@ func (s *jobStore) GetJobCounts(ctx context.Context) (_ *dto.JobCounts, err erro
 func (s *jobStore) GetJobsAddedByDay(ctx context.Context, days int) (results []dto.DailyJobCount, err error) {
 	ctx, span := tracing.Start(ctx, "job.store.GetJobsAddedByDay")
 	defer tracing.End(span, &err)
-	err = s.db.WithContext(ctx).Model(&model.Job{}).
+	err = s.db.WithContext(ctx).Model(&jobmodel.Job{}).
 		Select("DATE(added_at) as date, COUNT(*) as count").
 		Where("added_at >= NOW() - ? * INTERVAL '1 day'", days).
 		Group("DATE(added_at)").

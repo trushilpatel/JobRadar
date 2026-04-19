@@ -5,8 +5,9 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
+	scanmodel "github.com/trushilpatel/jobradar/service/scan/models"
 	"gorm.io/gorm"
 )
 
@@ -242,7 +243,7 @@ func NewLogStore(db *gorm.DB) ScanLogStore {
 func (s *scanLogStore) InsertCompanyScanLog(ctx context.Context, companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.InsertCompanyScanLog")
 	defer tracing.End(span, &err)
-	row := model.CompanyScanLog{
+	row := scanmodel.CompanyScanLog{
 		CompanyID:   companyID,
 		JobsFetched: jobsFetched,
 		JobsNew:     jobsNew,
@@ -269,7 +270,7 @@ func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ dt
 			AvgDurationMs *float64
 		}
 		var a agg
-		if err := tx.Model(&model.CompanyScanLog{}).
+		if err := tx.Model(&scanmodel.CompanyScanLog{}).
 			Where("company_id = ?", companyID).
 			Select("COUNT(*) as total_scans, SUM(jobs_fetched) as total_fetched, SUM(jobs_new) as total_new, SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) as error_count, AVG(duration_ms) as avg_duration_ms").
 			Scan(&a).Error; err != nil {
@@ -282,7 +283,7 @@ func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ dt
 		stats.AvgDurationMs = a.AvgDurationMs
 
 		var newToday int64
-		if err := tx.Model(&model.CompanyScanLog{}).
+		if err := tx.Model(&scanmodel.CompanyScanLog{}).
 			Where("company_id = ? AND DATE(scanned_at) = CURRENT_DATE", companyID).
 			Select("COALESCE(SUM(jobs_new), 0)").
 			Scan(&newToday).Error; err != nil {
@@ -291,7 +292,7 @@ func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ dt
 		stats.NewToday = newToday
 
 		var newThisMonth int64
-		if err := tx.Model(&model.CompanyScanLog{}).
+		if err := tx.Model(&scanmodel.CompanyScanLog{}).
 			Where("company_id = ? AND DATE_TRUNC('month', scanned_at) = DATE_TRUNC('month', CURRENT_DATE)", companyID).
 			Select("COALESCE(SUM(jobs_new), 0)").
 			Scan(&newThisMonth).Error; err != nil {
@@ -300,7 +301,7 @@ func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ dt
 		stats.NewThisMonth = newThisMonth
 
 		var recent []dto.ScanRun
-		if err := tx.Model(&model.CompanyScanLog{}).
+		if err := tx.Model(&scanmodel.CompanyScanLog{}).
 			Where("company_id = ?", companyID).
 			Order("scanned_at DESC").
 			Limit(10).
@@ -320,7 +321,7 @@ func (s *scanLogStore) RecordScanResult(ctx context.Context, companyID, status s
 	ctx, span := tracing.Start(ctx, "scan.store.RecordScanResult")
 	defer tracing.End(span, &err)
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		row := model.CompanyScanLog{
+		row := scanmodel.CompanyScanLog{
 			CompanyID:   companyID,
 			JobsFetched: jobsFetched,
 			JobsNew:     jobsNew,
@@ -330,7 +331,7 @@ func (s *scanLogStore) RecordScanResult(ctx context.Context, companyID, status s
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
-		return tx.Model(&model.Company{}).
+		return tx.Model(&companymodel.Company{}).
 			Where("id = ?", companyID).
 			Updates(map[string]any{
 				"last_scan_at":     gorm.Expr("NOW()"),
@@ -379,7 +380,7 @@ func (s *scanLogStore) GetJobsScannedToday(ctx context.Context) (_ int64, err er
 	ctx, span := tracing.Start(ctx, "scan.store.GetJobsScannedToday")
 	defer tracing.End(span, &err)
 	var count int64
-	err = s.db.WithContext(ctx).Model(&model.CompanyScanLog{}).
+	err = s.db.WithContext(ctx).Model(&scanmodel.CompanyScanLog{}).
 		Where("DATE(scanned_at) = CURRENT_DATE").
 		Select("COALESCE(SUM(jobs_fetched), 0)").
 		Scan(&count).Error
@@ -389,7 +390,7 @@ func (s *scanLogStore) GetJobsScannedToday(ctx context.Context) (_ int64, err er
 func (s *scanLogStore) GetScansByDay(ctx context.Context, days int) (results []dto.DailyScanCount, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.GetScansByDay")
 	defer tracing.End(span, &err)
-	err = s.db.WithContext(ctx).Model(&model.CompanyScanLog{}).
+	err = s.db.WithContext(ctx).Model(&scanmodel.CompanyScanLog{}).
 		Select("DATE(scanned_at) as date, SUM(jobs_fetched) as scanned, SUM(jobs_new) as new_jobs").
 		Where("scanned_at >= NOW() - ? * INTERVAL '1 day'", days).
 		Group("DATE(scanned_at)").

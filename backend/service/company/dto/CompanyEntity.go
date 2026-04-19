@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/trushilpatel/jobradar/model"
+import companymodel "github.com/trushilpatel/jobradar/service/company/models"
 
 // CompanyEntity is the primary domain entity for the company service.
-type CompanyEntity = model.Company
+type CompanyEntity = companymodel.Company

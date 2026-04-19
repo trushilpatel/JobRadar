@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	"gorm.io/gorm"
 )
@@ -12,11 +12,11 @@ import (
 // CompanyReader is the interface the scan engine depends on.
 // Workers receive this interface — not the concrete type.
 type CompanyReader interface {
-	GetActiveCompanies(ctx context.Context) ([]model.Company, error)
-	GetAllCompanies(ctx context.Context) ([]model.Company, error)
-	GetCompanyByID(ctx context.Context, id string) (model.Company, error)
+	GetActiveCompanies(ctx context.Context) ([]companymodel.Company, error)
+	GetAllCompanies(ctx context.Context) ([]companymodel.Company, error)
+	GetCompanyByID(ctx context.Context, id string) (companymodel.Company, error)
 	// GetCompanies returns a filtered, paginated slice and the total matching count.
-	GetCompanies(ctx context.Context, filter companydto.CompanyFilter, page, limit int) ([]model.Company, int64, error)
+	GetCompanies(ctx context.Context, filter companydto.CompanyFilter, page, limit int) ([]companymodel.Company, int64, error)
 	// GetCompanyCounts returns (total, total_active) across all companies,
 	// regardless of the current filter — used for header stats.
 	GetCompanyCounts(ctx context.Context) (total, active int64, error error)
@@ -24,7 +24,7 @@ type CompanyReader interface {
 
 // CompanyWriter covers mutations from the API.
 type CompanyWriter interface {
-	CreateCompany(ctx context.Context, c model.Company) error
+	CreateCompany(ctx context.Context, c companymodel.Company) error
 	UpdateCompany(ctx context.Context, id string, fields map[string]any) error
 	DeleteCompany(ctx context.Context, id string) error
 	SetAllCompaniesActive(ctx context.Context, active bool) error
@@ -48,24 +48,24 @@ func NewStore(db *gorm.DB) Store {
 	return &companyStore{db: db}
 }
 
-func (s *companyStore) GetActiveCompanies(ctx context.Context) (companies []model.Company, err error) {
+func (s *companyStore) GetActiveCompanies(ctx context.Context) (companies []companymodel.Company, err error) {
 	ctx, span := tracing.Start(ctx, "company.store.GetActiveCompanies")
 	defer tracing.End(span, &err)
 	err = s.db.WithContext(ctx).Where("active = ?", true).Find(&companies).Error
 	return companies, err
 }
 
-func (s *companyStore) GetAllCompanies(ctx context.Context) (companies []model.Company, err error) {
+func (s *companyStore) GetAllCompanies(ctx context.Context) (companies []companymodel.Company, err error) {
 	ctx, span := tracing.Start(ctx, "company.store.GetAllCompanies")
 	defer tracing.End(span, &err)
 	err = s.db.WithContext(ctx).Find(&companies).Error
 	return companies, err
 }
 
-func (s *companyStore) GetCompanyByID(ctx context.Context, id string) (_ model.Company, err error) {
+func (s *companyStore) GetCompanyByID(ctx context.Context, id string) (_ companymodel.Company, err error) {
 	ctx, span := tracing.Start(ctx, "company.store.GetCompanyByID")
 	defer tracing.End(span, &err)
-	var company model.Company
+	var company companymodel.Company
 	err = s.db.WithContext(ctx).First(&company, "id = ?", id).Error
 	if err != nil {
 		return company, err
@@ -73,7 +73,7 @@ func (s *companyStore) GetCompanyByID(ctx context.Context, id string) (_ model.C
 	return company, nil
 }
 
-func (s *companyStore) CreateCompany(ctx context.Context, c model.Company) (err error) {
+func (s *companyStore) CreateCompany(ctx context.Context, c companymodel.Company) (err error) {
 	ctx, span := tracing.Start(ctx, "company.store.CreateCompany")
 	defer tracing.End(span, &err)
 	return s.db.WithContext(ctx).Create(&c).Error
@@ -82,7 +82,7 @@ func (s *companyStore) CreateCompany(ctx context.Context, c model.Company) (err 
 func (s *companyStore) UpdateCompany(ctx context.Context, id string, fields map[string]any) (err error) {
 	ctx, span := tracing.Start(ctx, "company.store.UpdateCompany")
 	defer tracing.End(span, &err)
-	result := s.db.WithContext(ctx).Model(&model.Company{}).Where("id = ?", id).Updates(fields)
+	result := s.db.WithContext(ctx).Model(&companymodel.Company{}).Where("id = ?", id).Updates(fields)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -95,19 +95,19 @@ func (s *companyStore) UpdateCompany(ctx context.Context, id string, fields map[
 func (s *companyStore) DeleteCompany(ctx context.Context, id string) (err error) {
 	ctx, span := tracing.Start(ctx, "company.store.DeleteCompany")
 	defer tracing.End(span, &err)
-	return s.db.WithContext(ctx).Delete(&model.Company{}, "id = ?", id).Error
+	return s.db.WithContext(ctx).Delete(&companymodel.Company{}, "id = ?", id).Error
 }
 
 func (s *companyStore) SetAllCompaniesActive(ctx context.Context, active bool) (err error) {
 	ctx, span := tracing.Start(ctx, "company.store.SetAllCompaniesActive")
 	defer tracing.End(span, &err)
-	return s.db.WithContext(ctx).Model(&model.Company{}).Where("1 = 1").Update("active", active).Error
+	return s.db.WithContext(ctx).Model(&companymodel.Company{}).Where("1 = 1").Update("active", active).Error
 }
 
-func (s *companyStore) GetCompanies(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (_ []model.Company, _ int64, err error) {
+func (s *companyStore) GetCompanies(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (_ []companymodel.Company, _ int64, err error) {
 	ctx, span := tracing.Start(ctx, "company.store.GetCompanies")
 	defer tracing.End(span, &err)
-	q := s.db.WithContext(ctx).Model(&model.Company{})
+	q := s.db.WithContext(ctx).Model(&companymodel.Company{})
 
 	if filter.Active != nil {
 		q = q.Where("active = ?", *filter.Active)
@@ -124,7 +124,7 @@ func (s *companyStore) GetCompanies(ctx context.Context, filter companydto.Compa
 		return nil, 0, err
 	}
 
-	var companies []model.Company
+	var companies []companymodel.Company
 	offset := (page - 1) * limit
 	err = q.Order("name ASC").Offset(offset).Limit(limit).Find(&companies).Error
 	return companies, total, err
@@ -133,17 +133,17 @@ func (s *companyStore) GetCompanies(ctx context.Context, filter companydto.Compa
 func (s *companyStore) GetCompanyCounts(ctx context.Context) (total, active int64, err error) {
 	ctx, span := tracing.Start(ctx, "company.store.GetCompanyCounts")
 	defer tracing.End(span, &err)
-	if err = s.db.WithContext(ctx).Model(&model.Company{}).Count(&total).Error; err != nil {
+	if err = s.db.WithContext(ctx).Model(&companymodel.Company{}).Count(&total).Error; err != nil {
 		return
 	}
-	err = s.db.WithContext(ctx).Model(&model.Company{}).Where("active = ?", true).Count(&active).Error
+	err = s.db.WithContext(ctx).Model(&companymodel.Company{}).Where("active = ?", true).Count(&active).Error
 	return
 }
 
 func (s *companyStore) UpdateScanStatus(ctx context.Context, id, status string) (err error) {
 	ctx, span := tracing.Start(ctx, "company.store.UpdateScanStatus")
 	defer tracing.End(span, &err)
-	result := s.db.WithContext(ctx).Model(&model.Company{}).
+	result := s.db.WithContext(ctx).Model(&companymodel.Company{}).
 		Where("id = ?", id).
 		Updates(map[string]any{
 			"last_scan_at":     gorm.Expr("NOW()"),

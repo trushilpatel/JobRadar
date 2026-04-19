@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/model"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 )
 
@@ -22,8 +22,8 @@ type Service interface {
 	// GetAll returns every company as a view without pagination.
 	// Used by internal workers that need the full set (e.g. scan queue enrichment).
 	GetAll(ctx context.Context) ([]companydto.CompanyView, error)
-	Get(ctx context.Context, id string) (*model.Company, error)
-	Create(ctx context.Context, input companydto.CreateCompanyInput) (*model.Company, error)
+	Get(ctx context.Context, id string) (*companymodel.Company, error)
+	Create(ctx context.Context, input companydto.CreateCompanyInput) (*companymodel.Company, error)
 	Update(ctx context.Context, id string, input companydto.UpdateCompanyInput) error
 	Delete(ctx context.Context, id string) error
 	SetAllActive(ctx context.Context, active bool) error

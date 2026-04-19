@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	"gorm.io/gorm"
 )
@@ -27,7 +27,7 @@ func NewSnapshotStore(db *gorm.DB) SnapshotWriter {
 func (s *snapshotStore) InsertSnapshot(ctx context.Context, input dto.SnapshotInput) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.InsertSnapshot")
 	defer tracing.End(span, &err)
-	row := model.JobSnapshot{
+	row := jobmodel.JobSnapshot{
 		ID:                input.ID,
 		CompanyID:         input.CompanyID,
 		SnapshottedAt:     time.Now(),
@@ -57,7 +57,7 @@ func (s *snapshotStore) UpdateSnapshotAction(ctx context.Context, id, action str
 	ctx, span := tracing.Start(ctx, "job.store.UpdateSnapshotAction")
 	defer tracing.End(span, &err)
 	now := time.Now()
-	return s.db.WithContext(ctx).Model(&model.JobSnapshot{}).
+	return s.db.WithContext(ctx).Model(&jobmodel.JobSnapshot{}).
 		Where("id = ?", id).
 		Updates(map[string]any{
 			"user_action": action,

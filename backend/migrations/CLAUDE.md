@@ -49,6 +49,6 @@ Files are numbered sequentially: `001_`, `002_`, etc.
 ## Rules
 
 - Never edit an already-applied migration — add a new one instead
-- All constrained columns use SQL `CHECK` constraints — mirror them as Go constants in `model/constants.go`
+- All constrained columns use SQL `CHECK` constraints — mirror them as Go constants in the owning service's `common/{Domain}ServiceConstants.go` (e.g. adapter types → `service/company/common/`, job status → `service/job/common/`)
 - Use `TIMESTAMPTZ` not `TIMESTAMP` for all time columns (timezone-aware)
 - Use `BIGSERIAL` for auto-increment integer PKs, `TEXT` for string PKs

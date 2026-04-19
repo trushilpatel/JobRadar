@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/trushilpatel/jobradar/model"
+import scanmodel "github.com/trushilpatel/jobradar/service/scan/models"
 
 // ScanEntity is the primary domain entity for the scan service.
-type ScanEntity = model.CompanyScanLog
+type ScanEntity = scanmodel.CompanyScanLog

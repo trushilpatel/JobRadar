@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/model"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/llm"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
@@ -17,7 +17,7 @@ import (
 // --- Test doubles (local to this file) ---
 
 type pipelineJobWriter struct {
-	inserted  *model.Job
+	inserted  *jobmodel.Job
 	insertErr error
 	deleteErr error
 	statusErr error
@@ -25,7 +25,7 @@ type pipelineJobWriter struct {
 	notesErr  error
 }
 
-func (f *pipelineJobWriter) InsertJob(_ context.Context, job *model.Job) error {
+func (f *pipelineJobWriter) InsertJob(_ context.Context, job *jobmodel.Job) error {
 	f.inserted = job
 	return f.insertErr
 }

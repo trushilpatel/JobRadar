@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/trushilpatel/jobradar/model"
+import jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 
 // JobEntity is the primary domain entity for the job service.
-type JobEntity = model.Job
+type JobEntity = jobmodel.Job

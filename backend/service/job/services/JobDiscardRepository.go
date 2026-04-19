@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"gorm.io/gorm"
 )
 
@@ -28,7 +28,7 @@ func (s *discardStore) InsertDiscard(ctx context.Context, jobResultID, reason, n
 	if note != "" {
 		notePtr = &note
 	}
-	row := model.Discarded{
+	row := jobmodel.Discarded{
 		JobResultID: jobResultID,
 		Reason:      reason,
 		Note:        notePtr,

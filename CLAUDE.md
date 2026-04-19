@@ -17,7 +17,6 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `backend/cmd/`                 | Binary entry points — one per worker + api                                        |
 | `backend/config/`              | Config struct + env var loading via godotenv                                      |
 | `backend/domain/`              | Shared error types: ServiceError, ValidationError, sentinel errors                |
-| `backend/model/`               | DB structs + all typed constants                                                  |
 | `backend/pipeline/`            | The entire data pipeline                                                          |
 | `backend/pipeline/ats/`        | Careers page fetchers (Greenhouse, Lever, Ashby, Google, Netflix, Uber)           |
 | `backend/pipeline/crawler/`    | Polls scan queue, fetches careers pages, publishes raw jobs                       |
@@ -25,13 +24,13 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `backend/pipeline/analyzer/`   | Fetches full job page, LLM enriches, writes to job_feed                           |
 | `backend/pipeline/llm/`        | LLM scorer interface + Gemini implementation                                      |
 | `backend/pipeline/techtag/`    | Normalizes and deduplicates raw tech_stack strings from LLM                       |
-| `backend/service/`             | Feature-slice packages — each owns handler + service + store + types + validator  |
-| `backend/service/job/`         | Job listing operations                                                            |
-| `backend/service/company/`     | Company CRUD + scan trigger                                                       |
-| `backend/service/application/` | Application tracking                                                              |
+| `backend/service/`             | Feature-slice packages — each owns handler + service + store + models + validator |
+| `backend/service/job/`         | Job listing operations — models in `job/models/` (package `jobmodel`)             |
+| `backend/service/company/`     | Company CRUD + scan trigger — models in `company/models/` (package `companymodel`)|
+| `backend/service/application/` | Application tracking — models in `application/models/` (package `appmodel`)       |
 | `backend/service/dashboard/`   | Dashboard stats + pipeline status                                                 |
 | `backend/service/insights/`    | Analytics and insights queries                                                    |
-| `backend/service/scan/`        | Scan result recording (used by crawler)                                           |
+| `backend/service/scan/`        | Scan result recording — models in `scan/models/` (package `scanmodel`)            |
 | `backend/store/`               | `IsNotFound(err)` helper only — store interfaces now live in each service package |
 | `backend/api/`                 | Router, respond helpers, middleware, RouteGroup interface                         |
 | `backend/infra/`               | Infrastructure plumbing (db, kafka, logger, metrics, tracing)                     |
@@ -93,9 +92,9 @@ new → dismissed          (user dismisses — job row kept for FK integrity, hi
 ## Key rules (detail in subdirectory CLAUDE.md files)
 
 - Workers depend on **interfaces**, never concrete types
-- All DB access goes through store interfaces defined in each `service/{domain}/store.go` — no raw GORM outside those files
+- All DB access goes through store interfaces defined in each service's `{Table}Repository.go` — no raw GORM outside those files
 - Domain errors come from `domain/` (`domain.ErrNotFound`, `domain.ErrInternal`, etc.) — never use `fmt.Errorf` for sentinel errors that handlers inspect
-- All typed values (status, stage, reason) use constants from `model/constants.go`
+- All typed values (status, stage, reason) use constants from the owning service's `common/` package — never raw strings
 - Insights query `job_analytics`, not `job_feed` — snapshot rows are never deleted
 - job_listing_relevance_filter batch failures mark jobs as `error` in `job_pipeline_ledger` — never re-queue to Kafka
 - All logging goes through `infra/logger.Logger` — never use stdlib `log` package directly

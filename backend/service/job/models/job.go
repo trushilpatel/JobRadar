@@ -1,8 +1,9 @@
-package model
+package jobmodel
 
 import (
 	"time"
 
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	"gorm.io/datatypes"
 )
 
@@ -11,12 +12,12 @@ type Job struct {
 	JobPostID string `gorm:"not null"    json:"job_post_id"`
 	CompanyID string `gorm:"not null"    json:"company_id"`
 
-	Title      string  `gorm:"not null"            json:"title"`
+	Title      string  `gorm:"not null"               json:"title"`
 	Location   *string `json:"location"`
 	Country    *string `json:"country"`
 	State      *string `json:"state"`
 	Remote     bool    `gorm:"not null;default:false" json:"remote"`
-	URL        string  `gorm:"not null"            json:"url"`
+	URL        string  `gorm:"not null"               json:"url"`
 	Department *string `json:"department"`
 	EmployType *string `json:"employ_type"`
 
@@ -25,7 +26,6 @@ type Job struct {
 	SalaryRange     datatypes.JSON `json:"salary_range"`
 	LLMSummary      *string        `json:"llm_summary"`
 
-	// LLM-enriched fields
 	Sponsorship       bool           `gorm:"not null;default:false" json:"sponsorship"`
 	RequiresCitizen   bool           `gorm:"not null;default:false" json:"requires_citizen"`
 	SecurityClearance bool           `gorm:"not null;default:false" json:"security_clearance"`
@@ -38,7 +38,7 @@ type Job struct {
 
 	AddedAt time.Time `gorm:"not null;autoCreateTime" json:"added_at"`
 
-	Company Company `gorm:"foreignKey:CompanyID" json:"company"`
+	Company companymodel.Company `gorm:"foreignKey:CompanyID" json:"company"`
 }
 
 func (Job) TableName() string {

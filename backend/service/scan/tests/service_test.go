@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/domain"
-	"github.com/trushilpatel/jobradar/model"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	"github.com/trushilpatel/jobradar/service/company"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 	svc "github.com/trushilpatel/jobradar/service/scan/services"
@@ -68,7 +68,7 @@ func (f *fakeScanLogReader) GetScansByDay(_ context.Context, days int) ([]dto.Da
 
 // fakeCompanyService is a test double for company.Service.
 type fakeCompanyService struct {
-	company *model.Company
+	company *companymodel.Company
 	views   []company.CompanyView
 	err     error
 }
@@ -79,10 +79,10 @@ func (f *fakeCompanyService) List(_ context.Context, _ company.CompanyFilter, _,
 func (f *fakeCompanyService) GetAll(_ context.Context) ([]company.CompanyView, error) {
 	return f.views, f.err
 }
-func (f *fakeCompanyService) Get(_ context.Context, id string) (*model.Company, error) {
+func (f *fakeCompanyService) Get(_ context.Context, id string) (*companymodel.Company, error) {
 	return f.company, f.err
 }
-func (f *fakeCompanyService) Create(_ context.Context, _ company.CreateCompanyInput) (*model.Company, error) {
+func (f *fakeCompanyService) Create(_ context.Context, _ company.CreateCompanyInput) (*companymodel.Company, error) {
 	return f.company, f.err
 }
 func (f *fakeCompanyService) Update(_ context.Context, id string, _ company.UpdateCompanyInput) error {
@@ -95,7 +95,7 @@ func (f *fakeCompanyService) SetAllActive(_ context.Context, active bool) error 
 
 func TestTriggerScan_OK(t *testing.T) {
 	q := &fakeQueueStore{}
-	service := svc.NewService(q, &fakeScanLogReader{}, &fakeCompanyService{company: &model.Company{ID: "stripe"}}, svc.Config{})
+	service := svc.NewService(q, &fakeScanLogReader{}, &fakeCompanyService{company: &companymodel.Company{ID: "stripe"}}, svc.Config{})
 
 	err := service.TriggerScan(context.Background(), "stripe")
 	if err != nil {
@@ -128,7 +128,7 @@ func TestListQueue_EnrichesWithCompanyData(t *testing.T) {
 		{ID: "q1", CompanyID: "stripe", Status: "queued", Source: "manual", QueuedAt: time.Now()},
 	}
 	views := []company.CompanyView{
-		{Company: model.Company{ID: "stripe", Name: "Stripe", AdapterType: "greenhouse", LastScanAt: &lastScan}},
+		{Company: companymodel.Company{ID: "stripe", Name: "Stripe", AdapterType: "greenhouse", LastScanAt: &lastScan}},
 	}
 
 	service := svc.NewService(

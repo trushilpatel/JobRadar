@@ -3,14 +3,14 @@ package crawler
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/model"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
 // CompanyReader is the narrow company interface the crawler engine depends on.
 type CompanyReader interface {
-	GetByID(ctx context.Context, id string) (model.Company, error)
-	GetActive(ctx context.Context) ([]model.Company, error)
+	GetByID(ctx context.Context, id string) (companymodel.Company, error)
+	GetActive(ctx context.Context) ([]companymodel.Company, error)
 }
 
 // PipelineLedger is the narrow ledger interface the crawler engine depends on.

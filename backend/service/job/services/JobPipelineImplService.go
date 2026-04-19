@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/pipeline/techtag"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
@@ -96,8 +96,8 @@ func (p *pipelineService) HasSeenJob(ctx context.Context, jobID string) (_ bool,
 	return p.ledger.HasSeen(ctx, jobID)
 }
 
-// buildJobRow maps EnrichedJobInput into a model.Job ready for DB insert.
-func buildJobRow(input dto.EnrichedJobInput) (*model.Job, error) {
+// buildJobRow maps EnrichedJobInput into a jobmodel.Job ready for DB insert.
+func buildJobRow(input dto.EnrichedJobInput) (*jobmodel.Job, error) {
 	raw := input.Raw
 	enriched := input.Enriched
 
@@ -120,7 +120,7 @@ func buildJobRow(input dto.EnrichedJobInput) (*model.Job, error) {
 		return nil, fmt.Errorf("marshal salary_range: %w", err)
 	}
 
-	return &model.Job{
+	return &jobmodel.Job{
 		ID:                uuid.New().String(),
 		JobPostID:         raw.ID,
 		CompanyID:         raw.CompanyID,

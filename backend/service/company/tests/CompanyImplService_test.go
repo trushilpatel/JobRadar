@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/domain"
-	"github.com/trushilpatel/jobradar/model"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
@@ -23,7 +23,7 @@ func (f *fakeScanHistoryReader) GetScanHistories(_ context.Context, _ []string) 
 
 // fakeStore is a test double for Store.
 type fakeStore struct {
-	companies []model.Company
+	companies []companymodel.Company
 	err       error
 
 	updateCalled bool
@@ -32,24 +32,24 @@ type fakeStore struct {
 	createCalled bool
 }
 
-func (f *fakeStore) GetActiveCompanies(_ context.Context) ([]model.Company, error) {
+func (f *fakeStore) GetActiveCompanies(_ context.Context) ([]companymodel.Company, error) {
 	return f.companies, f.err
 }
-func (f *fakeStore) GetAllCompanies(_ context.Context) ([]model.Company, error) {
+func (f *fakeStore) GetAllCompanies(_ context.Context) ([]companymodel.Company, error) {
 	return f.companies, f.err
 }
-func (f *fakeStore) GetCompanyByID(_ context.Context, id string) (model.Company, error) {
+func (f *fakeStore) GetCompanyByID(_ context.Context, id string) (companymodel.Company, error) {
 	for _, c := range f.companies {
 		if c.ID == id {
 			return c, nil
 		}
 	}
 	if f.err != nil {
-		return model.Company{}, f.err
+		return companymodel.Company{}, f.err
 	}
-	return model.Company{}, gorm.ErrRecordNotFound
+	return companymodel.Company{}, gorm.ErrRecordNotFound
 }
-func (f *fakeStore) GetCompanies(_ context.Context, _ companydto.CompanyFilter, _, _ int) ([]model.Company, int64, error) {
+func (f *fakeStore) GetCompanies(_ context.Context, _ companydto.CompanyFilter, _, _ int) ([]companymodel.Company, int64, error) {
 	return f.companies, int64(len(f.companies)), f.err
 }
 func (f *fakeStore) GetCompanyCounts(_ context.Context) (total, active int64, err error) {
@@ -61,7 +61,7 @@ func (f *fakeStore) GetCompanyCounts(_ context.Context) (total, active int64, er
 	}
 	return int64(len(f.companies)), active, f.err
 }
-func (f *fakeStore) CreateCompany(_ context.Context, c model.Company) error {
+func (f *fakeStore) CreateCompany(_ context.Context, c companymodel.Company) error {
 	f.createCalled = true
 	return f.err
 }
@@ -91,7 +91,7 @@ func (f *fakeStore) UpdateScanStatus(_ context.Context, id, status string) error
 
 func TestList_ComputesNextScanAt(t *testing.T) {
 	lastScan := time.Now().Add(-1 * time.Hour)
-	companies := []model.Company{
+	companies := []companymodel.Company{
 		{ID: "c1", Name: "C1", LastScanAt: &lastScan},
 		{ID: "c2", Name: "C2", LastScanAt: nil},
 	}
@@ -124,7 +124,7 @@ func TestList_ComputesNextScanAt(t *testing.T) {
 
 func TestCreate_SetsLastScanAt(t *testing.T) {
 	before := time.Now()
-	fs := &fakeStore{companies: []model.Company{}}
+	fs := &fakeStore{companies: []companymodel.Company{}}
 	svc := companysvc.NewService(fs, companycommon.Config{}, &fakeScanHistoryReader{})
 
 	company, err := svc.Create(context.Background(), companydto.CreateCompanyInput{
@@ -148,7 +148,7 @@ func TestCreate_SetsLastScanAt(t *testing.T) {
 }
 
 func TestUpdate_NilFieldsSkipped(t *testing.T) {
-	fs := &fakeStore{companies: []model.Company{{ID: "stripe"}}}
+	fs := &fakeStore{companies: []companymodel.Company{{ID: "stripe"}}}
 	svc := companysvc.NewService(fs, companycommon.Config{}, &fakeScanHistoryReader{})
 
 	name := "New Name"
@@ -173,7 +173,7 @@ func TestUpdate_NilFieldsSkipped(t *testing.T) {
 }
 
 func TestDelete_ReturnsNotFoundWhenMissing(t *testing.T) {
-	fs := &fakeStore{companies: []model.Company{}} // no companies
+	fs := &fakeStore{companies: []companymodel.Company{}} // no companies
 	svc := companysvc.NewService(fs, companycommon.Config{}, &fakeScanHistoryReader{})
 
 	err := svc.Delete(context.Background(), "nonexistent")
@@ -193,7 +193,7 @@ func TestDelete_ReturnsNotFoundWhenMissing(t *testing.T) {
 func TestList_FiltersActiveCompanies(t *testing.T) {
 	// fakeStore.GetCompanies ignores the filter — this test verifies the service
 	// passes filter through; store-level filtering is tested via integration tests.
-	companies := []model.Company{
+	companies := []companymodel.Company{
 		{ID: "c1", Active: true},
 	}
 	svc := companysvc.NewService(&fakeStore{companies: companies}, companycommon.Config{}, &fakeScanHistoryReader{})

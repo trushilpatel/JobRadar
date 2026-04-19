@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -29,9 +29,9 @@ func (s *techTagStore) InsertTechTags(ctx context.Context, jobID, companyID stri
 	if len(techs) == 0 {
 		return nil
 	}
-	rows := make([]model.JobTechTag, 0, len(techs))
+	rows := make([]jobmodel.JobTechTag, 0, len(techs))
 	for _, tech := range techs {
-		rows = append(rows, model.JobTechTag{
+		rows = append(rows, jobmodel.JobTechTag{
 			JobID:     jobID,
 			Tech:      tech,
 			CompanyID: companyID,

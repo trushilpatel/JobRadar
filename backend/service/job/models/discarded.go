@@ -1,4 +1,4 @@
-package model
+package jobmodel
 
 import "time"
 

@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/domain"
-	"github.com/trushilpatel/jobradar/model"
+	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	svc "github.com/trushilpatel/jobradar/service/application/services"
@@ -32,20 +32,20 @@ func (f *fakeValidator) ValidateListAll(_, _ int) error                    { ret
 
 // fakeService is a test double for ApplicationService.
 type fakeService struct {
-	apps        []model.JobApplication
+	apps        []appmodel.JobApplication
 	appsWithJob []svc.ApplicationWithJob
-	app         *model.JobApplication
+	app         *appmodel.JobApplication
 	total       int
 	err         error
 }
 
-func (f *fakeService) ListByJob(_ string) ([]model.JobApplication, error) {
+func (f *fakeService) ListByJob(_ string) ([]appmodel.JobApplication, error) {
 	return f.apps, f.err
 }
 func (f *fakeService) ListAll(_, _ int) ([]svc.ApplicationWithJob, int, error) {
 	return f.appsWithJob, f.total, f.err
 }
-func (f *fakeService) Create(_ context.Context, _ string, _ dto.CreateApplicationInput) (*model.JobApplication, error) {
+func (f *fakeService) Create(_ context.Context, _ string, _ dto.CreateApplicationInput) (*appmodel.JobApplication, error) {
 	return f.app, f.err
 }
 func (f *fakeService) UpdateStage(_, _ string, _ dto.UpdateStageInput) error { return f.err }
@@ -58,7 +58,7 @@ func newTestRouter(h *svc.RestHandler) *chi.Mux {
 }
 
 func TestHandlerList_OK(t *testing.T) {
-	h := svc.NewApplicationRestHandler(&fakeValidator{}, &fakeService{apps: []model.JobApplication{}})
+	h := svc.NewApplicationRestHandler(&fakeValidator{}, &fakeService{apps: []appmodel.JobApplication{}})
 	r := newTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/jobs/j1/applications", nil)
@@ -71,7 +71,7 @@ func TestHandlerList_OK(t *testing.T) {
 }
 
 func TestHandlerCreate_OK(t *testing.T) {
-	app := &model.JobApplication{Stage: appcommon.StageApplied}
+	app := &appmodel.JobApplication{Stage: appcommon.StageApplied}
 	h := svc.NewApplicationRestHandler(&fakeValidator{}, &fakeService{app: app})
 	r := newTestRouter(h)
 

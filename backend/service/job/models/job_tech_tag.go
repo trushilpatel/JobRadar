@@ -1,9 +1,7 @@
-package model
+package jobmodel
 
 import "time"
 
-// JobTechTag is a flattened, normalized technology tag extracted from a job posting.
-// One row per (job, tech) pair. Written by the analyzer after validation.
 type JobTechTag struct {
 	JobID     string    `gorm:"primaryKey"`
 	Tech      string    `gorm:"primaryKey"`

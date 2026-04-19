@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/trushilpatel/jobradar/domain"
-	"github.com/trushilpatel/jobradar/model"
+	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -22,7 +22,7 @@ func NewApplicationImplService(repo ApplicationRepositoryService, jobSvc jobsvc.
 }
 
 // ListByJob returns all application entries for a job.
-func (s *applicationImpl) ListByJob(jobID string) ([]model.JobApplication, error) {
+func (s *applicationImpl) ListByJob(jobID string) ([]appmodel.JobApplication, error) {
 	apps, err := s.repo.GetApplicationsByJobID(jobID)
 	if err != nil {
 		return nil, domain.ErrInternal.WithMessage("failed to fetch applications")
@@ -41,7 +41,7 @@ func (s *applicationImpl) ListAll(page, limit int) ([]ApplicationWithJob, int, e
 
 // Create inserts a new application stage entry for the given job.
 // Verifies the job exists via job.Service.Get().
-func (s *applicationImpl) Create(ctx context.Context, jobID string, input dto.CreateApplicationInput) (*model.JobApplication, error) {
+func (s *applicationImpl) Create(ctx context.Context, jobID string, input dto.CreateApplicationInput) (*appmodel.JobApplication, error) {
 	// Existence check — returns NOT_FOUND if missing
 	if _, err := s.jobSvc.Get(ctx, jobID); err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ func (s *applicationImpl) Create(ctx context.Context, jobID string, input dto.Cr
 		_ = s.jobSvc.MarkApplied(ctx, jobID)
 	}
 
-	app := &model.JobApplication{
+	app := &appmodel.JobApplication{
 		JobResultID: jobID,
 		Stage:       input.Stage,
 	}

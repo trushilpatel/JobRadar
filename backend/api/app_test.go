@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/model"
+	appmodel "github.com/trushilpatel/jobradar/service/application/models"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/service/application"
 	"github.com/trushilpatel/jobradar/service/company"
 	"github.com/trushilpatel/jobradar/service/dashboard"
@@ -150,10 +152,10 @@ func (f *fakeCompanyService) List(_ context.Context, _ company.CompanyFilter, _,
 func (f *fakeCompanyService) GetAll(_ context.Context) ([]company.CompanyView, error) {
 	return nil, nil
 }
-func (f *fakeCompanyService) Get(_ context.Context, _ string) (*model.Company, error) {
+func (f *fakeCompanyService) Get(_ context.Context, _ string) (*companymodel.Company, error) {
 	return nil, nil
 }
-func (f *fakeCompanyService) Create(_ context.Context, _ company.CreateCompanyInput) (*model.Company, error) {
+func (f *fakeCompanyService) Create(_ context.Context, _ company.CreateCompanyInput) (*companymodel.Company, error) {
 	return nil, nil
 }
 func (f *fakeCompanyService) Update(_ context.Context, _ string, _ company.UpdateCompanyInput) error {
@@ -180,10 +182,10 @@ func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error {
 
 type fakeJobService struct{}
 
-func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]model.Job, int, error) {
+func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
 	return nil, 0, nil
 }
-func (f *fakeJobService) Get(_ context.Context, _ string) (*model.Job, error)    { return nil, nil }
+func (f *fakeJobService) Get(_ context.Context, _ string) (*jobmodel.Job, error)    { return nil, nil }
 func (f *fakeJobService) GetCounts(_ context.Context) (*jobdto.JobCounts, error) { return nil, nil }
 func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error {
 	return nil
@@ -195,11 +197,11 @@ func (f *fakeJobService) MarkApplied(_ context.Context, _ string) error      { r
 
 type fakeAppService struct{}
 
-func (f *fakeAppService) ListByJob(_ string) ([]model.JobApplication, error) { return nil, nil }
+func (f *fakeAppService) ListByJob(_ string) ([]appmodel.JobApplication, error) { return nil, nil }
 func (f *fakeAppService) ListAll(_, _ int) ([]application.ApplicationWithJob, int, error) {
 	return nil, 0, nil
 }
-func (f *fakeAppService) Create(_ context.Context, _ string, _ application.CreateApplicationInput) (*model.JobApplication, error) {
+func (f *fakeAppService) Create(_ context.Context, _ string, _ application.CreateApplicationInput) (*appmodel.JobApplication, error) {
 	return nil, nil
 }
 func (f *fakeAppService) UpdateStage(_, _ string, _ application.UpdateStageInput) error { return nil }

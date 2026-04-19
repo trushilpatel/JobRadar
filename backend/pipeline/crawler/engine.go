@@ -10,7 +10,7 @@ import (
 	"github.com/trushilpatel/jobradar/infra/logger"
 	"github.com/trushilpatel/jobradar/infra/metrics"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/model"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	"github.com/trushilpatel/jobradar/pipeline/ats"
 	"github.com/trushilpatel/jobradar/pipeline/ats/google"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
@@ -68,7 +68,7 @@ func (e *Engine) RunForCompany(ctx context.Context, companyID string) {
 	e.scanCompany(ctx, company)
 }
 
-func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
+func (e *Engine) scanCompany(ctx context.Context, company companymodel.Company) {
 	ctx, span := tracing.Start(ctx, "crawler.engine.scanCompany")
 	defer tracing.End(span, nil)
 	start := time.Now()
@@ -101,7 +101,7 @@ func (e *Engine) scanCompany(ctx context.Context, company model.Company) {
 	e.recordResult(ctx, company.ID, len(result.Jobs), newCount, elapsed, nil)
 }
 
-func (e *Engine) fetchJobs(ctx context.Context, company model.Company, log logger.Logger) (ats.FetchJobsResponse, error) {
+func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, log logger.Logger) (ats.FetchJobsResponse, error) {
 	adp, err := ats.RegistryWithGoogleConfig(company.AdapterType, e.googleCfg, log)
 	if err != nil {
 		log.Error("no adapter found", err)
@@ -115,7 +115,7 @@ func (e *Engine) fetchJobs(ctx context.Context, company model.Company, log logge
 	return result, nil
 }
 
-func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, company model.Company, log logger.Logger) int {
+func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, company companymodel.Company, log logger.Logger) int {
 	if len(jobs) == 0 {
 		return 0
 	}

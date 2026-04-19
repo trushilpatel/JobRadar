@@ -13,6 +13,8 @@ Every service package has the same layout:
 │   └── {Domain}ServiceConstants.go    # Domain constants (package common)
 ├── dto/
 │   └── {TypeName}.go                  # One file per input/output type (package dto)
+├── models/
+│   └── {table_name}.go                # One file per DB table — GORM struct, package {domain}model
 ├── services/
 │   ├── {Domain}Service.go             # All service-level interfaces: Service, Validator, LedgerService, cross-service writers
 │   ├── {Domain}ImplService.go         # Business logic implementation
@@ -23,6 +25,8 @@ Every service package has the same layout:
 └── tests/
     └── {Domain}{Role}_test.go         # Tests mirroring the services/ file they cover
 ```
+
+**Model package naming:** each `models/` directory uses a domain-prefixed package name — `jobmodel`, `companymodel`, `appmodel`, `scanmodel`. This prevents import alias conflicts when a file needs structs from multiple service domains.
 
 **Repository file naming:** use the table's logical name, not the domain prefix — e.g. `JobFeedRepository.go`, `JobSeenLedgerRepository.go`, `JobSnapshotRepository.go`. Each file owns exactly one DB table.
 

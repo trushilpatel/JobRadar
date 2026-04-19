@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/domain"
-	"github.com/trushilpatel/jobradar/model"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
@@ -34,8 +34,8 @@ func (f *fakeValidator) ValidateSetAllActive(_ *bool) error                     
 // fakeService is a test double for Service.
 type fakeService struct {
 	listResult   []companydto.CompanyView
-	getResult    *model.Company
-	createResult *model.Company
+	getResult    *companymodel.Company
+	createResult *companymodel.Company
 	err          error
 }
 
@@ -45,10 +45,10 @@ func (f *fakeService) List(_ context.Context, _ companydto.CompanyFilter, _, _ i
 func (f *fakeService) GetAll(_ context.Context) ([]companydto.CompanyView, error) {
 	return f.listResult, f.err
 }
-func (f *fakeService) Get(_ context.Context, id string) (*model.Company, error) {
+func (f *fakeService) Get(_ context.Context, id string) (*companymodel.Company, error) {
 	return f.getResult, f.err
 }
-func (f *fakeService) Create(_ context.Context, _ companydto.CreateCompanyInput) (*model.Company, error) {
+func (f *fakeService) Create(_ context.Context, _ companydto.CreateCompanyInput) (*companymodel.Company, error) {
 	return f.createResult, f.err
 }
 func (f *fakeService) Update(_ context.Context, id string, _ companydto.UpdateCompanyInput) error {
@@ -100,7 +100,7 @@ func TestHandlerList_ValidatorError(t *testing.T) {
 }
 
 func TestHandlerCreate_OK(t *testing.T) {
-	company := &model.Company{ID: "stripe", Name: "Stripe"}
+	company := &companymodel.Company{ID: "stripe", Name: "Stripe"}
 	h := companysvc.NewHandler(&fakeValidator{}, &fakeService{createResult: company})
 	r := newTestRouter(h)
 

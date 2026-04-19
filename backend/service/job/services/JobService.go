@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/model"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 )
 
@@ -17,8 +17,8 @@ type Validator interface {
 
 // Service defines all business operations for the job domain.
 type Service interface {
-	List(ctx context.Context, filter dto.JobFilter, page, limit int) ([]model.Job, int, error)
-	Get(ctx context.Context, id string) (*model.Job, error)
+	List(ctx context.Context, filter dto.JobFilter, page, limit int) ([]jobmodel.Job, int, error)
+	Get(ctx context.Context, id string) (*jobmodel.Job, error)
 	GetCounts(ctx context.Context) (*dto.JobCounts, error)
 	Dismiss(ctx context.Context, id string, input dto.DismissInput) error
 	SetSaved(ctx context.Context, id string, saved bool) error

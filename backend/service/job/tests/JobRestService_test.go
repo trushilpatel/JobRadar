@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/domain"
-	"github.com/trushilpatel/jobradar/model"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -36,16 +36,16 @@ func (f *fakeJobValidator) ValidateSetNotes(_ jobdto.SetNotesInput) error {
 
 // fakeJobService is a test double for Service.
 type fakeJobService struct {
-	jobs  []model.Job
-	job   *model.Job
+	jobs  []jobmodel.Job
+	job   *jobmodel.Job
 	total int
 	err   error
 }
 
-func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]model.Job, int, error) {
+func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
 	return f.jobs, f.total, f.err
 }
-func (f *fakeJobService) Get(_ context.Context, _ string) (*model.Job, error) {
+func (f *fakeJobService) Get(_ context.Context, _ string) (*jobmodel.Job, error) {
 	return f.job, f.err
 }
 func (f *fakeJobService) GetCounts(_ context.Context) (*jobdto.JobCounts, error) {
@@ -66,7 +66,7 @@ func newJobTestRouter(h *jobsvc.Handler) *chi.Mux {
 }
 
 func TestJobHandlerList_OK(t *testing.T) {
-	h := jobsvc.NewHandler(&fakeJobValidator{}, &fakeJobService{jobs: []model.Job{}, total: 0})
+	h := jobsvc.NewHandler(&fakeJobValidator{}, &fakeJobService{jobs: []jobmodel.Job{}, total: 0})
 	r := newJobTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
@@ -102,7 +102,7 @@ func TestJobHandlerList_ValidationError(t *testing.T) {
 }
 
 func TestJobHandlerGet_OK(t *testing.T) {
-	h := jobsvc.NewHandler(&fakeJobValidator{}, &fakeJobService{job: &model.Job{ID: "j1"}})
+	h := jobsvc.NewHandler(&fakeJobValidator{}, &fakeJobService{job: &jobmodel.Job{ID: "j1"}})
 	r := newJobTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/jobs/j1", nil)

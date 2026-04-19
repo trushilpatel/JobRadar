@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/trushilpatel/jobradar/domain"
-	"github.com/trushilpatel/jobradar/model"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -16,8 +16,8 @@ import (
 // --- Test doubles ---
 
 type fakeJobStore struct {
-	job   *model.Job
-	jobs  []model.Job
+	job   *jobmodel.Job
+	jobs  []jobmodel.Job
 	total int64
 	err   error
 
@@ -26,10 +26,10 @@ type fakeJobStore struct {
 	updateNotesCalled  bool
 }
 
-func (f *fakeJobStore) GetJobs(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]model.Job, int64, error) {
+func (f *fakeJobStore) GetJobs(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int64, error) {
 	return f.jobs, f.total, f.err
 }
-func (f *fakeJobStore) GetJobByID(_ context.Context, id string) (*model.Job, error) {
+func (f *fakeJobStore) GetJobByID(_ context.Context, id string) (*jobmodel.Job, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -38,7 +38,7 @@ func (f *fakeJobStore) GetJobByID(_ context.Context, id string) (*model.Job, err
 	}
 	return nil, gorm.ErrRecordNotFound
 }
-func (f *fakeJobStore) InsertJob(_ context.Context, job *model.Job) error { return f.err }
+func (f *fakeJobStore) InsertJob(_ context.Context, job *jobmodel.Job) error { return f.err }
 func (f *fakeJobStore) DeleteJob(_ context.Context, id string) error      { return f.err }
 func (f *fakeJobStore) UpdateJobStatus(_ context.Context, id, status string) error {
 	f.updateStatusCalled = true
@@ -114,7 +114,7 @@ func (f *fakeApplicationWriter) InsertOfferApplication(_ string) error        { 
 // --- Tests ---
 
 func TestList_ReturnsPaged(t *testing.T) {
-	jobs := []model.Job{{ID: "j1"}, {ID: "j2"}}
+	jobs := []jobmodel.Job{{ID: "j1"}, {ID: "j2"}}
 	svc := jobsvc.NewService(&fakeJobStore{jobs: jobs, total: 2}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{}, &fakeApplicationWriter{})
 
 	result, total, err := svc.List(context.Background(), jobdto.JobFilter{Status: "new"}, 1, 20)
@@ -143,7 +143,7 @@ func TestGet_NotFound(t *testing.T) {
 }
 
 func TestDismiss_MultiStep(t *testing.T) {
-	job := &model.Job{ID: "j1", JobPostID: "jp1"}
+	job := &jobmodel.Job{ID: "j1", JobPostID: "jp1"}
 	js := &fakeJobStore{job: job}
 	discard := &fakeDiscardStore{}
 	snapshot := &fakeSnapshotWriter{}

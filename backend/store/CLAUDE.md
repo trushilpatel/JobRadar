@@ -13,17 +13,17 @@ if store.IsNotFound(err) {
 }
 ```
 
-## Store interfaces have moved
+## Repository files
 
-Store interfaces and their GORM implementations now live in each service package:
+Store interfaces and their GORM implementations live in each service package, one file per DB table:
 
-| Package                | Store file                                                                          |
-| ---------------------- | ----------------------------------------------------------------------------------- |
-| `service/job/`         | `store.go` — JobStore, SeenLedgerStore, DiscardStore, SnapshotWriter, TechTagWriter |
-| `service/company/`     | `store.go` — CompanyStore                                                           |
-| `service/application/` | `store.go` — ApplicationStore                                                       |
-| `service/dashboard/`   | `store.go` — DashboardStore, PipelineStore                                          |
-| `service/insights/`    | `store.go` — InsightsStore                                                          |
-| `service/scan/`        | `store.go` — ScanLogWriter                                                          |
+| Service                | Repository files                                                                                                                        |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `service/job/`         | `JobFeedRepository.go`, `JobSeenLedgerRepository.go`, `JobSnapshotRepository.go`, `JobDiscardRepository.go`, `JobTechTagRepository.go` |
+| `service/company/`     | `CompanyRepository.go`                                                                                                                  |
+| `service/application/` | `ApplicationRepository.go`                                                                                                              |
+| `service/dashboard/`   | `DashboardRepositoryService.go`                                                                                                         |
+| `service/insights/`    | `InsightsRepositoryService.go`                                                                                                          |
+| `service/scan/`        | `ScanRepositoryService.go`                                                                                                              |
 
-Each store file defines the interfaces the service depends on, then implements them with GORM — all in the same package. This keeps each domain fully self-contained.
+Each repository file defines the store interface(s) for one DB table, then implements them with GORM — all in the same package. This keeps each domain fully self-contained.

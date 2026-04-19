@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/trushilpatel/jobradar/model"
+import appmodel "github.com/trushilpatel/jobradar/service/application/models"
 
 // ApplicationEntity is the primary domain entity for the application service.
-type ApplicationEntity = model.JobApplication
+type ApplicationEntity = appmodel.JobApplication

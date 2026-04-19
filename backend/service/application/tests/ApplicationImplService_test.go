@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/trushilpatel/jobradar/domain"
-	"github.com/trushilpatel/jobradar/model"
+	appmodel "github.com/trushilpatel/jobradar/service/application/models"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	svc "github.com/trushilpatel/jobradar/service/application/services"
@@ -16,17 +17,17 @@ import (
 
 // fakeRepository is a test double for ApplicationRepositoryService.
 type fakeRepository struct {
-	apps         []model.JobApplication
+	apps         []appmodel.JobApplication
 	appsWithJob  []svc.ApplicationWithJob
 	total        int64
 	err          error
 	insertCalled bool
 }
 
-func (f *fakeRepository) GetApplicationsByJobID(jobResultID string) ([]model.JobApplication, error) {
+func (f *fakeRepository) GetApplicationsByJobID(jobResultID string) ([]appmodel.JobApplication, error) {
 	return f.apps, f.err
 }
-func (f *fakeRepository) GetApplicationsByJobIDPaged(jobResultID string, page, limit int) ([]model.JobApplication, int64, error) {
+func (f *fakeRepository) GetApplicationsByJobIDPaged(jobResultID string, page, limit int) ([]appmodel.JobApplication, int64, error) {
 	return f.apps, f.total, f.err
 }
 func (f *fakeRepository) InsertApplication(jobResultID, stage, note string) error {
@@ -47,16 +48,16 @@ func (f *fakeRepository) UpdateApplicationNote(id int64, note string) error   { 
 
 // fakeJobService is a test double for job.Service.
 type fakeJobService struct {
-	job *model.Job
+	job *jobmodel.Job
 	err error
 
 	markAppliedCalled bool
 }
 
-func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]model.Job, int, error) {
+func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
 	return nil, 0, f.err
 }
-func (f *fakeJobService) Get(_ context.Context, _ string) (*model.Job, error) { return f.job, f.err }
+func (f *fakeJobService) Get(_ context.Context, _ string) (*jobmodel.Job, error) { return f.job, f.err }
 func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error {
 	return f.err
 }
@@ -88,7 +89,7 @@ func TestCreate_JobNotFound(t *testing.T) {
 
 func TestCreate_OK(t *testing.T) {
 	fr := &fakeRepository{}
-	service := svc.NewApplicationImplService(fr, &fakeJobService{job: &model.Job{ID: "j1"}})
+	service := svc.NewApplicationImplService(fr, &fakeJobService{job: &jobmodel.Job{ID: "j1"}})
 
 	app, err := service.Create(context.Background(), "j1", dto.CreateApplicationInput{Stage: appcommon.StagePhoneScreen})
 	if err != nil {
@@ -104,7 +105,7 @@ func TestCreate_OK(t *testing.T) {
 
 func TestCreate_SetsJobApplied(t *testing.T) {
 	fr := &fakeRepository{}
-	jobService := &fakeJobService{job: &model.Job{ID: "j1"}}
+	jobService := &fakeJobService{job: &jobmodel.Job{ID: "j1"}}
 	service := svc.NewApplicationImplService(fr, jobService)
 
 	_, err := service.Create(context.Background(), "j1", dto.CreateApplicationInput{Stage: appcommon.StageApplied})

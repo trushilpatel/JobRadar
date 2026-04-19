@@ -10,9 +10,9 @@ job_listing_crawler
 
 job_post_analyzer
   └─ job.FullContent != nil?
-       └─ yes → fullContentToResponse()    → JSON → LLM → model.Job (DB)  [skip fetch]
+       └─ yes → fullContentToResponse()    → JSON → LLM → jobmodel.Job (DB)  [skip fetch]
        └─ no  → Registry(rawJob.adapter)   → ContentFetcher.FetchJobContent()   [if implemented]
-                    └─ FetchJobContentResponse → JSON → LLM → model.Job (DB)
+                    └─ FetchJobContentResponse → JSON → LLM → jobmodel.Job (DB)
              → fallback: HTTP GET rawJob.URL   → StripHTML → FetchJobContentResponse
 ```
 
@@ -46,8 +46,8 @@ This means adding a new downstream field never requires touching HTTP/decode log
 
 ### RawJob
 
-Kafka message published to `job_listings.raw`. Defined here, not in `model/`.
-`model.Job` is the enriched DB row — don't mix them up.
+Kafka message published to `job_listings.raw`. Defined in `pipeline/ats/` — the Kafka wire type, not a DB model.
+`jobmodel.Job` (in `service/job/models/`) is the GORM DB row — keep them separate.
 
 ```go
 type RawJob struct {
@@ -218,7 +218,7 @@ lever-d6389903-e642-4189-804c-02d271714bdb
 ashby-abc-111-def
 ```
 
-The prefix matches the `model.Adapter*` constants in `model/constants.go`.
+The prefix matches the `companycommon.Adapter*` constants in `service/company/common/`.
 
 ---
 
@@ -228,7 +228,7 @@ The prefix matches the `model.Adapter*` constants in `model/constants.go`.
 2. Implement `ContentFetcher` (`FetchJobContent`) if the platform has a native job detail API — OR populate `FetchJobsItem.FullContent` if the adapter returns full details at listing time (full-detail path)
 3. Create `{name}.md` documenting the full API response with a `Captured` column
 4. Add a `case` in `registry.go`
-5. Add the adapter constant to `model/constants.go`
+5. Add the adapter constant to `service/company/common/CompanyServiceConstants.go`
 6. Add the CHECK constraint value to the `companies` migration
 7. Add unit tests in `{name}_test.go` using `httptest.NewServer` — no real HTTP in unit tests
 

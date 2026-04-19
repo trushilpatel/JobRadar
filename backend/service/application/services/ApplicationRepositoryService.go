@@ -1,7 +1,7 @@
 package services
 
 import (
-	"github.com/trushilpatel/jobradar/model"
+	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"gorm.io/gorm"
 )
@@ -15,18 +15,18 @@ func NewApplicationRepositoryService(db *gorm.DB) ApplicationRepositoryService {
 	return &applicationRepository{db: db}
 }
 
-func (s *applicationRepository) GetApplicationsByJobID(jobResultID string) ([]model.JobApplication, error) {
-	var apps []model.JobApplication
+func (s *applicationRepository) GetApplicationsByJobID(jobResultID string) ([]appmodel.JobApplication, error) {
+	var apps []appmodel.JobApplication
 	err := s.db.Where("job_result_id = ?", jobResultID).
 		Order("stage_at ASC").
 		Find(&apps).Error
 	return apps, err
 }
 
-func (s *applicationRepository) GetApplicationsByJobIDPaged(jobResultID string, page, limit int) ([]model.JobApplication, int64, error) {
-	var apps []model.JobApplication
+func (s *applicationRepository) GetApplicationsByJobIDPaged(jobResultID string, page, limit int) ([]appmodel.JobApplication, int64, error) {
+	var apps []appmodel.JobApplication
 	var total int64
-	query := s.db.Model(&model.JobApplication{}).Where("job_result_id = ?", jobResultID)
+	query := s.db.Model(&appmodel.JobApplication{}).Where("job_result_id = ?", jobResultID)
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -40,7 +40,7 @@ func (s *applicationRepository) InsertApplication(jobResultID, stage, note strin
 	if note != "" {
 		notePtr = &note
 	}
-	row := model.JobApplication{
+	row := appmodel.JobApplication{
 		JobResultID: jobResultID,
 		Stage:       stage,
 		Note:        notePtr,

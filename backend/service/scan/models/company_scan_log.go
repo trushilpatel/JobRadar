@@ -1,6 +1,10 @@
-package model
+package scanmodel
 
-import "time"
+import (
+	"time"
+
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
+)
 
 type CompanyScanLog struct {
 	ID          int64     `gorm:"primaryKey;autoIncrement" json:"id"`
@@ -11,7 +15,7 @@ type CompanyScanLog struct {
 	Error       *string   `json:"error"`
 	DurationMs  *int      `json:"duration_ms"`
 
-	Company Company `gorm:"foreignKey:CompanyID" json:"company"`
+	Company companymodel.Company `gorm:"foreignKey:CompanyID" json:"company"`
 }
 
 func (CompanyScanLog) TableName() string {
