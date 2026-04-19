@@ -45,16 +45,16 @@ func (s *userDashboardRepository) GetProgressStats(ctx context.Context) (_ dto.P
 					WHERE ja.stage IN ('phone_screen', 'technical', 'final_round')
 					  AND ja.stage_at >= DATE_TRUNC('week', NOW())
 				) AS interviewing_this_week,
-				COUNT(DISTINCT j.id) FILTER (
-					WHERE j.status = 'applied'
-					  AND NOT EXISTS (
-						  SELECT 1 FROM job_application_tracker ja2
-						  WHERE ja2.job_result_id = j.id
-							AND ja2.stage != 'applied'
-						  )
-				) AS awaiting_reply
+				COUNT(DISTINCT CASE
+					WHEN j.status = 'applied' AND advanced.job_result_id IS NULL THEN j.id
+				END) AS awaiting_reply
 			FROM job_application_tracker ja
 			JOIN job_feed j ON ja.job_result_id = j.id
+			LEFT JOIN (
+				SELECT DISTINCT job_result_id
+				FROM job_application_tracker
+				WHERE stage != 'applied'
+			) advanced ON advanced.job_result_id = j.id
 		)
 		SELECT
 			sc.applied_count,

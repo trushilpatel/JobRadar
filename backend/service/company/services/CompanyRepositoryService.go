@@ -135,11 +135,17 @@ func (s *companyStore) GetCompanies(ctx context.Context, filter companydto.Compa
 func (s *companyStore) GetCompanyCounts(ctx context.Context) (total, active int64, err error) {
 	ctx, span := tracing.Start(ctx, "company.store.GetCompanyCounts")
 	defer tracing.End(span, &err)
-	if err = s.db.WithContext(ctx).Model(&companymodel.Company{}).Count(&total).Error; err != nil {
-		return
+	var counts struct {
+		Total  int64
+		Active int64
 	}
-	err = s.db.WithContext(ctx).Model(&companymodel.Company{}).Where("active = ?", true).Count(&active).Error
-	return
+	err = s.db.WithContext(ctx).Raw(`
+		SELECT
+			COUNT(*)                       AS total,
+			COUNT(*) FILTER (WHERE active) AS active
+		FROM companies
+	`).Scan(&counts).Error
+	return counts.Total, counts.Active, err
 }
 
 func (s *companyStore) UpdateScanStatus(ctx context.Context, id, status string) (err error) {

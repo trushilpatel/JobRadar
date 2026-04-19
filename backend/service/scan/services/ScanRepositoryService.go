@@ -262,62 +262,53 @@ func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ dt
 
 	var stats dto.ScanStatsView
 
-	// All three queries run inside one read transaction so every value comes
-	// from the same consistent snapshot of company_scan_log.
-	txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		type agg struct {
-			TotalScans    int64
-			TotalFetched  int64
-			TotalNew      int64
-			ErrorCount    int64
-			AvgDurationMs *float64
-		}
-		var a agg
-		if err := tx.Model(&scanmodel.CompanyScanLog{}).
-			Where("company_id = ?", companyID).
-			Select("COUNT(*) as total_scans, SUM(jobs_fetched) as total_fetched, SUM(jobs_new) as total_new, SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) as error_count, AVG(duration_ms) as avg_duration_ms").
-			Scan(&a).Error; err != nil {
-			return err
-		}
-		stats.TotalScans = a.TotalScans
-		stats.TotalFetched = a.TotalFetched
-		stats.TotalNew = a.TotalNew
-		stats.ErrorCount = a.ErrorCount
-		stats.AvgDurationMs = a.AvgDurationMs
+	// Single aggregation query collapses the previous 3 separate queries into one
+	// using conditional aggregation — avoids 3 round-trips for a single stats card.
+	type agg struct {
+		TotalScans    int64
+		TotalFetched  int64
+		TotalNew      int64
+		ErrorCount    int64
+		AvgDurationMs *float64
+		NewToday      int64
+		NewThisMonth  int64
+	}
+	var a agg
+	if err := s.db.WithContext(ctx).Raw(`
+		SELECT
+		    COUNT(*)                                                                                              AS total_scans,
+		    COALESCE(SUM(jobs_fetched), 0)                                                                       AS total_fetched,
+		    COALESCE(SUM(jobs_new), 0)                                                                           AS total_new,
+		    COUNT(*) FILTER (WHERE error IS NOT NULL)                                                            AS error_count,
+		    COALESCE(AVG(duration_ms), 0)                                                                        AS avg_duration_ms,
+		    COALESCE(SUM(jobs_new) FILTER (WHERE DATE(scanned_at) = CURRENT_DATE), 0)                           AS new_today,
+		    COALESCE(SUM(jobs_new) FILTER (WHERE DATE_TRUNC('month', scanned_at) = DATE_TRUNC('month', CURRENT_DATE)), 0) AS new_this_month
+		FROM company_scan_log
+		WHERE company_id = ?
+	`, companyID).Scan(&a).Error; err != nil {
+		return stats, err
+	}
+	stats.TotalScans = a.TotalScans
+	stats.TotalFetched = a.TotalFetched
+	stats.TotalNew = a.TotalNew
+	stats.ErrorCount = a.ErrorCount
+	stats.AvgDurationMs = a.AvgDurationMs
+	stats.NewToday = a.NewToday
+	stats.NewThisMonth = a.NewThisMonth
 
-		var newToday int64
-		if err := tx.Model(&scanmodel.CompanyScanLog{}).
-			Where("company_id = ? AND DATE(scanned_at) = CURRENT_DATE", companyID).
-			Select("COALESCE(SUM(jobs_new), 0)").
-			Scan(&newToday).Error; err != nil {
-			return err
-		}
-		stats.NewToday = newToday
+	// Recent runs must remain a separate query — it returns multiple rows.
+	var recent []dto.ScanRun
+	if err := s.db.WithContext(ctx).Model(&scanmodel.CompanyScanLog{}).
+		Where("company_id = ?", companyID).
+		Order("scanned_at DESC").
+		Limit(10).
+		Select("company_id, scanned_at, jobs_fetched, jobs_new, error, duration_ms").
+		Scan(&recent).Error; err != nil {
+		return stats, err
+	}
+	stats.RecentRuns = recent
 
-		var newThisMonth int64
-		if err := tx.Model(&scanmodel.CompanyScanLog{}).
-			Where("company_id = ? AND DATE_TRUNC('month', scanned_at) = DATE_TRUNC('month', CURRENT_DATE)", companyID).
-			Select("COALESCE(SUM(jobs_new), 0)").
-			Scan(&newThisMonth).Error; err != nil {
-			return err
-		}
-		stats.NewThisMonth = newThisMonth
-
-		var recent []dto.ScanRun
-		if err := tx.Model(&scanmodel.CompanyScanLog{}).
-			Where("company_id = ?", companyID).
-			Order("scanned_at DESC").
-			Limit(10).
-			Select("company_id, scanned_at, jobs_fetched, jobs_new, error, duration_ms").
-			Scan(&recent).Error; err != nil {
-			return err
-		}
-		stats.RecentRuns = recent
-
-		return nil
-	})
-
-	return stats, txErr
+	return stats, nil
 }
 
 func (s *scanLogStore) RecordScanResult(ctx context.Context, companyID, status string, jobsFetched, jobsNew, durationMs int, errMsg *string) (err error) {

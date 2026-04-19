@@ -48,6 +48,7 @@ func (s *repositoryService) CompanyActivity(ctx context.Context) (_ interface{},
 			COUNT(*) AS count
 		FROM job_feed j
 		JOIN companies c ON j.company_id = c.id
+		WHERE j.added_at >= NOW() - INTERVAL '90 days'
 		GROUP BY c.name, DATE_TRUNC('week', j.added_at)
 		ORDER BY week DESC, count DESC
 	`).Scan(&results).Error
