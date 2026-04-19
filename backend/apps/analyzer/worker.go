@@ -142,13 +142,13 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 
 	// 3. Drop ineligible jobs before writing to DB
 	if !result.RoleMatch {
-		jobLog.Info("job dropped: role mismatch", logger.Str("title", job.Title))
+		jobLog.Debug("job dropped: role mismatch", logger.Str("title", job.Title))
 		w.markIrrelevant(ctx, job.ID)
 		metrics.EnricherJobsTotal.WithLabelValues("dropped").Inc()
 		return
 	}
 	if reason := w.dropJob(result); reason != "" {
-		jobLog.Info("job dropped", logger.Str("reason", reason))
+		jobLog.Debug("job dropped", logger.Str("reason", reason))
 		w.markError(ctx, job.ID)
 		metrics.EnricherJobsTotal.WithLabelValues("dropped").Inc()
 		return
@@ -164,7 +164,7 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 	}
 
 	metrics.EnricherJobsTotal.WithLabelValues("saved").Inc()
-	jobLog.Info("enriched and saved")
+	jobLog.Debug("enriched and saved")
 }
 
 // toEnrichedInput builds a jobdto.EnrichedJobInput from the raw job and LLM result.

@@ -2,28 +2,30 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
-	"log"
 	"os"
 
 	"github.com/pressly/goose/v3"
 	"github.com/trushilpatel/jobradar/common/config"
+	"github.com/trushilpatel/jobradar/common/logger"
 	_ "gorm.io/driver/postgres"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
+	log := logger.Init("migrate")
 	cfg := config.Load()
 
 	db, err := sql.Open("pgx", cfg.DB.DSN())
 	if err != nil {
-		log.Fatalf("failed to open db: %v", err)
+		log.Error("failed to open db", err)
+		os.Exit(1)
 	}
 	defer func() { _ = db.Close() }()
 
 	if err := db.Ping(); err != nil {
-		log.Fatalf("failed to connect to db: %v", err)
+		log.Error("failed to connect to db", err)
+		os.Exit(1)
 	}
 
 	migrationsDir := "migrations"
@@ -32,12 +34,14 @@ func main() {
 	}
 
 	if err := goose.SetDialect("postgres"); err != nil {
-		log.Fatalf("failed to set dialect: %v", err)
+		log.Error("failed to set dialect", err)
+		os.Exit(1)
 	}
 
 	if err := goose.Up(db, migrationsDir); err != nil {
-		log.Fatalf("failed to run migrations: %v", err)
+		log.Error("failed to run migrations", err)
+		os.Exit(1)
 	}
 
-	fmt.Println("migrations applied successfully")
+	log.Info("migrations applied successfully")
 }

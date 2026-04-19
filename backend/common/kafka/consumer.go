@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/logger"
@@ -52,6 +53,7 @@ func (c *Consumer) Poll(ctx context.Context, fn func(topic string, value []byte,
 		}
 		if err := fetches.Err(); err != nil {
 			c.log.Warn("fetch error, retrying", logger.Err(err))
+			time.Sleep(time.Second)
 			continue
 		}
 
@@ -83,6 +85,7 @@ func (c *Consumer) PollBatch(ctx context.Context, fn func(records []*kgo.Record)
 		}
 		if err := fetches.Err(); err != nil {
 			c.log.Warn("fetch error, retrying", logger.Err(err))
+			time.Sleep(time.Second)
 			continue
 		}
 

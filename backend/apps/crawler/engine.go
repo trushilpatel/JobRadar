@@ -79,6 +79,7 @@ func (e *Engine) scanCompany(ctx context.Context, company companymodel.Company) 
 
 	result, err := e.fetchJobs(ctx, company, log)
 	if err != nil {
+		log.Error("scan failed", err)
 		errMsg := err.Error()
 		e.recordResult(ctx, company.ID, 0, 0, time.Since(start), &errMsg)
 		metrics.CrawlerScansTotal.WithLabelValues("error").Inc()
@@ -104,12 +105,10 @@ func (e *Engine) scanCompany(ctx context.Context, company companymodel.Company) 
 func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, log logger.Logger) (ats.FetchJobsResponse, error) {
 	adp, err := ats.RegistryWithGoogleConfig(company.AdapterType, e.googleCfg, log)
 	if err != nil {
-		log.Error("no adapter found", err)
 		return ats.FetchJobsResponse{}, fmt.Errorf("no adapter for type %q: %w", company.AdapterType, err)
 	}
 	result, err := adp.FetchJobs(ctx, company.ID)
 	if err != nil {
-		log.Error("fetch jobs failed", err)
 		return ats.FetchJobsResponse{}, fmt.Errorf("fetch failed: %w", err)
 	}
 	return result, nil
