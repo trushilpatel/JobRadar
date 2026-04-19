@@ -37,12 +37,29 @@ func RespondError(w http.ResponseWriter, status int, code, message string) {
 	})
 }
 
+// RespondValidationErrors writes { "errors": [...] } for validation failures.
+func RespondValidationErrors(w http.ResponseWriter, errs apperr.ValidationErrors) {
+	fields := make([]response.ValidationFieldError, len(errs))
+	for i, e := range errs {
+		fields[i] = response.ValidationFieldError{Field: e.Field, Code: e.Code, Message: e.Message}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	json.NewEncoder(w).Encode(response.ValidationErrorResponse{Errors: fields}) //nolint:errcheck
+}
+
 // HandleError inspects err and writes the appropriate error response.
-// ValidationError → 400, ServiceError → its Status, anything else → 500.
+// ValidationErrors → 400 with field list, *ValidationError → 400 (single field),
+// ServiceError → its Status, anything else → 500.
 func HandleError(w http.ResponseWriter, err error) {
+	var vErrs apperr.ValidationErrors
+	if errors.As(err, &vErrs) {
+		RespondValidationErrors(w, vErrs)
+		return
+	}
 	var vErr *apperr.ValidationError
 	if errors.As(err, &vErr) {
-		RespondError(w, http.StatusBadRequest, vErr.Code, vErr.Message)
+		RespondValidationErrors(w, apperr.ValidationErrors{*vErr})
 		return
 	}
 	var sErr *apperr.ServiceError

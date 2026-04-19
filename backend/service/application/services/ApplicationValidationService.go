@@ -29,55 +29,71 @@ var validStages = map[string]bool{
 
 // Create validates the stage then delegates.
 func (v *validationService) Create(ctx context.Context, jobID string, input dto.CreateApplicationInput) (*appmodel.JobApplication, error) {
+	var errs errors.ValidationErrors
 	if !validStages[input.Stage] {
-		return nil, &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "stage",
 			Code:    "INVALID_VALUE",
 			Message: "stage must be a valid application stage",
-		}
+		})
+	}
+	if len(errs) > 0 {
+		return nil, errs
 	}
 	return v.next.Create(ctx, jobID, input)
 }
 
 // UpdateStage validates the stage then delegates.
 func (v *validationService) UpdateStage(jobID, appID string, input dto.UpdateStageInput) error {
+	var errs errors.ValidationErrors
 	if !validStages[input.Stage] {
-		return &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "stage",
 			Code:    "INVALID_VALUE",
 			Message: "stage must be a valid application stage",
-		}
+		})
+	}
+	if len(errs) > 0 {
+		return errs
 	}
 	return v.next.UpdateStage(jobID, appID, input)
 }
 
 // UpdateNote validates the note is non-empty then delegates.
 func (v *validationService) UpdateNote(jobID, appID string, input dto.UpdateNoteInput) error {
+	var errs errors.ValidationErrors
 	if input.Note == "" {
-		return &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "note",
 			Code:    "REQUIRED",
 			Message: "note is required",
-		}
+		})
+	}
+	if len(errs) > 0 {
+		return errs
 	}
 	return v.next.UpdateNote(jobID, appID, input)
 }
 
 // ListAll validates pagination parameters then delegates.
 func (v *validationService) ListAll(page, limit int) ([]ApplicationWithJob, int, error) {
+	var errs errors.ValidationErrors
 	if page < 1 {
-		return nil, 0, &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "page",
 			Code:    "INVALID_VALUE",
 			Message: "page must be >= 1",
-		}
+		})
 	}
 	if limit < 1 || limit > 100 {
-		return nil, 0, &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "limit",
 			Code:    "INVALID_VALUE",
 			Message: "limit must be between 1 and 100",
-		}
+		})
+	}
+	if len(errs) > 0 {
+		return nil, 0, errs
 	}
 	return v.next.ListAll(page, limit)
 }

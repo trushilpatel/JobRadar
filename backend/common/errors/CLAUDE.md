@@ -4,7 +4,9 @@
 
 **`ServiceError`** — typed error returned by all service methods. Carries an HTTP status code and a short machine-readable code. Handlers call `handler.HandleError(w, err)` which inspects this type to pick the HTTP status.
 
-**`ValidationError`** — returned by validators for malformed or out-of-range input. Always maps to 400.
+**`ValidationError`** — a single field-level validation failure (field, code, message). Kept for cases where only one check is possible, but callers should prefer `ValidationErrors`.
+
+**`ValidationErrors`** — a slice of `ValidationError` returned by validators that collect all failures instead of stopping at the first. All five validator services now return this type. `HandleError` detects it via `errors.As` (checked before `*ValidationError`) and writes `{ "errors": [...] }` with HTTP 400. A single `*ValidationError` is also normalised into a one-element `ValidationErrors` slice by `HandleError` so the response shape is always consistent.
 
 ## Sentinel errors
 

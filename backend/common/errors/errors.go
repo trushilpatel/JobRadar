@@ -4,6 +4,7 @@ import (
 	stderrors "errors"
 
 	"fmt"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -17,6 +18,17 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string {
 	return fmt.Sprintf("validation error: %s — %s", e.Field, e.Message)
+}
+
+// ValidationErrors is returned by validators that collect all failures instead of stopping at the first.
+type ValidationErrors []ValidationError
+
+func (e ValidationErrors) Error() string {
+	msgs := make([]string, len(e))
+	for i, v := range e {
+		msgs[i] = fmt.Sprintf("%s: %s", v.Field, v.Message)
+	}
+	return strings.Join(msgs, "; ")
 }
 
 // ServiceError is a typed error that carries an HTTP status code and a short

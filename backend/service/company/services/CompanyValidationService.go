@@ -45,73 +45,85 @@ func NewValidator(next Service) Service {
 
 // List validates filter and pagination then delegates.
 func (v *validationService) List(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (companydto.CompanyListResult, error) {
+	var errs errors.ValidationErrors
 	if filter.AdapterType != "" && !validAdapters[filter.AdapterType] {
-		return companydto.CompanyListResult{}, &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "adapter_type",
 			Code:    "INVALID_VALUE",
 			Message: "adapter_type is not a recognised adapter",
-		}
+		})
 	}
 	if len(filter.Search) > 100 {
-		return companydto.CompanyListResult{}, &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "search",
 			Code:    "INVALID_VALUE",
 			Message: "search must be 100 characters or fewer",
-		}
+		})
 	}
 	if page < 1 {
-		return companydto.CompanyListResult{}, &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "page",
 			Code:    "INVALID_VALUE",
 			Message: "page must be >= 1",
-		}
+		})
 	}
 	if limit < 1 || limit > 100 {
-		return companydto.CompanyListResult{}, &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "limit",
 			Code:    "INVALID_VALUE",
 			Message: "limit must be between 1 and 100",
-		}
+		})
+	}
+	if len(errs) > 0 {
+		return companydto.CompanyListResult{}, errs
 	}
 	return v.next.List(ctx, filter, page, limit)
 }
 
 // Create validates required fields then delegates.
 func (v *validationService) Create(ctx context.Context, input companydto.CreateCompanyInput) (*companymodel.Company, error) {
+	var errs errors.ValidationErrors
 	if input.ID == "" {
-		return nil, &errors.ValidationError{Field: "id", Code: "REQUIRED", Message: "id is required"}
+		errs = append(errs, errors.ValidationError{Field: "id", Code: "REQUIRED", Message: "id is required"})
 	}
 	if input.Name == "" {
-		return nil, &errors.ValidationError{Field: "name", Code: "REQUIRED", Message: "name is required"}
+		errs = append(errs, errors.ValidationError{Field: "name", Code: "REQUIRED", Message: "name is required"})
 	}
 	if !fixedURLAdapters[input.AdapterType] && input.URL == "" {
-		return nil, &errors.ValidationError{Field: "url", Code: "REQUIRED", Message: "url is required for this adapter type"}
+		errs = append(errs, errors.ValidationError{Field: "url", Code: "REQUIRED", Message: "url is required for this adapter type"})
 	}
 	if !validAdapters[input.AdapterType] {
-		return nil, &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "adapter_type",
 			Code:    "INVALID_VALUE",
 			Message: "adapter_type is not a recognised adapter",
-		}
+		})
+	}
+	if len(errs) > 0 {
+		return nil, errs
 	}
 	return v.next.Create(ctx, input)
 }
 
 // Update validates that at least one field is provided then delegates.
 func (v *validationService) Update(ctx context.Context, id string, input companydto.UpdateCompanyInput) error {
+	var errs errors.ValidationErrors
 	if input.Name == nil && input.URL == nil && input.AdapterType == nil && input.Active == nil {
-		return &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "",
 			Code:    "BAD_REQUEST",
 			Message: "at least one field must be provided",
-		}
+		})
 	}
 	if input.AdapterType != nil && !validAdapters[*input.AdapterType] {
-		return &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "adapter_type",
 			Code:    "INVALID_VALUE",
 			Message: "adapter_type is not a recognised adapter",
-		}
+		})
+	}
+	if len(errs) > 0 {
+		return errs
 	}
 	return v.next.Update(ctx, id, input)
 }

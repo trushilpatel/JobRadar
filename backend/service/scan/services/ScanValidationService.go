@@ -31,31 +31,39 @@ func NewValidator(next Service) Service {
 
 // TriggerScan validates that companyID is non-empty before delegating.
 func (v *validationService) TriggerScan(ctx context.Context, companyID string) error {
+	var errs errors.ValidationErrors
 	if companyID == "" {
-		return &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "company_id",
 			Code:    "REQUIRED",
 			Message: "company_id is required",
-		}
+		})
+	}
+	if len(errs) > 0 {
+		return errs
 	}
 	return v.next.TriggerScan(ctx, companyID)
 }
 
 // ListQueue validates filter parameters before delegating.
 func (v *validationService) ListQueue(ctx context.Context, filter dto.QueueFilter) ([]dto.QueueEntryView, error) {
+	var errs errors.ValidationErrors
 	if filter.Status != "" && !validQueueStatuses[filter.Status] {
-		return nil, &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
 			Message: "status must be 'queued' or 'processing'",
-		}
+		})
 	}
 	if filter.Source != "" && !validQueueSources[filter.Source] {
-		return nil, &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "source",
 			Code:    "INVALID_VALUE",
 			Message: "source must be 'manual' or 'scheduler'",
-		}
+		})
+	}
+	if len(errs) > 0 {
+		return nil, errs
 	}
 	return v.next.ListQueue(ctx, filter)
 }

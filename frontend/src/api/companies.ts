@@ -1,4 +1,5 @@
 import type { Company, ScanStats, QueueEntry } from '@/types'
+import { parseApiError } from '@/lib/api-error'
 
 const BASE = '/api'
 
@@ -46,8 +47,7 @@ export async function createCompany(data: {
     body: JSON.stringify(data),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error?.message ?? 'Failed to create company')
+    throw await parseApiError(res, 'Failed to create company')
   }
   return res.json().then((r: { data: Company }) => r.data)
 }
@@ -61,7 +61,9 @@ export async function updateCompany(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(fields),
   })
-  if (!res.ok) throw new Error('Failed to update company')
+  if (!res.ok) {
+    throw await parseApiError(res, 'Failed to update company')
+  }
 }
 
 export async function deleteCompany(id: string): Promise<void> {

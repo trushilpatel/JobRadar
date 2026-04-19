@@ -65,4 +65,3 @@ func (b *BaseService) ListQueue(ctx context.Context, filter dto.QueueFilter) ([]
 func (b *BaseService) RemoveFromQueue(ctx context.Context, entryID string) error {
 	return b.next.RemoveFromQueue(ctx, entryID)
 }
-

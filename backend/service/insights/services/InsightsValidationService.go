@@ -18,12 +18,16 @@ func NewValidationService(next InsightsService) InsightsService {
 
 // Sponsorship validates that filter.Days >= 1 before delegating.
 func (v *validationService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) (interface{}, error) {
+	var errs errors.ValidationErrors
 	if filter.Days < 1 {
-		return nil, &errors.ValidationError{
+		errs = append(errs, errors.ValidationError{
 			Field:   "days",
 			Code:    "INVALID_VALUE",
 			Message: "days must be >= 1",
-		}
+		})
+	}
+	if len(errs) > 0 {
+		return nil, errs
 	}
 	return v.next.Sponsorship(ctx, filter)
 }

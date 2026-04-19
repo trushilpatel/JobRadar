@@ -432,4 +432,3 @@ func (s *repositoryService) RemoveFromQueue(ctx context.Context, entryID string)
 	}
 	return nil
 }
-

@@ -42,14 +42,20 @@ func TestValidateFilter(t *testing.T) {
 		t.Errorf("unexpected error for days=30: %v", err)
 	}
 
-	// invalid days — should return ValidationError
+	// invalid days — should return ValidationErrors
 	_, err = v.Sponsorship(context.Background(), dto.InsightsFilter{Days: 0})
 	if err == nil {
 		t.Error("expected error for days=0")
 	}
-	var vErr *apperr.ValidationError
-	if !errors.As(err, &vErr) {
-		t.Errorf("expected ValidationError, got %T: %v", err, err)
+	var vErrs apperr.ValidationErrors
+	if !errors.As(err, &vErrs) {
+		t.Errorf("expected ValidationErrors, got %T: %v", err, err)
+	}
+	if len(vErrs) != 1 {
+		t.Errorf("expected 1 validation error, got %d", len(vErrs))
+	}
+	if len(vErrs) > 0 && vErrs[0].Field != "days" {
+		t.Errorf("expected field 'days', got %q", vErrs[0].Field)
 	}
 
 	_, err = v.Sponsorship(context.Background(), dto.InsightsFilter{Days: -1})

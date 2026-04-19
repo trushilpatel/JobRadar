@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { ADAPTER_TYPES } from '@/types'
 import type { Company } from '@/types'
 import { createCompany, updateCompany } from '@/api/companies'
+import { ApiValidationError } from '@/lib/api-error'
 
 interface Props {
   open: boolean
@@ -47,7 +48,8 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
 
   const [form, setForm] = useState(EMPTY_FORM)
   const [urlManuallyEdited, setUrlManuallyEdited] = useState(false)
-  const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [globalError, setGlobalError] = useState('')
   const [loading, setLoading] = useState(false)
 
   // Sync form when modal opens in edit mode
@@ -65,7 +67,8 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
       setForm(EMPTY_FORM)
       setUrlManuallyEdited(false)
     }
-    setError('')
+    setFieldErrors({})
+    setGlobalError('')
   }, [open, initialData])
 
   function handleAdapterChange(adapter: string) {
@@ -74,7 +77,8 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
       adapter_type: adapter,
       url: !urlManuallyEdited ? buildUrl(adapter, f.id) : f.url,
     }))
-    setError('')
+    setFieldErrors({})
+    setGlobalError('')
   }
 
   function handleIdChange(id: string) {
@@ -83,26 +87,29 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
       id,
       url: !urlManuallyEdited ? buildUrl(f.adapter_type, id) : f.url,
     }))
-    setError('')
+    setFieldErrors({})
+    setGlobalError('')
   }
 
   function handleUrlChange(url: string) {
     setUrlManuallyEdited(true)
     setForm(f => ({ ...f, url }))
-    setError('')
+    setFieldErrors({})
+    setGlobalError('')
   }
 
   function handleClose() {
     setForm(EMPTY_FORM)
     setUrlManuallyEdited(false)
-    setError('')
+    setFieldErrors({})
+    setGlobalError('')
     onClose()
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.id || !form.name || (!FIXED_URL_ADAPTERS.has(form.adapter_type) && !form.url)) {
-      setError('ID, name, and URL are required')
+      setGlobalError('ID, name, and URL are required')
       return
     }
     setLoading(true)
@@ -121,7 +128,11 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
       }
       handleClose()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : `Failed to ${isEdit ? 'update' : 'create'} company`)
+      if (err instanceof ApiValidationError) {
+        setFieldErrors(err.fieldErrors())
+      } else {
+        setGlobalError(err instanceof Error ? err.message : `Failed to ${isEdit ? 'update' : 'create'} company`)
+      }
     } finally {
       setLoading(false)
     }
@@ -156,6 +167,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                   <option key={a} value={a}>{a}</option>
                 ))}
               </select>
+              {fieldErrors.adapter_type && <p className="text-xs text-red-400 mt-1">{fieldErrors.adapter_type}</p>}
             </Field>
 
             <Field label="Company ID" hint={isEdit ? 'Cannot be changed' : 'Unique slug, e.g. stripe'}>
@@ -166,6 +178,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                 disabled={isEdit}
                 className={cn(inputClass, isEdit && 'opacity-50 cursor-not-allowed')}
               />
+              {fieldErrors.id && <p className="text-xs text-red-400 mt-1">{fieldErrors.id}</p>}
             </Field>
 
             <Field label="Name">
@@ -175,6 +188,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                 placeholder="Stripe"
                 className={inputClass}
               />
+              {fieldErrors.name && <p className="text-xs text-red-400 mt-1">{fieldErrors.name}</p>}
             </Field>
 
             <Field label="Careers URL" hint={urlHint}>
@@ -217,6 +231,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                   )}
                 </div>
               </div>
+              {fieldErrors.url && <p className="text-xs text-red-400 mt-1">{fieldErrors.url}</p>}
             </Field>
 
             <div className="flex items-center justify-between">
@@ -238,7 +253,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
               </button>
             </div>
 
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {globalError && <p className="text-sm text-red-400">{globalError}</p>}
 
             <div className="flex gap-3 pt-2">
               <button

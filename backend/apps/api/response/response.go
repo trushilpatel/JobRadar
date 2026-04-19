@@ -23,3 +23,15 @@ type ErrorDetail struct {
 type ErrorResponse struct {
 	Error ErrorDetail `json:"error"`
 }
+
+// ValidationFieldError is one field-level error in a validation failure response.
+type ValidationFieldError struct {
+	Field   string `json:"field"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// ValidationErrorResponse is the envelope sent for validation failures (HTTP 400).
+type ValidationErrorResponse struct {
+	Errors []ValidationFieldError `json:"errors"`
+}
