@@ -262,13 +262,13 @@ services:
 
   # ── Frontend ──────────────────────────────────────────────────────────────────
 
-  frontend:
+  console:
     build:
-      context: ./frontend
+      context: ./ui/console
       dockerfile: Dockerfile
       args:
         GIT_SHA: "${GIT_SHA:-dev}"
-    container_name: jobradar_frontend
+    container_name: jobradar_console
     ports:
       - "3000:80"
     depends_on:

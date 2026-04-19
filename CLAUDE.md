@@ -149,7 +149,7 @@ Every feature delivery must include:
 
 - Tests written alongside implementation — not as an afterthought
 - All tests passing before marking work complete
-- Frontend linting passing: `cd frontend && npm run lint`
+- Frontend linting passing: `cd ui/console && npm run lint`
 - Backend linting passing: `cd backend && golangci-lint run --config ../.github/.golangci.yml --timeout 5m`
 - Do not mark a task complete if any test or lint check fails — fix the failure first
 

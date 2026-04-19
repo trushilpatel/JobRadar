@@ -105,7 +105,7 @@ Analytics over all enriched jobs:
 | `jobradar_filter` | LLM batch-scores titles, routes relevant jobs |
 | `jobradar_enricher` | Fetches full job pages, LLM enriches, writes to DB |
 | `jobradar_api` | REST API on `:8080` |
-| `jobradar_frontend` | React UI |
+| `jobradar_console` | Internal management console (React UI) |
 
 ---
 
@@ -149,7 +149,7 @@ make down      # stop
 ```bash
 make docker-up    # start Postgres + Kafka only
 make migrate      # run DB migrations
-make dev          # start API + frontend dev server
+make dev          # start API + console dev server
 ```
 
 **Useful commands:**
@@ -157,5 +157,5 @@ make dev          # start API + frontend dev server
 make migrate      # run pending migrations
 make db-truncate  # truncate all data except companies
 make test         # run all Go tests
-make build        # build frontend + backend
+make build        # build console + backend
 ```

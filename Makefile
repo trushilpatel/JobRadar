@@ -1,8 +1,8 @@
 GIT_SHA ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 export GIT_SHA
 
-.PHONY: dev dev-frontend dev-backend \
-        build build-frontend build-backend clean-frontend \
+.PHONY: dev dev-console dev-backend \
+        build build-console build-backend clean-console \
         run-api run-crawler run-filter run-enricher run-scheduler \
         migrate scan-google db-truncate lint lint-go tsc \
         test test-short test-unit \
@@ -11,32 +11,32 @@ export GIT_SHA
         test-adapters \
         test-adapter-greenhouse test-adapter-lever test-adapter-ashby \
         docker-up \
-        up rebuild rebuild-backend rebuild-crawler rebuild-frontend down logs build-docker \
+        up rebuild rebuild-backend rebuild-crawler rebuild-console down logs build-docker \
         install-hooks \
         help
 
 # ── Dev ──────────────────────────────────────────────────────────────────────
 
-dev: ## Start infra in Docker, then run frontend + API on host
+dev: ## Start infra in Docker, then run console + API on host
 	$(MAKE) docker-up
 	cd backend && go run ./apps/migrate
-	$(MAKE) -j2 dev-frontend dev-backend
+	$(MAKE) -j2 dev-console dev-backend
 
-dev-frontend: ## Start Vite dev server
-	cd frontend && npm run dev
+dev-console: ## Start Vite dev server (ui/console)
+	cd ui/console && npm run dev
 
 dev-backend: ## Start API server (hot-reload via go run)
 	cd backend && go run ./apps/api
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 
-build: build-frontend build-backend ## Build everything
+build: build-console build-backend ## Build everything
 
-clean-frontend: ## Remove frontend build artifacts from host
-	rm -rf frontend/dist
+clean-console: ## Remove console build artifacts from host
+	rm -rf ui/console/dist
 
-build-frontend: clean-frontend ## Build frontend on host (local preview only — Docker builds its own via Dockerfile)
-	cd frontend && npm run build
+build-console: clean-console ## Build console on host (local preview only — Docker builds its own via Dockerfile)
+	cd ui/console && npm run build
 
 build-backend: ## Compile all Go binaries
 	cd backend && go build ./...
@@ -72,8 +72,8 @@ db-truncate: ## Truncate all tables except companies (keeps company list intact)
 
 # ── Quality ───────────────────────────────────────────────────────────────────
 
-lint: ## Run ESLint on frontend
-	cd frontend && npm run lint
+lint: ## Run ESLint on console
+	cd ui/console && npm run lint
 
 lint-go: ## Run golangci-lint on backend (matches CI config)
 	@command -v golangci-lint >/dev/null 2>&1 || { \
@@ -92,8 +92,8 @@ lint-go-fast: ## Lint only files changed vs main branch
 	}
 	cd backend && golangci-lint run --config ../.github/.golangci.yml --new-from-rev=main --timeout 2m
 
-tsc: ## Type-check frontend without emitting
-	cd frontend && npx tsc --noEmit
+tsc: ## Type-check console without emitting
+	cd ui/console && npx tsc --noEmit
 
 test: ## Run all Go tests (unit + integration, hits real APIs)
 	cd backend && go test ./...
@@ -157,8 +157,8 @@ rebuild-backend: ## Rebuild backend image only (api/scheduler/filter/enricher)
 rebuild-crawler: ## Rebuild crawler image only
 	DOCKER_BUILDKIT=1 docker-compose up -d --build crawler
 
-rebuild-frontend: ## Rebuild Docker frontend image (build happens inside Docker)
-	DOCKER_BUILDKIT=1 docker-compose up -d --build frontend
+rebuild-console: ## Rebuild console image only (build happens inside Docker)
+	DOCKER_BUILDKIT=1 docker-compose up -d --build console
 
 down: ## Stop and remove all containers (keeps volumes)
 	docker-compose down
