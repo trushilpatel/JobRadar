@@ -4,43 +4,28 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/api/handler"
+	"github.com/trushilpatel/jobradar/common/domain"
 )
 
-// DashboardRestService handles HTTP requests for the dashboard domain.
-type DashboardRestService struct {
-	validator       DashboardValidationService
-	dashboard       DashboardService
-	userDashboard   UserDashboardService
-	pipelineService PipelineService
+// RestService handles HTTP requests for the dashboard domain.
+type RestService struct {
+	dashboard     DashboardService
+	userDashboard UserDashboardService
+	pipeline      PipelineService
 }
 
-// NewDashboardRestService constructs a DashboardRestService.
-func NewDashboardRestService(v DashboardValidationService, svc DashboardService, userSvc UserDashboardService, pipelineSvc PipelineService) *DashboardRestService {
-	return &DashboardRestService{validator: v, dashboard: svc, userDashboard: userSvc, pipelineService: pipelineSvc}
-}
-
-// Register mounts all dashboard routes onto r.
-func (h *DashboardRestService) Register(r chi.Router) {
-	// Existing routes — unchanged
-	r.Get("/dashboard/stats", h.Stats)
-	r.Get("/dashboard/activity", h.Activity)
-
-	// User dashboard routes
-	r.Get("/dashboard/progress", h.Progress)
-	r.Get("/dashboard/market", h.Market)
-	r.Get("/dashboard/heatmap", h.Heatmap)
-	r.Get("/dashboard/interviews", h.Interviews)
-	r.Get("/dashboard/velocity", h.Velocity)
-	r.Get("/dashboard/tech-trends", h.TechTrends)
-
-	// Pipeline strip
-	r.Get("/dashboard/pipeline", h.Pipeline)
+// NewDashboardRestService constructs a RestService.
+func NewDashboardRestService(dashboard DashboardService, userDashboard UserDashboardService, pipeline PipelineService) *RestService {
+	return &RestService{
+		dashboard:     dashboard,
+		userDashboard: userDashboard,
+		pipeline:      pipeline,
+	}
 }
 
 // GET /dashboard/stats
-func (h *DashboardRestService) Stats(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) Stats(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.dashboard.GetStats(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
@@ -50,7 +35,7 @@ func (h *DashboardRestService) Stats(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /dashboard/activity?days=7
-func (h *DashboardRestService) Activity(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) Activity(w http.ResponseWriter, r *http.Request) {
 	days := 7
 	if d := r.URL.Query().Get("days"); d != "" {
 		if parsed, err := strconv.Atoi(d); err == nil {
@@ -58,8 +43,12 @@ func (h *DashboardRestService) Activity(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	if err := h.validator.ValidateActivity(days); err != nil {
-		handler.HandleError(w, err)
+	if days < 1 {
+		handler.HandleError(w, &domain.ValidationError{
+			Field:   "days",
+			Code:    "INVALID_VALUE",
+			Message: "days must be >= 1",
+		})
 		return
 	}
 
@@ -73,7 +62,7 @@ func (h *DashboardRestService) Activity(w http.ResponseWriter, r *http.Request) 
 }
 
 // GET /dashboard/progress
-func (h *DashboardRestService) Progress(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) Progress(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.userDashboard.GetProgressStats(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
@@ -83,7 +72,7 @@ func (h *DashboardRestService) Progress(w http.ResponseWriter, r *http.Request) 
 }
 
 // GET /dashboard/market
-func (h *DashboardRestService) Market(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) Market(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.userDashboard.GetMarketStats(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
@@ -93,7 +82,7 @@ func (h *DashboardRestService) Market(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /dashboard/heatmap
-func (h *DashboardRestService) Heatmap(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) Heatmap(w http.ResponseWriter, r *http.Request) {
 	counts, err := h.userDashboard.GetHeatmap(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
@@ -103,7 +92,7 @@ func (h *DashboardRestService) Heatmap(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /dashboard/interviews
-func (h *DashboardRestService) Interviews(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) Interviews(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.userDashboard.GetInterviews(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
@@ -113,7 +102,7 @@ func (h *DashboardRestService) Interviews(w http.ResponseWriter, r *http.Request
 }
 
 // GET /dashboard/velocity?limit=10
-func (h *DashboardRestService) Velocity(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) Velocity(w http.ResponseWriter, r *http.Request) {
 	limit := 10
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
@@ -130,7 +119,7 @@ func (h *DashboardRestService) Velocity(w http.ResponseWriter, r *http.Request) 
 }
 
 // GET /dashboard/tech-trends
-func (h *DashboardRestService) TechTrends(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) TechTrends(w http.ResponseWriter, r *http.Request) {
 	trends, err := h.userDashboard.GetTechTrends(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
@@ -140,8 +129,8 @@ func (h *DashboardRestService) TechTrends(w http.ResponseWriter, r *http.Request
 }
 
 // GET /dashboard/pipeline
-func (h *DashboardRestService) Pipeline(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.pipelineService.GetPipelineStats(r.Context())
+func (h *RestService) Pipeline(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.pipeline.GetPipelineStats(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return

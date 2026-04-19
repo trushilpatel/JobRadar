@@ -2,10 +2,13 @@ package services
 
 import (
 	"context"
+	"time"
 
+	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
+	"github.com/trushilpatel/jobradar/store"
 	"gorm.io/gorm"
 )
 
@@ -154,6 +157,138 @@ func (s *companyStore) UpdateScanStatus(ctx context.Context, id, status string) 
 	}
 	if result.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// repositoryService is the terminal layer of the decorator chain.
+// It implements all Service methods by delegating directly to the Store.
+// It has no next and does not embed BaseService.
+type repositoryService struct {
+	store Store
+}
+
+// NewRepositoryService constructs the terminal Service backed by a Store.
+func NewRepositoryService(s Store) Service {
+	return &repositoryService{store: s}
+}
+
+func (r *repositoryService) List(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (_ companydto.CompanyListResult, err error) {
+	ctx, span := tracing.Start(ctx, "company.repository.List")
+	defer tracing.End(span, &err)
+	companies, total, err := r.store.GetCompanies(ctx, filter, page, limit)
+	if err != nil {
+		return companydto.CompanyListResult{}, domain.ErrInternal.WithMessage("failed to fetch companies")
+	}
+	_, totalActive, err := r.store.GetCompanyCounts(ctx)
+	if err != nil {
+		return companydto.CompanyListResult{}, domain.ErrInternal.WithMessage("failed to fetch company counts")
+	}
+	views := make([]companydto.CompanyView, 0, len(companies))
+	for _, c := range companies {
+		views = append(views, companydto.CompanyView{Company: c})
+	}
+	return companydto.CompanyListResult{
+		Items:       views,
+		Total:       total,
+		TotalActive: totalActive,
+	}, nil
+}
+
+func (r *repositoryService) GetAll(ctx context.Context) (_ []companydto.CompanyView, err error) {
+	ctx, span := tracing.Start(ctx, "company.repository.GetAll")
+	defer tracing.End(span, &err)
+	companies, err := r.store.GetAllCompanies(ctx)
+	if err != nil {
+		return nil, domain.ErrInternal.WithMessage("failed to fetch companies")
+	}
+	views := make([]companydto.CompanyView, 0, len(companies))
+	for _, c := range companies {
+		views = append(views, companydto.CompanyView{Company: c})
+	}
+	return views, nil
+}
+
+func (r *repositoryService) Get(ctx context.Context, id string) (_ *companymodel.Company, err error) {
+	ctx, span := tracing.Start(ctx, "company.repository.Get")
+	defer tracing.End(span, &err)
+	c, err := r.store.GetCompanyByID(ctx, id)
+	if err != nil {
+		if store.IsNotFound(err) {
+			return nil, domain.ErrNotFound.WithMessage("company not found")
+		}
+		return nil, domain.ErrInternal.WithMessage("failed to fetch company")
+	}
+	return &c, nil
+}
+
+func (r *repositoryService) Create(ctx context.Context, input companydto.CreateCompanyInput) (_ *companymodel.Company, err error) {
+	ctx, span := tracing.Start(ctx, "company.repository.Create")
+	defer tracing.End(span, &err)
+	active := true
+	if input.Active != nil {
+		active = *input.Active
+	}
+	now := time.Now()
+	company := companymodel.Company{
+		ID:          input.ID,
+		Name:        input.Name,
+		URL:         input.URL,
+		AdapterType: input.AdapterType,
+		Active:      active,
+		LastScanAt:  &now,
+	}
+	if err := r.store.CreateCompany(ctx, company); err != nil {
+		return nil, domain.ErrInternal.WithMessage("failed to create company")
+	}
+	return &company, nil
+}
+
+func (r *repositoryService) Update(ctx context.Context, id string, input companydto.UpdateCompanyInput) (err error) {
+	ctx, span := tracing.Start(ctx, "company.repository.Update")
+	defer tracing.End(span, &err)
+	fields := make(map[string]any)
+	if input.Name != nil {
+		fields["name"] = *input.Name
+	}
+	if input.URL != nil {
+		fields["url"] = *input.URL
+	}
+	if input.AdapterType != nil {
+		fields["adapter_type"] = *input.AdapterType
+	}
+	if input.Active != nil {
+		fields["active"] = *input.Active
+	}
+	if err := r.store.UpdateCompany(ctx, id, fields); err != nil {
+		if store.IsNotFound(err) {
+			return domain.ErrNotFound.WithMessage("company not found")
+		}
+		return domain.ErrInternal.WithMessage("failed to update company")
+	}
+	return nil
+}
+
+func (r *repositoryService) Delete(ctx context.Context, id string) (err error) {
+	ctx, span := tracing.Start(ctx, "company.repository.Delete")
+	defer tracing.End(span, &err)
+	if _, err := r.store.GetCompanyByID(ctx, id); err != nil {
+		if store.IsNotFound(err) {
+			return domain.ErrNotFound.WithMessage("company not found")
+		}
+		return domain.ErrInternal.WithMessage("failed to fetch company")
+	}
+	if err := r.store.DeleteCompany(ctx, id); err != nil {
+		return domain.ErrInternal.WithMessage("failed to delete company")
+	}
+	return nil
+}
+
+func (r *repositoryService) SetAllActive(ctx context.Context, active bool) (err error) {
+	ctx, span := tracing.Start(ctx, "company.repository.SetAllActive")
+	defer tracing.End(span, &err)
+	if err := r.store.SetAllCompaniesActive(ctx, active); err != nil {
+		return domain.ErrInternal.WithMessage("failed to update companies")
 	}
 	return nil
 }

@@ -6,8 +6,8 @@ import (
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 )
 
-// Service defines all analytics queries for the insights domain.
-type Service interface {
+// InsightsService defines all analytics queries for the insights domain.
+type InsightsService interface {
 	TechStack(ctx context.Context) (interface{}, error)
 	CompanyActivity(ctx context.Context) (interface{}, error)
 	Funnel(ctx context.Context) (interface{}, error)
@@ -18,20 +18,48 @@ type Service interface {
 	GetPipelineCounts(ctx context.Context) (dto.PipelineCounts, error)
 }
 
-// Store provides aggregated analytics over the job pipeline.
-type Store interface {
-	GetTechStackTrends(ctx context.Context, limit int) ([]dto.TechCount, error)
-	GetCompanyActivity(ctx context.Context) ([]dto.CompanyActivityItem, error)
-	GetPipelineFunnel(ctx context.Context) ([]dto.FunnelStep, error)
-	GetLocationBreakdown(ctx context.Context) ([]dto.LocationCount, error)
-	GetUSAStateBreakdown(ctx context.Context) ([]dto.StateCount, error)
-	GetSponsorshipTrend(ctx context.Context, days int) ([]dto.SponsorshipDay, error)
-	GetCompanyVelocity(ctx context.Context, limit int) ([]dto.CompanyVelocity, error)
-	GetRoleCategoryBreakdown(ctx context.Context) ([]dto.RoleCategoryCount, error)
-	GetPipelineCounts(ctx context.Context) (dto.PipelineCounts, error)
+// BaseService auto-delegates all InsightsService methods to the next layer.
+// Embed this in Impl and Validation services to avoid re-implementing unchanged methods.
+type BaseService struct {
+	next InsightsService
 }
 
-// Validator validates user-submitted input for the insights domain.
-type Validator interface {
-	ValidateFilter(filter dto.InsightsFilter) error
+// NewBaseService constructs a BaseService. Panics if next is nil.
+func NewBaseService(next InsightsService) BaseService {
+	if next == nil {
+		panic("BaseService: next must not be nil — check wire setup")
+	}
+	return BaseService{next: next}
+}
+
+func (b *BaseService) TechStack(ctx context.Context) (interface{}, error) {
+	return b.next.TechStack(ctx)
+}
+
+func (b *BaseService) CompanyActivity(ctx context.Context) (interface{}, error) {
+	return b.next.CompanyActivity(ctx)
+}
+
+func (b *BaseService) Funnel(ctx context.Context) (interface{}, error) {
+	return b.next.Funnel(ctx)
+}
+
+func (b *BaseService) Location(ctx context.Context) (interface{}, error) {
+	return b.next.Location(ctx)
+}
+
+func (b *BaseService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) (interface{}, error) {
+	return b.next.Sponsorship(ctx, filter)
+}
+
+func (b *BaseService) Velocity(ctx context.Context) (interface{}, error) {
+	return b.next.Velocity(ctx)
+}
+
+func (b *BaseService) RoleCategories(ctx context.Context) (interface{}, error) {
+	return b.next.RoleCategories(ctx)
+}
+
+func (b *BaseService) GetPipelineCounts(ctx context.Context) (dto.PipelineCounts, error) {
+	return b.next.GetPipelineCounts(ctx)
 }

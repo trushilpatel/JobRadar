@@ -1,16 +1,22 @@
 package services
 
 import (
+	"context"
+
 	"github.com/trushilpatel/jobradar/common/domain"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 )
 
-type validator struct{}
+type validationService struct {
+	BaseService
+}
 
-// NewValidator constructs a Validator.
-func NewValidator() Validator {
-	return &validator{}
+// NewValidator constructs a validation Service that validates inputs before
+// delegating to next.
+func NewValidator(next Service) Service {
+	return &validationService{BaseService: NewBaseService(next)}
 }
 
 var validJobStatuses = map[string]bool{
@@ -26,10 +32,10 @@ var validDiscardReasons = map[string]bool{
 	jobcommon.DiscardReasonNotRelevant: true,
 }
 
-// ValidateList validates list filter and pagination parameters.
-func (v *validator) ValidateList(filter dto.JobFilter, page, limit int) error {
+// List validates filter and pagination before delegating.
+func (v *validationService) List(ctx context.Context, filter dto.JobFilter, page, limit int) ([]jobmodel.Job, int, error) {
 	if filter.Status != "" && !validJobStatuses[filter.Status] {
-		return &domain.ValidationError{
+		return nil, 0, &domain.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
 			Message: "status must be 'new', 'saved', 'applied', 'interviewing', or 'offer'",
@@ -37,14 +43,14 @@ func (v *validator) ValidateList(filter dto.JobFilter, page, limit int) error {
 	}
 	for _, r := range filter.ExperienceRanges {
 		if r.Min < 0 {
-			return &domain.ValidationError{
+			return nil, 0, &domain.ValidationError{
 				Field:   "experience_ranges",
 				Code:    "INVALID_VALUE",
 				Message: "experience range min must be >= 0",
 			}
 		}
 		if r.Max != nil && *r.Max <= r.Min {
-			return &domain.ValidationError{
+			return nil, 0, &domain.ValidationError{
 				Field:   "experience_ranges",
 				Code:    "INVALID_VALUE",
 				Message: "experience range max must be > min",
@@ -52,24 +58,24 @@ func (v *validator) ValidateList(filter dto.JobFilter, page, limit int) error {
 		}
 	}
 	if page < 1 {
-		return &domain.ValidationError{
+		return nil, 0, &domain.ValidationError{
 			Field:   "page",
 			Code:    "INVALID_VALUE",
 			Message: "page must be >= 1",
 		}
 	}
 	if limit < 1 || limit > 100 {
-		return &domain.ValidationError{
+		return nil, 0, &domain.ValidationError{
 			Field:   "limit",
 			Code:    "INVALID_VALUE",
 			Message: "limit must be between 1 and 100",
 		}
 	}
-	return nil
+	return v.next.List(ctx, filter, page, limit)
 }
 
-// ValidateDismiss validates dismiss reason.
-func (v *validator) ValidateDismiss(input dto.DismissInput) error {
+// Dismiss validates the dismiss input before delegating.
+func (v *validationService) Dismiss(ctx context.Context, id string, input dto.DismissInput) error {
 	if !validDiscardReasons[input.Reason] {
 		return &domain.ValidationError{
 			Field:   "reason",
@@ -77,11 +83,11 @@ func (v *validator) ValidateDismiss(input dto.DismissInput) error {
 			Message: "reason must be 'user_dismissed' or 'user_not_relevant'",
 		}
 	}
-	return nil
+	return v.next.Dismiss(ctx, id, input)
 }
 
-// ValidateSetStatus validates that status is a valid user-settable value.
-func (v *validator) ValidateSetStatus(status string) error {
+// SetStatus validates the status value before delegating.
+func (v *validationService) SetStatus(ctx context.Context, id, status string) error {
 	if !validJobStatuses[status] {
 		return &domain.ValidationError{
 			Field:   "status",
@@ -89,10 +95,11 @@ func (v *validator) ValidateSetStatus(status string) error {
 			Message: "status must be 'new', 'saved', 'applied', 'interviewing', or 'offer'",
 		}
 	}
-	return nil
+	return v.next.SetStatus(ctx, id, status)
 }
 
-// ValidateSetNotes validates notes input (no constraint — empty notes are allowed).
-func (v *validator) ValidateSetNotes(input dto.SetNotesInput) error {
-	return nil
+// SetNotes delegates directly — notes have no constraints.
+// (BaseService delegation would also work, but being explicit avoids confusion.)
+func (v *validationService) SetNotes(ctx context.Context, id, notes string) error {
+	return v.next.SetNotes(ctx, id, notes)
 }

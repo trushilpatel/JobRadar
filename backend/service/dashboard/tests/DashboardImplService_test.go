@@ -39,17 +39,17 @@ type fakeInsightsService struct {
 	err      error
 }
 
-func (f *fakeInsightsService) TechStack(_ context.Context) (interface{}, error) { return nil, f.err }
-func (f *fakeInsightsService) CompanyActivity(_ context.Context) (interface{}, error) {
+func (f *fakeInsightsService) TechStack(_ context.Context) (any, error) { return nil, f.err }
+func (f *fakeInsightsService) CompanyActivity(_ context.Context) (any, error) {
 	return nil, f.err
 }
-func (f *fakeInsightsService) Funnel(_ context.Context) (interface{}, error)   { return nil, f.err }
-func (f *fakeInsightsService) Location(_ context.Context) (interface{}, error) { return nil, f.err }
-func (f *fakeInsightsService) Sponsorship(_ context.Context, _ insightsdto.InsightsFilter) (interface{}, error) {
+func (f *fakeInsightsService) Funnel(_ context.Context) (any, error)   { return nil, f.err }
+func (f *fakeInsightsService) Location(_ context.Context) (any, error) { return nil, f.err }
+func (f *fakeInsightsService) Sponsorship(_ context.Context, _ insightsdto.InsightsFilter) (any, error) {
 	return nil, f.err
 }
-func (f *fakeInsightsService) Velocity(_ context.Context) (interface{}, error) { return nil, f.err }
-func (f *fakeInsightsService) RoleCategories(_ context.Context) (interface{}, error) {
+func (f *fakeInsightsService) Velocity(_ context.Context) (any, error) { return nil, f.err }
+func (f *fakeInsightsService) RoleCategories(_ context.Context) (any, error) {
 	return nil, f.err
 }
 func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insightsdto.PipelineCounts, error) {
@@ -136,5 +136,5 @@ func TestGetActivity_OK(t *testing.T) {
 
 // Ensure test doubles implement interfaces.
 var _ scansvc.ScanLogReader = (*fakeScanLogReader)(nil)
-var _ insightssvc.Service = (*fakeInsightsService)(nil)
+var _ insightssvc.InsightsService = (*fakeInsightsService)(nil)
 var _ services.JobCountReader = (*fakeJobCountReader)(nil) // JobCountReader is exported from services package

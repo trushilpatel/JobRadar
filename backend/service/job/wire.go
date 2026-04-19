@@ -7,9 +7,11 @@ import (
 
 // ProviderSet is the Wire provider set for the job domain.
 var ProviderSet = wire.NewSet(
-	svc.NewHandler,
+	svc.NewRestRouter,
+	svc.NewRestService,
 	svc.NewValidator,
 	svc.NewService,
+	svc.NewRepositoryService,
 	svc.NewJobStore,
 	svc.NewSeenLedgerStore,
 	svc.NewDiscardStore,

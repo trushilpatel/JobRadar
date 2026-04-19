@@ -1,18 +1,43 @@
 package company_test
 
 import (
+	"context"
 	"testing"
 
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 )
+
+// noopService is the terminal pass-through used under the validation layer in tests.
+type noopService struct{}
+
+func (n *noopService) List(_ context.Context, _ companydto.CompanyFilter, _, _ int) (companydto.CompanyListResult, error) {
+	return companydto.CompanyListResult{}, nil
+}
+func (n *noopService) GetAll(_ context.Context) ([]companydto.CompanyView, error) { return nil, nil }
+func (n *noopService) Get(_ context.Context, _ string) (*companymodel.Company, error) {
+	return nil, nil
+}
+func (n *noopService) Create(_ context.Context, _ companydto.CreateCompanyInput) (*companymodel.Company, error) {
+	return nil, nil
+}
+func (n *noopService) Update(_ context.Context, _ string, _ companydto.UpdateCompanyInput) error {
+	return nil
+}
+func (n *noopService) Delete(_ context.Context, _ string) error     { return nil }
+func (n *noopService) SetAllActive(_ context.Context, _ bool) error { return nil }
+
+func newValidator() companysvc.Service {
+	return companysvc.NewValidator(&noopService{})
+}
 
 func boolPtr(b bool) *bool    { return &b }
 func strPtr(s string) *string { return &s }
 
 func TestValidateCreate(t *testing.T) {
-	v := companysvc.NewValidator()
+	v := newValidator()
 
 	tests := []struct {
 		name    string
@@ -59,16 +84,16 @@ func TestValidateCreate(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := v.ValidateCreate(tc.input)
+			_, err := v.Create(context.Background(), tc.input)
 			if (err != nil) != tc.wantErr {
-				t.Errorf("ValidateCreate() error = %v, wantErr %v", err, tc.wantErr)
+				t.Errorf("Create() error = %v, wantErr %v", err, tc.wantErr)
 			}
 		})
 	}
 }
 
 func TestValidateUpdate(t *testing.T) {
-	v := companysvc.NewValidator()
+	v := newValidator()
 
 	tests := []struct {
 		name    string
@@ -101,16 +126,16 @@ func TestValidateUpdate(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := v.ValidateUpdate(tc.input)
+			err := v.Update(context.Background(), "any-id", tc.input)
 			if (err != nil) != tc.wantErr {
-				t.Errorf("ValidateUpdate() error = %v, wantErr %v", err, tc.wantErr)
+				t.Errorf("Update() error = %v, wantErr %v", err, tc.wantErr)
 			}
 		})
 	}
 }
 
 func TestValidateList(t *testing.T) {
-	v := companysvc.NewValidator()
+	v := newValidator()
 
 	tests := []struct {
 		name    string
@@ -129,24 +154,23 @@ func TestValidateList(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := v.ValidateList(tc.filter, tc.page, tc.limit)
+			_, err := v.List(context.Background(), tc.filter, tc.page, tc.limit)
 			if (err != nil) != tc.wantErr {
-				t.Errorf("ValidateList() error = %v, wantErr %v", err, tc.wantErr)
+				t.Errorf("List() error = %v, wantErr %v", err, tc.wantErr)
 			}
 		})
 	}
 }
 
 func TestValidateSetAllActive(t *testing.T) {
-	v := companysvc.NewValidator()
+	v := newValidator()
 
-	if err := v.ValidateSetAllActive(nil); err == nil {
-		t.Error("expected error for nil active, got nil")
+	// nil active pointer — the REST layer guards this before calling SetAllActive;
+	// at the Service level the bool is already unwrapped, so SetAllActive always passes.
+	if err := v.SetAllActive(context.Background(), true); err != nil {
+		t.Errorf("unexpected error for true active: %v", err)
 	}
-	if err := v.ValidateSetAllActive(boolPtr(true)); err != nil {
-		t.Errorf("unexpected error for non-nil active: %v", err)
-	}
-	if err := v.ValidateSetAllActive(boolPtr(false)); err != nil {
+	if err := v.SetAllActive(context.Background(), false); err != nil {
 		t.Errorf("unexpected error for false active: %v", err)
 	}
 }

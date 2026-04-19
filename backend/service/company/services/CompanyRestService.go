@@ -10,26 +10,15 @@ import (
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 )
 
-// Handler handles HTTP requests for the company domain.
-type Handler struct {
-	validator Validator
-	companies Service
+// RestService handles HTTP requests for the company domain.
+// It has a single dependency on Service; validation is handled by the chain.
+type RestService struct {
+	next Service
 }
 
-// NewHandler constructs a Handler.
-func NewHandler(v Validator, svc Service) *Handler {
-	return &Handler{validator: v, companies: svc}
-}
-
-// Register mounts all company routes (except scan/queue) onto r.
-func (h *Handler) Register(r chi.Router) {
-	r.Route("/companies", func(r chi.Router) {
-		r.Get("/", h.List)
-		r.Post("/", h.Create)
-		r.Patch("/active", h.SetAllActive)
-		r.Patch("/{id}", h.Update)
-		r.Delete("/{id}", h.Delete)
-	})
+// NewRestService constructs a RestService.
+func NewRestService(next Service) *RestService {
+	return &RestService{next: next}
 }
 
 // companyListResponse is the envelope for GET /companies.
@@ -43,7 +32,7 @@ type companyListResponse struct {
 }
 
 // GET /companies?active=true&adapter_type=greenhouse&search=stripe&page=1&limit=20
-func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) List(w http.ResponseWriter, r *http.Request) {
 	p := request.ParsePagination(r)
 	q := r.URL.Query()
 
@@ -59,12 +48,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		filter.Search = v
 	}
 
-	if err := h.validator.ValidateList(filter, p.Page, p.Limit); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	result, err := h.companies.List(r.Context(), filter, p.Page, p.Limit)
+	result, err := h.next.List(r.Context(), filter, p.Page, p.Limit)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -80,19 +64,14 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST /companies
-func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) Create(w http.ResponseWriter, r *http.Request) {
 	var input companydto.CreateCompanyInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
 		return
 	}
 
-	if err := h.validator.ValidateCreate(input); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	company, err := h.companies.Create(r.Context(), input)
+	company, err := h.next.Create(r.Context(), input)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -102,7 +81,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // PATCH /companies/active
-func (h *Handler) SetAllActive(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) SetAllActive(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Active *bool `json:"active"`
 	}
@@ -111,12 +90,12 @@ func (h *Handler) SetAllActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.validator.ValidateSetAllActive(body.Active); err != nil {
-		handler.HandleError(w, err)
+	if body.Active == nil {
+		handler.RespondError(w, http.StatusBadRequest, "REQUIRED", "active (bool) is required")
 		return
 	}
 
-	if err := h.companies.SetAllActive(r.Context(), *body.Active); err != nil {
+	if err := h.next.SetAllActive(r.Context(), *body.Active); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -125,7 +104,7 @@ func (h *Handler) SetAllActive(w http.ResponseWriter, r *http.Request) {
 }
 
 // PATCH /companies/:id
-func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	var input companydto.UpdateCompanyInput
@@ -134,12 +113,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.validator.ValidateUpdate(input); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	if err := h.companies.Update(r.Context(), id, input); err != nil {
+	if err := h.next.Update(r.Context(), id, input); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -148,10 +122,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 // DELETE /companies/:id
-func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	if err := h.companies.Delete(r.Context(), id); err != nil {
+	if err := h.next.Delete(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
 		return
 	}

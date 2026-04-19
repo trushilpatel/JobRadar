@@ -17,57 +17,46 @@ import (
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
 
-// fakeJobValidator is a test double for Validator.
-type fakeJobValidator struct {
-	listErr    error
-	dismissErr error
-	statusErr  error
-	notesErr   error
-}
-
-func (f *fakeJobValidator) ValidateList(_ jobdto.JobFilter, _, _ int) error {
-	return f.listErr
-}
-func (f *fakeJobValidator) ValidateDismiss(_ jobdto.DismissInput) error { return f.dismissErr }
-func (f *fakeJobValidator) ValidateSetStatus(_ string) error            { return f.statusErr }
-func (f *fakeJobValidator) ValidateSetNotes(_ jobdto.SetNotesInput) error {
-	return f.notesErr
-}
-
-// fakeJobService is a test double for Service.
-type fakeJobService struct {
+// fakeJobSvc is a test double for Service used in REST handler tests.
+type fakeJobSvc struct {
 	jobs  []jobmodel.Job
 	job   *jobmodel.Job
 	total int
 	err   error
 }
 
-func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
+func (f *fakeJobSvc) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
 	return f.jobs, f.total, f.err
 }
-func (f *fakeJobService) Get(_ context.Context, _ string) (*jobmodel.Job, error) {
+func (f *fakeJobSvc) Get(_ context.Context, _ string) (*jobmodel.Job, error) {
 	return f.job, f.err
 }
-func (f *fakeJobService) GetCounts(_ context.Context) (*jobdto.JobCounts, error) {
+func (f *fakeJobSvc) GetCounts(_ context.Context) (*jobdto.JobCounts, error) {
 	return &jobdto.JobCounts{}, f.err
 }
-func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error {
+func (f *fakeJobSvc) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error {
 	return f.err
 }
-func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error { return f.err }
-func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error     { return f.err }
-func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error      { return f.err }
-func (f *fakeJobService) MarkApplied(_ context.Context, _ string) error      { return f.err }
+func (f *fakeJobSvc) SetSaved(_ context.Context, _ string, _ bool) error { return f.err }
+func (f *fakeJobSvc) SetStatus(_ context.Context, _, _ string) error     { return f.err }
+func (f *fakeJobSvc) SetNotes(_ context.Context, _, _ string) error      { return f.err }
+func (f *fakeJobSvc) MarkApplied(_ context.Context, _ string) error      { return f.err }
 
-func newJobTestRouter(h *jobsvc.Handler) *chi.Mux {
+var _ jobsvc.Service = (*fakeJobSvc)(nil)
+
+// newJobTestRouter builds a chi router with all job routes registered via RestRouter.
+// The fake is used as the terminal; no validation layer is in the chain so REST
+// handler tests exercise parsing and HTTP behaviour in isolation.
+func newJobTestRouter(fake jobsvc.Service) *chi.Mux {
+	rest := jobsvc.NewRestService(fake)
+	router := jobsvc.NewRestRouter(rest)
 	r := chi.NewRouter()
-	h.Register(r)
+	router.Register(r)
 	return r
 }
 
 func TestJobHandlerList_OK(t *testing.T) {
-	h := jobsvc.NewHandler(&fakeJobValidator{}, &fakeJobService{jobs: []jobmodel.Job{}, total: 0})
-	r := newJobTestRouter(h)
+	r := newJobTestRouter(&fakeJobSvc{jobs: []jobmodel.Job{}, total: 0})
 
 	req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
 	w := httptest.NewRecorder()
@@ -85,25 +74,20 @@ func TestJobHandlerList_OK(t *testing.T) {
 	}
 }
 
-func TestJobHandlerList_ValidationError(t *testing.T) {
-	h := jobsvc.NewHandler(
-		&fakeJobValidator{listErr: &domain.ValidationError{Field: "status", Code: "INVALID_VALUE", Message: "bad"}},
-		&fakeJobService{},
-	)
-	r := newJobTestRouter(h)
+func TestJobHandlerList_ServiceError(t *testing.T) {
+	r := newJobTestRouter(&fakeJobSvc{err: domain.ErrInternal.WithMessage("db failure")})
 
-	req := httptest.NewRequest(http.MethodGet, "/jobs?status=dismissed", nil)
+	req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("got status %d, want 400", w.Code)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("got status %d, want 500", w.Code)
 	}
 }
 
 func TestJobHandlerGet_OK(t *testing.T) {
-	h := jobsvc.NewHandler(&fakeJobValidator{}, &fakeJobService{job: &jobmodel.Job{ID: "j1"}})
-	r := newJobTestRouter(h)
+	r := newJobTestRouter(&fakeJobSvc{job: &jobmodel.Job{ID: "j1"}})
 
 	req := httptest.NewRequest(http.MethodGet, "/jobs/j1", nil)
 	w := httptest.NewRecorder()
@@ -115,11 +99,7 @@ func TestJobHandlerGet_OK(t *testing.T) {
 }
 
 func TestJobHandlerGet_NotFound(t *testing.T) {
-	h := jobsvc.NewHandler(
-		&fakeJobValidator{},
-		&fakeJobService{err: domain.ErrNotFound.WithMessage("job not found")},
-	)
-	r := newJobTestRouter(h)
+	r := newJobTestRouter(&fakeJobSvc{err: domain.ErrNotFound.WithMessage("job not found")})
 
 	req := httptest.NewRequest(http.MethodGet, "/jobs/missing", nil)
 	w := httptest.NewRecorder()
@@ -131,8 +111,7 @@ func TestJobHandlerGet_NotFound(t *testing.T) {
 }
 
 func TestJobHandlerDismiss_OK(t *testing.T) {
-	h := jobsvc.NewHandler(&fakeJobValidator{}, &fakeJobService{})
-	r := newJobTestRouter(h)
+	r := newJobTestRouter(&fakeJobSvc{})
 
 	body, _ := json.Marshal(jobdto.DismissInput{Reason: jobcommon.DiscardReasonDismissed})
 	req := httptest.NewRequest(http.MethodDelete, "/jobs/j1", bytes.NewReader(body))
@@ -144,26 +123,21 @@ func TestJobHandlerDismiss_OK(t *testing.T) {
 	}
 }
 
-func TestJobHandlerDismiss_ValidationError(t *testing.T) {
-	h := jobsvc.NewHandler(
-		&fakeJobValidator{dismissErr: &domain.ValidationError{Field: "reason", Code: "INVALID_VALUE", Message: "bad reason"}},
-		&fakeJobService{},
-	)
-	r := newJobTestRouter(h)
+func TestJobHandlerDismiss_ServiceError(t *testing.T) {
+	r := newJobTestRouter(&fakeJobSvc{err: domain.ErrInternal.WithMessage("db failure")})
 
-	body, _ := json.Marshal(jobdto.DismissInput{Reason: "invalid"})
+	body, _ := json.Marshal(jobdto.DismissInput{Reason: jobcommon.DiscardReasonDismissed})
 	req := httptest.NewRequest(http.MethodDelete, "/jobs/j1", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("got status %d, want 400", w.Code)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("got status %d, want 500", w.Code)
 	}
 }
 
 func TestJobHandlerSetStatus_OK(t *testing.T) {
-	h := jobsvc.NewHandler(&fakeJobValidator{}, &fakeJobService{})
-	r := newJobTestRouter(h)
+	r := newJobTestRouter(&fakeJobSvc{})
 
 	body, _ := json.Marshal(jobdto.SetStatusInput{Status: jobcommon.JobStatusApplied})
 	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/status", bytes.NewReader(body))
@@ -176,8 +150,7 @@ func TestJobHandlerSetStatus_OK(t *testing.T) {
 }
 
 func TestJobHandlerSetNotes_OK(t *testing.T) {
-	h := jobsvc.NewHandler(&fakeJobValidator{}, &fakeJobService{})
-	r := newJobTestRouter(h)
+	r := newJobTestRouter(&fakeJobSvc{})
 
 	body, _ := json.Marshal(jobdto.SetNotesInput{Notes: "great company"})
 	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/notes", bytes.NewReader(body))
@@ -190,8 +163,7 @@ func TestJobHandlerSetNotes_OK(t *testing.T) {
 }
 
 func TestJobHandlerGetCounts_OK(t *testing.T) {
-	h := jobsvc.NewHandler(&fakeJobValidator{}, &fakeJobService{})
-	r := newJobTestRouter(h)
+	r := newJobTestRouter(&fakeJobSvc{})
 
 	req := httptest.NewRequest(http.MethodGet, "/jobs/counts", nil)
 	w := httptest.NewRecorder()
@@ -206,23 +178,28 @@ func TestJobHandlerGetCounts_OK(t *testing.T) {
 	}
 }
 
-// capturingValidator records the filter passed to ValidateList for inspection.
-type capturingValidator struct {
+// capturingService records the filter passed to List for inspection.
+type capturingService struct {
 	filter jobdto.JobFilter
 }
 
-func (c *capturingValidator) ValidateList(f jobdto.JobFilter, _, _ int) error {
+func (c *capturingService) List(_ context.Context, f jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
 	c.filter = f
-	return nil
+	return nil, 0, nil
 }
-func (c *capturingValidator) ValidateDismiss(_ jobdto.DismissInput) error   { return nil }
-func (c *capturingValidator) ValidateSetStatus(_ string) error              { return nil }
-func (c *capturingValidator) ValidateSetNotes(_ jobdto.SetNotesInput) error { return nil }
+func (c *capturingService) Get(_ context.Context, _ string) (*jobmodel.Job, error)         { return nil, nil }
+func (c *capturingService) GetCounts(_ context.Context) (*jobdto.JobCounts, error)         { return &jobdto.JobCounts{}, nil }
+func (c *capturingService) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error { return nil }
+func (c *capturingService) SetSaved(_ context.Context, _ string, _ bool) error             { return nil }
+func (c *capturingService) SetStatus(_ context.Context, _, _ string) error                 { return nil }
+func (c *capturingService) SetNotes(_ context.Context, _, _ string) error                  { return nil }
+func (c *capturingService) MarkApplied(_ context.Context, _ string) error                  { return nil }
+
+var _ jobsvc.Service = (*capturingService)(nil)
 
 func TestJobHandlerList_ExperienceRangesParsed(t *testing.T) {
-	capturing := &capturingValidator{}
-	h := jobsvc.NewHandler(capturing, &fakeJobService{})
-	r := newJobTestRouter(h)
+	capturing := &capturingService{}
+	r := newJobTestRouter(capturing)
 
 	req := httptest.NewRequest(http.MethodGet, "/jobs?experience_ranges=0-2&experience_ranges=5%2B", nil)
 	w := httptest.NewRecorder()
@@ -245,9 +222,8 @@ func TestJobHandlerList_ExperienceRangesParsed(t *testing.T) {
 }
 
 func TestJobHandlerList_ExperienceRangesInvalidDropped(t *testing.T) {
-	capturing := &capturingValidator{}
-	h := jobsvc.NewHandler(capturing, &fakeJobService{})
-	r := newJobTestRouter(h)
+	capturing := &capturingService{}
+	r := newJobTestRouter(capturing)
 
 	req := httptest.NewRequest(http.MethodGet, "/jobs?experience_ranges=bad&experience_ranges=2-5", nil)
 	w := httptest.NewRecorder()
@@ -264,8 +240,3 @@ func TestJobHandlerList_ExperienceRangesInvalidDropped(t *testing.T) {
 		t.Errorf("range[0] = {Min:%d Max:%v}, want {2 5}", r0.Min, r0.Max)
 	}
 }
-
-// Ensure test doubles implement interfaces.
-var _ jobsvc.Validator = (*fakeJobValidator)(nil)
-var _ jobsvc.Validator = (*capturingValidator)(nil)
-var _ jobsvc.Service = (*fakeJobService)(nil)

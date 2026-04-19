@@ -10,8 +10,10 @@ import (
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/infra/kafka"
 	"github.com/trushilpatel/jobradar/service/application"
+	appsvc "github.com/trushilpatel/jobradar/service/application/services"
 	"github.com/trushilpatel/jobradar/service/company"
 	"github.com/trushilpatel/jobradar/service/dashboard"
+	dashsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
 	"github.com/trushilpatel/jobradar/service/job"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -67,9 +69,14 @@ func provideJobCountReader(s jobsvc.JobStore) dashboard.JobCountReader {
 	return &jobCountReaderAdapter{store: s}
 }
 
-// provideJobApplicationWriter binds application.Store to the jobsvc.ApplicationWriter interface
-// so job.Service can auto-insert tracker rows when status advances to applied/interviewing/offer.
-func provideJobApplicationWriter(s application.Store) jobsvc.ApplicationWriter {
+// provideJobApplicationWriter constructs a dedicated ApplicationWriter for job.Service.
+func provideJobApplicationWriter(db *gorm.DB) jobsvc.ApplicationWriter {
+	return application.NewApplicationWriter(db)
+}
+
+// provideApplicationListReader binds ApplicationService to the ApplicationListReader interface
+// needed by dashboard.UserDashboardService.
+func provideApplicationListReader(s appsvc.ApplicationService) dashsvc.ApplicationListReader {
 	return s
 }
 
@@ -87,6 +94,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*api.App, error) {
 		provideSeenLedgerWriter,
 		provideJobCountReader,
 		provideJobApplicationWriter,
+		provideApplicationListReader,
 		provideLagReader,
 		company.ProviderSet,
 		scan.ProviderSet,

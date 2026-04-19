@@ -2,7 +2,6 @@
 
 //go:generate go run -mod=mod github.com/google/wire/cmd/wire
 //go:build !wireinject
-// +build !wireinject
 
 package main
 
@@ -26,49 +25,69 @@ import (
 // Injectors from wire.go:
 
 func InitializeApp(db *gorm.DB, cfg *config.Config) (*api.App, error) {
-	validator := services.NewValidator()
-	store := services.NewStore(db)
+	// Company
+	companyStore := services.NewStore(db)
+	companyRepositoryService := services.NewRepositoryService(companyStore)
 	commonConfig := provideCompanyConfig(cfg)
 	scanLogStore := services2.NewLogStore(db)
 	scanHistoryReader := provideScanHistoryReader(scanLogStore)
-	service := services.NewService(store, commonConfig, scanHistoryReader)
-	v := services.NewHandler(validator, service)
-	servicesValidator := services2.NewValidator()
+	companyImplService := services.NewService(companyRepositoryService, commonConfig, scanHistoryReader)
+	companyValidationService := services.NewValidator(companyImplService)
+	companyRestService := services.NewRestService(companyValidationService)
+	companyHandler := services.NewRestRouter(companyRestService)
+
+	// Scan
 	scanQueueStore := services2.NewQueueStore(db)
 	scanLogReader := provideScanLogReader(scanLogStore)
 	servicesConfig := provideScanConfig(cfg)
-	servicesService := services2.NewService(scanQueueStore, scanLogReader, service, servicesConfig)
-	restService := services2.NewRestService(servicesValidator, servicesService)
-	jobValidator := jobsvc.NewValidator()
+	scanRepositoryService := services2.NewRepositoryService(scanQueueStore, scanLogReader, servicesConfig)
+	scanImplService := services2.NewService(scanRepositoryService, companyImplService, servicesConfig)
+	scanValidationService := services2.NewValidator(scanImplService)
+	scanRestService := services2.NewRestService(scanValidationService)
+	scanRestRouter := services2.NewRestRouter(scanRestService)
+
+	// Job
 	jobStore := jobsvc.NewJobStore(db)
 	seenLedgerStore := jobsvc.NewSeenLedgerStore(db)
 	seenLedgerWriter := provideSeenLedgerWriter(seenLedgerStore)
 	discardStore := jobsvc.NewDiscardStore(db)
 	snapshotWriter := jobsvc.NewSnapshotStore(db)
-	v2 := services3.NewApplicationRepositoryService(db)
-	applicationWriter := provideJobApplicationWriter(v2)
-	jobService := jobsvc.NewService(jobStore, seenLedgerWriter, discardStore, snapshotWriter, applicationWriter)
-	handler := jobsvc.NewHandler(jobValidator, jobService)
-	applicationValidationService := services3.NewApplicationValidationService()
-	applicationService := services3.NewApplicationImplService(v2, jobService)
-	v3 := services3.NewApplicationRestHandler(applicationValidationService, applicationService)
-	dashboardValidationService := services4.NewDashboardValidationService()
-	servicesStore := services5.NewRepositoryService(db)
-	v4 := services5.NewImplService(servicesStore)
+	applicationWriter := provideJobApplicationWriter(db)
+	jobRepositoryService := jobsvc.NewRepositoryService(jobStore)
+	jobImplService := jobsvc.NewService(jobRepositoryService, seenLedgerWriter, discardStore, snapshotWriter, applicationWriter)
+	jobValidationService := jobsvc.NewValidator(jobImplService)
+	jobRestService := jobsvc.NewRestService(jobValidationService)
+	jobHandler := jobsvc.NewRestRouter(jobRestService)
+
+	// Application
+	applicationRepositoryService := services3.NewApplicationRepositoryService(db)
+	applicationImplService := services3.NewApplicationImplService(applicationRepositoryService, jobImplService)
+	applicationValidationService := services3.NewApplicationValidationService(applicationImplService)
+	applicationRestService := services3.NewApplicationRestService(applicationValidationService)
+	applicationRestRouter := services3.NewApplicationRestRouter(applicationRestService)
+
+	// Insights
+	insightsRepositoryService := services5.NewRepositoryService(db)
+	insightsImplService := services5.NewImplService(insightsRepositoryService)
+	insightsValidationService := services5.NewValidationService(insightsImplService)
+	insightsRestService := services5.NewRestService(insightsValidationService)
+	insightsRestRouter := services5.NewRestRouter(insightsRestService)
+
+	// Dashboard
 	jobCountReader := provideJobCountReader(jobStore)
-	dashboardService := services4.NewDashboardImplService(scanLogReader, v4, jobCountReader)
+	dashboardService := services4.NewDashboardImplService(scanLogReader, insightsImplService, jobCountReader)
 	userDashboardStore := services4.NewUserDashboardStore(db)
-	userDashboardService := services4.NewUserDashboardService(userDashboardStore, v2)
+	userDashboardService := services4.NewUserDashboardService(userDashboardStore, applicationImplService)
 	pipelineStore := services4.NewPipelineStore(db)
 	lagReader, err := provideLagReader(cfg)
 	if err != nil {
 		return nil, err
 	}
 	pipelineService := services4.NewPipelineService(pipelineStore, lagReader)
-	v5 := services4.NewDashboardRestService(dashboardValidationService, dashboardService, userDashboardService, pipelineService)
-	validator2 := services5.NewValidationService()
-	v6 := services5.NewRestService(validator2, v4)
-	app := api.NewApp(v, restService, handler, v3, v5, v6)
+	dashboardRestService := services4.NewDashboardRestService(dashboardService, userDashboardService, pipelineService)
+	dashboardRestRouter := services4.NewRestRouter(dashboardRestService)
+
+	app := api.NewApp(companyHandler, scanRestRouter, jobHandler, applicationRestRouter, dashboardRestRouter, insightsRestRouter)
 	return app, nil
 }
 
@@ -121,10 +140,9 @@ func provideJobCountReader(s jobsvc.JobStore) dashboard.JobCountReader {
 	return &jobCountReaderAdapter{store: s}
 }
 
-// provideJobApplicationWriter binds application.Store to the jobsvc.ApplicationWriter interface
-// so job.Service can auto-insert tracker rows when status advances to applied/interviewing/offer.
-func provideJobApplicationWriter(s application.Store) jobsvc.ApplicationWriter {
-	return s
+// provideJobApplicationWriter constructs a dedicated ApplicationWriter for job.Service.
+func provideJobApplicationWriter(db *gorm.DB) jobsvc.ApplicationWriter {
+	return application.NewApplicationWriter(db)
 }
 
 // provideLagReader creates a Kafka LagReader from the config.

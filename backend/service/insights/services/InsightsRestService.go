@@ -4,35 +4,22 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/api/handler"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 )
 
 // RestService handles HTTP requests for the insights domain.
 type RestService struct {
-	validator Validator
-	insights  Service
+	next InsightsService
 }
 
 // NewRestService constructs a RestService.
-func NewRestService(v Validator, svc Service) *RestService {
-	return &RestService{validator: v, insights: svc}
-}
-
-// Register mounts all insights routes onto r.
-func (h *RestService) Register(r chi.Router) {
-	r.Get("/insights/tech-stack", h.TechStack)
-	r.Get("/insights/company-activity", h.CompanyActivity)
-	r.Get("/insights/funnel", h.Funnel)
-	r.Get("/insights/location", h.Location)
-	r.Get("/insights/sponsorship", h.Sponsorship)
-	r.Get("/insights/velocity", h.Velocity)
-	r.Get("/insights/role-categories", h.RoleCategories)
+func NewRestService(next InsightsService) *RestService {
+	return &RestService{next: next}
 }
 
 func (h *RestService) TechStack(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.TechStack(r.Context())
+	data, err := h.next.TechStack(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -41,7 +28,7 @@ func (h *RestService) TechStack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RestService) CompanyActivity(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.CompanyActivity(r.Context())
+	data, err := h.next.CompanyActivity(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -50,7 +37,7 @@ func (h *RestService) CompanyActivity(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RestService) Funnel(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.Funnel(r.Context())
+	data, err := h.next.Funnel(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -59,7 +46,7 @@ func (h *RestService) Funnel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RestService) Location(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.Location(r.Context())
+	data, err := h.next.Location(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -75,13 +62,7 @@ func (h *RestService) Sponsorship(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	filter := dto.InsightsFilter{Days: days}
-	if err := h.validator.ValidateFilter(filter); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	data, err := h.insights.Sponsorship(r.Context(), filter)
+	data, err := h.next.Sponsorship(r.Context(), dto.InsightsFilter{Days: days})
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -90,7 +71,7 @@ func (h *RestService) Sponsorship(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RestService) Velocity(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.Velocity(r.Context())
+	data, err := h.next.Velocity(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -99,7 +80,7 @@ func (h *RestService) Velocity(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RestService) RoleCategories(w http.ResponseWriter, r *http.Request) {
-	data, err := h.insights.RoleCategories(r.Context())
+	data, err := h.next.RoleCategories(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return

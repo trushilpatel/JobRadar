@@ -9,33 +9,14 @@ import (
 )
 
 // RestService handles HTTP requests for the scan domain.
-// It mounts under /companies alongside the company handler.
+// It holds a single next Service dependency; routing belongs in RestRouter.
 type RestService struct {
-	validator Validator
-	scans     Service
+	next Service
 }
 
 // NewRestService constructs a RestService.
-func NewRestService(v Validator, svc Service) *RestService {
-	return &RestService{validator: v, scans: svc}
-}
-
-// Register mounts scan-specific routes under /companies.
-// Routes are mounted at the top level (not as a sub-router) to avoid conflicts
-// when both CompanyHandler and ScanHandler mount under /companies.
-func (h *RestService) Register(r chi.Router) {
-	// Queue management
-	r.Get("/companies/queue", h.ListQueue)
-	r.Delete("/companies/queue/{entry_id}", h.RemoveFromQueue)
-	r.Post("/companies/queue/{entry_id}/move-up", h.MoveQueueItemUp)
-	r.Post("/companies/queue/{entry_id}/move-down", h.MoveQueueItemDown)
-
-	// Bulk scan
-	r.Post("/companies/scan-all", h.TriggerScanAll)
-
-	// Per-company scan operations
-	r.Get("/companies/{id}/scan-stats", h.ScanStats)
-	r.Post("/companies/{id}/scan", h.TriggerScan)
+func NewRestService(next Service) *RestService {
+	return &RestService{next: next}
 }
 
 // GET /companies/queue
@@ -45,12 +26,7 @@ func (h *RestService) ListQueue(w http.ResponseWriter, r *http.Request) {
 		Source: r.URL.Query().Get("source"),
 	}
 
-	if err := h.validator.ValidateListQueue(filter); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	views, err := h.scans.ListQueue(r.Context(), filter)
+	views, err := h.next.ListQueue(r.Context(), filter)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -62,7 +38,7 @@ func (h *RestService) ListQueue(w http.ResponseWriter, r *http.Request) {
 // DELETE /companies/queue/:entry_id
 func (h *RestService) RemoveFromQueue(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "entry_id")
-	if err := h.scans.RemoveFromQueue(r.Context(), id); err != nil {
+	if err := h.next.RemoveFromQueue(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -72,7 +48,7 @@ func (h *RestService) RemoveFromQueue(w http.ResponseWriter, r *http.Request) {
 // POST /companies/queue/:entry_id/move-up
 func (h *RestService) MoveQueueItemUp(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "entry_id")
-	if err := h.scans.MoveUp(r.Context(), id); err != nil {
+	if err := h.next.MoveUp(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -82,7 +58,7 @@ func (h *RestService) MoveQueueItemUp(w http.ResponseWriter, r *http.Request) {
 // POST /companies/queue/:entry_id/move-down
 func (h *RestService) MoveQueueItemDown(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "entry_id")
-	if err := h.scans.MoveDown(r.Context(), id); err != nil {
+	if err := h.next.MoveDown(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -91,7 +67,7 @@ func (h *RestService) MoveQueueItemDown(w http.ResponseWriter, r *http.Request) 
 
 // POST /companies/scan-all
 func (h *RestService) TriggerScanAll(w http.ResponseWriter, r *http.Request) {
-	count, err := h.scans.TriggerScanAll(r.Context())
+	count, err := h.next.TriggerScanAll(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -103,12 +79,7 @@ func (h *RestService) TriggerScanAll(w http.ResponseWriter, r *http.Request) {
 func (h *RestService) ScanStats(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	if err := h.validator.ValidateTriggerScan(id); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	stats, err := h.scans.GetStats(r.Context(), id)
+	stats, err := h.next.GetStats(r.Context(), id)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -121,12 +92,7 @@ func (h *RestService) ScanStats(w http.ResponseWriter, r *http.Request) {
 func (h *RestService) TriggerScan(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	if err := h.validator.ValidateTriggerScan(id); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	if err := h.scans.TriggerScan(r.Context(), id); err != nil {
+	if err := h.next.TriggerScan(r.Context(), id); err != nil {
 		handler.HandleError(w, err)
 		return
 	}

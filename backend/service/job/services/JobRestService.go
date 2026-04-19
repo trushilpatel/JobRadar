@@ -13,30 +13,20 @@ import (
 	"github.com/trushilpatel/jobradar/service/job/dto"
 )
 
-// Handler handles HTTP requests for the job domain.
-type Handler struct {
-	validator Validator
-	jobs      Service
+// RestService handles HTTP requests for the job domain.
+// It parses requests, calls the service chain, and writes responses.
+// Routing belongs in RestRouter.
+type RestService struct {
+	next Service
 }
 
-// NewHandler constructs a Handler.
-func NewHandler(v Validator, jobs Service) *Handler {
-	return &Handler{validator: v, jobs: jobs}
-}
-
-// Register mounts all job routes onto r.
-func (h *Handler) Register(r chi.Router) {
-	r.Get("/jobs", h.List)
-	r.Get("/jobs/counts", h.GetCounts)
-	r.Get("/jobs/{id}", h.Get)
-	r.Delete("/jobs/{id}", h.Dismiss)
-	r.Patch("/jobs/{id}/save", h.SetSaved)
-	r.Patch("/jobs/{id}/status", h.SetStatus)
-	r.Patch("/jobs/{id}/notes", h.SetNotes)
+// NewRestService constructs a RestService.
+func NewRestService(next Service) *RestService {
+	return &RestService{next: next}
 }
 
 // GET /jobs?status=new&page=1&limit=20&remote=true&sponsorship=true&...
-func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) List(w http.ResponseWriter, r *http.Request) {
 	p := request.ParsePagination(r)
 	q := r.URL.Query()
 
@@ -82,12 +72,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := h.validator.ValidateList(filter, p.Page, p.Limit); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	jobs, total, err := h.jobs.List(r.Context(), filter, p.Page, p.Limit)
+	jobs, total, err := h.next.List(r.Context(), filter, p.Page, p.Limit)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -97,8 +82,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /jobs/counts
-func (h *Handler) GetCounts(w http.ResponseWriter, r *http.Request) {
-	counts, err := h.jobs.GetCounts(r.Context())
+func (h *RestService) GetCounts(w http.ResponseWriter, r *http.Request) {
+	counts, err := h.next.GetCounts(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -107,10 +92,10 @@ func (h *Handler) GetCounts(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /jobs/:id
-func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) Get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	job, err := h.jobs.Get(r.Context(), id)
+	job, err := h.next.Get(r.Context(), id)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -120,7 +105,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // DELETE /jobs/:id
-func (h *Handler) Dismiss(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) Dismiss(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	var input dto.DismissInput
@@ -129,12 +114,7 @@ func (h *Handler) Dismiss(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.validator.ValidateDismiss(input); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	if err := h.jobs.Dismiss(r.Context(), id, input); err != nil {
+	if err := h.next.Dismiss(r.Context(), id, input); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -143,7 +123,7 @@ func (h *Handler) Dismiss(w http.ResponseWriter, r *http.Request) {
 }
 
 // PATCH /jobs/:id/save
-func (h *Handler) SetSaved(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) SetSaved(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	var body struct {
@@ -154,7 +134,7 @@ func (h *Handler) SetSaved(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.jobs.SetSaved(r.Context(), id, body.Saved); err != nil {
+	if err := h.next.SetSaved(r.Context(), id, body.Saved); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -163,7 +143,7 @@ func (h *Handler) SetSaved(w http.ResponseWriter, r *http.Request) {
 }
 
 // PATCH /jobs/:id/status
-func (h *Handler) SetStatus(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) SetStatus(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	var input dto.SetStatusInput
@@ -172,12 +152,7 @@ func (h *Handler) SetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.validator.ValidateSetStatus(input.Status); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	if err := h.jobs.SetStatus(r.Context(), id, input.Status); err != nil {
+	if err := h.next.SetStatus(r.Context(), id, input.Status); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -186,7 +161,7 @@ func (h *Handler) SetStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // PATCH /jobs/:id/notes
-func (h *Handler) SetNotes(w http.ResponseWriter, r *http.Request) {
+func (h *RestService) SetNotes(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	var input dto.SetNotesInput
@@ -195,12 +170,7 @@ func (h *Handler) SetNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.validator.ValidateSetNotes(input); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	if err := h.jobs.SetNotes(r.Context(), id, input.Notes); err != nil {
+	if err := h.next.SetNotes(r.Context(), id, input.Notes); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -209,8 +179,8 @@ func (h *Handler) SetNotes(w http.ResponseWriter, r *http.Request) {
 }
 
 func parseExperienceRange(s string) (dto.ExperienceRange, bool) {
-	if strings.HasSuffix(s, "+") {
-		min, err := strconv.Atoi(strings.TrimSuffix(s, "+"))
+	if rest, ok := strings.CutSuffix(s, "+"); ok {
+		min, err := strconv.Atoi(rest)
 		if err != nil || min < 0 {
 			return dto.ExperienceRange{}, false
 		}

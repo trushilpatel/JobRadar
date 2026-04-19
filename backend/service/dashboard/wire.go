@@ -7,8 +7,8 @@ import (
 
 // ProviderSet is the Wire provider set for the dashboard domain.
 var ProviderSet = wire.NewSet(
+	services.NewRestRouter,
 	services.NewDashboardRestService,
-	services.NewDashboardValidationService,
 	services.NewDashboardImplService,
 	services.NewUserDashboardStore,
 	services.NewUserDashboardService,

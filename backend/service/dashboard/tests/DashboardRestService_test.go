@@ -13,14 +13,7 @@ import (
 	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 )
 
-// fakeDashboardValidator is a test double for Validator.
-type fakeDashboardValidator struct {
-	activityErr error
-}
-
-func (f *fakeDashboardValidator) ValidateActivity(_ int) error { return f.activityErr }
-
-// fakeDashboardService is a test double for Service.
+// fakeDashboardService is a test double for DashboardService.
 type fakeDashboardService struct {
 	stats    *dto.StatsView
 	activity []dto.ActivityView
@@ -34,14 +27,15 @@ func (f *fakeDashboardService) GetActivity(_ context.Context, _ int) ([]dto.Acti
 	return f.activity, f.err
 }
 
-func newDashboardTestRouter(h *dashboardsvc.DashboardRestService) *chi.Mux {
+func newDashboardTestRouter(h *dashboardsvc.RestService) *chi.Mux {
 	r := chi.NewRouter()
-	h.Register(r)
+	router := dashboardsvc.NewRestRouter(h)
+	router.Register(r)
 	return r
 }
 
 func TestDashboardHandlerStats_OK(t *testing.T) {
-	h := dashboardsvc.NewDashboardRestService(&fakeDashboardValidator{}, &fakeDashboardService{stats: &dto.StatsView{}}, nil, nil)
+	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{stats: &dto.StatsView{}}, nil, nil)
 	r := newDashboardTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/stats", nil)
@@ -58,7 +52,6 @@ func TestDashboardHandlerStats_OK(t *testing.T) {
 
 func TestDashboardHandlerStats_ServiceError(t *testing.T) {
 	h := dashboardsvc.NewDashboardRestService(
-		&fakeDashboardValidator{},
 		&fakeDashboardService{err: domain.ErrInternal.WithMessage("db down")},
 		nil, nil,
 	)
@@ -77,7 +70,7 @@ func TestDashboardHandlerStats_ServiceError(t *testing.T) {
 }
 
 func TestDashboardHandlerActivity_OK(t *testing.T) {
-	h := dashboardsvc.NewDashboardRestService(&fakeDashboardValidator{}, &fakeDashboardService{activity: []dto.ActivityView{}}, nil, nil)
+	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{activity: []dto.ActivityView{}}, nil, nil)
 	r := newDashboardTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/activity?days=7", nil)
@@ -90,11 +83,8 @@ func TestDashboardHandlerActivity_OK(t *testing.T) {
 }
 
 func TestDashboardHandlerActivity_ValidationError(t *testing.T) {
-	h := dashboardsvc.NewDashboardRestService(
-		&fakeDashboardValidator{activityErr: &domain.ValidationError{Field: "days", Code: "INVALID_VALUE", Message: "days must be >= 1"}},
-		&fakeDashboardService{},
-		nil, nil,
-	)
+	// days=0 triggers the inlined validation in the handler (days < 1).
+	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{}, nil, nil)
 	r := newDashboardTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/activity?days=0", nil)
@@ -108,7 +98,6 @@ func TestDashboardHandlerActivity_ValidationError(t *testing.T) {
 
 func TestDashboardHandlerActivity_ServiceError(t *testing.T) {
 	h := dashboardsvc.NewDashboardRestService(
-		&fakeDashboardValidator{},
 		&fakeDashboardService{err: domain.ErrInternal.WithMessage("db down")},
 		nil, nil,
 	)
@@ -135,7 +124,6 @@ func (f *fakePipelineService) GetPipelineStats(_ context.Context) (*dto.Pipeline
 
 func TestDashboardHandlerPipeline_OK(t *testing.T) {
 	h := dashboardsvc.NewDashboardRestService(
-		&fakeDashboardValidator{},
 		&fakeDashboardService{},
 		nil,
 		&fakePipelineService{stats: &dto.PipelineStats{TotalCompanies: 5, ActiveCompanies: 4}},
@@ -156,7 +144,6 @@ func TestDashboardHandlerPipeline_OK(t *testing.T) {
 
 func TestDashboardHandlerPipeline_ServiceError(t *testing.T) {
 	h := dashboardsvc.NewDashboardRestService(
-		&fakeDashboardValidator{},
 		&fakeDashboardService{},
 		nil,
 		&fakePipelineService{err: domain.ErrInternal.WithMessage("db down")},
@@ -173,6 +160,5 @@ func TestDashboardHandlerPipeline_ServiceError(t *testing.T) {
 }
 
 // Ensure test doubles implement interfaces.
-var _ dashboardsvc.DashboardValidationService = (*fakeDashboardValidator)(nil)
 var _ dashboardsvc.DashboardService = (*fakeDashboardService)(nil)
 var _ dashboardsvc.PipelineService = (*fakePipelineService)(nil)

@@ -6,45 +6,37 @@ import (
 	"testing"
 
 	"github.com/trushilpatel/jobradar/common/domain"
-	appmodel "github.com/trushilpatel/jobradar/service/application/models"
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
+	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	svc "github.com/trushilpatel/jobradar/service/application/services"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
 
-// fakeRepository is a test double for ApplicationRepositoryService.
-type fakeRepository struct {
-	apps         []appmodel.JobApplication
-	appsWithJob  []svc.ApplicationWithJob
-	total        int64
-	err          error
+// fakeApplicationService is a test double for ApplicationService (used as "next" for ImplService).
+type fakeApplicationService struct {
+	apps        []appmodel.JobApplication
+	appsWithJob []svc.ApplicationWithJob
+	app         *appmodel.JobApplication
+	total       int64
+	err         error
 	insertCalled bool
 }
 
-func (f *fakeRepository) GetApplicationsByJobID(jobResultID string) ([]appmodel.JobApplication, error) {
+func (f *fakeApplicationService) ListByJob(_ string) ([]appmodel.JobApplication, error) {
 	return f.apps, f.err
 }
-func (f *fakeRepository) GetApplicationsByJobIDPaged(jobResultID string, page, limit int) ([]appmodel.JobApplication, int64, error) {
-	return f.apps, f.total, f.err
+func (f *fakeApplicationService) ListAll(_, _ int) ([]svc.ApplicationWithJob, int, error) {
+	return f.appsWithJob, int(f.total), f.err
 }
-func (f *fakeRepository) InsertApplication(jobResultID, stage, note string) error {
+func (f *fakeApplicationService) Create(_ context.Context, _ string, _ dto.CreateApplicationInput) (*appmodel.JobApplication, error) {
 	f.insertCalled = true
-	return f.err
+	return f.app, f.err
 }
-func (f *fakeRepository) InsertAppliedApplication(_ string) error      { return f.err }
-func (f *fakeRepository) InsertInterviewingApplication(_ string) error { return f.err }
-func (f *fakeRepository) InsertOfferApplication(_ string) error        { return f.err }
-func (f *fakeRepository) GetLatestApplicationsWithJob() ([]svc.ApplicationWithJob, error) {
-	return f.appsWithJob, f.err
-}
-func (f *fakeRepository) GetLatestApplicationsWithJobPaged(page, limit int) ([]svc.ApplicationWithJob, int64, error) {
-	return f.appsWithJob, f.total, f.err
-}
-func (f *fakeRepository) UpdateApplicationStage(id int64, stage string) error { return f.err }
-func (f *fakeRepository) UpdateApplicationNote(id int64, note string) error   { return f.err }
+func (f *fakeApplicationService) UpdateStage(_, _ string, _ dto.UpdateStageInput) error { return f.err }
+func (f *fakeApplicationService) UpdateNote(_, _ string, _ dto.UpdateNoteInput) error   { return f.err }
 
 // fakeJobService is a test double for job.Service.
 type fakeJobService struct {
@@ -73,7 +65,8 @@ func (f *fakeJobService) MarkApplied(_ context.Context, _ string) error {
 }
 
 func TestCreate_JobNotFound(t *testing.T) {
-	service := svc.NewApplicationImplService(&fakeRepository{}, &fakeJobService{
+	next := &fakeApplicationService{}
+	service := svc.NewApplicationImplService(next, &fakeJobService{
 		err: domain.ErrNotFound.WithMessage("job not found"),
 	})
 
@@ -88,15 +81,17 @@ func TestCreate_JobNotFound(t *testing.T) {
 }
 
 func TestCreate_OK(t *testing.T) {
-	fr := &fakeRepository{}
-	service := svc.NewApplicationImplService(fr, &fakeJobService{job: &jobmodel.Job{ID: "j1"}})
+	next := &fakeApplicationService{
+		app: &appmodel.JobApplication{JobResultID: "j1", Stage: appcommon.StagePhoneScreen},
+	}
+	service := svc.NewApplicationImplService(next, &fakeJobService{job: &jobmodel.Job{ID: "j1"}})
 
 	app, err := service.Create(context.Background(), "j1", dto.CreateApplicationInput{Stage: appcommon.StagePhoneScreen})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	if !fr.insertCalled {
-		t.Error("expected InsertApplication to be called")
+	if !next.insertCalled {
+		t.Error("expected Create to be called on next")
 	}
 	if app.Stage != appcommon.StagePhoneScreen {
 		t.Errorf("expected stage %q, got %q", appcommon.StagePhoneScreen, app.Stage)
@@ -104,9 +99,11 @@ func TestCreate_OK(t *testing.T) {
 }
 
 func TestCreate_SetsJobApplied(t *testing.T) {
-	fr := &fakeRepository{}
+	next := &fakeApplicationService{
+		app: &appmodel.JobApplication{JobResultID: "j1", Stage: appcommon.StageApplied},
+	}
 	jobService := &fakeJobService{job: &jobmodel.Job{ID: "j1"}}
-	service := svc.NewApplicationImplService(fr, jobService)
+	service := svc.NewApplicationImplService(next, jobService)
 
 	_, err := service.Create(context.Background(), "j1", dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	if err != nil {
@@ -119,7 +116,8 @@ func TestCreate_SetsJobApplied(t *testing.T) {
 
 func TestListAll_Paged(t *testing.T) {
 	appsWithJob := []svc.ApplicationWithJob{{JobTitle: "Backend Eng"}}
-	service := svc.NewApplicationImplService(&fakeRepository{appsWithJob: appsWithJob, total: 1}, &fakeJobService{})
+	next := &fakeApplicationService{appsWithJob: appsWithJob, total: 1}
+	service := svc.NewApplicationImplService(next, &fakeJobService{})
 
 	result, total, err := service.ListAll(1, 20)
 	if err != nil {
@@ -134,5 +132,5 @@ func TestListAll_Paged(t *testing.T) {
 }
 
 // Ensure test doubles implement interfaces.
-var _ svc.ApplicationRepositoryService = (*fakeRepository)(nil)
+var _ svc.ApplicationService = (*fakeApplicationService)(nil)
 var _ jobsvc.Service = (*fakeJobService)(nil)

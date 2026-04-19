@@ -7,8 +7,10 @@ import (
 
 // ProviderSet is the Wire provider set for the company domain.
 var ProviderSet = wire.NewSet(
-	services.NewHandler,
+	services.NewRestRouter,
+	services.NewRestService,
 	services.NewValidator,
 	services.NewService,
+	services.NewRepositoryService,
 	services.NewStore,
 )

@@ -16,8 +16,8 @@ type Config struct {
 	ScanIntervalMinutes int
 }
 
-// schedulerService implements SchedulerService. Embedded by service so the
-// logic lives in one place and both constructors share it.
+// schedulerService implements SchedulerService for the scheduler worker.
+// It uses ScanQueueStore directly — not part of the REST decorator chain.
 type schedulerService struct {
 	queue ScanQueueStore
 }
@@ -47,40 +47,36 @@ func (s *schedulerService) ResetStuck(ctx context.Context, staleDur time.Duratio
 	return nil
 }
 
-type service struct {
-	*schedulerService
-	scanLog    ScanLogReader
+// implService is the business-logic decorator. It embeds BaseService so all
+// methods not overridden here are auto-delegated to the next layer.
+type implService struct {
+	BaseService
 	companySvc company.Service
 	config     Config
 }
 
-// NewService constructs a Service implementation.
-func NewService(queue ScanQueueStore, scanLog ScanLogReader, companySvc company.Service, cfg Config) Service {
-	return &service{
-		schedulerService: &schedulerService{queue: queue},
-		scanLog:          scanLog,
-		companySvc:       companySvc,
-		config:           cfg,
+// NewService constructs the ImplService decorator.
+func NewService(next Service, companySvc company.Service, cfg Config) Service {
+	return &implService{
+		BaseService: NewBaseService(next),
+		companySvc:  companySvc,
+		config:      cfg,
 	}
 }
 
-// TriggerScan enqueues a manual scan for a company. Verifies the company exists first.
-func (s *service) TriggerScan(ctx context.Context, companyID string) (err error) {
-	ctx, span := tracing.Start(ctx, "scan.service.TriggerScan")
+// TriggerScan verifies the company exists, then delegates enqueue to next.
+func (s *implService) TriggerScan(ctx context.Context, companyID string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.impl.TriggerScan")
 	defer tracing.End(span, &err)
 	if _, err := s.companySvc.Get(ctx, companyID); err != nil {
 		return err // already a ServiceError from company.Service
 	}
-	if err := s.queue.Enqueue(ctx, companyID, scancommon.QueueSourceManual); err != nil {
-		return domain.ErrInternal.WithMessage("failed to trigger scan")
-	}
-	return nil
+	return s.next.TriggerScan(ctx, companyID)
 }
 
-// TriggerScanAll enqueues a manual scan for every active company.
-// Returns the number of companies successfully enqueued.
-func (s *service) TriggerScanAll(ctx context.Context) (_ int, err error) {
-	ctx, span := tracing.Start(ctx, "scan.service.TriggerScanAll")
+// TriggerScanAll enqueues every active company for an immediate manual scan.
+func (s *implService) TriggerScanAll(ctx context.Context) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "scan.impl.TriggerScanAll")
 	defer tracing.End(span, &err)
 	companies, err := s.companySvc.GetAll(ctx)
 	if err != nil {
@@ -91,7 +87,7 @@ func (s *service) TriggerScanAll(ctx context.Context) (_ int, err error) {
 		if !c.Active {
 			continue
 		}
-		if err := s.queue.Enqueue(ctx, c.ID, scancommon.QueueSourceManual); err != nil {
+		if err := s.next.TriggerScan(ctx, c.ID); err != nil {
 			continue
 		}
 		count++
@@ -99,24 +95,14 @@ func (s *service) TriggerScanAll(ctx context.Context) (_ int, err error) {
 	return count, nil
 }
 
-// GetStats returns a summary of scan history for the given company.
-func (s *service) GetStats(ctx context.Context, companyID string) (_ *dto.ScanStatsView, err error) {
-	ctx, span := tracing.Start(ctx, "scan.service.GetStats")
+// ListQueue fetches raw entries from next, then enriches them with company metadata.
+func (s *implService) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ []dto.QueueEntryView, err error) {
+	ctx, span := tracing.Start(ctx, "scan.impl.ListQueue")
 	defer tracing.End(span, &err)
-	stats, err := s.scanLog.GetScanStats(ctx, companyID)
-	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch scan stats")
-	}
-	return &stats, nil
-}
 
-// ListQueue returns all active queue entries enriched with company name, adapter, and next_scan_at.
-func (s *service) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ []dto.QueueEntryView, err error) {
-	ctx, span := tracing.Start(ctx, "scan.service.ListQueue")
-	defer tracing.End(span, &err)
-	items, err := s.queue.ListQueue(ctx)
+	views, err := s.next.ListQueue(ctx, filter)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch queue")
+		return nil, err
 	}
 
 	allCompanies, err := s.companySvc.GetAll(ctx)
@@ -129,66 +115,16 @@ func (s *service) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ []dt
 		companyMap[c.ID] = c
 	}
 
-	views := make([]dto.QueueEntryView, 0, len(items))
-	for _, item := range items {
-		// Apply status filter if set
-		if filter.Status != "" && item.Status != filter.Status {
-			continue
-		}
-		// Apply source filter if set
-		if filter.Source != "" && item.Source != filter.Source {
-			continue
-		}
-
-		v := dto.QueueEntryView{
-			ID:        item.ID,
-			CompanyID: item.CompanyID,
-			Status:    item.Status,
-			Source:    item.Source,
-			Priority:  item.Priority,
-			QueuedAt:  item.QueuedAt,
-			StartedAt: item.StartedAt,
-		}
-		if c, ok := companyMap[item.CompanyID]; ok {
-			v.CompanyName = c.Name
-			v.AdapterType = c.AdapterType
+	for i, v := range views {
+		if c, ok := companyMap[v.CompanyID]; ok {
+			views[i].CompanyName = c.Name
+			views[i].AdapterType = c.AdapterType
 			if c.LastScanAt != nil {
 				t := c.LastScanAt.Add(time.Duration(s.config.ScanIntervalMinutes) * time.Minute)
-				v.NextScanAt = &t
+				views[i].NextScanAt = &t
 			}
 		}
-		views = append(views, v)
 	}
 
 	return views, nil
-}
-
-// RemoveFromQueue removes a queued entry by ID.
-func (s *service) RemoveFromQueue(ctx context.Context, entryID string) (err error) {
-	ctx, span := tracing.Start(ctx, "scan.service.RemoveFromQueue")
-	defer tracing.End(span, &err)
-	if err := s.queue.Remove(ctx, entryID); err != nil {
-		return domain.ErrInternal.WithMessage("failed to remove queue entry")
-	}
-	return nil
-}
-
-// MoveUp raises a queue entry one position.
-func (s *service) MoveUp(ctx context.Context, entryID string) (err error) {
-	ctx, span := tracing.Start(ctx, "scan.service.MoveUp")
-	defer tracing.End(span, &err)
-	if err := s.queue.MoveUp(ctx, entryID); err != nil {
-		return domain.ErrInternal.WithMessage("failed to move queue entry")
-	}
-	return nil
-}
-
-// MoveDown lowers a queue entry one position.
-func (s *service) MoveDown(ctx context.Context, entryID string) (err error) {
-	ctx, span := tracing.Start(ctx, "scan.service.MoveDown")
-	defer tracing.End(span, &err)
-	if err := s.queue.MoveDown(ctx, entryID); err != nil {
-		return domain.ErrInternal.WithMessage("failed to move queue entry")
-	}
-	return nil
 }

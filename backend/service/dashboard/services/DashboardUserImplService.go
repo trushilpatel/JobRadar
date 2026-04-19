@@ -6,24 +6,24 @@ import (
 
 	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	"github.com/trushilpatel/jobradar/service/application"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 	insightscommon "github.com/trushilpatel/jobradar/service/insights/common"
 )
 
-// UserDashboardImplService implements UserDashboardService.
-type UserDashboardImplService struct {
+// userDashboardImplService is the terminal implementation of UserDashboardService.
+// It aggregates DB data from UserDashboardStore and cross-service data from ApplicationListReader.
+type userDashboardImplService struct {
 	store    UserDashboardStore
-	appStore application.Store
+	appStore ApplicationListReader
 }
 
-// NewUserDashboardService constructs a UserDashboardService.
-func NewUserDashboardService(store UserDashboardStore, appStore application.Store) UserDashboardService {
-	return &UserDashboardImplService{store: store, appStore: appStore}
+// NewUserDashboardService constructs the terminal UserDashboardService implementation.
+func NewUserDashboardService(store UserDashboardStore, appStore ApplicationListReader) UserDashboardService {
+	return &userDashboardImplService{store: store, appStore: appStore}
 }
 
-func (s *UserDashboardImplService) GetProgressStats(ctx context.Context) (_ *dto.ProgressStats, err error) {
+func (s *userDashboardImplService) GetProgressStats(ctx context.Context) (_ *dto.ProgressStats, err error) {
 	ctx, span := tracing.Start(ctx, "dashboard.userdashboard.GetProgressStats")
 	defer tracing.End(span, &err)
 	stats, err := s.store.GetProgressStats(ctx)
@@ -33,7 +33,7 @@ func (s *UserDashboardImplService) GetProgressStats(ctx context.Context) (_ *dto
 	return &stats, nil
 }
 
-func (s *UserDashboardImplService) GetMarketStats(ctx context.Context) (_ *dto.MarketStats, err error) {
+func (s *userDashboardImplService) GetMarketStats(ctx context.Context) (_ *dto.MarketStats, err error) {
 	ctx, span := tracing.Start(ctx, "dashboard.userdashboard.GetMarketStats")
 	defer tracing.End(span, &err)
 	stats, err := s.store.GetMarketStats(ctx)
@@ -43,7 +43,7 @@ func (s *UserDashboardImplService) GetMarketStats(ctx context.Context) (_ *dto.M
 	return &stats, nil
 }
 
-func (s *UserDashboardImplService) GetHeatmap(ctx context.Context) (_ []dto.WeeklyCount, err error) {
+func (s *userDashboardImplService) GetHeatmap(ctx context.Context) (_ []dto.WeeklyCount, err error) {
 	ctx, span := tracing.Start(ctx, "dashboard.userdashboard.GetHeatmap")
 	defer tracing.End(span, &err)
 	counts, err := s.store.GetWeeklyHiringActivity(ctx, 52)
@@ -54,10 +54,10 @@ func (s *UserDashboardImplService) GetHeatmap(ctx context.Context) (_ []dto.Week
 }
 
 // GetInterviews returns active applications mapped to InterviewRow, excluding rejected.
-func (s *UserDashboardImplService) GetInterviews(ctx context.Context) (_ []dto.InterviewRow, err error) {
+func (s *userDashboardImplService) GetInterviews(ctx context.Context) (_ []dto.InterviewRow, err error) {
 	_, span := tracing.Start(ctx, "dashboard.userdashboard.GetInterviews")
 	defer tracing.End(span, &err)
-	apps, err := s.appStore.GetLatestApplicationsWithJob()
+	apps, _, err := s.appStore.ListAll(1, 1000)
 	if err != nil {
 		return nil, domain.ErrInternal.WithMessage("failed to fetch interviews")
 	}
@@ -95,7 +95,7 @@ func toDisplayStage(stage string) string {
 }
 
 // GetVelocity returns top-N companies ranked by current-week job count with 4-week sparklines.
-func (s *UserDashboardImplService) GetVelocity(ctx context.Context, limit int) (_ []dto.CompanyVelocityRow, err error) {
+func (s *userDashboardImplService) GetVelocity(ctx context.Context, limit int) (_ []dto.CompanyVelocityRow, err error) {
 	ctx, span := tracing.Start(ctx, "dashboard.userdashboard.GetVelocity")
 	defer tracing.End(span, &err)
 	rows, err := s.store.GetCompanyVelocityDetailed(ctx, limit)
@@ -138,7 +138,7 @@ func classifyVelocity(current, w1, w2, w3 int) (float64, string) {
 }
 
 // GetTechTrends returns quarterly tech job-count trends classified into Rising and New Entrant lists.
-func (s *UserDashboardImplService) GetTechTrends(ctx context.Context) (_ *dto.TechTrends, err error) {
+func (s *userDashboardImplService) GetTechTrends(ctx context.Context) (_ *dto.TechTrends, err error) {
 	ctx, span := tracing.Start(ctx, "dashboard.userdashboard.GetTechTrends")
 	defer tracing.End(span, &err)
 	rows, err := s.store.GetTechStackQuarterlyAdoption(ctx)

@@ -4,18 +4,14 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/trushilpatel/jobradar/infra/kafka"
-	"github.com/trushilpatel/jobradar/service/application"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 	"github.com/trushilpatel/jobradar/service/dashboard/services"
 	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
-// Handler is a compatibility alias for DashboardRestService.
-type Handler = services.DashboardRestService
-
-// Validator is a compatibility alias for DashboardValidationService.
-type Validator = services.DashboardValidationService
+// Handler is a compatibility alias for RestRouter.
+type Handler = services.RestRouter
 
 // Service is a compatibility alias for DashboardService.
 type Service = services.DashboardService
@@ -29,18 +25,8 @@ type StatsView = dto.StatsView
 // ActivityView is a compatibility alias for dto.ActivityView.
 type ActivityView = dto.ActivityView
 
-// NewValidator constructs a Validator from the services package.
-func NewValidator() Validator {
-	return services.NewDashboardValidationService()
-}
-
-// NewHandler wraps NewDashboardRestService for backward compatibility.
-func NewHandler(v Validator, svc Service, userSvc services.UserDashboardService, pipelineSvc services.PipelineService) *Handler {
-	return services.NewDashboardRestService(v, svc, userSvc, pipelineSvc)
-}
-
 // NewService constructs a Service implementation.
-func NewService(scanLog scansvc.ScanLogReader, insightsSvc insightssvc.Service, jobCounts JobCountReader) services.DashboardService {
+func NewService(scanLog scansvc.ScanLogReader, insightsSvc insightssvc.InsightsService, jobCounts JobCountReader) services.DashboardService {
 	return services.NewDashboardImplService(scanLog, insightsSvc, jobCounts)
 }
 
@@ -50,7 +36,7 @@ func NewUserDashboardStore(db *gorm.DB) services.UserDashboardStore {
 }
 
 // NewUserDashboardService constructs a UserDashboardService.
-func NewUserDashboardService(store services.UserDashboardStore, appStore application.Store) services.UserDashboardService {
+func NewUserDashboardService(store services.UserDashboardStore, appStore services.ApplicationListReader) services.UserDashboardService {
 	return services.NewUserDashboardService(store, appStore)
 }
 

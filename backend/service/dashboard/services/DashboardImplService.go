@@ -13,12 +13,12 @@ import (
 // DashboardImplService implements the DashboardService interface.
 type DashboardImplService struct {
 	scanLog     scansvc.ScanLogReader
-	insightsSvc insightssvc.Service
+	insightsSvc insightssvc.InsightsService
 	jobCounts   JobCountReader
 }
 
 // NewDashboardImplService constructs a DashboardImplService implementation.
-func NewDashboardImplService(scanLog scansvc.ScanLogReader, insightsSvc insightssvc.Service, jobCounts JobCountReader) DashboardService {
+func NewDashboardImplService(scanLog scansvc.ScanLogReader, insightsSvc insightssvc.InsightsService, jobCounts JobCountReader) DashboardService {
 	return &DashboardImplService{
 		scanLog:     scanLog,
 		insightsSvc: insightsSvc,

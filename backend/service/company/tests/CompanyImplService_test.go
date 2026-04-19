@@ -89,13 +89,18 @@ func (f *fakeStore) UpdateScanStatus(_ context.Context, id, status string) error
 	return f.err
 }
 
+func newImplService(fs *fakeStore, cfg companycommon.Config, history companydto.ScanHistoryReader) companysvc.Service {
+	repo := companysvc.NewRepositoryService(fs)
+	return companysvc.NewService(repo, cfg, history)
+}
+
 func TestList_ComputesNextScanAt(t *testing.T) {
 	lastScan := time.Now().Add(-1 * time.Hour)
 	companies := []companymodel.Company{
 		{ID: "c1", Name: "C1", LastScanAt: &lastScan},
 		{ID: "c2", Name: "C2", LastScanAt: nil},
 	}
-	svc := companysvc.NewService(&fakeStore{companies: companies}, companycommon.Config{ScanIntervalMinutes: 60}, &fakeScanHistoryReader{})
+	svc := newImplService(&fakeStore{companies: companies}, companycommon.Config{ScanIntervalMinutes: 60}, &fakeScanHistoryReader{})
 
 	result, err := svc.List(context.Background(), companydto.CompanyFilter{}, 1, 20)
 	if err != nil {
@@ -125,7 +130,7 @@ func TestList_ComputesNextScanAt(t *testing.T) {
 func TestCreate_SetsLastScanAt(t *testing.T) {
 	before := time.Now()
 	fs := &fakeStore{companies: []companymodel.Company{}}
-	svc := companysvc.NewService(fs, companycommon.Config{}, &fakeScanHistoryReader{})
+	svc := newImplService(fs, companycommon.Config{}, &fakeScanHistoryReader{})
 
 	company, err := svc.Create(context.Background(), companydto.CreateCompanyInput{
 		ID:          "stripe",
@@ -149,7 +154,7 @@ func TestCreate_SetsLastScanAt(t *testing.T) {
 
 func TestUpdate_NilFieldsSkipped(t *testing.T) {
 	fs := &fakeStore{companies: []companymodel.Company{{ID: "stripe"}}}
-	svc := companysvc.NewService(fs, companycommon.Config{}, &fakeScanHistoryReader{})
+	svc := newImplService(fs, companycommon.Config{}, &fakeScanHistoryReader{})
 
 	name := "New Name"
 	err := svc.Update(context.Background(), "stripe", companydto.UpdateCompanyInput{Name: &name})
@@ -174,7 +179,7 @@ func TestUpdate_NilFieldsSkipped(t *testing.T) {
 
 func TestDelete_ReturnsNotFoundWhenMissing(t *testing.T) {
 	fs := &fakeStore{companies: []companymodel.Company{}} // no companies
-	svc := companysvc.NewService(fs, companycommon.Config{}, &fakeScanHistoryReader{})
+	svc := newImplService(fs, companycommon.Config{}, &fakeScanHistoryReader{})
 
 	err := svc.Delete(context.Background(), "nonexistent")
 	if err == nil {
@@ -196,7 +201,7 @@ func TestList_FiltersActiveCompanies(t *testing.T) {
 	companies := []companymodel.Company{
 		{ID: "c1", Active: true},
 	}
-	svc := companysvc.NewService(&fakeStore{companies: companies}, companycommon.Config{}, &fakeScanHistoryReader{})
+	svc := newImplService(&fakeStore{companies: companies}, companycommon.Config{}, &fakeScanHistoryReader{})
 
 	active := true
 	result, err := svc.List(context.Background(), companydto.CompanyFilter{Active: &active}, 1, 20)

@@ -4,10 +4,12 @@ import (
 	"context"
 	"strings"
 
+	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"github.com/trushilpatel/jobradar/service/job/dto"
+	"github.com/trushilpatel/jobradar/store"
 	"gorm.io/gorm"
 )
 
@@ -84,7 +86,7 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, page, limi
 
 	if len(filter.ExperienceRanges) > 0 {
 		var clauses []string
-		var args []interface{}
+		var args []any
 		for _, r := range filter.ExperienceRanges {
 			if r.Max != nil {
 				if r.Min == 0 {
@@ -219,4 +221,88 @@ func (s *jobStore) GetJobsAddedByDay(ctx context.Context, days int) (results []d
 		Order("date ASC").
 		Scan(&results).Error
 	return results, err
+}
+
+// repositoryService is the terminal layer in the job Service decorator chain.
+// It implements all Service methods by delegating directly to the JobStore.
+type repositoryService struct {
+	store JobStore
+}
+
+// NewRepositoryService constructs the terminal Service backed by a JobStore.
+func NewRepositoryService(s JobStore) Service {
+	return &repositoryService{store: s}
+}
+
+func (r *repositoryService) List(ctx context.Context, filter dto.JobFilter, page, limit int) (_ []jobmodel.Job, _ int, err error) {
+	ctx, span := tracing.Start(ctx, "job.repository.List")
+	defer tracing.End(span, &err)
+	jobs, total, err := r.store.GetJobs(ctx, filter, page, limit)
+	if err != nil {
+		return nil, 0, domain.ErrInternal.WithMessage("failed to fetch jobs")
+	}
+	return jobs, int(total), nil
+}
+
+func (r *repositoryService) Get(ctx context.Context, id string) (_ *jobmodel.Job, err error) {
+	ctx, span := tracing.Start(ctx, "job.repository.Get")
+	defer tracing.End(span, &err)
+	job, err := r.store.GetJobByID(ctx, id)
+	if err != nil {
+		if store.IsNotFound(err) {
+			return nil, domain.ErrNotFound.WithMessage("job not found")
+		}
+		return nil, domain.ErrInternal.WithMessage("failed to fetch job")
+	}
+	return job, nil
+}
+
+func (r *repositoryService) GetCounts(ctx context.Context) (_ *dto.JobCounts, err error) {
+	ctx, span := tracing.Start(ctx, "job.repository.GetCounts")
+	defer tracing.End(span, &err)
+	counts, err := r.store.GetJobCounts(ctx)
+	if err != nil {
+		return nil, domain.ErrInternal.WithMessage("failed to fetch job counts")
+	}
+	return counts, nil
+}
+
+func (r *repositoryService) Dismiss(ctx context.Context, id string, _ dto.DismissInput) (err error) {
+	ctx, span := tracing.Start(ctx, "job.repository.Dismiss")
+	defer tracing.End(span, &err)
+	if err := r.store.UpdateJobStatus(ctx, id, jobcommon.JobStatusDismissed); err != nil {
+		return domain.ErrInternal.WithMessage("failed to update job status")
+	}
+	return nil
+}
+
+func (r *repositoryService) SetSaved(ctx context.Context, id string, saved bool) (err error) {
+	ctx, span := tracing.Start(ctx, "job.repository.SetSaved")
+	defer tracing.End(span, &err)
+	if err := r.store.UpdateJobSaved(ctx, id, saved); err != nil {
+		return domain.ErrInternal.WithMessage("failed to update job")
+	}
+	return nil
+}
+
+func (r *repositoryService) SetStatus(ctx context.Context, id, status string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.repository.SetStatus")
+	defer tracing.End(span, &err)
+	if err := r.store.UpdateJobStatus(ctx, id, status); err != nil {
+		return domain.ErrInternal.WithMessage("failed to update status")
+	}
+	return nil
+}
+
+func (r *repositoryService) SetNotes(ctx context.Context, id, notes string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.repository.SetNotes")
+	defer tracing.End(span, &err)
+	if err := r.store.UpdateJobNotes(ctx, id, notes); err != nil {
+		return domain.ErrInternal.WithMessage("failed to update notes")
+	}
+	return nil
+}
+
+func (r *repositoryService) MarkApplied(ctx context.Context, id string) error {
+	return r.SetStatus(ctx, id, jobcommon.JobStatusApplied)
 }

@@ -11,24 +11,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/common/domain"
-	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
+	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	svc "github.com/trushilpatel/jobradar/service/application/services"
 )
-
-// fakeValidator is a test double for ApplicationValidationService.
-type fakeValidator struct {
-	createErr      error
-	updateStageErr error
-	updateNoteErr  error
-	listAllErr     error
-}
-
-func (f *fakeValidator) ValidateCreate(_ dto.CreateApplicationInput) error { return f.createErr }
-func (f *fakeValidator) ValidateUpdateStage(_ dto.UpdateStageInput) error  { return f.updateStageErr }
-func (f *fakeValidator) ValidateUpdateNote(_ dto.UpdateNoteInput) error    { return f.updateNoteErr }
-func (f *fakeValidator) ValidateListAll(_, _ int) error                    { return f.listAllErr }
 
 // fakeService is a test double for ApplicationService.
 type fakeService struct {
@@ -51,15 +38,17 @@ func (f *fakeService) Create(_ context.Context, _ string, _ dto.CreateApplicatio
 func (f *fakeService) UpdateStage(_, _ string, _ dto.UpdateStageInput) error { return f.err }
 func (f *fakeService) UpdateNote(_, _ string, _ dto.UpdateNoteInput) error   { return f.err }
 
-func newTestRouter(h *svc.RestHandler) *chi.Mux {
+// newTestRouter wires a RestService directly (bypassing validation) and registers routes via RestRouter.
+func newTestRouter(next svc.ApplicationService) *chi.Mux {
 	r := chi.NewRouter()
-	h.Register(r)
+	h := svc.NewApplicationRestService(next)
+	rt := svc.NewApplicationRestRouter(h)
+	rt.Register(r)
 	return r
 }
 
 func TestHandlerList_OK(t *testing.T) {
-	h := svc.NewApplicationRestHandler(&fakeValidator{}, &fakeService{apps: []appmodel.JobApplication{}})
-	r := newTestRouter(h)
+	r := newTestRouter(&fakeService{apps: []appmodel.JobApplication{}})
 
 	req := httptest.NewRequest(http.MethodGet, "/jobs/j1/applications", nil)
 	w := httptest.NewRecorder()
@@ -72,8 +61,7 @@ func TestHandlerList_OK(t *testing.T) {
 
 func TestHandlerCreate_OK(t *testing.T) {
 	app := &appmodel.JobApplication{Stage: appcommon.StageApplied}
-	h := svc.NewApplicationRestHandler(&fakeValidator{}, &fakeService{app: app})
-	r := newTestRouter(h)
+	r := newTestRouter(&fakeService{app: app})
 
 	body, _ := json.Marshal(dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	req := httptest.NewRequest(http.MethodPost, "/jobs/j1/applications", bytes.NewReader(body))
@@ -86,11 +74,7 @@ func TestHandlerCreate_OK(t *testing.T) {
 }
 
 func TestHandlerCreate_NotFound(t *testing.T) {
-	h := svc.NewApplicationRestHandler(
-		&fakeValidator{},
-		&fakeService{err: domain.ErrNotFound.WithMessage("job not found")},
-	)
-	r := newTestRouter(h)
+	r := newTestRouter(&fakeService{err: domain.ErrNotFound.WithMessage("job not found")})
 
 	body, _ := json.Marshal(dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	req := httptest.NewRequest(http.MethodPost, "/jobs/missing/applications", bytes.NewReader(body))
@@ -103,10 +87,9 @@ func TestHandlerCreate_NotFound(t *testing.T) {
 }
 
 func TestHandlerListAll_OK(t *testing.T) {
-	h := svc.NewApplicationRestHandler(&fakeValidator{}, &fakeService{appsWithJob: []svc.ApplicationWithJob{}})
-	r := newTestRouter(h)
+	r := newTestRouter(&fakeService{appsWithJob: []svc.ApplicationWithJob{}})
 
-	req := httptest.NewRequest(http.MethodGet, "/applications", nil)
+	req := httptest.NewRequest(http.MethodGet, "/applications?page=1&limit=20", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -118,26 +101,21 @@ func TestHandlerListAll_OK(t *testing.T) {
 	}
 }
 
-func TestHandlerUpdateStage_ValidationError(t *testing.T) {
-	h := svc.NewApplicationRestHandler(
-		&fakeValidator{updateStageErr: &domain.ValidationError{Field: "stage", Code: "INVALID_VALUE", Message: "bad"}},
-		&fakeService{},
-	)
-	r := newTestRouter(h)
+func TestHandlerUpdateStage_OK(t *testing.T) {
+	r := newTestRouter(&fakeService{})
 
-	body, _ := json.Marshal(dto.UpdateStageInput{Stage: "invalid"})
+	body, _ := json.Marshal(dto.UpdateStageInput{Stage: appcommon.StageApplied})
 	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/applications/1/stage", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("got status %d, want 400", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("got status %d, want 200", w.Code)
 	}
 }
 
 func TestHandlerUpdateNote_OK(t *testing.T) {
-	h := svc.NewApplicationRestHandler(&fakeValidator{}, &fakeService{})
-	r := newTestRouter(h)
+	r := newTestRouter(&fakeService{})
 
 	body, _ := json.Marshal(dto.UpdateNoteInput{Note: "great call"})
 	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/applications/1/note", bytes.NewReader(body))
@@ -149,6 +127,5 @@ func TestHandlerUpdateNote_OK(t *testing.T) {
 	}
 }
 
-// Ensure test doubles implement interfaces.
-var _ svc.ApplicationValidationService = (*fakeValidator)(nil)
+// Ensure test double implements interface.
 var _ svc.ApplicationService = (*fakeService)(nil)

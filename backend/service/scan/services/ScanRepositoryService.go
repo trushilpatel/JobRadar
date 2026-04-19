@@ -2,9 +2,12 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/trushilpatel/jobradar/common/domain"
 	"github.com/trushilpatel/jobradar/infra/tracing"
+	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 	scanmodel "github.com/trushilpatel/jobradar/service/scan/models"
@@ -397,4 +400,117 @@ func (s *scanLogStore) GetScansByDay(ctx context.Context, days int) (results []d
 		Order("date ASC").
 		Scan(&results).Error
 	return results, err
+}
+
+// --- repositoryService: terminal Service implementation ---
+
+type repositoryService struct {
+	queue   ScanQueueStore
+	scanLog ScanLogReader
+	config  Config
+}
+
+// NewRepositoryService constructs the terminal Service implementation backed by DB stores.
+func NewRepositoryService(queue ScanQueueStore, scanLog ScanLogReader, cfg Config) Service {
+	return &repositoryService{queue: queue, scanLog: scanLog, config: cfg}
+}
+
+func (s *repositoryService) EnqueueDue(ctx context.Context, intervalMinutes int) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.EnqueueDue")
+	defer tracing.End(span, &err)
+	n, err := s.queue.EnqueueDue(ctx, intervalMinutes, scancommon.QueueSourceScheduler)
+	if err != nil {
+		return 0, domain.ErrInternal.WithMessage("failed to enqueue due companies")
+	}
+	return n, nil
+}
+
+func (s *repositoryService) ResetStuck(ctx context.Context, staleDur time.Duration) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.ResetStuck")
+	defer tracing.End(span, &err)
+	if err := s.queue.ResetStuck(ctx, staleDur); err != nil {
+		return domain.ErrInternal.WithMessage("failed to reset stuck queue entries")
+	}
+	return nil
+}
+
+// TriggerScan enqueues a manual scan by company ID. No existence check — that's ImplService's job.
+func (s *repositoryService) TriggerScan(ctx context.Context, companyID string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.TriggerScan")
+	defer tracing.End(span, &err)
+	if err := s.queue.Enqueue(ctx, companyID, scancommon.QueueSourceManual); err != nil {
+		return domain.ErrInternal.WithMessage("failed to trigger scan")
+	}
+	return nil
+}
+
+// TriggerScanAll is not implemented at the repository level — ImplService overrides this.
+func (s *repositoryService) TriggerScanAll(_ context.Context) (int, error) {
+	return 0, fmt.Errorf("scan.repositoryService: TriggerScanAll not implemented at repository level")
+}
+
+func (s *repositoryService) GetStats(ctx context.Context, companyID string) (_ *dto.ScanStatsView, err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.GetStats")
+	defer tracing.End(span, &err)
+	stats, err := s.scanLog.GetScanStats(ctx, companyID)
+	if err != nil {
+		return nil, domain.ErrInternal.WithMessage("failed to fetch scan stats")
+	}
+	return &stats, nil
+}
+
+// ListQueue returns raw queue entries without company enrichment — ImplService overrides this.
+func (s *repositoryService) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ []dto.QueueEntryView, err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.ListQueue")
+	defer tracing.End(span, &err)
+	items, err := s.queue.ListQueue(ctx)
+	if err != nil {
+		return nil, domain.ErrInternal.WithMessage("failed to fetch queue")
+	}
+	views := make([]dto.QueueEntryView, 0, len(items))
+	for _, item := range items {
+		if filter.Status != "" && item.Status != filter.Status {
+			continue
+		}
+		if filter.Source != "" && item.Source != filter.Source {
+			continue
+		}
+		views = append(views, dto.QueueEntryView{
+			ID:        item.ID,
+			CompanyID: item.CompanyID,
+			Status:    item.Status,
+			Source:    item.Source,
+			Priority:  item.Priority,
+			QueuedAt:  item.QueuedAt,
+			StartedAt: item.StartedAt,
+		})
+	}
+	return views, nil
+}
+
+func (s *repositoryService) RemoveFromQueue(ctx context.Context, entryID string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.RemoveFromQueue")
+	defer tracing.End(span, &err)
+	if err := s.queue.Remove(ctx, entryID); err != nil {
+		return domain.ErrInternal.WithMessage("failed to remove queue entry")
+	}
+	return nil
+}
+
+func (s *repositoryService) MoveUp(ctx context.Context, entryID string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.MoveUp")
+	defer tracing.End(span, &err)
+	if err := s.queue.MoveUp(ctx, entryID); err != nil {
+		return domain.ErrInternal.WithMessage("failed to move queue entry up")
+	}
+	return nil
+}
+
+func (s *repositoryService) MoveDown(ctx context.Context, entryID string) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.MoveDown")
+	defer tracing.End(span, &err)
+	if err := s.queue.MoveDown(ctx, entryID); err != nil {
+		return domain.ErrInternal.WithMessage("failed to move queue entry down")
+	}
+	return nil
 }

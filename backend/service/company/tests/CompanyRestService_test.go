@@ -18,19 +18,6 @@ import (
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 )
 
-// fakeValidator is a test double for Validator.
-type fakeValidator struct {
-	listErr   error
-	createErr error
-	updateErr error
-	activeErr error
-}
-
-func (f *fakeValidator) ValidateList(_ companydto.CompanyFilter, _, _ int) error { return f.listErr }
-func (f *fakeValidator) ValidateCreate(_ companydto.CreateCompanyInput) error    { return f.createErr }
-func (f *fakeValidator) ValidateUpdate(_ companydto.UpdateCompanyInput) error    { return f.updateErr }
-func (f *fakeValidator) ValidateSetAllActive(_ *bool) error                      { return f.activeErr }
-
 // fakeService is a test double for Service.
 type fakeService struct {
 	listResult   []companydto.CompanyView
@@ -45,31 +32,30 @@ func (f *fakeService) List(_ context.Context, _ companydto.CompanyFilter, _, _ i
 func (f *fakeService) GetAll(_ context.Context) ([]companydto.CompanyView, error) {
 	return f.listResult, f.err
 }
-func (f *fakeService) Get(_ context.Context, id string) (*companymodel.Company, error) {
+func (f *fakeService) Get(_ context.Context, _ string) (*companymodel.Company, error) {
 	return f.getResult, f.err
 }
 func (f *fakeService) Create(_ context.Context, _ companydto.CreateCompanyInput) (*companymodel.Company, error) {
 	return f.createResult, f.err
 }
-func (f *fakeService) Update(_ context.Context, id string, _ companydto.UpdateCompanyInput) error {
+func (f *fakeService) Update(_ context.Context, _ string, _ companydto.UpdateCompanyInput) error {
 	return f.err
 }
-func (f *fakeService) Delete(_ context.Context, id string) error {
-	return f.err
-}
-func (f *fakeService) SetAllActive(_ context.Context, active bool) error {
-	return f.err
-}
+func (f *fakeService) Delete(_ context.Context, _ string) error     { return f.err }
+func (f *fakeService) SetAllActive(_ context.Context, _ bool) error { return f.err }
 
-func newTestRouter(h *companysvc.Handler) *chi.Mux {
+// newTestRouter builds a chi router with the full chain:
+// validationService → fakeService, mounted via RestRouter.
+func newTestRouter(svc companysvc.Service) *chi.Mux {
+	rest := companysvc.NewRestService(svc)
+	router := companysvc.NewRestRouter(rest)
 	r := chi.NewRouter()
-	h.Register(r)
+	router.Register(r)
 	return r
 }
 
 func TestHandlerList_OK(t *testing.T) {
-	h := companysvc.NewHandler(&fakeValidator{}, &fakeService{listResult: []companydto.CompanyView{}})
-	r := newTestRouter(h)
+	r := newTestRouter(&fakeService{listResult: []companydto.CompanyView{}})
 
 	req := httptest.NewRequest(http.MethodGet, "/companies", nil)
 	w := httptest.NewRecorder()
@@ -84,11 +70,9 @@ func TestHandlerList_OK(t *testing.T) {
 }
 
 func TestHandlerList_ValidatorError(t *testing.T) {
-	h := companysvc.NewHandler(
-		&fakeValidator{listErr: &domain.ValidationError{Field: "adapter_type", Code: "INVALID_VALUE", Message: "bad"}},
-		&fakeService{},
-	)
-	r := newTestRouter(h)
+	// Validation is in the chain — use a real validationService wrapping fakeService.
+	svc := companysvc.NewValidator(&fakeService{})
+	r := newTestRouter(svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/companies?adapter_type=bogus", nil)
 	w := httptest.NewRecorder()
@@ -101,8 +85,7 @@ func TestHandlerList_ValidatorError(t *testing.T) {
 
 func TestHandlerCreate_OK(t *testing.T) {
 	company := &companymodel.Company{ID: "stripe", Name: "Stripe"}
-	h := companysvc.NewHandler(&fakeValidator{}, &fakeService{createResult: company})
-	r := newTestRouter(h)
+	r := newTestRouter(&fakeService{createResult: company})
 
 	body, _ := json.Marshal(companydto.CreateCompanyInput{
 		ID: "stripe", Name: "Stripe", URL: "https://example.com", AdapterType: companycommon.AdapterGreenhouse,
@@ -117,11 +100,7 @@ func TestHandlerCreate_OK(t *testing.T) {
 }
 
 func TestHandlerCreate_ServiceError(t *testing.T) {
-	h := companysvc.NewHandler(
-		&fakeValidator{},
-		&fakeService{err: domain.ErrInternal.WithMessage("db error")},
-	)
-	r := newTestRouter(h)
+	r := newTestRouter(&fakeService{err: domain.ErrInternal.WithMessage("db error")})
 
 	body, _ := json.Marshal(companydto.CreateCompanyInput{
 		ID: "stripe", Name: "Stripe", URL: "https://example.com", AdapterType: companycommon.AdapterGreenhouse,
@@ -136,8 +115,7 @@ func TestHandlerCreate_ServiceError(t *testing.T) {
 }
 
 func TestHandlerDelete_OK(t *testing.T) {
-	h := companysvc.NewHandler(&fakeValidator{}, &fakeService{})
-	r := newTestRouter(h)
+	r := newTestRouter(&fakeService{})
 
 	req := httptest.NewRequest(http.MethodDelete, "/companies/stripe", nil)
 	w := httptest.NewRecorder()
@@ -149,11 +127,7 @@ func TestHandlerDelete_OK(t *testing.T) {
 }
 
 func TestHandlerDelete_NotFound(t *testing.T) {
-	h := companysvc.NewHandler(
-		&fakeValidator{},
-		&fakeService{err: domain.ErrNotFound.WithMessage("company not found")},
-	)
-	r := newTestRouter(h)
+	r := newTestRouter(&fakeService{err: domain.ErrNotFound.WithMessage("company not found")})
 
 	req := httptest.NewRequest(http.MethodDelete, "/companies/missing", nil)
 	w := httptest.NewRecorder()
@@ -165,11 +139,9 @@ func TestHandlerDelete_NotFound(t *testing.T) {
 }
 
 func TestHandlerUpdate_ValidatorError(t *testing.T) {
-	h := companysvc.NewHandler(
-		&fakeValidator{updateErr: &domain.ValidationError{Field: "", Code: "BAD_REQUEST", Message: "at least one field"}},
-		&fakeService{},
-	)
-	r := newTestRouter(h)
+	// No fields — validation layer should reject it.
+	svc := companysvc.NewValidator(&fakeService{})
+	r := newTestRouter(svc)
 
 	body, _ := json.Marshal(companydto.UpdateCompanyInput{})
 	req := httptest.NewRequest(http.MethodPatch, "/companies/stripe", bytes.NewReader(body))
@@ -182,11 +154,9 @@ func TestHandlerUpdate_ValidatorError(t *testing.T) {
 }
 
 func TestHandlerSetAllActive_OK(t *testing.T) {
-	h := companysvc.NewHandler(&fakeValidator{}, &fakeService{})
-	r := newTestRouter(h)
+	r := newTestRouter(&fakeService{})
 
-	active := true
-	body, _ := json.Marshal(map[string]bool{"active": active})
+	body, _ := json.Marshal(map[string]bool{"active": true})
 	req := httptest.NewRequest(http.MethodPatch, "/companies/active", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -196,14 +166,10 @@ func TestHandlerSetAllActive_OK(t *testing.T) {
 	}
 }
 
-func TestHandlerSetAllActive_ValidationError(t *testing.T) {
-	h := companysvc.NewHandler(
-		&fakeValidator{activeErr: &domain.ValidationError{Field: "active", Code: "REQUIRED", Message: "required"}},
-		&fakeService{},
-	)
-	r := newTestRouter(h)
+func TestHandlerSetAllActive_MissingActive(t *testing.T) {
+	r := newTestRouter(&fakeService{})
 
-	// Deliberately send invalid body (missing active)
+	// Body missing the active field — RestService guards this directly.
 	body, _ := json.Marshal(map[string]string{})
 	req := httptest.NewRequest(http.MethodPatch, "/companies/active", bytes.NewReader(body))
 	w := httptest.NewRecorder()
@@ -215,8 +181,7 @@ func TestHandlerSetAllActive_ValidationError(t *testing.T) {
 }
 
 func TestHandlerCreate_InvalidBody(t *testing.T) {
-	h := companysvc.NewHandler(&fakeValidator{}, &fakeService{})
-	r := newTestRouter(h)
+	r := newTestRouter(&fakeService{})
 
 	req := httptest.NewRequest(http.MethodPost, "/companies", strings.NewReader("not json"))
 	w := httptest.NewRecorder()
@@ -227,8 +192,7 @@ func TestHandlerCreate_InvalidBody(t *testing.T) {
 	}
 }
 
-// Ensure fakeValidator and fakeService implement their respective interfaces.
-var _ companysvc.Validator = (*fakeValidator)(nil)
+// Ensure fakeService implements Service.
 var _ companysvc.Service = (*fakeService)(nil)
 
 // Suppress unused import warning.

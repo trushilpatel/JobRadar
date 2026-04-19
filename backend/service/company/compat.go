@@ -5,25 +5,24 @@ import (
 	"gorm.io/gorm"
 )
 
-// Backward compatibility: re-export services constructors and interfaces
+// Backward compatibility: re-export services constructors and interfaces.
 
-type Handler = services.Handler
-type Validator = services.Validator
+type Handler = services.RestRouter
 type Service = services.Service
 type Store = services.Store
 type CompanyReader = services.CompanyReader
 type CompanyWriter = services.CompanyWriter
 
-func NewHandler(v Validator, svc Service) *Handler {
-	return services.NewHandler(v, svc)
+func NewHandler(h *services.RestService) *Handler {
+	return services.NewRestRouter(h)
 }
 
-func NewValidator() Validator {
-	return services.NewValidator()
+func NewValidator(next Service) Service {
+	return services.NewValidator(next)
 }
 
-func NewService(s Store, cfg Config, scanHistory ScanHistoryReader) Service {
-	return services.NewService(s, cfg, scanHistory)
+func NewService(next Service, cfg Config, scanHistory ScanHistoryReader) Service {
+	return services.NewService(next, cfg, scanHistory)
 }
 
 func NewStore(db *gorm.DB) Store {

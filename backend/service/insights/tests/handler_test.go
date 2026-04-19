@@ -13,14 +13,7 @@ import (
 	svc "github.com/trushilpatel/jobradar/service/insights/services"
 )
 
-// fakeInsightsValidator is a test double for Validator.
-type fakeInsightsValidator struct {
-	filterErr error
-}
-
-func (f *fakeInsightsValidator) ValidateFilter(_ dto.InsightsFilter) error { return f.filterErr }
-
-// fakeInsightsService is a test double for Service.
+// fakeInsightsService is a test double for InsightsService.
 type fakeInsightsService struct {
 	data           interface{}
 	pipelineCounts dto.PipelineCounts
@@ -52,12 +45,13 @@ func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (dto.Pipeline
 
 func newInsightsTestRouter(h *svc.RestService) *chi.Mux {
 	r := chi.NewRouter()
-	h.Register(r)
+	router := svc.NewRestRouter(h)
+	router.Register(r)
 	return r
 }
 
 func TestInsightsHandlerTechStack_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeInsightsValidator{}, &fakeInsightsService{data: []dto.TechCount{}})
+	h := svc.NewRestService(&fakeInsightsService{data: []dto.TechCount{}})
 	r := newInsightsTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/insights/tech-stack", nil)
@@ -74,7 +68,6 @@ func TestInsightsHandlerTechStack_OK(t *testing.T) {
 
 func TestInsightsHandlerTechStack_ServiceError(t *testing.T) {
 	h := svc.NewRestService(
-		&fakeInsightsValidator{},
 		&fakeInsightsService{err: domain.ErrInternal.WithMessage("db down")},
 	)
 	r := newInsightsTestRouter(h)
@@ -92,7 +85,7 @@ func TestInsightsHandlerTechStack_ServiceError(t *testing.T) {
 }
 
 func TestInsightsHandlerFunnel_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeInsightsValidator{}, &fakeInsightsService{data: []dto.FunnelStep{}})
+	h := svc.NewRestService(&fakeInsightsService{data: []dto.FunnelStep{}})
 	r := newInsightsTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/insights/funnel", nil)
@@ -105,7 +98,7 @@ func TestInsightsHandlerFunnel_OK(t *testing.T) {
 }
 
 func TestInsightsHandlerSponsorship_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeInsightsValidator{}, &fakeInsightsService{data: []dto.SponsorshipDay{}})
+	h := svc.NewRestService(&fakeInsightsService{data: []dto.SponsorshipDay{}})
 	r := newInsightsTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/insights/sponsorship?days=30", nil)
@@ -118,10 +111,10 @@ func TestInsightsHandlerSponsorship_OK(t *testing.T) {
 }
 
 func TestInsightsHandlerSponsorship_ValidationError(t *testing.T) {
-	h := svc.NewRestService(
-		&fakeInsightsValidator{filterErr: &domain.ValidationError{Field: "days", Code: "INVALID_VALUE", Message: "days must be >= 1"}},
-		&fakeInsightsService{},
-	)
+	// Wire validation into the chain: ValidationService wraps the fake
+	fake := &fakeInsightsService{data: []dto.SponsorshipDay{}}
+	validationSvc := svc.NewValidationService(fake)
+	h := svc.NewRestService(validationSvc)
 	r := newInsightsTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/insights/sponsorship?days=0", nil)
@@ -134,7 +127,7 @@ func TestInsightsHandlerSponsorship_ValidationError(t *testing.T) {
 }
 
 func TestInsightsHandlerVelocity_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeInsightsValidator{}, &fakeInsightsService{data: []dto.CompanyVelocity{}})
+	h := svc.NewRestService(&fakeInsightsService{data: []dto.CompanyVelocity{}})
 	r := newInsightsTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/insights/velocity", nil)
@@ -147,7 +140,7 @@ func TestInsightsHandlerVelocity_OK(t *testing.T) {
 }
 
 func TestInsightsHandlerRoleCategories_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeInsightsValidator{}, &fakeInsightsService{data: []dto.RoleCategoryCount{}})
+	h := svc.NewRestService(&fakeInsightsService{data: []dto.RoleCategoryCount{}})
 	r := newInsightsTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/insights/role-categories", nil)
@@ -159,6 +152,5 @@ func TestInsightsHandlerRoleCategories_OK(t *testing.T) {
 	}
 }
 
-// Ensure test doubles implement interfaces.
-var _ svc.Validator = (*fakeInsightsValidator)(nil)
-var _ svc.Service = (*fakeInsightsService)(nil)
+// Ensure test double implements InsightsService.
+var _ svc.InsightsService = (*fakeInsightsService)(nil)

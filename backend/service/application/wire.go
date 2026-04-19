@@ -7,7 +7,8 @@ import (
 
 // ProviderSet is the Wire provider set for the application domain.
 var ProviderSet = wire.NewSet(
-	services.NewApplicationRestHandler,
+	services.NewApplicationRestRouter,
+	services.NewApplicationRestService,
 	services.NewApplicationValidationService,
 	services.NewApplicationImplService,
 	services.NewApplicationRepositoryService,

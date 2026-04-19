@@ -39,7 +39,7 @@ func (f *fakeJobStore) GetJobByID(_ context.Context, id string) (*jobmodel.Job, 
 	return nil, gorm.ErrRecordNotFound
 }
 func (f *fakeJobStore) InsertJob(_ context.Context, job *jobmodel.Job) error { return f.err }
-func (f *fakeJobStore) DeleteJob(_ context.Context, id string) error      { return f.err }
+func (f *fakeJobStore) DeleteJob(_ context.Context, id string) error         { return f.err }
 func (f *fakeJobStore) UpdateJobStatus(_ context.Context, id, status string) error {
 	f.updateStatusCalled = true
 	return f.err
@@ -111,11 +111,17 @@ func (f *fakeApplicationWriter) InsertAppliedApplication(_ string) error      { 
 func (f *fakeApplicationWriter) InsertInterviewingApplication(_ string) error { return f.err }
 func (f *fakeApplicationWriter) InsertOfferApplication(_ string) error        { return f.err }
 
+// newImplService builds an implService with a repositoryService wrapping the given store.
+func newImplService(js *fakeJobStore, ledger jobsvc.SeenLedgerWriter, discard jobsvc.DiscardStore, snapshot jobsvc.SnapshotWriter, app jobsvc.ApplicationWriter) jobsvc.Service {
+	repo := jobsvc.NewRepositoryService(js)
+	return jobsvc.NewService(repo, ledger, discard, snapshot, app)
+}
+
 // --- Tests ---
 
 func TestList_ReturnsPaged(t *testing.T) {
 	jobs := []jobmodel.Job{{ID: "j1"}, {ID: "j2"}}
-	svc := jobsvc.NewService(&fakeJobStore{jobs: jobs, total: 2}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{}, &fakeApplicationWriter{})
+	svc := newImplService(&fakeJobStore{jobs: jobs, total: 2}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{}, &fakeApplicationWriter{})
 
 	result, total, err := svc.List(context.Background(), jobdto.JobFilter{Status: "new"}, 1, 20)
 	if err != nil {
@@ -130,7 +136,7 @@ func TestList_ReturnsPaged(t *testing.T) {
 }
 
 func TestGet_NotFound(t *testing.T) {
-	svc := jobsvc.NewService(&fakeJobStore{}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{}, &fakeApplicationWriter{})
+	svc := newImplService(&fakeJobStore{}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{}, &fakeApplicationWriter{})
 
 	_, err := svc.Get(context.Background(), "missing")
 	if err == nil {
@@ -149,7 +155,7 @@ func TestDismiss_MultiStep(t *testing.T) {
 	snapshot := &fakeSnapshotWriter{}
 	ledger := &fakeLedgerWriter{}
 
-	svc := jobsvc.NewService(js, ledger, discard, snapshot, &fakeApplicationWriter{})
+	svc := newImplService(js, ledger, discard, snapshot, &fakeApplicationWriter{})
 	err := svc.Dismiss(context.Background(), "j1", jobdto.DismissInput{Reason: jobcommon.DiscardReasonDismissed})
 	if err != nil {
 		t.Fatalf("Dismiss() error = %v", err)
@@ -170,7 +176,7 @@ func TestDismiss_MultiStep(t *testing.T) {
 func TestSetSaved_NonFatalSnapshot(t *testing.T) {
 	js := &fakeJobStore{}
 	snapshot := &fakeSnapshotWriter{err: errors.New("snapshot error")} // non-fatal error
-	svc := jobsvc.NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
+	svc := newImplService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
 
 	err := svc.SetSaved(context.Background(), "j1", true)
 	if err != nil {
@@ -184,7 +190,7 @@ func TestSetSaved_NonFatalSnapshot(t *testing.T) {
 func TestSetStatus_BackfillsSnapshotOnApplied(t *testing.T) {
 	js := &fakeJobStore{}
 	snapshot := &fakeSnapshotWriter{}
-	svc := jobsvc.NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
+	svc := newImplService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
 
 	err := svc.SetStatus(context.Background(), "j1", jobcommon.JobStatusApplied)
 	if err != nil {
@@ -198,7 +204,7 @@ func TestSetStatus_BackfillsSnapshotOnApplied(t *testing.T) {
 func TestSetStatus_NoSnapshotBackfillForNew(t *testing.T) {
 	js := &fakeJobStore{}
 	snapshot := &fakeSnapshotWriter{}
-	svc := jobsvc.NewService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
+	svc := newImplService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
 
 	err := svc.SetStatus(context.Background(), "j1", jobcommon.JobStatusNew)
 	if err != nil {

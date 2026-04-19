@@ -1,17 +1,13 @@
 package services
 
 import (
+	"context"
+
 	"github.com/trushilpatel/jobradar/common/domain"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 )
-
-type validator struct{}
-
-// NewValidator constructs a Validator.
-func NewValidator() Validator {
-	return &validator{}
-}
 
 // fixedURLAdapters lists adapters whose target URL is hard-coded in the scraper.
 // When creating a company with one of these adapters, the URL field is optional.
@@ -38,63 +34,71 @@ var validAdapters = map[string]bool{
 	companycommon.AdapterRippling:   true,
 }
 
-// ValidateList validates list filter and pagination parameters.
-func (v *validator) ValidateList(filter companydto.CompanyFilter, page, limit int) error {
+type validationService struct {
+	BaseService
+}
+
+// NewValidator constructs the validation decorator wrapping next.
+func NewValidator(next Service) Service {
+	return &validationService{BaseService: NewBaseService(next)}
+}
+
+// List validates filter and pagination then delegates.
+func (v *validationService) List(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (companydto.CompanyListResult, error) {
 	if filter.AdapterType != "" && !validAdapters[filter.AdapterType] {
-		return &domain.ValidationError{
+		return companydto.CompanyListResult{}, &domain.ValidationError{
 			Field:   "adapter_type",
 			Code:    "INVALID_VALUE",
 			Message: "adapter_type is not a recognised adapter",
 		}
 	}
 	if len(filter.Search) > 100 {
-		return &domain.ValidationError{
+		return companydto.CompanyListResult{}, &domain.ValidationError{
 			Field:   "search",
 			Code:    "INVALID_VALUE",
 			Message: "search must be 100 characters or fewer",
 		}
 	}
 	if page < 1 {
-		return &domain.ValidationError{
+		return companydto.CompanyListResult{}, &domain.ValidationError{
 			Field:   "page",
 			Code:    "INVALID_VALUE",
 			Message: "page must be >= 1",
 		}
 	}
 	if limit < 1 || limit > 100 {
-		return &domain.ValidationError{
+		return companydto.CompanyListResult{}, &domain.ValidationError{
 			Field:   "limit",
 			Code:    "INVALID_VALUE",
 			Message: "limit must be between 1 and 100",
 		}
 	}
-	return nil
+	return v.next.List(ctx, filter, page, limit)
 }
 
-// ValidateCreate validates all required fields for company creation.
-func (v *validator) ValidateCreate(input companydto.CreateCompanyInput) error {
+// Create validates required fields then delegates.
+func (v *validationService) Create(ctx context.Context, input companydto.CreateCompanyInput) (*companymodel.Company, error) {
 	if input.ID == "" {
-		return &domain.ValidationError{Field: "id", Code: "REQUIRED", Message: "id is required"}
+		return nil, &domain.ValidationError{Field: "id", Code: "REQUIRED", Message: "id is required"}
 	}
 	if input.Name == "" {
-		return &domain.ValidationError{Field: "name", Code: "REQUIRED", Message: "name is required"}
+		return nil, &domain.ValidationError{Field: "name", Code: "REQUIRED", Message: "name is required"}
 	}
 	if !fixedURLAdapters[input.AdapterType] && input.URL == "" {
-		return &domain.ValidationError{Field: "url", Code: "REQUIRED", Message: "url is required for this adapter type"}
+		return nil, &domain.ValidationError{Field: "url", Code: "REQUIRED", Message: "url is required for this adapter type"}
 	}
 	if !validAdapters[input.AdapterType] {
-		return &domain.ValidationError{
+		return nil, &domain.ValidationError{
 			Field:   "adapter_type",
 			Code:    "INVALID_VALUE",
 			Message: "adapter_type is not a recognised adapter",
 		}
 	}
-	return nil
+	return v.next.Create(ctx, input)
 }
 
-// ValidateUpdate validates update input — at least one field must be provided,
-// and adapter_type must be a valid constant if set.
-func (v *validator) ValidateUpdate(input companydto.UpdateCompanyInput) error {
+// Update validates that at least one field is provided then delegates.
+func (v *validationService) Update(ctx context.Context, id string, input companydto.UpdateCompanyInput) error {
 	if input.Name == nil && input.URL == nil && input.AdapterType == nil && input.Active == nil {
 		return &domain.ValidationError{
 			Field:   "",
@@ -109,17 +113,12 @@ func (v *validator) ValidateUpdate(input companydto.UpdateCompanyInput) error {
 			Message: "adapter_type is not a recognised adapter",
 		}
 	}
-	return nil
+	return v.next.Update(ctx, id, input)
 }
 
-// ValidateSetAllActive validates that the active pointer is non-nil.
-func (v *validator) ValidateSetAllActive(active *bool) error {
-	if active == nil {
-		return &domain.ValidationError{
-			Field:   "active",
-			Code:    "REQUIRED",
-			Message: "active (bool) is required",
-		}
-	}
-	return nil
+// SetAllActive validates that the active value is present (always is — Go bool — but
+// the HTTP layer passes the pointer through the body, so we validate the body struct
+// upstream; this override handles the boolean-already-unwrapped path).
+func (v *validationService) SetAllActive(ctx context.Context, active bool) error {
+	return v.next.SetAllActive(ctx, active)
 }

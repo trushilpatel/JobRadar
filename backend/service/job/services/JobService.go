@@ -7,14 +7,6 @@ import (
 	"github.com/trushilpatel/jobradar/service/job/dto"
 )
 
-// Validator validates user-submitted input for the job domain.
-type Validator interface {
-	ValidateList(filter dto.JobFilter, page, limit int) error
-	ValidateDismiss(input dto.DismissInput) error
-	ValidateSetStatus(status string) error
-	ValidateSetNotes(input dto.SetNotesInput) error
-}
-
 // Service defines all business operations for the job domain.
 type Service interface {
 	List(ctx context.Context, filter dto.JobFilter, page, limit int) ([]jobmodel.Job, int, error)
@@ -62,4 +54,51 @@ type PipelineService interface {
 
 	// HasSeenJob returns true if the job has already been processed (dedup check).
 	HasSeenJob(ctx context.Context, jobID string) (bool, error)
+}
+
+// BaseService auto-delegates all Service methods to the next layer in the chain.
+// Embed this in ImplService and ValidationService; override only what you own.
+type BaseService struct {
+	next Service
+}
+
+// NewBaseService constructs a BaseService wrapping next.
+// Panics if next is nil — a nil next always indicates a wiring error.
+func NewBaseService(next Service) BaseService {
+	if next == nil {
+		panic("BaseService: next must not be nil — check wire setup")
+	}
+	return BaseService{next: next}
+}
+
+func (b *BaseService) List(ctx context.Context, filter dto.JobFilter, page, limit int) ([]jobmodel.Job, int, error) {
+	return b.next.List(ctx, filter, page, limit)
+}
+
+func (b *BaseService) Get(ctx context.Context, id string) (*jobmodel.Job, error) {
+	return b.next.Get(ctx, id)
+}
+
+func (b *BaseService) GetCounts(ctx context.Context) (*dto.JobCounts, error) {
+	return b.next.GetCounts(ctx)
+}
+
+func (b *BaseService) Dismiss(ctx context.Context, id string, input dto.DismissInput) error {
+	return b.next.Dismiss(ctx, id, input)
+}
+
+func (b *BaseService) SetSaved(ctx context.Context, id string, saved bool) error {
+	return b.next.SetSaved(ctx, id, saved)
+}
+
+func (b *BaseService) SetStatus(ctx context.Context, id, status string) error {
+	return b.next.SetStatus(ctx, id, status)
+}
+
+func (b *BaseService) SetNotes(ctx context.Context, id, notes string) error {
+	return b.next.SetNotes(ctx, id, notes)
+}
+
+func (b *BaseService) MarkApplied(ctx context.Context, id string) error {
+	return b.next.MarkApplied(ctx, id)
 }

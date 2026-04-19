@@ -14,15 +14,6 @@ import (
 	svc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
-// fakeScanValidator is a test double for Validator.
-type fakeScanValidator struct {
-	listErr    error
-	triggerErr error
-}
-
-func (f *fakeScanValidator) ValidateListQueue(_ dto.QueueFilter) error { return f.listErr }
-func (f *fakeScanValidator) ValidateTriggerScan(_ string) error        { return f.triggerErr }
-
 // fakeScanService is a test double for Service.
 type fakeScanService struct {
 	queueResult []dto.QueueEntryView
@@ -30,29 +21,33 @@ type fakeScanService struct {
 	err         error
 }
 
-func (f *fakeScanService) TriggerScan(_ context.Context, companyID string) error { return f.err }
+func (f *fakeScanService) TriggerScan(_ context.Context, _ string) error        { return f.err }
 func (f *fakeScanService) TriggerScanAll(_ context.Context) (int, error)         { return 0, f.err }
-func (f *fakeScanService) GetStats(_ context.Context, companyID string) (*dto.ScanStatsView, error) {
+func (f *fakeScanService) GetStats(_ context.Context, _ string) (*dto.ScanStatsView, error) {
 	return f.statsResult, f.err
 }
-func (f *fakeScanService) ListQueue(_ context.Context, filter dto.QueueFilter) ([]dto.QueueEntryView, error) {
+func (f *fakeScanService) ListQueue(_ context.Context, _ dto.QueueFilter) ([]dto.QueueEntryView, error) {
 	return f.queueResult, f.err
 }
-func (f *fakeScanService) RemoveFromQueue(_ context.Context, entryID string) error { return f.err }
-func (f *fakeScanService) MoveUp(_ context.Context, entryID string) error          { return f.err }
-func (f *fakeScanService) MoveDown(_ context.Context, entryID string) error        { return f.err }
-func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (int, error)        { return 0, f.err }
-func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error     { return f.err }
+func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error { return f.err }
+func (f *fakeScanService) MoveUp(_ context.Context, _ string) error          { return f.err }
+func (f *fakeScanService) MoveDown(_ context.Context, _ string) error        { return f.err }
+func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (int, error)  { return 0, f.err }
+func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error { return f.err }
 
-func newScanTestRouter(h *svc.RestService) *chi.Mux {
+// newScanTestRouter wires the full decorator chain under test using the given
+// service as the terminal, then mounts all routes onto a chi router.
+func newScanTestRouter(next svc.Service) *chi.Mux {
+	valid := svc.NewValidator(next)
+	handler := svc.NewRestService(valid)
+	router := svc.NewRestRouter(handler)
 	r := chi.NewRouter()
-	h.Register(r)
+	router.Register(r)
 	return r
 }
 
 func TestHandlerListQueue_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeScanValidator{}, &fakeScanService{queueResult: []dto.QueueEntryView{}})
-	r := newScanTestRouter(h)
+	r := newScanTestRouter(&fakeScanService{queueResult: []dto.QueueEntryView{}})
 
 	req := httptest.NewRequest(http.MethodGet, "/companies/queue", nil)
 	w := httptest.NewRecorder()
@@ -67,11 +62,7 @@ func TestHandlerListQueue_OK(t *testing.T) {
 }
 
 func TestHandlerListQueue_ValidationError(t *testing.T) {
-	h := svc.NewRestService(
-		&fakeScanValidator{listErr: &domain.ValidationError{Field: "status", Code: "INVALID_VALUE", Message: "bad"}},
-		&fakeScanService{},
-	)
-	r := newScanTestRouter(h)
+	r := newScanTestRouter(&fakeScanService{})
 
 	req := httptest.NewRequest(http.MethodGet, "/companies/queue?status=invalid", nil)
 	w := httptest.NewRecorder()
@@ -83,8 +74,7 @@ func TestHandlerListQueue_ValidationError(t *testing.T) {
 }
 
 func TestHandlerTriggerScan_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeScanValidator{}, &fakeScanService{})
-	r := newScanTestRouter(h)
+	r := newScanTestRouter(&fakeScanService{})
 
 	req := httptest.NewRequest(http.MethodPost, "/companies/stripe/scan", nil)
 	w := httptest.NewRecorder()
@@ -96,11 +86,7 @@ func TestHandlerTriggerScan_OK(t *testing.T) {
 }
 
 func TestHandlerTriggerScan_NotFound(t *testing.T) {
-	h := svc.NewRestService(
-		&fakeScanValidator{},
-		&fakeScanService{err: domain.ErrNotFound.WithMessage("company not found")},
-	)
-	r := newScanTestRouter(h)
+	r := newScanTestRouter(&fakeScanService{err: domain.ErrNotFound.WithMessage("company not found")})
 
 	req := httptest.NewRequest(http.MethodPost, "/companies/missing/scan", nil)
 	w := httptest.NewRecorder()
@@ -113,8 +99,7 @@ func TestHandlerTriggerScan_NotFound(t *testing.T) {
 
 func TestHandlerScanStats_OK(t *testing.T) {
 	stats := &dto.ScanStatsView{TotalScans: 5}
-	h := svc.NewRestService(&fakeScanValidator{}, &fakeScanService{statsResult: stats})
-	r := newScanTestRouter(h)
+	r := newScanTestRouter(&fakeScanService{statsResult: stats})
 
 	req := httptest.NewRequest(http.MethodGet, "/companies/stripe/scan-stats", nil)
 	w := httptest.NewRecorder()
@@ -126,8 +111,7 @@ func TestHandlerScanStats_OK(t *testing.T) {
 }
 
 func TestHandlerRemoveFromQueue_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeScanValidator{}, &fakeScanService{})
-	r := newScanTestRouter(h)
+	r := newScanTestRouter(&fakeScanService{})
 
 	req := httptest.NewRequest(http.MethodDelete, "/companies/queue/entry-123", nil)
 	w := httptest.NewRecorder()
@@ -138,6 +122,5 @@ func TestHandlerRemoveFromQueue_OK(t *testing.T) {
 	}
 }
 
-// Ensure test doubles implement interfaces.
-var _ svc.Validator = (*fakeScanValidator)(nil)
+// Ensure test double implements the interface.
 var _ svc.Service = (*fakeScanService)(nil)
