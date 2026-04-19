@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/common/domain"
+	"github.com/trushilpatel/jobradar/common/errors"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
@@ -77,7 +77,7 @@ func TestHandlerCreate_OK(t *testing.T) {
 }
 
 func TestHandlerCreate_NotFound(t *testing.T) {
-	r := newTestRouter(&fakeService{err: domain.ErrNotFound.WithMessage("job not found")})
+	r := newTestRouter(&fakeService{err: errors.ErrNotFound.WithMessage("job not found")})
 
 	body, _ := json.Marshal(dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	req := httptest.NewRequest(http.MethodPost, "/jobs/missing/applications", bytes.NewReader(body))

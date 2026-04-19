@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/trushilpatel/jobradar/apps/api/handler"
-	"github.com/trushilpatel/jobradar/common/domain"
+	"github.com/trushilpatel/jobradar/common/errors"
 )
 
 // RestService handles HTTP requests for the dashboard domain.
@@ -44,7 +44,7 @@ func (h *RestService) Activity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if days < 1 {
-		handler.HandleError(w, &domain.ValidationError{
+		handler.HandleError(w, &errors.ValidationError{
 			Field:   "days",
 			Code:    "INVALID_VALUE",
 			Message: "days must be >= 1",

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/common/domain"
+	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 	svc "github.com/trushilpatel/jobradar/service/scan/services"
 )
@@ -86,7 +86,7 @@ func TestHandlerTriggerScan_OK(t *testing.T) {
 }
 
 func TestHandlerTriggerScan_NotFound(t *testing.T) {
-	r := newScanTestRouter(&fakeScanService{err: domain.ErrNotFound.WithMessage("company not found")})
+	r := newScanTestRouter(&fakeScanService{err: errors.ErrNotFound.WithMessage("company not found")})
 
 	req := httptest.NewRequest(http.MethodPost, "/companies/missing/scan", nil)
 	w := httptest.NewRecorder()

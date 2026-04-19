@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/service/company"
 	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
@@ -33,7 +33,7 @@ func (s *schedulerService) EnqueueDue(ctx context.Context, intervalMinutes int) 
 	defer tracing.End(span, &err)
 	n, err := s.queue.EnqueueDue(ctx, intervalMinutes, scancommon.QueueSourceScheduler)
 	if err != nil {
-		return 0, domain.ErrInternal.WithMessage("failed to enqueue due companies")
+		return 0, errors.ErrInternal.WithMessage("failed to enqueue due companies")
 	}
 	return n, nil
 }
@@ -42,7 +42,7 @@ func (s *schedulerService) ResetStuck(ctx context.Context, staleDur time.Duratio
 	ctx, span := tracing.Start(ctx, "scan.service.ResetStuck")
 	defer tracing.End(span, &err)
 	if err := s.queue.ResetStuck(ctx, staleDur); err != nil {
-		return domain.ErrInternal.WithMessage("failed to reset stuck queue entries")
+		return errors.ErrInternal.WithMessage("failed to reset stuck queue entries")
 	}
 	return nil
 }
@@ -80,7 +80,7 @@ func (s *implService) TriggerScanAll(ctx context.Context) (_ int, err error) {
 	defer tracing.End(span, &err)
 	companies, err := s.companySvc.GetAll(ctx)
 	if err != nil {
-		return 0, domain.ErrInternal.WithMessage("failed to fetch companies")
+		return 0, errors.ErrInternal.WithMessage("failed to fetch companies")
 	}
 	var count int
 	for _, c := range companies {
@@ -107,7 +107,7 @@ func (s *implService) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ 
 
 	allCompanies, err := s.companySvc.GetAll(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch companies")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch companies")
 	}
 
 	companyMap := make(map[string]company.CompanyView, len(allCompanies))

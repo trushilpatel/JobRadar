@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	"github.com/trushilpatel/jobradar/common/errors"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
@@ -31,7 +31,7 @@ func (s *implService) Create(ctx context.Context, jobID string, input dto.Create
 	}
 	app, err := s.next.Create(ctx, jobID, input)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to create application")
+		return nil, errors.ErrInternal.WithMessage("failed to create application")
 	}
 	if input.Stage == appcommon.StageApplied {
 		_ = s.jobSvc.MarkApplied(ctx, jobID)

@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 )
 
 type ledgerService struct {
@@ -21,7 +21,7 @@ func (s *ledgerService) HasSeenBatch(ctx context.Context, jobIDs []string) (_ ma
 	defer tracing.End(span, &err)
 	result, err := s.store.HasSeenBatch(ctx, jobIDs)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to check seen batch")
+		return nil, errors.ErrInternal.WithMessage("failed to check seen batch")
 	}
 	return result, nil
 }
@@ -30,7 +30,7 @@ func (s *ledgerService) MarkSeenBatch(ctx context.Context, jobIDs []string, comp
 	ctx, span := tracing.Start(ctx, "job.ledgerservice.MarkSeenBatch")
 	defer tracing.End(span, &err)
 	if err := s.store.MarkSeenBatch(ctx, jobIDs, companyID, reason); err != nil {
-		return domain.ErrInternal.WithMessage("failed to mark seen batch")
+		return errors.ErrInternal.WithMessage("failed to mark seen batch")
 	}
 	return nil
 }
@@ -40,7 +40,7 @@ func (s *ledgerService) GetActiveJobIDsByCompany(ctx context.Context, companyID 
 	defer tracing.End(span, &err)
 	ids, err := s.store.GetActiveJobIDsByCompany(ctx, companyID)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to get active job IDs")
+		return nil, errors.ErrInternal.WithMessage("failed to get active job IDs")
 	}
 	return ids, nil
 }
@@ -49,7 +49,7 @@ func (s *ledgerService) MarkRemovedBatch(ctx context.Context, jobIDs []string) (
 	ctx, span := tracing.Start(ctx, "job.ledgerservice.MarkRemovedBatch")
 	defer tracing.End(span, &err)
 	if err := s.store.MarkRemovedBatch(ctx, jobIDs); err != nil {
-		return domain.ErrInternal.WithMessage("failed to mark removed batch")
+		return errors.ErrInternal.WithMessage("failed to mark removed batch")
 	}
 	return nil
 }

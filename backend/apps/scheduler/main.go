@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/config"
-	"github.com/trushilpatel/jobradar/platform/db"
-	"github.com/trushilpatel/jobradar/platform/logger"
-	"github.com/trushilpatel/jobradar/platform/metrics"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/db"
+	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
+	"github.com/trushilpatel/jobradar/common/tracing"
+	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
@@ -52,6 +53,7 @@ func main() {
 	defer shutdownTracing()
 
 	svc := scansvc.NewSchedulerService(scansvc.NewQueueStore(database))
+	refresher := dashboardsvc.NewDashboardRefresher(database)
 	checkInterval := time.Duration(cfg.Scheduler.CheckIntervalSeconds) * time.Second
 	stuckTimeout := time.Duration(cfg.Scheduler.StuckTimeoutMinutes) * time.Minute
 
@@ -61,8 +63,10 @@ func main() {
 		logger.Dur("stuck_timeout", stuckTimeout),
 	)
 
+	state := &refreshState{}
+
 	// Run immediately on startup so the first tick doesn't wait a full interval.
-	runCycle(ctx, log, svc, cfg.Scheduler.ScanIntervalMinutes, stuckTimeout)
+	runCycle(ctx, log, svc, refresher, state, cfg.Scheduler.ScanIntervalMinutes, stuckTimeout)
 
 	ticker := time.NewTicker(checkInterval)
 	defer ticker.Stop()
@@ -70,7 +74,7 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			runCycle(ctx, log, svc, cfg.Scheduler.ScanIntervalMinutes, stuckTimeout)
+			runCycle(ctx, log, svc, refresher, state, cfg.Scheduler.ScanIntervalMinutes, stuckTimeout)
 		case <-ctx.Done():
 			log.Info("shutting down")
 			return
@@ -78,10 +82,17 @@ func main() {
 	}
 }
 
+// refreshState tracks when each materialized view was last refreshed.
+type refreshState struct {
+	lastPipelineStats time.Time
+	lastHeatmap       time.Time
+}
+
 // runCycle performs one full scheduler pass:
 //  1. Resets any processing rows whose crawler has gone silent (stuck detection).
 //  2. Enqueues all companies currently due for a scan in a single query.
-func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerService, intervalMinutes int, stuckTimeout time.Duration) {
+//  3. Refreshes dashboard materialized views on their own intervals.
+func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerService, refresher dashboardsvc.StatsRefresher, state *refreshState, intervalMinutes int, stuckTimeout time.Duration) {
 	start := time.Now()
 
 	if err := svc.ResetStuck(ctx, stuckTimeout); err != nil {
@@ -97,6 +108,24 @@ func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerServi
 		log.Error("enqueue due failed", err)
 	} else {
 		metrics.SchedulerCompaniesEnqueuedTotal.Add(float64(n))
+	}
+
+	now := time.Now()
+
+	if now.Sub(state.lastPipelineStats) >= 3*time.Minute {
+		if err := refresher.RefreshPipelineStats(ctx); err != nil {
+			log.Error("refresh pipeline stats failed", err)
+		} else {
+			state.lastPipelineStats = now
+		}
+	}
+
+	if now.Sub(state.lastHeatmap) >= 5*time.Minute {
+		if err := refresher.RefreshHeatmap(ctx); err != nil {
+			log.Error("refresh heatmap failed", err)
+		} else {
+			state.lastHeatmap = now
+		}
 	}
 
 	metrics.SchedulerRunDuration.Observe(time.Since(start).Seconds())

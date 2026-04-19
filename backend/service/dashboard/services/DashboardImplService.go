@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
@@ -32,17 +32,17 @@ func (s *DashboardImplService) GetStats(ctx context.Context) (_ *dto.StatsView, 
 	defer tracing.End(span, &err)
 	scannedToday, err := s.scanLog.GetJobsScannedToday(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch scanned today")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch scanned today")
 	}
 
 	newCount, savedCount, appliedCount, err := s.jobCounts.GetJobCounts()
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch job counts")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch job counts")
 	}
 
 	pipeline, err := s.insightsSvc.GetPipelineCounts(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch pipeline counts")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch pipeline counts")
 	}
 
 	relevant := newCount + savedCount + appliedCount
@@ -69,7 +69,7 @@ func (s *DashboardImplService) GetActivity(ctx context.Context, days int) (_ []d
 	defer tracing.End(span, &err)
 	scans, err := s.scanLog.GetScansByDay(ctx, days)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch activity")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch activity")
 	}
 
 	views := make([]dto.ActivityView, len(scans))

@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
@@ -238,7 +238,7 @@ func (r *repositoryService) List(ctx context.Context, filter dto.JobFilter, page
 	defer tracing.End(span, &err)
 	jobs, total, err := r.store.GetJobs(ctx, filter, page, limit)
 	if err != nil {
-		return nil, 0, domain.ErrInternal.WithMessage("failed to fetch jobs")
+		return nil, 0, errors.ErrInternal.WithMessage("failed to fetch jobs")
 	}
 	return jobs, int(total), nil
 }
@@ -248,10 +248,10 @@ func (r *repositoryService) Get(ctx context.Context, id string) (_ *jobmodel.Job
 	defer tracing.End(span, &err)
 	job, err := r.store.GetJobByID(ctx, id)
 	if err != nil {
-		if domain.IsNotFound(err) {
-			return nil, domain.ErrNotFound.WithMessage("job not found")
+		if errors.IsNotFound(err) {
+			return nil, errors.ErrNotFound.WithMessage("job not found")
 		}
-		return nil, domain.ErrInternal.WithMessage("failed to fetch job")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch job")
 	}
 	return job, nil
 }
@@ -261,7 +261,7 @@ func (r *repositoryService) GetCounts(ctx context.Context) (_ *dto.JobCounts, er
 	defer tracing.End(span, &err)
 	counts, err := r.store.GetJobCounts(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch job counts")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch job counts")
 	}
 	return counts, nil
 }
@@ -270,7 +270,7 @@ func (r *repositoryService) Dismiss(ctx context.Context, id string, _ dto.Dismis
 	ctx, span := tracing.Start(ctx, "job.repository.Dismiss")
 	defer tracing.End(span, &err)
 	if err := r.store.UpdateJobStatus(ctx, id, jobcommon.JobStatusDismissed); err != nil {
-		return domain.ErrInternal.WithMessage("failed to update job status")
+		return errors.ErrInternal.WithMessage("failed to update job status")
 	}
 	return nil
 }
@@ -279,7 +279,7 @@ func (r *repositoryService) SetSaved(ctx context.Context, id string, saved bool)
 	ctx, span := tracing.Start(ctx, "job.repository.SetSaved")
 	defer tracing.End(span, &err)
 	if err := r.store.UpdateJobSaved(ctx, id, saved); err != nil {
-		return domain.ErrInternal.WithMessage("failed to update job")
+		return errors.ErrInternal.WithMessage("failed to update job")
 	}
 	return nil
 }
@@ -288,7 +288,7 @@ func (r *repositoryService) SetStatus(ctx context.Context, id, status string) (e
 	ctx, span := tracing.Start(ctx, "job.repository.SetStatus")
 	defer tracing.End(span, &err)
 	if err := r.store.UpdateJobStatus(ctx, id, status); err != nil {
-		return domain.ErrInternal.WithMessage("failed to update status")
+		return errors.ErrInternal.WithMessage("failed to update status")
 	}
 	return nil
 }
@@ -297,7 +297,7 @@ func (r *repositoryService) SetNotes(ctx context.Context, id, notes string) (err
 	ctx, span := tracing.Start(ctx, "job.repository.SetNotes")
 	defer tracing.End(span, &err)
 	if err := r.store.UpdateJobNotes(ctx, id, notes); err != nil {
-		return domain.ErrInternal.WithMessage("failed to update notes")
+		return errors.ErrInternal.WithMessage("failed to update notes")
 	}
 	return nil
 }

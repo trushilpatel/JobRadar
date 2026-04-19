@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	apperr "github.com/trushilpatel/jobradar/common/errors"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
@@ -142,7 +142,7 @@ func TestGet_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing job")
 	}
-	var sErr *domain.ServiceError
+	var sErr *apperr.ServiceError
 	if !errors.As(err, &sErr) || sErr.Code != "NOT_FOUND" {
 		t.Errorf("expected NOT_FOUND error, got %v", err)
 	}

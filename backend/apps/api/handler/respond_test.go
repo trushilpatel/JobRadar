@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	apperr "github.com/trushilpatel/jobradar/common/errors"
 )
 
 func TestHandleError(t *testing.T) {
@@ -19,25 +19,25 @@ func TestHandleError(t *testing.T) {
 	}{
 		{
 			name:           "ValidationError returns 400",
-			err:            &domain.ValidationError{Field: "name", Code: "REQUIRED", Message: "name is required"},
+			err:            &apperr.ValidationError{Field: "name", Code: "REQUIRED", Message: "name is required"},
 			wantStatus:     http.StatusBadRequest,
 			wantCodeSubstr: "REQUIRED",
 		},
 		{
 			name:           "ServiceError NOT_FOUND returns 404",
-			err:            domain.ErrNotFound.WithMessage("company not found"),
+			err:            apperr.ErrNotFound.WithMessage("company not found"),
 			wantStatus:     http.StatusNotFound,
 			wantCodeSubstr: "NOT_FOUND",
 		},
 		{
 			name:           "ServiceError CONFLICT returns 409",
-			err:            domain.ErrConflict.WithMessage("already exists"),
+			err:            apperr.ErrConflict.WithMessage("already exists"),
 			wantStatus:     http.StatusConflict,
 			wantCodeSubstr: "CONFLICT",
 		},
 		{
 			name:           "ServiceError BAD_REQUEST returns 400",
-			err:            domain.ErrBadRequest.WithMessage("bad input"),
+			err:            apperr.ErrBadRequest.WithMessage("bad input"),
 			wantStatus:     http.StatusBadRequest,
 			wantCodeSubstr: "BAD_REQUEST",
 		},

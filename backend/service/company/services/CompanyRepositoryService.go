@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	"gorm.io/gorm"
@@ -177,11 +177,11 @@ func (r *repositoryService) List(ctx context.Context, filter companydto.CompanyF
 	defer tracing.End(span, &err)
 	companies, total, err := r.store.GetCompanies(ctx, filter, page, limit)
 	if err != nil {
-		return companydto.CompanyListResult{}, domain.ErrInternal.WithMessage("failed to fetch companies")
+		return companydto.CompanyListResult{}, errors.ErrInternal.WithMessage("failed to fetch companies")
 	}
 	_, totalActive, err := r.store.GetCompanyCounts(ctx)
 	if err != nil {
-		return companydto.CompanyListResult{}, domain.ErrInternal.WithMessage("failed to fetch company counts")
+		return companydto.CompanyListResult{}, errors.ErrInternal.WithMessage("failed to fetch company counts")
 	}
 	views := make([]companydto.CompanyView, 0, len(companies))
 	for _, c := range companies {
@@ -199,7 +199,7 @@ func (r *repositoryService) GetAll(ctx context.Context) (_ []companydto.CompanyV
 	defer tracing.End(span, &err)
 	companies, err := r.store.GetAllCompanies(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch companies")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch companies")
 	}
 	views := make([]companydto.CompanyView, 0, len(companies))
 	for _, c := range companies {
@@ -213,10 +213,10 @@ func (r *repositoryService) Get(ctx context.Context, id string) (_ *companymodel
 	defer tracing.End(span, &err)
 	c, err := r.store.GetCompanyByID(ctx, id)
 	if err != nil {
-		if domain.IsNotFound(err) {
-			return nil, domain.ErrNotFound.WithMessage("company not found")
+		if errors.IsNotFound(err) {
+			return nil, errors.ErrNotFound.WithMessage("company not found")
 		}
-		return nil, domain.ErrInternal.WithMessage("failed to fetch company")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch company")
 	}
 	return &c, nil
 }
@@ -238,7 +238,7 @@ func (r *repositoryService) Create(ctx context.Context, input companydto.CreateC
 		LastScanAt:  &now,
 	}
 	if err := r.store.CreateCompany(ctx, company); err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to create company")
+		return nil, errors.ErrInternal.WithMessage("failed to create company")
 	}
 	return &company, nil
 }
@@ -260,10 +260,10 @@ func (r *repositoryService) Update(ctx context.Context, id string, input company
 		fields["active"] = *input.Active
 	}
 	if err := r.store.UpdateCompany(ctx, id, fields); err != nil {
-		if domain.IsNotFound(err) {
-			return domain.ErrNotFound.WithMessage("company not found")
+		if errors.IsNotFound(err) {
+			return errors.ErrNotFound.WithMessage("company not found")
 		}
-		return domain.ErrInternal.WithMessage("failed to update company")
+		return errors.ErrInternal.WithMessage("failed to update company")
 	}
 	return nil
 }
@@ -272,13 +272,13 @@ func (r *repositoryService) Delete(ctx context.Context, id string) (err error) {
 	ctx, span := tracing.Start(ctx, "company.repository.Delete")
 	defer tracing.End(span, &err)
 	if _, err := r.store.GetCompanyByID(ctx, id); err != nil {
-		if domain.IsNotFound(err) {
-			return domain.ErrNotFound.WithMessage("company not found")
+		if errors.IsNotFound(err) {
+			return errors.ErrNotFound.WithMessage("company not found")
 		}
-		return domain.ErrInternal.WithMessage("failed to fetch company")
+		return errors.ErrInternal.WithMessage("failed to fetch company")
 	}
 	if err := r.store.DeleteCompany(ctx, id); err != nil {
-		return domain.ErrInternal.WithMessage("failed to delete company")
+		return errors.ErrInternal.WithMessage("failed to delete company")
 	}
 	return nil
 }
@@ -287,7 +287,7 @@ func (r *repositoryService) SetAllActive(ctx context.Context, active bool) (err 
 	ctx, span := tracing.Start(ctx, "company.repository.SetAllActive")
 	defer tracing.End(span, &err)
 	if err := r.store.SetAllCompaniesActive(ctx, active); err != nil {
-		return domain.ErrInternal.WithMessage("failed to update companies")
+		return errors.ErrInternal.WithMessage("failed to update companies")
 	}
 	return nil
 }

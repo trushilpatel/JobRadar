@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 )
 
@@ -99,12 +99,9 @@ func (s *userDashboardRepository) GetWeeklyHiringActivity(ctx context.Context, w
 	ctx, span := tracing.Start(ctx, "dashboard.store.GetWeeklyHiringActivity")
 	defer tracing.End(span, &err)
 	err = s.db.WithContext(ctx).Raw(`
-		SELECT
-			DATE_TRUNC('week', first_seen_at)::date::text AS week_start,
-			COUNT(*)                                       AS job_count
-		FROM job_pipeline_ledger
-		WHERE first_seen_at >= NOW() - (? * INTERVAL '1 week')
-		GROUP BY DATE_TRUNC('week', first_seen_at)
+		SELECT week_start, job_count
+		FROM mv_weekly_hiring_activity
+		WHERE week_start >= (NOW() - (? * INTERVAL '1 week'))::date::text
 		ORDER BY week_start ASC
 	`, weeks).Scan(&results).Error
 	return results, err
@@ -207,14 +204,29 @@ func (s *pipelineRepository) GetPipelineDBStats(ctx context.Context) (_ dto.Pipe
 	defer tracing.End(span, &err)
 	var result dto.PipelineDBStats
 	err = s.db.WithContext(ctx).Raw(`
-		SELECT
-			(SELECT COUNT(*) FROM companies)                                                                              AS total_companies,
-			(SELECT COUNT(*) FROM companies WHERE active = true)                                                          AS active_companies,
-			(SELECT COUNT(*) FROM company_scan_queue WHERE status = 'queued')                                             AS queued,
-			(SELECT COUNT(*) FROM company_scan_queue WHERE status = 'processing')                                         AS crawling,
-			(SELECT COUNT(*) FROM job_feed WHERE added_at >= NOW() - INTERVAL '24 hours' AND status != 'dismissed')      AS new_jobs_24h,
-			(SELECT COUNT(*) FROM job_pipeline_ledger WHERE reason = 'error' AND first_seen_at >= NOW() - INTERVAL '24 hours') AS errors_24h,
-			(SELECT COUNT(*) FROM job_pipeline_ledger WHERE reason = 'fetch' AND job_id NOT IN (SELECT job_post_id FROM job_feed)) AS pipeline_pending
+		SELECT total_companies, active_companies, queued, crawling, new_jobs_24h, errors_24h, pipeline_pending
+		FROM mv_pipeline_db_stats
 	`).Scan(&result).Error
 	return result, err
+}
+
+// StatsRefresher refreshes the dashboard materialized views on a schedule.
+type StatsRefresher interface {
+	RefreshPipelineStats(ctx context.Context) error
+	RefreshHeatmap(ctx context.Context) error
+}
+
+type dashboardRefresher struct{ db *gorm.DB }
+
+// NewDashboardRefresher constructs a StatsRefresher backed by the given DB connection.
+func NewDashboardRefresher(db *gorm.DB) StatsRefresher {
+	return &dashboardRefresher{db: db}
+}
+
+func (r *dashboardRefresher) RefreshPipelineStats(ctx context.Context) error {
+	return r.db.WithContext(ctx).Exec(`REFRESH MATERIALIZED VIEW CONCURRENTLY mv_pipeline_db_stats`).Error
+}
+
+func (r *dashboardRefresher) RefreshHeatmap(ctx context.Context) error {
+	return r.db.WithContext(ctx).Exec(`REFRESH MATERIALIZED VIEW CONCURRENTLY mv_weekly_hiring_activity`).Error
 }

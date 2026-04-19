@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/trushilpatel/jobradar/common/config"
-	"github.com/trushilpatel/jobradar/platform/logger"
+	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl/plain"
 )

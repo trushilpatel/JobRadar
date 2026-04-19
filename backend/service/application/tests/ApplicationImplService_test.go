@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	apperr "github.com/trushilpatel/jobradar/common/errors"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
@@ -70,14 +70,14 @@ func (f *fakeJobService) MarkApplied(_ context.Context, _ string) error {
 func TestCreate_JobNotFound(t *testing.T) {
 	next := &fakeApplicationService{}
 	service := svc.NewApplicationImplService(next, &fakeJobService{
-		err: domain.ErrNotFound.WithMessage("job not found"),
+		err: apperr.ErrNotFound.WithMessage("job not found"),
 	})
 
 	_, err := service.Create(context.Background(), "missing", dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	if err == nil {
 		t.Fatal("expected error for missing job")
 	}
-	var sErr *domain.ServiceError
+	var sErr *apperr.ServiceError
 	if !errors.As(err, &sErr) || sErr.Code != "NOT_FOUND" {
 		t.Errorf("expected NOT_FOUND error, got %v", err)
 	}

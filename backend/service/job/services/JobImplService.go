@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 )
@@ -40,11 +40,11 @@ func (s *implService) Dismiss(ctx context.Context, id string, input dto.DismissI
 	}
 
 	if err := s.discard.InsertDiscard(ctx, id, input.Reason, input.Note); err != nil {
-		return domain.ErrInternal.WithMessage("failed to discard job")
+		return errors.ErrInternal.WithMessage("failed to discard job")
 	}
 
 	if err := s.ledger.UpdateSeenReason(ctx, job.JobPostID, jobcommon.SeenReasonUserDismissed); err != nil {
-		return domain.ErrInternal.WithMessage("failed to update seen ledger")
+		return errors.ErrInternal.WithMessage("failed to update seen ledger")
 	}
 
 	if err := s.next.Dismiss(ctx, id, input); err != nil {

@@ -8,7 +8,7 @@ package main
 import (
 	"context"
 	"github.com/trushilpatel/jobradar/common/config"
-	"github.com/trushilpatel/jobradar/platform/kafka"
+	"github.com/trushilpatel/jobradar/common/kafka"
 	"github.com/trushilpatel/jobradar/service/application"
 	services3 "github.com/trushilpatel/jobradar/service/application/services"
 	"github.com/trushilpatel/jobradar/service/company"

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
@@ -31,7 +31,7 @@ func (s *crawlerQueueService) ClaimNext(ctx context.Context) (_ *dto.ScanQueueIt
 	defer tracing.End(span, &err)
 	item, err := s.store.ClaimNext(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to claim queue item")
+		return nil, errors.ErrInternal.WithMessage("failed to claim queue item")
 	}
 	return item, nil
 }
@@ -40,7 +40,7 @@ func (s *crawlerQueueService) Complete(ctx context.Context, id string) (err erro
 	ctx, span := tracing.Start(ctx, "scan.crawlerqueue.Complete")
 	defer tracing.End(span, &err)
 	if err := s.store.Complete(ctx, id); err != nil {
-		return domain.ErrInternal.WithMessage("failed to complete queue item")
+		return errors.ErrInternal.WithMessage("failed to complete queue item")
 	}
 	return nil
 }
@@ -49,7 +49,7 @@ func (s *crawlerQueueService) ResetStuck(ctx context.Context, staleDur time.Dura
 	ctx, span := tracing.Start(ctx, "scan.crawlerqueue.ResetStuck")
 	defer tracing.End(span, &err)
 	if err := s.store.ResetStuck(ctx, staleDur); err != nil {
-		return domain.ErrInternal.WithMessage("failed to reset stuck queue items")
+		return errors.ErrInternal.WithMessage("failed to reset stuck queue items")
 	}
 	return nil
 }
@@ -58,7 +58,7 @@ func (s *crawlerQueueService) UpdateHeartbeat(ctx context.Context, id string) (e
 	ctx, span := tracing.Start(ctx, "scan.crawlerqueue.UpdateHeartbeat")
 	defer tracing.End(span, &err)
 	if err := s.store.UpdateHeartbeat(ctx, id); err != nil {
-		return domain.ErrInternal.WithMessage("failed to update heartbeat")
+		return errors.ErrInternal.WithMessage("failed to update heartbeat")
 	}
 	return nil
 }

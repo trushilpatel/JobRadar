@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	apperr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 	svc "github.com/trushilpatel/jobradar/service/insights/services"
 )
@@ -47,7 +47,7 @@ func TestValidateFilter(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for days=0")
 	}
-	var vErr *domain.ValidationError
+	var vErr *apperr.ValidationError
 	if !errors.As(err, &vErr) {
 		t.Errorf("expected ValidationError, got %T: %v", err, err)
 	}

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	apperr "github.com/trushilpatel/jobradar/common/errors"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
@@ -186,7 +186,7 @@ func TestDelete_ReturnsNotFoundWhenMissing(t *testing.T) {
 		t.Fatal("expected error for missing company")
 	}
 
-	var sErr *domain.ServiceError
+	var sErr *apperr.ServiceError
 	if !errors.As(err, &sErr) {
 		t.Fatalf("expected ServiceError, got %T: %v", err, err)
 	}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	"github.com/trushilpatel/jobradar/common/errors"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
@@ -109,7 +109,7 @@ func (s *applicationRepository) InsertOfferApplication(jobResultID string) error
 func parseAppID(s string) (int64, error) {
 	id, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return 0, domain.ErrBadRequest.WithMessage("invalid app_id")
+		return 0, errors.ErrBadRequest.WithMessage("invalid app_id")
 	}
 	return id, nil
 }

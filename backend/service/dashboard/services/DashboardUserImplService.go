@@ -4,8 +4,8 @@ import (
 	"context"
 	"math"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 	insightscommon "github.com/trushilpatel/jobradar/service/insights/common"
@@ -28,7 +28,7 @@ func (s *userDashboardImplService) GetProgressStats(ctx context.Context) (_ *dto
 	defer tracing.End(span, &err)
 	stats, err := s.store.GetProgressStats(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch progress stats")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch progress stats")
 	}
 	return &stats, nil
 }
@@ -38,7 +38,7 @@ func (s *userDashboardImplService) GetMarketStats(ctx context.Context) (_ *dto.M
 	defer tracing.End(span, &err)
 	stats, err := s.store.GetMarketStats(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch market stats")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch market stats")
 	}
 	return &stats, nil
 }
@@ -48,7 +48,7 @@ func (s *userDashboardImplService) GetHeatmap(ctx context.Context) (_ []dto.Week
 	defer tracing.End(span, &err)
 	counts, err := s.store.GetWeeklyHiringActivity(ctx, 52)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch heatmap data")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch heatmap data")
 	}
 	return counts, nil
 }
@@ -59,7 +59,7 @@ func (s *userDashboardImplService) GetInterviews(ctx context.Context) (_ []dto.I
 	defer tracing.End(span, &err)
 	apps, err := s.appStore.ListActive()
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch interviews")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch interviews")
 	}
 
 	rows := make([]dto.InterviewRow, 0, len(apps))
@@ -97,7 +97,7 @@ func (s *userDashboardImplService) GetVelocity(ctx context.Context, limit int) (
 	defer tracing.End(span, &err)
 	rows, err := s.store.GetCompanyVelocityDetailed(ctx, limit)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch velocity data")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch velocity data")
 	}
 
 	for i := range rows {
@@ -140,7 +140,7 @@ func (s *userDashboardImplService) GetTechTrends(ctx context.Context) (_ *dto.Te
 	defer tracing.End(span, &err)
 	rows, err := s.store.GetTechStackQuarterlyAdoption(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch tech trends")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch tech trends")
 	}
 
 	var totalJobs int

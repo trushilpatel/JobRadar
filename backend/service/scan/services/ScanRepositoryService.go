@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
@@ -420,7 +420,7 @@ func (s *repositoryService) EnqueueDue(ctx context.Context, intervalMinutes int)
 	defer tracing.End(span, &err)
 	n, err := s.queue.EnqueueDue(ctx, intervalMinutes, scancommon.QueueSourceScheduler)
 	if err != nil {
-		return 0, domain.ErrInternal.WithMessage("failed to enqueue due companies")
+		return 0, errors.ErrInternal.WithMessage("failed to enqueue due companies")
 	}
 	return n, nil
 }
@@ -429,7 +429,7 @@ func (s *repositoryService) ResetStuck(ctx context.Context, staleDur time.Durati
 	ctx, span := tracing.Start(ctx, "scan.repository.ResetStuck")
 	defer tracing.End(span, &err)
 	if err := s.queue.ResetStuck(ctx, staleDur); err != nil {
-		return domain.ErrInternal.WithMessage("failed to reset stuck queue entries")
+		return errors.ErrInternal.WithMessage("failed to reset stuck queue entries")
 	}
 	return nil
 }
@@ -439,7 +439,7 @@ func (s *repositoryService) TriggerScan(ctx context.Context, companyID string) (
 	ctx, span := tracing.Start(ctx, "scan.repository.TriggerScan")
 	defer tracing.End(span, &err)
 	if err := s.queue.Enqueue(ctx, companyID, scancommon.QueueSourceManual); err != nil {
-		return domain.ErrInternal.WithMessage("failed to trigger scan")
+		return errors.ErrInternal.WithMessage("failed to trigger scan")
 	}
 	return nil
 }
@@ -454,7 +454,7 @@ func (s *repositoryService) GetStats(ctx context.Context, companyID string) (_ *
 	defer tracing.End(span, &err)
 	stats, err := s.scanLog.GetScanStats(ctx, companyID)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch scan stats")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch scan stats")
 	}
 	return &stats, nil
 }
@@ -465,7 +465,7 @@ func (s *repositoryService) ListQueue(ctx context.Context, filter dto.QueueFilte
 	defer tracing.End(span, &err)
 	items, err := s.queue.ListQueue(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch queue")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch queue")
 	}
 	views := make([]dto.QueueEntryView, 0, len(items))
 	for _, item := range items {
@@ -492,7 +492,7 @@ func (s *repositoryService) RemoveFromQueue(ctx context.Context, entryID string)
 	ctx, span := tracing.Start(ctx, "scan.repository.RemoveFromQueue")
 	defer tracing.End(span, &err)
 	if err := s.queue.Remove(ctx, entryID); err != nil {
-		return domain.ErrInternal.WithMessage("failed to remove queue entry")
+		return errors.ErrInternal.WithMessage("failed to remove queue entry")
 	}
 	return nil
 }
@@ -501,7 +501,7 @@ func (s *repositoryService) MoveUp(ctx context.Context, entryID string) (err err
 	ctx, span := tracing.Start(ctx, "scan.repository.MoveUp")
 	defer tracing.End(span, &err)
 	if err := s.queue.MoveUp(ctx, entryID); err != nil {
-		return domain.ErrInternal.WithMessage("failed to move queue entry up")
+		return errors.ErrInternal.WithMessage("failed to move queue entry up")
 	}
 	return nil
 }
@@ -510,7 +510,7 @@ func (s *repositoryService) MoveDown(ctx context.Context, entryID string) (err e
 	ctx, span := tracing.Start(ctx, "scan.repository.MoveDown")
 	defer tracing.End(span, &err)
 	if err := s.queue.MoveDown(ctx, entryID); err != nil {
-		return domain.ErrInternal.WithMessage("failed to move queue entry down")
+		return errors.ErrInternal.WithMessage("failed to move queue entry down")
 	}
 	return nil
 }

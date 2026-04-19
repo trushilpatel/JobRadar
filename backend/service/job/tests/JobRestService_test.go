@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/common/domain"
+	"github.com/trushilpatel/jobradar/common/errors"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
@@ -75,7 +75,7 @@ func TestJobHandlerList_OK(t *testing.T) {
 }
 
 func TestJobHandlerList_ServiceError(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{err: domain.ErrInternal.WithMessage("db failure")})
+	r := newJobTestRouter(&fakeJobSvc{err: errors.ErrInternal.WithMessage("db failure")})
 
 	req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
 	w := httptest.NewRecorder()
@@ -99,7 +99,7 @@ func TestJobHandlerGet_OK(t *testing.T) {
 }
 
 func TestJobHandlerGet_NotFound(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{err: domain.ErrNotFound.WithMessage("job not found")})
+	r := newJobTestRouter(&fakeJobSvc{err: errors.ErrNotFound.WithMessage("job not found")})
 
 	req := httptest.NewRequest(http.MethodGet, "/jobs/missing", nil)
 	w := httptest.NewRecorder()
@@ -124,7 +124,7 @@ func TestJobHandlerDismiss_OK(t *testing.T) {
 }
 
 func TestJobHandlerDismiss_ServiceError(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{err: domain.ErrInternal.WithMessage("db failure")})
+	r := newJobTestRouter(&fakeJobSvc{err: errors.ErrInternal.WithMessage("db failure")})
 
 	body, _ := json.Marshal(jobdto.DismissInput{Reason: jobcommon.DiscardReasonDismissed})
 	req := httptest.NewRequest(http.MethodDelete, "/jobs/j1", bytes.NewReader(body))

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/common/domain"
+	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 )
@@ -52,7 +52,7 @@ func TestDashboardHandlerStats_OK(t *testing.T) {
 
 func TestDashboardHandlerStats_ServiceError(t *testing.T) {
 	h := dashboardsvc.NewDashboardRestService(
-		&fakeDashboardService{err: domain.ErrInternal.WithMessage("db down")},
+		&fakeDashboardService{err: errors.ErrInternal.WithMessage("db down")},
 		nil, nil,
 	)
 	r := newDashboardTestRouter(h)
@@ -98,7 +98,7 @@ func TestDashboardHandlerActivity_ValidationError(t *testing.T) {
 
 func TestDashboardHandlerActivity_ServiceError(t *testing.T) {
 	h := dashboardsvc.NewDashboardRestService(
-		&fakeDashboardService{err: domain.ErrInternal.WithMessage("db down")},
+		&fakeDashboardService{err: errors.ErrInternal.WithMessage("db down")},
 		nil, nil,
 	)
 	r := newDashboardTestRouter(h)
@@ -146,7 +146,7 @@ func TestDashboardHandlerPipeline_ServiceError(t *testing.T) {
 	h := dashboardsvc.NewDashboardRestService(
 		&fakeDashboardService{},
 		nil,
-		&fakePipelineService{err: domain.ErrInternal.WithMessage("db down")},
+		&fakePipelineService{err: errors.ErrInternal.WithMessage("db down")},
 	)
 	r := newDashboardTestRouter(h)
 

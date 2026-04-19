@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 )
 
@@ -19,7 +19,7 @@ func NewValidationService(next InsightsService) InsightsService {
 // Sponsorship validates that filter.Days >= 1 before delegating.
 func (v *validationService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) (interface{}, error) {
 	if filter.Days < 1 {
-		return nil, &domain.ValidationError{
+		return nil, &errors.ValidationError{
 			Field:   "days",
 			Code:    "INVALID_VALUE",
 			Message: "days must be >= 1",

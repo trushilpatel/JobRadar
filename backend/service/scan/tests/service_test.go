@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	apperr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/company"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
@@ -115,14 +115,14 @@ func TestTriggerScan_OK(t *testing.T) {
 func TestTriggerScan_CompanyNotFound(t *testing.T) {
 	q := &fakeQueueStore{}
 	service := newImplService(q, &fakeScanLogReader{}, &fakeCompanyService{
-		err: domain.ErrNotFound.WithMessage("company not found"),
+		err: apperr.ErrNotFound.WithMessage("company not found"),
 	}, svc.Config{})
 
 	err := service.TriggerScan(context.Background(), "missing")
 	if err == nil {
 		t.Fatal("expected error for missing company")
 	}
-	var sErr *domain.ServiceError
+	var sErr *apperr.ServiceError
 	if !errors.As(err, &sErr) || sErr.Code != "NOT_FOUND" {
 		t.Errorf("expected NOT_FOUND error, got %v", err)
 	}
@@ -232,7 +232,7 @@ func TestEnqueueDue_StoreError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on store failure")
 	}
-	var sErr *domain.ServiceError
+	var sErr *apperr.ServiceError
 	if !errors.As(err, &sErr) || sErr.Code != "INTERNAL" {
 		t.Errorf("expected INTERNAL error, got %v", err)
 	}
@@ -258,7 +258,7 @@ func TestResetStuck_StoreError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on store failure")
 	}
-	var sErr *domain.ServiceError
+	var sErr *apperr.ServiceError
 	if !errors.As(err, &sErr) || sErr.Code != "INTERNAL" {
 		t.Errorf("expected INTERNAL error, got %v", err)
 	}

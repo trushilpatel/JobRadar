@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/config"
-	"github.com/trushilpatel/jobradar/platform/db"
-	"github.com/trushilpatel/jobradar/platform/logger"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/db"
+	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/tracing"
 )
 
 func main() {

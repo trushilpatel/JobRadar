@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"gorm.io/gorm"
 )

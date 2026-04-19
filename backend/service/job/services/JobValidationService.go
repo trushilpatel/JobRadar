@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	"github.com/trushilpatel/jobradar/common/errors"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
@@ -35,7 +35,7 @@ var validDiscardReasons = map[string]bool{
 // List validates filter and pagination before delegating.
 func (v *validationService) List(ctx context.Context, filter dto.JobFilter, page, limit int) ([]jobmodel.Job, int, error) {
 	if filter.Status != "" && !validJobStatuses[filter.Status] {
-		return nil, 0, &domain.ValidationError{
+		return nil, 0, &errors.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
 			Message: "status must be 'new', 'saved', 'applied', 'interviewing', or 'offer'",
@@ -43,14 +43,14 @@ func (v *validationService) List(ctx context.Context, filter dto.JobFilter, page
 	}
 	for _, r := range filter.ExperienceRanges {
 		if r.Min < 0 {
-			return nil, 0, &domain.ValidationError{
+			return nil, 0, &errors.ValidationError{
 				Field:   "experience_ranges",
 				Code:    "INVALID_VALUE",
 				Message: "experience range min must be >= 0",
 			}
 		}
 		if r.Max != nil && *r.Max <= r.Min {
-			return nil, 0, &domain.ValidationError{
+			return nil, 0, &errors.ValidationError{
 				Field:   "experience_ranges",
 				Code:    "INVALID_VALUE",
 				Message: "experience range max must be > min",
@@ -58,14 +58,14 @@ func (v *validationService) List(ctx context.Context, filter dto.JobFilter, page
 		}
 	}
 	if page < 1 {
-		return nil, 0, &domain.ValidationError{
+		return nil, 0, &errors.ValidationError{
 			Field:   "page",
 			Code:    "INVALID_VALUE",
 			Message: "page must be >= 1",
 		}
 	}
 	if limit < 1 || limit > 100 {
-		return nil, 0, &domain.ValidationError{
+		return nil, 0, &errors.ValidationError{
 			Field:   "limit",
 			Code:    "INVALID_VALUE",
 			Message: "limit must be between 1 and 100",
@@ -77,7 +77,7 @@ func (v *validationService) List(ctx context.Context, filter dto.JobFilter, page
 // Dismiss validates the dismiss input before delegating.
 func (v *validationService) Dismiss(ctx context.Context, id string, input dto.DismissInput) error {
 	if !validDiscardReasons[input.Reason] {
-		return &domain.ValidationError{
+		return &errors.ValidationError{
 			Field:   "reason",
 			Code:    "INVALID_VALUE",
 			Message: "reason must be 'user_dismissed' or 'user_not_relevant'",
@@ -89,7 +89,7 @@ func (v *validationService) Dismiss(ctx context.Context, id string, input dto.Di
 // SetStatus validates the status value before delegating.
 func (v *validationService) SetStatus(ctx context.Context, id, status string) error {
 	if !validJobStatuses[status] {
-		return &domain.ValidationError{
+		return &errors.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
 			Message: "status must be 'new', 'saved', 'applied', 'interviewing', or 'offer'",

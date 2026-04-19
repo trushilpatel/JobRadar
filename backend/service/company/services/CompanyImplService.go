@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 )
@@ -69,7 +69,7 @@ func (s *implService) GetAll(ctx context.Context) (_ []companydto.CompanyView, e
 
 	views, err := s.next.GetAll(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch companies")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch companies")
 	}
 
 	enriched := make([]companydto.CompanyView, 0, len(views))

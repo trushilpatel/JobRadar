@@ -1,7 +1,8 @@
-package domain
+package errors
 
 import (
-	"errors"
+	stderrors "errors"
+
 	"fmt"
 
 	"gorm.io/gorm"
@@ -43,5 +44,5 @@ var (
 
 // IsNotFound reports whether err is a GORM record-not-found error.
 func IsNotFound(err error) bool {
-	return errors.Is(err, gorm.ErrRecordNotFound)
+	return stderrors.Is(err, gorm.ErrRecordNotFound)
 }

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/common/domain"
+	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 	svc "github.com/trushilpatel/jobradar/service/insights/services"
 )
@@ -68,7 +68,7 @@ func TestInsightsHandlerTechStack_OK(t *testing.T) {
 
 func TestInsightsHandlerTechStack_ServiceError(t *testing.T) {
 	h := svc.NewRestService(
-		&fakeInsightsService{err: domain.ErrInternal.WithMessage("db down")},
+		&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")},
 	)
 	r := newInsightsTestRouter(h)
 

@@ -3,8 +3,8 @@ package company
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 )
 
@@ -28,10 +28,10 @@ func (r *crawlerReader) GetByID(ctx context.Context, id string) (_ companymodel.
 	defer tracing.End(span, &err)
 	c, err := r.store.GetCompanyByID(ctx, id)
 	if err != nil {
-		if domain.IsNotFound(err) {
-			return companymodel.Company{}, domain.ErrNotFound.WithMessage("company not found")
+		if errors.IsNotFound(err) {
+			return companymodel.Company{}, errors.ErrNotFound.WithMessage("company not found")
 		}
-		return companymodel.Company{}, domain.ErrInternal.WithMessage("failed to fetch company")
+		return companymodel.Company{}, errors.ErrInternal.WithMessage("failed to fetch company")
 	}
 	return c, nil
 }
@@ -41,7 +41,7 @@ func (r *crawlerReader) GetActive(ctx context.Context) (_ []companymodel.Company
 	defer tracing.End(span, &err)
 	companies, err := r.store.GetActiveCompanies(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch active companies")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch active companies")
 	}
 	return companies, nil
 }

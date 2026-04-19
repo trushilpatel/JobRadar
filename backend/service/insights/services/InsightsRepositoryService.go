@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/tracing"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"gorm.io/gorm"
@@ -32,7 +32,7 @@ func (s *repositoryService) TechStack(ctx context.Context) (_ interface{}, err e
 		LIMIT ?
 	`, 15).Scan(&results).Error
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch tech stack")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch tech stack")
 	}
 	return results, nil
 }
@@ -52,7 +52,7 @@ func (s *repositoryService) CompanyActivity(ctx context.Context) (_ interface{},
 		ORDER BY week DESC, count DESC
 	`).Scan(&results).Error
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch company activity")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch company activity")
 	}
 	return results, nil
 }
@@ -70,7 +70,7 @@ func (s *repositoryService) Funnel(ctx context.Context) (_ interface{}, err erro
 		GROUP BY user_action
 	`).Scan(&rows).Error
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch funnel")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch funnel")
 	}
 
 	counts := map[string]int{}
@@ -101,7 +101,7 @@ func (s *repositoryService) Location(ctx context.Context) (_ interface{}, err er
 		ORDER BY count DESC
 	`).Scan(&countries).Error
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch location breakdown")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch location breakdown")
 	}
 
 	var states []dto.StateCount
@@ -114,7 +114,7 @@ func (s *repositoryService) Location(ctx context.Context) (_ interface{}, err er
 		LIMIT 20
 	`).Scan(&states).Error
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch state breakdown")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch state breakdown")
 	}
 
 	return map[string]interface{}{
@@ -142,7 +142,7 @@ func (s *repositoryService) Sponsorship(ctx context.Context, filter dto.Insights
 		ORDER BY snapshotted_at ASC
 	`, days).Scan(&results).Error
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch sponsorship trend")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch sponsorship trend")
 	}
 	return results, nil
 }
@@ -175,7 +175,7 @@ func (s *repositoryService) Velocity(ctx context.Context) (_ interface{}, err er
 		LIMIT ?
 	`, 20).Scan(&results).Error
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch company velocity")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch company velocity")
 	}
 	return results, nil
 }
@@ -191,7 +191,7 @@ func (s *repositoryService) RoleCategories(ctx context.Context) (_ interface{}, 
 		ORDER BY count DESC
 	`).Scan(&results).Error
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch role categories")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch role categories")
 	}
 	return results, nil
 }
@@ -211,7 +211,7 @@ func (s *repositoryService) GetPipelineCounts(ctx context.Context) (_ dto.Pipeli
 		LEFT JOIN job_feed j ON j.job_post_id = l.job_id
 	`).Scan(&result).Error
 	if err != nil {
-		return dto.PipelineCounts{}, domain.ErrInternal.WithMessage("failed to fetch pipeline counts")
+		return dto.PipelineCounts{}, errors.ErrInternal.WithMessage("failed to fetch pipeline counts")
 	}
 	return dto.PipelineCounts{Pending: result.Pending, Errors: result.Errors}, nil
 }

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	apperr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 	svc "github.com/trushilpatel/jobradar/service/insights/services"
 )
@@ -83,15 +83,15 @@ func TestTechStack_OK(t *testing.T) {
 }
 
 func TestTechStack_Error(t *testing.T) {
-	// RepositoryService wraps DB errors into domain.ServiceError before returning.
+	// RepositoryService wraps DB errors into apperr.ServiceError before returning.
 	// Simulate that by having the fake return a wrapped ServiceError directly.
-	repo := &fakeInsightsRepository{err: domain.ErrInternal.WithMessage("failed to fetch tech stack")}
+	repo := &fakeInsightsRepository{err: apperr.ErrInternal.WithMessage("failed to fetch tech stack")}
 	service := svc.NewImplService(repo)
 	_, err := service.TechStack(context.Background())
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var sErr *domain.ServiceError
+	var sErr *apperr.ServiceError
 	if !errors.As(err, &sErr) || sErr.Status != 500 {
 		t.Errorf("expected 500 ServiceError, got %v", err)
 	}

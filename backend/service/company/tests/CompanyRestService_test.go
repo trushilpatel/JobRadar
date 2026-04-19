@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/common/domain"
+	apperr "github.com/trushilpatel/jobradar/common/errors"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
@@ -100,7 +100,7 @@ func TestHandlerCreate_OK(t *testing.T) {
 }
 
 func TestHandlerCreate_ServiceError(t *testing.T) {
-	r := newTestRouter(&fakeService{err: domain.ErrInternal.WithMessage("db error")})
+	r := newTestRouter(&fakeService{err: apperr.ErrInternal.WithMessage("db error")})
 
 	body, _ := json.Marshal(companydto.CreateCompanyInput{
 		ID: "stripe", Name: "Stripe", URL: "https://example.com", AdapterType: companycommon.AdapterGreenhouse,
@@ -127,7 +127,7 @@ func TestHandlerDelete_OK(t *testing.T) {
 }
 
 func TestHandlerDelete_NotFound(t *testing.T) {
-	r := newTestRouter(&fakeService{err: domain.ErrNotFound.WithMessage("company not found")})
+	r := newTestRouter(&fakeService{err: apperr.ErrNotFound.WithMessage("company not found")})
 
 	req := httptest.NewRequest(http.MethodDelete, "/companies/missing", nil)
 	w := httptest.NewRecorder()

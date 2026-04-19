@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	"github.com/trushilpatel/jobradar/common/errors"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
@@ -46,28 +46,28 @@ func NewValidator(next Service) Service {
 // List validates filter and pagination then delegates.
 func (v *validationService) List(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (companydto.CompanyListResult, error) {
 	if filter.AdapterType != "" && !validAdapters[filter.AdapterType] {
-		return companydto.CompanyListResult{}, &domain.ValidationError{
+		return companydto.CompanyListResult{}, &errors.ValidationError{
 			Field:   "adapter_type",
 			Code:    "INVALID_VALUE",
 			Message: "adapter_type is not a recognised adapter",
 		}
 	}
 	if len(filter.Search) > 100 {
-		return companydto.CompanyListResult{}, &domain.ValidationError{
+		return companydto.CompanyListResult{}, &errors.ValidationError{
 			Field:   "search",
 			Code:    "INVALID_VALUE",
 			Message: "search must be 100 characters or fewer",
 		}
 	}
 	if page < 1 {
-		return companydto.CompanyListResult{}, &domain.ValidationError{
+		return companydto.CompanyListResult{}, &errors.ValidationError{
 			Field:   "page",
 			Code:    "INVALID_VALUE",
 			Message: "page must be >= 1",
 		}
 	}
 	if limit < 1 || limit > 100 {
-		return companydto.CompanyListResult{}, &domain.ValidationError{
+		return companydto.CompanyListResult{}, &errors.ValidationError{
 			Field:   "limit",
 			Code:    "INVALID_VALUE",
 			Message: "limit must be between 1 and 100",
@@ -79,16 +79,16 @@ func (v *validationService) List(ctx context.Context, filter companydto.CompanyF
 // Create validates required fields then delegates.
 func (v *validationService) Create(ctx context.Context, input companydto.CreateCompanyInput) (*companymodel.Company, error) {
 	if input.ID == "" {
-		return nil, &domain.ValidationError{Field: "id", Code: "REQUIRED", Message: "id is required"}
+		return nil, &errors.ValidationError{Field: "id", Code: "REQUIRED", Message: "id is required"}
 	}
 	if input.Name == "" {
-		return nil, &domain.ValidationError{Field: "name", Code: "REQUIRED", Message: "name is required"}
+		return nil, &errors.ValidationError{Field: "name", Code: "REQUIRED", Message: "name is required"}
 	}
 	if !fixedURLAdapters[input.AdapterType] && input.URL == "" {
-		return nil, &domain.ValidationError{Field: "url", Code: "REQUIRED", Message: "url is required for this adapter type"}
+		return nil, &errors.ValidationError{Field: "url", Code: "REQUIRED", Message: "url is required for this adapter type"}
 	}
 	if !validAdapters[input.AdapterType] {
-		return nil, &domain.ValidationError{
+		return nil, &errors.ValidationError{
 			Field:   "adapter_type",
 			Code:    "INVALID_VALUE",
 			Message: "adapter_type is not a recognised adapter",
@@ -100,14 +100,14 @@ func (v *validationService) Create(ctx context.Context, input companydto.CreateC
 // Update validates that at least one field is provided then delegates.
 func (v *validationService) Update(ctx context.Context, id string, input companydto.UpdateCompanyInput) error {
 	if input.Name == nil && input.URL == nil && input.AdapterType == nil && input.Active == nil {
-		return &domain.ValidationError{
+		return &errors.ValidationError{
 			Field:   "",
 			Code:    "BAD_REQUEST",
 			Message: "at least one field must be provided",
 		}
 	}
 	if input.AdapterType != nil && !validAdapters[*input.AdapterType] {
-		return &domain.ValidationError{
+		return &errors.ValidationError{
 			Field:   "adapter_type",
 			Code:    "INVALID_VALUE",
 			Message: "adapter_type is not a recognised adapter",

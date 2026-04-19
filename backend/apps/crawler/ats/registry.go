@@ -13,7 +13,7 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/netflix"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/rippling"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/uber"
-	"github.com/trushilpatel/jobradar/platform/logger"
+	"github.com/trushilpatel/jobradar/common/logger"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 )
 

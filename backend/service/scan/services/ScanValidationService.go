@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/common/domain"
+	"github.com/trushilpatel/jobradar/common/errors"
 	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
@@ -32,7 +32,7 @@ func NewValidator(next Service) Service {
 // TriggerScan validates that companyID is non-empty before delegating.
 func (v *validationService) TriggerScan(ctx context.Context, companyID string) error {
 	if companyID == "" {
-		return &domain.ValidationError{
+		return &errors.ValidationError{
 			Field:   "company_id",
 			Code:    "REQUIRED",
 			Message: "company_id is required",
@@ -44,14 +44,14 @@ func (v *validationService) TriggerScan(ctx context.Context, companyID string) e
 // ListQueue validates filter parameters before delegating.
 func (v *validationService) ListQueue(ctx context.Context, filter dto.QueueFilter) ([]dto.QueueEntryView, error) {
 	if filter.Status != "" && !validQueueStatuses[filter.Status] {
-		return nil, &domain.ValidationError{
+		return nil, &errors.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
 			Message: "status must be 'queued' or 'processing'",
 		}
 	}
 	if filter.Source != "" && !validQueueSources[filter.Source] {
-		return nil, &domain.ValidationError{
+		return nil, &errors.ValidationError{
 			Field:   "source",
 			Code:    "INVALID_VALUE",
 			Message: "source must be 'manual' or 'scheduler'",

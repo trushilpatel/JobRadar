@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 
-	"github.com/trushilpatel/jobradar/common/domain"
-	"github.com/trushilpatel/jobradar/platform/kafka"
+	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/kafka"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 )
 
@@ -22,7 +22,7 @@ func NewPipelineService(store PipelineStore, lag kafka.LagReader) PipelineServic
 func (s *PipelineImplService) GetPipelineStats(ctx context.Context) (*dto.PipelineStats, error) {
 	dbStats, err := s.store.GetPipelineDBStats(ctx)
 	if err != nil {
-		return nil, domain.ErrInternal.WithMessage("failed to fetch pipeline stats")
+		return nil, errors.ErrInternal.WithMessage("failed to fetch pipeline stats")
 	}
 
 	// Use DB-based count as primary source for awaiting_filter: jobs that have been
