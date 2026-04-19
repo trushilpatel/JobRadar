@@ -27,3 +27,4 @@ HTTP server on `:8080`. Mounts all service routers, handles graceful shutdown.
 - Route registration belongs in each service's `RestRouter` — `router.go` only mounts them
 - `wire_gen.go` is auto-generated — regenerate with `go generate ./apps/api/` after changing `wire.go`
 - 5-second graceful shutdown timeout on SIGINT/SIGTERM
+- `main.go` owns dashboard materialized view refresh via a background goroutine (`runRefresher`): pipeline stats every 3 min, heatmap every 5 min

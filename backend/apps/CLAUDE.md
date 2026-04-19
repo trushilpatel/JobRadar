@@ -7,7 +7,7 @@ Each subdirectory is a self-contained app: one `main.go` entry point, its worker
 | App          | Binary name | Role                                              |
 | ------------ | ----------- | ------------------------------------------------- |
 | `crawler/`   | `crawler`   | Fetches careers pages, publishes raw jobs         |
-| `scheduler/` | `scheduler` | Enqueues companies due for a scan                 |
+| `scheduler/` | `scheduler` | Enqueues companies due for a scan; resets stuck queue rows |
 | `filter/`    | `filter`    | LLM batch scoring, routes relevant jobs           |
 | `analyzer/`  | `enricher`  | LLM enrichment, writes final rows to `job_feed`   |
 | `api/`       | `api`       | REST API on `:8080`                               |
