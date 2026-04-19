@@ -21,8 +21,6 @@ type Service interface {
 	GetStats(ctx context.Context, companyID string) (*dto.ScanStatsView, error)
 	ListQueue(ctx context.Context, filter dto.QueueFilter) ([]dto.QueueEntryView, error)
 	RemoveFromQueue(ctx context.Context, entryID string) error
-	MoveUp(ctx context.Context, entryID string) error
-	MoveDown(ctx context.Context, entryID string) error
 }
 
 // BaseService auto-delegates all Service methods to next.
@@ -68,10 +66,3 @@ func (b *BaseService) RemoveFromQueue(ctx context.Context, entryID string) error
 	return b.next.RemoveFromQueue(ctx, entryID)
 }
 
-func (b *BaseService) MoveUp(ctx context.Context, entryID string) error {
-	return b.next.MoveUp(ctx, entryID)
-}
-
-func (b *BaseService) MoveDown(ctx context.Context, entryID string) error {
-	return b.next.MoveDown(ctx, entryID)
-}

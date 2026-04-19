@@ -17,8 +17,6 @@ func NewRestRouter(h *RestService) *RestRouter {
 func (r *RestRouter) Register(router chi.Router) {
 	router.Get("/companies/queue", r.handler.ListQueue)
 	router.Delete("/companies/queue/{entry_id}", r.handler.RemoveFromQueue)
-	router.Post("/companies/queue/{entry_id}/move-up", r.handler.MoveQueueItemUp)
-	router.Post("/companies/queue/{entry_id}/move-down", r.handler.MoveQueueItemDown)
 	router.Post("/companies/scan-all", r.handler.TriggerScanAll)
 	router.Get("/companies/{id}/scan-stats", r.handler.ScanStats)
 	router.Post("/companies/{id}/scan", r.handler.TriggerScan)

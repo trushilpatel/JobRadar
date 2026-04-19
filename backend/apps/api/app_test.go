@@ -117,8 +117,6 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 		{http.MethodPatch, "/companies/active"},
 		{http.MethodGet, "/companies/queue"},
 		{http.MethodDelete, "/companies/queue/{entry_id}"},
-		{http.MethodPost, "/companies/queue/{entry_id}/move-up"},
-		{http.MethodPost, "/companies/queue/{entry_id}/move-down"},
 		{http.MethodPatch, "/companies/{id}"},
 		{http.MethodDelete, "/companies/{id}"},
 		{http.MethodGet, "/companies/{id}/scan-stats"},
@@ -202,8 +200,6 @@ func (f *fakeScanService) ListQueue(_ context.Context, _ dto.QueueFilter) ([]dto
 	return nil, nil
 }
 func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error   { return nil }
-func (f *fakeScanService) MoveUp(_ context.Context, _ string) error            { return nil }
-func (f *fakeScanService) MoveDown(_ context.Context, _ string) error          { return nil }
 func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (int, error)    { return 0, nil }
 func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error { return nil }
 

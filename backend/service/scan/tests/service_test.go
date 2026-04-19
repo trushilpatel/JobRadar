@@ -38,8 +38,6 @@ func (f *fakeQueueStore) Remove(_ context.Context, _ string) error {
 	f.removeCalled = true
 	return f.err
 }
-func (f *fakeQueueStore) MoveUp(_ context.Context, _ string) error   { return f.err }
-func (f *fakeQueueStore) MoveDown(_ context.Context, _ string) error { return f.err }
 func (f *fakeQueueStore) ResetStuck(_ context.Context, _ time.Duration) error {
 	f.resetStuckCalled = true
 	return f.err

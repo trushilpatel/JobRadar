@@ -30,8 +30,6 @@ func (f *fakeScanService) ListQueue(_ context.Context, _ dto.QueueFilter) ([]dto
 	return f.queueResult, f.err
 }
 func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error   { return f.err }
-func (f *fakeScanService) MoveUp(_ context.Context, _ string) error            { return f.err }
-func (f *fakeScanService) MoveDown(_ context.Context, _ string) error          { return f.err }
 func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (int, error)    { return 0, f.err }
 func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error { return f.err }
 

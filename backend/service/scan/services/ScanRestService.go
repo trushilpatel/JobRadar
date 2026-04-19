@@ -45,26 +45,6 @@ func (h *RestService) RemoveFromQueue(w http.ResponseWriter, r *http.Request) {
 	handler.Respond(w, http.StatusOK, map[string]string{"id": id})
 }
 
-// POST /companies/queue/:entry_id/move-up
-func (h *RestService) MoveQueueItemUp(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "entry_id")
-	if err := h.next.MoveUp(r.Context(), id); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, map[string]string{"id": id})
-}
-
-// POST /companies/queue/:entry_id/move-down
-func (h *RestService) MoveQueueItemDown(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "entry_id")
-	if err := h.next.MoveDown(r.Context(), id); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, map[string]string{"id": id})
-}
-
 // POST /companies/scan-all
 func (h *RestService) TriggerScanAll(w http.ResponseWriter, r *http.Request) {
 	count, err := h.next.TriggerScanAll(r.Context())

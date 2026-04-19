@@ -108,13 +108,3 @@ export async function removeFromQueue(entryId: string): Promise<void> {
   const res = await fetch(`${BASE}/companies/queue/${entryId}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to remove queue entry')
 }
-
-export async function moveQueueItemUp(entryId: string): Promise<void> {
-  const res = await fetch(`${BASE}/companies/queue/${entryId}/move-up`, { method: 'POST' })
-  if (!res.ok) throw new Error('Failed to move queue entry')
-}
-
-export async function moveQueueItemDown(entryId: string): Promise<void> {
-  const res = await fetch(`${BASE}/companies/queue/${entryId}/move-down`, { method: 'POST' })
-  if (!res.ok) throw new Error('Failed to move queue entry')
-}

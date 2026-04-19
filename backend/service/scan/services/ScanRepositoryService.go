@@ -36,12 +36,6 @@ type ScanQueueStore interface {
 	// Remove deletes a queued entry by ID. No-ops if entry is processing or missing.
 	Remove(ctx context.Context, id string) error
 
-	// MoveUp raises this item one position in the queue by increasing its priority.
-	MoveUp(ctx context.Context, id string) error
-
-	// MoveDown lowers this item one position in the queue.
-	MoveDown(ctx context.Context, id string) error
-
 	// ResetStuck resets processing rows whose heartbeat (or started_at if no heartbeat yet) is older than staleDur.
 	ResetStuck(ctx context.Context, staleDur time.Duration) error
 
@@ -154,51 +148,6 @@ func (s *scanQueueStore) Remove(ctx context.Context, id string) (err error) {
 	return s.db.WithContext(ctx).Exec(`DELETE FROM company_scan_queue WHERE id = ? AND status = 'queued'`, id).Error
 }
 
-func (s *scanQueueStore) MoveUp(ctx context.Context, id string) (err error) {
-	ctx, span := tracing.Start(ctx, "scan.store.MoveUp")
-	defer tracing.End(span, &err)
-	items, err := s.listOrdered(ctx)
-	if err != nil {
-		return err
-	}
-	pos := -1
-	for i, item := range items {
-		if item.ID == id {
-			pos = i
-			break
-		}
-	}
-	if pos <= 0 {
-		return nil
-	}
-	above := items[pos-1]
-	newPriority := above.Priority + 1
-	return s.db.WithContext(ctx).Exec(`UPDATE company_scan_queue SET priority = ? WHERE id = ?`, newPriority, id).Error
-}
-
-func (s *scanQueueStore) MoveDown(ctx context.Context, id string) (err error) {
-	ctx, span := tracing.Start(ctx, "scan.store.MoveDown")
-	defer tracing.End(span, &err)
-	items, err := s.listOrdered(ctx)
-	if err != nil {
-		return err
-	}
-	pos := -1
-	for i, item := range items {
-		if item.ID == id {
-			pos = i
-			break
-		}
-	}
-	if pos < 0 || pos >= len(items)-1 {
-		return nil
-	}
-	// Lower id's priority below the next item so it sorts after it (ORDER BY priority DESC).
-	below := items[pos+1]
-	newPriority := below.Priority - 1
-	return s.db.WithContext(ctx).Exec(`UPDATE company_scan_queue SET priority = ? WHERE id = ?`, newPriority, id).Error
-}
-
 func (s *scanQueueStore) ResetStuck(ctx context.Context, staleDur time.Duration) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.ResetStuck")
 	defer tracing.End(span, &err)
@@ -219,12 +168,8 @@ func (s *scanQueueStore) UpdateHeartbeat(ctx context.Context, id string) (err er
 func (s *scanQueueStore) ListQueue(ctx context.Context) (_ []dto.ScanQueueItem, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.ListQueue")
 	defer tracing.End(span, &err)
-	return s.listOrdered(ctx)
-}
-
-func (s *scanQueueStore) listOrdered(ctx context.Context) ([]dto.ScanQueueItem, error) {
 	var items []dto.ScanQueueItem
-	err := s.db.WithContext(ctx).Raw(`
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT id, company_id, status, source, priority, queued_at, started_at, heartbeat_at
 		FROM company_scan_queue
 		ORDER BY priority DESC, queued_at ASC
@@ -488,20 +433,3 @@ func (s *repositoryService) RemoveFromQueue(ctx context.Context, entryID string)
 	return nil
 }
 
-func (s *repositoryService) MoveUp(ctx context.Context, entryID string) (err error) {
-	ctx, span := tracing.Start(ctx, "scan.repository.MoveUp")
-	defer tracing.End(span, &err)
-	if err := s.queue.MoveUp(ctx, entryID); err != nil {
-		return errors.ErrInternal.WithMessage("failed to move queue entry up")
-	}
-	return nil
-}
-
-func (s *repositoryService) MoveDown(ctx context.Context, entryID string) (err error) {
-	ctx, span := tracing.Start(ctx, "scan.repository.MoveDown")
-	defer tracing.End(span, &err)
-	if err := s.queue.MoveDown(ctx, entryID); err != nil {
-		return errors.ErrInternal.WithMessage("failed to move queue entry down")
-	}
-	return nil
-}
