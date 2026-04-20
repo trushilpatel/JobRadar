@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -12,6 +13,8 @@ import (
 type Config struct {
 	DB            DatabaseConfig
 	Kafka         KafkaConfig
+	Redis         RedisConfig
+	Cooldown      CooldownConfig
 	LLM           LLMConfig
 	Filter        FilterConfig
 	Enricher      EnricherConfig
@@ -64,6 +67,7 @@ type FilterConfig struct {
 	FlushTimeoutSeconds int
 	LLMParallelism      int
 	RateLimits          RateLimits
+	Slots               []LLMSlotConfig
 }
 
 type EnricherConfig struct {
@@ -71,6 +75,7 @@ type EnricherConfig struct {
 	Concurrency int
 	MaxExpYears int
 	RateLimits  RateLimits
+	Slots       []LLMSlotConfig
 }
 
 type CrawlerConfig struct {
@@ -115,9 +120,52 @@ type ObservabilityConfig struct {
 	JaegerEndpoint string
 }
 
+type RedisConfig struct {
+	Addr string
+	DB   int
+}
+
+type CooldownConfig struct {
+	BaseSeconds int
+	MaxSeconds  int
+	Jitter      float64 // 0.0 – 1.0
+}
+
+// LLMSlotConfig describes a single (API key, model) slot for routed LLM calls.
+type LLMSlotConfig struct {
+	KeyID  string `json:"key_id"`
+	APIKey string `json:"api_key"`
+	Model  string `json:"model"`
+	RPM    int    `json:"rpm"`
+	RPD    int    `json:"rpd"`
+	TPMIn  int    `json:"tpm_in"`
+}
+
+// ParseLLMSlots parses a JSON array of slot configs from a single env var.
+// Returns nil on empty input (not an error — enables legacy single-slot mode).
+func ParseLLMSlots(raw string) ([]LLMSlotConfig, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	var slots []LLMSlotConfig
+	if err := json.Unmarshal([]byte(raw), &slots); err != nil {
+		return nil, fmt.Errorf("config: parse LLM slots: %w", err)
+	}
+	return slots, nil
+}
+
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
 		fmt.Fprintf(os.Stderr, "config: no .env file found, falling back to environment variables\n")
+	}
+
+	filterSlots, err := ParseLLMSlots(getEnv("FILTER_LLM_SLOTS", ""))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config: %v — falling back to single slot\n", err)
+	}
+	enricherSlots, err := ParseLLMSlots(getEnv("ENRICHER_LLM_SLOTS", ""))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config: %v — falling back to single slot\n", err)
 	}
 
 	return &Config{
@@ -133,6 +181,15 @@ func Load() *Config {
 			Brokers:  getEnv("KAFKA_BROKERS", "localhost:9092"),
 			User:     getEnv("KAFKA_USER", ""),
 			Password: getEnv("KAFKA_PASSWORD", ""),
+		},
+		Redis: RedisConfig{
+			Addr: getEnv("REDIS_ADDR", "localhost:6379"),
+			DB:   getEnvInt("REDIS_DB", 0),
+		},
+		Cooldown: CooldownConfig{
+			BaseSeconds: getEnvInt("LLM_COOLDOWN_BASE_SECONDS", 60),
+			MaxSeconds:  getEnvInt("LLM_COOLDOWN_MAX_SECONDS", 3600),
+			Jitter:      getEnvFloat("LLM_COOLDOWN_JITTER", 0.2),
 		},
 		LLM: LLMConfig{
 			Provider:    getEnv("LLM_PROVIDER", "gemini"),
@@ -151,6 +208,7 @@ func Load() *Config {
 				RPD:   getEnvInt("FILTER_RPD", 1500),
 				TPMIn: getEnvInt("FILTER_TPM", 1000000),
 			},
+			Slots: filterSlots,
 		},
 		Enricher: EnricherConfig{
 			Model:       getEnvWithFallback("ENRICHER_LLM_MODEL", "LLM_MODEL", "gemma-4-31b-it"),
@@ -161,6 +219,7 @@ func Load() *Config {
 				RPD:   getEnvInt("ENRICHER_RPD", 1500),
 				TPMIn: getEnvInt("ENRICHER_TPM", 1000000),
 			},
+			Slots: enricherSlots,
 		},
 		Crawler: CrawlerConfig{
 			CompanyDelaySeconds:      getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 30),
@@ -209,6 +268,15 @@ func getEnvInt(key string, fallback int) int {
 	if val := os.Getenv(key); val != "" {
 		if n, err := strconv.Atoi(val); err == nil {
 			return n
+		}
+	}
+	return fallback
+}
+
+func getEnvFloat(key string, fallback float64) float64 {
+	if val := os.Getenv(key); val != "" {
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f
 		}
 	}
 	return fallback

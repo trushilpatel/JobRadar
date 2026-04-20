@@ -23,6 +23,21 @@
 | `KAFKA_USER`     | `""`             | SASL username        |
 | `KAFKA_PASSWORD` | `""`             | SASL password        |
 
+### Redis (LLM rate limiting + cooldown)
+
+| Env var      | Default          | Notes                   |
+| ------------ | ---------------- | ----------------------- |
+| `REDIS_ADDR` | `localhost:6379` | host:port               |
+| `REDIS_DB`   | `0`              | logical database number |
+
+### LLM cooldown
+
+| Env var                     | Default | Notes                         |
+| --------------------------- | ------- | ----------------------------- |
+| `LLM_COOLDOWN_BASE_SECONDS` | `60`    | Base backoff duration          |
+| `LLM_COOLDOWN_MAX_SECONDS`  | `3600`  | Cap on backoff                 |
+| `LLM_COOLDOWN_JITTER`       | `0.2`   | ± fraction, must be in [0, 1]  |
+
 ### LLM (shared base)
 
 | Env var        | Default                         | Notes                                             |
@@ -44,6 +59,7 @@
 | `FILTER_RPM`                   | `15`                      | Rate limit: requests per minute (0 = unlimited) |
 | `FILTER_RPD`                   | `1500`                    | Rate limit: requests per day                    |
 | `FILTER_TPM`                   | `1000000`                 | Rate limit: input tokens per minute             |
+| `FILTER_LLM_SLOTS`             | `""`                      | JSON array of `{key_id, api_key, model, rpm, rpd, tpm_in}`. If set, overrides single-slot config. |
 
 ### Enricher worker
 
@@ -55,6 +71,7 @@
 | `ENRICHER_RPM`            | `15`                                                | Rate limit: requests per minute                         |
 | `ENRICHER_RPD`            | `1500`                                              | Rate limit: requests per day                            |
 | `ENRICHER_TPM`            | `1000000`                                           | Rate limit: input tokens per minute                     |
+| `ENRICHER_LLM_SLOTS`      | `""`                                                | JSON array of `{key_id, api_key, model, rpm, rpd, tpm_in}`. Same shape as `FILTER_LLM_SLOTS`. |
 
 ### Crawler worker
 

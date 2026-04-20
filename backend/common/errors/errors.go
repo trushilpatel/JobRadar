@@ -5,6 +5,7 @@ import (
 
 	"fmt"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -52,7 +53,30 @@ var (
 	ErrConflict   = &ServiceError{Code: "CONFLICT", Status: 409}
 	ErrBadRequest = &ServiceError{Code: "BAD_REQUEST", Status: 400}
 	ErrInternal   = &ServiceError{Code: "INTERNAL", Status: 500}
+
+	ErrLLMValidation          = &ServiceError{Code: "LLM_VALIDATION", Status: 400, Message: "llm: validation failed"}
+	ErrLLMLocalQuotaExceeded  = &ServiceError{Code: "LLM_LOCAL_QUOTA", Status: 429, Message: "llm: local quota exceeded"}
+	ErrLLMProviderRateLimited = &ServiceError{Code: "LLM_PROVIDER_429", Status: 429, Message: "llm: provider rate limited"}
+	ErrLLMAllExhausted        = &ServiceError{Code: "LLM_EXHAUSTED", Status: 503, Message: "llm: all slots exhausted"}
 )
+
+// LLMSlotStatus is the public shape of slot state at exhaustion time.
+type LLMSlotStatus struct {
+	SlotID        string
+	Model         string
+	CooldownUntil time.Time
+	FailureCount  int
+	LastDenial    string // "rpm" | "rpd" | "tpm" | "cooldown" | "provider_429"
+}
+
+// LLMAllExhaustedError carries per-slot exhaustion detail. Unwraps to ErrLLMAllExhausted.
+type LLMAllExhaustedError struct {
+	Slots      []LLMSlotStatus
+	RetryAfter time.Time
+}
+
+func (e *LLMAllExhaustedError) Error() string { return ErrLLMAllExhausted.Message }
+func (e *LLMAllExhaustedError) Unwrap() error { return ErrLLMAllExhausted }
 
 // IsNotFound reports whether err is a GORM record-not-found error.
 func IsNotFound(err error) bool {

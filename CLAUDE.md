@@ -161,8 +161,10 @@ After implementation, write a brief spec-style doc:
 
 ## Plan execution mode
 
-When executing an implementation plan, always use the **subagent-driven approach**:
+When executing an implementation plan, always use the **parallel subagent approach**:
 
-- Dispatch a fresh subagent per task using the `superpowers:subagent-driven-development` skill
-- Review each task's output before dispatching the next
+- Use the `superpowers:dispatching-parallel-agents` skill
+- Group the plan's tasks into independent buckets (no shared files, no sequential dependencies) and dispatch all buckets in parallel via a single message with multiple Agent tool calls
+- Only serialise tasks that truly depend on each other; everything else runs concurrently
+- After all parallel agents finish, dispatch one final QA reviewer over the combined result
 - Never execute plans inline in the same session

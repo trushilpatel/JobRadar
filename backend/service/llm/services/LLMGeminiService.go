@@ -3,11 +3,14 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"google.golang.org/genai"
 
+	llmerr "github.com/trushilpatel/jobradar/common/errors"
 	llmcommon "github.com/trushilpatel/jobradar/service/llm/common"
 	"github.com/trushilpatel/jobradar/service/llm/dto"
 	"github.com/trushilpatel/jobradar/service/llm/prompts"
@@ -136,6 +139,9 @@ func (s *geminiScorer) generate(ctx context.Context, prompt string, maxOutputTok
 		},
 	)
 	if err != nil {
+		if isGemini429(err) {
+			return "", fmt.Errorf("%w: %s", llmerr.ErrLLMProviderRateLimited, err.Error())
+		}
 		return "", err
 	}
 
@@ -145,6 +151,20 @@ func (s *geminiScorer) generate(ctx context.Context, prompt string, maxOutputTok
 	}
 
 	return cleanJSON(text), nil
+}
+
+// isGemini429 reports whether err indicates a Gemini provider-side rate limit
+// response (HTTP 429). The genai SDK returns a value-typed APIError with the
+// raw HTTP status code in Code.
+func isGemini429(err error) bool {
+	if err == nil {
+		return false
+	}
+	var apiErr genai.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.Code == http.StatusTooManyRequests
+	}
+	return false
 }
 
 func cleanJSON(text string) string {
