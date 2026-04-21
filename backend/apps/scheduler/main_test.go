@@ -25,6 +25,7 @@ func (f *fakeSchedulerService) ResetStuck(_ context.Context, _ time.Duration) er
 	f.resetCalled = true
 	return f.resetErr
 }
+func (f *fakeSchedulerService) PurgeInactive(_ context.Context) (int, error) { return 0, nil }
 
 var _ scansvc.SchedulerService = (*fakeSchedulerService)(nil)
 

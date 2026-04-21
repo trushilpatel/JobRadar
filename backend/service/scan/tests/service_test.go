@@ -42,6 +42,7 @@ func (f *fakeQueueStore) ResetStuck(_ context.Context, _ time.Duration) error {
 	f.resetStuckCalled = true
 	return f.err
 }
+func (f *fakeQueueStore) PurgeInactive(_ context.Context) (int, error)      { return 0, f.err }
 func (f *fakeQueueStore) UpdateHeartbeat(_ context.Context, _ string) error { return f.err }
 func (f *fakeQueueStore) ListQueue(_ context.Context) ([]dto.ScanQueueItem, error) {
 	return f.items, f.err

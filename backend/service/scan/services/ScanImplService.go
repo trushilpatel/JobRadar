@@ -47,6 +47,16 @@ func (s *schedulerService) ResetStuck(ctx context.Context, staleDur time.Duratio
 	return nil
 }
 
+func (s *schedulerService) PurgeInactive(ctx context.Context) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "scan.service.PurgeInactive")
+	defer tracing.End(span, &err)
+	n, err := s.queue.PurgeInactive(ctx)
+	if err != nil {
+		return 0, errors.ErrInternal.WithMessage("failed to purge inactive company queue entries")
+	}
+	return n, nil
+}
+
 // implService is the business-logic decorator. It embeds BaseService so all
 // methods not overridden here are auto-delegated to the next layer.
 type implService struct {

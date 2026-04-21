@@ -80,7 +80,8 @@ func main() {
 
 // runCycle performs one full scheduler pass:
 //  1. Resets any processing rows whose crawler has gone silent (stuck detection).
-//  2. Enqueues all companies currently due for a scan in a single query.
+//  2. Removes queued rows for companies that have since been deactivated.
+//  3. Enqueues all companies currently due for a scan in a single query.
 func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerService, intervalMinutes int, stuckTimeout time.Duration) {
 	start := time.Now()
 
@@ -89,6 +90,13 @@ func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerServi
 		log.Error("reset stuck failed", err)
 	} else {
 		metrics.SchedulerStuckChecksTotal.Inc()
+	}
+
+	if purged, err := svc.PurgeInactive(ctx); err != nil {
+		metrics.SchedulerErrorsTotal.WithLabelValues("purge_inactive").Inc()
+		log.Error("purge inactive failed", err)
+	} else if purged > 0 {
+		log.Info("purged inactive company queue entries", logger.Int("purged", purged))
 	}
 
 	n, err := svc.EnqueueDue(ctx, intervalMinutes)
