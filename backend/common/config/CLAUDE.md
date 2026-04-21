@@ -38,40 +38,41 @@
 | `LLM_COOLDOWN_MAX_SECONDS`  | `3600`  | Cap on backoff                 |
 | `LLM_COOLDOWN_JITTER`       | `0.2`   | ± fraction, must be in [0, 1]  |
 
-### LLM (shared base)
+### LLM slots (multi-key / multi-model routing)
 
-| Env var        | Default                         | Notes                                             |
-| -------------- | ------------------------------- | ------------------------------------------------- |
-| `LLM_PROVIDER` | `gemini`                        | Only `gemini` supported currently                 |
-| `LLM_API_KEY`  | `""`                            | Required                                          |
-| `LLM_MODEL`    | `gemini-3.1-flash-lite-preview` | Fallback model if per-worker model unset          |
-| `TARGET_ROLES` | `Software Engineer`             | Comma-separated; used in relevance scoring prompt |
-| `YEARS_EXP`    | `0`                             | Used in relevance scoring prompt                  |
+Slots are required — the factory errors at startup if none are configured. Precedence (first non-empty wins):
+
+1. **YAML file** — `LLM_SLOTS_CONFIG=/path/to/llm-slots.yaml`. See `config/llm-slots.example.yaml`. `${VAR}` in the file is expanded from the process env at load time so API keys stay in `.env`.
+2. **JSON env vars** — `FILTER_LLM_SLOTS` / `ENRICHER_LLM_SLOTS` as a JSON array of `{key_id, api_key, model, rpm, rpd, tpm_in}`.
+
+| Env var             | Default | Notes                                                       |
+| ------------------- | ------- | ----------------------------------------------------------- |
+| `LLM_SLOTS_CONFIG`  | `""`    | Path to YAML slots file. When set, wins over JSON env vars. |
+
+### LLM (shared)
+
+| Env var        | Default             | Notes                                             |
+| -------------- | ------------------- | ------------------------------------------------- |
+| `LLM_PROVIDER` | `gemini`            | Only `gemini` supported currently                 |
+| `TARGET_ROLES` | `Software Engineer` | Comma-separated; used in relevance scoring prompt |
+| `YEARS_EXP`    | `0`                 | Used in relevance scoring prompt                  |
 
 ### Filter worker
 
-| Env var                        | Default                   | Notes                                           |
-| ------------------------------ | ------------------------- | ----------------------------------------------- |
-| `FILTER_LLM_MODEL`             | falls back to `LLM_MODEL` | Override model for relevance filter             |
-| `FILTER_BATCH_SIZE`            | `50`                      | Jobs per LLM batch                              |
-| `FILTER_FLUSH_TIMEOUT_SECONDS` | `30`                      | Max wait to fill a batch before flushing        |
-| `FILTER_LLM_PARALLELISM`       | `5`                       | Concurrent LLM calls                            |
-| `FILTER_RPM`                   | `15`                      | Rate limit: requests per minute (0 = unlimited) |
-| `FILTER_RPD`                   | `1500`                    | Rate limit: requests per day                    |
-| `FILTER_TPM`                   | `1000000`                 | Rate limit: input tokens per minute             |
-| `FILTER_LLM_SLOTS`             | `""`                      | JSON array of `{key_id, api_key, model, rpm, rpd, tpm_in}`. If set, overrides single-slot config. |
+| Env var                        | Default | Notes                            |
+| ------------------------------ | ------- | -------------------------------- |
+| `FILTER_BATCH_SIZE`            | `50`    | Jobs per LLM batch               |
+| `FILTER_FLUSH_TIMEOUT_SECONDS` | `30`    | Max wait to fill a batch         |
+| `FILTER_LLM_PARALLELISM`       | `5`     | Concurrent LLM calls             |
+| `FILTER_LLM_SLOTS`             | `""`    | JSON array of slot configs       |
 
 ### Enricher worker
 
-| Env var                   | Default                                             | Notes                                                   |
-| ------------------------- | --------------------------------------------------- | ------------------------------------------------------- |
-| `ENRICHER_LLM_MODEL`      | `gemma-4-31b-it` (falls back to `LLM_MODEL` if set) | Override model for job enrichment                       |
-| `ENRICHER_CONCURRENCY`    | `5`                                                 | Concurrent enrichment goroutines                        |
-| `DISCARD_JOB_WITH_EXP_GT` | `0`                                                 | Drop jobs requiring more than N years exp; 0 = disabled |
-| `ENRICHER_RPM`            | `15`                                                | Rate limit: requests per minute                         |
-| `ENRICHER_RPD`            | `1500`                                              | Rate limit: requests per day                            |
-| `ENRICHER_TPM`            | `1000000`                                           | Rate limit: input tokens per minute                     |
-| `ENRICHER_LLM_SLOTS`      | `""`                                                | JSON array of `{key_id, api_key, model, rpm, rpd, tpm_in}`. Same shape as `FILTER_LLM_SLOTS`. |
+| Env var                   | Default | Notes                                                   |
+| ------------------------- | ------- | ------------------------------------------------------- |
+| `ENRICHER_CONCURRENCY`    | `5`     | Concurrent enrichment goroutines                        |
+| `DISCARD_JOB_WITH_EXP_GT` | `0`     | Drop jobs requiring more than N years exp; 0 = disabled |
+| `ENRICHER_LLM_SLOTS`      | `""`    | JSON array of slot configs                              |
 
 ### Crawler worker
 

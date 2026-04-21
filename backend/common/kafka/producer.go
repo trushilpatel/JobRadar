@@ -43,6 +43,17 @@ func (p *Producer) Publish(ctx context.Context, topic string, value []byte) erro
 	return p.client.ProduceSync(ctx, record).FirstErr()
 }
 
+// PublishWithHeaders publishes with caller-supplied headers.
+// Tracing headers are merged in automatically — callers never add them themselves.
+func (p *Producer) PublishWithHeaders(ctx context.Context, topic string, value []byte, headers []kgo.RecordHeader) error {
+	record := &kgo.Record{
+		Topic:   topic,
+		Value:   value,
+		Headers: tracing.InjectKafka(ctx, headers),
+	}
+	return p.client.ProduceSync(ctx, record).FirstErr()
+}
+
 func (p *Producer) Close() {
 	p.client.Close()
 }

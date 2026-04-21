@@ -14,15 +14,6 @@ import (
 	"github.com/trushilpatel/jobradar/service/llm/store"
 )
 
-// RateLimits holds the three quota dimensions for an LLM slot.
-// All fields are 0 = unlimited. Values come from config — never hardcoded.
-// This type is retained for the legacy single-slot factory fallback.
-type RateLimits struct {
-	RPM   int
-	RPD   int
-	TPMIn int
-}
-
 // RateLimitSlot describes a single provider/key/model slot's local quota limits.
 type RateLimitSlot struct {
 	SlotID   string

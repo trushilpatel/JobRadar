@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"sync"
 	"time"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	domainerr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/kafka"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
@@ -52,10 +54,12 @@ func NewWorker(
 	}
 }
 
-// jobWithCtx pairs a raw job with the trace context extracted from its Kafka headers.
+// jobWithCtx pairs a raw job with the trace context extracted from its Kafka headers
+// and the retry_count value carried on its incoming Kafka record.
 type jobWithCtx struct {
-	ctx context.Context
-	job ats.RawJob
+	ctx        context.Context
+	job        ats.RawJob
+	retryCount int
 }
 
 // Run starts consuming jobs.raw and blocks until ctx is cancelled.
@@ -85,7 +89,7 @@ func (w *Worker) Run(ctx context.Context) error {
 				return nil
 			}
 			select {
-			case jobsCh <- jobWithCtx{ctx: msgCtx, job: job}:
+			case jobsCh <- jobWithCtx{ctx: msgCtx, job: job, retryCount: kafka.RetryCountFromHeaders(headers)}:
 			case <-ctx.Done():
 			}
 			return nil
@@ -139,8 +143,9 @@ func (w *Worker) Run(ctx context.Context) error {
 
 // subBatchResult holds the outcome of one parallel ScoreBatch call.
 type subBatchResult struct {
+	sub         []jobWithCtx
 	relevantIDs []string
-	errorIDs    []string
+	err         error
 }
 
 // flushBatch splits the batch into w.parallelism sub-batches, scores them in
@@ -183,18 +188,16 @@ func (w *Worker) flushBatch(ctx context.Context, batch []jobWithCtx) {
 		go func() {
 			defer wg.Done()
 			inputs := make([]llmdto.JobsRelevanceFilterInput, len(sub))
-			ids := make([]string, len(sub))
 			for i, item := range sub {
 				inputs[i] = llmdto.JobsRelevanceFilterInput{ID: item.job.ID, Title: item.job.Title, Location: item.job.Location}
-				ids[i] = item.job.ID
 			}
 			relevantIDs, err := w.scorer.ScoreBatch(batchCtx, inputs)
 			if err != nil {
-				w.log.Error("ScoreBatch failed, marking sub-batch as error", err, logger.Int(logger.FieldBatch, len(sub)))
-				resultCh <- subBatchResult{errorIDs: ids}
+				w.log.Error("ScoreBatch failed, routing sub-batch", err, logger.Int(logger.FieldBatch, len(sub)))
+				resultCh <- subBatchResult{sub: sub, err: err}
 				return
 			}
-			resultCh <- subBatchResult{relevantIDs: relevantIDs}
+			resultCh <- subBatchResult{sub: sub, relevantIDs: relevantIDs}
 		}()
 	}
 
@@ -202,28 +205,49 @@ func (w *Worker) flushBatch(ctx context.Context, batch []jobWithCtx) {
 	close(resultCh)
 	metrics.FilterLLMDuration.Observe(time.Since(start).Seconds())
 
-	// Collect results from all sub-batches
+	// Collect results from all sub-batches.
 	var allRelevantIDs []string
-	var allErrorIDs []string
+	var failedSubs []subBatchResult
+	var totalErrors int
 	for r := range resultCh {
+		if r.err != nil {
+			failedSubs = append(failedSubs, r)
+			totalErrors += len(r.sub)
+			continue
+		}
 		allRelevantIDs = append(allRelevantIDs, r.relevantIDs...)
-		allErrorIDs = append(allErrorIDs, r.errorIDs...)
 	}
 
-	if len(allErrorIDs) > 0 {
-		if merr := w.ledger.UpdateSeenReasonBatch(batchCtx, allErrorIDs, jobcommon.SeenReasonError); merr != nil {
+	// Route failed sub-batches through the retry ladder / DLQ.
+	// Gather DLQ-bound job IDs so their ledger rows get marked `error`.
+	var dlqJobIDs []string
+	errorSet := make(map[string]bool, totalErrors)
+	if len(failedSubs) > 0 {
+		// If shutting down, skip retry publishes — Kafka will redeliver on restart.
+		if ctx.Err() != nil {
+			w.log.Warn("context cancelled, skipping retry routing",
+				logger.Int(logger.FieldBatch, totalErrors))
+		} else {
+			for _, r := range failedSubs {
+				ids := w.routeFailedSubBatch(batchCtx, r.sub, r.err)
+				dlqJobIDs = append(dlqJobIDs, ids...)
+				for _, item := range r.sub {
+					errorSet[item.job.ID] = true
+				}
+			}
+		}
+	}
+
+	if len(dlqJobIDs) > 0 {
+		if merr := w.ledger.UpdateSeenReasonBatch(batchCtx, dlqJobIDs, jobcommon.SeenReasonError); merr != nil {
 			w.log.Error("mark error batch failed", merr)
 		}
-		metrics.FilterJobsTotal.WithLabelValues("error").Add(float64(len(allErrorIDs)))
+		metrics.FilterJobsTotal.WithLabelValues("error").Add(float64(len(dlqJobIDs)))
 	}
 
 	relevant := make(map[string]bool, len(allRelevantIDs))
 	for _, id := range allRelevantIDs {
 		relevant[id] = true
-	}
-	errorSet := make(map[string]bool, len(allErrorIDs))
-	for _, id := range allErrorIDs {
-		errorSet[id] = true
 	}
 
 	var irrelevantIDs []string
@@ -251,9 +275,71 @@ func (w *Worker) flushBatch(ctx context.Context, batch []jobWithCtx) {
 		logger.Int(logger.FieldBatch, len(batch)),
 		logger.Int(logger.FieldRelevant, len(allRelevantIDs)),
 		logger.Int("irrelevant", len(irrelevantIDs)),
-		logger.Int("errors", len(allErrorIDs)),
+		logger.Int("errors", totalErrors),
+		logger.Int("dlq", len(dlqJobIDs)),
 		logger.Int("sub_batches", len(subBatches)),
 	)
+}
+
+// routeFailedSubBatch ships each job in a failed sub-batch to the correct retry tier
+// (or to the DLQ if already exhausted / on validation error). Returns the set of job
+// IDs that landed in the DLQ so callers can mark their ledger rows `error`.
+func (w *Worker) routeFailedSubBatch(ctx context.Context, sub []jobWithCtx, scoreErr error) []string {
+	tiers := kafka.FilterRetryTiers()
+	now := time.Now()
+
+	// LLM validation error is our own bug — retry won't help, straight to DLQ.
+	if stderrors.Is(scoreErr, domainerr.ErrLLMValidation) {
+		dlqIDs := make([]string, 0, len(sub))
+		for _, item := range sub {
+			if w.publishToDLQ(ctx, item, scoreErr) {
+				dlqIDs = append(dlqIDs, item.job.ID)
+			}
+		}
+		return dlqIDs
+	}
+
+	var dlqIDs []string
+	for _, item := range sub {
+		// retryCount here is the INCOMING count; tier index = incoming count.
+		if item.retryCount >= len(tiers) {
+			if w.publishToDLQ(ctx, item, scoreErr) {
+				dlqIDs = append(dlqIDs, item.job.ID)
+			}
+			continue
+		}
+		tier := tiers[item.retryCount]
+		newCount := item.retryCount + 1
+		nextAt := now.Add(tier.Delay)
+		payload, err := json.Marshal(item.job)
+		if err != nil {
+			w.log.Error("marshal for retry failed", err, logger.Str(logger.FieldJobID, item.job.ID))
+			continue
+		}
+		headers := kafka.BuildRetryHeaders(newCount, nextAt)
+		if perr := w.publisher.PublishWithHeaders(ctx, tier.Topic, payload, headers); perr != nil {
+			w.log.Error("publish to retry tier failed", perr,
+				logger.Str(logger.FieldJobID, item.job.ID),
+				logger.Int("retry_count", newCount),
+			)
+		}
+	}
+	return dlqIDs
+}
+
+// publishToDLQ marshals and publishes a single job to the raw DLQ. Returns true on success.
+func (w *Worker) publishToDLQ(ctx context.Context, item jobWithCtx, scoreErr error) bool {
+	payload, err := json.Marshal(item.job)
+	if err != nil {
+		w.log.Error("marshal for DLQ failed", err, logger.Str(logger.FieldJobID, item.job.ID))
+		return false
+	}
+	headers := kafka.BuildDLQHeaders(item.retryCount, scoreErr.Error())
+	if perr := w.publisher.PublishWithHeaders(ctx, kafka.TopicJobListingsRawDLQ, payload, headers); perr != nil {
+		w.log.Error("publish to DLQ failed", perr, logger.Str(logger.FieldJobID, item.job.ID))
+		return false
+	}
+	return true
 }
 
 func (w *Worker) publishDetail(ctx context.Context, job ats.RawJob) {

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -17,6 +19,8 @@ import (
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 	llmstore "github.com/trushilpatel/jobradar/service/llm/store"
+	"github.com/twmb/franz-go/pkg/kgo"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
@@ -37,12 +41,32 @@ func main() {
 
 	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
 
+	// Ensure analyzer-owned retry + DLQ topics exist before any producer/consumer
+	// connects. The main .filtered topic is created by the filter worker — do not
+	// include it here.
+	if err := kafka.EnsureTopics(ctx, cfg.Kafka,
+		kafka.TopicJobListingsFilteredRetry1m,
+		kafka.TopicJobListingsFilteredRetry10m,
+		kafka.TopicJobListingsFilteredRetry1h,
+		kafka.TopicJobListingsFilteredDLQ,
+	); err != nil {
+		log.Error("ensure topics failed", err)
+		os.Exit(1)
+	}
+
 	consumer, err := kafka.NewConsumer(cfg.Kafka, log, "job-post-analyzer", kafka.TopicJobListingsFiltered)
 	if err != nil {
 		log.Error("kafka consumer failed", err)
 		os.Exit(1)
 	}
 	defer consumer.Close()
+
+	producer, err := kafka.NewProducer(cfg.Kafka)
+	if err != nil {
+		log.Error("kafka producer failed", err)
+		os.Exit(1)
+	}
+	defer producer.Close()
 
 	rdb, err := redispkg.New(ctx, cfg.Redis.Addr, cfg.Redis.DB)
 	if err != nil {
@@ -78,14 +102,6 @@ func main() {
 		Slots:          slots,
 		RateLimitStore: rateStore,
 		CooldownStore:  cooldownStore,
-		// Legacy fallback — used when Slots is empty.
-		APIKey: cfg.LLM.APIKey,
-		Model:  cfg.Enricher.Model,
-		Limits: llmcore.RateLimits{
-			RPM:   cfg.Enricher.RateLimits.RPM,
-			RPD:   cfg.Enricher.RateLimits.RPD,
-			TPMIn: cfg.Enricher.RateLimits.TPMIn,
-		},
 	})
 	if err != nil {
 		log.Error("llm init failed", err)
@@ -97,11 +113,85 @@ func main() {
 	snapshotStore := jobsvc.NewSnapshotStore(database)
 	techTagStore := jobsvc.NewTechTagStore(database)
 	pipeline := jobsvc.NewPipelineService(jobStore, ledgerStore, snapshotStore, techTagStore)
-	worker := NewWorker(consumer, scorer, pipeline, log, cfg.Enricher.MaxExpYears, cfg.Enricher.Concurrency)
+	worker := NewWorker(consumer, producer, scorer, pipeline, log, cfg.Enricher.MaxExpYears, cfg.Enricher.Concurrency)
 
-	if err := worker.Run(ctx); err != nil && ctx.Err() == nil {
+	g, gctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error { return worker.Run(gctx) })
+
+	for _, rt := range []struct {
+		topic   string
+		groupID string
+	}{
+		{kafka.TopicJobListingsFilteredRetry1m, "job-post-analyzer-retry-1m"},
+		{kafka.TopicJobListingsFilteredRetry10m, "job-post-analyzer-retry-10m"},
+		{kafka.TopicJobListingsFilteredRetry1h, "job-post-analyzer-retry-1h"},
+	} {
+		rt := rt
+		g.Go(func() error {
+			return runRetryConsumer(gctx, cfg.Kafka, log, producer, rt.topic, rt.groupID)
+		})
+	}
+
+	if err := g.Wait(); err != nil && ctx.Err() == nil {
 		log.Error("worker exited with error", err)
 		os.Exit(1)
 	}
 	log.Info("shutting down")
+}
+
+// runRetryConsumer consumes from a retry tier topic, waits until each message's
+// scheduled next_attempt_at, and republishes the payload back onto the main
+// .filtered topic so the analyzer worker picks it up again. The retry_count
+// header is preserved so the main worker knows the current attempt count.
+func runRetryConsumer(
+	ctx context.Context,
+	kcfg config.KafkaConfig,
+	log logger.Logger,
+	publisher kafka.Publisher,
+	inputTopic string,
+	groupID string,
+) error {
+	retryLog := log.With(logger.Str("retry_topic", inputTopic))
+	consumer, err := kafka.NewConsumer(kcfg, log, groupID, inputTopic)
+	if err != nil {
+		return fmt.Errorf("retry consumer %s: %w", inputTopic, err)
+	}
+	defer consumer.Close()
+
+	retryLog.Info("retry consumer started", logger.Str("group_id", groupID))
+
+	return consumer.Poll(ctx, func(_ string, value []byte, headers []kgo.RecordHeader) error {
+		nextAt := kafka.NextAttemptAtFromHeaders(headers)
+		if wait := time.Until(nextAt); wait > 0 {
+			// Cap the blocking sleep at 1h — matches the longest retry tier and
+			// keeps startup drains bounded if the clock is wildly off.
+			if wait > time.Hour {
+				wait = time.Hour
+			}
+			timer := time.NewTimer(wait)
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			}
+		}
+
+		retryCount := kafka.RetryCountFromHeaders(headers)
+		// Preserve the existing retry_count header so the main worker knows
+		// the current attempt on re-arrival. next_attempt_at is no longer
+		// relevant once the message is back on the primary topic.
+		outHeaders := []kgo.RecordHeader{
+			{Key: kafka.HeaderRetryCount, Value: []byte(strconv.Itoa(retryCount))},
+		}
+		if err := publisher.PublishWithHeaders(ctx, kafka.TopicJobListingsFiltered, value, outHeaders); err != nil {
+			retryLog.Error("republish to main topic failed", err)
+			return fmt.Errorf("republish %s: %w", inputTopic, err)
+		}
+		retryLog.Debug("republished",
+			logger.Int("retry_count", retryCount),
+		)
+		return nil
+	})
 }

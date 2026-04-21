@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	domainerr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/kafka"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
@@ -25,6 +27,7 @@ import (
 // runs LLM enrichment, and writes the final row to the job table.
 type Worker struct {
 	consumer    *kafka.Consumer
+	publisher   kafka.Publisher
 	scorer      llmcore.JobPostEnricher
 	pipeline    jobsvc.PipelineService
 	client      *http.Client
@@ -35,6 +38,7 @@ type Worker struct {
 
 func NewWorker(
 	consumer *kafka.Consumer,
+	publisher kafka.Publisher,
 	scorer llmcore.JobPostEnricher,
 	pipeline jobsvc.PipelineService,
 	log logger.Logger,
@@ -43,6 +47,7 @@ func NewWorker(
 ) *Worker {
 	return &Worker{
 		consumer:    consumer,
+		publisher:   publisher,
 		scorer:      scorer,
 		pipeline:    pipeline,
 		client:      &http.Client{Timeout: 15 * time.Second},
@@ -72,9 +77,13 @@ func (w *Worker) Run(ctx context.Context) error {
 				continue
 			}
 
+			retryCount := kafka.RetryCountFromHeaders(r.Headers)
+			value := r.Value
+
 			w.log.Debug("job received",
 				logger.Str(logger.FieldJobID, job.ID),
 				logger.Str("title", job.Title),
+				logger.Int("retry_count", retryCount),
 			)
 
 			sem <- struct{}{}
@@ -82,7 +91,9 @@ func (w *Worker) Run(ctx context.Context) error {
 			go func() {
 				defer wg.Done()
 				defer func() { <-sem }()
-				w.enrich(msgCtx, job)
+				if err := w.enrich(msgCtx, job); err != nil {
+					w.handleFailure(msgCtx, job, value, retryCount, err)
+				}
 			}()
 		}
 		wg.Wait() // all enrichments complete before returning nil → commit fires
@@ -91,7 +102,10 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 // enrich runs the full enrichment pipeline for a single job.
-func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
+// Returns nil on success (or on terminal states like irrelevant/drop which are
+// handled inline). Returns a non-nil error for transient failures that the
+// caller must route to the retry tiers or DLQ.
+func (w *Worker) enrich(ctx context.Context, job ats.RawJob) error {
 	ctx, span := tracing.Start(ctx, "analyzer.worker.enrich")
 	defer tracing.End(span, nil)
 	jobLog := w.log.With(
@@ -109,9 +123,8 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 		content, err = w.fetchContent(ctx, job)
 		if err != nil {
 			jobLog.Error("fetch content failed", err)
-			w.markError(ctx, job.ID)
 			metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
-			return
+			return fmt.Errorf("fetch content: %w", err)
 		}
 	}
 
@@ -121,9 +134,8 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 	rawText, err := json.Marshal(content)
 	if err != nil {
 		jobLog.Error("marshal content failed", err)
-		w.markError(ctx, job.ID)
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
-		return
+		return fmt.Errorf("marshal content: %w", err)
 	}
 
 	// 2. Send to LLM for structured extraction
@@ -135,9 +147,8 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 	metrics.EnricherLLMDuration.Observe(time.Since(llmStart).Seconds())
 	if err != nil {
 		jobLog.Error("LLM enrich failed", err)
-		w.markError(ctx, job.ID)
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
-		return
+		return fmt.Errorf("llm enrich: %w", err)
 	}
 
 	// 3. Drop ineligible jobs before writing to DB
@@ -145,26 +156,82 @@ func (w *Worker) enrich(ctx context.Context, job ats.RawJob) {
 		jobLog.Debug("job dropped: role mismatch", logger.Str("title", job.Title))
 		w.markIrrelevant(ctx, job.ID)
 		metrics.EnricherJobsTotal.WithLabelValues("dropped").Inc()
-		return
+		return nil
 	}
 	if reason := w.dropJob(result); reason != "" {
 		jobLog.Debug("job dropped", logger.Str("reason", reason))
+		// dropJob is a filter (not an error); keep pre-existing behavior of
+		// marking ledger error so the job isn't re-processed.
 		w.markError(ctx, job.ID)
 		metrics.EnricherJobsTotal.WithLabelValues("dropped").Inc()
-		return
+		return nil
 	}
 
 	// 4. Save via pipeline service (builds job row, inserts, writes snapshot, marks ledger)
 	input := toEnrichedInput(job, result)
 	if err := w.pipeline.SaveEnrichedJob(ctx, input); err != nil {
 		jobLog.Error("save enriched job failed", err)
-		w.markError(ctx, job.ID)
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
-		return
+		return fmt.Errorf("save enriched job: %w", err)
 	}
 
 	metrics.EnricherJobsTotal.WithLabelValues("saved").Inc()
 	jobLog.Debug("enriched and saved")
+	return nil
+}
+
+// handleFailure routes a failed enrichment to the appropriate Kafka topic.
+// Validation errors skip retries entirely (they're our bug — retry won't help).
+// Transient errors move through the retry ladder; exhausted retries go to the DLQ.
+// Ledger is only marked `error` for DLQ-bound messages.
+func (w *Worker) handleFailure(ctx context.Context, job ats.RawJob, value []byte, retryCount int, err error) {
+	// Context cancellation during shutdown: do NOT publish to retry/DLQ.
+	// Let Kafka redeliver on restart.
+	if stderrors.Is(err, context.Canceled) || ctx.Err() != nil {
+		return
+	}
+
+	jobLog := w.log.With(
+		logger.Str(logger.FieldJobID, job.ID),
+		logger.Int("retry_count", retryCount),
+	)
+
+	// Validation errors go straight to DLQ — retrying is useless, it's our own bug.
+	if stderrors.Is(err, domainerr.ErrLLMValidation) {
+		w.sendToDLQ(ctx, jobLog, job.ID, value, retryCount, err)
+		return
+	}
+
+	tiers := kafka.AnalyzerRetryTiers()
+	if retryCount >= len(tiers) {
+		w.sendToDLQ(ctx, jobLog, job.ID, value, retryCount, err)
+		return
+	}
+
+	tier := tiers[retryCount]
+	nextAttemptAt := time.Now().Add(tier.Delay)
+	headers := kafka.BuildRetryHeaders(retryCount+1, nextAttemptAt)
+	if perr := w.publisher.PublishWithHeaders(ctx, tier.Topic, value, headers); perr != nil {
+		jobLog.Error("publish retry failed", perr, logger.Str("topic", tier.Topic))
+		return
+	}
+	jobLog.Info("scheduled retry",
+		logger.Str("topic", tier.Topic),
+		logger.Dur("delay", tier.Delay),
+	)
+}
+
+// sendToDLQ publishes the original message to the DLQ topic and marks the
+// ledger row as errored. Used for both validation errors and exhausted retries.
+func (w *Worker) sendToDLQ(ctx context.Context, jobLog logger.Logger, jobID string, value []byte, retryCount int, err error) {
+	headers := kafka.BuildDLQHeaders(retryCount, err.Error())
+	if perr := w.publisher.PublishWithHeaders(ctx, kafka.TopicJobListingsFilteredDLQ, value, headers); perr != nil {
+		jobLog.Error("publish DLQ failed", perr)
+		return
+	}
+	w.markError(ctx, jobID)
+	jobLog.Warn("moved to DLQ", logger.Err(err))
+	metrics.EnricherJobsTotal.WithLabelValues("dlq").Inc()
 }
 
 // toEnrichedInput builds a jobdto.EnrichedJobInput from the raw job and LLM result.

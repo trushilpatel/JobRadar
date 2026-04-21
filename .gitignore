@@ -38,3 +38,5 @@ backend/internal/ats_fetcher/google/scraper/logs.json
 
 # Git Worktrees (isolated agent workspaces)
 .worktrees/
+
+*llm-slots.yaml

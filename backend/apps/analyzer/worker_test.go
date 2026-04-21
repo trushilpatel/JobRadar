@@ -2,16 +2,21 @@ package main
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
+	stderrors "errors"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	atstypes "github.com/trushilpatel/jobradar/apps/crawler/ats/types"
+	domainerr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/kafka"
 	"github.com/trushilpatel/jobradar/common/logger"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 // ── fakes ────────────────────────────────────────────────────────────────────
@@ -56,10 +61,57 @@ func (f *fakePipelineService) HasSeenJob(_ context.Context, id string) (bool, er
 	return f.hasSeen, f.hasSeenErr
 }
 
+// publishedMsg captures a single call to the fake publisher so tests can
+// inspect the topic, payload, and headers routed on failure.
+type publishedMsg struct {
+	Topic   string
+	Value   []byte
+	Headers []kgo.RecordHeader
+}
+
+type fakePublisher struct {
+	mu       sync.Mutex
+	err      error
+	messages []publishedMsg
+}
+
+func (f *fakePublisher) Publish(_ context.Context, topic string, value []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return f.err
+	}
+	f.messages = append(f.messages, publishedMsg{Topic: topic, Value: value})
+	return nil
+}
+
+func (f *fakePublisher) PublishWithHeaders(_ context.Context, topic string, value []byte, headers []kgo.RecordHeader) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return f.err
+	}
+	f.messages = append(f.messages, publishedMsg{Topic: topic, Value: value, Headers: headers})
+	return nil
+}
+
+func headerValue(headers []kgo.RecordHeader, key string) string {
+	for _, h := range headers {
+		if h.Key == key {
+			return string(h.Value)
+		}
+	}
+	return ""
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func makeWorker(scorer *fakeScorer, pipeline *fakePipelineService) *Worker {
-	return NewWorker(nil, scorer, pipeline, logger.NewNoop(), 0, 5)
+	return NewWorker(nil, &fakePublisher{}, scorer, pipeline, logger.NewNoop(), 0, 5)
+}
+
+func makeWorkerWithPublisher(scorer *fakeScorer, pipeline *fakePipelineService, publisher kafka.Publisher) *Worker {
+	return NewWorker(nil, publisher, scorer, pipeline, logger.NewNoop(), 0, 5)
 }
 
 func baseRawJob() ats.RawJob {
@@ -132,7 +184,7 @@ func TestEnrich_HappyPath(t *testing.T) {
 }
 
 func TestEnrich_LLMError_MarksError(t *testing.T) {
-	scorer := &fakeScorer{err: errors.New("LLM timeout")}
+	scorer := &fakeScorer{err: stderrors.New("LLM timeout")}
 	pipeline := &fakePipelineService{}
 	w := makeWorker(scorer, pipeline)
 
@@ -151,7 +203,7 @@ func TestEnrich_LLMError_MarksError(t *testing.T) {
 
 func TestEnrich_SaveError_MarksError(t *testing.T) {
 	scorer := &fakeScorer{result: baseEnrichResult()}
-	pipeline := &fakePipelineService{saveErr: errors.New("db constraint")}
+	pipeline := &fakePipelineService{saveErr: stderrors.New("db constraint")}
 	w := makeWorker(scorer, pipeline)
 
 	// Simulate the save-failure path
@@ -195,7 +247,7 @@ func TestDropJob_SecurityClearance(t *testing.T) {
 }
 
 func TestDropJob_ExperienceExceedsMax(t *testing.T) {
-	w := NewWorker(nil, &fakeScorer{}, &fakePipelineService{}, logger.NewNoop(), 3, 5)
+	w := NewWorker(nil, &fakePublisher{}, &fakeScorer{}, &fakePipelineService{}, logger.NewNoop(), 3, 5)
 	exp := 5
 	result := &llmdto.JobPostEnrichResult{Sponsorship: true, ExperienceYears: &exp}
 	if reason := w.dropJob(result); reason == "" {
@@ -236,7 +288,7 @@ type failingTransport struct {
 
 func (ft *failingTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
 	ft.called = true
-	return nil, errors.New("HTTP client must not be called when FullContent is present")
+	return nil, stderrors.New("HTTP client must not be called when FullContent is present")
 }
 
 // TestEnrich_SkipsFetchWhenFullContentPresent verifies that when a RawJob has
@@ -253,7 +305,7 @@ func TestEnrich_SkipsFetchWhenFullContentPresent(t *testing.T) {
 	}}
 	pipeline := &fakePipelineService{}
 
-	w := NewWorker(nil, scorer, pipeline, logger.NewNoop(), 0, 5)
+	w := NewWorker(nil, &fakePublisher{}, scorer, pipeline, logger.NewNoop(), 0, 5)
 	// Replace the default HTTP client with one that will fail if called.
 	w.client = &http.Client{Transport: transport}
 
@@ -274,7 +326,9 @@ func TestEnrich_SkipsFetchWhenFullContentPresent(t *testing.T) {
 		},
 	}
 
-	w.enrich(context.Background(), job)
+	if err := w.enrich(context.Background(), job); err != nil {
+		t.Fatalf("enrich returned unexpected error: %v", err)
+	}
 
 	// HTTP client must NOT have been called.
 	if transport.called {
@@ -353,5 +407,215 @@ func TestFullContentToResponse_FieldMapping(t *testing.T) {
 	}
 	if resp.PublishedDate != fc.PublishedDate {
 		t.Errorf("PublishedDate: want %q got %q", fc.PublishedDate, resp.PublishedDate)
+	}
+}
+
+// ── retry / DLQ routing tests ─────────────────────────────────────────────────
+
+// marshalJob is a helper to produce the Kafka message body the worker receives.
+func marshalJob(t *testing.T, job ats.RawJob) []byte {
+	t.Helper()
+	b, err := json.Marshal(job)
+	if err != nil {
+		t.Fatalf("marshal job: %v", err)
+	}
+	return b
+}
+
+// TestEnrich_TransientError_GoesToRetryTier verifies that a fresh message
+// (retry_count=0) whose enrichment fails with a generic error is routed to
+// the 1m retry tier with retry_count=1 and the ledger is NOT marked error.
+func TestEnrich_TransientError_GoesToRetryTier(t *testing.T) {
+	scorer := &fakeScorer{err: stderrors.New("LLM timeout")}
+	pipeline := &fakePipelineService{}
+	publisher := &fakePublisher{}
+	w := makeWorkerWithPublisher(scorer, pipeline, publisher)
+
+	job := baseRawJob()
+	job.FullContent = &atstypes.FullJobContent{Description: "n/a"}
+	value := marshalJob(t, job)
+
+	err := w.enrich(context.Background(), job)
+	if err == nil {
+		t.Fatalf("expected enrich to return an error for transient failure")
+	}
+
+	w.handleFailure(context.Background(), job, value, 0, err)
+
+	if len(publisher.messages) != 1 {
+		t.Fatalf("expected 1 published retry message, got %d", len(publisher.messages))
+	}
+	msg := publisher.messages[0]
+	if msg.Topic != kafka.TopicJobListingsFilteredRetry1m {
+		t.Errorf("topic: want %s got %s", kafka.TopicJobListingsFilteredRetry1m, msg.Topic)
+	}
+	if got := headerValue(msg.Headers, kafka.HeaderRetryCount); got != "1" {
+		t.Errorf("retry_count header: want 1 got %q", got)
+	}
+	if len(pipeline.markCalls) != 0 {
+		t.Errorf("ledger should NOT be marked on retry; got calls %v", pipeline.markCalls)
+	}
+}
+
+// TestEnrich_TransientError_RetryCountAdvances verifies that an incoming
+// retry_count=1 message failing again is routed to the 10m retry tier with
+// retry_count=2.
+func TestEnrich_TransientError_RetryCountAdvances(t *testing.T) {
+	scorer := &fakeScorer{err: stderrors.New("LLM timeout")}
+	pipeline := &fakePipelineService{}
+	publisher := &fakePublisher{}
+	w := makeWorkerWithPublisher(scorer, pipeline, publisher)
+
+	job := baseRawJob()
+	job.FullContent = &atstypes.FullJobContent{Description: "n/a"}
+	value := marshalJob(t, job)
+
+	err := w.enrich(context.Background(), job)
+	if err == nil {
+		t.Fatalf("expected enrich to return an error for transient failure")
+	}
+	w.handleFailure(context.Background(), job, value, 1, err)
+
+	if len(publisher.messages) != 1 {
+		t.Fatalf("expected 1 published retry message, got %d", len(publisher.messages))
+	}
+	msg := publisher.messages[0]
+	if msg.Topic != kafka.TopicJobListingsFilteredRetry10m {
+		t.Errorf("topic: want %s got %s", kafka.TopicJobListingsFilteredRetry10m, msg.Topic)
+	}
+	if got := headerValue(msg.Headers, kafka.HeaderRetryCount); got != "2" {
+		t.Errorf("retry_count header: want 2 got %q", got)
+	}
+	if len(pipeline.markCalls) != 0 {
+		t.Errorf("ledger should NOT be marked on retry; got calls %v", pipeline.markCalls)
+	}
+}
+
+// TestEnrich_TransientError_ThirdTier verifies that an incoming retry_count=2
+// message failing is routed to the 1h retry tier with retry_count=3.
+func TestEnrich_TransientError_ThirdTier(t *testing.T) {
+	scorer := &fakeScorer{err: stderrors.New("LLM timeout")}
+	pipeline := &fakePipelineService{}
+	publisher := &fakePublisher{}
+	w := makeWorkerWithPublisher(scorer, pipeline, publisher)
+
+	job := baseRawJob()
+	value := marshalJob(t, job)
+	err := w.enrich(context.Background(), job)
+	if err == nil {
+		t.Fatalf("expected enrich to return an error for transient failure")
+	}
+	w.handleFailure(context.Background(), job, value, 2, err)
+
+	if len(publisher.messages) != 1 {
+		t.Fatalf("expected 1 published retry message, got %d", len(publisher.messages))
+	}
+	msg := publisher.messages[0]
+	if msg.Topic != kafka.TopicJobListingsFilteredRetry1h {
+		t.Errorf("topic: want %s got %s", kafka.TopicJobListingsFilteredRetry1h, msg.Topic)
+	}
+	if got := headerValue(msg.Headers, kafka.HeaderRetryCount); got != "3" {
+		t.Errorf("retry_count header: want 3 got %q", got)
+	}
+	if len(pipeline.markCalls) != 0 {
+		t.Errorf("ledger should NOT be marked on retry; got calls %v", pipeline.markCalls)
+	}
+}
+
+// TestEnrich_ExhaustedGoesToDLQ verifies that once retry_count reaches the
+// number of retry tiers, the next failure sends the message to the DLQ and
+// marks the ledger row as errored.
+func TestEnrich_ExhaustedGoesToDLQ(t *testing.T) {
+	scorer := &fakeScorer{err: stderrors.New("LLM timeout")}
+	pipeline := &fakePipelineService{}
+	publisher := &fakePublisher{}
+	w := makeWorkerWithPublisher(scorer, pipeline, publisher)
+
+	job := baseRawJob()
+	value := marshalJob(t, job)
+	err := w.enrich(context.Background(), job)
+	if err == nil {
+		t.Fatalf("expected enrich to return an error for transient failure")
+	}
+
+	w.handleFailure(context.Background(), job, value, 3, err)
+
+	if len(publisher.messages) != 1 {
+		t.Fatalf("expected 1 DLQ message, got %d", len(publisher.messages))
+	}
+	msg := publisher.messages[0]
+	if msg.Topic != kafka.TopicJobListingsFilteredDLQ {
+		t.Errorf("topic: want %s got %s", kafka.TopicJobListingsFilteredDLQ, msg.Topic)
+	}
+	if got := headerValue(msg.Headers, kafka.HeaderRetryCount); got != "3" {
+		t.Errorf("retry_count header: want 3 got %q", got)
+	}
+	if headerValue(msg.Headers, kafka.HeaderLastError) == "" {
+		t.Errorf("last_error header missing on DLQ message")
+	}
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != job.ID {
+		t.Errorf("ledger should be marked on DLQ; got %v", pipeline.markCalls)
+	}
+}
+
+// TestEnrich_ValidationErrorGoesStraightToDLQ verifies that when enrich()
+// fails with ErrLLMValidation, the message is published to the DLQ regardless
+// of retry_count (retry is pointless — it's our own bug).
+func TestEnrich_ValidationErrorGoesStraightToDLQ(t *testing.T) {
+	scorer := &fakeScorer{err: domainerr.ErrLLMValidation}
+	pipeline := &fakePipelineService{}
+	publisher := &fakePublisher{}
+	w := makeWorkerWithPublisher(scorer, pipeline, publisher)
+
+	// Use FullContent so enrich skips the HTTP fetch and surfaces the
+	// validation error from the LLM directly.
+	job := baseRawJob()
+	job.FullContent = &atstypes.FullJobContent{Description: "n/a"}
+	value := marshalJob(t, job)
+
+	err := w.enrich(context.Background(), job)
+	if err == nil {
+		t.Fatalf("expected enrich to return validation error")
+	}
+
+	// retry_count=0 — should STILL go to DLQ, not retry.
+	w.handleFailure(context.Background(), job, value, 0, err)
+
+	if len(publisher.messages) != 1 {
+		t.Fatalf("expected 1 DLQ message, got %d", len(publisher.messages))
+	}
+	msg := publisher.messages[0]
+	if msg.Topic != kafka.TopicJobListingsFilteredDLQ {
+		t.Errorf("topic: want %s got %s", kafka.TopicJobListingsFilteredDLQ, msg.Topic)
+	}
+	if got := headerValue(msg.Headers, kafka.HeaderRetryCount); got != "0" {
+		t.Errorf("retry_count header: want 0 got %q", got)
+	}
+	if headerValue(msg.Headers, kafka.HeaderLastError) == "" {
+		t.Errorf("last_error header missing on DLQ message")
+	}
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != job.ID {
+		t.Errorf("ledger should be marked on DLQ; got %v", pipeline.markCalls)
+	}
+}
+
+// TestHandleFailure_ContextCanceledSkipsPublish verifies that when ctx is
+// cancelled (e.g. during shutdown), we don't publish to any topic — Kafka
+// will redeliver the message on restart.
+func TestHandleFailure_ContextCanceledSkipsPublish(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	publisher := &fakePublisher{}
+	w := makeWorkerWithPublisher(&fakeScorer{}, pipeline, publisher)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	w.handleFailure(ctx, baseRawJob(), []byte("value"), 0, context.Canceled)
+
+	if len(publisher.messages) != 0 {
+		t.Errorf("expected no publishes when ctx is cancelled, got %d", len(publisher.messages))
+	}
+	if len(pipeline.markCalls) != 0 {
+		t.Errorf("expected no ledger marks when ctx is cancelled, got %v", pipeline.markCalls)
 	}
 }

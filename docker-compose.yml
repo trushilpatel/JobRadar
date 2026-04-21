@@ -1,3 +1,21 @@
+x-app-env: &app-env
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  KAFKA_BROKERS: kafka:29092
+  KAFKA_USER: ""
+  KAFKA_PASSWORD: ""
+  LOG_LEVEL: info
+  LOG_FORMAT: json
+  JAEGER_ENDPOINT: http://jaeger:4318
+
+x-app-depends: &app-depends
+  postgres:
+    condition: service_healthy
+  kafka-init:
+    condition: service_completed_successfully
+  migrate:
+    condition: service_completed_successfully
+
 services:
 
   # ── Infrastructure ────────────────────────────────────────────────────────────
@@ -106,24 +124,12 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      KAFKA_BROKERS: kafka:29092
-      KAFKA_USER: ""
-      KAFKA_PASSWORD: ""
-      LOG_LEVEL: info
-      LOG_FORMAT: json
-      JAEGER_ENDPOINT: http://jaeger:4318
+      <<: *app-env
     ports:
       - "8080:8080"
     command: ["/app/api"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-      migrate:
-        condition: service_completed_successfully
+      <<: *app-depends
     restart: unless-stopped
 
   scheduler:
@@ -135,25 +141,13 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      KAFKA_BROKERS: kafka:29092
-      KAFKA_USER: ""
-      KAFKA_PASSWORD: ""
-      LOG_LEVEL: info
-      LOG_FORMAT: json
+      <<: *app-env
       METRICS_ADDR: ":9101"
-      JAEGER_ENDPOINT: http://jaeger:4318
     ports:
       - "9101:9101"
     command: ["/app/scheduler"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-      migrate:
-        condition: service_completed_successfully
+      <<: *app-depends
     restart: unless-stopped
 
   crawler:
@@ -169,25 +163,13 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      KAFKA_BROKERS: kafka:29092
-      KAFKA_USER: ""
-      KAFKA_PASSWORD: ""
-      LOG_LEVEL: info
-      LOG_FORMAT: json
+      <<: *app-env
       METRICS_ADDR: ":9102"
-      JAEGER_ENDPOINT: http://jaeger:4318
     ports:
       - "9102:9102"
     command: ["/app/crawler"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-      migrate:
-        condition: service_completed_successfully
+      <<: *app-depends
     restart: unless-stopped
 
   filter:
@@ -199,25 +181,17 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      KAFKA_BROKERS: kafka:29092
-      KAFKA_USER: ""
-      KAFKA_PASSWORD: ""
-      LOG_LEVEL: info
-      LOG_FORMAT: json
+      <<: *app-env
       METRICS_ADDR: ":9103"
-      JAEGER_ENDPOINT: http://jaeger:4318
+      REDIS_ADDR: redis:6379
+      LLM_SLOTS_CONFIG: /app/config/llm-slots.yaml
+    volumes:
+      - ./backend/common/config:/app/config:ro
     ports:
       - "9103:9103"
     command: ["/app/filter"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-      migrate:
-        condition: service_completed_successfully
+      <<: *app-depends
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -231,25 +205,17 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      KAFKA_BROKERS: kafka:29092
-      KAFKA_USER: ""
-      KAFKA_PASSWORD: ""
-      LOG_LEVEL: info
-      LOG_FORMAT: json
+      <<: *app-env
       METRICS_ADDR: ":9104"
-      JAEGER_ENDPOINT: http://jaeger:4318
+      REDIS_ADDR: redis:6379
+      LLM_SLOTS_CONFIG: /app/config/llm-slots.yaml
+    volumes:
+      - ./backend/common/config:/app/config:ro
     ports:
       - "9104:9104"
     command: ["/app/enricher"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-      migrate:
-        condition: service_completed_successfully
+      <<: *app-depends
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -265,11 +231,11 @@ services:
     image: jobradar_google_scraper
     container_name: jobradar_google_scraper
     environment:
-      GOOGLE_SCRAPER_TIMEOUT_MS: "14400000"   # 4 hours — matches defaultConfig()
-      GOOGLE_SCRAPER_MIN_DELAY: "120000"       # 2 min — matches defaultConfig()
-      GOOGLE_SCRAPER_MAX_DELAY: "240000"       # 4 min — matches defaultConfig()
-      GOOGLE_SCRAPER_ENRICH_MIN: "60000"       # 1 min — matches defaultConfig()
-      GOOGLE_SCRAPER_ENRICH_MAX: "120000"      # 2 min — matches defaultConfig()
+      GOOGLE_SCRAPER_TIMEOUT_MS: "14400000"   # 4 hours
+      GOOGLE_SCRAPER_MIN_DELAY: "120000"       # 2 min
+      GOOGLE_SCRAPER_MAX_DELAY: "240000"       # 4 min
+      GOOGLE_SCRAPER_ENRICH_MIN: "60000"       # 1 min
+      GOOGLE_SCRAPER_ENRICH_MAX: "120000"      # 2 min
     # Not a long-running service — started on-demand by the crawler.
     # Use: docker compose run --rm google-scraper
     profiles:
@@ -338,4 +304,3 @@ volumes:
   prometheusdata:
   grafanadata:
   redpandadata:
-

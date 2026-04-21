@@ -47,34 +47,20 @@ type KafkaConfig struct {
 
 type LLMConfig struct {
 	Provider    string
-	APIKey      string
-	BaseModel   string
 	TargetRoles []string
 	YearsExp    int
 }
 
-// RateLimits holds the three quota dimensions for an LLM model.
-// All values are 0 = unlimited. Set these to match your model's free/paid tier.
-type RateLimits struct {
-	RPM   int
-	RPD   int
-	TPMIn int
-}
-
 type FilterConfig struct {
-	Model               string
 	BatchSize           int
 	FlushTimeoutSeconds int
 	LLMParallelism      int
-	RateLimits          RateLimits
 	Slots               []LLMSlotConfig
 }
 
 type EnricherConfig struct {
-	Model       string
 	Concurrency int
 	MaxExpYears int
-	RateLimits  RateLimits
 	Slots       []LLMSlotConfig
 }
 
@@ -133,12 +119,12 @@ type CooldownConfig struct {
 
 // LLMSlotConfig describes a single (API key, model) slot for routed LLM calls.
 type LLMSlotConfig struct {
-	KeyID  string `json:"key_id"`
-	APIKey string `json:"api_key"`
-	Model  string `json:"model"`
-	RPM    int    `json:"rpm"`
-	RPD    int    `json:"rpd"`
-	TPMIn  int    `json:"tpm_in"`
+	KeyID  string `json:"key_id"  yaml:"key_id"`
+	APIKey string `json:"api_key" yaml:"api_key"`
+	Model  string `json:"model"   yaml:"model"`
+	RPM    int    `json:"rpm"     yaml:"rpm"`
+	RPD    int    `json:"rpd"     yaml:"rpd"`
+	TPMIn  int    `json:"tpm_in"  yaml:"tpm_in"`
 }
 
 // ParseLLMSlots parses a JSON array of slot configs from a single env var.
@@ -159,13 +145,23 @@ func Load() *Config {
 		fmt.Fprintf(os.Stderr, "config: no .env file found, falling back to environment variables\n")
 	}
 
-	filterSlots, err := ParseLLMSlots(getEnv("FILTER_LLM_SLOTS", ""))
+	// Prefer YAML when LLM_SLOTS_CONFIG points at a file; otherwise fall back
+	// to the JSON env vars (FILTER_LLM_SLOTS / ENRICHER_LLM_SLOTS).
+	filterSlots, enricherSlots, err := LoadLLMSlotsYAML(getEnv("LLM_SLOTS_CONFIG", ""))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "config: %v — falling back to single slot\n", err)
+		fmt.Fprintf(os.Stderr, "config: %v — falling back to env JSON\n", err)
 	}
-	enricherSlots, err := ParseLLMSlots(getEnv("ENRICHER_LLM_SLOTS", ""))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "config: %v — falling back to single slot\n", err)
+	if filterSlots == nil {
+		filterSlots, err = ParseLLMSlots(getEnv("FILTER_LLM_SLOTS", ""))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config: %v — falling back to single slot\n", err)
+		}
+	}
+	if enricherSlots == nil {
+		enricherSlots, err = ParseLLMSlots(getEnv("ENRICHER_LLM_SLOTS", ""))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config: %v — falling back to single slot\n", err)
+		}
 	}
 
 	return &Config{
@@ -193,33 +189,19 @@ func Load() *Config {
 		},
 		LLM: LLMConfig{
 			Provider:    getEnv("LLM_PROVIDER", "gemini"),
-			APIKey:      getEnv("LLM_API_KEY", ""),
-			BaseModel:   getEnv("LLM_MODEL", "gemini-3.1-flash-lite-preview"),
 			TargetRoles: splitCSV(getEnv("TARGET_ROLES", "Software Engineer")),
 			YearsExp:    getEnvInt("YEARS_EXP", 0),
 		},
 		Filter: FilterConfig{
-			Model:               getEnvWithFallback("FILTER_LLM_MODEL", "LLM_MODEL", "gemini-3.1-flash-lite-preview"),
 			BatchSize:           getEnvInt("FILTER_BATCH_SIZE", 50),
 			FlushTimeoutSeconds: getEnvInt("FILTER_FLUSH_TIMEOUT_SECONDS", 30),
 			LLMParallelism:      getEnvInt("FILTER_LLM_PARALLELISM", 5),
-			RateLimits: RateLimits{
-				RPM:   getEnvInt("FILTER_RPM", 15),
-				RPD:   getEnvInt("FILTER_RPD", 1500),
-				TPMIn: getEnvInt("FILTER_TPM", 1000000),
-			},
-			Slots: filterSlots,
+			Slots:               filterSlots,
 		},
 		Enricher: EnricherConfig{
-			Model:       getEnvWithFallback("ENRICHER_LLM_MODEL", "LLM_MODEL", "gemma-4-31b-it"),
 			Concurrency: getEnvInt("ENRICHER_CONCURRENCY", 5),
 			MaxExpYears: getEnvInt("DISCARD_JOB_WITH_EXP_GT", 0),
-			RateLimits: RateLimits{
-				RPM:   getEnvInt("ENRICHER_RPM", 15),
-				RPD:   getEnvInt("ENRICHER_RPD", 1500),
-				TPMIn: getEnvInt("ENRICHER_TPM", 1000000),
-			},
-			Slots: enricherSlots,
+			Slots:       enricherSlots,
 		},
 		Crawler: CrawlerConfig{
 			CompanyDelaySeconds:      getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 30),
@@ -252,16 +234,6 @@ func getEnv(key, fallback string) string {
 		return val
 	}
 	return fallback
-}
-
-func getEnvWithFallback(key, fallbackKey, defaultVal string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	if val := os.Getenv(fallbackKey); val != "" {
-		return val
-	}
-	return defaultVal
 }
 
 func getEnvInt(key string, fallback int) int {

@@ -21,26 +21,17 @@ type SlotOptions struct {
 }
 
 // Options holds everything needed to build and configure a routed Scorer.
-//
-// The new multi-slot path is Slots + RateLimitStore + CooldownStore. The
-// legacy single-slot fields (APIKey / Model / Limits) stay for backwards
-// compatibility — when Slots is empty, the factory synthesizes a single
-// "default" slot from the legacy fields.
+// Slots must be non-empty — configure via LLM_SLOTS_CONFIG (YAML) or
+// FILTER_LLM_SLOTS / ENRICHER_LLM_SLOTS (JSON env vars).
 type Options struct {
 	Provider    string
 	TargetRoles []string
 	YearsExp    int
 	Log         logger.Logger
 
-	// Multi-slot routing.
 	Slots          []SlotOptions
 	RateLimitStore store.LLMRateLimitStore
 	CooldownStore  store.LLMCooldownStore
-
-	// Legacy single-slot fields — used only when Slots is empty.
-	APIKey string
-	Model  string
-	Limits RateLimits
 }
 
 // NewScorer builds one Gemini scorer per configured slot, wraps each in a
@@ -60,22 +51,14 @@ func NewScorer(ctx context.Context, opts Options) (Scorer, error) {
 		return nil, fmt.Errorf("llm: CooldownStore is required")
 	}
 
-	slots := opts.Slots
-	if len(slots) == 0 {
-		slots = []SlotOptions{{
-			KeyID:  "default",
-			APIKey: opts.APIKey,
-			Model:  opts.Model,
-			RPM:    opts.Limits.RPM,
-			RPD:    opts.Limits.RPD,
-			TPMIn:  opts.Limits.TPMIn,
-		}}
+	if len(opts.Slots) == 0 {
+		return nil, fmt.Errorf("llm: no slots configured — set LLM_SLOTS_CONFIG, FILTER_LLM_SLOTS, or ENRICHER_LLM_SLOTS")
 	}
 
-	seen := make(map[string]struct{}, len(slots))
-	routerSlots := make([]RouterSlot, 0, len(slots))
+	seen := make(map[string]struct{}, len(opts.Slots))
+	routerSlots := make([]RouterSlot, 0, len(opts.Slots))
 
-	for i, s := range slots {
+	for i, s := range opts.Slots {
 		if s.KeyID == "" {
 			return nil, fmt.Errorf("llm: slot[%d] missing KeyID", i)
 		}
