@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
 import { fetchJobs, fetchJobCounts, type JobFilters } from '@/api/jobs'
+import type { SortingState } from '@/components/ui/data-table'
 
 export type TabKey = 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
 export type DateFilter = 'all' | '24h' | '7d' | '30d'
@@ -24,9 +25,15 @@ export function useJobs() {
   // Search
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Sorting
+  const [sorting, setSorting] = useState<SortingState>([])
+
   // Pagination
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
+
+  const sortBy = sorting[0]?.id
+  const sortDir = sorting[0] ? (sorting[0].desc ? 'desc' : 'asc') : undefined
 
   // Stable filter object — only changes when a filter value changes
   const filters = useMemo<JobFilters>(
@@ -38,8 +45,10 @@ export function useJobs() {
       experienceRanges: expFilter.length > 0 ? expFilter : undefined,
       daysAdded:
         dateFilter === '24h' ? 1 : dateFilter === '7d' ? 7 : dateFilter === '30d' ? 30 : undefined,
+      sortBy,
+      sortDir,
     }),
-    [tab, selectedCompanies, remoteFilter, onSiteFilter, expFilter, dateFilter]
+    [tab, selectedCompanies, remoteFilter, onSiteFilter, expFilter, dateFilter, sortBy, sortDir]
   )
 
   // Reset to page 1 when filters change
@@ -85,6 +94,12 @@ export function useJobs() {
     setOnSiteFilter(false)
     setExpFilter([])
     setDateFilter('all')
+    setSorting([])
+    setPage(1)
+  }
+
+  function handleSortingChange(newSorting: SortingState) {
+    setSorting(newSorting)
     setPage(1)
   }
 
@@ -117,6 +132,10 @@ export function useJobs() {
     dateFilter,
     setDateFilter,
     resetFilters,
+
+    // Sorting
+    sorting,
+    handleSortingChange,
 
     // Pagination
     page,

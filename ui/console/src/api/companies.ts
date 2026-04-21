@@ -5,8 +5,11 @@ const BASE = '/api'
 
 export interface CompanyFilters {
   active?: boolean // true = active only, false = inactive only, undefined = all
-  adapterType?: string // e.g. 'greenhouse', 'lever'
+  adapterTypes?: string[] // e.g. ['greenhouse', 'lever']
   search?: string // ILIKE name match
+  lastScanStatus?: string // e.g. 'error'
+  sortBy?: string
+  sortDir?: 'asc' | 'desc'
 }
 
 export interface CompaniesPage {
@@ -26,8 +29,11 @@ export async function fetchCompanies(
   p.set('page', String(page))
   p.set('limit', String(limit))
   if (filters.active !== undefined) p.set('active', String(filters.active))
-  if (filters.adapterType) p.set('adapter_type', filters.adapterType)
+  filters.adapterTypes?.forEach((at) => p.append('adapter_types', at))
   if (filters.search) p.set('search', filters.search)
+  if (filters.lastScanStatus) p.set('last_scan_status', filters.lastScanStatus)
+  if (filters.sortBy) p.set('sort_by', filters.sortBy)
+  if (filters.sortDir) p.set('sort_dir', filters.sortDir)
 
   const res = await fetch(`${BASE}/companies?${p}`)
   if (!res.ok) throw new Error('Failed to fetch companies')

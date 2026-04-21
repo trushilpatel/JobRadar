@@ -59,7 +59,7 @@ export function CompaniesPage() {
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <CompaniesTable
           companies={c.companies}
-          total={c.statusFilter !== 'none' ? c.companies.length : c.total}
+          total={['running', 'queued'].includes(c.statusFilter) ? c.companies.length : c.total}
           loading={c.loading}
           page={c.page}
           limit={c.limit}
@@ -77,6 +77,8 @@ export function CompaniesPage() {
           }
           activeCompanyId={drawerCompany?.id}
           onRowClick={setDrawerCompany}
+          sorting={c.sorting}
+          onSortingChange={c.handleSortingChange}
           actions={{
             onScan: actions.scan,
             onEdit: setEditCompany,

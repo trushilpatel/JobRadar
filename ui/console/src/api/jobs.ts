@@ -16,6 +16,8 @@ export interface JobFilters {
   onSite?: boolean
   experienceRanges?: string[]
   daysAdded?: number
+  sortBy?: string
+  sortDir?: 'asc' | 'desc'
 }
 
 export interface JobCounts {
@@ -38,6 +40,8 @@ export async function fetchJobs(filters: JobFilters, page = 1, limit = 20): Prom
   if (filters.onSite) p.set('on_site', 'true')
   filters.experienceRanges?.forEach((r) => p.append('experience_ranges', r))
   if (filters.daysAdded) p.set('days_added', String(filters.daysAdded))
+  if (filters.sortBy) p.set('sort_by', filters.sortBy)
+  if (filters.sortDir) p.set('sort_dir', filters.sortDir)
 
   const res = await fetch(`${BASE}/jobs?${p}`)
   if (!res.ok) throw new Error('Failed to fetch jobs')

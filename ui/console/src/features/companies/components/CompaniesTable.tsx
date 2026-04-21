@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { DataTable } from '@/components/ui/data-table'
+import { DataTable, type SortingState } from '@/components/ui/data-table'
 import type { Company } from '@/types'
 import { buildCompanyColumns, type CompanyColumnActions } from './companies-columns'
 
@@ -15,6 +15,8 @@ interface CompaniesTableProps {
   activeCompanyId?: string
   actions: CompanyColumnActions
   emptyMessage?: string
+  sorting: SortingState
+  onSortingChange: (sorting: SortingState) => void
 }
 
 export function CompaniesTable({
@@ -23,6 +25,8 @@ export function CompaniesTable({
   onRowClick, activeCompanyId,
   actions,
   emptyMessage = 'No companies match the current filters',
+  sorting,
+  onSortingChange,
 }: CompaniesTableProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const columns = useMemo(
@@ -40,6 +44,8 @@ export function CompaniesTable({
         getRowId={c => c.id}
         selectedId={activeCompanyId}
         onRowClick={onRowClick}
+        sorting={sorting}
+        onSortingChange={onSortingChange}
         serverPagination={{
           page, limit, total,
           onPageChange,

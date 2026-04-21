@@ -46,12 +46,15 @@ func NewValidator(next Service) Service {
 // List validates filter and pagination then delegates.
 func (v *validationService) List(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (companydto.CompanyListResult, error) {
 	var errs errors.ValidationErrors
-	if filter.AdapterType != "" && !validAdapters[filter.AdapterType] {
-		errs = append(errs, errors.ValidationError{
-			Field:   "adapter_type",
-			Code:    "INVALID_VALUE",
-			Message: "adapter_type is not a recognised adapter",
-		})
+	for _, at := range filter.AdapterTypes {
+		if !validAdapters[at] {
+			errs = append(errs, errors.ValidationError{
+				Field:   "adapter_types",
+				Code:    "INVALID_VALUE",
+				Message: "adapter_types contains unrecognised adapter: " + at,
+			})
+			break
+		}
 	}
 	if len(filter.Search) > 100 {
 		errs = append(errs, errors.ValidationError{

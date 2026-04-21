@@ -154,6 +154,8 @@ export function JobsPage() {
             jobs.setLimit(l)
             jobs.setPage(1)
           }}
+          sorting={jobs.sorting}
+          onSortingChange={jobs.handleSortingChange}
         />
 
         {activeJob && (

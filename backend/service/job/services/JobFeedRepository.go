@@ -114,9 +114,31 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, page, limi
 		return nil, 0, err
 	}
 
+	// Whitelist sort columns to prevent SQL injection.
+	var col string
+	var needsCompanyJoin bool
+	switch filter.SortBy {
+	case "title":
+		col = "title"
+	case "company":
+		col = "companies.name"
+		needsCompanyJoin = true
+	default:
+		col = "added_at"
+	}
+	dir := "DESC"
+	if filter.SortDir == "asc" {
+		dir = "ASC"
+	}
+
+	dataQuery := query
+	if needsCompanyJoin {
+		dataQuery = dataQuery.Joins("JOIN companies ON companies.id = job_feed.company_id")
+	}
+
 	var jobs []jobmodel.Job
 	offset := (page - 1) * limit
-	err = query.Order("added_at DESC").Offset(offset).Limit(limit).Preload("Company").Find(&jobs).Error
+	err = dataQuery.Order(col + " " + dir).Offset(offset).Limit(limit).Preload("Company").Find(&jobs).Error
 	return jobs, total, err
 }
 

@@ -7,6 +7,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
+export type { SortingState }
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import {
   Table,
@@ -43,8 +44,16 @@ interface DataTableProps<TData> {
   getRowClassName?: (row: TData) => string
   /** When provided, renders server-side pagination controls below the table */
   serverPagination?: ServerPagination
-  /** Called when the sort order changes — use to reset to page 1 */
-  onSortingChange?: () => void
+  /**
+   * When provided, enables server-side (manual) sorting. The parent controls the
+   * sort state and is responsible for fetching sorted data from the server.
+   */
+  sorting?: SortingState
+  /**
+   * Called when the sort state changes. Receives the new SortingState.
+   * In server-side mode, use this to update your query params and reset to page 1.
+   */
+  onSortingChange?: (sorting: SortingState) => void
 }
 
 export function DataTable<TData>({
@@ -57,17 +66,26 @@ export function DataTable<TData>({
   selectedId,
   getRowClassName,
   serverPagination,
+  sorting: controlledSorting,
   onSortingChange,
 }: DataTableProps<TData>) {
-  const [sorting, setSorting] = useState<SortingState>([])
+  const [internalSorting, setInternalSorting] = useState<SortingState>([])
+  const isControlled = controlledSorting !== undefined
+  const effectiveSorting = isControlled ? controlledSorting : internalSorting
 
   const table = useReactTable({
     data,
     columns,
-    state: { sorting },
+    state: { sorting: effectiveSorting },
+    manualSorting: isControlled,
     onSortingChange: (updater) => {
-      setSorting(updater)
-      onSortingChange?.()
+      const next = typeof updater === 'function' ? updater(effectiveSorting) : updater
+      if (isControlled) {
+        onSortingChange?.(next)
+      } else {
+        setInternalSorting(next)
+        onSortingChange?.(next)
+      }
     },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),

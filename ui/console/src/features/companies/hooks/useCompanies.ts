@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchCompanies, fetchQueue, type CompanyFilters } from '@/api/companies'
+import type { SortingState } from '@/components/ui/data-table'
 
 export type ActiveFilter = 'all' | 'active' | 'inactive'
 export type StatusFilter = 'none' | 'error' | 'running' | 'queued'
@@ -11,6 +12,7 @@ export function useCompanies() {
   const [adapters, setAdapters] = useState<string[]>([])
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('none')
+  const [sorting, setSorting] = useState<SortingState>([])
 
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
@@ -22,15 +24,21 @@ export function useCompanies() {
     debounceRef.current = setTimeout(() => setDebouncedSearch(v), 300)
   }
 
-  // Server-side filters — only those the API supports.
-  // statusFilter + multi-adapter are applied client-side on the current page.
+  const sortBy = sorting[0]?.id
+  const sortDir = sorting[0] ? (sorting[0].desc ? 'desc' : 'asc') : undefined
+
+  // Server-side filters. 'error' is server-side; 'running'/'queued' require the
+  // queue table and remain client-side refinements below.
   const serverFilters = useMemo<CompanyFilters>(
     () => ({
       search: debouncedSearch || undefined,
-      adapterType: adapters.length === 1 ? adapters[0] : undefined,
+      adapterTypes: adapters.length > 0 ? adapters : undefined,
       active: activeFilter === 'active' ? true : activeFilter === 'inactive' ? false : undefined,
+      lastScanStatus: statusFilter === 'error' ? 'error' : undefined,
+      sortBy,
+      sortDir,
     }),
-    [debouncedSearch, adapters, activeFilter]
+    [debouncedSearch, adapters, activeFilter, statusFilter, sortBy, sortDir]
   )
 
   useEffect(() => {
@@ -60,30 +68,18 @@ export function useCompanies() {
   const total = companiesQuery.data?.total ?? 0
   const totalActive = companiesQuery.data?.total_active ?? 0
 
-  // Client-side refinement
+  // Client-side refinement for running/queued only — these require queue data.
   const companies = useMemo(() => {
-    let list = rawCompanies
-    if (adapters.length > 1) {
-      list = list.filter((c) => adapters.includes(c.adapter_type))
+    if (statusFilter === 'running') {
+      return rawCompanies.filter((c) => queueMap.get(c.id) === 'processing')
     }
-    if (statusFilter !== 'none') {
-      list = list.filter((c) => {
-        const q = queueMap.get(c.id)
-        if (statusFilter === 'running') return q === 'processing'
-        if (statusFilter === 'queued') return q === 'queued'
-        if (statusFilter === 'error') return c.last_scan_status === 'error'
-        return true
-      })
+    if (statusFilter === 'queued') {
+      return rawCompanies.filter((c) => queueMap.get(c.id) === 'queued')
     }
-    return list
-  }, [rawCompanies, adapters, statusFilter, queueMap])
+    return rawCompanies
+  }, [rawCompanies, statusFilter, queueMap])
 
   // Counts for filter bar / KPI strip.
-  // running/queued are derived from queueMap cross-referenced with rawCompanies so
-  // the counts stay consistent with what the status filter will actually show on
-  // the current page. Using queueMap.values() globally would show counts that don't
-  // match the page, making the filter appear broken when the matching company is
-  // on a different page.
   const counts = useMemo(() => {
     const errors = rawCompanies.filter((c) => c.last_scan_status === 'error').length
     const running = rawCompanies.filter((c) => queueMap.get(c.id) === 'processing').length
@@ -91,12 +87,18 @@ export function useCompanies() {
     return { errors, running, queued }
   }, [rawCompanies, queueMap])
 
+  function handleSortingChange(newSorting: SortingState) {
+    setSorting(newSorting)
+    setPage(1)
+  }
+
   function resetFilters() {
     setSearch('')
     setDebouncedSearch('')
     setAdapters([])
     setActiveFilter('all')
     setStatusFilter('none')
+    setSorting([])
     setPage(1)
   }
 
@@ -119,6 +121,9 @@ export function useCompanies() {
     setActiveFilter,
     statusFilter,
     setStatusFilter,
+
+    sorting,
+    handleSortingChange,
 
     page,
     setPage,

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { DataTable } from '@/components/ui/data-table'
+import { DataTable, type SortingState } from '@/components/ui/data-table'
 import type { Job } from '@/types'
 import type { TabKey } from '@/features/jobs/hooks/useJobs'
 import { buildJobColumns } from '@/features/jobs/components/jobs-columns'
@@ -18,6 +18,8 @@ interface JobsTableProps {
   onSelectAll: (checked: boolean) => void
   onPageChange: (page: number) => void
   onLimitChange: (limit: number) => void
+  sorting: SortingState
+  onSortingChange: (sorting: SortingState) => void
 }
 
 const EMPTY_MESSAGES: Record<TabKey, string> = {
@@ -42,6 +44,8 @@ export function JobsTable({
   onSelectAll,
   onPageChange,
   onLimitChange,
+  sorting,
+  onSortingChange,
 }: JobsTableProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const columns = useMemo(
@@ -69,7 +73,8 @@ export function JobsTable({
           if (activeJobId === job.id) return 'bg-violet-500/[0.08]'
           return 'hover:bg-white/[0.03]'
         }}
-        onSortingChange={() => onPageChange(1)}
+        sorting={sorting}
+        onSortingChange={onSortingChange}
         serverPagination={{
           page,
           limit,

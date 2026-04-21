@@ -37,8 +37,11 @@ func (h *RestService) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	var filter companydto.CompanyFilter
-	if v := q.Get("adapter_type"); v != "" {
-		filter.AdapterType = v
+	// adapter_types[] supports multi-select; single adapter_type is also accepted.
+	if types := q["adapter_types"]; len(types) > 0 {
+		filter.AdapterTypes = types
+	} else if v := q.Get("adapter_type"); v != "" {
+		filter.AdapterTypes = []string{v}
 	}
 	if v := q.Get("active"); v != "" {
 		active := v == "true"
@@ -46,6 +49,15 @@ func (h *RestService) List(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := q.Get("search"); v != "" {
 		filter.Search = v
+	}
+	if v := q.Get("last_scan_status"); v != "" {
+		filter.LastScanStatus = v
+	}
+	if v := q.Get("sort_by"); v != "" {
+		filter.SortBy = v
+	}
+	if v := q.Get("sort_dir"); v != "" {
+		filter.SortDir = v
 	}
 
 	result, err := h.next.List(r.Context(), filter, p.Page, p.Limit)
