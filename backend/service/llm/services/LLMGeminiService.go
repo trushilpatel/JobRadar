@@ -11,7 +11,6 @@ import (
 	"google.golang.org/genai"
 
 	llmerr "github.com/trushilpatel/jobradar/common/errors"
-	llmcommon "github.com/trushilpatel/jobradar/service/llm/common"
 	"github.com/trushilpatel/jobradar/service/llm/dto"
 	"github.com/trushilpatel/jobradar/service/llm/prompts"
 )
@@ -62,7 +61,7 @@ func (s *geminiScorer) ScoreBatch(ctx context.Context, jobs []dto.JobsRelevanceF
 
 	prompt := prompts.BuildScoreBatch(s.targetRoles, s.yearsExp, sb.String())
 
-	raw, err := s.generate(ctx, prompt, llmcommon.ScoreBatchMaxOutputTokens, scoreBatchSchema)
+	raw, err := s.generate(ctx, prompt, scoreBatchSchema)
 	if err != nil {
 		return nil, fmt.Errorf("gemini score batch: %w", err)
 	}
@@ -110,7 +109,7 @@ var enrichSchema = &genai.Schema{
 func (s *geminiScorer) Enrich(ctx context.Context, input dto.JobPostEnrichInput) (*dto.JobPostEnrichResult, error) {
 	prompt := prompts.BuildEnrich(input.ID, s.targetRoles, input.RawText)
 
-	raw, err := s.generate(ctx, prompt, llmcommon.EnrichMaxOutputTokens, enrichSchema)
+	raw, err := s.generate(ctx, prompt, enrichSchema)
 	if err != nil {
 		return nil, fmt.Errorf("gemini enrich: %w", err)
 	}
@@ -125,14 +124,13 @@ func (s *geminiScorer) Enrich(ctx context.Context, input dto.JobPostEnrichInput)
 
 // ── shared generate helper ────────────────────────────────────────────────────
 
-func (s *geminiScorer) generate(ctx context.Context, prompt string, maxOutputTokens int32, schema *genai.Schema) (string, error) {
+func (s *geminiScorer) generate(ctx context.Context, prompt string, schema *genai.Schema) (string, error) {
 	temp := float32(0.0)
 	resp, err := s.client.Models.GenerateContent(
 		ctx,
 		s.modelName,
 		[]*genai.Content{genai.NewContentFromText(prompt, genai.RoleUser)},
 		&genai.GenerateContentConfig{
-			MaxOutputTokens:  maxOutputTokens,
 			ResponseMIMEType: "application/json",
 			ResponseSchema:   schema,
 			Temperature:      &temp,
