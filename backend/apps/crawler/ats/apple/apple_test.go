@@ -180,6 +180,172 @@ func TestFetchJobs_HTTPError(t *testing.T) {
 	}
 }
 
+// ── FetchJobs — JSON.parse() hydration format ───────────────────────────────
+
+func TestFetchJobs_JSONParseHydrationFormat(t *testing.T) {
+	job := appleJob{
+		ID:                      "200647207-3543",
+		PostingTitle:            "Software Engineer",
+		TransformedPostingTitle: "software-engineer",
+		JobSummary:              "<p>Build great software.</p>",
+		Locations:               []appleLocation{{City: "Cupertino", StateCode: "CA", CountryCode: "USA"}},
+		Type:                    "Regular",
+		Team:                    appleTeam{TeamName: "Software and Services"},
+	}
+
+	// Build the hydration JSON and wrap it as Apple now does: JSON.parse("...")
+	hydrationObj := hydrationData{
+		LoaderData: loaderData{
+			Search: searchData{
+				SearchResults: []appleJob{job},
+				TotalRecords:  1,
+			},
+		},
+	}
+	rawJSON, _ := json.Marshal(hydrationObj)
+	// Escape the JSON bytes as a JS string literal (double-quotes and backslashes).
+	escapedJSON := strings.ReplaceAll(string(rawJSON), `\`, `\\`)
+	escapedJSON = strings.ReplaceAll(escapedJSON, `"`, `\"`)
+
+	// Page 2 returns an empty result so pagination stops
+	emptyHydration := hydrationData{LoaderData: loaderData{Search: searchData{SearchResults: []appleJob{}}}}
+	emptyJSON, _ := json.Marshal(emptyHydration)
+	escapedEmpty := strings.ReplaceAll(string(emptyJSON), `\`, `\\`)
+	escapedEmpty = strings.ReplaceAll(escapedEmpty, `"`, `\"`)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pageStr := r.URL.Query().Get("page")
+		escaped := escapedJSON
+		if pageStr == "2" {
+			escaped = escapedEmpty
+		}
+		html := fmt.Sprintf(`<!DOCTYPE html><html><head></head><body><script>window.__staticRouterHydrationData = JSON.parse("%s");</script></body></html>`, escaped)
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(html))
+	}))
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	result, err := a.FetchJobs(context.Background(), "apple")
+	if err != nil {
+		t.Fatalf("FetchJobs error: %v", err)
+	}
+	if len(result.Jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(result.Jobs))
+	}
+	assertEqual(t, "Title", result.Jobs[0].Title, "Software Engineer")
+}
+
+// ── FetchJobs — JSON.parse() single-quote hydration format ─────────────────
+
+func TestFetchJobs_JSONParseHydrationFormat_SingleQuote(t *testing.T) {
+	job := appleJob{
+		ID:                      "200647207-3543",
+		PostingTitle:            "Software Engineer",
+		TransformedPostingTitle: "software-engineer",
+		JobSummary:              "<p>Build great software.</p>",
+		Locations:               []appleLocation{{City: "Cupertino", StateCode: "CA", CountryCode: "USA"}},
+		Type:                    "Regular",
+		Team:                    appleTeam{TeamName: "Software and Services"},
+	}
+
+	hydrationObj := hydrationData{
+		LoaderData: loaderData{
+			Search: searchData{
+				SearchResults: []appleJob{job},
+				TotalRecords:  1,
+			},
+		},
+	}
+	rawJSON, _ := json.Marshal(hydrationObj)
+	// Escape for a single-quoted JS string: only \' and \ need escaping.
+	escapedJSON := strings.ReplaceAll(string(rawJSON), `\`, `\\`)
+	escapedJSON = strings.ReplaceAll(escapedJSON, `'`, `\'`)
+
+	emptyHydration := hydrationData{LoaderData: loaderData{Search: searchData{SearchResults: []appleJob{}}}}
+	emptyJSON, _ := json.Marshal(emptyHydration)
+	escapedEmpty := strings.ReplaceAll(string(emptyJSON), `\`, `\\`)
+	escapedEmpty = strings.ReplaceAll(escapedEmpty, `'`, `\'`)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pageStr := r.URL.Query().Get("page")
+		escaped := escapedJSON
+		if pageStr == "2" {
+			escaped = escapedEmpty
+		}
+		html := fmt.Sprintf(`<!DOCTYPE html><html><head></head><body><script>window.__staticRouterHydrationData = JSON.parse('%s');</script></body></html>`, escaped)
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(html))
+	}))
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	result, err := a.FetchJobs(context.Background(), "apple")
+	if err != nil {
+		t.Fatalf("FetchJobs error: %v", err)
+	}
+	if len(result.Jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(result.Jobs))
+	}
+	assertEqual(t, "Title", result.Jobs[0].Title, "Software Engineer")
+}
+
+// ── FetchJobs — trailing content after JSON.parse() ─────────────────────────
+// Apple pages may have additional JS statements or comments after the
+// JSON.parse("...") call and before </script>. The old code failed because it
+// used the </script> boundary and then checked HasSuffix("\")")  — any trailing
+// content caused the suffix check to fail.
+
+func TestFetchJobs_TrailingContentAfterJSONParse(t *testing.T) {
+	job := appleJob{
+		ID:                      "100-1",
+		PostingTitle:            "Staff Engineer",
+		TransformedPostingTitle: "staff-engineer",
+		Type:                    "Regular",
+	}
+
+	hydrationObj := hydrationData{
+		LoaderData: loaderData{Search: searchData{SearchResults: []appleJob{job}, TotalRecords: 1}},
+	}
+	rawJSON, _ := json.Marshal(hydrationObj)
+	escapedJSON := strings.ReplaceAll(string(rawJSON), `\`, `\\`)
+	escapedJSON = strings.ReplaceAll(escapedJSON, `"`, `\"`)
+
+	emptyHydration := hydrationData{LoaderData: loaderData{Search: searchData{SearchResults: []appleJob{}}}}
+	emptyJSON, _ := json.Marshal(emptyHydration)
+	escapedEmpty := strings.ReplaceAll(string(emptyJSON), `\`, `\\`)
+	escapedEmpty = strings.ReplaceAll(escapedEmpty, `"`, `\"`)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pageStr := r.URL.Query().Get("page")
+		escaped := escapedJSON
+		if pageStr == "2" {
+			escaped = escapedEmpty
+		}
+		// Trailing comment and second statement after the JSON.parse call.
+		html := fmt.Sprintf(`<!DOCTYPE html><html><body><script>window.__staticRouterHydrationData = JSON.parse("%s");
+// apple internal
+window.__otherVar = {};
+</script></body></html>`, escaped)
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(html))
+	}))
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	result, err := a.FetchJobs(context.Background(), "apple")
+	if err != nil {
+		t.Fatalf("FetchJobs error: %v", err)
+	}
+	if len(result.Jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(result.Jobs))
+	}
+	assertEqual(t, "Title", result.Jobs[0].Title, "Staff Engineer")
+}
+
 // ── FetchJobs — malformed HTML (no hydration data) ─────────────────────────
 
 func TestFetchJobs_MalformedHTML(t *testing.T) {

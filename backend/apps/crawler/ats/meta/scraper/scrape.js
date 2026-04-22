@@ -430,10 +430,12 @@ async function main() {
       },
     }));
 
-    process.stdout.write(JSON.stringify(output));
+    // Newline before the payload guarantees it lands on its own line even if
+    // Playwright/Chromium wrote something to stdout without a trailing newline.
+    process.stdout.write("\n" + JSON.stringify(output) + "\n");
   } catch (err) {
     log("fatal error", { error: err.message, stack: err.stack });
-    process.stdout.write(JSON.stringify({ error: err.message }));
+    process.stdout.write("\n" + JSON.stringify({ error: err.message }) + "\n");
     process.exit(1);
   } finally {
     await browser.close();

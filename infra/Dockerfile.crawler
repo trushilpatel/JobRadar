@@ -24,12 +24,18 @@ WORKDIR /app
 
 COPY --from=go-builder /out/crawler /app/crawler
 
-COPY apps/crawler/ats/google/scraper/package.json apps/crawler/ats/google/scraper/package-lock.json /app/scraper/
+COPY apps/crawler/ats/google/scraper/package.json apps/crawler/ats/google/scraper/package-lock.json /app/google-scraper/
 RUN --mount=type=cache,target=/root/.npm \
-    cd /app/scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --omit=dev --cache /root/.npm
-COPY apps/crawler/ats/google/scraper/scrape.js /app/scraper/
+    cd /app/google-scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --omit=dev --cache /root/.npm
+COPY apps/crawler/ats/google/scraper/scrape.js /app/google-scraper/
 
-ENV GOOGLE_SCRAPER_DIR=/app/scraper
+COPY apps/crawler/ats/meta/scraper/package.json /app/meta-scraper/
+RUN --mount=type=cache,target=/root/.npm \
+    cd /app/meta-scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --cache /root/.npm
+COPY apps/crawler/ats/meta/scraper/scrape.js /app/meta-scraper/
+
+ENV GOOGLE_SCRAPER_DIR=/app/google-scraper
+ENV META_SCRAPER_DIR=/app/meta-scraper
 
 ARG GIT_SHA=dev
 LABEL org.opencontainers.image.revision="${GIT_SHA}"

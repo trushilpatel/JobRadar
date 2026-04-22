@@ -52,9 +52,11 @@ func (m *Microsoft) CareersURL(_ string) string {
 // ── Microsoft API response types ────────────────────────────────────────────
 
 // searchResponse is the top-level JSON from /api/pcsx/search.
+// Error is RawMessage because the API returns either a string or an object
+// depending on the error condition; RawMessage accepts any JSON value.
 type searchResponse struct {
 	Status any                `json:"status"`
-	Error  string             `json:"error"`
+	Error  json.RawMessage    `json:"error"`
 	Data   searchResponseData `json:"data"`
 }
 
@@ -67,38 +69,49 @@ type searchResponseData struct {
 }
 
 // position mirrors a single entry in the Microsoft positions array.
+// StandardizedLocations is RawMessage because the API has returned both
+// map[string][]string and []interface{} depending on the response context.
 type position struct {
-	ID                    int64               `json:"id"`
-	DisplayJobID          string              `json:"displayJobId"`
-	Name                  string              `json:"name"`
-	Locations             []string            `json:"locations"`
-	StandardizedLocations map[string][]string `json:"standardizedLocations"`
-	PostedTs              int64               `json:"postedTs"`
-	Department            string              `json:"department"`
-	WorkLocationOption    string              `json:"workLocationOption"`
-	AtsJobID              string              `json:"atsJobId"`
-	PositionURL           string              `json:"positionUrl"`
+	ID                    int64           `json:"id"`
+	DisplayJobID          string          `json:"displayJobId"`
+	Name                  string          `json:"name"`
+	Locations             []string        `json:"locations"`
+	StandardizedLocations json.RawMessage `json:"standardizedLocations"`
+	PostedTs              int64           `json:"postedTs"`
+	Department            string          `json:"department"`
+	WorkLocationOption    string          `json:"workLocationOption"`
+	AtsJobID              string          `json:"atsJobId"`
+	PositionURL           string          `json:"positionUrl"`
 }
 
-// positionDetail is the JSON returned by /api/pcsx/position_details.
-// Includes all list fields plus additional detail-only fields.
+// positionDetail is the payload inside data.* from /api/pcsx/position_details.
+// StandardizedLocations is RawMessage — the API returns []string, not map[string][]string.
 type positionDetail struct {
-	ID                         int64    `json:"id"`
-	DisplayJobID               string   `json:"displayJobId"`
-	Name                       string   `json:"name"`
-	Locations                  []string `json:"locations"`
-	PostedTs                   int64    `json:"postedTs"`
-	Department                 string   `json:"department"`
-	WorkLocationOption         string   `json:"workLocationOption"`
-	JobDescription             string   `json:"jobDescription"`
-	Location                   string   `json:"location"`
-	EfcustomTextWorkSite       []string `json:"efcustomTextWorkSite"`
-	EfcustomTextEmploymentType []string `json:"efcustomTextEmploymentType"`
-	EfcustomTextRoletype       []string `json:"efcustomTextRoletype"`
-	EfcustomTextRequiredTravel []string `json:"efcustomTextRequiredTravel"`
-	PublicURL                  string   `json:"publicUrl"`
-	AtsJobID                   string   `json:"atsJobId"`
-	PositionURL                string   `json:"positionUrl"`
+	ID                         int64           `json:"id"`
+	DisplayJobID               string          `json:"displayJobId"`
+	Name                       string          `json:"name"`
+	Locations                  []string        `json:"locations"`
+	StandardizedLocations      json.RawMessage `json:"standardizedLocations"`
+	PostedTs                   int64           `json:"postedTs"`
+	Department                 string          `json:"department"`
+	WorkLocationOption         string          `json:"workLocationOption"`
+	JobDescription             string          `json:"jobDescription"`
+	Location                   string          `json:"location"`
+	EfcustomTextWorkSite       []string        `json:"efcustomTextWorkSite"`
+	EfcustomTextEmploymentType []string        `json:"efcustomTextEmploymentType"`
+	EfcustomTextRoletype       []string        `json:"efcustomTextRoletype"`
+	EfcustomTextRequiredTravel []string        `json:"efcustomTextRequiredTravel"`
+	PublicURL                  string          `json:"publicUrl"`
+	AtsJobID                   string          `json:"atsJobId"`
+	PositionURL                string          `json:"positionUrl"`
+}
+
+// positionDetailResponse is the top-level wrapper from /api/pcsx/position_details.
+// The actual detail lives in Data, not at the top level.
+type positionDetailResponse struct {
+	Status any             `json:"status"`
+	Error  json.RawMessage `json:"error"`
+	Data   positionDetail  `json:"data"`
 }
 
 // ── Adapter implementation (FetchJobs) ──────────────────────────────────────
@@ -109,7 +122,6 @@ type positionDetail struct {
 func (m *Microsoft) FetchJobs(ctx context.Context, _ string) (types.FetchJobsResponse, error) {
 	var allItems []types.FetchJobsItem
 	start := 0
-	pageSize := m.resolvePageSize()
 
 	for {
 		url := m.searchURL(start)
@@ -138,11 +150,13 @@ func (m *Microsoft) FetchJobs(ctx context.Context, _ string) (types.FetchJobsRes
 			allItems = append(allItems, positionToItem(p))
 		}
 
-		// No more pages when we got fewer results than page size
-		if len(page.Data.Positions) < pageSize {
+		// Stop on empty page or once we've collected the total the API advertised.
+		// Using Count (not pageSize) avoids stopping early when the API returns fewer
+		// items per page than requested.
+		if len(page.Data.Positions) == 0 || len(allItems) >= page.Data.Count {
 			break
 		}
-		start += pageSize
+		start += len(page.Data.Positions)
 	}
 
 	return types.FetchJobsResponse{Jobs: allItems}, nil
@@ -175,12 +189,12 @@ func (m *Microsoft) FetchJobContent(ctx context.Context, job types.RawJob) (type
 		return types.FetchJobContentResponse{}, fmt.Errorf("microsoft: detail status %d for position %d", resp.StatusCode, positionID)
 	}
 
-	var detail positionDetail
-	if err := json.NewDecoder(resp.Body).Decode(&detail); err != nil {
+	var wrapper positionDetailResponse
+	if err := json.NewDecoder(resp.Body).Decode(&wrapper); err != nil {
 		return types.FetchJobContentResponse{}, fmt.Errorf("microsoft: decode detail: %w", err)
 	}
 
-	return detailToContent(detail), nil
+	return detailToContent(wrapper.Data), nil
 }
 
 // ── URL builders ────────────────────────────────────────────────────────────
@@ -249,8 +263,12 @@ func detailToContent(p positionDetail) types.FetchJobContentResponse {
 		loc = strings.Join(p.Locations, "; ")
 	}
 
-	// Use positionUrl from the detail response
+	// Use positionUrl from the detail response. The API returns relative paths
+	// like "/careers/job/123" — make them absolute.
 	jobURL := p.PositionURL
+	if strings.HasPrefix(jobURL, "/") {
+		jobURL = "https://apply.careers.microsoft.com" + jobURL
+	}
 	if jobURL == "" {
 		jobURL = fmt.Sprintf("https://careers.microsoft.com/v2/global/en/job/%s", p.DisplayJobID)
 	}
