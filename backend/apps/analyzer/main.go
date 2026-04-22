@@ -54,7 +54,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	consumer, err := kafka.NewConsumer(cfg.Kafka, log, "job-post-analyzer", kafka.TopicJobListingsFiltered)
+	consumer, err := kafka.NewConsumer(cfg.Kafka, log, "job-post-analyzer", 0, kafka.TopicJobListingsFiltered)
 	if err != nil {
 		log.Error("kafka consumer failed", err)
 		os.Exit(1)
@@ -153,7 +153,7 @@ func runRetryConsumer(
 	groupID string,
 ) error {
 	retryLog := log.With(logger.Str("retry_topic", inputTopic))
-	consumer, err := kafka.NewConsumer(kcfg, log, groupID, inputTopic)
+	consumer, err := kafka.NewConsumer(kcfg, log, groupID, 0, inputTopic)
 	if err != nil {
 		return fmt.Errorf("retry consumer %s: %w", inputTopic, err)
 	}

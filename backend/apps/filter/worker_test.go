@@ -87,11 +87,12 @@ func (f *fakePublisher) recordsOnTopic(topic string) []publishedRecord {
 
 func makeWorker(scorer *fakeScorer, ledger *fakeLedger, pub *fakePublisher) *Worker {
 	return &Worker{
-		scorer:    scorer,
-		ledger:    ledger,
-		publisher: pub,
-		batchSize: 10,
-		log:       logger.NewNoop(),
+		scorer:      scorer,
+		ledger:      ledger,
+		publisher:   pub,
+		batchSize:   5,
+		parallelism: 2,
+		log:         logger.NewNoop(),
 	}
 }
 
@@ -126,13 +127,13 @@ func headerValue(h []kgo.RecordHeader, key string) (string, bool) {
 
 // ── tests ────────────────────────────────────────────────────────────────────
 
-func TestFlushBatch_AllRelevant(t *testing.T) {
+func TestProcessChunk_AllRelevant(t *testing.T) {
 	scorer := &fakeScorer{relevantIDs: []string{"job-1", "job-2", "job-3"}}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.flushBatch(context.Background(), makeBatch(
+	w.processChunk(context.Background(), makeBatch(
 		makeJob("job-1"), makeJob("job-2"), makeJob("job-3"),
 	))
 
@@ -144,13 +145,13 @@ func TestFlushBatch_AllRelevant(t *testing.T) {
 	}
 }
 
-func TestFlushBatch_PartialRelevant(t *testing.T) {
+func TestProcessChunk_PartialRelevant(t *testing.T) {
 	scorer := &fakeScorer{relevantIDs: []string{"job-1", "job-3"}}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.flushBatch(context.Background(), makeBatch(
+	w.processChunk(context.Background(), makeBatch(
 		makeJob("job-1"), makeJob("job-2"), makeJob("job-3"),
 	))
 
@@ -183,14 +184,14 @@ func TestFlushBatch_PartialRelevant(t *testing.T) {
 // On a generic (transient) scorer error with incoming retry_count=0, jobs go to
 // the 1m retry tier with retry_count=1 and next_attempt_at ≈ now+1m. No ledger
 // call is made — the ledger row stays as-is.
-func TestFlushBatch_ScorerError(t *testing.T) {
+func TestProcessChunk_ScorerError(t *testing.T) {
 	scorer := &fakeScorer{err: context.DeadlineExceeded}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
 	start := time.Now()
-	w.flushBatch(context.Background(), makeBatch(
+	w.processChunk(context.Background(), makeBatch(
 		makeJob("job-1"), makeJob("job-2"),
 	))
 
@@ -231,13 +232,13 @@ func TestFlushBatch_ScorerError(t *testing.T) {
 }
 
 // With incoming retry_count=1, failure should publish to retry.10m with retry_count=2.
-func TestFlushBatch_ScorerError_RetryCountAdvances(t *testing.T) {
+func TestProcessChunk_ScorerError_RetryCountAdvances(t *testing.T) {
 	scorer := &fakeScorer{err: context.DeadlineExceeded}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.flushBatch(context.Background(), makeBatchWithRetryCount(1,
+	w.processChunk(context.Background(), makeBatchWithRetryCount(1,
 		makeJob("job-1"), makeJob("job-2"),
 	))
 
@@ -261,13 +262,13 @@ func TestFlushBatch_ScorerError_RetryCountAdvances(t *testing.T) {
 
 // With incoming retry_count=3 (tiers exhausted), failure should publish to DLQ
 // and mark ledger rows as error.
-func TestFlushBatch_ScorerError_ExhaustedGoesToDLQ(t *testing.T) {
+func TestProcessChunk_ScorerError_ExhaustedGoesToDLQ(t *testing.T) {
 	scorer := &fakeScorer{err: context.DeadlineExceeded}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.flushBatch(context.Background(), makeBatchWithRetryCount(3,
+	w.processChunk(context.Background(), makeBatchWithRetryCount(3,
 		makeJob("job-1"), makeJob("job-2"),
 	))
 
@@ -299,14 +300,14 @@ func TestFlushBatch_ScorerError_ExhaustedGoesToDLQ(t *testing.T) {
 
 // ErrLLMValidation (our bug) should skip retries entirely: all jobs go to DLQ
 // regardless of incoming retry_count, and ledger rows get marked error.
-func TestFlushBatch_ValidationErrorGoesStraightToDLQ(t *testing.T) {
+func TestProcessChunk_ValidationErrorGoesStraightToDLQ(t *testing.T) {
 	scorer := &fakeScorer{err: domainerr.ErrLLMValidation}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
 	// Use retry_count=0 to prove we bypass the retry ladder entirely.
-	w.flushBatch(context.Background(), makeBatchWithRetryCount(0,
+	w.processChunk(context.Background(), makeBatchWithRetryCount(0,
 		makeJob("job-1"), makeJob("job-2"),
 	))
 
@@ -335,13 +336,13 @@ func TestFlushBatch_ValidationErrorGoesStraightToDLQ(t *testing.T) {
 	}
 }
 
-func TestFlushBatch_EmptyBatch(t *testing.T) {
+func TestProcessChunk_EmptyBatch(t *testing.T) {
 	scorer := &fakeScorer{}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.flushBatch(context.Background(), makeBatch())
+	w.processChunk(context.Background(), makeBatch())
 
 	if scorer.calls != 0 {
 		t.Errorf("expected scorer not called on empty batch, got %d calls", scorer.calls)

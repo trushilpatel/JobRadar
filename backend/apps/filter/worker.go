@@ -19,17 +19,18 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// Worker consumes jobs.raw, scores them in batches via LLM,
-// routes relevant jobs to jobs.raw_detail, and marks irrelevant ones in seen_ledger.
+// Worker consumes job_listings.raw via PollBatch, splits each fetch into
+// chunks of batchSize, and scores each chunk concurrently via ScoreBatch.
+// Up to parallelism chunks run in parallel; the rest wait for a slot.
+// Offsets are committed only after all chunks complete.
 type Worker struct {
-	consumer     *kafka.Consumer
-	publisher    kafka.Publisher
-	scorer       llmcore.JobsRelevanceFilter
-	ledger       FilterLedger
-	batchSize    int
-	flushTimeout time.Duration
-	parallelism  int
-	log          logger.Logger
+	consumer    *kafka.Consumer
+	publisher   kafka.Publisher
+	scorer      llmcore.JobsRelevanceFilter
+	ledger      FilterLedger
+	batchSize   int
+	parallelism int
+	log         logger.Logger
 }
 
 func NewWorker(
@@ -38,260 +39,161 @@ func NewWorker(
 	scorer llmcore.JobsRelevanceFilter,
 	ledger FilterLedger,
 	batchSize int,
-	flushTimeoutSeconds int,
 	parallelism int,
 	log logger.Logger,
 ) *Worker {
 	return &Worker{
-		consumer:     consumer,
-		publisher:    publisher,
-		scorer:       scorer,
-		ledger:       ledger,
-		batchSize:    batchSize,
-		flushTimeout: time.Duration(flushTimeoutSeconds) * time.Second,
-		parallelism:  parallelism,
-		log:          log,
+		consumer:    consumer,
+		publisher:   publisher,
+		scorer:      scorer,
+		ledger:      ledger,
+		batchSize:   batchSize,
+		parallelism: parallelism,
+		log:         log,
 	}
 }
 
-// jobWithCtx pairs a raw job with the trace context extracted from its Kafka headers
-// and the retry_count value carried on its incoming Kafka record.
+// jobWithCtx pairs a raw job with the trace context extracted from its Kafka
+// headers and the retry_count value carried on its incoming Kafka record.
 type jobWithCtx struct {
 	ctx        context.Context
 	job        ats.RawJob
 	retryCount int
 }
 
-// Run starts consuming jobs.raw and blocks until ctx is cancelled.
-// Jobs are scored in batches of batchSize. If the batch doesn't fill within
-// flushTimeout, whatever is buffered gets flushed — so jobs never sit forever.
+// Run starts consuming job_listings.raw and blocks until ctx is cancelled.
+// Each Kafka fetch is split into chunks of batchSize. All chunks are scored
+// concurrently (up to parallelism at a time) before offsets are committed.
 func (w *Worker) Run(ctx context.Context) error {
 	w.log.Info("worker started",
 		logger.Int("batch_size", w.batchSize),
-		logger.Dur("flush_timeout", w.flushTimeout),
 		logger.Int("llm_parallelism", w.parallelism),
 	)
 
-	var batch []jobWithCtx
-	timer := time.NewTimer(w.flushTimeout)
-	defer timer.Stop()
+	return w.consumer.PollBatch(ctx, func(records []*kgo.Record) error {
+		return w.processFetch(ctx, records)
+	})
+}
 
-	// jobsCh bridges the Kafka poll goroutine to the batch loop below.
-	jobsCh := make(chan jobWithCtx, w.batchSize*2)
-	errCh := make(chan error, 1)
-
-	go func() {
-		err := w.consumer.Poll(ctx, func(_ string, value []byte, headers []kgo.RecordHeader) error {
-			msgCtx := tracing.ExtractKafka(ctx, headers) // continue trace from crawler
-			var job ats.RawJob
-			if err := json.Unmarshal(value, &job); err != nil {
-				w.log.Warn("malformed message, skipping", logger.Err(err))
-				return nil
-			}
-			select {
-			case jobsCh <- jobWithCtx{ctx: msgCtx, job: job, retryCount: kafka.RetryCountFromHeaders(headers)}:
-			case <-ctx.Done():
-			}
-			return nil
-		})
-		errCh <- err
-	}()
-
-	for {
-		select {
-		case item := <-jobsCh:
-			batch = append(batch, item)
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
-			}
-			timer.Reset(w.flushTimeout)
-
-			if len(batch) >= w.batchSize {
-				w.flushBatch(ctx, batch)
-				batch = batch[:0]
-				timer.Reset(w.flushTimeout)
-			}
-
-		case <-timer.C:
-			if len(batch) > 0 {
-				w.log.Debug("flush timeout, flushing batch", logger.Int(logger.FieldBatch, len(batch)))
-				w.flushBatch(ctx, batch)
-				batch = batch[:0]
-			}
-			timer.Reset(w.flushTimeout)
-
-		case err := <-errCh:
-			// Flush any remaining jobs before exiting
-			if len(batch) > 0 {
-				w.flushBatch(ctx, batch)
-			}
-			return err
-
-		case <-ctx.Done():
-			// Flush remaining jobs on graceful shutdown
-			if len(batch) > 0 {
-				w.log.Info("shutdown, flushing remaining jobs", logger.Int(logger.FieldBatch, len(batch)))
-				w.flushBatch(ctx, batch)
-			}
-			return nil
+// processFetch parses all records from one Kafka fetch, splits them into
+// chunks of batchSize, and scores each chunk in a separate goroutine.
+// A semaphore caps concurrent LLM calls at w.parallelism.
+func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) error {
+	var jobs []jobWithCtx
+	for _, r := range records {
+		msgCtx := tracing.ExtractKafka(ctx, r.Headers)
+		var job ats.RawJob
+		if err := json.Unmarshal(r.Value, &job); err != nil {
+			w.log.Warn("malformed message, skipping", logger.Err(err))
+			continue
 		}
-	}
-}
-
-// subBatchResult holds the outcome of one parallel ScoreBatch call.
-type subBatchResult struct {
-	sub         []jobWithCtx
-	relevantIDs []string
-	err         error
-}
-
-// flushBatch splits the batch into w.parallelism sub-batches, scores them in
-// parallel via ScoreBatch, then routes relevant jobs and marks irrelevant ones.
-func (w *Worker) flushBatch(ctx context.Context, batch []jobWithCtx) {
-	if len(batch) == 0 {
-		return
+		jobs = append(jobs, jobWithCtx{
+			ctx:        msgCtx,
+			job:        job,
+			retryCount: kafka.RetryCountFromHeaders(r.Headers),
+		})
 	}
 
-	// Use the first job's trace context as the parent for the batch span.
-	batchCtx, span := tracing.Start(batch[0].ctx, "filter.worker.flushBatch")
+	if len(jobs) == 0 {
+		return nil
+	}
+
+	fetchCtx, span := tracing.Start(ctx, "filter.worker.processFetch")
 	defer tracing.End(span, nil)
 
-	// Only use as many parallel calls as needed to keep each sub-batch at the
-	// target size. Avoids firing w.parallelism LLM calls for a tiny partial batch.
-	maxParallelism := w.parallelism
-	if maxParallelism < 1 {
-		maxParallelism = 1
-	}
-	targetSubBatchSize := w.batchSize / maxParallelism
-	if targetSubBatchSize < 1 {
-		targetSubBatchSize = 1
-	}
-	parallelism := len(batch) / targetSubBatchSize
-	if parallelism < 1 {
-		parallelism = 1
-	} else if parallelism > maxParallelism {
-		parallelism = maxParallelism
-	}
-
-	subBatches := splitIntoN(batch, parallelism)
-	resultCh := make(chan subBatchResult, len(subBatches))
-
+	chunks := splitBySize(jobs, w.batchSize)
+	sem := make(chan struct{}, w.parallelism)
 	var wg sync.WaitGroup
 	start := time.Now()
 
-	for _, sub := range subBatches {
-		sub := sub
+	for _, chunk := range chunks {
 		wg.Add(1)
-		go func() {
+		sem <- struct{}{}
+		go func(sub []jobWithCtx) {
 			defer wg.Done()
-			inputs := make([]llmdto.JobsRelevanceFilterInput, len(sub))
-			for i, item := range sub {
-				inputs[i] = llmdto.JobsRelevanceFilterInput{ID: item.job.ID, Title: item.job.Title, Location: item.job.Location}
-			}
-			relevantIDs, err := w.scorer.ScoreBatch(batchCtx, inputs)
-			if err != nil {
-				w.log.Error("ScoreBatch failed, routing sub-batch", err, logger.Int(logger.FieldBatch, len(sub)))
-				resultCh <- subBatchResult{sub: sub, err: err}
-				return
-			}
-			resultCh <- subBatchResult{sub: sub, relevantIDs: relevantIDs}
-		}()
+			defer func() { <-sem }()
+			w.processChunk(fetchCtx, sub)
+		}(chunk)
 	}
 
 	wg.Wait()
-	close(resultCh)
 	metrics.FilterLLMDuration.Observe(time.Since(start).Seconds())
 
-	// Collect results from all sub-batches.
-	var allRelevantIDs []string
-	var failedSubs []subBatchResult
-	var totalErrors int
-	for r := range resultCh {
-		if r.err != nil {
-			failedSubs = append(failedSubs, r)
-			totalErrors += len(r.sub)
-			continue
+	w.log.Info("fetch processed",
+		logger.Int("jobs", len(jobs)),
+		logger.Int("chunks", len(chunks)),
+	)
+
+	return nil
+}
+
+// processChunk owns one chunk end-to-end: ScoreBatch → publish relevant →
+// mark irrelevant in ledger → route errors to retry/DLQ.
+func (w *Worker) processChunk(ctx context.Context, chunk []jobWithCtx) {
+	if len(chunk) == 0 {
+		return
+	}
+	inputs := make([]llmdto.JobsRelevanceFilterInput, len(chunk))
+	for i, item := range chunk {
+		inputs[i] = llmdto.JobsRelevanceFilterInput{
+			ID:       item.job.ID,
+			Title:    item.job.Title,
+			Location: item.job.Location,
 		}
-		allRelevantIDs = append(allRelevantIDs, r.relevantIDs...)
 	}
 
-	// Route failed sub-batches through the retry ladder / DLQ.
-	// Gather DLQ-bound job IDs so their ledger rows get marked `error`.
-	var dlqJobIDs []string
-	errorSet := make(map[string]bool, totalErrors)
-	if len(failedSubs) > 0 {
-		// If shutting down, skip retry publishes — Kafka will redeliver on restart.
-		if ctx.Err() != nil {
-			w.log.Warn("context cancelled, skipping retry routing",
-				logger.Int(logger.FieldBatch, totalErrors))
-		} else {
-			for _, r := range failedSubs {
-				ids := w.routeFailedSubBatch(batchCtx, r.sub, r.err)
-				dlqJobIDs = append(dlqJobIDs, ids...)
-				for _, item := range r.sub {
-					errorSet[item.job.ID] = true
-				}
+	relevantIDs, err := w.scorer.ScoreBatch(ctx, inputs)
+	if err != nil {
+		w.log.Error("ScoreBatch failed, routing chunk", err, logger.Int(logger.FieldBatch, len(chunk)))
+		dlqIDs := w.routeFailedChunk(ctx, chunk, err)
+		if len(dlqIDs) > 0 {
+			if merr := w.ledger.UpdateSeenReasonBatch(ctx, dlqIDs, jobcommon.SeenReasonError); merr != nil {
+				w.log.Error("mark error batch failed", merr)
 			}
+			metrics.FilterJobsTotal.WithLabelValues("error").Add(float64(len(dlqIDs)))
 		}
+		return
 	}
 
-	if len(dlqJobIDs) > 0 {
-		if merr := w.ledger.UpdateSeenReasonBatch(batchCtx, dlqJobIDs, jobcommon.SeenReasonError); merr != nil {
-			w.log.Error("mark error batch failed", merr)
-		}
-		metrics.FilterJobsTotal.WithLabelValues("error").Add(float64(len(dlqJobIDs)))
-	}
-
-	relevant := make(map[string]bool, len(allRelevantIDs))
-	for _, id := range allRelevantIDs {
+	relevant := make(map[string]bool, len(relevantIDs))
+	for _, id := range relevantIDs {
 		relevant[id] = true
 	}
 
 	var irrelevantIDs []string
-	for _, item := range batch {
-		if errorSet[item.job.ID] {
-			continue
-		}
+	for _, item := range chunk {
 		if relevant[item.job.ID] {
-			w.publishDetail(batchCtx, item.job)
+			w.publishDetail(ctx, item.job)
 		} else {
 			irrelevantIDs = append(irrelevantIDs, item.job.ID)
 		}
 	}
 
 	if len(irrelevantIDs) > 0 {
-		if err := w.ledger.UpdateSeenReasonBatch(batchCtx, irrelevantIDs, jobcommon.SeenReasonLLMIrrelevant); err != nil {
+		if err := w.ledger.UpdateSeenReasonBatch(ctx, irrelevantIDs, jobcommon.SeenReasonLLMIrrelevant); err != nil {
 			w.log.Error("mark irrelevant failed", err)
 		}
 	}
 
-	metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(allRelevantIDs)))
+	metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(relevantIDs)))
 	metrics.FilterJobsTotal.WithLabelValues("irrelevant").Add(float64(len(irrelevantIDs)))
 
-	w.log.Info("batch scored",
-		logger.Int(logger.FieldBatch, len(batch)),
-		logger.Int(logger.FieldRelevant, len(allRelevantIDs)),
+	w.log.Info("chunk scored",
+		logger.Int(logger.FieldBatch, len(chunk)),
+		logger.Int(logger.FieldRelevant, len(relevantIDs)),
 		logger.Int("irrelevant", len(irrelevantIDs)),
-		logger.Int("errors", totalErrors),
-		logger.Int("dlq", len(dlqJobIDs)),
-		logger.Int("sub_batches", len(subBatches)),
 	)
 }
 
-// routeFailedSubBatch ships each job in a failed sub-batch to the correct retry tier
-// (or to the DLQ if already exhausted / on validation error). Returns the set of job
-// IDs that landed in the DLQ so callers can mark their ledger rows `error`.
-func (w *Worker) routeFailedSubBatch(ctx context.Context, sub []jobWithCtx, scoreErr error) []string {
+// routeFailedChunk ships each job in a failed chunk to the correct retry tier
+// (or DLQ if exhausted / validation error). Returns DLQ job IDs.
+func (w *Worker) routeFailedChunk(ctx context.Context, chunk []jobWithCtx, scoreErr error) []string {
 	tiers := kafka.FilterRetryTiers()
 	now := time.Now()
 
-	// LLM validation error is our own bug — retry won't help, straight to DLQ.
 	if stderrors.Is(scoreErr, domainerr.ErrLLMValidation) {
-		dlqIDs := make([]string, 0, len(sub))
-		for _, item := range sub {
+		var dlqIDs []string
+		for _, item := range chunk {
 			if w.publishToDLQ(ctx, item, scoreErr) {
 				dlqIDs = append(dlqIDs, item.job.ID)
 			}
@@ -300,8 +202,7 @@ func (w *Worker) routeFailedSubBatch(ctx context.Context, sub []jobWithCtx, scor
 	}
 
 	var dlqIDs []string
-	for _, item := range sub {
-		// retryCount here is the INCOMING count; tier index = incoming count.
+	for _, item := range chunk {
 		if item.retryCount >= len(tiers) {
 			if w.publishToDLQ(ctx, item, scoreErr) {
 				dlqIDs = append(dlqIDs, item.job.ID)
@@ -353,13 +254,12 @@ func (w *Worker) publishDetail(ctx context.Context, job ats.RawJob) {
 	}
 }
 
-// splitIntoN divides s into at most n roughly equal sub-slices.
-func splitIntoN(s []jobWithCtx, n int) [][]jobWithCtx {
-	if n <= 0 || n > len(s) {
-		n = len(s)
+// splitBySize divides s into chunks of at most size elements each.
+func splitBySize(s []jobWithCtx, size int) [][]jobWithCtx {
+	if size < 1 {
+		size = 1
 	}
-	size := (len(s) + n - 1) / n // ceil division
-	chunks := make([][]jobWithCtx, 0, n)
+	chunks := make([][]jobWithCtx, 0, (len(s)+size-1)/size)
 	for i := 0; i < len(s); i += size {
 		end := i + size
 		if end > len(s) {

@@ -66,7 +66,7 @@ func main() {
 
 	retryConsumers := make([]*kafka.Consumer, 0, len(retryInputs))
 	for _, ri := range retryInputs {
-		c, err := kafka.NewConsumer(cfg.Kafka, log, ri.groupID, ri.topic)
+		c, err := kafka.NewConsumer(cfg.Kafka, log, ri.groupID, 0, ri.topic)
 		if err != nil {
 			log.Error("retry consumer init failed", err, logger.Str("topic", ri.topic))
 			os.Exit(1)
@@ -115,7 +115,9 @@ func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gor
 		return nil, nil, nil, nil, err
 	}
 
-	consumer, err := kafka.NewConsumer(cfg.Kafka, log, mainConsumerGroupID, kafka.TopicJobListingsRaw)
+	consumer, err := kafka.NewConsumer(cfg.Kafka, log, mainConsumerGroupID,
+		time.Duration(cfg.Filter.FlushTimeoutSeconds)*time.Second,
+		kafka.TopicJobListingsRaw)
 	if err != nil {
 		log.Error("kafka consumer failed", err)
 		return nil, nil, nil, nil, err
@@ -172,7 +174,7 @@ func buildWorker(ctx context.Context, cfg *config.Config, database *gorm.DB, con
 
 	ledger := jobsvc.NewSeenLedgerStore(database)
 	return NewWorker(consumer, producer, scorer, ledger,
-		cfg.Filter.BatchSize, cfg.Filter.FlushTimeoutSeconds, cfg.Filter.LLMParallelism, log), nil
+		cfg.Filter.BatchSize, cfg.Filter.LLMParallelism, log), nil
 }
 
 // runRetryConsumer consumes one retry-tier topic, sleeps until each record's

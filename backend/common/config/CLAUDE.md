@@ -61,9 +61,9 @@ Slots are required — the factory errors at startup if none are configured. Pre
 
 | Env var                        | Default | Notes                            |
 | ------------------------------ | ------- | -------------------------------- |
-| `FILTER_BATCH_SIZE`            | `50`    | Jobs per LLM batch               |
-| `FILTER_FLUSH_TIMEOUT_SECONDS` | `30`    | Max wait to fill a batch         |
-| `FILTER_LLM_PARALLELISM`       | `5`     | Concurrent LLM calls             |
+| `FILTER_BATCH_SIZE`            | `50`    | Jobs per individual LLM ScoreBatch call |
+| `FILTER_FLUSH_TIMEOUT_SECONDS` | `30`    | Flush partial batch after N seconds idle |
+| `FILTER_LLM_PARALLELISM`       | `5`     | Concurrent LLM calls per flush; accumulation threshold = BATCH_SIZE × PARALLELISM |
 | `FILTER_LLM_SLOTS`             | `""`    | JSON array of slot configs       |
 
 ### Enricher worker

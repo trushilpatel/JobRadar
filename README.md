@@ -126,7 +126,8 @@ All config is via environment variables (or `.env` file in `backend/`):
 | `LLM_TPM` | `250000` | Rate limit: input tokens per minute |
 | `SCAN_INTERVAL_MINUTES` | `1440` | How often each company is re-scanned (24h default) |
 | `SCAN_COMPANY_DELAY_SECONDS` | `60` | Delay between company fetches within a scan cycle |
-| `SCORER_BATCH_SIZE` | `50` | Job titles per LLM batch-score call |
+| `FILTER_BATCH_SIZE` | `50` | Jobs per individual LLM ScoreBatch call |
+| `FILTER_LLM_PARALLELISM` | `5` | Concurrent LLM calls per flush |
 | `DB_HOST` | `localhost` | Postgres host |
 | `DB_PORT` | `5432` | Postgres port |
 | `DB_USER` | `postgres` | Postgres user |

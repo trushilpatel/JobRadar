@@ -12,11 +12,12 @@ Consumes `job_listings.raw` (Kafka), scores jobs in batches via LLM, routes rele
 
 ## Batch flow
 
-1. Accumulate jobs up to `FILTER_BATCH_SIZE` or `FILTER_FLUSH_TIMEOUT_SECONDS`
-2. Split into `LLM_PARALLELISM` sub-batches, score in parallel
-3. Relevant → publish to `job_listings.filtered`
-4. Irrelevant → mark `reason='llm_irrelevant'` in ledger
-5. ScoreBatch error → mark entire sub-batch `reason='error'` — **never re-queue**
+1. Accumulate jobs until `FILTER_BATCH_SIZE × FILTER_LLM_PARALLELISM` are collected, or `FILTER_FLUSH_TIMEOUT_SECONDS` elapses
+2. Split into chunks of exactly `FILTER_BATCH_SIZE` jobs each
+3. Score all chunks in parallel (up to `FILTER_LLM_PARALLELISM` concurrent LLM calls) — each chunk is one `ScoreBatch` call
+4. Relevant → publish to `job_listings.filtered`
+5. Irrelevant → mark `reason='llm_irrelevant'` in ledger
+6. ScoreBatch error → route chunk through retry ladder / DLQ — **never re-queue directly**
 
 ## Error handling rule
 
