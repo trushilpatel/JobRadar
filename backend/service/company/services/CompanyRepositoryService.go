@@ -248,7 +248,7 @@ func (r *repositoryService) Get(ctx context.Context, id string) (_ *companymodel
 func (r *repositoryService) Create(ctx context.Context, input companydto.CreateCompanyInput) (_ *companymodel.Company, err error) {
 	ctx, span := tracing.Start(ctx, "company.repository.Create")
 	defer tracing.End(span, &err)
-	active := true
+	active := false
 	if input.Active != nil {
 		active = *input.Active
 	}

@@ -41,7 +41,7 @@ function buildUrl(adapter: string, id: string): string {
 
 const FIXED_URL_ADAPTERS = new Set(['google', 'netflix', 'uber', 'apple', 'meta', 'microsoft', 'rippling'])
 
-const EMPTY_FORM = { id: '', name: '', url: '', adapter_type: 'greenhouse', active: true }
+const EMPTY_FORM = { id: '', name: '', url: '', adapter_type: 'greenhouse', active: false }
 
 export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdated }: Props) {
   const isEdit = !!initialData
