@@ -153,7 +153,7 @@ func (s *geminiScorer) generate(ctx context.Context, prompt string, schema *gena
 		},
 	)
 	if err != nil {
-		if isGemini429(err) {
+		if isGeminiProviderError(err) {
 			return "", fmt.Errorf("%w: %s", llmerr.ErrLLMProviderRateLimited, err.Error())
 		}
 		return "", err
@@ -167,16 +167,16 @@ func (s *geminiScorer) generate(ctx context.Context, prompt string, schema *gena
 	return cleanJSON(text), nil
 }
 
-// isGemini429 reports whether err indicates a Gemini provider-side rate limit
-// response (HTTP 429). The genai SDK returns a value-typed APIError with the
-// raw HTTP status code in Code.
-func isGemini429(err error) bool {
+// isGeminiProviderError reports whether err is a retriable provider-side
+// response: HTTP 429 (rate limited) or HTTP 503 (model overloaded / high
+// demand). Both mean "try again later" and trigger slot cooldown in the router.
+func isGeminiProviderError(err error) bool {
 	if err == nil {
 		return false
 	}
 	var apiErr genai.APIError
 	if errors.As(err, &apiErr) {
-		return apiErr.Code == http.StatusTooManyRequests
+		return apiErr.Code == http.StatusTooManyRequests || apiErr.Code == http.StatusServiceUnavailable
 	}
 	return false
 }

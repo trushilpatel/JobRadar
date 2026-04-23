@@ -11,7 +11,7 @@ import (
 	llmerr "github.com/trushilpatel/jobradar/common/errors"
 )
 
-func TestIsGemini429(t *testing.T) {
+func TestIsGeminiProviderError(t *testing.T) {
 	tests := []struct {
 		name string
 		err  error
@@ -22,21 +22,24 @@ func TestIsGemini429(t *testing.T) {
 		{"api error 500", genai.APIError{Code: http.StatusInternalServerError}, false},
 		{"api error 429 value", genai.APIError{Code: http.StatusTooManyRequests}, true},
 		{"api error 429 wrapped", fmt.Errorf("wrap: %w", genai.APIError{Code: http.StatusTooManyRequests}), true},
+		{"api error 503 value", genai.APIError{Code: http.StatusServiceUnavailable}, true},
+		{"api error 503 wrapped", fmt.Errorf("wrap: %w", genai.APIError{Code: http.StatusServiceUnavailable}), true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := isGemini429(tc.err); got != tc.want {
-				t.Fatalf("isGemini429(%v) = %v, want %v", tc.err, got, tc.want)
+			if got := isGeminiProviderError(tc.err); got != tc.want {
+				t.Fatalf("isGeminiProviderError(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestIsGemini429MappedToSentinel(t *testing.T) {
-	// Simulate the mapping done by generate().
-	src := genai.APIError{Code: http.StatusTooManyRequests, Message: "rate limit"}
-	mapped := fmt.Errorf("%w: %s", llmerr.ErrLLMProviderRateLimited, src.Error())
-	if !errors.Is(mapped, llmerr.ErrLLMProviderRateLimited) {
-		t.Fatalf("mapped error should unwrap to ErrLLMProviderRateLimited: %v", mapped)
+func TestIsGeminiProviderErrorMappedToSentinel(t *testing.T) {
+	for _, code := range []int{http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+		src := genai.APIError{Code: code, Message: "provider error"}
+		mapped := fmt.Errorf("%w: %s", llmerr.ErrLLMProviderRateLimited, src.Error())
+		if !errors.Is(mapped, llmerr.ErrLLMProviderRateLimited) {
+			t.Fatalf("code %d: mapped error should unwrap to ErrLLMProviderRateLimited: %v", code, mapped)
+		}
 	}
 }
