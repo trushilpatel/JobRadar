@@ -63,14 +63,14 @@ func (s *rateLimitService) ScoreBatch(ctx context.Context, jobs []dto.JobsReleva
 	return out, nil
 }
 
-func (s *rateLimitService) Enrich(ctx context.Context, in dto.JobPostEnrichInput) (*dto.JobPostEnrichResult, error) {
+func (s *rateLimitService) EnrichBatch(ctx context.Context, inputs []dto.JobPostEnrichInput) ([]*dto.JobPostEnrichResult, error) {
 	reqID := uuid.NewString()
-	tokens := estimateEnrichTokens(in)
+	tokens := estimateEnrichBatchTokens(inputs)
 	if err := s.reserve(ctx, reqID, tokens); err != nil {
 		return nil, err
 	}
 
-	out, innerErr := s.inner.Enrich(ctx, in)
+	out, innerErr := s.inner.EnrichBatch(ctx, inputs)
 	if err := s.aftercall(ctx, reqID, innerErr); err != nil {
 		return nil, err
 	}
@@ -134,8 +134,14 @@ func estimateScoreBatchTokens(jobs []dto.JobsRelevanceFilterInput) int {
 	return 150 + len(jobs)*20
 }
 
-// estimateEnrichTokens returns a coarse input-token estimate for an enrich
-// call, dominated by the full raw job text.
-func estimateEnrichTokens(input dto.JobPostEnrichInput) int {
-	return 200 + len(input.RawText)/4
+// estimateEnrichBatchTokens returns a coarse input-token estimate for an enrich
+// batch. The fixed 500-token base covers the prompt template overhead; each
+// input contributes its raw text length divided by ~4 (rough chars-per-token).
+// We intentionally over-count slightly so the TPM limiter trends conservative.
+func estimateEnrichBatchTokens(inputs []dto.JobPostEnrichInput) int {
+	total := 500
+	for _, in := range inputs {
+		total += 50 + len(in.RawText)/4 // 50 = per-job framing overhead
+	}
+	return total
 }

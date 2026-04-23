@@ -4,11 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/trushilpatel/jobradar/service/llm/dto"
 	"github.com/trushilpatel/jobradar/service/llm/prompts"
 )
 
 func TestBuildEnrich_SecurityClearanceOnlyOnExplicitRequirement(t *testing.T) {
-	prompt := prompts.BuildEnrich("job123", []string{"Software Engineer"}, "some job text")
+	prompt := prompts.BuildEnrichBatch([]string{"Software Engineer"}, []dto.JobPostEnrichInput{{ID: "job123", RawText: "some job text"}})
 
 	// Extract just the security_clearance instruction line.
 	start := strings.Index(prompt, "- security_clearance:")
@@ -45,7 +46,7 @@ func TestBuildEnrich_SecurityClearanceOnlyOnExplicitRequirement(t *testing.T) {
 }
 
 func TestBuildEnrich_SponsorshipDefaultsTrue(t *testing.T) {
-	prompt := prompts.BuildEnrich("job123", []string{"Software Engineer"}, "some job text")
+	prompt := prompts.BuildEnrichBatch([]string{"Software Engineer"}, []dto.JobPostEnrichInput{{ID: "job123", RawText: "some job text"}})
 
 	if !strings.Contains(prompt, "Default true if not mentioned") {
 		t.Error("sponsorship must default to true when not mentioned in the posting")
@@ -53,7 +54,7 @@ func TestBuildEnrich_SponsorshipDefaultsTrue(t *testing.T) {
 }
 
 func TestBuildEnrich_CitizenshipDefaultsFalse(t *testing.T) {
-	prompt := prompts.BuildEnrich("job123", []string{"Software Engineer"}, "some job text")
+	prompt := prompts.BuildEnrichBatch([]string{"Software Engineer"}, []dto.JobPostEnrichInput{{ID: "job123", RawText: "some job text"}})
 
 	if !strings.Contains(prompt, "Default false if not mentioned") {
 		t.Error("requires_citizen must default to false when not mentioned in the posting")

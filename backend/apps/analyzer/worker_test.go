@@ -22,12 +22,12 @@ import (
 // ── fakes ────────────────────────────────────────────────────────────────────
 
 type fakeScorer struct {
-	result *llmdto.JobPostEnrichResult
-	err    error
+	results []*llmdto.JobPostEnrichResult
+	err     error
 }
 
-func (f *fakeScorer) Enrich(_ context.Context, _ llmdto.JobPostEnrichInput) (*llmdto.JobPostEnrichResult, error) {
-	return f.result, f.err
+func (f *fakeScorer) EnrichBatch(_ context.Context, _ []llmdto.JobPostEnrichInput) ([]*llmdto.JobPostEnrichResult, error) {
+	return f.results, f.err
 }
 
 type fakePipelineService struct {
@@ -107,11 +107,11 @@ func headerValue(headers []kgo.RecordHeader, key string) string {
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func makeWorker(scorer *fakeScorer, pipeline *fakePipelineService) *Worker {
-	return NewWorker(nil, &fakePublisher{}, scorer, pipeline, logger.NewNoop(), 0, 5)
+	return NewWorker(nil, &fakePublisher{}, scorer, pipeline, nil, logger.NewNoop(), 0, 5, 5)
 }
 
 func makeWorkerWithPublisher(scorer *fakeScorer, pipeline *fakePipelineService, publisher kafka.Publisher) *Worker {
-	return NewWorker(nil, publisher, scorer, pipeline, logger.NewNoop(), 0, 5)
+	return NewWorker(nil, publisher, scorer, pipeline, nil, logger.NewNoop(), 0, 5, 5)
 }
 
 func baseRawJob() ats.RawJob {
@@ -156,7 +156,7 @@ func TestToEnrichedInput_FieldMapping(t *testing.T) {
 // ── enrich / happy path tests ─────────────────────────────────────────────────
 
 func TestEnrich_HappyPath(t *testing.T) {
-	scorer := &fakeScorer{result: baseEnrichResult()}
+	scorer := &fakeScorer{results: []*llmdto.JobPostEnrichResult{baseEnrichResult()}}
 	pipeline := &fakePipelineService{}
 	w := makeWorker(scorer, pipeline)
 
@@ -187,6 +187,7 @@ func TestEnrich_LLMError_MarksError(t *testing.T) {
 	scorer := &fakeScorer{err: stderrors.New("LLM timeout")}
 	pipeline := &fakePipelineService{}
 	w := makeWorker(scorer, pipeline)
+	_ = scorer
 
 	// Simulate the markError path directly
 	w.markError(context.Background(), "ashby-abc123")
@@ -202,7 +203,7 @@ func TestEnrich_LLMError_MarksError(t *testing.T) {
 }
 
 func TestEnrich_SaveError_MarksError(t *testing.T) {
-	scorer := &fakeScorer{result: baseEnrichResult()}
+	scorer := &fakeScorer{results: []*llmdto.JobPostEnrichResult{baseEnrichResult()}}
 	pipeline := &fakePipelineService{saveErr: stderrors.New("db constraint")}
 	w := makeWorker(scorer, pipeline)
 
@@ -247,7 +248,7 @@ func TestDropJob_SecurityClearance(t *testing.T) {
 }
 
 func TestDropJob_ExperienceExceedsMax(t *testing.T) {
-	w := NewWorker(nil, &fakePublisher{}, &fakeScorer{}, &fakePipelineService{}, logger.NewNoop(), 3, 5)
+	w := NewWorker(nil, &fakePublisher{}, &fakeScorer{}, &fakePipelineService{}, nil, logger.NewNoop(), 3, 5, 5)
 	exp := 5
 	result := &llmdto.JobPostEnrichResult{Sponsorship: true, ExperienceYears: &exp}
 	if reason := w.dropJob(result); reason == "" {
@@ -265,19 +266,28 @@ func TestDropJob_EligibleJob(t *testing.T) {
 
 // ── FullContent / skip-fetch tests ────────────────────────────────────────────
 
-// capturingScorer records the last EnrichInput it received so tests can assert
+// capturingScorer records the last batch input it received so tests can assert
 // on what was passed to the LLM.
 type capturingScorer struct {
 	result      *llmdto.JobPostEnrichResult
 	err         error
-	lastInput   llmdto.JobPostEnrichInput
+	lastInputs  []llmdto.JobPostEnrichInput
 	enrichCalls int
 }
 
-func (c *capturingScorer) Enrich(_ context.Context, input llmdto.JobPostEnrichInput) (*llmdto.JobPostEnrichResult, error) {
-	c.lastInput = input
+func (c *capturingScorer) EnrichBatch(_ context.Context, inputs []llmdto.JobPostEnrichInput) ([]*llmdto.JobPostEnrichResult, error) {
+	c.lastInputs = inputs
 	c.enrichCalls++
-	return c.result, c.err
+	if c.err != nil {
+		return nil, c.err
+	}
+	out := make([]*llmdto.JobPostEnrichResult, 0, len(inputs))
+	for _, in := range inputs {
+		r := *c.result
+		r.JobID = in.ID
+		out = append(out, &r)
+	}
+	return out, nil
 }
 
 // failingTransport is an http.RoundTripper that always returns an error.
@@ -305,7 +315,7 @@ func TestEnrich_SkipsFetchWhenFullContentPresent(t *testing.T) {
 	}}
 	pipeline := &fakePipelineService{}
 
-	w := NewWorker(nil, &fakePublisher{}, scorer, pipeline, logger.NewNoop(), 0, 5)
+	w := NewWorker(nil, &fakePublisher{}, scorer, pipeline, nil, logger.NewNoop(), 0, 5, 5)
 	// Replace the default HTTP client with one that will fail if called.
 	w.client = &http.Client{Transport: transport}
 
@@ -326,26 +336,31 @@ func TestEnrich_SkipsFetchWhenFullContentPresent(t *testing.T) {
 		},
 	}
 
-	if err := w.enrich(context.Background(), job); err != nil {
-		t.Fatalf("enrich returned unexpected error: %v", err)
+	// Stage 1: fetchContent should use FullContent and never touch HTTP.
+	content, err := w.fetchContent(context.Background(), job)
+	if err != nil {
+		t.Fatalf("fetchContent returned unexpected error: %v", err)
 	}
-
-	// HTTP client must NOT have been called.
 	if transport.called {
 		t.Error("HTTP client should not be called when FullContent is present")
 	}
+	if !strings.Contains(content.Description, "Go engineer role") {
+		t.Errorf("description should be drawn from FullContent; got: %s", content.Description)
+	}
 
-	// Scorer.Enrich must have been called exactly once.
+	// Stage 2: enrichGroup should produce one LLM call carrying that content.
+	w.enrichGroup(context.Background(), []fetchedJob{{
+		job:     job,
+		content: content,
+		ctx:     context.Background(),
+	}})
+
 	if scorer.enrichCalls != 1 {
-		t.Errorf("Enrich call count: want 1 got %d", scorer.enrichCalls)
+		t.Errorf("EnrichBatch call count: want 1 got %d", scorer.enrichCalls)
 	}
-
-	// The RawText passed to the LLM must contain the description from FullContent.
-	if !strings.Contains(scorer.lastInput.RawText, "Go engineer role") {
-		t.Errorf("LLM RawText should contain description text; got: %s", scorer.lastInput.RawText)
+	if len(scorer.lastInputs) != 1 || !strings.Contains(scorer.lastInputs[0].RawText, "Go engineer role") {
+		t.Errorf("LLM RawText should contain description text; got: %v", scorer.lastInputs)
 	}
-
-	// No ledger error should be recorded (enrich succeeded end-to-end).
 	if len(pipeline.markCalls) != 0 {
 		t.Errorf("expected no error mark on success, got %v", pipeline.markCalls)
 	}
@@ -435,12 +450,7 @@ func TestEnrich_TransientError_GoesToRetryTier(t *testing.T) {
 	job.FullContent = &atstypes.FullJobContent{Description: "n/a"}
 	value := marshalJob(t, job)
 
-	err := w.enrich(context.Background(), job)
-	if err == nil {
-		t.Fatalf("expected enrich to return an error for transient failure")
-	}
-
-	w.handleFailure(context.Background(), job, value, 0, err)
+	w.handleFailure(context.Background(), job, value, 0, scorer.err)
 
 	if len(publisher.messages) != 1 {
 		t.Fatalf("expected 1 published retry message, got %d", len(publisher.messages))
@@ -470,11 +480,7 @@ func TestEnrich_TransientError_RetryCountAdvances(t *testing.T) {
 	job.FullContent = &atstypes.FullJobContent{Description: "n/a"}
 	value := marshalJob(t, job)
 
-	err := w.enrich(context.Background(), job)
-	if err == nil {
-		t.Fatalf("expected enrich to return an error for transient failure")
-	}
-	w.handleFailure(context.Background(), job, value, 1, err)
+	w.handleFailure(context.Background(), job, value, 1, scorer.err)
 
 	if len(publisher.messages) != 1 {
 		t.Fatalf("expected 1 published retry message, got %d", len(publisher.messages))
@@ -501,11 +507,7 @@ func TestEnrich_TransientError_ThirdTier(t *testing.T) {
 
 	job := baseRawJob()
 	value := marshalJob(t, job)
-	err := w.enrich(context.Background(), job)
-	if err == nil {
-		t.Fatalf("expected enrich to return an error for transient failure")
-	}
-	w.handleFailure(context.Background(), job, value, 2, err)
+	w.handleFailure(context.Background(), job, value, 2, scorer.err)
 
 	if len(publisher.messages) != 1 {
 		t.Fatalf("expected 1 published retry message, got %d", len(publisher.messages))
@@ -533,12 +535,7 @@ func TestEnrich_ExhaustedGoesToDLQ(t *testing.T) {
 
 	job := baseRawJob()
 	value := marshalJob(t, job)
-	err := w.enrich(context.Background(), job)
-	if err == nil {
-		t.Fatalf("expected enrich to return an error for transient failure")
-	}
-
-	w.handleFailure(context.Background(), job, value, 3, err)
+	w.handleFailure(context.Background(), job, value, 3, scorer.err)
 
 	if len(publisher.messages) != 1 {
 		t.Fatalf("expected 1 DLQ message, got %d", len(publisher.messages))
@@ -567,19 +564,12 @@ func TestEnrich_ValidationErrorGoesStraightToDLQ(t *testing.T) {
 	publisher := &fakePublisher{}
 	w := makeWorkerWithPublisher(scorer, pipeline, publisher)
 
-	// Use FullContent so enrich skips the HTTP fetch and surfaces the
-	// validation error from the LLM directly.
 	job := baseRawJob()
 	job.FullContent = &atstypes.FullJobContent{Description: "n/a"}
 	value := marshalJob(t, job)
 
-	err := w.enrich(context.Background(), job)
-	if err == nil {
-		t.Fatalf("expected enrich to return validation error")
-	}
-
-	// retry_count=0 — should STILL go to DLQ, not retry.
-	w.handleFailure(context.Background(), job, value, 0, err)
+	// retry_count=0 — validation errors STILL go to DLQ, not retry.
+	w.handleFailure(context.Background(), job, value, 0, scorer.err)
 
 	if len(publisher.messages) != 1 {
 		t.Fatalf("expected 1 DLQ message, got %d", len(publisher.messages))

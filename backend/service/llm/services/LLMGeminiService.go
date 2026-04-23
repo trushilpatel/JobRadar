@@ -73,11 +73,14 @@ func (s *geminiScorer) ScoreBatch(ctx context.Context, jobs []dto.JobsRelevanceF
 	return ids, nil
 }
 
-// ── Enrich ────────────────────────────────────────────────────────────────────
+// ── EnrichBatch ───────────────────────────────────────────────────────────────
 
-var enrichSchema = &genai.Schema{
+// enrichItemSchema is the per-job result shape returned inside the batch array.
+// job_id is required so callers can attribute results back to source inputs.
+var enrichItemSchema = &genai.Schema{
 	Type: genai.TypeObject,
 	Properties: map[string]*genai.Schema{
+		"job_id":             {Type: genai.TypeString},
 		"experience_years":   {Type: genai.TypeInteger, Nullable: boolPtr(true)},
 		"tech_stack":         {Type: genai.TypeArray, Items: &genai.Schema{Type: genai.TypeString}},
 		"salary_min":         {Type: genai.TypeInteger, Nullable: boolPtr(true)},
@@ -99,6 +102,7 @@ var enrichSchema = &genai.Schema{
 		"role_match": {Type: genai.TypeBoolean},
 	},
 	Required: []string{
+		"job_id",
 		"experience_years", "tech_stack", "salary_min", "salary_max", "salary_currency",
 		"summary", "remote", "country", "state", "sponsorship",
 		"requires_citizen", "security_clearance", "role_brief", "responsibilities", "role_category",
@@ -106,20 +110,32 @@ var enrichSchema = &genai.Schema{
 	},
 }
 
-func (s *geminiScorer) Enrich(ctx context.Context, input dto.JobPostEnrichInput) (*dto.JobPostEnrichResult, error) {
-	prompt := prompts.BuildEnrich(input.ID, s.targetRoles, input.RawText)
+// enrichBatchSchema wraps enrichItemSchema in an array — the model is instructed
+// to return one result object per input job, in the same order, each carrying
+// the matching job_id field.
+var enrichBatchSchema = &genai.Schema{
+	Type:  genai.TypeArray,
+	Items: enrichItemSchema,
+}
 
-	raw, err := s.generate(ctx, prompt, enrichSchema)
+func (s *geminiScorer) EnrichBatch(ctx context.Context, inputs []dto.JobPostEnrichInput) ([]*dto.JobPostEnrichResult, error) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+
+	prompt := prompts.BuildEnrichBatch(s.targetRoles, inputs)
+
+	raw, err := s.generate(ctx, prompt, enrichBatchSchema)
 	if err != nil {
-		return nil, fmt.Errorf("gemini enrich: %w", err)
+		return nil, fmt.Errorf("gemini enrich batch: %w", err)
 	}
 
-	var out dto.JobPostEnrichResult
+	var out []*dto.JobPostEnrichResult
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return nil, fmt.Errorf("gemini enrich: parse response %q: %w", raw, err)
+		return nil, fmt.Errorf("gemini enrich batch: parse response %q: %w", raw, err)
 	}
 
-	return &out, nil
+	return out, nil
 }
 
 // ── shared generate helper ────────────────────────────────────────────────────

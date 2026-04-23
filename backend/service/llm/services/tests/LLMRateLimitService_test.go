@@ -15,14 +15,14 @@ type fakeScorer struct {
 	scoreErr  error
 	scoreOut  []string
 	enrichErr error
-	enrichOut *dto.JobPostEnrichResult
+	enrichOut []*dto.JobPostEnrichResult
 }
 
 func (f *fakeScorer) ScoreBatch(_ context.Context, _ []dto.JobsRelevanceFilterInput) ([]string, error) {
 	return f.scoreOut, f.scoreErr
 }
 
-func (f *fakeScorer) Enrich(_ context.Context, _ dto.JobPostEnrichInput) (*dto.JobPostEnrichResult, error) {
+func (f *fakeScorer) EnrichBatch(_ context.Context, _ []dto.JobPostEnrichInput) ([]*dto.JobPostEnrichResult, error) {
 	return f.enrichOut, f.enrichErr
 }
 

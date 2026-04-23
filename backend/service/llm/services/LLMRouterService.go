@@ -80,7 +80,7 @@ func (r *routerService) ScoreBatch(ctx context.Context, jobs []dto.JobsRelevance
 	return nil, &llmerr.LLMAllExhaustedError{Slots: statuses, RetryAfter: earliestCooldown(statuses)}
 }
 
-func (r *routerService) Enrich(ctx context.Context, in dto.JobPostEnrichInput) (*dto.JobPostEnrichResult, error) {
+func (r *routerService) EnrichBatch(ctx context.Context, inputs []dto.JobPostEnrichInput) ([]*dto.JobPostEnrichResult, error) {
 	var statuses []llmerr.LLMSlotStatus
 	for _, s := range r.slots {
 		ok, cdErr := r.cooldown.IsAvailable(ctx, s.SlotID)
@@ -92,7 +92,7 @@ func (r *routerService) Enrich(ctx context.Context, in dto.JobPostEnrichInput) (
 			continue
 		}
 
-		out, err := s.Scorer.Enrich(ctx, in)
+		out, err := s.Scorer.EnrichBatch(ctx, inputs)
 		if err == nil {
 			if sErr := r.cooldown.RecordSuccess(ctx, s.SlotID); sErr != nil {
 				r.warnCooldown("record success failed", s.SlotID, sErr)

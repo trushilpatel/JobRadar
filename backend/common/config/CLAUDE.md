@@ -68,11 +68,18 @@ Slots are required — the factory errors at startup if none are configured. Pre
 
 ### Enricher worker
 
-| Env var                   | Default | Notes                                                   |
-| ------------------------- | ------- | ------------------------------------------------------- |
-| `ENRICHER_CONCURRENCY`    | `5`     | Concurrent enrichment goroutines                        |
-| `DISCARD_JOB_WITH_EXP_GT` | `0`     | Drop jobs requiring more than N years exp; 0 = disabled |
-| `ENRICHER_LLM_SLOTS`      | `""`    | JSON array of slot configs                              |
+Two-stage pipeline: parallel HTTP fetches (Stage 1) → LLM `EnrichBatch` per group (Stage 2).
+
+| Env var                          | Default | Notes                                                                 |
+| -------------------------------- | ------- | --------------------------------------------------------------------- |
+| `ENRICHER_FETCH_CONCURRENCY`     | `15`    | Parallel HTTP fetches per Kafka fetch (IO-bound, can be high)         |
+| `ENRICHER_LLM_BATCH_SIZE`        | `5`     | Jobs per single `EnrichBatch` call                                    |
+| `ENRICHER_FLUSH_TIMEOUT_SECONDS` | `120`   | Kafka `FetchMaxWait` — accumulates trickle traffic at the broker      |
+| `ENRICHER_DEFAULT_RPS`           | `2`     | Per-adapter token bucket rate (requests/sec) for HTTP fetches         |
+| `ENRICHER_DEFAULT_BURST`         | `3`     | Per-adapter token bucket burst capacity                               |
+| `ENRICHER_JITTER_MS`             | `200`   | Random ±jitter after each rate-limit grant (ms) — anti-bot pacing     |
+| `DISCARD_JOB_WITH_EXP_GT`        | `0`     | Drop jobs requiring more than N years exp; 0 = disabled               |
+| `ENRICHER_LLM_SLOTS`             | `""`    | JSON array of slot configs                                            |
 
 ### Crawler worker
 

@@ -54,7 +54,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	consumer, err := kafka.NewConsumer(cfg.Kafka, log, "job-post-analyzer", 0, kafka.TopicJobListingsFiltered)
+	consumer, err := kafka.NewConsumer(cfg.Kafka, log, "job-post-analyzer",
+		time.Duration(cfg.Enricher.FlushTimeoutSeconds)*time.Second,
+		kafka.TopicJobListingsFiltered)
 	if err != nil {
 		log.Error("kafka consumer failed", err)
 		os.Exit(1)
@@ -113,7 +115,19 @@ func main() {
 	snapshotStore := jobsvc.NewSnapshotStore(database)
 	techTagStore := jobsvc.NewTechTagStore(database)
 	pipeline := jobsvc.NewPipelineService(jobStore, ledgerStore, snapshotStore, techTagStore)
-	worker := NewWorker(consumer, producer, scorer, pipeline, log, cfg.Enricher.MaxExpYears, cfg.Enricher.Concurrency)
+
+	rateLimiter := NewAdapterRateLimiter(
+		cfg.Enricher.DefaultRPS,
+		cfg.Enricher.DefaultBurst,
+		time.Duration(cfg.Enricher.JitterMs)*time.Millisecond,
+		log,
+	)
+
+	worker := NewWorker(consumer, producer, scorer, pipeline, rateLimiter, log,
+		cfg.Enricher.MaxExpYears,
+		cfg.Enricher.FetchConcurrency,
+		cfg.Enricher.LLMBatchSize,
+	)
 
 	g, gctx := errgroup.WithContext(ctx)
 
