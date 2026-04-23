@@ -4,7 +4,8 @@ ALTER TABLE job_pipeline_ledger
     ADD COLUMN next_attempt_at TIMESTAMPTZ NULL;
 
 ALTER TABLE job_pipeline_ledger
-    DROP CONSTRAINT job_pipeline_ledger_reason_check;
+    DROP CONSTRAINT IF EXISTS job_seen_ledger_reason_check,
+    DROP CONSTRAINT IF EXISTS job_pipeline_ledger_reason_check;
 
 ALTER TABLE job_pipeline_ledger
     ADD CONSTRAINT job_pipeline_ledger_reason_check

@@ -96,6 +96,43 @@ var EnricherLLMDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 	Buckets: []float64{0.5, 1, 2, 5, 10, 30},
 })
 
+var EnricherGroupDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	Name:    "enricher_group_duration_seconds",
+	Help:    "Per-group fetch+enrich+publish duration by outcome.",
+	Buckets: prometheus.DefBuckets,
+}, []string{"outcome"})
+
+var EnricherRetryPublishesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "enricher_retry_publishes_total",
+	Help: "Successful retry-tier publishes by tier and stage.",
+}, []string{"tier", "stage"})
+
+var EnricherRetryPublishFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "enricher_retry_publish_failures_total",
+	Help: "Failed retry-tier publishes by tier and stage (silent-drop alert surface).",
+}, []string{"tier", "stage"})
+
+var EnricherRetryLedgerFailuresTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "enricher_retry_ledger_failures_total",
+	Help: "UpdateRetryBatch errors encountered by the enricher.",
+})
+
+var EnricherDLQPublishesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "enricher_dlq_publishes_total",
+	Help: "Successful DLQ publishes by cause.",
+}, []string{"cause"})
+
+var EnricherCommitFailuresTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "enricher_commit_failures_total",
+	Help: "CommitRecords errors (replay on next poll).",
+})
+
+var EnricherGroupsPerFetch = prometheus.NewHistogram(prometheus.HistogramOpts{
+	Name:    "enricher_groups_per_fetch",
+	Help:    "Fan-out size (groups) per Kafka fetch.",
+	Buckets: []float64{1, 2, 4, 8, 16, 32, 64},
+})
+
 // ── Scheduler ─────────────────────────────────────────────────────────────────
 
 var SchedulerCompaniesEnqueuedTotal = prometheus.NewCounter(prometheus.CounterOpts{
@@ -144,6 +181,13 @@ func init() {
 		FilterChunksPerFetch,
 		EnricherJobsTotal,
 		EnricherLLMDuration,
+		EnricherGroupDuration,
+		EnricherRetryPublishesTotal,
+		EnricherRetryPublishFailures,
+		EnricherRetryLedgerFailuresTotal,
+		EnricherDLQPublishesTotal,
+		EnricherCommitFailuresTotal,
+		EnricherGroupsPerFetch,
 		SchedulerCompaniesEnqueuedTotal,
 		SchedulerRunDuration,
 		SchedulerErrorsTotal,

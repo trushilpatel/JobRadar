@@ -59,14 +59,15 @@ type FilterConfig struct {
 }
 
 type EnricherConfig struct {
-	FetchConcurrency    int
-	LLMBatchSize        int
-	FlushTimeoutSeconds int
-	DefaultRPS          float64
-	DefaultBurst        int
-	JitterMs            int
-	MaxExpYears         int
-	Slots               []LLMSlotConfig
+	FetchConcurrency       int
+	LLMBatchSize           int
+	FlushTimeoutSeconds    int
+	LLMCallIntervalSeconds int
+	DefaultRPS             float64
+	DefaultBurst           int
+	JitterMs               int
+	MaxExpYears            int
+	Slots                  []LLMSlotConfig
 }
 
 type CrawlerConfig struct {
@@ -204,14 +205,15 @@ func Load() *Config {
 			Slots:                  filterSlots,
 		},
 		Enricher: EnricherConfig{
-			FetchConcurrency:    getEnvInt("ENRICHER_FETCH_CONCURRENCY", 15),
-			LLMBatchSize:        getEnvInt("ENRICHER_LLM_BATCH_SIZE", 5),
-			FlushTimeoutSeconds: getEnvInt("ENRICHER_FLUSH_TIMEOUT_SECONDS", 120),
-			DefaultRPS:          getEnvFloat("ENRICHER_DEFAULT_RPS", 2),
-			DefaultBurst:        getEnvInt("ENRICHER_DEFAULT_BURST", 3),
-			JitterMs:            getEnvInt("ENRICHER_JITTER_MS", 200),
-			MaxExpYears:         getEnvInt("DISCARD_JOB_WITH_EXP_GT", 0),
-			Slots:               enricherSlots,
+			FetchConcurrency:       getEnvInt("ENRICHER_FETCH_CONCURRENCY", 15),
+			LLMBatchSize:           getEnvInt("ENRICHER_LLM_BATCH_SIZE", 5),
+			FlushTimeoutSeconds:    getEnvInt("ENRICHER_FLUSH_TIMEOUT_SECONDS", 120),
+			LLMCallIntervalSeconds: getEnvInt("ENRICHER_LLM_CALL_INTERVAL_SECONDS", 5),
+			DefaultRPS:             getEnvFloat("ENRICHER_DEFAULT_RPS", 2),
+			DefaultBurst:           getEnvInt("ENRICHER_DEFAULT_BURST", 3),
+			JitterMs:               getEnvInt("ENRICHER_JITTER_MS", 200),
+			MaxExpYears:            getEnvInt("DISCARD_JOB_WITH_EXP_GT", 0),
+			Slots:                  enricherSlots,
 		},
 		Crawler: CrawlerConfig{
 			CompanyDelaySeconds:      getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 30),

@@ -422,7 +422,7 @@ func (w *Worker) routeFailedChunk(ctx context.Context, chunk []chunkItem, scoreE
 			continue
 		}
 		tier := tiers[item.job.retryCount]
-		tierName := tierHumanName(tier)
+		tierName := tier.Name()
 		newCount := item.job.retryCount + 1
 		nextAt := w.clock.Now().Add(tier.Delay)
 
@@ -480,21 +480,6 @@ func (w *Worker) publishDetail(ctx context.Context, job ats.RawJob) {
 	}
 	if err := w.publisher.Publish(ctx, kafka.TopicJobListingsFiltered, payload); err != nil {
 		w.log.Error("publish failed", err, logger.Str(logger.FieldJobID, job.ID))
-	}
-}
-
-// tierHumanName derives a human-readable tier label from the tier's delay.
-// Matches the metric label values "1m", "10m", "1h" used by the spec.
-func tierHumanName(t kafka.RetryTier) string {
-	switch t.Delay {
-	case 1 * time.Minute:
-		return "1m"
-	case 10 * time.Minute:
-		return "10m"
-	case 1 * time.Hour:
-		return "1h"
-	default:
-		return t.Delay.String()
 	}
 }
 

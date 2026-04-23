@@ -14,6 +14,21 @@ type RetryTier struct {
 	Delay time.Duration
 }
 
+// Name returns a short human identifier for the tier ("1m"/"10m"/"1h")
+// based on Delay. Empty string for unknown delays.
+func (t RetryTier) Name() string {
+	switch t.Delay {
+	case time.Minute:
+		return "1m"
+	case 10 * time.Minute:
+		return "10m"
+	case time.Hour:
+		return "1h"
+	default:
+		return ""
+	}
+}
+
 // FilterRetryTiers is the retry ladder for the filter worker (.raw).
 // Index = retry_count value that will be written into the outgoing header.
 // 0 → retry.1m (1st retry), 1 → retry.10m, 2 → retry.1h. After 2 → DLQ.

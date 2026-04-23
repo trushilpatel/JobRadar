@@ -7,8 +7,11 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	"github.com/trushilpatel/jobradar/common/kafka"
@@ -20,16 +23,21 @@ import (
 // fetchAll runs HTTP fetches for every record in parallel, capped by
 // fetchConc and additionally rate-limited per adapter. Records that fail
 // to parse, fetch, or whose adapter is unknown are routed to the retry
-// ladder / DLQ here — they never reach stage 2.
+// ladder / DLQ here (stage="fetch") — they never reach stage 2.
 //
 // The returned slice contains only successfully-fetched jobs in arbitrary
-// order. Callers must not assume input/output order matches.
-func (w *Worker) fetchAll(ctx context.Context, records []*kgo.Record) []fetchedJob {
+// order; processFetch sorts by (partition, offset) before grouping.
+func (w *Worker) fetchAll(ctx context.Context, fetchLog logger.Logger, records []*kgo.Record) []fetchedJob {
+	ctx, span := tracing.Start(ctx, "analyzer.worker.fetchAll")
+	defer span.End()
+	span.SetAttributes(attribute.Int("records", len(records)))
+
 	sem := make(chan struct{}, w.fetchConc)
 	var (
 		wg      sync.WaitGroup
 		mu      sync.Mutex
 		fetched = make([]fetchedJob, 0, len(records))
+		failed  atomic.Int64
 	)
 
 	for _, r := range records {
@@ -39,8 +47,9 @@ func (w *Worker) fetchAll(ctx context.Context, records []*kgo.Record) []fetchedJ
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			result, ok := w.fetchOne(ctx, rec)
+			result, ok := w.fetchOne(ctx, fetchLog, rec)
 			if !ok {
+				failed.Add(1)
 				return
 			}
 			mu.Lock()
@@ -50,40 +59,60 @@ func (w *Worker) fetchAll(ctx context.Context, records []*kgo.Record) []fetchedJ
 	}
 
 	wg.Wait()
+	span.SetAttributes(
+		attribute.Int("fetched", len(fetched)),
+		attribute.Int("failed", int(failed.Load())),
+	)
 	return fetched
 }
 
 // fetchOne handles all error routing for a single record so the caller can
 // just collect the success cases. Returns ok=false when the record was
-// dropped (parse error, malformed, fetch failed → already routed).
-func (w *Worker) fetchOne(ctx context.Context, r *kgo.Record) (fetchedJob, bool) {
+// dropped (parse error, malformed, fetch failed → already routed via
+// handleFailure with stage="fetch").
+func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, r *kgo.Record) (fetchedJob, bool) {
 	msgCtx := tracing.ExtractKafka(ctx, r.Headers)
+
+	msgCtx, span := tracing.Start(msgCtx, "analyzer.worker.fetchOne")
+	defer span.End()
+
 	var job ats.RawJob
 	if err := json.Unmarshal(r.Value, &job); err != nil {
-		w.log.Warn("malformed message, skipping", logger.Err(err))
+		span.SetAttributes(attribute.String("outcome", "malformed"))
+		fetchLog.Warn("malformed message, skipping", logger.Err(err))
 		return fetchedJob{}, false
 	}
+
+	span.SetAttributes(
+		attribute.String("job_id", job.ID),
+		attribute.String("adapter", job.Adapter),
+	)
+
 	retryCount := kafka.RetryCountFromHeaders(r.Headers)
-	jobLog := w.log.With(
+	jobLog := fetchLog.With(
 		logger.Str(logger.FieldJobID, job.ID),
 		logger.Str("adapter", job.Adapter),
-		logger.Int("retry_count", retryCount),
+		logger.Int(logger.FieldRetryCount, retryCount),
 	)
 	jobLog.Debug("fetching content")
 
+	fetchStart := time.Now()
 	content, err := w.fetchContent(msgCtx, job)
+	span.SetAttributes(attribute.Int64("wait_ms", time.Since(fetchStart).Milliseconds()))
 	if err != nil {
+		span.SetAttributes(attribute.String("outcome", "fetch_failed"))
 		jobLog.Error("fetch content failed", err)
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
-		w.handleFailure(msgCtx, job, r.Value, retryCount, fmt.Errorf("fetch content: %w", err))
+		w.handleFailure(msgCtx, fetchLog, job, r.Value, retryCount, "fetch", fmt.Errorf("fetch content: %w", err))
 		return fetchedJob{}, false
 	}
 
+	span.SetAttributes(attribute.String("outcome", "ok"))
 	jobLog.Debug("content fetched", logger.Int("description_bytes", len(content.Description)))
 	return fetchedJob{
 		job:        job,
 		content:    content,
-		value:      r.Value,
+		record:     r,
 		retryCount: retryCount,
 		ctx:        msgCtx,
 	}, true

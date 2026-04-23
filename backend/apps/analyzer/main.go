@@ -123,11 +123,19 @@ func main() {
 		log,
 	)
 
-	worker := NewWorker(consumer, producer, scorer, pipeline, rateLimiter, log,
-		cfg.Enricher.MaxExpYears,
-		cfg.Enricher.FetchConcurrency,
-		cfg.Enricher.LLMBatchSize,
-	)
+	worker := NewWorker(WorkerOptions{
+		Consumer:         consumer,
+		Publisher:        producer,
+		Scorer:           scorer,
+		Pipeline:         pipeline,
+		Ledger:           ledgerStore,
+		RateLimiter:      rateLimiter,
+		Log:              log,
+		MaxExpYears:      cfg.Enricher.MaxExpYears,
+		FetchConcurrency: cfg.Enricher.FetchConcurrency,
+		LLMBatchSize:     cfg.Enricher.LLMBatchSize,
+		LLMCallInterval:  time.Duration(cfg.Enricher.LLMCallIntervalSeconds) * time.Second,
+	})
 
 	g, gctx := errgroup.WithContext(ctx)
 
