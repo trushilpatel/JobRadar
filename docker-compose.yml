@@ -1,6 +1,4 @@
 x-app-env: &app-env
-  DB_HOST: postgres
-  DB_PORT: "5432"
   KAFKA_BROKERS: kafka:29092
   KAFKA_USER: ""
   KAFKA_PASSWORD: ""
@@ -9,8 +7,6 @@ x-app-env: &app-env
   JAEGER_ENDPOINT: http://jaeger:4318
 
 x-app-depends: &app-depends
-  postgres:
-    condition: service_healthy
   kafka-init:
     condition: service_completed_successfully
   migrate:
@@ -19,27 +15,6 @@ x-app-depends: &app-depends
 services:
 
   # ── Infrastructure ────────────────────────────────────────────────────────────
-
-  postgres:
-    image: postgres:16
-    container_name: jobradar_postgres
-    mem_limit: 256m
-    env_file:
-      - ./backend/.env
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-jobradar}
-    ports:
-      - "${DB_PORT:-5432}:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    command: postgres -c log_checkpoints=off -c log_connections=off -c log_disconnections=off
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-jobradar}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
 
   kafka:
     image: redpandadata/redpanda:v24.3.1
@@ -101,13 +76,7 @@ services:
     container_name: jobradar_migrate
     env_file:
       - ./backend/.env
-    environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
     command: ["/app/migrate"]
-    depends_on:
-      postgres:
-        condition: service_healthy
     restart: on-failure
 
   # ── Application services ──────────────────────────────────────────────────────
@@ -300,7 +269,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  pgdata:
   prometheusdata:
   grafanadata:
   redpandadata:
