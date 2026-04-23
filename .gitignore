@@ -16,8 +16,9 @@ backend/migrate
 /vendor/
 
 # Environment variables
-.env
+/.env
 .env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -42,4 +43,4 @@ backend/internal/ats_fetcher/google/scraper/logs.json
 # Runtime secrets (Docker secrets files — never commit real values)
 secrets/
 
-*llm-slots.yaml
+.env

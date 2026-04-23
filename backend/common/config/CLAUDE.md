@@ -6,14 +6,16 @@
 
 ### Database
 
-| Env var       | Default     | Notes                 |
-| ------------- | ----------- | --------------------- |
-| `DB_HOST`     | `localhost` |                       |
-| `DB_PORT`     | `5432`      |                       |
-| `DB_USER`     | `postgres`  |                       |
-| `DB_PASSWORD` | `postgres`  |                       |
-| `DB_NAME`     | `jobradar`  |                       |
-| `DB_SSLMODE`  | `disable`   | Set `require` in prod |
+Database is **Supabase-hosted PostgreSQL** — there is no local postgres container. All services connect to the Supabase pooler via `backend/.env`.
+
+| Env var       | Example value                                    | Notes                        |
+| ------------- | ------------------------------------------------ | ---------------------------- |
+| `DB_HOST`     | `aws-1-us-east-2.pooler.supabase.com`            | Supabase pooler host         |
+| `DB_PORT`     | `5432`                                           |                              |
+| `DB_USER`     | `postgres.<project-ref>`                         | Supabase pooler user format  |
+| `DB_PASSWORD` | `<supabase-db-password>`                         |                              |
+| `DB_NAME`     | `postgres`                                       | Supabase default DB name     |
+| `DB_SSLMODE`  | `require`                                        | Always `require` for Supabase|
 
 ### Kafka
 

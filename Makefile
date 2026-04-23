@@ -11,6 +11,7 @@ export GIT_SHA
         test-adapters \
         test-adapter-greenhouse test-adapter-lever test-adapter-ashby \
         docker-up \
+        local local-down prod prod-down \
         up rebuild rebuild-backend rebuild-crawler rebuild-console down logs build-docker \
         install-hooks \
         help
@@ -27,6 +28,18 @@ dev-console: ## Start Vite dev server (ui/console)
 
 dev-backend: ## Start API server (hot-reload via go run)
 	cd backend && go run ./apps/api
+
+local: ## Start full local stack in Docker (everything except Caddy) — API :8080, console :3000
+	docker compose --profile infra --profile app --profile workers --profile obs up -d --build
+
+local-down: ## Stop local stack
+	docker compose --profile infra --profile app --profile workers --profile obs down --remove-orphans
+
+prod: ## Start full production stack (all profiles)
+	docker compose --profile infra --profile app --profile workers --profile obs --profile proxy up -d
+
+prod-down: ## Stop production stack
+	docker compose --profile infra --profile app --profile workers --profile obs --profile proxy down --remove-orphans
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 
@@ -136,8 +149,8 @@ vet: ## Run go vet
 
 # ── Docker (infra only — for local dev) ──────────────────────────────────────
 
-docker-up: ## Start Kafka + Redis for local dev (DB is Supabase — no local postgres)
-	docker-compose up -d kafka kafka-init redis
+docker-up: ## Start infra only in Docker (Kafka + Redis) — for use with make dev
+	docker compose --profile infra up -d
 
 docker-logs: ## Tail docker-compose logs
 	docker-compose logs -f
@@ -147,9 +160,9 @@ docker-logs: ## Tail docker-compose logs
 up: ## Start the full stack using existing images (fast — no rebuild)
 	docker-compose --profile workers up -d
 
-rebuild: ## Rebuild all images then start (use after code changes)
-	docker volume rm jobradar_kafkadata 2>/dev/null || true
-	DOCKER_BUILDKIT=1 docker-compose --profile workers up -d --build
+rebuild: ## Rebuild all images then start full local stack
+	docker volume rm jobradar_redpandadata 2>/dev/null || true
+	DOCKER_BUILDKIT=1 docker compose --profile infra --profile app --profile obs up -d --build
 
 rebuild-backend: ## Rebuild backend image only (api/scheduler/filter/enricher)
 	DOCKER_BUILDKIT=1 docker-compose up -d --build api scheduler filter enricher migrate
@@ -160,8 +173,8 @@ rebuild-crawler: ## Rebuild crawler image only
 rebuild-console: ## Rebuild console image only (build happens inside Docker)
 	DOCKER_BUILDKIT=1 docker-compose up -d --build console
 
-down: ## Stop and remove all containers (keeps volumes)
-	docker-compose --profile workers down --remove-orphans
+down: ## Stop all containers (keeps volumes)
+	docker compose --profile infra --profile app --profile workers --profile obs --profile proxy down --remove-orphans
 
 logs: ## Tail logs for all services (Ctrl-C to stop)
 	docker-compose logs -f

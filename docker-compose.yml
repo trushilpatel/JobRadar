@@ -30,6 +30,7 @@ services:
   kafka:
     image: redpandadata/redpanda:v24.3.1
     container_name: jobradar_kafka
+    profiles: [infra]
     stop_grace_period: 30s
     volumes:
       - redpandadata:/var/lib/redpanda/data
@@ -57,6 +58,7 @@ services:
   kafka-init:
     image: redpandadata/redpanda:v24.3.1
     container_name: jobradar_kafka_init
+    profiles: [infra]
     depends_on:
       kafka:
         condition: service_healthy
@@ -71,6 +73,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: jobradar_redis
+    profiles: [infra]
+    user: "999:1000"
     ports:
       - "127.0.0.1:6379:6379"
     healthcheck:
@@ -90,6 +94,7 @@ services:
     image: jobradar_backend
     pull_policy: never
     container_name: jobradar_migrate
+    profiles: [app]
     env_file:
       - ./backend/.env
     command: ["/app/migrate"]
@@ -113,6 +118,7 @@ services:
         GIT_SHA: "${GIT_SHA:-dev}"
     image: jobradar_backend
     container_name: jobradar_api
+    profiles: [app]
     mem_limit: 128m
     env_file:
       - ./backend/.env
@@ -122,9 +128,9 @@ services:
       # Caddy is the single host-level ingress. The internal ops/metrics
       # listener stays on 127.0.0.1 inside the container.
       METRICS_ADDR: "127.0.0.1:9100"
-    # No host port — Caddy reaches api:8080 over the compose network.
-    expose:
-      - "8080"
+    # Loopback binding — accessible locally without Caddy; Caddy uses internal network in prod.
+    ports:
+      - "${API_HOST_PORT:-127.0.0.1:8080}:8080"
     command: ["/app/api"]
     depends_on:
       <<: *app-depends
@@ -238,8 +244,7 @@ services:
       GOOGLE_SCRAPER_MAX_DELAY: "240000"
       GOOGLE_SCRAPER_ENRICH_MIN: "60000"
       GOOGLE_SCRAPER_ENRICH_MAX: "120000"
-    profiles:
-      - scraper
+    profiles: [workers]
     restart: "no"
 
   # ── Frontend ──────────────────────────────────────────────────────────────────
@@ -253,10 +258,12 @@ services:
         VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
         VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}"
         VITE_APP_DOMAIN: "${VITE_APP_DOMAIN:-}"
+        VITE_ALLOWED_EMAIL: "${VITE_ALLOWED_EMAIL:-}"
     container_name: jobradar_console
-    # No host port — Caddy reaches console:8080 over the compose network.
-    expose:
-      - "8080"
+    profiles: [app]
+    # Loopback binding — accessible locally without Caddy; Caddy uses internal network in prod.
+    ports:
+      - "${CONSOLE_HOST_PORT:-127.0.0.1:3000}:8080"
     depends_on:
       - api
     restart: unless-stopped
@@ -278,6 +285,7 @@ services:
       dockerfile: Dockerfile
     image: jobradar_caddy
     container_name: jobradar_caddy
+    profiles: [proxy]
     ports:
       - "80:80"
       - "443:443"
@@ -314,9 +322,10 @@ services:
   jaeger:
     image: jaegertracing/all-in-one:1.57
     container_name: jobradar_jaeger
+    profiles: [obs]
     ports:
-      - "127.0.0.1:16686:16686"
-      - "127.0.0.1:4318:4318"
+      - "${JAEGER_UI_PORT:-127.0.0.1:16686}:16686"
+      - "${JAEGER_OTLP_PORT:-127.0.0.1:4318}:4318"
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     restart: unless-stopped
@@ -324,8 +333,9 @@ services:
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: jobradar_prometheus
+    profiles: [obs]
     ports:
-      - "127.0.0.1:9090:9090"
+      - "${PROMETHEUS_PORT:-127.0.0.1:9090}:9090"
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheusdata:/prometheus
@@ -337,9 +347,10 @@ services:
   grafana:
     image: grafana/grafana:10.4.0
     container_name: jobradar_grafana
+    profiles: [obs]
     # Direct access for bootstrap via SSH tunnel. Public path is via Caddy.
     ports:
-      - "127.0.0.1:3001:3000"
+      - "${GRAFANA_PORT:-127.0.0.1:3001}:3000"
     volumes:
       - ./infra/prometheus/grafana-prometheus-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml
       - ./infra/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
@@ -368,8 +379,9 @@ services:
   loki:
     image: grafana/loki:2.9.0
     container_name: jobradar_loki
+    profiles: [obs]
     ports:
-      - "127.0.0.1:3100:3100"
+      - "${LOKI_PORT:-127.0.0.1:3100}:3100"
     volumes:
       - ./infra/loki/config.yaml:/etc/loki/local-config.yaml:ro
       - lokidata:/loki
@@ -381,6 +393,7 @@ services:
   promtail:
     image: grafana/promtail:2.9.0
     container_name: jobradar_promtail
+    profiles: [obs]
     volumes:
       - ./infra/promtail/config.yaml:/etc/promtail/config.yaml:ro
       - caddy_logs:/var/log/caddy:ro
@@ -400,6 +413,7 @@ services:
       dockerfile: Dockerfile
     image: jobradar_supabase_audit_sync
     container_name: jobradar_supabase_audit_sync
+    profiles: [obs]
     environment:
       SUPABASE_DB_URL: "${SUPABASE_DB_URL}"
       LOKI_URL: "${LOKI_URL:-http://loki:3100/loki/api/v1/push}"
