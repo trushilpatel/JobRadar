@@ -23,6 +23,9 @@ func main() {
 	}
 	defer func() { _ = db.Close() }()
 
+	db.SetMaxOpenConns(2)
+	db.SetMaxIdleConns(2)
+
 	if err := db.Ping(); err != nil {
 		log.Error("failed to connect to db", err)
 		os.Exit(1)

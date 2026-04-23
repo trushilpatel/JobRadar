@@ -33,7 +33,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	database, err := db.Open(cfg.DB)
+	database, err := db.Open(cfg.DB, 5)
 	if err != nil {
 		log.Error("db open failed", err)
 		os.Exit(1)

@@ -45,7 +45,7 @@ func main() {
 }
 
 func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gorm.DB, *kafka.Producer, error) {
-	database, err := db.Open(cfg.DB)
+	database, err := db.Open(cfg.DB, 5)
 	if err != nil {
 		log.Error("db open failed", err)
 		return nil, nil, err

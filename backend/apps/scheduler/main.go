@@ -32,17 +32,11 @@ func main() {
 
 	shutdownTracing := tracing.Init("jobradar-scheduler", cfg.Observability.JaegerEndpoint)
 
-	database, err := db.OpenWithRetry(cfg.DB, dbMaxAttempts, dbRetryDelay)
+	database, err := db.OpenWithRetry(cfg.DB, 2, dbMaxAttempts, dbRetryDelay)
 	if err != nil {
 		log.Error("db open failed", err)
 		shutdownTracing()
 		os.Exit(1)
-	}
-
-	// Scheduler is never concurrent — one connection is sufficient.
-	if sqlDB, err := database.DB(); err == nil {
-		sqlDB.SetMaxOpenConns(1)
-		sqlDB.SetMaxIdleConns(1)
 	}
 
 	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
