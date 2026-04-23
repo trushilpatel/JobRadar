@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, Timer } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PipelineStrip } from './PipelineStrip'
@@ -17,15 +18,21 @@ export function CompaniesHeader({
   errorFilterActive,
   onErrorToggle,
 }: CompaniesHeaderProps) {
+  const queryClient = useQueryClient()
   const [autoRefresh, setAutoRefresh] = useState(
     () => localStorage.getItem(AUTO_REFRESH_KEY) === 'true'
   )
 
+  const refresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['companies'] })
+    queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] })
+  }, [queryClient])
+
   useEffect(() => {
     if (!autoRefresh) return
-    const id = setInterval(() => window.location.reload(), AUTO_REFRESH_INTERVAL_MS)
+    const id = setInterval(refresh, AUTO_REFRESH_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [autoRefresh])
+  }, [autoRefresh, refresh])
 
   function toggleAutoRefresh() {
     setAutoRefresh((prev) => {
@@ -80,8 +87,8 @@ export function CompaniesHeader({
 
         <button
           type="button"
-          onClick={() => window.location.reload()}
-          title="Refresh page"
+          onClick={refresh}
+          title="Refresh data"
           className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white transition-colors"
         >
           <RefreshCw size={14} />
