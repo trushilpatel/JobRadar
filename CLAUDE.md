@@ -51,7 +51,7 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | ------------------------- | ----------------------------------------------------------------------------------------- |
 | `companies`               | Tracked companies                                                                         |
 | `company_scan_queue`      | Durable work queue for pending/in-progress company scans; deduped by unique partial index |
-| `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` tracks when a job disappears from a careers page  |
+| `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` tracks when a job disappears; `reason` includes `retry` (transient in-flight) with `retry_count` + `next_attempt_at` populated only while `reason='retry'`, written by the filter via `UpdateRetryBatch` |
 | `company_scan_log`        | Per-run scan summary (fetched, new, duration, error)                                      |
 | `job_feed`                | Operational feed — only `new`, `saved`, `applied`, `dismissed` rows live here             |
 | `job_analytics`           | Append-only analytics record written by job_post_analyzer; survives job dismissal         |

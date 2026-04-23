@@ -117,6 +117,13 @@ func (c *Consumer) PollBatch(ctx context.Context, fn func(records []*kgo.Record)
 	}
 }
 
+// CommitRecords commits offsets for the given records. The max offset per
+// partition across the passed records is committed — callers must ensure
+// records are processed and ready to commit in-order per partition.
+func (c *Consumer) CommitRecords(ctx context.Context, records ...*kgo.Record) error {
+	return c.client.CommitRecords(ctx, records...)
+}
+
 func (c *Consumer) Close() {
 	c.client.Close()
 }

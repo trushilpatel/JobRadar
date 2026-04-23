@@ -59,12 +59,12 @@ Slots are required — the factory errors at startup if none are configured. Pre
 
 ### Filter worker
 
-| Env var                        | Default | Notes                            |
-| ------------------------------ | ------- | -------------------------------- |
-| `FILTER_BATCH_SIZE`            | `50`    | Jobs per individual LLM ScoreBatch call |
-| `FILTER_FLUSH_TIMEOUT_SECONDS` | `30`    | Flush partial batch after N seconds idle |
-| `FILTER_LLM_PARALLELISM`       | `5`     | Concurrent LLM calls per flush; accumulation threshold = BATCH_SIZE × PARALLELISM |
-| `FILTER_LLM_SLOTS`             | `""`    | JSON array of slot configs       |
+| Env var                            | Default | Notes                                                            |
+| ---------------------------------- | ------- | ---------------------------------------------------------------- |
+| `FILTER_BATCH_SIZE`                | `50`    | Jobs per individual LLM ScoreBatch call                          |
+| `FILTER_FLUSH_TIMEOUT_SECONDS`     | `30`    | Broker `FetchMaxWait` — accumulate trickle traffic at the broker |
+| `FILTER_LLM_CALL_INTERVAL_SECONDS` | `5`     | Sleep between successive LLM calls within one fetch              |
+| `FILTER_LLM_SLOTS`                 | `""`    | JSON array of slot configs                                       |
 
 ### Enricher worker
 

@@ -174,7 +174,9 @@ func buildWorker(ctx context.Context, cfg *config.Config, database *gorm.DB, con
 
 	ledger := jobsvc.NewSeenLedgerStore(database)
 	return NewWorker(consumer, producer, scorer, ledger,
-		cfg.Filter.BatchSize, cfg.Filter.LLMParallelism, log), nil
+		cfg.Filter.BatchSize,
+		time.Duration(cfg.Filter.LLMCallIntervalSeconds)*time.Second,
+		log), nil
 }
 
 // runRetryConsumer consumes one retry-tier topic, sleeps until each record's

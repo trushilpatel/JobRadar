@@ -51,6 +51,38 @@ var FilterLLMDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 	Buckets: []float64{0.5, 1, 2, 5, 10, 30},
 })
 
+var FilterChunkDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	Name:    "filter_chunk_duration_seconds",
+	Help:    "Per-chunk score+route+publish duration by outcome.",
+	Buckets: []float64{0.5, 1, 2, 5, 10, 30},
+}, []string{"outcome"})
+
+var FilterRetryPublishesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "filter_retry_publishes_total",
+	Help: "Successful retry-tier publishes by tier.",
+}, []string{"tier"})
+
+var FilterRetryPublishFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "filter_retry_publish_failures_total",
+	Help: "Failed retry-tier publishes by tier (silent-drop alert surface).",
+}, []string{"tier"})
+
+var FilterDLQPublishesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "filter_dlq_publishes_total",
+	Help: "Successful DLQ publishes by cause.",
+}, []string{"cause"})
+
+var FilterCommitFailuresTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "filter_commit_failures_total",
+	Help: "CommitRecords errors (replay on next poll).",
+})
+
+var FilterChunksPerFetch = prometheus.NewHistogram(prometheus.HistogramOpts{
+	Name:    "filter_chunks_per_fetch",
+	Help:    "Fan-out size (chunks) per Kafka fetch.",
+	Buckets: []float64{1, 2, 4, 8, 16, 32, 64},
+})
+
 // ── Enricher ──────────────────────────────────────────────────────────────────
 
 var EnricherJobsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -104,6 +136,12 @@ func init() {
 		CrawlerScanDuration,
 		FilterJobsTotal,
 		FilterLLMDuration,
+		FilterChunkDuration,
+		FilterRetryPublishesTotal,
+		FilterRetryPublishFailures,
+		FilterDLQPublishesTotal,
+		FilterCommitFailuresTotal,
+		FilterChunksPerFetch,
 		EnricherJobsTotal,
 		EnricherLLMDuration,
 		SchedulerCompaniesEnqueuedTotal,

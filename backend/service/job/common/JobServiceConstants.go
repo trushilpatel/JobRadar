@@ -14,6 +14,7 @@ const (
 const (
 	SeenReasonFetch         = "fetch"
 	SeenReasonLLMIrrelevant = "llm_irrelevant"
+	SeenReasonRetry         = "retry"
 	SeenReasonUserDismissed = "user_dismissed"
 	SeenReasonError         = "error"
 )

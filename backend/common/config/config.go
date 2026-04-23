@@ -52,10 +52,10 @@ type LLMConfig struct {
 }
 
 type FilterConfig struct {
-	BatchSize           int
-	FlushTimeoutSeconds int
-	LLMParallelism      int
-	Slots               []LLMSlotConfig
+	BatchSize              int
+	FlushTimeoutSeconds    int
+	LLMCallIntervalSeconds int
+	Slots                  []LLMSlotConfig
 }
 
 type EnricherConfig struct {
@@ -198,10 +198,10 @@ func Load() *Config {
 			YearsExp:    getEnvInt("YEARS_EXP", 0),
 		},
 		Filter: FilterConfig{
-			BatchSize:           getEnvInt("FILTER_BATCH_SIZE", 50),
-			FlushTimeoutSeconds: getEnvInt("FILTER_FLUSH_TIMEOUT_SECONDS", 30),
-			LLMParallelism:      getEnvInt("FILTER_LLM_PARALLELISM", 5),
-			Slots:               filterSlots,
+			BatchSize:              getEnvInt("FILTER_BATCH_SIZE", 50),
+			FlushTimeoutSeconds:    getEnvInt("FILTER_FLUSH_TIMEOUT_SECONDS", 30),
+			LLMCallIntervalSeconds: getEnvInt("FILTER_LLM_CALL_INTERVAL_SECONDS", 5),
+			Slots:                  filterSlots,
 		},
 		Enricher: EnricherConfig{
 			FetchConcurrency:    getEnvInt("ENRICHER_FETCH_CONCURRENCY", 15),

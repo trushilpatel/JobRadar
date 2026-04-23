@@ -75,6 +75,9 @@ func (f *fakeLedgerWriter) UpdateSeenReasonBatch(_ context.Context, ids []string
 func (f *fakeLedgerWriter) MarkSeenBatch(_ context.Context, ids []string, companyID, reason string) error {
 	return f.err
 }
+func (f *fakeLedgerWriter) UpdateRetryBatch(_ context.Context, entries []jobsvc.RetryLedgerEntry) error {
+	return f.err
+}
 func (f *fakeLedgerWriter) MarkRemovedBatch(_ context.Context, ids []string) error { return f.err }
 
 type fakeDiscardStore struct {
