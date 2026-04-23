@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	stderrors "errors"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -144,7 +146,18 @@ func (w *Worker) processChunk(ctx context.Context, chunk []jobWithCtx) {
 
 	relevantIDs, err := w.scorer.ScoreBatch(ctx, inputs)
 	if err != nil {
-		w.log.Error("ScoreBatch failed, routing chunk", err, logger.Int(logger.FieldBatch, len(chunk)))
+		fields := []logger.Field{logger.Int(logger.FieldBatch, len(chunk))}
+		var exhausted *domainerr.LLMAllExhaustedError
+		if stderrors.As(err, &exhausted) {
+			if !exhausted.RetryAfter.IsZero() {
+				fields = append(fields,
+					logger.Str("retry_after", exhausted.RetryAfter.UTC().Format(time.RFC3339)),
+					logger.Dur("retry_in", time.Until(exhausted.RetryAfter)),
+				)
+			}
+			fields = append(fields, logger.Str("slots_detail", formatSlotStatuses(exhausted.Slots)))
+		}
+		w.log.Error("ScoreBatch failed, routing chunk", err, fields...)
 		dlqIDs := w.routeFailedChunk(ctx, chunk, err)
 		if len(dlqIDs) > 0 {
 			if merr := w.ledger.UpdateSeenReasonBatch(ctx, dlqIDs, jobcommon.SeenReasonError); merr != nil {
@@ -252,6 +265,23 @@ func (w *Worker) publishDetail(ctx context.Context, job ats.RawJob) {
 	if err := w.publisher.Publish(ctx, kafka.TopicJobListingsFiltered, payload); err != nil {
 		w.log.Error("publish failed", err, logger.Str(logger.FieldJobID, job.ID))
 	}
+}
+
+// formatSlotStatuses renders per-slot exhaustion detail for log output:
+// "slot_id=reason(fail=N,cd=RFC3339)" joined by "; ".
+func formatSlotStatuses(ss []domainerr.LLMSlotStatus) string {
+	if len(ss) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(ss))
+	for _, s := range ss {
+		cd := "-"
+		if !s.CooldownUntil.IsZero() {
+			cd = s.CooldownUntil.UTC().Format(time.RFC3339)
+		}
+		parts = append(parts, fmt.Sprintf("%s=%s(fail=%d,cd=%s)", s.SlotID, s.LastDenial, s.FailureCount, cd))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // splitBySize divides s into chunks of at most size elements each.
