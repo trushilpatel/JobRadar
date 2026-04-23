@@ -9,15 +9,21 @@ import type {
   TechTrends,
   PipelineStats,
 } from '@/types'
-
-const BASE = '/api'
+import { apiClient } from '@/lib/api-client'
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
+interface DashboardStatsRaw {
+  jobs_scanned_today?: number
+  jobs_new?: number
+  jobs_saved?: number
+  jobs_applied?: number
+  pipeline_pending?: number
+  pipeline_errors?: number
+}
+
 export async function fetchDashboardStats(): Promise<DashboardStats> {
-  const res = await fetch(`${BASE}/dashboard/stats`)
-  if (!res.ok) throw new Error('Failed to fetch dashboard stats')
-  const { data: raw } = await res.json()
+  const raw = await apiClient.get<DashboardStatsRaw>('/dashboard/stats')
   return {
     scanned_today: raw.jobs_scanned_today ?? 0,
     jobs_new: raw.jobs_new ?? 0,
@@ -29,10 +35,9 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
 }
 
 export async function fetchDashboardActivity(days = 7): Promise<WeeklyDataPoint[]> {
-  const res = await fetch(`${BASE}/dashboard/activity?days=${days}`)
-  if (!res.ok) throw new Error('Failed to fetch dashboard activity')
-  const { data: raw }: { data: Array<{ date: string; scanned: number; new_jobs: number }> } =
-    await res.json()
+  const raw = await apiClient.get<Array<{ date: string; scanned: number; new_jobs: number }>>(
+    `/dashboard/activity?days=${days}`
+  )
   return (raw ?? []).map((d) => ({
     // Use noon UTC to avoid date-boundary timezone shifts
     day: DAY_NAMES[new Date(d.date + 'T12:00:00Z').getDay()],
@@ -42,9 +47,7 @@ export async function fetchDashboardActivity(days = 7): Promise<WeeklyDataPoint[
 }
 
 export async function fetchProgress(): Promise<ProgressStats> {
-  const res = await fetch(`${BASE}/dashboard/progress`)
-  if (!res.ok) throw new Error('Failed to fetch progress stats')
-  const { data } = await res.json()
+  const data = await apiClient.get<Partial<ProgressStats> | null>('/dashboard/progress')
   return {
     applied_count: data?.applied_count ?? 0,
     awaiting_reply: data?.awaiting_reply ?? 0,
@@ -55,9 +58,7 @@ export async function fetchProgress(): Promise<ProgressStats> {
 }
 
 export async function fetchMarket(): Promise<MarketStats> {
-  const res = await fetch(`${BASE}/dashboard/market`)
-  if (!res.ok) throw new Error('Failed to fetch market stats')
-  const { data } = await res.json()
+  const data = await apiClient.get<Partial<MarketStats> | null>('/dashboard/market')
   return {
     new_since_yesterday: data?.new_since_yesterday ?? 0,
     total_open: data?.total_open ?? 0,
@@ -68,30 +69,24 @@ export async function fetchMarket(): Promise<MarketStats> {
 }
 
 export async function fetchHeatmap(): Promise<WeeklyCount[]> {
-  const res = await fetch(`${BASE}/dashboard/heatmap`)
-  if (!res.ok) throw new Error('Failed to fetch heatmap data')
-  const { data } = await res.json()
+  const data = await apiClient.get<WeeklyCount[] | null>('/dashboard/heatmap')
   return data ?? []
 }
 
 export async function fetchInterviews(): Promise<InterviewRow[]> {
-  const res = await fetch(`${BASE}/dashboard/interviews`)
-  if (!res.ok) throw new Error('Failed to fetch interviews')
-  const { data } = await res.json()
+  const data = await apiClient.get<InterviewRow[] | null>('/dashboard/interviews')
   return data ?? []
 }
 
 export async function fetchVelocity(limit = 10): Promise<CompanyVelocityRow[]> {
-  const res = await fetch(`${BASE}/dashboard/velocity?limit=${limit}`)
-  if (!res.ok) throw new Error('Failed to fetch velocity data')
-  const { data } = await res.json()
+  const data = await apiClient.get<CompanyVelocityRow[] | null>(
+    `/dashboard/velocity?limit=${limit}`
+  )
   return data ?? []
 }
 
 export async function fetchTechTrends(): Promise<TechTrends> {
-  const res = await fetch(`${BASE}/dashboard/tech-trends`)
-  if (!res.ok) throw new Error('Failed to fetch tech trends')
-  const { data } = await res.json()
+  const data = await apiClient.get<Partial<TechTrends> | null>('/dashboard/tech-trends')
   return {
     total_jobs: data?.total_jobs ?? 0,
     rising: data?.rising ?? [],
@@ -100,9 +95,7 @@ export async function fetchTechTrends(): Promise<TechTrends> {
 }
 
 export async function fetchPipelineStats(): Promise<PipelineStats> {
-  const res = await fetch(`${BASE}/dashboard/pipeline`)
-  if (!res.ok) throw new Error('Failed to fetch pipeline stats')
-  const { data } = await res.json()
+  const data = await apiClient.get<Partial<PipelineStats> | null>('/dashboard/pipeline')
   return {
     total_companies: data?.total_companies ?? 0,
     active_companies: data?.active_companies ?? 0,
@@ -116,10 +109,5 @@ export async function fetchPipelineStats(): Promise<PipelineStats> {
 }
 
 export async function updateApplicationStage(id: number, stage: string): Promise<void> {
-  const res = await fetch(`${BASE}/applications/${id}/stage`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stage }),
-  })
-  if (!res.ok) throw new Error('Failed to update stage')
+  await apiClient.patch<void>(`/applications/${id}/stage`, { stage })
 }

@@ -1,4 +1,4 @@
-const BASE = '/api'
+import { apiClient } from '@/lib/api-client'
 
 export interface TechCount {
   tech: string
@@ -51,43 +51,29 @@ export interface RoleCategoryCount {
 }
 
 export async function fetchTechStack(limit = 15): Promise<TechCount[]> {
-  const res = await fetch(`${BASE}/insights/tech-stack?limit=${limit}`)
-  if (!res.ok) throw new Error('Failed to fetch tech stack')
-  return res.json().then((r: { data: TechCount[] }) => r.data)
+  return apiClient.get<TechCount[]>(`/insights/tech-stack?limit=${limit}`)
 }
 
 export async function fetchCompanyActivity(): Promise<CompanyWeekCount[]> {
-  const res = await fetch(`${BASE}/insights/company-activity`)
-  if (!res.ok) throw new Error('Failed to fetch company activity')
-  return res.json().then((r: { data: CompanyWeekCount[] }) => r.data)
+  return apiClient.get<CompanyWeekCount[]>('/insights/company-activity')
 }
 
 export async function fetchFunnel(): Promise<FunnelStep[]> {
-  const res = await fetch(`${BASE}/insights/funnel`)
-  if (!res.ok) throw new Error('Failed to fetch funnel')
-  return res.json().then((r: { data: FunnelStep[] }) => r.data)
+  return apiClient.get<FunnelStep[]>('/insights/funnel')
 }
 
 export async function fetchLocation(): Promise<LocationData> {
-  const res = await fetch(`${BASE}/insights/location`)
-  if (!res.ok) throw new Error('Failed to fetch location')
-  return res.json().then((r: { data: LocationData }) => r.data)
+  return apiClient.get<LocationData>('/insights/location')
 }
 
 export async function fetchSponsorshipTrend(days = 30): Promise<SponsorshipDay[]> {
-  const res = await fetch(`${BASE}/insights/sponsorship?days=${days}`)
-  if (!res.ok) throw new Error('Failed to fetch sponsorship trend')
-  return res.json().then((r: { data: SponsorshipDay[] }) => r.data)
+  return apiClient.get<SponsorshipDay[]>(`/insights/sponsorship?days=${days}`)
 }
 
 export async function fetchVelocity(limit = 20): Promise<CompanyVelocity[]> {
-  const res = await fetch(`${BASE}/insights/velocity?limit=${limit}`)
-  if (!res.ok) throw new Error('Failed to fetch velocity')
-  return res.json().then((r: { data: CompanyVelocity[] }) => r.data)
+  return apiClient.get<CompanyVelocity[]>(`/insights/velocity?limit=${limit}`)
 }
 
 export async function fetchRoleCategories(): Promise<RoleCategoryCount[]> {
-  const res = await fetch(`${BASE}/insights/role-categories`)
-  if (!res.ok) throw new Error('Failed to fetch role categories')
-  return res.json().then((r: { data: RoleCategoryCount[] }) => r.data)
+  return apiClient.get<RoleCategoryCount[]>('/insights/role-categories')
 }

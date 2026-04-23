@@ -1,6 +1,5 @@
 import type { Job, JobApplication } from '@/types'
-
-const BASE = '/api'
+import { apiClient } from '@/lib/api-client'
 
 export interface JobsPage {
   data: Job[]
@@ -43,26 +42,17 @@ export async function fetchJobs(filters: JobFilters, page = 1, limit = 20): Prom
   if (filters.sortBy) p.set('sort_by', filters.sortBy)
   if (filters.sortDir) p.set('sort_dir', filters.sortDir)
 
-  const res = await fetch(`${BASE}/jobs?${p}`)
-  if (!res.ok) throw new Error('Failed to fetch jobs')
-  return res.json()
+  return apiClient.get<JobsPage>(`/jobs?${p}`)
 }
 
 // GET /jobs/:id
 export async function fetchJob(id: string): Promise<Job> {
-  const res = await fetch(`${BASE}/jobs/${id}`)
-  if (!res.ok) throw new Error('Failed to fetch job')
-  return res.json().then((r: { data: Job }) => r.data)
+  return apiClient.get<Job>(`/jobs/${id}`)
 }
 
 // PATCH /jobs/:id/save
 export async function setJobSaved(id: string, saved: boolean): Promise<void> {
-  const res = await fetch(`${BASE}/jobs/${id}/save`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ saved }),
-  })
-  if (!res.ok) throw new Error('Failed to update job')
+  await apiClient.patch<void>(`/jobs/${id}/save`, { saved })
 }
 
 // PATCH /jobs/:id/status
@@ -70,46 +60,27 @@ export async function setJobStatus(
   id: string,
   status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
 ): Promise<void> {
-  const res = await fetch(`${BASE}/jobs/${id}/status`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status }),
-  })
-  if (!res.ok) throw new Error('Failed to update job status')
+  await apiClient.patch<void>(`/jobs/${id}/status`, { status })
 }
 
 // PATCH /jobs/:id/notes
 export async function setJobNotes(id: string, notes: string): Promise<void> {
-  const res = await fetch(`${BASE}/jobs/${id}/notes`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ notes }),
-  })
-  if (!res.ok) throw new Error('Failed to update notes')
+  await apiClient.patch<void>(`/jobs/${id}/notes`, { notes })
 }
 
 // GET /jobs/counts
 export async function fetchJobCounts(): Promise<JobCounts> {
-  const res = await fetch(`${BASE}/jobs/counts`)
-  if (!res.ok) throw new Error('Failed to fetch job counts')
-  return res.json().then((r: { data: JobCounts }) => r.data)
+  return apiClient.get<JobCounts>('/jobs/counts')
 }
 
 // DELETE /jobs/:id  (dismiss)
 export async function dismissJob(id: string, reason: string, note?: string): Promise<void> {
-  const res = await fetch(`${BASE}/jobs/${id}`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ reason, note: note ?? '' }),
-  })
-  if (!res.ok) throw new Error('Failed to dismiss job')
+  await apiClient.delete<void>(`/jobs/${id}`, { reason, note: note ?? '' })
 }
 
 // GET /jobs/:id/applications
 export async function fetchApplications(jobId: string): Promise<JobApplication[]> {
-  const res = await fetch(`${BASE}/jobs/${jobId}/applications`)
-  if (!res.ok) throw new Error('Failed to fetch applications')
-  return res.json().then((r: { data: JobApplication[] }) => r.data)
+  return apiClient.get<JobApplication[]>(`/jobs/${jobId}/applications`)
 }
 
 // POST /jobs/:id/applications
@@ -118,10 +89,5 @@ export async function createApplication(
   stage: string,
   note?: string
 ): Promise<void> {
-  const res = await fetch(`${BASE}/jobs/${jobId}/applications`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stage, note: note ?? '' }),
-  })
-  if (!res.ok) throw new Error('Failed to create application stage')
+  await apiClient.post<void>(`/jobs/${jobId}/applications`, { stage, note: note ?? '' })
 }

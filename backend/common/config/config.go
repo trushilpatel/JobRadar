@@ -21,6 +21,51 @@ type Config struct {
 	Crawler       CrawlerConfig
 	Scheduler     SchedulerConfig
 	Observability ObservabilityConfig
+	Auth          AuthConfig
+	API           APIConfig
+}
+
+// AuthConfig holds Supabase auth verification settings. Exactly one of
+// SupabaseJWTSecret (HS256) or SupabaseJWKSURL (ES256 via JWKS) must be set.
+type AuthConfig struct {
+	SupabaseProjectURL  string
+	SupabaseJWKSURL     string
+	SupabaseJWTSecret   string
+	AllowedEmail        string
+	ClockSkewSeconds    int
+	JWKSCacheTTLSeconds int
+}
+
+// Validate enforces boot-time auth invariants. Refuses to start if both JWT
+// secret and JWKS URL are set, or if neither is set, or if AllowedEmail is
+// empty.
+func (c AuthConfig) Validate() error {
+	if c.AllowedEmail == "" {
+		return fmt.Errorf("config: ALLOWED_EMAIL must be set")
+	}
+	hasSecret := c.SupabaseJWTSecret != ""
+	hasJWKS := c.SupabaseJWKSURL != ""
+	if hasSecret && hasJWKS {
+		return fmt.Errorf("config: only one of SUPABASE_JWT_SECRET or SUPABASE_JWKS_URL may be set, not both")
+	}
+	if !hasSecret && !hasJWKS {
+		return fmt.Errorf("config: exactly one of SUPABASE_JWT_SECRET or SUPABASE_JWKS_URL must be set")
+	}
+	if c.SupabaseProjectURL == "" {
+		return fmt.Errorf("config: SUPABASE_PROJECT_URL must be set")
+	}
+	if c.ClockSkewSeconds < 0 {
+		return fmt.Errorf("config: JWT_CLOCK_SKEW_SECONDS must be >= 0, got %d", c.ClockSkewSeconds)
+	}
+	if c.JWKSCacheTTLSeconds <= 0 {
+		return fmt.Errorf("config: JWKS_CACHE_TTL_SECONDS must be > 0, got %d", c.JWKSCacheTTLSeconds)
+	}
+	return nil
+}
+
+// APIConfig holds HTTP-server-level settings for the public API listener.
+type APIConfig struct {
+	MaxBodyBytes int64
 }
 
 type DatabaseConfig struct {
@@ -235,10 +280,37 @@ func Load() *Config {
 			CheckIntervalSeconds: getEnvInt("SCHEDULER_CHECK_INTERVAL_SECONDS", 60),
 		},
 		Observability: ObservabilityConfig{
-			MetricsAddr:    getEnv("METRICS_ADDR", ":9090"),
+			MetricsAddr:    getEnv("METRICS_ADDR", "127.0.0.1:9100"),
 			JaegerEndpoint: getEnv("JAEGER_ENDPOINT", "http://localhost:4318"),
 		},
+		Auth: AuthConfig{
+			SupabaseProjectURL:  getEnv("SUPABASE_PROJECT_URL", ""),
+			SupabaseJWKSURL:     deriveJWKSURL(getEnv("SUPABASE_PROJECT_URL", ""), getEnv("SUPABASE_JWKS_URL", ""), getEnv("SUPABASE_JWT_SECRET", "")),
+			SupabaseJWTSecret:   getEnv("SUPABASE_JWT_SECRET", ""),
+			AllowedEmail:        getEnv("ALLOWED_EMAIL", ""),
+			ClockSkewSeconds:    getEnvInt("JWT_CLOCK_SKEW_SECONDS", 60),
+			JWKSCacheTTLSeconds: getEnvInt("JWKS_CACHE_TTL_SECONDS", 600),
+		},
+		API: APIConfig{
+			MaxBodyBytes: int64(getEnvInt("API_MAX_BODY_BYTES", 1048576)),
+		},
 	}
+}
+
+// deriveJWKSURL returns the explicit JWKS URL when set, otherwise derives it
+// from the project URL. Returns "" when HS256 mode is selected (JWT secret is
+// set) so the "exactly one of secret/JWKS" invariant stays satisfied.
+func deriveJWKSURL(projectURL, explicit, jwtSecret string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if jwtSecret != "" {
+		return ""
+	}
+	if projectURL == "" {
+		return ""
+	}
+	return strings.TrimRight(projectURL, "/") + "/auth/v1/.well-known/jwks.json"
 }
 
 func getEnv(key, fallback string) string {

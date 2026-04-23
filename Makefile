@@ -66,8 +66,8 @@ migrate: ## Run database migrations (goose up)
 scan-google: ## Manually trigger a Google careers scan (bypasses cooldown)
 	curl -s -X POST http://localhost:8080/companies/google/scan | jq .
 
-db-truncate: ## Truncate all tables except companies (keeps company list intact)
-	docker exec -it jobradar_postgres psql -U postgres -d jobradar -c \
+db-truncate: ## Truncate all tables except companies — requires psql + DB_URL env var
+	psql "$$DB_URL" -c \
 		"TRUNCATE TABLE job_pipeline_ledger, company_scan_queue, company_scan_log, job_application_tracker, job_dismissal_log, job_analytics, job_feed CASCADE;"
 
 # ── Quality ───────────────────────────────────────────────────────────────────
@@ -136,8 +136,8 @@ vet: ## Run go vet
 
 # ── Docker (infra only — for local dev) ──────────────────────────────────────
 
-docker-up: ## Start Kafka + Postgres only (for local go run dev)
-	docker-compose up -d postgres kafka kafka-init
+docker-up: ## Start Kafka + Redis for local dev (DB is Supabase — no local postgres)
+	docker-compose up -d kafka kafka-init redis
 
 docker-logs: ## Tail docker-compose logs
 	docker-compose logs -f

@@ -1,7 +1,5 @@
 import type { Company, ScanStats, QueueEntry } from '@/types'
-import { parseApiError } from '@/lib/api-error'
-
-const BASE = '/api'
+import { apiClient } from '@/lib/api-client'
 
 export interface CompanyFilters {
   active?: boolean // true = active only, false = inactive only, undefined = all
@@ -35,9 +33,7 @@ export async function fetchCompanies(
   if (filters.sortBy) p.set('sort_by', filters.sortBy)
   if (filters.sortDir) p.set('sort_dir', filters.sortDir)
 
-  const res = await fetch(`${BASE}/companies?${p}`)
-  if (!res.ok) throw new Error('Failed to fetch companies')
-  return res.json().then((r: { data: CompaniesPage }) => r.data)
+  return apiClient.get<CompaniesPage>(`/companies?${p}`)
 }
 
 export async function createCompany(data: {
@@ -47,72 +43,40 @@ export async function createCompany(data: {
   adapter_type: string
   active: boolean
 }): Promise<Company> {
-  const res = await fetch(`${BASE}/companies`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
-  if (!res.ok) {
-    throw await parseApiError(res, 'Failed to create company')
-  }
-  return res.json().then((r: { data: Company }) => r.data)
+  return apiClient.post<Company>('/companies', data)
 }
 
 export async function updateCompany(
   id: string,
   fields: Partial<Pick<Company, 'name' | 'url' | 'adapter_type' | 'active'>>
 ): Promise<void> {
-  const res = await fetch(`${BASE}/companies/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(fields),
-  })
-  if (!res.ok) {
-    throw await parseApiError(res, 'Failed to update company')
-  }
+  await apiClient.patch<void>(`/companies/${encodeURIComponent(id)}`, fields)
 }
 
 export async function deleteCompany(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/companies/${encodeURIComponent(id)}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error('Failed to delete company')
+  await apiClient.delete<void>(`/companies/${encodeURIComponent(id)}`)
 }
 
 export async function fetchScanStats(id: string): Promise<ScanStats> {
-  const res = await fetch(`${BASE}/companies/${encodeURIComponent(id)}/scan-stats`)
-  if (!res.ok) throw new Error('Failed to fetch scan stats')
-  return res.json().then((r: { data: ScanStats }) => r.data)
+  return apiClient.get<ScanStats>(`/companies/${encodeURIComponent(id)}/scan-stats`)
 }
 
 export async function triggerScan(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/companies/${encodeURIComponent(id)}/scan`, { method: 'POST' })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.error?.message ?? 'Failed to trigger scan')
-  }
+  await apiClient.post<void>(`/companies/${encodeURIComponent(id)}/scan`)
 }
 
 export async function triggerScanAll(): Promise<{ queued: number }> {
-  const res = await fetch(`${BASE}/companies/scan-all`, { method: 'POST' })
-  if (!res.ok) throw new Error('Failed to trigger scan all')
-  return res.json().then((r: { data: { queued: number } }) => r.data)
+  return apiClient.post<{ queued: number }>('/companies/scan-all')
 }
 
 export async function setAllCompaniesActive(active: boolean): Promise<void> {
-  const res = await fetch(`${BASE}/companies/active`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ active }),
-  })
-  if (!res.ok) throw new Error('Failed to update companies')
+  await apiClient.patch<void>('/companies/active', { active })
 }
 
 export async function fetchQueue(): Promise<QueueEntry[]> {
-  const res = await fetch(`${BASE}/companies/queue`)
-  if (!res.ok) throw new Error('Failed to fetch queue')
-  return res.json().then((r: { data: QueueEntry[] }) => r.data)
+  return apiClient.get<QueueEntry[]>('/companies/queue')
 }
 
 export async function removeFromQueue(entryId: string): Promise<void> {
-  const res = await fetch(`${BASE}/companies/queue/${entryId}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error('Failed to remove queue entry')
+  await apiClient.delete<void>(`/companies/queue/${entryId}`)
 }

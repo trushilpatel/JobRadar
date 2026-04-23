@@ -7,8 +7,10 @@ import {
   BarChart2,
   ChevronsLeft,
   ChevronsRight,
+  LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/features/auth/store'
 
 const nav: { to: string; label: string; icon: React.ReactNode }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
@@ -19,6 +21,10 @@ const nav: { to: string; label: string; icon: React.ReactNode }[] = [
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
+  const session = useAuthStore((s) => s.session)
+  const signOut = useAuthStore((s) => s.signOut)
+  const email = session?.user?.email ?? ''
+  const initials = email ? email[0].toUpperCase() : '?'
 
   return (
     <div
@@ -77,11 +83,33 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      {!collapsed && (
-        <div className="px-5 py-4 border-t border-white/[0.07]">
-          <p className="text-xs text-slate-500">Single-user mode</p>
-        </div>
-      )}
+      <div className={cn('border-t border-white/[0.07]', collapsed ? 'px-1.5 py-3' : 'px-3 py-3')}>
+        {collapsed ? (
+          <button
+            onClick={signOut}
+            title={email}
+            className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-white/[0.05] transition-colors"
+          >
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
+              {initials}
+            </span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-2.5">
+            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
+              {initials}
+            </span>
+            <span className="flex-1 text-xs text-slate-400 truncate">{email}</span>
+            <button
+              onClick={signOut}
+              title="Sign out"
+              className="p-1 text-slate-500 hover:text-white hover:bg-white/[0.06] rounded-md transition-colors shrink-0"
+            >
+              <LogOut size={13} />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

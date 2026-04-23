@@ -22,7 +22,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 # ── Final image ───────────────────────────────────────────────────────────────
 
 FROM alpine:3.20
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata && \
+    addgroup -S -g 65532 jobradar && \
+    adduser  -S -D -H -u 65532 -G jobradar jobradar
 WORKDIR /app
 COPY --from=go-builder /out/api       /app/
 COPY --from=go-builder /out/migrate   /app/
@@ -30,6 +32,9 @@ COPY --from=go-builder /out/scheduler /app/
 COPY --from=go-builder /out/filter    /app/
 COPY --from=go-builder /out/enricher  /app/
 COPY migrations/ /app/migrations/
+RUN chown -R 65532:65532 /app
+
+USER 65532:65532
 
 ARG GIT_SHA=dev
 LABEL org.opencontainers.image.revision="${GIT_SHA}"

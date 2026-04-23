@@ -34,6 +34,8 @@ const (
 	FieldNextAttemptAt = "next_attempt_at"
 	FieldPartition     = "partition"
 	FieldOffset        = "offset"
+	FieldUserID        = "user_id"
+	FieldEmailDomain   = "email_domain"
 )
 
 // Str creates a string field.

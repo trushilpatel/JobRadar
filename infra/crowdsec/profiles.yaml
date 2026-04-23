@@ -1,0 +1,20 @@
+# Profile: decide what remediation to apply to alerts.
+# Ban duration is injected from env CROWDSEC_BAN_DURATION (default 4h in
+# bootstrap.sh). CrowdSec config files do not natively support env expansion,
+# so the profile is generated/patched by the ops layer if a non-default
+# duration is needed. Default value here is 4h to match bootstrap.sh.
+name: default_ip_remediation
+filters:
+  - Alert.Remediation == true && Alert.GetScope() == "Ip"
+decisions:
+  - type: ban
+    duration: 4h
+on_success: break
+---
+name: default_range_remediation
+filters:
+  - Alert.Remediation == true && Alert.GetScope() == "Range"
+decisions:
+  - type: ban
+    duration: 4h
+on_success: break

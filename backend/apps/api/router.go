@@ -8,27 +8,49 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/apps/api/middleware"
+	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/db"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"gorm.io/gorm"
 )
 
-// NewRouter builds the chi router, applies global middleware, mounts operational
-// endpoints, then delegates all resource routes to each RouteGroup.
+// NewRouter builds the public API router. Middleware chain is:
+// otelhttp → Logger → Metrics → Recoverer → SecurityHeaders → BodyLimit →
+// Auth → route groups. Operational endpoints (/metrics, /health, /ready)
+// live on a separate listener — see NewOpsRouter.
 //
-// To add a new resource: implement handler.RouteGroup and add it to App.Handlers().
-// This function never needs to change.
-func NewRouter(log logger.Logger, database *gorm.DB, groups []handler.RouteGroup) *chi.Mux {
+// authMiddleware is injected so main.go can fail fast when auth setup fails
+// (e.g. malformed JWKS URL); this keeps NewRouter free of fallible IO.
+func NewRouter(
+	log logger.Logger,
+	cfg *config.Config,
+	authMiddleware func(http.Handler) http.Handler,
+	groups []handler.RouteGroup,
+) *chi.Mux {
 	r := chi.NewRouter()
 
-	// Global middleware — runs on every request
-	r.Use(otelhttp.NewMiddleware("jobradar-api")) // root span per request; must be first
+	r.Use(otelhttp.NewMiddleware("jobradar-api"))
 	r.Use(middleware.Logger(log))
 	r.Use(middleware.Metrics())
 	r.Use(chimiddleware.Recoverer)
+	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.BodyLimit(cfg.API.MaxBodyBytes))
+	r.Use(authMiddleware)
 
-	// Operational endpoints — not owned by any resource handler
+	for _, g := range groups {
+		g.Register(r)
+	}
+
+	return r
+}
+
+// NewOpsRouter builds the operational router bound to the metrics listener.
+// It exposes /metrics (Prometheus), /health (liveness), and /ready
+// (DB ping). Kept separate from the public API so Prometheus scrapes never
+// traverse the auth or rate-limit middleware stacks.
+func NewOpsRouter(database *gorm.DB) *chi.Mux {
+	r := chi.NewRouter()
 	r.Handle("/metrics", promhttp.Handler())
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -40,11 +62,5 @@ func NewRouter(log logger.Logger, database *gorm.DB, groups []handler.RouteGroup
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-
-	// Register all resource route groups
-	for _, g := range groups {
-		g.Register(r)
-	}
-
 	return r
 }
