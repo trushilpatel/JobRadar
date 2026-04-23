@@ -108,7 +108,16 @@ func main() {
 
 // runRefresher keeps dashboard materialized views up to date.
 // Pipeline stats refresh every 3 minutes; the heatmap every 5 minutes.
+// Both views are also refreshed once immediately on startup so the first
+// API response reflects the current DB state rather than stale MV data.
 func runRefresher(ctx context.Context, log logger.Logger, r dashboardsvc.StatsRefresher) {
+	if err := r.RefreshPipelineStats(ctx); err != nil {
+		log.Error("refresh pipeline stats failed", err)
+	}
+	if err := r.RefreshHeatmap(ctx); err != nil {
+		log.Error("refresh heatmap failed", err)
+	}
+
 	pipelineTicker := time.NewTicker(3 * time.Minute)
 	heatmapTicker := time.NewTicker(5 * time.Minute)
 	defer pipelineTicker.Stop()
