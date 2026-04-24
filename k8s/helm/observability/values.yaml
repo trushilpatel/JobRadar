@@ -39,16 +39,25 @@ kube-prometheus-stack:
   grafana:
     service:
       type: NodePort
-      nodePort: 3001
+      nodePort: 30001
     adminPassword: "admin"
     grafana.ini:
       users:
         allow_sign_up: false
-    # Wire Loki as a datasource manually (not auto-wired like Prometheus).
+    # Disable sidecar-based datasource provisioning to avoid duplicate defaults.
+    # Both Prometheus and Loki are declared via additionalDataSources instead.
+    sidecar:
+      datasources:
+        enabled: false
     additionalDataSources:
+      - name: Prometheus
+        type: prometheus
+        url: http://obs-kube-prometheus-stack-prometheus:9090
+        access: proxy
+        isDefault: true
       - name: Loki
         type: loki
-        url: http://obs-loki-stack:3100
+        url: http://obs-loki:3100
         access: proxy
         isDefault: false
     # Provision dashboards from the jobradar-grafana-dashboards ConfigMap (created in Task 14).
@@ -103,7 +112,7 @@ supabaseAuditSync:
     repository: jobradar-supabase-audit-sync
     tag: local
     pullPolicy: IfNotPresent
-  lokiUrl: "http://obs-loki-stack:3100/loki/api/v1/push"
+  lokiUrl: "http://obs-loki:3100/loki/api/v1/push"
   intervalSeconds: "900"
   stateFile: "/var/lib/audit-sync/state.json"
   storage: 100Mi
