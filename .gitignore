@@ -43,4 +43,7 @@ backend/internal/ats_fetcher/google/scraper/logs.json
 # Runtime secrets (Docker secrets files — never commit real values)
 secrets/
 
+# Kubernetes secrets — never commit real values
+k8s/**/secret.yaml
+
 .env
