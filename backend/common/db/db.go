@@ -11,7 +11,11 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
+// Open connects to Postgres with the supplied DSN and caps the pool at
+// maxOpenConns. Idle connections are set equal to maxOpenConns so the full
+// pool stays warm under bursty traffic. Callers pick a pool size that fits
+// their workload and the shared upstream connection limit.
+func Open(cfg config.DatabaseConfig, maxOpenConns int) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(cfg.DSN()), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
@@ -28,8 +32,8 @@ func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	sqlDB.SetMaxOpenConns(10)
-	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetMaxOpenConns(maxOpenConns)
+	sqlDB.SetMaxIdleConns(maxOpenConns)
 	// Prevent stale connections that firewalls or cloud load-balancers silently drop.
 	sqlDB.SetConnMaxLifetime(30 * time.Minute)
 	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
@@ -43,10 +47,10 @@ func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
 // OpenWithRetry attempts to open a DB connection up to maxAttempts times,
 // waiting delay between each attempt. Use this in workers where the database
 // may not be ready immediately at process start (e.g. Docker Compose boot order).
-func OpenWithRetry(cfg config.DatabaseConfig, maxAttempts int, delay time.Duration) (*gorm.DB, error) {
+func OpenWithRetry(cfg config.DatabaseConfig, maxOpenConns, maxAttempts int, delay time.Duration) (*gorm.DB, error) {
 	var lastErr error
 	for i := range maxAttempts {
-		opened, err := Open(cfg)
+		opened, err := Open(cfg, maxOpenConns)
 		if err != nil {
 			lastErr = err
 		} else if pingErr := Ping(opened); pingErr != nil {

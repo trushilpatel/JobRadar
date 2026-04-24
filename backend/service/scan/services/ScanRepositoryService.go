@@ -26,8 +26,9 @@ type ScanQueueStore interface {
 	// uses FOR UPDATE SKIP LOCKED so two instances never double-enqueue.
 	EnqueueDue(ctx context.Context, intervalMinutes int, source string) (int, error)
 
-	// ClaimNext atomically claims the next queued item and marks it processing.
-	// Returns nil, nil if the queue is empty.
+	// ClaimNext atomically claims the next queued item for an active company
+	// and marks it processing. Returns nil, nil if the queue is empty or all
+	// remaining entries belong to inactive companies.
 	ClaimNext(ctx context.Context) (*dto.ScanQueueItem, error)
 
 	// Complete removes the queue entry. Call after scan succeeds or fails.
@@ -39,11 +40,15 @@ type ScanQueueStore interface {
 	// ResetStuck resets processing rows whose heartbeat (or started_at if no heartbeat yet) is older than staleDur.
 	ResetStuck(ctx context.Context, staleDur time.Duration) error
 
+	// PurgeInactive deletes all queued (not processing) entries whose company
+	// is inactive. Returns the number of rows removed.
+	PurgeInactive(ctx context.Context) (int, error)
+
 	// UpdateHeartbeat refreshes the heartbeat timestamp for an in-progress row.
 	UpdateHeartbeat(ctx context.Context, id string) error
 
-	// ListQueue returns all active queue entries ordered by priority DESC, queued_at ASC.
-	ListQueue(ctx context.Context) ([]dto.ScanQueueItem, error)
+	// ListQueue returns queue entries matching filter, ordered by priority DESC, queued_at ASC.
+	ListQueue(ctx context.Context, filter dto.QueueFilter) ([]dto.ScanQueueItem, error)
 }
 
 // ScanLogWriter records scan summaries.
@@ -119,11 +124,13 @@ func (s *scanQueueStore) ClaimNext(ctx context.Context) (_ *dto.ScanQueueItem, e
 		UPDATE company_scan_queue
 		SET status = 'processing', started_at = NOW()
 		WHERE id = (
-			SELECT id FROM company_scan_queue
-			WHERE status = 'queued'
-			ORDER BY priority DESC, queued_at ASC
+			SELECT q.id
+			FROM company_scan_queue q
+			JOIN companies c ON c.id = q.company_id AND c.active = true
+			WHERE q.status = 'queued'
+			ORDER BY q.priority DESC, q.queued_at ASC
 			LIMIT 1
-			FOR UPDATE SKIP LOCKED
+			FOR UPDATE OF q SKIP LOCKED
 		)
 		RETURNING id, company_id, status, source, priority, queued_at, started_at, heartbeat_at
 	`).Scan(&item).Error
@@ -134,6 +141,17 @@ func (s *scanQueueStore) ClaimNext(ctx context.Context) (_ *dto.ScanQueueItem, e
 		return nil, nil
 	}
 	return &item, nil
+}
+
+func (s *scanQueueStore) PurgeInactive(ctx context.Context) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.PurgeInactive")
+	defer tracing.End(span, &err)
+	result := s.db.WithContext(ctx).Exec(`
+		DELETE FROM company_scan_queue
+		WHERE status = 'queued'
+		  AND company_id IN (SELECT id FROM companies WHERE active = false)
+	`)
+	return int(result.RowsAffected), result.Error
 }
 
 func (s *scanQueueStore) Complete(ctx context.Context, id string) (err error) {
@@ -165,15 +183,22 @@ func (s *scanQueueStore) UpdateHeartbeat(ctx context.Context, id string) (err er
 	return s.db.WithContext(ctx).Exec(`UPDATE company_scan_queue SET heartbeat_at = NOW() WHERE id = ?`, id).Error
 }
 
-func (s *scanQueueStore) ListQueue(ctx context.Context) (_ []dto.ScanQueueItem, err error) {
+func (s *scanQueueStore) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ []dto.ScanQueueItem, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.ListQueue")
 	defer tracing.End(span, &err)
+	query := `SELECT id, company_id, status, source, priority, queued_at, started_at, heartbeat_at FROM company_scan_queue WHERE 1=1`
+	var args []any
+	if filter.Status != "" {
+		query += ` AND status = ?`
+		args = append(args, filter.Status)
+	}
+	if filter.Source != "" {
+		query += ` AND source = ?`
+		args = append(args, filter.Source)
+	}
+	query += ` ORDER BY priority DESC, queued_at ASC`
 	var items []dto.ScanQueueItem
-	err = s.db.WithContext(ctx).Raw(`
-		SELECT id, company_id, status, source, priority, queued_at, started_at, heartbeat_at
-		FROM company_scan_queue
-		ORDER BY priority DESC, queued_at ASC
-	`).Scan(&items).Error
+	err = s.db.WithContext(ctx).Raw(query, args...).Scan(&items).Error
 	return items, err
 }
 
@@ -399,18 +424,12 @@ func (s *repositoryService) GetStats(ctx context.Context, companyID string) (_ *
 func (s *repositoryService) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ []dto.QueueEntryView, err error) {
 	ctx, span := tracing.Start(ctx, "scan.repository.ListQueue")
 	defer tracing.End(span, &err)
-	items, err := s.queue.ListQueue(ctx)
+	items, err := s.queue.ListQueue(ctx, filter)
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch queue")
 	}
 	views := make([]dto.QueueEntryView, 0, len(items))
 	for _, item := range items {
-		if filter.Status != "" && item.Status != filter.Status {
-			continue
-		}
-		if filter.Source != "" && item.Source != filter.Source {
-			continue
-		}
 		views = append(views, dto.QueueEntryView{
 			ID:        item.ID,
 			CompanyID: item.CompanyID,
@@ -422,6 +441,16 @@ func (s *repositoryService) ListQueue(ctx context.Context, filter dto.QueueFilte
 		})
 	}
 	return views, nil
+}
+
+func (s *repositoryService) PurgeInactive(ctx context.Context) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.PurgeInactive")
+	defer tracing.End(span, &err)
+	n, err := s.queue.PurgeInactive(ctx)
+	if err != nil {
+		return 0, errors.ErrInternal.WithMessage("failed to purge inactive queue entries")
+	}
+	return n, nil
 }
 
 func (s *repositoryService) RemoveFromQueue(ctx context.Context, entryID string) (err error) {

@@ -145,9 +145,9 @@ func TestValidateList(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "empty filter", filter: companydto.CompanyFilter{}, page: 1, limit: 20},
-		{name: "valid adapter_type", filter: companydto.CompanyFilter{AdapterType: companycommon.AdapterGreenhouse}, page: 1, limit: 20},
+		{name: "valid adapter_types", filter: companydto.CompanyFilter{AdapterTypes: []string{companycommon.AdapterGreenhouse}}, page: 1, limit: 20},
 		{name: "valid active filter", filter: companydto.CompanyFilter{Active: boolPtr(true)}, page: 1, limit: 20},
-		{name: "invalid adapter_type", filter: companydto.CompanyFilter{AdapterType: "bogus"}, page: 1, limit: 20, wantErr: true},
+		{name: "invalid adapter_types", filter: companydto.CompanyFilter{AdapterTypes: []string{"bogus"}}, page: 1, limit: 20, wantErr: true},
 		{name: "page zero", filter: companydto.CompanyFilter{}, page: 0, limit: 20, wantErr: true},
 		{name: "limit too large", filter: companydto.CompanyFilter{}, page: 1, limit: 200, wantErr: true},
 	}

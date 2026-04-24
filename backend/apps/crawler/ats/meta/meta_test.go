@@ -340,8 +340,9 @@ func TestFetchJobs_MockScraper_InvalidJSON(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
-	if !contains(err.Error(), "failed to parse scraper output") {
-		t.Errorf("expected parse error, got: %s", err.Error())
+	// Error may come from payload extraction (no JSON start char) or JSON parsing.
+	if !contains(err.Error(), "failed to parse scraper output") && !contains(err.Error(), "failed to locate scraper payload") {
+		t.Errorf("expected parse/locate error, got: %s", err.Error())
 	}
 }
 
@@ -453,6 +454,48 @@ func TestFetchJobs_ConfigPassedToNode(t *testing.T) {
 	}
 	// Title encodes all env var values — verify all were passed correctly
 	assertEqual(t, "env vars in title", result.Jobs[0].Title, "2000|5000|50|120000")
+}
+
+// ── FetchJobs — NDJSON mixed stdout (Playwright/Chromium diagnostic lines) ──
+// Playwright and Chromium may write diagnostic JSON lines to stdout before the
+// scraper's final output. The parser must extract only the last JSON value.
+
+func TestFetchJobs_MockScraper_NDJSONMixedStdout(t *testing.T) {
+	dir := t.TempDir()
+	// Simulate Chromium writing a diagnostic JSON line to stdout before the
+	// scraper's actual output (which is prefixed with \n per the scrape.js fix).
+	fakeScript := `
+		const diag = JSON.stringify({"ts":"2026-04-22T00:40:45.332Z","msg":"starting meta careers scraper"});
+		const result = JSON.stringify([{
+			"id": "meta-111",
+			"title": "Test Engineer",
+			"url": "https://www.metacareers.com/jobs/111/",
+			"location": "Remote",
+			"employ_type": "full_time",
+			"full_content": {
+				"description": "Test",
+				"requirements": "",
+				"compensation": "",
+				"workplace_type": "",
+				"department": "Engineering",
+				"published_date": ""
+			}
+		}]);
+		// Simulate Playwright/Chromium writing to stdout before our result
+		process.stdout.write(diag + "\n");
+		process.stdout.write("\n" + result + "\n");
+	`
+	writeScript(t, dir, fakeScript)
+
+	m := &Meta{cfg: defaultConfig(), scraperDir: dir}
+	result, err := m.FetchJobs(context.Background(), "meta")
+	if err != nil {
+		t.Fatalf("FetchJobs failed with mixed stdout: %v", err)
+	}
+	if len(result.Jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(result.Jobs))
+	}
+	assertEqual(t, "ID", result.Jobs[0].ID, "meta-111")
 }
 
 // ── Context cancellation ────────────────────────────────────────────────────

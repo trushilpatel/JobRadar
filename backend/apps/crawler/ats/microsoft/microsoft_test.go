@@ -220,6 +220,29 @@ func TestFetchJobs_MalformedJSON(t *testing.T) {
 	}
 }
 
+// ── FetchJobs — error field as object (not string) ────────────────────────
+// The live API returns {"error": {"code": 400, "message": "..."}} in some
+// error conditions. Previously this caused an unmarshal failure because the
+// field was typed as string.
+
+func TestFetchJobs_ObjectErrorField(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Return a response where "error" is an object, not a string.
+		_, _ = w.Write([]byte(`{"status":"ok","error":{"code":0,"message":null},"data":{"count":1,"positions":[{"id":1812345678,"displayJobId":"1812345678","name":"SWE","locations":["Redmond, WA"],"postedTs":1712678400,"department":"Eng","workLocationOption":"hybrid","atsJobId":"REQ-1","positionUrl":""}]}}`))
+	}))
+	defer srv.Close()
+
+	m := &Microsoft{baseURL: srv.URL}
+	result, err := m.FetchJobs(context.Background(), "")
+	if err != nil {
+		t.Fatalf("expected success when error field is an object, got: %v", err)
+	}
+	if len(result.Jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(result.Jobs))
+	}
+}
+
 // ── FetchJobs — context cancelled ───────────────────────────────────────────
 
 func TestFetchJobs_ContextCancelled(t *testing.T) {
@@ -328,19 +351,23 @@ func TestFetchJobContent_Success(t *testing.T) {
 			return
 		}
 
-		_ = json.NewEncoder(w).Encode(positionDetail{
-			ID:                         1812345678,
-			DisplayJobID:               "1812345678",
-			Name:                       "Senior Software Engineer",
-			Locations:                  []string{"Redmond, Washington, United States"},
-			PostedTs:                   1712678400,
-			Department:                 "Engineering",
-			WorkLocationOption:         "Up to 50% work from home",
-			JobDescription:             "<p>We are looking for a <b>talented engineer</b>.</p>",
-			Location:                   "Redmond, Washington, United States",
-			EfcustomTextEmploymentType: []string{"Full-Time"},
-			PositionURL:                "https://careers.microsoft.com/v2/global/en/job/1812345678/senior-software-engineer",
-			AtsJobID:                   "REQ-12345",
+		// API returns data wrapped in {status, error, data} envelope.
+		_ = json.NewEncoder(w).Encode(positionDetailResponse{
+			Status: 200,
+			Data: positionDetail{
+				ID:                         1812345678,
+				DisplayJobID:               "1812345678",
+				Name:                       "Senior Software Engineer",
+				Locations:                  []string{"Redmond, Washington, United States"},
+				PostedTs:                   1712678400,
+				Department:                 "Engineering",
+				WorkLocationOption:         "Up to 50% work from home",
+				JobDescription:             "<p>We are looking for a <b>talented engineer</b>.</p>",
+				Location:                   "Redmond, Washington, United States",
+				EfcustomTextEmploymentType: []string{"Full-Time"},
+				PositionURL:                "https://careers.microsoft.com/v2/global/en/job/1812345678/senior-software-engineer",
+				AtsJobID:                   "REQ-12345",
+			},
 		})
 	}))
 	defer srv.Close()

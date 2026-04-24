@@ -16,8 +16,9 @@ backend/migrate
 /vendor/
 
 # Environment variables
-.env
+/.env
 .env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -38,3 +39,11 @@ backend/internal/ats_fetcher/google/scraper/logs.json
 
 # Git Worktrees (isolated agent workspaces)
 .worktrees/
+
+# Runtime secrets (Docker secrets files — never commit real values)
+secrets/
+
+# Kubernetes secrets — never commit real values
+k8s/**/secret.yaml
+
+.env

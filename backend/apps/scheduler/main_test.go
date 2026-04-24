@@ -16,6 +16,8 @@ type fakeSchedulerService struct {
 	enqueueErr   error
 	resetErr     error
 	resetCalled  bool
+	purgeErr     error
+	purgeCalled  bool
 }
 
 func (f *fakeSchedulerService) EnqueueDue(_ context.Context, _ int) (int, error) {
@@ -24,6 +26,10 @@ func (f *fakeSchedulerService) EnqueueDue(_ context.Context, _ int) (int, error)
 func (f *fakeSchedulerService) ResetStuck(_ context.Context, _ time.Duration) error {
 	f.resetCalled = true
 	return f.resetErr
+}
+func (f *fakeSchedulerService) PurgeInactive(_ context.Context) (int, error) {
+	f.purgeCalled = true
+	return 0, f.purgeErr
 }
 
 var _ scansvc.SchedulerService = (*fakeSchedulerService)(nil)
@@ -57,5 +63,14 @@ func TestRunCycle_ResetStuckError_ContinuesToEnqueue(t *testing.T) {
 		enqueueCount: 2,
 	}
 	// Reset failure must not abort the enqueue step.
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+}
+
+func TestRunCycle_PurgeInactiveError_ContinuesToEnqueue(t *testing.T) {
+	svc := &fakeSchedulerService{
+		purgeErr:     errors.New("db down"),
+		enqueueCount: 2,
+	}
+	// Purge failure must not abort the enqueue step.
 	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
 }

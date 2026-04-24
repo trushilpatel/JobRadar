@@ -16,7 +16,12 @@ type Consumer struct {
 	log    logger.Logger
 }
 
-func NewConsumer(cfg config.KafkaConfig, log logger.Logger, groupID string, topics ...string) (*Consumer, error) {
+// NewConsumer creates a Kafka consumer for the given group and topics.
+// fetchMaxWait controls how long the broker waits before returning a fetch with
+// fewer than FetchMinBytes. Pass 0 to use the Kafka default (5 seconds).
+// Set a longer duration (e.g. 2 minutes) to accumulate jobs at the broker
+// before processing, reducing LLM calls during trickle traffic.
+func NewConsumer(cfg config.KafkaConfig, log logger.Logger, groupID string, fetchMaxWait time.Duration, topics ...string) (*Consumer, error) {
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(strings.Split(cfg.Brokers, ",")...),
 		kgo.ConsumerGroup(groupID),
@@ -25,6 +30,10 @@ func NewConsumer(cfg config.KafkaConfig, log logger.Logger, groupID string, topi
 		// the beginning — process all pending messages before following new ones.
 		// Existing groups with committed offsets are unaffected by this setting.
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
+	}
+
+	if fetchMaxWait > 0 {
+		opts = append(opts, kgo.FetchMaxWait(fetchMaxWait))
 	}
 
 	if cfg.User != "" && cfg.Password != "" {
@@ -106,6 +115,13 @@ func (c *Consumer) PollBatch(ctx context.Context, fn func(records []*kgo.Record)
 			return err
 		}
 	}
+}
+
+// CommitRecords commits offsets for the given records. The max offset per
+// partition across the passed records is committed — callers must ensure
+// records are processed and ready to commit in-order per partition.
+func (c *Consumer) CommitRecords(ctx context.Context, records ...*kgo.Record) error {
+	return c.client.CommitRecords(ctx, records...)
 }
 
 func (c *Consumer) Close() {

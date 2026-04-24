@@ -27,7 +27,7 @@ func main() {
 	cfg := config.Load()
 	log := logger.Init("crawler")
 
-	stopTracing := tracing.Init("jobradar-crawler", cfg.Observability.JaegerEndpoint)
+	stopTracing := tracing.Init("jobradar-crawler", cfg.Observability.JaegerEndpoint, log)
 	defer stopTracing()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -45,7 +45,7 @@ func main() {
 }
 
 func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gorm.DB, *kafka.Producer, error) {
-	database, err := db.Open(cfg.DB)
+	database, err := db.Open(cfg.DB, 5)
 	if err != nil {
 		log.Error("db open failed", err)
 		return nil, nil, err

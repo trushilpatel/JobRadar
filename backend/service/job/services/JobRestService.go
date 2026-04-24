@@ -71,6 +71,12 @@ func (h *RestService) List(w http.ResponseWriter, r *http.Request) {
 			filter.DaysAdded = &n
 		}
 	}
+	if v := q.Get("sort_by"); v != "" {
+		filter.SortBy = v
+	}
+	if v := q.Get("sort_dir"); v != "" {
+		filter.SortDir = v
+	}
 
 	jobs, total, err := h.next.List(r.Context(), filter, p.Page, p.Limit)
 	if err != nil {

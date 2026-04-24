@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/tracing"
@@ -9,6 +11,15 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+// RetryLedgerEntry describes a per-job retry state update destined for
+// job_pipeline_ledger. Used by UpdateRetryBatch to write distinct retry_count
+// and next_attempt_at values for many rows in a single round trip.
+type RetryLedgerEntry struct {
+	JobID         string
+	RetryCount    int
+	NextAttemptAt time.Time
+}
 
 // SeenLedgerReader checks if a job has already been processed.
 type SeenLedgerReader interface {
@@ -22,6 +33,7 @@ type SeenLedgerWriter interface {
 	MarkSeenBatch(ctx context.Context, jobIDs []string, companyID, reason string) error
 	UpdateSeenReason(ctx context.Context, jobID, reason string) error
 	UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason string) error
+	UpdateRetryBatch(ctx context.Context, entries []RetryLedgerEntry) error
 	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
 }
 
@@ -118,6 +130,30 @@ func (s *seenLedgerStore) UpdateSeenReasonBatch(ctx context.Context, jobIDs []st
 	return s.db.WithContext(ctx).Model(&jobmodel.JobSeenLedger{}).
 		Where("job_id IN ?", jobIDs).
 		Update("reason", reason).Error
+}
+
+func (s *seenLedgerStore) UpdateRetryBatch(ctx context.Context, entries []RetryLedgerEntry) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.UpdateRetryBatch")
+	defer tracing.End(span, &err)
+	if len(entries) == 0 {
+		return nil
+	}
+
+	valuesClauses := make([]string, 0, len(entries))
+	args := make([]any, 0, len(entries)*3)
+	for i, e := range entries {
+		base := i * 3
+		valuesClauses = append(valuesClauses, fmt.Sprintf("($%d, $%d::int, $%d::timestamptz)", base+1, base+2, base+3))
+		args = append(args, e.JobID, e.RetryCount, e.NextAttemptAt)
+	}
+
+	query := "UPDATE job_pipeline_ledger AS l " +
+		"SET reason = 'retry', retry_count = v.retry_count, next_attempt_at = v.next_attempt_at " +
+		"FROM (VALUES " + strings.Join(valuesClauses, ",") + ") " +
+		"AS v(job_id, retry_count, next_attempt_at) " +
+		"WHERE l.job_id = v.job_id"
+
+	return s.db.WithContext(ctx).Exec(query, args...).Error
 }
 
 func (s *seenLedgerStore) MarkRemovedBatch(ctx context.Context, jobIDs []string) (err error) {

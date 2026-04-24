@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -12,12 +13,59 @@ import (
 type Config struct {
 	DB            DatabaseConfig
 	Kafka         KafkaConfig
+	Redis         RedisConfig
+	Cooldown      CooldownConfig
 	LLM           LLMConfig
 	Filter        FilterConfig
 	Enricher      EnricherConfig
 	Crawler       CrawlerConfig
 	Scheduler     SchedulerConfig
 	Observability ObservabilityConfig
+	Auth          AuthConfig
+	API           APIConfig
+}
+
+// AuthConfig holds Supabase auth verification settings. Exactly one of
+// SupabaseJWTSecret (HS256) or SupabaseJWKSURL (ES256 via JWKS) must be set.
+type AuthConfig struct {
+	SupabaseProjectURL  string
+	SupabaseJWKSURL     string
+	SupabaseJWTSecret   string
+	AllowedEmail        string
+	ClockSkewSeconds    int
+	JWKSCacheTTLSeconds int
+}
+
+// Validate enforces boot-time auth invariants. Refuses to start if both JWT
+// secret and JWKS URL are set, or if neither is set, or if AllowedEmail is
+// empty.
+func (c AuthConfig) Validate() error {
+	if c.AllowedEmail == "" {
+		return fmt.Errorf("config: ALLOWED_EMAIL must be set")
+	}
+	hasSecret := c.SupabaseJWTSecret != ""
+	hasJWKS := c.SupabaseJWKSURL != ""
+	if hasSecret && hasJWKS {
+		return fmt.Errorf("config: only one of SUPABASE_JWT_SECRET or SUPABASE_JWKS_URL may be set, not both")
+	}
+	if !hasSecret && !hasJWKS {
+		return fmt.Errorf("config: exactly one of SUPABASE_JWT_SECRET or SUPABASE_JWKS_URL must be set")
+	}
+	if c.SupabaseProjectURL == "" {
+		return fmt.Errorf("config: SUPABASE_PROJECT_URL must be set")
+	}
+	if c.ClockSkewSeconds < 0 {
+		return fmt.Errorf("config: JWT_CLOCK_SKEW_SECONDS must be >= 0, got %d", c.ClockSkewSeconds)
+	}
+	if c.JWKSCacheTTLSeconds <= 0 {
+		return fmt.Errorf("config: JWKS_CACHE_TTL_SECONDS must be > 0, got %d", c.JWKSCacheTTLSeconds)
+	}
+	return nil
+}
+
+// APIConfig holds HTTP-server-level settings for the public API listener.
+type APIConfig struct {
+	MaxBodyBytes int64
 }
 
 type DatabaseConfig struct {
@@ -44,33 +92,27 @@ type KafkaConfig struct {
 
 type LLMConfig struct {
 	Provider    string
-	APIKey      string
-	BaseModel   string
 	TargetRoles []string
 	YearsExp    int
 }
 
-// RateLimits holds the three quota dimensions for an LLM model.
-// All values are 0 = unlimited. Set these to match your model's free/paid tier.
-type RateLimits struct {
-	RPM   int
-	RPD   int
-	TPMIn int
-}
-
 type FilterConfig struct {
-	Model               string
-	BatchSize           int
-	FlushTimeoutSeconds int
-	LLMParallelism      int
-	RateLimits          RateLimits
+	BatchSize              int
+	FlushTimeoutSeconds    int
+	LLMCallIntervalSeconds int
+	Slots                  []LLMSlotConfig
 }
 
 type EnricherConfig struct {
-	Model       string
-	Concurrency int
-	MaxExpYears int
-	RateLimits  RateLimits
+	FetchConcurrency       int
+	LLMBatchSize           int
+	FlushTimeoutSeconds    int
+	LLMCallIntervalSeconds int
+	DefaultRPS             float64
+	DefaultBurst           int
+	JitterMs               int
+	MaxExpYears            int
+	Slots                  []LLMSlotConfig
 }
 
 type CrawlerConfig struct {
@@ -104,6 +146,9 @@ func (c SchedulerConfig) Validate() error {
 	if c.StuckTimeoutMinutes <= 0 {
 		return fmt.Errorf("config: SCHEDULER_STUCK_TIMEOUT_MINUTES must be > 0, got %d", c.StuckTimeoutMinutes)
 	}
+	if c.StuckTimeoutMinutes > 1440 {
+		return fmt.Errorf("config: SCHEDULER_STUCK_TIMEOUT_MINUTES must be <= 1440 (24h), got %d", c.StuckTimeoutMinutes)
+	}
 	if c.CheckIntervalSeconds <= 0 {
 		return fmt.Errorf("config: SCHEDULER_CHECK_INTERVAL_SECONDS must be > 0, got %d", c.CheckIntervalSeconds)
 	}
@@ -115,9 +160,62 @@ type ObservabilityConfig struct {
 	JaegerEndpoint string
 }
 
+type RedisConfig struct {
+	Addr string
+	DB   int
+}
+
+type CooldownConfig struct {
+	BaseSeconds int
+	MaxSeconds  int
+	Jitter      float64 // 0.0 – 1.0
+}
+
+// LLMSlotConfig describes a single (API key, model) slot for routed LLM calls.
+type LLMSlotConfig struct {
+	KeyID  string `json:"key_id"  yaml:"key_id"`
+	APIKey string `json:"api_key" yaml:"api_key"`
+	Model  string `json:"model"   yaml:"model"`
+	RPM    int    `json:"rpm"     yaml:"rpm"`
+	RPD    int    `json:"rpd"     yaml:"rpd"`
+	TPMIn  int    `json:"tpm_in"  yaml:"tpm_in"`
+}
+
+// ParseLLMSlots parses a JSON array of slot configs from a single env var.
+// Returns nil on empty input (not an error — enables legacy single-slot mode).
+func ParseLLMSlots(raw string) ([]LLMSlotConfig, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	var slots []LLMSlotConfig
+	if err := json.Unmarshal([]byte(raw), &slots); err != nil {
+		return nil, fmt.Errorf("config: parse LLM slots: %w", err)
+	}
+	return slots, nil
+}
+
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
 		fmt.Fprintf(os.Stderr, "config: no .env file found, falling back to environment variables\n")
+	}
+
+	// Prefer YAML when LLM_SLOTS_CONFIG points at a file; otherwise fall back
+	// to the JSON env vars (FILTER_LLM_SLOTS / ENRICHER_LLM_SLOTS).
+	filterSlots, enricherSlots, err := LoadLLMSlotsYAML(getEnv("LLM_SLOTS_CONFIG", ""))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config: %v — falling back to env JSON\n", err)
+	}
+	if filterSlots == nil {
+		filterSlots, err = ParseLLMSlots(getEnv("FILTER_LLM_SLOTS", ""))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config: %v — falling back to single slot\n", err)
+		}
+	}
+	if enricherSlots == nil {
+		enricherSlots, err = ParseLLMSlots(getEnv("ENRICHER_LLM_SLOTS", ""))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config: %v — falling back to single slot\n", err)
+		}
 	}
 
 	return &Config{
@@ -134,37 +232,40 @@ func Load() *Config {
 			User:     getEnv("KAFKA_USER", ""),
 			Password: getEnv("KAFKA_PASSWORD", ""),
 		},
+		Redis: RedisConfig{
+			Addr: getEnv("REDIS_ADDR", "localhost:6379"),
+			DB:   getEnvInt("REDIS_DB", 0),
+		},
+		Cooldown: CooldownConfig{
+			BaseSeconds: getEnvInt("LLM_COOLDOWN_BASE_SECONDS", 60),
+			MaxSeconds:  getEnvInt("LLM_COOLDOWN_MAX_SECONDS", 3600),
+			Jitter:      getEnvFloat("LLM_COOLDOWN_JITTER", 0.2),
+		},
 		LLM: LLMConfig{
 			Provider:    getEnv("LLM_PROVIDER", "gemini"),
-			APIKey:      getEnv("LLM_API_KEY", ""),
-			BaseModel:   getEnv("LLM_MODEL", "gemini-3.1-flash-lite-preview"),
 			TargetRoles: splitCSV(getEnv("TARGET_ROLES", "Software Engineer")),
 			YearsExp:    getEnvInt("YEARS_EXP", 0),
 		},
 		Filter: FilterConfig{
-			Model:               getEnvWithFallback("FILTER_LLM_MODEL", "LLM_MODEL", "gemini-3.1-flash-lite-preview"),
-			BatchSize:           getEnvInt("FILTER_BATCH_SIZE", 50),
-			FlushTimeoutSeconds: getEnvInt("FILTER_FLUSH_TIMEOUT_SECONDS", 30),
-			LLMParallelism:      getEnvInt("FILTER_LLM_PARALLELISM", 5),
-			RateLimits: RateLimits{
-				RPM:   getEnvInt("FILTER_RPM", 15),
-				RPD:   getEnvInt("FILTER_RPD", 1500),
-				TPMIn: getEnvInt("FILTER_TPM", 1000000),
-			},
+			BatchSize:              getEnvInt("FILTER_BATCH_SIZE", 50),
+			FlushTimeoutSeconds:    getEnvInt("FILTER_FLUSH_TIMEOUT_SECONDS", 30),
+			LLMCallIntervalSeconds: getEnvInt("FILTER_LLM_CALL_INTERVAL_SECONDS", 5),
+			Slots:                  filterSlots,
 		},
 		Enricher: EnricherConfig{
-			Model:       getEnvWithFallback("ENRICHER_LLM_MODEL", "LLM_MODEL", "gemma-4-31b-it"),
-			Concurrency: getEnvInt("ENRICHER_CONCURRENCY", 5),
-			MaxExpYears: getEnvInt("DISCARD_JOB_WITH_EXP_GT", 0),
-			RateLimits: RateLimits{
-				RPM:   getEnvInt("ENRICHER_RPM", 15),
-				RPD:   getEnvInt("ENRICHER_RPD", 1500),
-				TPMIn: getEnvInt("ENRICHER_TPM", 1000000),
-			},
+			FetchConcurrency:       getEnvInt("ENRICHER_FETCH_CONCURRENCY", 15),
+			LLMBatchSize:           getEnvInt("ENRICHER_LLM_BATCH_SIZE", 5),
+			FlushTimeoutSeconds:    getEnvInt("ENRICHER_FLUSH_TIMEOUT_SECONDS", 120),
+			LLMCallIntervalSeconds: getEnvInt("ENRICHER_LLM_CALL_INTERVAL_SECONDS", 5),
+			DefaultRPS:             getEnvFloat("ENRICHER_DEFAULT_RPS", 2),
+			DefaultBurst:           getEnvInt("ENRICHER_DEFAULT_BURST", 3),
+			JitterMs:               getEnvInt("ENRICHER_JITTER_MS", 200),
+			MaxExpYears:            getEnvInt("DISCARD_JOB_WITH_EXP_GT", 0),
+			Slots:                  enricherSlots,
 		},
 		Crawler: CrawlerConfig{
-			CompanyDelaySeconds:      getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 15),
-			PollIntervalSeconds:      getEnvInt("CRAWLER_POLL_INTERVAL_SECONDS", 10),
+			CompanyDelaySeconds:      getEnvInt("SCAN_COMPANY_DELAY_SECONDS", 30),
+			PollIntervalSeconds:      getEnvInt("CRAWLER_POLL_INTERVAL_SECONDS", 60),
 			StuckTimeoutSeconds:      getEnvInt("CRAWLER_STUCK_TIMEOUT_SECONDS", 120),
 			HeartbeatIntervalSeconds: getEnvInt("CRAWLER_HEARTBEAT_INTERVAL_SECONDS", 30),
 			Google: GoogleScraperConfig{
@@ -182,10 +283,37 @@ func Load() *Config {
 			CheckIntervalSeconds: getEnvInt("SCHEDULER_CHECK_INTERVAL_SECONDS", 60),
 		},
 		Observability: ObservabilityConfig{
-			MetricsAddr:    getEnv("METRICS_ADDR", ":9090"),
+			MetricsAddr:    getEnv("METRICS_ADDR", "127.0.0.1:9100"),
 			JaegerEndpoint: getEnv("JAEGER_ENDPOINT", "http://localhost:4318"),
 		},
+		Auth: AuthConfig{
+			SupabaseProjectURL:  getEnv("SUPABASE_PROJECT_URL", ""),
+			SupabaseJWKSURL:     deriveJWKSURL(getEnv("SUPABASE_PROJECT_URL", ""), getEnv("SUPABASE_JWKS_URL", ""), getEnv("SUPABASE_JWT_SECRET", "")),
+			SupabaseJWTSecret:   getEnv("SUPABASE_JWT_SECRET", ""),
+			AllowedEmail:        getEnv("ALLOWED_EMAIL", ""),
+			ClockSkewSeconds:    getEnvInt("JWT_CLOCK_SKEW_SECONDS", 60),
+			JWKSCacheTTLSeconds: getEnvInt("JWKS_CACHE_TTL_SECONDS", 600),
+		},
+		API: APIConfig{
+			MaxBodyBytes: int64(getEnvInt("API_MAX_BODY_BYTES", 1048576)),
+		},
 	}
+}
+
+// deriveJWKSURL returns the explicit JWKS URL when set, otherwise derives it
+// from the project URL. Returns "" when HS256 mode is selected (JWT secret is
+// set) so the "exactly one of secret/JWKS" invariant stays satisfied.
+func deriveJWKSURL(projectURL, explicit, jwtSecret string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if jwtSecret != "" {
+		return ""
+	}
+	if projectURL == "" {
+		return ""
+	}
+	return strings.TrimRight(projectURL, "/") + "/auth/v1/.well-known/jwks.json"
 }
 
 func getEnv(key, fallback string) string {
@@ -195,20 +323,19 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-func getEnvWithFallback(key, fallbackKey, defaultVal string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	if val := os.Getenv(fallbackKey); val != "" {
-		return val
-	}
-	return defaultVal
-}
-
 func getEnvInt(key string, fallback int) int {
 	if val := os.Getenv(key); val != "" {
 		if n, err := strconv.Atoi(val); err == nil {
 			return n
+		}
+	}
+	return fallback
+}
+
+func getEnvFloat(key string, fallback float64) float64 {
+	if val := os.Getenv(key); val != "" {
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f
 		}
 	}
 	return fallback

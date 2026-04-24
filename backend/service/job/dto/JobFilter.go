@@ -13,4 +13,6 @@ type JobFilter struct {
 	RequiresCitizen  *bool             // requires_citizen = true/false
 	ExperienceRanges []ExperienceRange // numeric range bands — OR across values
 	DaysAdded        *int              // added_at >= NOW() - N days
+	SortBy           string            // "title" | "company" | "added_at" — defaults to "added_at"
+	SortDir          string            // "asc" | "desc" — defaults to "desc"
 }

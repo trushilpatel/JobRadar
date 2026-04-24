@@ -1,0 +1,22 @@
+# Detects repeated failed Grafana OAuth logins from the same IP.
+#
+# NOTE: threshold hardcoded (see README, env var GRAFANA_LOGIN_THRESHOLD, default 5).
+type: leaky
+name: jobradar/grafana-login-abuse
+description: "Trigger on repeated failed Grafana logins from a single IP"
+filter: |
+  evt.Meta.log_type == "http_access-log"
+  && (evt.Meta.http_path == "/login/generic_oauth" || evt.Meta.http_path startsWith "/login")
+  && (evt.Meta.http_status == "401" || evt.Meta.http_status == "403")
+groupby: evt.Meta.source_ip
+capacity: 5
+leakspeed: 12s
+blackhole: 1m
+labels:
+  remediation: true
+  service: grafana
+  type: http
+  confidence: 3
+  spoofable: 0
+  classification:
+    - attack.T1110

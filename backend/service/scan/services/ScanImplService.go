@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/errors"
@@ -47,6 +48,16 @@ func (s *schedulerService) ResetStuck(ctx context.Context, staleDur time.Duratio
 	return nil
 }
 
+func (s *schedulerService) PurgeInactive(ctx context.Context) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "scan.service.PurgeInactive")
+	defer tracing.End(span, &err)
+	n, err := s.queue.PurgeInactive(ctx)
+	if err != nil {
+		return 0, errors.ErrInternal.WithMessage("failed to purge inactive company queue entries")
+	}
+	return n, nil
+}
+
 // implService is the business-logic decorator. It embeds BaseService so all
 // methods not overridden here are auto-delegated to the next layer.
 type implService struct {
@@ -82,15 +93,19 @@ func (s *implService) TriggerScanAll(ctx context.Context) (_ int, err error) {
 	if err != nil {
 		return 0, errors.ErrInternal.WithMessage("failed to fetch companies")
 	}
-	var count int
+	var count, failCount int
 	for _, c := range companies {
 		if !c.Active {
 			continue
 		}
 		if err := s.next.TriggerScan(ctx, c.ID); err != nil {
+			failCount++
 			continue
 		}
 		count++
+	}
+	if failCount > 0 {
+		return count, errors.ErrInternal.WithMessage(fmt.Sprintf("enqueued %d companies; %d failed to enqueue", count, failCount))
 	}
 	return count, nil
 }

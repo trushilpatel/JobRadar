@@ -1,6 +1,7 @@
 FROM golang:1.24-alpine AS go-builder
 
 ENV GOTOOLCHAIN=auto
+ENV CGO_ENABLED=0
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -13,6 +14,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     go build -o /out/crawler ./apps/crawler
 
+# ── Final image ───────────────────────────────────────────────────────────────
+
 FROM mcr.microsoft.com/playwright:v1.59.1-noble
 
 RUN apt-get update && apt-get install -y ca-certificates tzdata xvfb && rm -rf /var/lib/apt/lists/*
@@ -21,11 +24,20 @@ WORKDIR /app
 
 COPY --from=go-builder /out/crawler /app/crawler
 
-COPY apps/crawler/ats/google/scraper/package.json apps/crawler/ats/google/scraper/package-lock.json* /app/scraper/
+COPY apps/crawler/ats/google/scraper/package.json apps/crawler/ats/google/scraper/package-lock.json /app/google-scraper/
 RUN --mount=type=cache,target=/root/.npm \
-    cd /app/scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --production --cache /root/.npm
-COPY apps/crawler/ats/google/scraper/scrape.js /app/scraper/
+    cd /app/google-scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --omit=dev --cache /root/.npm
+COPY apps/crawler/ats/google/scraper/scrape.js /app/google-scraper/
 
-ENV GOOGLE_SCRAPER_DIR=/app/scraper
+COPY apps/crawler/ats/meta/scraper/package.json /app/meta-scraper/
+RUN --mount=type=cache,target=/root/.npm \
+    cd /app/meta-scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --cache /root/.npm
+COPY apps/crawler/ats/meta/scraper/scrape.js /app/meta-scraper/
+
+ENV GOOGLE_SCRAPER_DIR=/app/google-scraper
+ENV META_SCRAPER_DIR=/app/meta-scraper
+
+ARG GIT_SHA=dev
+LABEL org.opencontainers.image.revision="${GIT_SHA}"
 
 CMD ["/app/crawler"]

@@ -114,11 +114,14 @@ func (s *companyStore) GetCompanies(ctx context.Context, filter companydto.Compa
 	if filter.Active != nil {
 		q = q.Where("active = ?", *filter.Active)
 	}
-	if filter.AdapterType != "" {
-		q = q.Where("adapter_type = ?", filter.AdapterType)
+	if len(filter.AdapterTypes) > 0 {
+		q = q.Where("adapter_type IN ?", filter.AdapterTypes)
 	}
 	if filter.Search != "" {
 		q = q.Where("name ILIKE ?", "%"+filter.Search+"%")
+	}
+	if filter.LastScanStatus != "" {
+		q = q.Where("last_scan_status = ?", filter.LastScanStatus)
 	}
 
 	var total int64
@@ -126,9 +129,24 @@ func (s *companyStore) GetCompanies(ctx context.Context, filter companydto.Compa
 		return nil, 0, err
 	}
 
+	// Whitelist sort columns to prevent SQL injection.
+	var col string
+	switch filter.SortBy {
+	case "adapter_type":
+		col = "adapter_type"
+	case "last_scan_at":
+		col = "last_scan_at"
+	default:
+		col = "name"
+	}
+	dir := "ASC"
+	if filter.SortDir == "desc" {
+		dir = "DESC"
+	}
+
 	var companies []companymodel.Company
 	offset := (page - 1) * limit
-	err = q.Order("name ASC").Offset(offset).Limit(limit).Find(&companies).Error
+	err = q.Order(col + " " + dir).Offset(offset).Limit(limit).Find(&companies).Error
 	return companies, total, err
 }
 
@@ -230,7 +248,7 @@ func (r *repositoryService) Get(ctx context.Context, id string) (_ *companymodel
 func (r *repositoryService) Create(ctx context.Context, input companydto.CreateCompanyInput) (_ *companymodel.Company, err error) {
 	ctx, span := tracing.Start(ctx, "company.repository.Create")
 	defer tracing.End(span, &err)
-	active := true
+	active := false
 	if input.Active != nil {
 		active = *input.Active
 	}

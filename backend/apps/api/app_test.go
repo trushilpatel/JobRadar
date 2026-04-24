@@ -202,6 +202,7 @@ func (f *fakeScanService) ListQueue(_ context.Context, _ dto.QueueFilter) ([]dto
 func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error   { return nil }
 func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (int, error)    { return 0, nil }
 func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error { return nil }
+func (f *fakeScanService) PurgeInactive(_ context.Context) (int, error)        { return 0, nil }
 
 type fakeJobService struct{}
 

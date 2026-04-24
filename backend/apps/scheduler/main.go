@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
@@ -30,19 +31,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	shutdownTracing := tracing.Init("jobradar-scheduler", cfg.Observability.JaegerEndpoint)
+	shutdownTracing := tracing.Init("jobradar-scheduler", cfg.Observability.JaegerEndpoint, log)
 
-	database, err := db.OpenWithRetry(cfg.DB, dbMaxAttempts, dbRetryDelay)
+	database, err := db.OpenWithRetry(cfg.DB, 2, dbMaxAttempts, dbRetryDelay)
 	if err != nil {
 		log.Error("db open failed", err)
 		shutdownTracing()
 		os.Exit(1)
-	}
-
-	// Scheduler is never concurrent — one connection is sufficient.
-	if sqlDB, err := database.DB(); err == nil {
-		sqlDB.SetMaxOpenConns(1)
-		sqlDB.SetMaxIdleConns(1)
 	}
 
 	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
@@ -54,17 +49,19 @@ func main() {
 	svc := scansvc.NewSchedulerService(scansvc.NewQueueStore(database))
 	checkInterval := time.Duration(cfg.Scheduler.CheckIntervalSeconds) * time.Second
 	stuckTimeout := time.Duration(cfg.Scheduler.StuckTimeoutMinutes) * time.Minute
+	jitter := time.Duration(rand.Int63n(int64(checkInterval) / 10))
 
 	log.Info("started",
 		logger.Int("scan_interval_minutes", cfg.Scheduler.ScanIntervalMinutes),
 		logger.Dur("check_interval", checkInterval),
 		logger.Dur("stuck_timeout", stuckTimeout),
+		logger.Dur("jitter", jitter),
 	)
 
 	// Run immediately on startup so the first tick doesn't wait a full interval.
 	runCycle(ctx, log, svc, cfg.Scheduler.ScanIntervalMinutes, stuckTimeout)
 
-	ticker := time.NewTicker(checkInterval)
+	ticker := time.NewTicker(checkInterval + jitter)
 	defer ticker.Stop()
 
 	for {
@@ -80,7 +77,8 @@ func main() {
 
 // runCycle performs one full scheduler pass:
 //  1. Resets any processing rows whose crawler has gone silent (stuck detection).
-//  2. Enqueues all companies currently due for a scan in a single query.
+//  2. Removes queued rows for companies that have since been deactivated.
+//  3. Enqueues all companies currently due for a scan in a single query.
 func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerService, intervalMinutes int, stuckTimeout time.Duration) {
 	start := time.Now()
 
@@ -89,6 +87,13 @@ func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerServi
 		log.Error("reset stuck failed", err)
 	} else {
 		metrics.SchedulerStuckChecksTotal.Inc()
+	}
+
+	if purged, err := svc.PurgeInactive(ctx); err != nil {
+		metrics.SchedulerErrorsTotal.WithLabelValues("purge_inactive").Inc()
+		log.Error("purge inactive failed", err)
+	} else if purged > 0 {
+		log.Info("purged inactive company queue entries", logger.Int("purged", purged))
 	}
 
 	n, err := svc.EnqueueDue(ctx, intervalMinutes)

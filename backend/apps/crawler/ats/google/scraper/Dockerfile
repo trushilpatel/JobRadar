@@ -7,22 +7,18 @@
 #
 # Or via docker-compose (from project root):
 #   docker compose build google-scraper
-#
-# Run:
-#   docker run --rm jobradar-google-scraper
 
 FROM mcr.microsoft.com/playwright:v1.59.1-noble
 
 WORKDIR /app
 
-# Copy package files and install deps
-COPY package.json ./
-RUN npm install --production
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --omit=dev --cache /root/.npm
 
-# Copy scraper script
 COPY scrape.js ./
 
-# Playwright browsers are pre-installed in the base image
+ARG GIT_SHA=dev
+LABEL org.opencontainers.image.revision="${GIT_SHA}"
 
-# Default: run the scraper
 CMD ["node", "scrape.js"]

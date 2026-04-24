@@ -1,0 +1,26 @@
+# Detects repeated 401s on /api/* from the same IP.
+#
+# NOTE: CrowdSec scenarios do not support env-templating for numeric fields.
+# The threshold is hardcoded here; to change, edit this file and restart
+# crowdsec. Referenced env var: API_401_THRESHOLD (documented in README,
+# kept in sync manually -- default 10).
+type: leaky
+name: jobradar/api-401-abuse
+description: "Trigger on repeated 401s hitting /api/* from a single IP"
+filter: |
+  evt.Meta.log_type == "http_access-log"
+  && evt.Meta.http_status == "401"
+  && evt.Meta.http_path startsWith "/api"
+groupby: evt.Meta.source_ip
+distinct: evt.Meta.http_path
+capacity: 10
+leakspeed: 10s
+blackhole: 1m
+labels:
+  remediation: true
+  service: api
+  type: http
+  confidence: 3
+  spoofable: 0
+  classification:
+    - attack.T1110

@@ -132,18 +132,26 @@ func (m *Meta) FetchJobs(ctx context.Context, _ string) (types.FetchJobsResponse
 		return types.FetchJobsResponse{}, fmt.Errorf("meta: scraper failed: %w\nstderr: %s", err, stderr.String())
 	}
 
-	// Parse stdout — either a JSON array of jobs or an error object
+	// Extract the result payload from stdout. Playwright/Chromium may write
+	// diagnostic lines to fd 1 before the scraper's final JSON write, producing
+	// NDJSON-like output. We scan backwards for the last non-empty line that
+	// begins with '[' (jobs array) or '{' (error object) — the scraper always
+	// writes its payload last and prefixes it with '\n' to guarantee isolation.
 	raw := stdout.Bytes()
+	payload, err := extractScraperPayload(raw)
+	if err != nil {
+		return types.FetchJobsResponse{}, fmt.Errorf("meta: failed to locate scraper payload: %w\nraw (first 500 bytes): %s", err, truncate(string(raw), 500))
+	}
 
 	// Check for error response
 	var scraperErr scraperError
-	if err := json.Unmarshal(raw, &scraperErr); err == nil && scraperErr.Error != "" {
+	if err := json.Unmarshal(payload, &scraperErr); err == nil && scraperErr.Error != "" {
 		return types.FetchJobsResponse{}, fmt.Errorf("meta: scraper error: %s", scraperErr.Error)
 	}
 
 	// Parse jobs array
 	var scraperJobs []scraperJob
-	if err := json.Unmarshal(raw, &scraperJobs); err != nil {
+	if err := json.Unmarshal(payload, &scraperJobs); err != nil {
 		return types.FetchJobsResponse{}, fmt.Errorf("meta: failed to parse scraper output: %w\nraw (first 500 bytes): %s", err, truncate(string(raw), 500))
 	}
 
@@ -201,6 +209,25 @@ func (m *Meta) resolveScraperDir() string {
 
 func itoa(n int) string {
 	return strconv.Itoa(n)
+}
+
+// extractScraperPayload finds the result JSON written by the scraper at the
+// end of stdout. Playwright/Chromium may emit diagnostic lines to stdout
+// before the scraper's final write, producing interleaved NDJSON. This
+// function scans backwards through lines and returns the last non-empty line
+// that starts with '[' (jobs array) or '{' (error object).
+func extractScraperPayload(raw []byte) ([]byte, error) {
+	lines := bytes.Split(bytes.TrimRight(raw, "\n"), []byte("\n"))
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := bytes.TrimSpace(lines[i])
+		if len(line) == 0 {
+			continue
+		}
+		if line[0] == '[' || line[0] == '{' {
+			return line, nil
+		}
+	}
+	return nil, fmt.Errorf("no JSON array or object found in scraper stdout")
 }
 
 func truncate(s string, maxLen int) string {

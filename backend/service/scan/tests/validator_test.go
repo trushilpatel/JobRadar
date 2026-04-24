@@ -24,6 +24,7 @@ func (n *noopService) ListQueue(_ context.Context, _ dto.QueueFilter) ([]dto.Que
 func (n *noopService) RemoveFromQueue(_ context.Context, _ string) error   { return nil }
 func (n *noopService) EnqueueDue(_ context.Context, _ int) (int, error)    { return 0, nil }
 func (n *noopService) ResetStuck(_ context.Context, _ time.Duration) error { return nil }
+func (n *noopService) PurgeInactive(_ context.Context) (int, error)        { return 0, nil }
 
 var _ svc.Service = (*noopService)(nil)
 

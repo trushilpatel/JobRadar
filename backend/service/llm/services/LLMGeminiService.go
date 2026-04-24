@@ -3,14 +3,16 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
-	"github.com/google/generative-ai-go/genai"
-	llmcommon "github.com/trushilpatel/jobradar/service/llm/common"
+	"google.golang.org/genai"
+
+	llmerr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/llm/dto"
 	"github.com/trushilpatel/jobradar/service/llm/prompts"
-	"google.golang.org/api/option"
 )
 
 type geminiScorer struct {
@@ -21,7 +23,10 @@ type geminiScorer struct {
 }
 
 func newGeminiScorer(ctx context.Context, apiKey, modelName string, targetRoles []string, yearsExp int) (Scorer, error) {
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("gemini: create client: %w", err)
 	}
@@ -33,7 +38,7 @@ func newGeminiScorer(ctx context.Context, apiKey, modelName string, targetRoles 
 	}, nil
 }
 
-// ── ScoreBatch ───────────────────────────────────────────────────────────────
+// ── ScoreBatch ────────────────────────────────────────────────────────────────
 
 var scoreBatchSchema = &genai.Schema{
 	Type:  genai.TypeArray,
@@ -56,7 +61,7 @@ func (s *geminiScorer) ScoreBatch(ctx context.Context, jobs []dto.JobsRelevanceF
 
 	prompt := prompts.BuildScoreBatch(s.targetRoles, s.yearsExp, sb.String())
 
-	raw, err := s.generate(ctx, prompt, llmcommon.ScoreBatchMaxOutputTokens, scoreBatchSchema)
+	raw, err := s.generate(ctx, prompt, scoreBatchSchema)
 	if err != nil {
 		return nil, fmt.Errorf("gemini score batch: %w", err)
 	}
@@ -68,20 +73,23 @@ func (s *geminiScorer) ScoreBatch(ctx context.Context, jobs []dto.JobsRelevanceF
 	return ids, nil
 }
 
-// ── Enrich ───────────────────────────────────────────────────────────────────
+// ── EnrichBatch ───────────────────────────────────────────────────────────────
 
-var enrichSchema = &genai.Schema{
+// enrichItemSchema is the per-job result shape returned inside the batch array.
+// job_id is required so callers can attribute results back to source inputs.
+var enrichItemSchema = &genai.Schema{
 	Type: genai.TypeObject,
 	Properties: map[string]*genai.Schema{
-		"experience_years":   {Type: genai.TypeInteger, Nullable: true},
+		"job_id":             {Type: genai.TypeString},
+		"experience_years":   {Type: genai.TypeInteger, Nullable: boolPtr(true)},
 		"tech_stack":         {Type: genai.TypeArray, Items: &genai.Schema{Type: genai.TypeString}},
-		"salary_min":         {Type: genai.TypeInteger, Nullable: true},
-		"salary_max":         {Type: genai.TypeInteger, Nullable: true},
-		"salary_currency":    {Type: genai.TypeString, Nullable: true},
+		"salary_min":         {Type: genai.TypeInteger, Nullable: boolPtr(true)},
+		"salary_max":         {Type: genai.TypeInteger, Nullable: boolPtr(true)},
+		"salary_currency":    {Type: genai.TypeString, Nullable: boolPtr(true)},
 		"summary":            {Type: genai.TypeString},
 		"remote":             {Type: genai.TypeBoolean},
 		"country":            {Type: genai.TypeString},
-		"state":              {Type: genai.TypeString, Nullable: true},
+		"state":              {Type: genai.TypeString, Nullable: boolPtr(true)},
 		"sponsorship":        {Type: genai.TypeBoolean},
 		"requires_citizen":   {Type: genai.TypeBoolean},
 		"security_clearance": {Type: genai.TypeBoolean},
@@ -94,6 +102,7 @@ var enrichSchema = &genai.Schema{
 		"role_match": {Type: genai.TypeBoolean},
 	},
 	Required: []string{
+		"job_id",
 		"experience_years", "tech_stack", "salary_min", "salary_max", "salary_currency",
 		"summary", "remote", "country", "state", "sponsorship",
 		"requires_citizen", "security_clearance", "role_brief", "responsibilities", "role_category",
@@ -101,52 +110,78 @@ var enrichSchema = &genai.Schema{
 	},
 }
 
-func (s *geminiScorer) Enrich(ctx context.Context, input dto.JobPostEnrichInput) (*dto.JobPostEnrichResult, error) {
-	prompt := prompts.BuildEnrich(input.ID, s.targetRoles, input.RawText)
-
-	raw, err := s.generate(ctx, prompt, llmcommon.EnrichMaxOutputTokens, enrichSchema)
-	if err != nil {
-		return nil, fmt.Errorf("gemini enrich: %w", err)
-	}
-
-	var out dto.JobPostEnrichResult
-	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return nil, fmt.Errorf("gemini enrich: parse response %q: %w", raw, err)
-	}
-
-	return &out, nil
+// enrichBatchSchema wraps enrichItemSchema in an array — the model is instructed
+// to return one result object per input job, in the same order, each carrying
+// the matching job_id field.
+var enrichBatchSchema = &genai.Schema{
+	Type:  genai.TypeArray,
+	Items: enrichItemSchema,
 }
 
-// ── shared generate helper ───────────────────────────────────────────────────
+func (s *geminiScorer) EnrichBatch(ctx context.Context, inputs []dto.JobPostEnrichInput) ([]*dto.JobPostEnrichResult, error) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
 
-func (s *geminiScorer) generate(ctx context.Context, prompt string, maxOutputTokens int32, schema *genai.Schema) (string, error) {
-	model := s.client.GenerativeModel(s.modelName)
-	model.MaxOutputTokens = &maxOutputTokens
-	model.ResponseMIMEType = "application/json"
-	model.ResponseSchema = schema
+	prompt := prompts.BuildEnrichBatch(s.targetRoles, inputs)
 
-	temp := float32(0.0)
-	model.Temperature = &temp
-
-	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	raw, err := s.generate(ctx, prompt, enrichBatchSchema)
 	if err != nil {
+		return nil, fmt.Errorf("gemini enrich batch: %w", err)
+	}
+
+	var out []*dto.JobPostEnrichResult
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil, fmt.Errorf("gemini enrich batch: parse response %q: %w", raw, err)
+	}
+
+	return out, nil
+}
+
+// ── shared generate helper ────────────────────────────────────────────────────
+
+func (s *geminiScorer) generate(ctx context.Context, prompt string, schema *genai.Schema) (string, error) {
+	temp := float32(0.0)
+	resp, err := s.client.Models.GenerateContent(
+		ctx,
+		s.modelName,
+		[]*genai.Content{genai.NewContentFromText(prompt, genai.RoleUser)},
+		&genai.GenerateContentConfig{
+			ResponseMIMEType: "application/json",
+			ResponseSchema:   schema,
+			Temperature:      &temp,
+		},
+	)
+	if err != nil {
+		if isGeminiProviderError(err) {
+			return "", fmt.Errorf("%w: %s", llmerr.ErrLLMProviderRateLimited, err.Error())
+		}
 		return "", err
 	}
-	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
+
+	text := resp.Text()
+	if text == "" {
 		return "", fmt.Errorf("empty response from model")
 	}
 
-	var fullText strings.Builder
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if t, ok := part.(genai.Text); ok {
-			fullText.WriteString(string(t))
-		}
-	}
-
-	return s.cleanJSON(fullText.String()), nil
+	return cleanJSON(text), nil
 }
 
-func (s *geminiScorer) cleanJSON(text string) string {
+// isGeminiProviderError reports whether err is a retriable provider-side
+// response: HTTP 429 (rate limited) or HTTP 503 (model overloaded / high
+// demand). Both mean "try again later" and trigger slot cooldown in the router.
+func isGeminiProviderError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var apiErr genai.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.Code == http.StatusTooManyRequests || apiErr.Code == http.StatusServiceUnavailable
+	}
+	return false
+}
+
+func cleanJSON(text string) string {
 	text = strings.ReplaceAll(text, "\u00a0", " ")
 	text = strings.TrimSpace(text)
 
@@ -159,3 +194,5 @@ func (s *geminiScorer) cleanJSON(text string) string {
 
 	return text
 }
+
+func boolPtr(b bool) *bool { return &b }

@@ -1,32 +1,36 @@
+x-app-env: &app-env
+  KAFKA_BROKERS: kafka:29092
+  KAFKA_USER: ""
+  KAFKA_PASSWORD: ""
+  LOG_LEVEL: info
+  LOG_FORMAT: json
+  JAEGER_ENDPOINT: http://jaeger:4318
+
+x-app-depends: &app-depends
+  kafka-init:
+    condition: service_completed_successfully
+  migrate:
+    condition: service_completed_successfully
+
+# Shared hardening applied to every long-running Go service.
+x-app-hardening: &app-hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m
+  pids_limit: 200
+
 services:
 
   # ── Infrastructure ────────────────────────────────────────────────────────────
 
-  postgres:
-    image: postgres:16
-    container_name: jobradar_postgres
-    mem_limit: 256m
-    env_file:
-      - ./backend/.env
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-jobradar}
-    ports:
-      - "${DB_PORT:-5432}:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    command: postgres -c log_checkpoints=off -c log_connections=off -c log_disconnections=off
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-jobradar}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   kafka:
     image: redpandadata/redpanda:v24.3.1
     container_name: jobradar_kafka
-    user: "0"
+    profiles: [infra]
     stop_grace_period: 30s
     volumes:
       - redpandadata:/var/lib/redpanda/data
@@ -41,17 +45,20 @@ services:
       - --kafka-addr internal://0.0.0.0:29092,external://0.0.0.0:9092
       - --advertise-kafka-addr internal://kafka:29092,external://localhost:9092
     ports:
-      - "9092:9092"
+      # SSH-tunnel only; workers use internal listener kafka:29092.
+      - "127.0.0.1:9092:9092"
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 15
       start_period: 15s
+    restart: unless-stopped
 
   kafka-init:
     image: redpandadata/redpanda:v24.3.1
     container_name: jobradar_kafka_init
+    profiles: [infra]
     depends_on:
       kafka:
         condition: service_healthy
@@ -63,56 +70,74 @@ services:
       --replicas 1
     restart: "no"
 
+  redis:
+    image: redis:7-alpine
+    container_name: jobradar_redis
+    profiles: [infra]
+    user: "999:1000"
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   # ── One-shot migration ────────────────────────────────────────────────────────
 
   migrate:
     image: jobradar_backend
     pull_policy: never
     container_name: jobradar_migrate
+    profiles: [app]
     env_file:
       - ./backend/.env
-    environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
     command: ["/app/migrate"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: on-failure
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m
 
   # ── Application services ──────────────────────────────────────────────────────
 
   api:
+    <<: *app-hardening
     build:
       context: ./backend
-      dockerfile: ../infra/Dockerfile
+      dockerfile: ../infra/Dockerfile.backend
+      args:
+        GIT_SHA: "${GIT_SHA:-dev}"
     image: jobradar_backend
     container_name: jobradar_api
+    profiles: [app]
     mem_limit: 128m
     env_file:
       - ./backend/.env
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      KAFKA_BROKERS: kafka:29092
-      KAFKA_USER: ""
-      KAFKA_PASSWORD: ""
-      LOG_LEVEL: info
-      LOG_FORMAT: json
-      JAEGER_ENDPOINT: http://jaeger:4318
+      <<: *app-env
+      # Public API bound on all interfaces INSIDE the compose network only;
+      # Caddy is the single host-level ingress. The internal ops/metrics
+      # listener stays on 127.0.0.1 inside the container.
+      METRICS_ADDR: "127.0.0.1:9100"
+    # Loopback binding — accessible locally without Caddy; Caddy uses internal network in prod.
     ports:
-      - "8080:8080"
+      - "${API_HOST_PORT:-127.0.0.1:8080}:8080"
     command: ["/app/api"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-      migrate:
-        condition: service_completed_successfully
+      <<: *app-depends
     restart: unless-stopped
 
   scheduler:
+    <<: *app-hardening
     image: jobradar_backend
     pull_policy: never
     container_name: jobradar_scheduler
@@ -121,31 +146,22 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      KAFKA_BROKERS: kafka:29092
-      KAFKA_USER: ""
-      KAFKA_PASSWORD: ""
-      LOG_LEVEL: info
-      LOG_FORMAT: json
+      <<: *app-env
       METRICS_ADDR: ":9101"
-      JAEGER_ENDPOINT: http://jaeger:4318
     ports:
-      - "9101:9101"
+      - "127.0.0.1:9101:9101"
     command: ["/app/scheduler"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-      migrate:
-        condition: service_completed_successfully
+      <<: *app-depends
     restart: unless-stopped
 
   crawler:
+    <<: *app-hardening
     build:
       context: ./backend
       dockerfile: ../infra/Dockerfile.crawler
+      args:
+        GIT_SHA: "${GIT_SHA:-dev}"
     image: jobradar_crawler
     container_name: jobradar_crawler
     mem_limit: 1g
@@ -153,28 +169,17 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      KAFKA_BROKERS: kafka:29092
-      KAFKA_USER: ""
-      KAFKA_PASSWORD: ""
-      LOG_LEVEL: info
-      LOG_FORMAT: json
+      <<: *app-env
       METRICS_ADDR: ":9102"
-      JAEGER_ENDPOINT: http://jaeger:4318
     ports:
-      - "9102:9102"
+      - "127.0.0.1:9102:9102"
     command: ["/app/crawler"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-      migrate:
-        condition: service_completed_successfully
+      <<: *app-depends
     restart: unless-stopped
 
   filter:
+    <<: *app-hardening
     image: jobradar_backend
     pull_policy: never
     container_name: jobradar_filter
@@ -183,28 +188,23 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      KAFKA_BROKERS: kafka:29092
-      KAFKA_USER: ""
-      KAFKA_PASSWORD: ""
-      LOG_LEVEL: info
-      LOG_FORMAT: json
+      <<: *app-env
       METRICS_ADDR: ":9103"
-      JAEGER_ENDPOINT: http://jaeger:4318
+      REDIS_ADDR: redis:6379
+      LLM_SLOTS_CONFIG: /app/config/llm-slots.yaml
+    volumes:
+      - ./backend/common/config:/app/config:ro
     ports:
-      - "9103:9103"
+      - "127.0.0.1:9103:9103"
     command: ["/app/filter"]
     depends_on:
-      postgres:
+      <<: *app-depends
+      redis:
         condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-      migrate:
-        condition: service_completed_successfully
     restart: unless-stopped
 
   enricher:
+    <<: *app-hardening
     image: jobradar_backend
     pull_policy: never
     container_name: jobradar_enricher
@@ -213,25 +213,19 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      KAFKA_BROKERS: kafka:29092
-      KAFKA_USER: ""
-      KAFKA_PASSWORD: ""
-      LOG_LEVEL: info
-      LOG_FORMAT: json
+      <<: *app-env
       METRICS_ADDR: ":9104"
-      JAEGER_ENDPOINT: http://jaeger:4318
+      REDIS_ADDR: redis:6379
+      LLM_SLOTS_CONFIG: /app/config/llm-slots.yaml
+    volumes:
+      - ./backend/common/config:/app/config:ro
     ports:
-      - "9104:9104"
+      - "127.0.0.1:9104:9104"
     command: ["/app/enricher"]
     depends_on:
-      postgres:
+      <<: *app-depends
+      redis:
         condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
-      migrate:
-        condition: service_completed_successfully
     restart: unless-stopped
 
   # ── Google Careers Scraper ─────────────────────────────────────────────────────
@@ -240,41 +234,98 @@ services:
     build:
       context: ./backend/apps/crawler/ats/google/scraper
       dockerfile: Dockerfile
+      args:
+        GIT_SHA: "${GIT_SHA:-dev}"
     image: jobradar_google_scraper
     container_name: jobradar_google_scraper
     environment:
-      GOOGLE_SCRAPER_TIMEOUT_MS: "14400000"   # 4 hours — matches defaultConfig()
-      GOOGLE_SCRAPER_MIN_DELAY: "120000"       # 2 min — matches defaultConfig()
-      GOOGLE_SCRAPER_MAX_DELAY: "240000"       # 4 min — matches defaultConfig()
-      GOOGLE_SCRAPER_ENRICH_MIN: "60000"       # 1 min — matches defaultConfig()
-      GOOGLE_SCRAPER_ENRICH_MAX: "120000"      # 2 min — matches defaultConfig()
-    # Not a long-running service — started on-demand by the crawler.
-    # Use: docker compose run --rm google-scraper
-    profiles:
-      - scraper
+      GOOGLE_SCRAPER_TIMEOUT_MS: "14400000"
+      GOOGLE_SCRAPER_MIN_DELAY: "120000"
+      GOOGLE_SCRAPER_MAX_DELAY: "240000"
+      GOOGLE_SCRAPER_ENRICH_MIN: "60000"
+      GOOGLE_SCRAPER_ENRICH_MAX: "120000"
+    profiles: [workers]
     restart: "no"
 
   # ── Frontend ──────────────────────────────────────────────────────────────────
 
-  frontend:
+  console:
     build:
-      context: ./frontend
+      context: ./ui/console
       dockerfile: Dockerfile
-    container_name: jobradar_frontend
+      args:
+        GIT_SHA: "${GIT_SHA:-dev}"
+        VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
+        VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}"
+        VITE_APP_DOMAIN: "${VITE_APP_DOMAIN:-}"
+        VITE_ALLOWED_EMAIL: "${VITE_ALLOWED_EMAIL:-}"
+    container_name: jobradar_console
+    profiles: [app]
+    # Loopback binding — accessible locally without Caddy; Caddy uses internal network in prod.
     ports:
-      - "3000:80"
+      - "${CONSOLE_HOST_PORT:-127.0.0.1:3000}:8080"
     depends_on:
       - api
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+      - /var/cache/nginx:size=16m
+      - /var/run:size=4m
+
+  # ── Reverse proxy (the only service that binds public 80/443) ────────────────
+
+  caddy:
+    build:
+      context: ./infra/caddy
+      dockerfile: Dockerfile
+    image: jobradar_caddy
+    container_name: jobradar_caddy
+    profiles: [proxy]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: "${DOMAIN}"
+      ACME_EMAIL: "${ACME_EMAIL}"
+      ACME_CA: "${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}"
+      SUPABASE_PROJECT_HOST: "${SUPABASE_PROJECT_HOST}"
+      RATE_LIMIT_API_PER_MIN: "${RATE_LIMIT_API_PER_MIN:-30}"
+      RATE_LIMIT_CALLBACK_PER_MIN: "${RATE_LIMIT_CALLBACK_PER_MIN:-5}"
+      CROWDSEC_LAPI_URL: "${CROWDSEC_LAPI_URL:-http://crowdsec:8080}"
+      CROWDSEC_LAPI_KEY: "${CROWDSEC_LAPI_KEY:-}"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    depends_on:
+      - api
+      - console
+      - grafana
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # Needed to bind :80/:443 when running as non-root.
+      - NET_BIND_SERVICE
 
   # ── Observability ─────────────────────────────────────────────────────────────
 
   jaeger:
     image: jaegertracing/all-in-one:1.57
     container_name: jobradar_jaeger
+    profiles: [obs]
     ports:
-      - "16686:16686"  # Jaeger UI
-      - "4318:4318"    # OTLP HTTP receiver
+      - "${JAEGER_UI_PORT:-127.0.0.1:16686}:16686"
+      - "${JAEGER_OTLP_PORT:-127.0.0.1:4318}:4318"
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     restart: unless-stopped
@@ -282,8 +333,9 @@ services:
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: jobradar_prometheus
+    profiles: [obs]
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-127.0.0.1:9090}:9090"
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheusdata:/prometheus
@@ -292,24 +344,103 @@ services:
       - '--storage.tsdb.retention.time=15d'
     restart: unless-stopped
 
-  # grafana:
-  #   image: grafana/grafana:10.4.0
-  #   container_name: jobradar_grafana
-  #   ports:
-  #     - "3001:3000"
-  #   volumes:
-  #     - ./infra/prometheus/grafana-prometheus-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml
-  #     - grafanadata:/var/lib/grafana
-  #   environment:
-  #     - GF_AUTH_ANONYMOUS_ENABLED=true
-  #     - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-  #   depends_on:
-  #     - prometheus
-  #   restart: unless-stopped
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: jobradar_grafana
+    profiles: [obs]
+    # Direct access for bootstrap via SSH tunnel. Public path is via Caddy.
+    ports:
+      - "${GRAFANA_PORT:-127.0.0.1:3001}:3000"
+    volumes:
+      - ./infra/prometheus/grafana-prometheus-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml
+      - ./infra/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafanadata:/var/lib/grafana
+    environment:
+      GF_SERVER_ROOT_URL: "https://grafana.${DOMAIN}"
+      GF_SERVER_DOMAIN: "grafana.${DOMAIN}"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_GOOGLE_ENABLED: "true"
+      GF_AUTH_GOOGLE_CLIENT_ID: "${GF_AUTH_GOOGLE_CLIENT_ID}"
+      GF_AUTH_GOOGLE_CLIENT_SECRET: "${GF_AUTH_GOOGLE_CLIENT_SECRET}"
+      GF_AUTH_GOOGLE_ALLOWED_EMAILS: "${GF_AUTH_GOOGLE_ALLOWED_EMAILS}"
+      GF_AUTH_GOOGLE_AUTH_URL: "https://accounts.google.com/o/oauth2/auth"
+      GF_AUTH_GOOGLE_TOKEN_URL: "https://oauth2.googleapis.com/token"
+      GF_AUTH_GOOGLE_API_URL: "https://www.googleapis.com/oauth2/v1/userinfo"
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD__FILE: "/run/secrets/grafana_admin_password"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    secrets:
+      - grafana_admin_password
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: jobradar_loki
+    profiles: [obs]
+    ports:
+      - "${LOKI_PORT:-127.0.0.1:3100}:3100"
+    volumes:
+      - ./infra/loki/config.yaml:/etc/loki/local-config.yaml:ro
+      - lokidata:/loki
+    environment:
+      LOKI_RETENTION: "${LOKI_RETENTION:-720h}"
+    command: -config.file=/etc/loki/local-config.yaml -config.expand-env=true
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: jobradar_promtail
+    profiles: [obs]
+    volumes:
+      - ./infra/promtail/config.yaml:/etc/promtail/config.yaml:ro
+      - caddy_logs:/var/log/caddy:ro
+      - /var/log:/var/log/host:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      LOKI_URL: "${LOKI_URL:-http://loki:3100/loki/api/v1/push}"
+      HOST_NAME: "${HOST_NAME:-jobradar}"
+    command: -config.file=/etc/promtail/config.yaml -config.expand-env=true
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  supabase-audit-sync:
+    build:
+      context: ./infra/observability/supabase-audit-sync
+      dockerfile: Dockerfile
+    image: jobradar_supabase_audit_sync
+    container_name: jobradar_supabase_audit_sync
+    profiles: [obs]
+    environment:
+      SUPABASE_DB_URL: "${SUPABASE_DB_URL}"
+      LOKI_URL: "${LOKI_URL:-http://loki:3100/loki/api/v1/push}"
+      AUDIT_SYNC_INTERVAL_SECONDS: "${AUDIT_SYNC_INTERVAL_SECONDS:-900}"
+      AUDIT_SYNC_STATE_FILE: "${AUDIT_SYNC_STATE_FILE:-/var/lib/audit-sync/state.json}"
+    volumes:
+      - audit_sync_state:/var/lib/audit-sync
+    depends_on:
+      - loki
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+secrets:
+  grafana_admin_password:
+    file: ./secrets/grafana_admin_password
+  crowdsec_bouncer_key:
+    file: ./secrets/crowdsec_bouncer_key
 
 volumes:
-  pgdata:
   prometheusdata:
   grafanadata:
   redpandadata:
-
+  caddy_data:
+  caddy_config:
+  caddy_logs:
+  lokidata:
+  audit_sync_state:

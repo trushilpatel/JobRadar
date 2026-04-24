@@ -187,7 +187,13 @@ func (a *Apple) setHeaders(req *http.Request) {
 // ── Converters and helpers ──────────────────────────────────────────────────
 
 // extractHydrationData finds and returns the JSON string from window.__staticRouterHydrationData.
-// Handles both "= {...};</script>" (same line) and "= {...};\n</script>" (newline) variants.
+// Handles three variants Apple has used:
+//   - Direct object:           = {...};
+//   - JSON.parse double-quote: = JSON.parse("{...}");
+//   - JSON.parse single-quote: = JSON.parse('{...}');
+//
+// Leading whitespace after `=` is stripped before matching, so indented
+// assignments are handled correctly.
 func extractHydrationData(body string) (string, error) {
 	const marker = "window.__staticRouterHydrationData = "
 	idx := strings.Index(body, marker)
@@ -195,17 +201,65 @@ func extractHydrationData(body string) (string, error) {
 		return "", fmt.Errorf("window.__staticRouterHydrationData not found in page")
 	}
 
-	start := idx + len(marker)
-	// Find the closing </script> tag after the start position.
-	// The JSON ends with ";" followed by optional whitespace then "</script>".
-	endIdx := strings.Index(body[start:], "</script>")
+	// Strip leading whitespace/newlines — Apple sometimes indents the value.
+	rest := strings.TrimLeft(body[idx+len(marker):], " \t\r\n")
+
+	// JSON.parse("...") or JSON.parse('...') variant — find the argument string
+	// directly instead of relying on a </script> boundary, so trailing comments
+	// or additional statements do not interfere.
+	const jsonParseCall = "JSON.parse("
+	if strings.HasPrefix(rest, jsonParseCall) {
+		arg := rest[len(jsonParseCall):]
+		if len(arg) == 0 {
+			return "", fmt.Errorf("empty JSON.parse() call")
+		}
+		quoteChar := arg[0]
+		if quoteChar != '"' && quoteChar != '\'' {
+			return "", fmt.Errorf("JSON.parse() argument has unexpected opening character %c", quoteChar)
+		}
+		inner, err := scanToClosingQuote(arg[1:], quoteChar)
+		if err != nil {
+			return "", fmt.Errorf("JSON.parse() argument: %w", err)
+		}
+		if quoteChar == '"' {
+			// Double-quoted JS string — treat inner bytes as a JSON string literal
+			// so json.Unmarshal handles \", \\, \uXXXX, etc. correctly.
+			var unescaped string
+			if jsonErr := json.Unmarshal([]byte(`"`+inner+`"`), &unescaped); jsonErr != nil {
+				return "", fmt.Errorf("decode JSON.parse string: %w", jsonErr)
+			}
+			return unescaped, nil
+		}
+		// Single-quoted JS string — apply minimal JS unescape: \' → ' and \\ → \.
+		// The embedded JSON uses double-quote delimiters, so no further unescaping
+		// is needed for the JSON structure itself.
+		unescaped := strings.ReplaceAll(inner, `\'`, "'")
+		unescaped = strings.ReplaceAll(unescaped, `\\`, `\`)
+		return unescaped, nil
+	}
+
+	// Direct object assignment — use </script> as the boundary.
+	endIdx := strings.Index(rest, "</script>")
 	if endIdx == -1 {
 		return "", fmt.Errorf("closing </script> not found after hydration marker")
 	}
+	return strings.TrimRight(rest[:endIdx], " \t\r\n;"), nil
+}
 
-	// Trim trailing whitespace and the trailing semicolon from the JSON
-	raw := strings.TrimRight(body[start:start+endIdx], " \t\r\n;")
-	return raw, nil
+// scanToClosingQuote returns the raw content of a JS string literal up to (but
+// not including) the first unescaped occurrence of quote. Backslash-escaped
+// characters are skipped so they cannot accidentally terminate the string.
+func scanToClosingQuote(s string, quote byte) (string, error) {
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' {
+			i++ // skip the escaped character
+			continue
+		}
+		if s[i] == quote {
+			return s[:i], nil
+		}
+	}
+	return "", fmt.Errorf("unclosed string — closing %c not found", quote)
 }
 
 // jobToItem converts an appleJob to a FetchJobsItem with FullContent populated.

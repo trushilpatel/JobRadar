@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/trushilpatel/jobradar/apps/api/middleware"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/db"
 	"github.com/trushilpatel/jobradar/common/logger"
@@ -15,14 +16,29 @@ import (
 	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 )
 
+// Strict server timeouts applied to both the public API listener and the
+// internal ops listener. Short header/read timeouts blunt slowloris-style
+// attacks; a bounded write timeout caps per-request resource usage.
+const (
+	serverReadHeaderTimeout = 5 * time.Second
+	serverReadTimeout       = 15 * time.Second
+	serverWriteTimeout      = 30 * time.Second
+	serverIdleTimeout       = 60 * time.Second
+)
+
 func main() {
 	cfg := config.Load()
 	log := logger.Init("api")
 
-	shutdown := tracing.Init("jobradar-api", cfg.Observability.JaegerEndpoint)
+	if err := cfg.Auth.Validate(); err != nil {
+		log.Error("auth config invalid", err)
+		os.Exit(1)
+	}
+
+	shutdown := tracing.Init("jobradar-api", cfg.Observability.JaegerEndpoint, log)
 	defer shutdown()
 
-	database, err := db.Open(cfg.DB)
+	database, err := db.Open(cfg.DB, 10)
 	if err != nil {
 		log.Error("db open failed", err)
 		os.Exit(1)
@@ -34,23 +50,47 @@ func main() {
 		os.Exit(1)
 	}
 
-	router := NewRouter(log, database, app.Handlers())
+	authMW, err := middleware.Auth(cfg.Auth, log)
+	if err != nil {
+		log.Error("auth middleware init failed", err)
+		os.Exit(1)
+	}
 
-	srv := &http.Server{
-		Addr:         ":8080",
-		Handler:      router,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  60 * time.Second,
+	apiRouter := NewRouter(log, cfg, authMW, app.Handlers())
+	opsRouter := NewOpsRouter(database)
+
+	apiSrv := &http.Server{
+		Addr:              ":8080",
+		Handler:           apiRouter,
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		ReadTimeout:       serverReadTimeout,
+		WriteTimeout:      serverWriteTimeout,
+		IdleTimeout:       serverIdleTimeout,
+	}
+	opsSrv := &http.Server{
+		Addr:              cfg.Observability.MetricsAddr,
+		Handler:           opsRouter,
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		ReadTimeout:       serverReadTimeout,
+		WriteTimeout:      serverWriteTimeout,
+		IdleTimeout:       serverIdleTimeout,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	go func() {
-		log.Info("listening", logger.Str("addr", srv.Addr))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("server error", err)
+		log.Info("api listening", logger.Str("addr", apiSrv.Addr))
+		if err := apiSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error("api server error", err)
+			os.Exit(1)
+		}
+	}()
+
+	go func() {
+		log.Info("ops listening", logger.Str("addr", opsSrv.Addr))
+		if err := opsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error("ops server error", err)
 			os.Exit(1)
 		}
 	}()
@@ -62,12 +102,22 @@ func main() {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	srv.Shutdown(shutdownCtx) //nolint:errcheck
+	apiSrv.Shutdown(shutdownCtx) //nolint:errcheck
+	opsSrv.Shutdown(shutdownCtx) //nolint:errcheck
 }
 
 // runRefresher keeps dashboard materialized views up to date.
 // Pipeline stats refresh every 3 minutes; the heatmap every 5 minutes.
+// Both views are also refreshed once immediately on startup so the first
+// API response reflects the current DB state rather than stale MV data.
 func runRefresher(ctx context.Context, log logger.Logger, r dashboardsvc.StatsRefresher) {
+	if err := r.RefreshPipelineStats(ctx); err != nil {
+		log.Error("refresh pipeline stats failed", err)
+	}
+	if err := r.RefreshHeatmap(ctx); err != nil {
+		log.Error("refresh heatmap failed", err)
+	}
+
 	pipelineTicker := time.NewTicker(3 * time.Minute)
 	heatmapTicker := time.NewTicker(5 * time.Minute)
 	defer pipelineTicker.Stop()

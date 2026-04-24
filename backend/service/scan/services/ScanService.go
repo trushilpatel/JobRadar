@@ -11,6 +11,9 @@ import (
 type SchedulerService interface {
 	EnqueueDue(ctx context.Context, intervalMinutes int) (int, error)
 	ResetStuck(ctx context.Context, staleDur time.Duration) error
+	// PurgeInactive removes queued (not processing) entries for companies that
+	// have been deactivated since they were enqueued. Returns number of rows removed.
+	PurgeInactive(ctx context.Context) (int, error)
 }
 
 // Service defines all business operations for the scan domain.
@@ -44,6 +47,10 @@ func (b *BaseService) EnqueueDue(ctx context.Context, intervalMinutes int) (int,
 
 func (b *BaseService) ResetStuck(ctx context.Context, staleDur time.Duration) error {
 	return b.next.ResetStuck(ctx, staleDur)
+}
+
+func (b *BaseService) PurgeInactive(ctx context.Context) (int, error) {
+	return b.next.PurgeInactive(ctx)
 }
 
 func (b *BaseService) TriggerScan(ctx context.Context, companyID string) error {
