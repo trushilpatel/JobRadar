@@ -2,7 +2,7 @@
 /**
  * Meta Careers Playwright Scraper
  *
- * Navigates to metacareers.com/jobs/, scrolls to load all US jobs,
+ * Navigates to metacareers.com/jobsearch, scrolls to load all US jobs,
  * then visits each job detail page to extract full content.
  *
  * Meta's careers site uses Facebook's Comet/Relay framework. Job data is loaded
@@ -33,7 +33,7 @@ chromium.use(stealth());
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
-const BASE_URL = "https://www.metacareers.com/jobs/";
+const BASE_URL = "https://www.metacareers.com/jobsearch";
 
 const TIMEOUT_MS = parseInt(
   process.env.META_SCRAPER_TIMEOUT_MS || "3600000",
@@ -107,7 +107,7 @@ function normalizeEmployType(raw) {
  * Extracts job card data from Meta's job listing page.
  * Meta's DOM is heavily obfuscated, so we use resilient selectors:
  *
- * - Look for <a> elements linking to /jobs/\d+/ (job detail URLs)
+ * - Look for <a> elements linking to /profile/job_details/{id} (current Meta job URLs)
  * - Extract title, location, and team from the card text
  * - Keep track of unique job IDs to avoid duplicates
  */
@@ -116,15 +116,16 @@ async function extractJobsFromPage(page) {
     const jobs = [];
     const seenIds = new Set();
 
-    // Find all links pointing to job detail pages
-    const links = document.querySelectorAll('a[href*="/jobs/"]');
+    // Find all links pointing to job detail pages.
+    // Meta changed URL format from /jobs/{id}/ to /profile/job_details/{id}.
+    const links = document.querySelectorAll('a[href*="/profile/job_details/"]');
 
     for (const link of links) {
       try {
         const href = link.getAttribute("href") || "";
 
-        // Extract job ID from URL: /jobs/(\d+)/
-        const idMatch = href.match(/\/jobs\/(\d+)\//);
+        // Extract job ID from URL: /profile/job_details/{id}
+        const idMatch = href.match(/\/profile\/job_details\/(\d+)/);
         if (!idMatch) continue;
 
         const jobId = idMatch[1];
@@ -136,44 +137,32 @@ async function extractJobsFromPage(page) {
           ? href
           : "https://www.metacareers.com" + (href.startsWith("/") ? href : "/" + href);
 
-        // Get the card container (walk up the tree)
-        let card = link.closest("div[role]") || link.closest("div");
-        if (!card) card = link.parentElement;
-        if (!card) continue;
+        // The <a> wraps the full card — split its innerText into lines to get
+        // title, location, and team without climbing into section header containers.
+        const cardLines = (link.innerText || link.textContent || "")
+          .split("\n").map(l => l.trim()).filter(l => l && l !== "⋅");
+        if (!cardLines.length) continue;
 
-        // Extract text from the card for title, location, and team
-        const cardText = card.innerText || card.textContent || "";
-        const lines = cardText.split("\n").filter((line) => line.trim());
+        const title = cardLines[0]; // first line is always the job title
 
-        // First line is typically the title
-        const title = lines[0] || "";
-
-        // Look for location pattern (e.g., "Menlo Park, CA" or "New York, NY")
-        // Usually in the first few lines after title
+        // Location: first subsequent line that looks like a location
         let location = "";
-        for (let i = 1; i < Math.min(lines.length, 5); i++) {
-          const line = lines[i].trim();
-          // Check if it looks like a location (has a comma, or is a known US city)
-          if (
-            line.includes(",") ||
-            line === "Remote" ||
-            line === "Hybrid"
-          ) {
+        for (let i = 1; i < Math.min(cardLines.length, 6); i++) {
+          const line = cardLines[i];
+          if (line.includes(",") || line === "Remote" || line === "Hybrid" ||
+              line === "Multiple Locations" || /\+\d+ locations?/.test(line)) {
             location = line;
             break;
           }
         }
 
-        // Extract team/department from remaining lines
+        // Team: first subsequent non-location line (no comma, not a location keyword)
         let team = "";
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (
-            line &&
-            !line.includes(",") &&
-            line !== "Remote" &&
-            line !== "Hybrid"
-          ) {
+        for (let i = 1; i < Math.min(cardLines.length, 6); i++) {
+          const line = cardLines[i];
+          if (line !== location && !line.includes(",") && line !== "Remote" &&
+              line !== "Hybrid" && line !== "Multiple Locations" &&
+              !/\+\d+ locations?/.test(line)) {
             team = line;
             break;
           }
@@ -202,7 +191,7 @@ async function extractJobsFromPage(page) {
  * Meta's detail pages have a main content area with description text.
  */
 async function extractJobDetail(page, title, location) {
-  return page.evaluate((title, location) => {
+  return page.evaluate(({ title, location }) => {
     const lines = [title, "", location, ""];
 
     // Look for the main content container
@@ -223,7 +212,7 @@ async function extractJobDetail(page, title, location) {
     lines.push(trimmed.substring(0, 5000));
 
     return lines.join("\n").trim();
-  }, title, location);
+  }, { title, location });
 }
 
 // ── Scroll to load all jobs ──────────────────────────────────────────────────
@@ -304,10 +293,11 @@ async function main() {
 
   const startTime = Date.now();
 
-  // Run full Chrome (headed) via Xvfb virtual display — better anti-bot fingerprint
-  // than headless mode.
+  // headless: false — run in headed mode via Xvfb virtual display for better anti-bot fingerprint.
+  // executablePath: use system Chromium baked into the Docker image via PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH.
   const browser = await chromium.launch({
     headless: false,
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",

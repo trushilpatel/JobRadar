@@ -57,9 +57,9 @@ func NewDefault() *Meta {
 	return &Meta{cfg: defaultConfig()}
 }
 
-// CareersURL returns the Meta Careers jobs page with US filter.
+// CareersURL returns the Meta Careers jobs search page.
 func (m *Meta) CareersURL(_ string) string {
-	return "https://www.metacareers.com/jobs/"
+	return "https://www.metacareers.com/jobsearch"
 }
 
 // ── Scraper output types ────────────────────────────────────────────────────
