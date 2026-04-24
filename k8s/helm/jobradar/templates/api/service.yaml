@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jobradar-api
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: api
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: {{ .Values.api.nodePort }}
+    - name: metrics
+      port: 9100
+      targetPort: 9100
+  selector:
+    {{- include "jobradar.selectorLabels" (dict "component" "api") | nindent 4 }}

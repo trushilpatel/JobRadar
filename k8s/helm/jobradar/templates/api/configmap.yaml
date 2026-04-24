@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-api-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: api
+data:
+  METRICS_ADDR: {{ .Values.api.metricsAddr | quote }}
+  LOG_LEVEL: {{ .Values.api.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.api.logFormat | quote }}
+  JAEGER_ENDPOINT: {{ .Values.api.jaegerEndpoint | quote }}
+  DB_SSLMODE: {{ .Values.api.dbSslmode | quote }}
+  DB_PORT: {{ .Values.api.dbPort | quote }}
+  SUPABASE_PROJECT_URL: {{ .Values.api.supabaseProjectUrl | quote }}
+  ALLOWED_EMAIL: {{ .Values.api.allowedEmail | quote }}
+  JWT_CLOCK_SKEW_SECONDS: {{ .Values.api.jwtClockSkewSeconds | quote }}
+  JWKS_CACHE_TTL_SECONDS: {{ .Values.api.jwksCacheTtlSeconds | quote }}
+  API_MAX_BODY_BYTES: {{ .Values.api.apiMaxBodyBytes | quote }}
