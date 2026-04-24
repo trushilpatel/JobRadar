@@ -1,1 +1,110 @@
 namespace: jobradar-local
+
+kube-prometheus-stack:
+  # Disable heavyweight components not needed for local dev.
+  alertmanager:
+    enabled: false
+  nodeExporter:
+    enabled: false
+  kubeStateMetrics:
+    enabled: true
+
+  prometheus:
+    prometheusSpec:
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: local-path
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 10Gi
+      additionalScrapeConfigs:
+        - job_name: jobradar_api
+          static_configs:
+            - targets: ['jobradar-api.jobradar-local.svc.cluster.local:9100']
+        - job_name: jobradar_scheduler
+          static_configs:
+            - targets: ['jobradar-scheduler.jobradar-local.svc.cluster.local:9101']
+        - job_name: jobradar_crawler
+          static_configs:
+            - targets: ['jobradar-crawler.jobradar-local.svc.cluster.local:9101']
+        - job_name: jobradar_filter
+          static_configs:
+            - targets: ['jobradar-filter.jobradar-local.svc.cluster.local:9101']
+        - job_name: jobradar_enricher
+          static_configs:
+            - targets: ['jobradar-enricher.jobradar-local.svc.cluster.local:9101']
+
+  grafana:
+    service:
+      type: NodePort
+      nodePort: 3001
+    adminPassword: "admin"
+    grafana.ini:
+      users:
+        allow_sign_up: false
+    # Wire Loki as a datasource manually (not auto-wired like Prometheus).
+    additionalDataSources:
+      - name: Loki
+        type: loki
+        url: http://obs-loki-stack:3100
+        access: proxy
+        isDefault: false
+    # Provision dashboards from the jobradar-grafana-dashboards ConfigMap (created in Task 14).
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+          - name: jobradar
+            orgId: 1
+            folder: JobRadar
+            type: file
+            disableDeletion: false
+            options:
+              path: /var/lib/grafana/dashboards/jobradar
+    dashboardsConfigMaps:
+      jobradar: jobradar-grafana-dashboards
+
+loki-stack:
+  loki:
+    enabled: true
+    persistence:
+      enabled: true
+      storageClassName: local-path
+      size: 5Gi
+    config:
+      limits_config:
+        retention_period: 72h
+  promtail:
+    enabled: true
+
+jaeger:
+  provisionDataStore:
+    cassandra: false
+  allInOne:
+    enabled: true
+    extraEnv:
+      - name: COLLECTOR_OTLP_ENABLED
+        value: "true"
+  storage:
+    type: memory
+  agent:
+    enabled: false
+  collector:
+    enabled: false
+  query:
+    enabled: false
+  ingress:
+    enabled: false
+
+supabaseAuditSync:
+  image:
+    repository: jobradar-supabase-audit-sync
+    tag: local
+    pullPolicy: IfNotPresent
+  lokiUrl: "http://obs-loki-stack:3100/loki/api/v1/push"
+  intervalSeconds: "900"
+  stateFile: "/var/lib/audit-sync/state.json"
+  storage: 100Mi
+  storageClass: local-path
