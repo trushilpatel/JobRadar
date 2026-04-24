@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-grafana-dashboards
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "observability.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  auth-events.json: |
+{{ .Files.Get "dashboards/auth-events.json" | indent 4 }}
+  jobradar-overview.json: |
+{{ .Files.Get "dashboards/jobradar-overview.json" | indent 4 }}
+  security-posture.json: |
+{{ .Files.Get "dashboards/security-posture.json" | indent 4 }}
+  tls-health.json: |
+{{ .Files.Get "dashboards/tls-health.json" | indent 4 }}

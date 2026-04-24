@@ -1,0 +1,90 @@
+{
+  "title": "Auth Events (Supabase)",
+  "uid": "jobradar-auth-events",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["jobradar", "auth", "security"],
+  "timezone": "browser",
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Loki datasource",
+        "type": "datasource",
+        "query": "loki",
+        "current": { "text": "Loki", "value": "Loki" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Logins in last 24h",
+      "datasource": { "type": "loki", "uid": "${ds}" },
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count_over_time({service=\"supabase_auth\"} |= \"login\" [24h])"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Failed auth in last 24h",
+      "datasource": { "type": "loki", "uid": "${ds}" },
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count_over_time({service=\"supabase_auth\"} |= \"user_repeated_signup\" or {service=\"supabase_auth\"} |= \"invalid_credentials\" [24h])"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Failed auth by source IP",
+      "datasource": { "type": "loki", "uid": "${ds}" },
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (ip_address) (count_over_time({service=\"supabase_auth\"} |~ \"invalid_credentials|user_repeated_signup\" | json | __error__=\"\" [5m]))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Distinct sessions (24h)",
+      "datasource": { "type": "loki", "uid": "${ds}" },
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(sum by (session_id) (count_over_time({service=\"supabase_auth\"} | json session_id=\"payload.session_id\" | session_id != \"\" [24h])))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "Recent auth events",
+      "datasource": { "type": "loki", "uid": "${ds}" },
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 10 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service=\"supabase_auth\"}"
+        }
+      ],
+      "options": { "showTime": true, "wrapLogMessage": true }
+    }
+  ]
+}
