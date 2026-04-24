@@ -211,7 +211,7 @@ func TestAuth_ValidES256Token_200(t *testing.T) {
 	srv := startJWKSServer(t, b)
 
 	cfg := baseESConfig(srv.URL)
-	mw, err := Auth(cfg, logger.NewNoop())
+	mw, err := Auth(cfg, "", logger.NewNoop())
 	if err != nil {
 		t.Fatalf("Auth: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestAuth_ValidES256Token_200(t *testing.T) {
 
 func TestAuth_ValidHS256Token_200(t *testing.T) {
 	cfg := baseHSConfig()
-	mw, err := Auth(cfg, logger.NewNoop())
+	mw, err := Auth(cfg, "", logger.NewNoop())
 	if err != nil {
 		t.Fatalf("Auth: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestAuth_ValidHS256Token_200(t *testing.T) {
 
 func TestAuth_ExpiredToken_401(t *testing.T) {
 	cfg := baseHSConfig()
-	mw, _ := Auth(cfg, logger.NewNoop())
+	mw, _ := Auth(cfg, "", logger.NewNoop())
 	tok := signToken(t, tokenOptions{
 		alg: "HS256", hmacKey: []byte(testHMACSecret),
 		issuer: testIssuer, audience: testAudience, email: testAllowedEml,
@@ -266,7 +266,7 @@ func TestAuth_ExpiredToken_401(t *testing.T) {
 
 func TestAuth_WithinSkewWindow_200(t *testing.T) {
 	cfg := baseHSConfig()
-	mw, _ := Auth(cfg, logger.NewNoop())
+	mw, _ := Auth(cfg, "", logger.NewNoop())
 	// Exp is 30s in the past; skew default 60s keeps it valid.
 	tok := signToken(t, tokenOptions{
 		alg: "HS256", hmacKey: []byte(testHMACSecret),
@@ -281,7 +281,7 @@ func TestAuth_WithinSkewWindow_200(t *testing.T) {
 
 func TestAuth_MissingAuthorization_401(t *testing.T) {
 	cfg := baseHSConfig()
-	mw, _ := Auth(cfg, logger.NewNoop())
+	mw, _ := Auth(cfg, "", logger.NewNoop())
 	w, _ := request(t, mw, "")
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("got status %d, want 401", w.Code)
@@ -290,7 +290,7 @@ func TestAuth_MissingAuthorization_401(t *testing.T) {
 
 func TestAuth_MalformedBearer_401(t *testing.T) {
 	cfg := baseHSConfig()
-	mw, _ := Auth(cfg, logger.NewNoop())
+	mw, _ := Auth(cfg, "", logger.NewNoop())
 
 	cases := []string{"Token abc", "Bearer", "Bearer ", "abc"}
 	for _, h := range cases {
@@ -305,7 +305,7 @@ func TestAuth_MalformedBearer_401(t *testing.T) {
 
 func TestAuth_WrongIssuer_401(t *testing.T) {
 	cfg := baseHSConfig()
-	mw, _ := Auth(cfg, logger.NewNoop())
+	mw, _ := Auth(cfg, "", logger.NewNoop())
 	tok := signToken(t, tokenOptions{
 		alg: "HS256", hmacKey: []byte(testHMACSecret),
 		issuer: "https://evil.supabase.co/auth/v1", audience: testAudience, email: testAllowedEml,
@@ -319,7 +319,7 @@ func TestAuth_WrongIssuer_401(t *testing.T) {
 
 func TestAuth_WrongAudience_401(t *testing.T) {
 	cfg := baseHSConfig()
-	mw, _ := Auth(cfg, logger.NewNoop())
+	mw, _ := Auth(cfg, "", logger.NewNoop())
 	tok := signToken(t, tokenOptions{
 		alg: "HS256", hmacKey: []byte(testHMACSecret),
 		issuer: testIssuer, audience: "anon", email: testAllowedEml,
@@ -335,7 +335,7 @@ func TestAuth_WrongAudience_401(t *testing.T) {
 // WithValidMethods must block this before signature verification even runs.
 func TestAuth_AlgNone_401(t *testing.T) {
 	cfg := baseHSConfig()
-	mw, _ := Auth(cfg, logger.NewNoop())
+	mw, _ := Auth(cfg, "", logger.NewNoop())
 	// Hand-craft a "none" token.
 	header := b64url([]byte(`{"alg":"none","typ":"JWT"}`))
 	claimsJSON, _ := json.Marshal(map[string]any{
@@ -362,7 +362,7 @@ func TestAuth_AlgConfusion_ES256PublicKeyAsHS256_401(t *testing.T) {
 	srv := startJWKSServer(t, b)
 
 	cfg := baseESConfig(srv.URL)
-	mw, err := Auth(cfg, logger.NewNoop())
+	mw, err := Auth(cfg, "", logger.NewNoop())
 	if err != nil {
 		t.Fatalf("Auth: %v", err)
 	}
@@ -382,7 +382,7 @@ func TestAuth_AlgConfusion_ES256PublicKeyAsHS256_401(t *testing.T) {
 
 func TestAuth_WrongEmail_403(t *testing.T) {
 	cfg := baseHSConfig()
-	mw, _ := Auth(cfg, logger.NewNoop())
+	mw, _ := Auth(cfg, "", logger.NewNoop())
 	tok := signToken(t, tokenOptions{
 		alg: "HS256", hmacKey: []byte(testHMACSecret),
 		issuer: testIssuer, audience: testAudience, email: "intruder@example.com",
@@ -402,7 +402,7 @@ func TestAuth_JWKS503_MiddlewareReturns503(t *testing.T) {
 	srv := startJWKSServer(t, b)
 
 	cfg := baseESConfig(srv.URL)
-	mw, err := Auth(cfg, logger.NewNoop())
+	mw, err := Auth(cfg, "", logger.NewNoop())
 	if err != nil {
 		t.Fatalf("Auth: %v", err)
 	}
@@ -433,7 +433,7 @@ func TestAuth_UnknownKid_RefetchOnce_Then401(t *testing.T) {
 	srv := startJWKSServer(t, b)
 
 	cfg := baseESConfig(srv.URL)
-	mw, err := Auth(cfg, logger.NewNoop())
+	mw, err := Auth(cfg, "", logger.NewNoop())
 	if err != nil {
 		t.Fatalf("Auth: %v", err)
 	}
