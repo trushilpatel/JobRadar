@@ -113,7 +113,7 @@ services:
     <<: *app-hardening
     build:
       context: ./backend
-      dockerfile: ../infra/Dockerfile
+      dockerfile: ../infra/Dockerfile.backend
       args:
         GIT_SHA: "${GIT_SHA:-dev}"
     image: jobradar_backend
