@@ -485,6 +485,110 @@ func TestEmailMatches_ConstantTime(t *testing.T) {
 	}
 }
 
+func TestDevBypass(t *testing.T) {
+	const devToken = "test-dev-token-abc123"
+	const allowedEmail = "dev@example.com"
+
+	cfg := config.AuthConfig{
+		AllowedEmail:      allowedEmail,
+		SupabaseJWTSecret: "dummy-secret-for-test-only",
+	}
+
+	log := logger.NewNoop()
+	mw, err := Auth(cfg, devToken, log)
+	if err != nil {
+		t.Fatalf("Auth() setup error: %v", err)
+	}
+
+	var gotIdent Identity
+	var handlerCalled bool
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+		gotIdent, _ = FromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := mw(next)
+
+	t.Run("bypass fires on matching token", func(t *testing.T) {
+		handlerCalled = false
+		gotIdent = Identity{}
+		req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
+		req.Header.Set("X-Dev-Token", devToken)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if !handlerCalled {
+			t.Fatal("expected next handler to be called")
+		}
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rr.Code)
+		}
+		if gotIdent.UserID != "dev-bypass" {
+			t.Fatalf("expected UserID dev-bypass, got %q", gotIdent.UserID)
+		}
+		if gotIdent.Email != allowedEmail {
+			t.Fatalf("expected Email %q, got %q", allowedEmail, gotIdent.Email)
+		}
+	})
+
+	t.Run("wrong token falls through to 401", func(t *testing.T) {
+		handlerCalled = false
+		req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
+		req.Header.Set("X-Dev-Token", "wrong-token")
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if handlerCalled {
+			t.Fatal("next handler must not be called with wrong token")
+		}
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", rr.Code)
+		}
+	})
+
+	t.Run("no header falls through to 401", func(t *testing.T) {
+		handlerCalled = false
+		req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if handlerCalled {
+			t.Fatal("next handler must not be called with no token header")
+		}
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", rr.Code)
+		}
+	})
+}
+
+func TestDevBypassDisabledWhenTokenEmpty(t *testing.T) {
+	cfg := config.AuthConfig{
+		AllowedEmail:      "dev@example.com",
+		SupabaseJWTSecret: "dummy-secret-for-test-only",
+	}
+	log := logger.NewNoop()
+	mw, err := Auth(cfg, "", log) // devToken = "" → bypass disabled
+	if err != nil {
+		t.Fatalf("Auth() setup error: %v", err)
+	}
+
+	var handlerCalled bool
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := mw(next)
+
+	req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
+	req.Header.Set("X-Dev-Token", "anything")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if handlerCalled {
+		t.Fatal("next must not be called when devToken is empty")
+	}
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+}
+
 // TestExtractBearer verifies the Authorization header parser accepts well-formed
 // bearers and rejects everything else, including case-insensitive prefix.
 func TestExtractBearer(t *testing.T) {
