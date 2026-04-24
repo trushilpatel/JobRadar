@@ -26,6 +26,7 @@ images:
 api:
   nodePort: 30080
   metricsAddr: ":9100"
+  devToken: ""          # Set locally to enable dev auth bypass. Leave empty in production.
   logLevel: info
   logFormat: json
   jaegerEndpoint: ""
