@@ -177,7 +177,12 @@ make local-down   # stop
 
 #### Prerequisites
 - [k3d](https://k3d.io) + [kubectl](https://kubernetes.io/docs/tasks/tools/) installed
-- k3d cluster created: `k3d cluster create jobradar --port 30080:30080@loadbalancer`
+- k3d cluster created:
+  ```bash
+  k3d cluster create jobradar \
+    --port "30080:30080@loadbalancer" \
+    --port "30300:30300@loadbalancer"
+  ```
 
 #### First-time setup
 Create one secret per service (copy from the `secret.yaml.example` in each `k8s/<service>/` directory and apply):
@@ -199,13 +204,17 @@ The API is available at **`http://localhost:30080`** after `k8s-up` completes.
 #### Day-to-day commands
 ```bash
 make k8s-status           # show all pod statuses
+make k8s-forward          # port-forward console → localhost:3000, api → localhost:8080
+make k8s-unforward        # stop all port-forwards
 make k8s-logs             # tail all service logs (prefixed by pod name)
-make k8s-logs-api         # tail a specific service  (also: -crawler, -filter, -analyzer, -scheduler)
+make k8s-logs-api         # tail a specific service  (also: -crawler, -filter, -analyzer, -scheduler, -console)
 make k8s-restart          # rolling restart all deployments
 make k8s-restart-api      # rolling restart one service
 make k8s-migrate          # re-run migrations (idempotent)
 make k8s-down             # tear down workloads (secrets preserved)
 ```
+
+> **Note:** If the cluster was created without `--port` mappings, use `make k8s-forward` to access services. Recreating the cluster with the port flags above makes NodePorts directly accessible on `localhost:30080` (API) and `localhost:30300` (console) without port-forwarding.
 
 #### After a code change
 ```bash

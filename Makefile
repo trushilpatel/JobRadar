@@ -13,9 +13,9 @@ export GIT_SHA
         docker-up \
         local local-down prod prod-down \
         up rebuild rebuild-backend rebuild-crawler rebuild-console down logs build-docker \
-        k8s-build k8s-build-backend k8s-build-crawler \
-        k8s-up k8s-down k8s-migrate k8s-status \
-        k8s-logs k8s-logs-scheduler k8s-logs-crawler k8s-logs-filter k8s-logs-analyzer k8s-logs-api \
+        k8s-build k8s-build-backend k8s-build-crawler k8s-build-console \
+        k8s-up k8s-down k8s-migrate k8s-status k8s-forward k8s-unforward \
+        k8s-logs k8s-logs-scheduler k8s-logs-crawler k8s-logs-filter k8s-logs-analyzer k8s-logs-api k8s-logs-console \
         k8s-restart \
         install-hooks \
         help
@@ -199,9 +199,21 @@ k8s-build-crawler: ## Build crawler image and import into k3d
 	docker build -t jobradar-crawler:local -f infra/Dockerfile.crawler ./backend
 	k3d image import jobradar-crawler:local -c $(K3D_CLUSTER)
 
-k8s-build: k8s-build-backend k8s-build-crawler ## Build all images and import into k3d
+k8s-build-console: ## Build console image (bakes VITE_ vars from root .env) and import into k3d
+	@set -a && . ./.env && set +a && \
+	docker build \
+		--build-arg VITE_SUPABASE_URL="$$VITE_SUPABASE_URL" \
+		--build-arg VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY" \
+		--build-arg VITE_APP_DOMAIN="$$VITE_APP_DOMAIN" \
+		--build-arg VITE_ALLOWED_EMAIL="$$VITE_ALLOWED_EMAIL" \
+		--build-arg GIT_SHA=$(GIT_SHA) \
+		-t jobradar-console:local \
+		-f ui/console/Dockerfile ./ui/console
+	k3d image import jobradar-console:local -c $(K3D_CLUSTER)
 
-k8s-up: ## Deploy full stack to k3d (infra → migrate → workers → api)
+k8s-build: k8s-build-backend k8s-build-crawler k8s-build-console ## Build all images and import into k3d
+
+k8s-up: ## Deploy full stack to k3d (infra → migrate → workers → api → console)
 	kubectl apply -f k8s/scheduler/namespace.yaml
 	kubectl apply \
 		-f k8s/kafka/configmap.yaml \
@@ -220,7 +232,8 @@ k8s-up: ## Deploy full stack to k3d (infra → migrate → workers → api)
 		-f k8s/crawler/configmap.yaml    -f k8s/crawler/deployment.yaml \
 		-f k8s/filter/configmap.yaml     -f k8s/filter/deployment.yaml \
 		-f k8s/analyzer/configmap.yaml   -f k8s/analyzer/deployment.yaml \
-		-f k8s/api/configmap.yaml        -f k8s/api/deployment.yaml -f k8s/api/service.yaml
+		-f k8s/api/configmap.yaml        -f k8s/api/deployment.yaml       -f k8s/api/service.yaml \
+		-f k8s/console/configmap.yaml    -f k8s/console/deployment.yaml   -f k8s/console/service.yaml
 
 k8s-down: ## Tear down all k8s workloads (keeps secrets intact)
 	kubectl delete deployments,statefulsets,jobs,services,configmaps \
@@ -252,6 +265,18 @@ k8s-logs-analyzer: ## Tail analyzer logs
 
 k8s-logs-api: ## Tail api logs
 	kubectl logs -f -l app=jobradar,component=api -n $(K8S_NS)
+
+k8s-logs-console: ## Tail console logs
+	kubectl logs -f -l app=jobradar,component=console -n $(K8S_NS)
+
+k8s-forward: ## Port-forward console :3000 and API :8080 to localhost (runs in background)
+	kubectl port-forward svc/jobradar-console -n $(K8S_NS) 3000:8080 &
+	kubectl port-forward svc/jobradar-api     -n $(K8S_NS) 8080:8080 &
+	@echo "Console → http://localhost:3000"
+	@echo "API     → http://localhost:8080"
+
+k8s-unforward: ## Stop all kubectl port-forward processes
+	@pkill -f "kubectl port-forward" || true
 
 k8s-restart: ## Rolling restart all jobradar deployments
 	kubectl rollout restart deployment -l app=jobradar -n $(K8S_NS)

@@ -28,7 +28,7 @@ spec:
       containers:
         - name: api
           image: jobradar-backend:local
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           command: ["/app/api"]
           envFrom:
             - configMapRef:

@@ -1,4 +1,4 @@
-name: Build & Push Images
+name: Build, Push & Deploy
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
       - "backend/**"
       - "infra/Dockerfile.backend"
       - "infra/Dockerfile.crawler"
+      - "ui/console/**"
       - ".github/workflows/build.yml"
   workflow_dispatch:
     inputs:
@@ -26,6 +27,7 @@ jobs:
     outputs:
       backend: ${{ steps.result.outputs.backend }}
       crawler: ${{ steps.result.outputs.crawler }}
+      console: ${{ steps.result.outputs.console }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,6 +45,9 @@ jobs:
               - "backend/**"
               - "infra/Dockerfile.crawler"
               - ".github/workflows/build.yml"
+            console:
+              - "ui/console/**"
+              - ".github/workflows/build.yml"
 
       - name: Resolve build flags
         id: result
@@ -50,9 +55,11 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "backend=true" >> $GITHUB_OUTPUT
             echo "crawler=true" >> $GITHUB_OUTPUT
+            echo "console=true" >> $GITHUB_OUTPUT
           else
             echo "backend=${{ steps.filter.outputs.backend }}" >> $GITHUB_OUTPUT
             echo "crawler=${{ steps.filter.outputs.crawler }}" >> $GITHUB_OUTPUT
+            echo "console=${{ steps.filter.outputs.console }}" >> $GITHUB_OUTPUT
           fi
 
   # ── Backend image (scheduler + filter share this) ─────────────────────────
@@ -130,3 +137,117 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha,scope=crawler
           cache-to: type=gha,mode=max,scope=crawler
+
+  # ── Console image (React + nginx) ─────────────────────────────────────────
+  build-console:
+    name: Console
+    needs: changes
+    if: needs.changes.outputs.console == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ui/console
+          file: ./ui/console/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/jobradar-console:latest
+            ghcr.io/${{ github.repository_owner }}/jobradar-console:sha-${{ github.sha }}
+          build-args: |
+            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
+            VITE_APP_DOMAIN=${{ secrets.VITE_APP_DOMAIN }}
+            VITE_ALLOWED_EMAIL=${{ secrets.VITE_ALLOWED_EMAIL }}
+            GIT_SHA=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=console
+          cache-to: type=gha,mode=max,scope=console
+
+  # ── Deploy backend services to k8s ────────────────────────────────────────
+  deploy-backend:
+    name: Deploy Backend
+    needs: build-backend
+    if: needs.build-backend.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      NS: jobradar-local
+      IMAGE: ghcr.io/${{ github.repository_owner }}/jobradar-backend:sha-${{ github.sha }}
+    steps:
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Update images
+        run: |
+          kubectl set image deployment/jobradar-scheduler scheduler=$IMAGE -n $NS
+          kubectl set image deployment/jobradar-filter    filter=$IMAGE    -n $NS
+          kubectl set image deployment/jobradar-analyzer  analyzer=$IMAGE  -n $NS
+          kubectl set image deployment/jobradar-api       api=$IMAGE       -n $NS
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/jobradar-scheduler -n $NS --timeout=5m
+          kubectl rollout status deployment/jobradar-filter    -n $NS --timeout=5m
+          kubectl rollout status deployment/jobradar-analyzer  -n $NS --timeout=5m
+          kubectl rollout status deployment/jobradar-api       -n $NS --timeout=5m
+
+  # ── Deploy crawler to k8s ──────────────────────────────────────────────────
+  deploy-crawler:
+    name: Deploy Crawler
+    needs: build-crawler
+    if: needs.build-crawler.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      NS: jobradar-local
+      IMAGE: ghcr.io/${{ github.repository_owner }}/jobradar-crawler:sha-${{ github.sha }}
+    steps:
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Update image
+        run: kubectl set image deployment/jobradar-crawler crawler=$IMAGE -n $NS
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/jobradar-crawler -n $NS --timeout=5m
+
+  # ── Deploy console to k8s ──────────────────────────────────────────────────
+  deploy-console:
+    name: Deploy Console
+    needs: build-console
+    if: needs.build-console.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      NS: jobradar-local
+      IMAGE: ghcr.io/${{ github.repository_owner }}/jobradar-console:sha-${{ github.sha }}
+    steps:
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Update image
+        run: kubectl set image deployment/jobradar-console console=$IMAGE -n $NS
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/jobradar-console -n $NS --timeout=5m

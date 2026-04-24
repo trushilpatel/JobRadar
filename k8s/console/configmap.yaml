@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-console-nginx
+  namespace: jobradar-local
+  labels:
+    app: jobradar
+    component: console
+    environment: local
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        location ~* \.(js|css|svg|png|jpg|jpeg|gif|ico|woff|woff2|ttf)$ {
+            expires 30d;
+            add_header Cache-Control "public, immutable";
+        }
+
+        location = /robots.txt {
+            try_files $uri =404;
+        }
+
+        # Proxy /api/* → backend API service in cluster
+        location /api/ {
+            proxy_pass         http://jobradar-api:8080/;
+            proxy_http_version 1.1;
+            proxy_set_header   Host $host;
+            proxy_set_header   X-Real-IP $remote_addr;
+        }
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+    }

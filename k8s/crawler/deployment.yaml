@@ -25,7 +25,7 @@ spec:
       containers:
         - name: crawler
           image: jobradar-crawler:local
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
                 name: jobradar-crawler-config

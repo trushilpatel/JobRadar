@@ -21,7 +21,7 @@ spec:
       containers:
         - name: migrate
           image: jobradar-backend:local
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           command: ["/app/migrate", "/app/migrations"]
           envFrom:
             - secretRef:

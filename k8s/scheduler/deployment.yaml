@@ -25,7 +25,7 @@ spec:
       containers:
         - name: scheduler
           image: jobradar-backend:local
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           command: ["/app/scheduler"]
           envFrom:
             - configMapRef:
