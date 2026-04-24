@@ -1,0 +1,15 @@
+apiVersion: v2
+name: observability
+description: JobRadar observability stack — Prometheus, Grafana, Loki, Jaeger
+type: application
+version: 0.1.0
+dependencies:
+  - name: kube-prometheus-stack
+    version: "84.0.1"
+    repository: https://prometheus-community.github.io/helm-charts
+  - name: loki-stack
+    version: "2.10.3"
+    repository: https://grafana.github.io/helm-charts
+  - name: jaeger
+    version: "4.7.0"
+    repository: https://jaegertracing.github.io/helm-charts
