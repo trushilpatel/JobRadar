@@ -57,7 +57,6 @@ spec:
             # write access to /tmp for its temp profile.
             runAsNonRoot: false
             readOnlyRootFilesystem: false
-            allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
               add: ["SYS_ADMIN"]
