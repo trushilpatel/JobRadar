@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobradar-crawler
+  namespace: jobradar-local
+  labels:
+    app: jobradar
+    component: crawler
+    environment: local
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jobradar
+      component: crawler
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: jobradar
+        component: crawler
+        environment: local
+    spec:
+      containers:
+        - name: crawler
+          image: jobradar-crawler:local
+          imagePullPolicy: Never
+          envFrom:
+            - configMapRef:
+                name: jobradar-crawler-config
+            - secretRef:
+                name: jobradar-crawler-secret
+          ports:
+            - containerPort: 9101
+              name: metrics
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9101
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 9101
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          securityContext:
+            # Playwright (Chromium) requires write access to temp dirs and runs as root
+            runAsNonRoot: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["SYS_ADMIN"]
+      securityContext:
+        runAsNonRoot: false
