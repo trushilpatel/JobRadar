@@ -115,7 +115,7 @@ During implementation:
 
 ## Backend code standards
 
-These extend the rules in `.claude/rules/backend-solid.md` and `.claude/rules/backend-architecture.md`.
+These extend the rules in `.claude/rules/backend-solid.md`, `.claude/rules/backend-architecture.md`, and `.claude/rules/quality-attributes.md`.
 
 - Keep structs small with one clear reason to change
 - Prefer composition; keep interfaces small and focused — one interface per concern
