@@ -12,7 +12,7 @@ Usage: include "jobradar.selectorLabels" (dict "component" "api")
 */}}
 {{- define "jobradar.selectorLabels" -}}
 app: jobradar
-component: {{ .component }}
+component: {{ required "jobradar.selectorLabels: component is required" .component }}
 {{- end }}
 
 {{/*
