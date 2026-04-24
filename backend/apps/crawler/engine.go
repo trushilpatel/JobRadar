@@ -128,6 +128,15 @@ func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, kn
 		log.Debug("injected known job IDs into adapter", logger.Int("count", len(idSet)))
 	}
 
+	// If the adapter supports streaming, wire up a publish callback so jobs enter
+	// Kafka immediately after each page instead of waiting for the full scan.
+	if sp, ok := adp.(ats.StreamPublisher); ok {
+		sp.SetStreamPublish(func(items []ats.FetchJobsItem) {
+			e.publishNewJobs(ctx, items, company, log)
+		})
+		log.Debug("streaming publish enabled for adapter")
+	}
+
 	result, err := adp.FetchJobs(ctx, company.ID)
 	if err != nil {
 		return ats.FetchJobsResponse{}, fmt.Errorf("fetch failed: %w", err)

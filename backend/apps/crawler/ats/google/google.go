@@ -16,11 +16,11 @@ type Config struct {
 // defaultConfig returns sensible production defaults.
 func defaultConfig() Config {
 	return Config{
-		MinDelayMs:  15000,  // 15s between listing pages
-		MaxDelayMs:  25000,  // 25s between listing pages
-		TimeoutMs:   7200000, // 2 hours total
+		MinDelayMs:  55000,   // ~1 min between listing pages (human pacing, bot-safe)
+		MaxDelayMs:  75000,   // ~1.25 min between listing pages
+		TimeoutMs:   18000000, // 5 hours — enough for initial full scan of ~680 jobs
 		MaxPages:    0,
-		EnrichMinMs: 8000,  // 8s between detail pages
-		EnrichMaxMs: 12000, // 12s between detail pages
+		EnrichMinMs: 5000,  // 5s between detail pages
+		EnrichMaxMs: 10000, // 10s between detail pages
 	}
 }

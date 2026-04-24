@@ -22,9 +22,10 @@ const careersURL = "https://www.google.com/about/careers/applications/jobs/resul
 
 // RodGoogle implements types.Adapter using go-rod instead of the Node.js subprocess.
 type RodGoogle struct {
-	cfg      Config
-	log      logger.Logger
-	knownIDs map[string]struct{} // set by engine via SetKnownJobIDs before FetchJobs
+	cfg           Config
+	log           logger.Logger
+	knownIDs      map[string]struct{}        // set by engine via SetKnownJobIDs before FetchJobs
+	streamPublish func([]types.FetchJobsItem) // set by engine via SetStreamPublish before FetchJobs
 }
 
 // NewRodGoogle creates a RodGoogle adapter with the given config and logger.
@@ -35,6 +36,14 @@ func NewRodGoogle(cfg Config, log logger.Logger) *RodGoogle {
 // NewRodGoogleDefault creates a RodGoogle adapter with default config and no-op logger.
 func NewRodGoogleDefault() *RodGoogle {
 	return &RodGoogle{cfg: defaultConfig(), log: logger.NewNoop()}
+}
+
+// SetStreamPublish implements types.StreamPublisher.
+// The engine calls this before FetchJobs. After each listing page the adapter
+// calls fn with the new thin jobs so they enter Kafka without waiting for the
+// full scan to complete.
+func (s *RodGoogle) SetStreamPublish(fn func([]types.FetchJobsItem)) {
+	s.streamPublish = fn
 }
 
 // SetKnownJobIDs implements types.KnownJobsProvider.
@@ -62,6 +71,12 @@ type jsJob struct {
 // Detail page enrichment is not performed here — kept separate for validation.
 func (s *RodGoogle) FetchJobs(ctx context.Context, _ string) (types.FetchJobsResponse, error) {
 	start := time.Now()
+
+	if s.cfg.TimeoutMs > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutMs)*time.Millisecond)
+		defer cancel()
+	}
 
 	browser, closeBrowser, err := s.launchBrowser()
 	if err != nil {
@@ -113,6 +128,8 @@ func (s *RodGoogle) FetchJobs(ctx context.Context, _ string) (types.FetchJobsRes
 				newCount++
 			}
 		}
+		// No publish here — jobs are published after detail enrichment so Kafka
+		// always receives full content, never empty thin jobs.
 
 		s.log.Info("google/rod: page scraped",
 			logger.Int("page", pageNum),
@@ -207,6 +224,12 @@ done:
 		}
 		allJobs[i].Description = desc
 		enriched++
+
+		// Publish this job to Kafka immediately after enrichment.
+		// Full content (description + qualifications) is always present here.
+		if s.streamPublish != nil {
+			s.streamPublish(toRodItems([]jsJob{allJobs[i]}))
+		}
 	}
 
 enrich_done:
@@ -465,16 +488,24 @@ func (s *RodGoogle) sleep(ctx context.Context, minMs, maxMs int) error {
 func toRodItems(jobs []jsJob) []types.FetchJobsItem {
 	items := make([]types.FetchJobsItem, len(jobs))
 	for i, j := range jobs {
+		var fc *types.FullJobContent
+		if j.Description != "" {
+			// Full-detail job: description was fetched from the detail page.
+			fc = &types.FullJobContent{
+				Description: j.Description,
+				Department:  j.Org,
+			}
+		}
+		// Thin job (no description): leave FullContent nil so the analyzer
+		// falls through to its HTTP fetch fallback instead of fast-pathing
+		// with an empty description field.
 		items[i] = types.FetchJobsItem{
 			ID:             j.ID,
 			Title:          j.Title,
 			URL:            j.URL,
 			Location:       j.Location,
 			EmploymentType: "full_time",
-			FullContent: &types.FullJobContent{
-				Description: j.Description,
-				Department:  j.Org,
-			},
+			FullContent:    fc,
 		}
 	}
 	return items
@@ -485,4 +516,5 @@ var (
 	_ types.Adapter          = (*RodGoogle)(nil)
 	_ types.URLProvider      = (*RodGoogle)(nil)
 	_ types.KnownJobsProvider = (*RodGoogle)(nil)
+	_ types.StreamPublisher   = (*RodGoogle)(nil)
 )

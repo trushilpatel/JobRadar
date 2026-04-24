@@ -81,6 +81,15 @@ type URLProvider interface {
 	CareersURL(id string) string
 }
 
+// StreamPublisher is an optional interface for adapters that can publish jobs
+// incrementally instead of returning everything at once. The engine calls
+// SetStreamPublish before FetchJobs with a function that immediately publishes
+// a batch of jobs to Kafka. The adapter calls it after each page is scraped so
+// jobs enter the pipeline without waiting for the full scan to complete.
+type StreamPublisher interface {
+	SetStreamPublish(fn func([]FetchJobsItem))
+}
+
 // KnownJobsProvider is an optional interface for adapters that can skip detail
 // enrichment for already-known job IDs. The engine calls SetKnownJobIDs before
 // FetchJobs so the adapter avoids visiting detail pages for jobs already in the
