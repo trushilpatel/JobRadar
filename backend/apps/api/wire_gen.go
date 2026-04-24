@@ -45,6 +45,14 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {
 	scanRestService := services2.NewRestService(scanValidationService)
 	scanRestRouter := services2.NewRestRouter(scanRestService)
 
+	// AdapterConfig
+	adapterConfigStore := services2.NewAdapterConfigStore(db)
+	adapterConfigRepositoryService := services2.NewAdapterConfigRepositoryService(adapterConfigStore)
+	adapterConfigImplService := services2.NewAdapterConfigImplService(adapterConfigRepositoryService)
+	adapterConfigValidationService := services2.NewAdapterConfigValidator(adapterConfigImplService)
+	adapterConfigRestService := services2.NewAdapterConfigRestService(adapterConfigValidationService)
+	adapterConfigRestRouter := services2.NewAdapterConfigRestRouter(adapterConfigRestService)
+
 	// Job
 	jobStore := jobsvc.NewJobStore(db)
 	seenLedgerStore := jobsvc.NewSeenLedgerStore(db)
@@ -86,7 +94,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {
 	dashboardRestService := services4.NewDashboardRestService(dashboardService, userDashboardService, pipelineService)
 	dashboardRestRouter := services4.NewRestRouter(dashboardRestService)
 
-	app := NewApp(companyHandler, scanRestRouter, jobHandler, applicationRestRouter, dashboardRestRouter, insightsRestRouter)
+	app := NewApp(companyHandler, scanRestRouter, adapterConfigRestRouter, jobHandler, applicationRestRouter, dashboardRestRouter, insightsRestRouter)
 	return app, nil
 }
 

@@ -26,10 +26,10 @@ type ScanQueueStore interface {
 	// uses FOR UPDATE SKIP LOCKED so two instances never double-enqueue.
 	EnqueueDue(ctx context.Context, intervalMinutes int, source string) (int, error)
 
-	// ClaimNext atomically claims the next queued item for an active company
-	// and marks it processing. Returns nil, nil if the queue is empty or all
-	// remaining entries belong to inactive companies.
-	ClaimNext(ctx context.Context) (*dto.ScanQueueItem, error)
+	// ClaimNext atomically claims the next queued item for the given adapterType,
+	// enforcing the inter-company delay from adapter_configs via a FOR UPDATE lock.
+	// Returns nil, nil if the queue is empty or the delay has not elapsed.
+	ClaimNext(ctx context.Context, adapterType string) (*dto.ScanQueueItem, error)
 
 	// Complete removes the queue entry. Call after scan succeeds or fails.
 	Complete(ctx context.Context, id string) error
@@ -91,10 +91,10 @@ func (s *scanQueueStore) Enqueue(ctx context.Context, companyID, source string) 
 	ctx, span := tracing.Start(ctx, "scan.store.Enqueue")
 	defer tracing.End(span, &err)
 	return s.db.WithContext(ctx).Exec(`
-		INSERT INTO company_scan_queue (company_id, source)
-		VALUES (?, ?)
+		INSERT INTO company_scan_queue (company_id, source, adapter_type)
+		SELECT ?, ?, adapter_type FROM companies WHERE id = ?
 		ON CONFLICT DO NOTHING
-	`, companyID, source).Error
+	`, companyID, source, companyID).Error
 }
 
 func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, source string) (_ int, err error) {
@@ -102,46 +102,96 @@ func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, so
 	defer tracing.End(span, &err)
 	var ids []string
 	err = s.db.WithContext(ctx).Raw(`
-		INSERT INTO company_scan_queue (company_id, source)
-		SELECT id, ?
-		FROM companies
-		WHERE active = true
-		  AND (last_scan_at IS NULL OR last_scan_at + (? * INTERVAL '1 minute') <= NOW())
-		  AND NOT EXISTS (SELECT 1 FROM company_scan_queue WHERE company_id = companies.id)
-		ORDER BY last_scan_at ASC NULLS FIRST
-		FOR UPDATE SKIP LOCKED
+		INSERT INTO company_scan_queue (company_id, source, adapter_type)
+		SELECT c.id, ?, c.adapter_type
+		FROM companies c
+		LEFT JOIN adapter_configs ac ON ac.adapter_type = c.adapter_type
+		WHERE c.active = true
+		  AND NOT EXISTS (
+		    SELECT 1 FROM company_scan_queue q
+		    WHERE q.company_id = c.id AND q.status IN ('queued','processing')
+		  )
+		  AND (
+		    c.last_scan_at IS NULL
+		    OR c.last_scan_at + COALESCE(
+		        c.scan_interval_minutes_override,
+		        ac.scan_interval_minutes,
+		        ?
+		    ) * INTERVAL '1 minute' <= NOW()
+		  )
+		ORDER BY c.last_scan_at ASC NULLS FIRST
 		ON CONFLICT DO NOTHING
 		RETURNING company_id
 	`, source, intervalMinutes).Scan(&ids).Error
 	return len(ids), err
 }
 
-func (s *scanQueueStore) ClaimNext(ctx context.Context) (_ *dto.ScanQueueItem, err error) {
+func (s *scanQueueStore) ClaimNext(ctx context.Context, adapterType string) (_ *dto.ScanQueueItem, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.ClaimNext")
 	defer tracing.End(span, &err)
+
 	var item dto.ScanQueueItem
-	err = s.db.WithContext(ctx).Raw(`
-		UPDATE company_scan_queue
-		SET status = 'processing', started_at = NOW()
-		WHERE id = (
-			SELECT q.id
-			FROM company_scan_queue q
-			JOIN companies c ON c.id = q.company_id AND c.active = true
-			WHERE q.status = 'queued'
-			ORDER BY q.priority DESC, q.queued_at ASC
-			LIMIT 1
-			FOR UPDATE OF q SKIP LOCKED
-		)
-		RETURNING id, company_id, status, source, priority, queued_at, started_at, heartbeat_at
-	`).Scan(&item).Error
-	if err != nil {
-		return nil, err
+	txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Step 1: Lock this adapter's config row and check if the inter-company delay
+		// has elapsed. FOR UPDATE serialises concurrent pod claims for this adapter type.
+		// If the row is absent or the delay has not passed, no row is returned and we
+		// return nil (worker sleeps and retries on the next poll interval).
+		var delayS int
+		res := tx.Raw(`
+			SELECT inter_company_delay_s
+			FROM adapter_configs
+			WHERE adapter_type = ?
+			  AND (
+			    last_scheduled_at IS NULL
+			    OR NOW() - last_scheduled_at >= inter_company_delay_s * INTERVAL '1 second'
+			  )
+			FOR UPDATE
+		`, adapterType).Scan(&delayS)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			// Delay not elapsed or adapter unknown — signal nil return via sentinel.
+			return errNoEligibleAdapter
+		}
+
+		// Step 2: Claim the oldest queued item for this adapter type.
+		if err := tx.Raw(`
+			UPDATE company_scan_queue
+			SET status = 'processing', started_at = NOW(), heartbeat_at = NOW()
+			WHERE id = (
+			    SELECT id FROM company_scan_queue
+			    WHERE status = 'queued' AND adapter_type = ?
+			    ORDER BY priority DESC, queued_at ASC
+			    LIMIT 1
+			    FOR UPDATE SKIP LOCKED
+			)
+			RETURNING id, company_id, adapter_type, source
+		`, adapterType).Scan(&item).Error; err != nil {
+			return err
+		}
+
+		// Step 3: Record when this adapter was last claimed so the next claim
+		// waits for inter_company_delay_s before proceeding.
+		return tx.Exec(`UPDATE adapter_configs SET last_scheduled_at = NOW() WHERE adapter_type = ?`, adapterType).Error
+	})
+
+	if txErr == errNoEligibleAdapter {
+		return nil, nil
+	}
+	if txErr != nil {
+		return nil, txErr
 	}
 	if item.ID == "" {
 		return nil, nil
 	}
 	return &item, nil
 }
+
+// errNoEligibleAdapter is a sentinel used inside the ClaimNext transaction to
+// signal that no adapter_configs row was eligible (delay not elapsed or unknown
+// adapter). It is never returned to callers — ClaimNext returns nil, nil instead.
+var errNoEligibleAdapter = fmt.Errorf("no eligible adapter row")
 
 func (s *scanQueueStore) PurgeInactive(ctx context.Context) (_ int, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.PurgeInactive")
@@ -186,7 +236,7 @@ func (s *scanQueueStore) UpdateHeartbeat(ctx context.Context, id string) (err er
 func (s *scanQueueStore) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ []dto.ScanQueueItem, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.ListQueue")
 	defer tracing.End(span, &err)
-	query := `SELECT id, company_id, status, source, priority, queued_at, started_at, heartbeat_at FROM company_scan_queue WHERE 1=1`
+	query := `SELECT id, company_id, adapter_type, status, source, priority, queued_at, started_at, heartbeat_at FROM company_scan_queue WHERE 1=1`
 	var args []any
 	if filter.Status != "" {
 		query += ` AND status = ?`

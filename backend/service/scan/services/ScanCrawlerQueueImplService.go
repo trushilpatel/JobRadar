@@ -11,7 +11,10 @@ import (
 
 // CrawlerQueueService is the interface the crawler worker uses for queue operations.
 type CrawlerQueueService interface {
-	ClaimNext(ctx context.Context) (*dto.ScanQueueItem, error)
+	// ClaimNext atomically claims the next queued item for the given adapterType,
+	// enforcing the inter-company delay from adapter_configs. Returns nil, nil if
+	// the queue is empty or the delay has not yet elapsed.
+	ClaimNext(ctx context.Context, adapterType string) (*dto.ScanQueueItem, error)
 	Complete(ctx context.Context, id string) error
 	ResetStuck(ctx context.Context, staleDur time.Duration) error
 	UpdateHeartbeat(ctx context.Context, id string) error
@@ -26,10 +29,10 @@ func NewCrawlerQueueService(store ScanQueueStore) CrawlerQueueService {
 	return &crawlerQueueService{store: store}
 }
 
-func (s *crawlerQueueService) ClaimNext(ctx context.Context) (_ *dto.ScanQueueItem, err error) {
+func (s *crawlerQueueService) ClaimNext(ctx context.Context, adapterType string) (_ *dto.ScanQueueItem, err error) {
 	ctx, span := tracing.Start(ctx, "scan.crawlerqueue.ClaimNext")
 	defer tracing.End(span, &err)
-	item, err := s.store.ClaimNext(ctx)
+	item, err := s.store.ClaimNext(ctx, adapterType)
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to claim queue item")
 	}

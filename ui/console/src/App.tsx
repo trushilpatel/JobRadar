@@ -9,6 +9,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { JobsPage } from '@/pages/JobsPage'
 import { InsightsPage } from '@/pages/InsightsPage'
 import { LoginPage, AuthCallback, RequireAuth, useAuthStore } from '@/features/auth'
+import { SettingsPage } from '@/pages/SettingsPage'
 
 function AuthBootstrap({ children }: { children: React.ReactNode }) {
   const bootstrap = useAuthStore((s) => s.bootstrap)
@@ -35,6 +36,7 @@ function ProtectedLayout() {
           <Route path="/companies" element={<CompaniesPage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/insights" element={<InsightsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
     </div>

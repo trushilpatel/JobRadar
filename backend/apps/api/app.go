@@ -13,12 +13,13 @@ import (
 // App holds all domain handlers wired together.
 // Dependencies are injected by Wire (or manually in tests/main.go).
 type App struct {
-	companyHandler     *companysvc.RestRouter
-	scanHandler        *scansvc.RestRouter
-	jobHandler         *jobsvc.RestRouter
-	applicationHandler *application.Handler
-	dashboardHandler   *dashboard.Handler
-	insightsHandler    *insightssvc.RestRouter
+	companyHandler           *companysvc.RestRouter
+	scanHandler              *scansvc.RestRouter
+	adapterConfigHandler     *scansvc.AdapterConfigRestRouter
+	jobHandler               *jobsvc.RestRouter
+	applicationHandler       *application.Handler
+	dashboardHandler         *dashboard.Handler
+	insightsHandler          *insightssvc.RestRouter
 }
 
 // NewApp constructs the App from fully-wired domain handlers.
@@ -26,18 +27,20 @@ type App struct {
 func NewApp(
 	companyHandler *companysvc.RestRouter,
 	scanHandler *scansvc.RestRouter,
+	adapterConfigHandler *scansvc.AdapterConfigRestRouter,
 	jobHandler *jobsvc.RestRouter,
 	applicationHandler *application.Handler,
 	dashboardHandler *dashboard.Handler,
 	insightsHandler *insightssvc.RestRouter,
 ) *App {
 	return &App{
-		companyHandler:     companyHandler,
-		scanHandler:        scanHandler,
-		jobHandler:         jobHandler,
-		applicationHandler: applicationHandler,
-		dashboardHandler:   dashboardHandler,
-		insightsHandler:    insightsHandler,
+		companyHandler:       companyHandler,
+		scanHandler:          scanHandler,
+		adapterConfigHandler: adapterConfigHandler,
+		jobHandler:           jobHandler,
+		applicationHandler:   applicationHandler,
+		dashboardHandler:     dashboardHandler,
+		insightsHandler:      insightsHandler,
 	}
 }
 
@@ -46,6 +49,7 @@ func (a *App) Handlers() []handler.RouteGroup {
 	return []handler.RouteGroup{
 		a.companyHandler,
 		a.scanHandler,
+		a.adapterConfigHandler,
 		a.jobHandler,
 		a.applicationHandler,
 		a.dashboardHandler,

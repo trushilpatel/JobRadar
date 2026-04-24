@@ -39,6 +39,11 @@ func buildTestApp() *App {
 	scanRest := scansvc.NewRestService(scanValidation)
 	scanH := scansvc.NewRestRouter(scanRest)
 
+	fakeAdapterCfg := &fakeAdapterConfigService{}
+	adapterCfgValidation := scansvc.NewAdapterConfigValidator(fakeAdapterCfg)
+	adapterCfgRest := scansvc.NewAdapterConfigRestService(adapterCfgValidation)
+	adapterCfgH := scansvc.NewAdapterConfigRestRouter(adapterCfgRest)
+
 	fakeJob := &fakeJobService{}
 	jobValidation := jobsvc.NewValidator(fakeJob)
 	jobRest := jobsvc.NewRestService(jobValidation)
@@ -58,13 +63,13 @@ func buildTestApp() *App {
 	insightsRest := insightssvc.NewRestService(insightsValidation)
 	insightsH := insightssvc.NewRestRouter(insightsRest)
 
-	return NewApp(companyH, scanH, jobH, appH, dashH, insightsH)
+	return NewApp(companyH, scanH, adapterCfgH, jobH, appH, dashH, insightsH)
 }
 
 func TestApp_Handlers_ReturnsExpectedCount(t *testing.T) {
 	app := buildTestApp()
-	if got := len(app.Handlers()); got != 6 {
-		t.Fatalf("expected 6 route groups, got %d", got)
+	if got := len(app.Handlers()); got != 7 {
+		t.Fatalf("expected 7 route groups, got %d", got)
 	}
 }
 
@@ -101,6 +106,10 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 	})
 
 	expected := []struct{ method, route string }{
+		{http.MethodGet, "/adapter-configs"},
+		{http.MethodPatch, "/adapter-configs/{adapter_type}"},
+		{http.MethodPatch, "/companies/{id}/scan-interval-override"},
+		{http.MethodGet, "/companies/{id}/scan-config"},
 		{http.MethodGet, "/jobs"},
 		{http.MethodGet, "/jobs/{id}"},
 		{http.MethodDelete, "/jobs/{id}"},
@@ -291,9 +300,25 @@ func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insightsdto.
 	return insightsdto.PipelineCounts{}, nil
 }
 
+type fakeAdapterConfigService struct{}
+
+func (f *fakeAdapterConfigService) ListAdapterConfigs(_ context.Context) ([]dto.AdapterConfigDTO, error) {
+	return nil, nil
+}
+func (f *fakeAdapterConfigService) UpdateAdapterConfig(_ context.Context, _ string, _ dto.UpdateAdapterConfigInput) (dto.AdapterConfigDTO, error) {
+	return dto.AdapterConfigDTO{}, nil
+}
+func (f *fakeAdapterConfigService) GetEffectiveScanConfig(_ context.Context, _ string) (dto.EffectiveScanConfigDTO, error) {
+	return dto.EffectiveScanConfigDTO{}, nil
+}
+func (f *fakeAdapterConfigService) UpdateScanIntervalOverride(_ context.Context, _ string, _ *int) error {
+	return nil
+}
+
 // Ensure fakes implement interfaces.
 var _ company.Service = (*fakeCompanyService)(nil)
 var _ scansvc.Service = (*fakeScanService)(nil)
+var _ scansvc.AdapterConfigService = (*fakeAdapterConfigService)(nil)
 var _ jobsvc.Service = (*fakeJobService)(nil)
 var _ application.Service = (*fakeAppService)(nil)
 var _ dashboard.Service = (*fakeDashboardService)(nil)

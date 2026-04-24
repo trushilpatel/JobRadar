@@ -6,6 +6,7 @@ import "time"
 type ScanQueueItem struct {
 	ID          string     `json:"id"`
 	CompanyID   string     `json:"company_id"`
+	AdapterType string     `json:"adapter_type"`
 	Status      string     `json:"status"`
 	Source      string     `json:"source"`
 	Priority    int        `json:"priority"`

@@ -6,31 +6,38 @@ import (
 	"testing"
 	"time"
 
+	"github.com/trushilpatel/jobradar/apps/crawler/workers"
 	"github.com/trushilpatel/jobradar/common/logger"
-	"github.com/trushilpatel/jobradar/service/scan/dto"
-	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
-// fakeQueue is a test double for scansvc.CrawlerQueueService.
+// fakeWorkerQueue is a test double for workers.CrawlerQueueService.
 // Only UpdateHeartbeat is exercised by the heartbeat tests; other methods are no-ops.
-type fakeQueue struct {
+type fakeWorkerQueue struct {
 	calls atomic.Int64
 	err   error
 }
 
-func (f *fakeQueue) ClaimNext(_ context.Context) (*dto.ScanQueueItem, error) { return nil, nil }
-func (f *fakeQueue) Complete(_ context.Context, _ string) error              { return nil }
-func (f *fakeQueue) ResetStuck(_ context.Context, _ time.Duration) error     { return nil }
-func (f *fakeQueue) UpdateHeartbeat(_ context.Context, _ string) error {
+func (f *fakeWorkerQueue) ClaimNext(_ context.Context, _ string) (*workers.ScanQueueItem, error) {
+	return nil, nil
+}
+func (f *fakeWorkerQueue) Complete(_ context.Context, _ string) error { return nil }
+func (f *fakeWorkerQueue) UpdateHeartbeat(_ context.Context, _ string) error {
 	f.calls.Add(1)
 	return f.err
 }
 
-var _ scansvc.CrawlerQueueService = (*fakeQueue)(nil)
+var _ workers.CrawlerQueueService = (*fakeWorkerQueue)(nil)
+
+// startHeartbeatViaWorker is a test helper that creates a BaseWorker and exercises
+// its heartbeat goroutine. Heartbeat is now owned by workers.BaseWorker.
+func startHeartbeatViaWorker(ctx context.Context, q workers.CrawlerQueueService, id string, interval time.Duration, log logger.Logger) func() {
+	w := workers.NewBaseWorkerWithHeartbeat("test", q, nil, log, time.Second, interval)
+	return w.StartHeartbeatForTest(ctx, id)
+}
 
 func TestStartHeartbeat_CallsUpdatePeriodically(t *testing.T) {
-	q := &fakeQueue{}
-	stop := startHeartbeat(context.Background(), q, "item-1", 20*time.Millisecond, logger.NewNoop())
+	q := &fakeWorkerQueue{}
+	stop := startHeartbeatViaWorker(context.Background(), q, "item-1", 20*time.Millisecond, logger.NewNoop())
 
 	time.Sleep(75 * time.Millisecond)
 	stop()
@@ -41,8 +48,8 @@ func TestStartHeartbeat_CallsUpdatePeriodically(t *testing.T) {
 }
 
 func TestStartHeartbeat_StopsAfterStopCalled(t *testing.T) {
-	q := &fakeQueue{}
-	stop := startHeartbeat(context.Background(), q, "item-1", 20*time.Millisecond, logger.NewNoop())
+	q := &fakeWorkerQueue{}
+	stop := startHeartbeatViaWorker(context.Background(), q, "item-1", 20*time.Millisecond, logger.NewNoop())
 
 	time.Sleep(50 * time.Millisecond)
 	stop()
@@ -56,8 +63,8 @@ func TestStartHeartbeat_StopsAfterStopCalled(t *testing.T) {
 
 func TestStartHeartbeat_StopsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	q := &fakeQueue{}
-	_ = startHeartbeat(ctx, q, "item-1", 20*time.Millisecond, logger.NewNoop())
+	q := &fakeWorkerQueue{}
+	_ = startHeartbeatViaWorker(ctx, q, "item-1", 20*time.Millisecond, logger.NewNoop())
 
 	time.Sleep(50 * time.Millisecond)
 	cancel()
@@ -70,16 +77,16 @@ func TestStartHeartbeat_StopsOnContextCancel(t *testing.T) {
 }
 
 func TestStartHeartbeat_StopIsIdempotent(t *testing.T) {
-	q := &fakeQueue{}
-	stop := startHeartbeat(context.Background(), q, "item-1", 20*time.Millisecond, logger.NewNoop())
+	q := &fakeWorkerQueue{}
+	stop := startHeartbeatViaWorker(context.Background(), q, "item-1", 20*time.Millisecond, logger.NewNoop())
 
 	stop()
 	stop() // second call must not panic
 }
 
 func TestStartHeartbeat_DoesNotBlockOnUpdateError(t *testing.T) {
-	q := &fakeQueue{err: context.DeadlineExceeded}
-	stop := startHeartbeat(context.Background(), q, "item-1", 10*time.Millisecond, logger.NewNoop())
+	q := &fakeWorkerQueue{err: context.DeadlineExceeded}
+	stop := startHeartbeatViaWorker(context.Background(), q, "item-1", 10*time.Millisecond, logger.NewNoop())
 	defer stop()
 
 	time.Sleep(50 * time.Millisecond)

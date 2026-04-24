@@ -2,10 +2,14 @@ import { useEffect, useState } from 'react'
 import { X, Trash2, RefreshCw, Pencil, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Company, ScanStats } from '@/types'
 import { fetchScanStats } from '@/api/companies'
+import { getCompanyScanConfig } from '@/api/adapterConfigs'
+import type { EffectiveScanConfig } from '@/api/adapterConfigs'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { StatusPill, type StatusKind } from '@/components/ui/status-pill'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
 import { cn, formatRelativeTime } from '@/lib/utils'
+import { ScanIntervalOverrideModal } from '@/features/settings/components/ScanIntervalOverrideModal'
+import { useScanIntervalOverride } from '@/features/settings/hooks/useScanIntervalOverride'
 
 interface CompanyDetailDrawerProps {
   company: Company
@@ -27,6 +31,9 @@ export function CompanyDetailDrawer({
   const [stats, setStats] = useState<ScanStats | null>(null)
   const [loading, setLoading] = useState(false)
   const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set())
+  const [scanConfig, setScanConfig] = useState<EffectiveScanConfig | null>(null)
+  const [overrideModalOpen, setOverrideModalOpen] = useState(false)
+  const { setOverride } = useScanIntervalOverride(company.id)
 
   function toggleError(id: number) {
     setExpandedErrors((prev) => {
@@ -45,6 +52,14 @@ export function CompanyDetailDrawer({
       .then(setStats)
       .catch(() => setStats(null))
       .finally(() => setLoading(false))
+  }, [company.id])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setScanConfig(null)
+    getCompanyScanConfig(company.id)
+      .then(setScanConfig)
+      .catch(() => setScanConfig(null))
   }, [company.id])
 
   useEffect(() => {
@@ -148,6 +163,46 @@ export function CompanyDetailDrawer({
           )}
         </Section>
 
+        <Section title="Scan Interval">
+          {scanConfig ? (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Adapter default</span>
+                <span className="text-white/70">{scanConfig.effective_scan_interval_minutes} min</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Custom override</span>
+                {scanConfig.company_override !== null ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-violet-300 font-medium">{scanConfig.company_override} min</span>
+                    <button
+                      type="button"
+                      onClick={() => void setOverride(null)}
+                      title="Clear override"
+                      className="text-slate-500 hover:text-red-400 transition-colors"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500">—</span>
+                    <button
+                      type="button"
+                      onClick={() => setOverrideModalOpen(true)}
+                      className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                    >
+                      Set override
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="h-8 bg-white/5 rounded animate-pulse" />
+          )}
+        </Section>
+
         <Section title="Activity">
           <div className="grid grid-cols-2 gap-2">
             <StatTile value={stats?.new_today ?? '—'} accent="new" label="Last 24 hours" />
@@ -223,6 +278,17 @@ export function CompanyDetailDrawer({
           )}
         </Section>
       </div>
+
+      {scanConfig && (
+        <ScanIntervalOverrideModal
+          open={overrideModalOpen}
+          onClose={() => setOverrideModalOpen(false)}
+          companyId={company.id}
+          companyName={company.name}
+          adapterDefault={scanConfig.effective_scan_interval_minutes}
+          currentOverride={scanConfig.company_override}
+        />
+      )}
     </div>
   )
 }

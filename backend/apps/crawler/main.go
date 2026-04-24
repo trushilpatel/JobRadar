@@ -5,13 +5,22 @@ import (
 	"os"
 	"os/signal"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
 	"gorm.io/gorm"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/apple"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/ashby"
+	atsgoogle "github.com/trushilpatel/jobradar/apps/crawler/ats/google"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/greenhouse"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/lever"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/meta"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/microsoft"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/netflix"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/rippling"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/uber"
+	"github.com/trushilpatel/jobradar/apps/crawler/workers"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/db"
 	"github.com/trushilpatel/jobradar/common/kafka"
@@ -39,9 +48,67 @@ func main() {
 	}
 	defer producer.Close()
 
-	engine, queue := buildEngine(database, producer, cfg, log)
+	engine, rawQueue := buildEngine(database, producer, cfg, log)
 
-	runLoop(ctx, cfg, log, queue, engine)
+	stuckTimeout := time.Duration(cfg.Crawler.StuckTimeoutSeconds) * time.Second
+	if err := rawQueue.ResetStuck(ctx, stuckTimeout); err != nil {
+		log.Error("failed to reset stuck queue items on startup", err)
+	}
+
+	// Periodic stuck-reset — runs every 5 minutes in the background.
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := rawQueue.ResetStuck(ctx, stuckTimeout); err != nil {
+					log.Error("failed to reset stuck queue items", err)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// Wrap scansvc.CrawlerQueueService → workers.CrawlerQueueService.
+	queue := &queueAdapter{svc: rawQueue}
+
+	googleCfg := atsgoogle.Config{
+		MinDelayMs:    cfg.Crawler.Google.MinDelayMs,
+		MaxDelayMs:    cfg.Crawler.Google.MaxDelayMs,
+		TimeoutMs:     cfg.Crawler.Google.TimeoutMs,
+		MaxPages:      cfg.Crawler.Google.MaxPages,
+		EnrichMinMs:   cfg.Crawler.Google.EnrichMinMs,
+		EnrichMaxMs:   cfg.Crawler.Google.EnrichMaxMs,
+		MaxDetailJobs: cfg.Crawler.Google.MaxDetailJobs,
+		ProfileDir:    cfg.Crawler.Google.ProfileDir,
+		ChromiumPath:  cfg.Crawler.Google.ChromiumPath,
+	}
+
+	registry := workers.NewRegistry()
+
+	// API adapters — one goroutine per adapter type.
+	registry.Register(greenhouse.NewCrawlerService(queue, engine, log))
+	registry.Register(lever.NewCrawlerService(queue, engine, log))
+	registry.Register(ashby.NewCrawlerService(queue, engine, log))
+	registry.Register(netflix.NewCrawlerService(queue, engine, log))
+	registry.Register(uber.NewCrawlerService(queue, engine, log))
+	registry.Register(microsoft.NewCrawlerService(queue, engine, log))
+	registry.Register(rippling.NewCrawlerService(queue, engine, log))
+	registry.Register(apple.NewCrawlerService(queue, engine, log))
+
+	// Browser adapters — keep process/browser warm across scans.
+	registry.Register(atsgoogle.NewCrawlerService(queue, engine, googleCfg, log))
+	registry.Register(meta.NewCrawlerService(queue, engine, log))
+
+	log.Info("starting multi-lane crawler", logger.Int("adapters", 10))
+
+	var wg sync.WaitGroup
+	registry.StartAll(ctx, &wg)
+	wg.Wait()
+
+	log.Info("crawler stopped")
 }
 
 func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gorm.DB, *kafka.Producer, error) {
@@ -78,7 +145,7 @@ func buildEngine(database *gorm.DB, producer *kafka.Producer, cfg *config.Config
 	recorder := scansvc.NewCrawlerService(scanLog)
 	queue := scansvc.NewCrawlerQueueService(queueStore)
 
-	googleCfg := google.Config{
+	googleCfg := atsgoogle.Config{
 		MinDelayMs:    cfg.Crawler.Google.MinDelayMs,
 		MaxDelayMs:    cfg.Crawler.Google.MaxDelayMs,
 		TimeoutMs:     cfg.Crawler.Google.TimeoutMs,
@@ -94,104 +161,33 @@ func buildEngine(database *gorm.DB, producer *kafka.Producer, cfg *config.Config
 	return engine, queue
 }
 
-func runLoop(ctx context.Context, cfg *config.Config, log logger.Logger, queue scansvc.CrawlerQueueService, engine *Engine) {
-	pollInterval := time.Duration(cfg.Crawler.PollIntervalSeconds) * time.Second
-	stuckTimeout := time.Duration(cfg.Crawler.StuckTimeoutSeconds) * time.Second
-	heartbeatInterval := time.Duration(cfg.Crawler.HeartbeatIntervalSeconds) * time.Second
-	companyDelay := time.Duration(cfg.Crawler.CompanyDelaySeconds) * time.Second
-
-	if err := queue.ResetStuck(ctx, stuckTimeout); err != nil {
-		log.Error("failed to reset stuck queue items", err)
-	}
-
-	log.Info("worker started", logger.Dur("poll_interval", pollInterval))
-
-	var wg sync.WaitGroup
-	var active atomic.Bool
-
-	startScan := func() {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer active.Store(false)
-			pollAndProcess(ctx, log, queue, engine, companyDelay, heartbeatInterval)
-		}()
-	}
-
-	active.Store(true)
-	startScan()
-
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if err := queue.ResetStuck(ctx, stuckTimeout); err != nil {
-				log.Error("failed to reset stuck queue items", err)
-			}
-			if !active.CompareAndSwap(false, true) {
-				log.Debug("scan in progress, skipping tick")
-				continue
-			}
-			startScan()
-		case <-ctx.Done():
-			log.Info("shutting down")
-			wg.Wait()
-			return
-		}
-	}
+// queueAdapter bridges scansvc.CrawlerQueueService → workers.CrawlerQueueService.
+// The two interfaces differ in ClaimNext: workers returns *workers.ScanQueueItem
+// whereas the service layer returns *dto.ScanQueueItem. This adapter converts.
+type queueAdapter struct {
+	svc scansvc.CrawlerQueueService
 }
 
-func pollAndProcess(ctx context.Context, log logger.Logger, queue scansvc.CrawlerQueueService, engine *Engine, companyDelay, heartbeatInterval time.Duration) {
-	item, err := queue.ClaimNext(ctx)
+func (a *queueAdapter) ClaimNext(ctx context.Context, adapterType string) (*workers.ScanQueueItem, error) {
+	item, err := a.svc.ClaimNext(ctx, adapterType)
 	if err != nil {
-		log.Error("failed to claim queue item", err)
-		return
+		return nil, err
 	}
 	if item == nil {
-		log.Debug("queue empty")
-		return
+		return nil, nil
 	}
-
-	log.Info("processing company from queue",
-		logger.Str(logger.FieldCompany, item.CompanyID),
-		logger.Str("source", item.Source),
-	)
-
-	stopHeartbeat := startHeartbeat(ctx, queue, item.ID, heartbeatInterval, log)
-	defer stopHeartbeat()
-
-	engine.RunForCompany(ctx, item.CompanyID)
-
-	if err := queue.Complete(ctx, item.ID); err != nil {
-		log.Error("failed to complete queue item", err, logger.Str(logger.FieldCompany, item.CompanyID))
-	}
-
-	if companyDelay > 0 {
-		log.Debug("pacing before next claim", logger.Dur("delay", companyDelay))
-		select {
-		case <-time.After(companyDelay):
-		case <-ctx.Done():
-		}
-	}
+	return &workers.ScanQueueItem{
+		ID:          item.ID,
+		CompanyID:   item.CompanyID,
+		AdapterType: item.AdapterType,
+		Source:      item.Source,
+	}, nil
 }
 
-func startHeartbeat(ctx context.Context, q scansvc.CrawlerQueueService, id string, interval time.Duration, log logger.Logger) func() {
-	hbCtx, cancel := context.WithCancel(ctx)
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := q.UpdateHeartbeat(hbCtx, id); err != nil {
-					log.Warn("heartbeat update failed", logger.Str(logger.FieldQueueID, id), logger.Err(err))
-				}
-			case <-hbCtx.Done():
-				return
-			}
-		}
-	}()
-	return cancel
+func (a *queueAdapter) Complete(ctx context.Context, id string) error {
+	return a.svc.Complete(ctx, id)
+}
+
+func (a *queueAdapter) UpdateHeartbeat(ctx context.Context, id string) error {
+	return a.svc.UpdateHeartbeat(ctx, id)
 }

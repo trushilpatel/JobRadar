@@ -5,6 +5,7 @@ import {
   Briefcase,
   LayoutDashboard,
   BarChart2,
+  Settings,
   ChevronsLeft,
   ChevronsRight,
   LogOut,
@@ -17,6 +18,7 @@ const nav: { to: string; label: string; icon: React.ReactNode }[] = [
   { to: '/companies', label: 'Companies', icon: <Building2 size={16} /> },
   { to: '/jobs', label: 'Jobs', icon: <Briefcase size={16} /> },
   { to: '/insights', label: 'Insights', icon: <BarChart2 size={16} /> },
+  { to: '/settings', label: 'Settings', icon: <Settings size={16} /> },
 ]
 
 export function Sidebar() {
