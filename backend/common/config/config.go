@@ -66,6 +66,7 @@ func (c AuthConfig) Validate() error {
 // APIConfig holds HTTP-server-level settings for the public API listener.
 type APIConfig struct {
 	MaxBodyBytes int64
+	DevToken     string
 }
 
 type DatabaseConfig struct {
@@ -302,6 +303,7 @@ func Load() *Config {
 		},
 		API: APIConfig{
 			MaxBodyBytes: int64(getEnvInt("API_MAX_BODY_BYTES", 1048576)),
+			DevToken:     os.Getenv("DEV_TOKEN"),
 		},
 	}
 }
