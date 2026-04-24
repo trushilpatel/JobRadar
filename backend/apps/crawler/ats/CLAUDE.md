@@ -44,79 +44,13 @@ This means adding a new downstream field never requires touching HTTP/decode log
 
 ## Types
 
-### RawJob
+Two wire types (Kafka) — keep separate from DB model `jobmodel.Job`:
+- **`RawJob`** — published to `job_listings.raw`; `FullContent` is `omitempty` so thin-adapter consumers are unaffected
+- **`FetchJobsItem` / `FetchJobsResponse`** — minimal listing data for dedup + publish
+- **`FullJobContent`** — full details at scan time (full-detail adapters); when set, analyzer skips HTTP fetch
+- **`FetchJobContentResponse`** — union of all fields across platforms; empty string for unsupported fields
 
-Kafka message published to `job_listings.raw`. Defined in `pipeline/ats/` — the Kafka wire type, not a DB model.
-`jobmodel.Job` (in `service/job/models/`) is the GORM DB row — keep them separate.
-
-```go
-type RawJob struct {
-    ID          string          // e.g. "greenhouse-12345" — adapter prefix + external ID
-    CompanyID   string          // UUID from companies table — set by scan engine before publishing
-    Adapter     string          // "greenhouse", "lever", "ashby", etc.
-    Title       string
-    Location    string
-    URL         string          // hosted web URL — ContentFetcher parses this; fallback scrape target
-    EmployType  string          // full_time | part_time | contract | internship (model constants)
-    FullContent *FullJobContent `json:"full_content,omitempty"` // nil for thin adapters
-}
-```
-
-`FullContent` is `omitempty` — existing Kafka consumers that don't know about it are unaffected.
-
-### FetchJobsItem / FetchJobsResponse
-
-Minimal listing data — only what's needed for dedup and Kafka publish.
-
-```go
-type FetchJobsItem struct {
-    ID             string         // adapter-prefixed, e.g. "lever-abc-123"
-    Title          string
-    URL            string         // hosted web URL → becomes RawJob.URL
-    Location       string
-    EmploymentType string         // normalized via model constants
-    FullContent    *FullJobContent // nil for thin adapters; set by full-detail adapters
-}
-
-type FetchJobsResponse struct {
-    Jobs []FetchJobsItem
-}
-```
-
-### FullJobContent
-
-Optional full job details returned by adapters that provide everything at listing time (e.g. custom company scrapers). Fields map 1:1 to `FetchJobContentResponse`. When present, `job_post_analyzer` skips the HTTP fetch and LLM structuring steps.
-
-```go
-type FullJobContent struct {
-    Description   string
-    Requirements  string
-    Compensation  string
-    WorkplaceType string
-    Department    string
-    PublishedDate string
-}
-```
-
-### FetchJobContentResponse
-
-Union of all fields available across all platforms. Fields not provided by a platform are left as empty strings. The `job_post_analyzer` marshals the whole struct to JSON and sends it to the LLM.
-
-```go
-type FetchJobContentResponse struct {
-    ID             string // all platforms
-    Title          string // all platforms
-    Location       string // all platforms (Ashby appends workplaceType in parens)
-    URL            string // Greenhouse, Lever
-    Description    string // plain text — HTML stripped; primary content for LLM
-    EmploymentType string // Lever (commitment), Ashby (employmentType)
-    Department     string // Greenhouse (departments[0]), Lever (department > team fallback)
-    Compensation   string // Greenhouse (pay_input_ranges formatted), Lever (salaryDescriptionPlain > salaryRange fallback), Ashby (compensationTierSummary)
-    WorkplaceType  string // Lever (workplaceType), Ashby (workplaceType) — raw platform value
-    Requirements   string // plain text — Lever (lists[])
-    PublishedDate  string // Lever (createdAt ms as string), Ashby (publishedDate), Greenhouse (updated_at)
-}
-```
+Struct definitions: [`ats/types.go`](types.go)
 
 ---
 
