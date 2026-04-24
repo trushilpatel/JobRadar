@@ -57,7 +57,6 @@ crawler:
   pollIntervalSeconds: "60"
   stuckTimeoutSeconds: "120"
   heartbeatIntervalSeconds: "30"
-  scanCompanyDelaySeconds: "30"
   googleMinDelay: "55000"
   googleMaxDelay: "75000"
   googleTimeoutMs: "18000000"

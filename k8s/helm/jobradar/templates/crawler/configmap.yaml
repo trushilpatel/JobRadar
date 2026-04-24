@@ -8,7 +8,6 @@ metadata:
     component: crawler
 data:
   KAFKA_BROKERS: {{ .Values.crawler.kafkaBrokers | quote }}
-  SCAN_COMPANY_DELAY_SECONDS: {{ .Values.crawler.scanCompanyDelaySeconds | quote }}
   CRAWLER_POLL_INTERVAL_SECONDS: {{ .Values.crawler.pollIntervalSeconds | quote }}
   CRAWLER_STUCK_TIMEOUT_SECONDS: {{ .Values.crawler.stuckTimeoutSeconds | quote }}
   CRAWLER_HEARTBEAT_INTERVAL_SECONDS: {{ .Values.crawler.heartbeatIntervalSeconds | quote }}
