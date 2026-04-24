@@ -30,7 +30,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	shutdownTracing := tracing.Init("jobradar-scheduler", cfg.Observability.JaegerEndpoint)
+	shutdownTracing := tracing.Init("jobradar-scheduler", cfg.Observability.JaegerEndpoint, log)
 
 	database, err := db.OpenWithRetry(cfg.DB, 2, dbMaxAttempts, dbRetryDelay)
 	if err != nil {
