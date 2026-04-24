@@ -1,8 +1,3 @@
----
-paths:
-  - 'ui/console/**/*.tsx'
-  - 'ui/console/**/*.ts'
----
 
 # Frontend Core Quality Attributes
 

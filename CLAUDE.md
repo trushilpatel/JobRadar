@@ -88,6 +88,12 @@ new → dismissed          (user dismisses — job row kept for FK integrity, hi
 | `pipeline_pending`   | Jobs in `job_pipeline_ledger` with `reason='fetch'` but not yet in `job_feed` table |
 | `pipeline_errors`    | Jobs in `job_pipeline_ledger` with `reason='error'`                                 |
 
+## Core quality attributes
+
+Reliability · Availability · Fault Tolerance · Recoverability · Faultlessness · Maintainability · Modularity · Reusability · Analyzeability · Modifiability · Testability
+
+Full reference: [`docs/QUALITY.md`](docs/QUALITY.md). Detailed rules auto-load via `.claude/rules/quality-attributes.md` (backend) and `.claude/rules/frontend-quality-attributes.md` (frontend) for every session.
+
 ## Key rules (detail in subdirectory CLAUDE.md files)
 
 - Workers depend on **interfaces**, never concrete types

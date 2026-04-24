@@ -1,9 +1,3 @@
----
-paths:
-  - 'backend/**/*.go'
-  - 'ui/console/**/*.tsx'
-  - 'ui/console/**/*.ts'
----
 
 # Core Quality Attributes
 
