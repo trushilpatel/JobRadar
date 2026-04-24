@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supabase-audit-sync
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "observability.labels" . | nindent 4 }}
+    component: supabase-audit-sync
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jobradar-obs
+      component: supabase-audit-sync
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: jobradar-obs
+        component: supabase-audit-sync
+    spec:
+      containers:
+        - name: supabase-audit-sync
+          image: {{ .Values.supabaseAuditSync.image.repository }}:{{ .Values.supabaseAuditSync.image.tag }}
+          imagePullPolicy: {{ .Values.supabaseAuditSync.image.pullPolicy }}
+          env:
+            - name: SUPABASE_DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-audit-sync-secret
+                  key: SUPABASE_DB_URL
+            - name: LOKI_URL
+              value: {{ .Values.supabaseAuditSync.lokiUrl | quote }}
+            - name: AUDIT_SYNC_INTERVAL_SECONDS
+              value: {{ .Values.supabaseAuditSync.intervalSeconds | quote }}
+            - name: AUDIT_SYNC_STATE_FILE
+              value: {{ .Values.supabaseAuditSync.stateFile | quote }}
+          volumeMounts:
+            - name: audit-state
+              mountPath: /var/lib/audit-sync
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: audit-state
+          persistentVolumeClaim:
+            claimName: supabase-audit-sync-state
+      securityContext:
+        runAsNonRoot: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: supabase-audit-sync-state
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "observability.labels" . | nindent 4 }}
+    component: supabase-audit-sync
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: {{ .Values.supabaseAuditSync.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.supabaseAuditSync.storage }}
