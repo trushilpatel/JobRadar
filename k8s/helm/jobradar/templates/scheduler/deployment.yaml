@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobradar-scheduler
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "jobradar.selectorLabels" (dict "component" "scheduler") | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "jobradar.labels" . | nindent 8 }}
+        component: scheduler
+    spec:
+      containers:
+        - name: scheduler
+          image: {{ .Values.images.backend.repository }}:{{ .Values.images.backend.tag }}
+          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          command: ["/app/scheduler"]
+          envFrom:
+            - configMapRef:
+                name: jobradar-scheduler-config
+            - secretRef:
+                name: jobradar-scheduler-secret
+          ports:
+            - containerPort: 9101
+              name: metrics
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9101
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 9101
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
+      securityContext:
+        runAsNonRoot: true
