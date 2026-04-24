@@ -10,8 +10,9 @@ type (
 	FetchJobsItem           = types.FetchJobsItem
 	FetchJobsResponse       = types.FetchJobsResponse
 	FetchJobContentResponse = types.FetchJobContentResponse
-	Adapter                 = types.Adapter
-	ContentFetcher          = types.ContentFetcher
+	Adapter              = types.Adapter
+	ContentFetcher       = types.ContentFetcher
+	KnownJobsProvider    = types.KnownJobsProvider
 )
 
 // StripHTML removes all HTML tags, decodes entities, and collapses whitespace.

@@ -81,6 +81,14 @@ type URLProvider interface {
 	CareersURL(id string) string
 }
 
+// KnownJobsProvider is an optional interface for adapters that can skip detail
+// enrichment for already-known job IDs. The engine calls SetKnownJobIDs before
+// FetchJobs so the adapter avoids visiting detail pages for jobs already in the
+// pipeline ledger. Only new job IDs get detail page visits.
+type KnownJobsProvider interface {
+	SetKnownJobIDs(ids map[string]struct{})
+}
+
 // ContentFetcher is an optional interface for adapters that can fetch the full
 // content of a single job posting via their native API.
 //

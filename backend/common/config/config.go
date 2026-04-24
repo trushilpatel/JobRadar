@@ -124,12 +124,15 @@ type CrawlerConfig struct {
 }
 
 type GoogleScraperConfig struct {
-	MinDelayMs  int
-	MaxDelayMs  int
-	TimeoutMs   int
-	MaxPages    int
-	EnrichMinMs int
-	EnrichMaxMs int
+	MinDelayMs    int
+	MaxDelayMs    int
+	TimeoutMs     int
+	MaxPages      int
+	EnrichMinMs   int
+	EnrichMaxMs   int
+	MaxDetailJobs int
+	ProfileDir    string
+	ChromiumPath  string
 }
 
 type SchedulerConfig struct {
@@ -269,12 +272,15 @@ func Load() *Config {
 			StuckTimeoutSeconds:      getEnvInt("CRAWLER_STUCK_TIMEOUT_SECONDS", 120),
 			HeartbeatIntervalSeconds: getEnvInt("CRAWLER_HEARTBEAT_INTERVAL_SECONDS", 30),
 			Google: GoogleScraperConfig{
-				MinDelayMs:  getEnvInt("GOOGLE_SCRAPER_MIN_DELAY", 120000),
-				MaxDelayMs:  getEnvInt("GOOGLE_SCRAPER_MAX_DELAY", 240000),
-				TimeoutMs:   getEnvInt("GOOGLE_SCRAPER_TIMEOUT_MS", 14400000),
-				MaxPages:    getEnvInt("GOOGLE_SCRAPER_MAX_PAGES", 0),
-				EnrichMinMs: getEnvInt("GOOGLE_SCRAPER_ENRICH_MIN", 60000),
-				EnrichMaxMs: getEnvInt("GOOGLE_SCRAPER_ENRICH_MAX", 120000),
+				MinDelayMs:    getEnvInt("GOOGLE_SCRAPER_MIN_DELAY", 15000),
+				MaxDelayMs:    getEnvInt("GOOGLE_SCRAPER_MAX_DELAY", 25000),
+				TimeoutMs:     getEnvInt("GOOGLE_SCRAPER_TIMEOUT_MS", 7200000),
+				MaxPages:      getEnvInt("GOOGLE_SCRAPER_MAX_PAGES", 0),
+				EnrichMinMs:   getEnvInt("GOOGLE_SCRAPER_ENRICH_MIN", 8000),
+				EnrichMaxMs:   getEnvInt("GOOGLE_SCRAPER_ENRICH_MAX", 12000),
+				MaxDetailJobs: getEnvInt("GOOGLE_SCRAPER_MAX_DETAIL_JOBS", 0),
+				ProfileDir:    getEnv("GOOGLE_SCRAPER_PROFILE_DIR", ""),
+				ChromiumPath:  getEnv("CHROMIUM_PATH", ""),
 			},
 		},
 		Scheduler: SchedulerConfig{

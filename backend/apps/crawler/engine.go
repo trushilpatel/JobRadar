@@ -77,7 +77,17 @@ func (e *Engine) scanCompany(ctx context.Context, company companymodel.Company) 
 		logger.Str("name", company.Name),
 	)
 
-	result, err := e.fetchJobs(ctx, company, log)
+	// Fetch known job IDs upfront — used for two purposes:
+	//   1. Passed to the adapter (via KnownJobsProvider) to skip detail enrichment
+	//      for jobs already in the ledger, so only new jobs get detail page visits.
+	//   2. Reused in detectRemovedJobs to avoid a second DB round-trip.
+	knownIDs, err := e.ledger.GetActiveJobIDsByCompany(ctx, company.ID)
+	if err != nil {
+		log.Error("failed to load known job IDs — enrichment will run for all jobs", err)
+		knownIDs = nil
+	}
+
+	result, err := e.fetchJobs(ctx, company, knownIDs, log)
 	if err != nil {
 		log.Error("scan failed", err)
 		errMsg := err.Error()
@@ -87,7 +97,7 @@ func (e *Engine) scanCompany(ctx context.Context, company companymodel.Company) 
 	}
 
 	newCount := e.publishNewJobs(ctx, result.Jobs, company, log)
-	e.detectRemovedJobs(ctx, company.ID, result.Jobs, log)
+	e.detectRemovedJobs(ctx, result.Jobs, knownIDs, log)
 
 	elapsed := time.Since(start)
 	metrics.CrawlerScansTotal.WithLabelValues("success").Inc()
@@ -102,11 +112,22 @@ func (e *Engine) scanCompany(ctx context.Context, company companymodel.Company) 
 	e.recordResult(ctx, company.ID, len(result.Jobs), newCount, elapsed, nil)
 }
 
-func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, log logger.Logger) (ats.FetchJobsResponse, error) {
+func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, knownIDs []string, log logger.Logger) (ats.FetchJobsResponse, error) {
 	adp, err := ats.RegistryWithGoogleConfig(company.AdapterType, e.googleCfg, log)
 	if err != nil {
 		return ats.FetchJobsResponse{}, fmt.Errorf("no adapter for type %q: %w", company.AdapterType, err)
 	}
+
+	// If the adapter supports skipping enrichment for known jobs, inject the set now.
+	if setter, ok := adp.(ats.KnownJobsProvider); ok && len(knownIDs) > 0 {
+		idSet := make(map[string]struct{}, len(knownIDs))
+		for _, id := range knownIDs {
+			idSet[id] = struct{}{}
+		}
+		setter.SetKnownJobIDs(idSet)
+		log.Debug("injected known job IDs into adapter", logger.Int("count", len(idSet)))
+	}
+
 	result, err := adp.FetchJobs(ctx, company.ID)
 	if err != nil {
 		return ats.FetchJobsResponse{}, fmt.Errorf("fetch failed: %w", err)
@@ -186,16 +207,10 @@ func (e *Engine) publish(ctx context.Context, job ats.RawJob) error {
 	return e.publisher.Publish(ctx, kafka.TopicJobListingsRaw, payload)
 }
 
-// detectRemovedJobs compares the current scan results against previously known
-// active jobs for a company. Any job that was previously seen but is no longer
-// in the current scan gets marked with removed_at in the ledger.
-func (e *Engine) detectRemovedJobs(ctx context.Context, companyID string, currentJobs []ats.FetchJobsItem, log logger.Logger) {
-	// Get all previously active job IDs for this company
-	previousIDs, err := e.ledger.GetActiveJobIDsByCompany(ctx, companyID)
-	if err != nil {
-		log.Error("failed to load previous job IDs for removal detection", err)
-		return
-	}
+// detectRemovedJobs compares the current scan results against previousIDs (fetched
+// before the scan to also serve the KnownJobsProvider optimisation). Any job that
+// was previously active but is absent from the current scan is marked removed.
+func (e *Engine) detectRemovedJobs(ctx context.Context, currentJobs []ats.FetchJobsItem, previousIDs []string, log logger.Logger) {
 	if len(previousIDs) == 0 {
 		return // First scan or no active jobs — nothing to diff
 	}

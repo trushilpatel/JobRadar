@@ -79,12 +79,15 @@ func buildEngine(database *gorm.DB, producer *kafka.Producer, cfg *config.Config
 	queue := scansvc.NewCrawlerQueueService(queueStore)
 
 	googleCfg := google.Config{
-		MinDelayMs:  cfg.Crawler.Google.MinDelayMs,
-		MaxDelayMs:  cfg.Crawler.Google.MaxDelayMs,
-		TimeoutMs:   cfg.Crawler.Google.TimeoutMs,
-		MaxPages:    cfg.Crawler.Google.MaxPages,
-		EnrichMinMs: cfg.Crawler.Google.EnrichMinMs,
-		EnrichMaxMs: cfg.Crawler.Google.EnrichMaxMs,
+		MinDelayMs:    cfg.Crawler.Google.MinDelayMs,
+		MaxDelayMs:    cfg.Crawler.Google.MaxDelayMs,
+		TimeoutMs:     cfg.Crawler.Google.TimeoutMs,
+		MaxPages:      cfg.Crawler.Google.MaxPages,
+		EnrichMinMs:   cfg.Crawler.Google.EnrichMinMs,
+		EnrichMaxMs:   cfg.Crawler.Google.EnrichMaxMs,
+		MaxDetailJobs: cfg.Crawler.Google.MaxDetailJobs,
+		ProfileDir:    cfg.Crawler.Google.ProfileDir,
+		ChromiumPath:  cfg.Crawler.Google.ChromiumPath,
 	}
 
 	engine := NewEngine(companies, ledger, recorder, producer, googleCfg, log)

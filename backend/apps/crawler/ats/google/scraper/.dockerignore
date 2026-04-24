@@ -1,8 +1,0 @@
-node_modules
-.npm
-example_output.json
-jobs.json
-logs.json
-scrape.test.js
-install.sh
-*.md

@@ -36,10 +36,10 @@ spec:
               name: metrics
           resources:
             requests:
-              memory: "512Mi"
-              cpu: "200m"
+              memory: "1Gi"
+              cpu: "250m"
             limits:
-              memory: "2Gi"
+              memory: "3Gi"
               cpu: "1000m"
           livenessProbe:
             httpGet:
@@ -56,12 +56,24 @@ spec:
             periodSeconds: 15
             failureThreshold: 3
           securityContext:
-            # Playwright (Chromium) requires write access to temp dirs and runs as root
+            # Chromium (rod) runs headless with --no-sandbox in containers.
+            # Needs write access to /tmp for Chrome's temp profile and shared memory.
+            # SYS_ADMIN is retained for Chrome's user namespace sandboxing.
             runAsNonRoot: false
             readOnlyRootFilesystem: false
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
               add: ["SYS_ADMIN"]
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        # Chrome uses /dev/shm for shared memory. The default 64Mi in K8s pods
+        # causes renderer crashes — mount a tmpfs with enough headroom.
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "512Mi"
       securityContext:
         runAsNonRoot: false

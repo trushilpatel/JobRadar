@@ -37,9 +37,9 @@ func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config, log l
 		return &ashby.Ashby{}, nil
 	case companycommon.AdapterGoogle:
 		if googleCfg == (google.Config{}) {
-			return google.NewDefault(), nil
+			return google.NewRodGoogleDefault(), nil
 		}
-		return google.New(googleCfg, log), nil
+		return google.NewRodGoogle(googleCfg, log), nil
 	case companycommon.AdapterNetflix:
 		return netflix.New(), nil
 	case companycommon.AdapterUber:

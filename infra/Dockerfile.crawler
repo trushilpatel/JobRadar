@@ -15,26 +15,34 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     go build -o /out/crawler ./apps/crawler
 
 # ── Final image ───────────────────────────────────────────────────────────────
+# debian:bookworm-slim — Chromium is a real deb here (not a snap wrapper like Ubuntu).
+# The binary is bundled in the image; no external downloads happen at container startup.
 
-FROM mcr.microsoft.com/playwright:v1.59.1-noble
+FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y ca-certificates tzdata xvfb && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    ca-certificates \
+    tzdata \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# rod picks up CHROMIUM_PATH directly — no glob search or auto-download.
+ENV CHROMIUM_PATH=/usr/bin/chromium
+
+# Meta's Playwright subprocess also uses this path instead of its own download.
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
 COPY --from=go-builder /out/crawler /app/crawler
-
-COPY apps/crawler/ats/google/scraper/package.json apps/crawler/ats/google/scraper/package-lock.json /app/google-scraper/
-RUN --mount=type=cache,target=/root/.npm \
-    cd /app/google-scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --omit=dev --cache /root/.npm
-COPY apps/crawler/ats/google/scraper/scrape.js /app/google-scraper/
 
 COPY apps/crawler/ats/meta/scraper/package.json /app/meta-scraper/
 RUN --mount=type=cache,target=/root/.npm \
     cd /app/meta-scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --cache /root/.npm
 COPY apps/crawler/ats/meta/scraper/scrape.js /app/meta-scraper/
 
-ENV GOOGLE_SCRAPER_DIR=/app/google-scraper
 ENV META_SCRAPER_DIR=/app/meta-scraper
 
 ARG GIT_SHA=dev
