@@ -44,23 +44,28 @@ kube-prometheus-stack:
     grafana.ini:
       users:
         allow_sign_up: false
-    # Disable sidecar-based datasource provisioning to avoid duplicate defaults.
-    # Both Prometheus and Loki are declared via additionalDataSources instead.
+    # Disable both sidecars — Grafana 13 conflicts when sidecar and static provisioning overlap.
     sidecar:
       datasources:
         enabled: false
-    additionalDataSources:
-      - name: Prometheus
-        type: prometheus
-        url: http://obs-kube-prometheus-stack-prometheus:9090
-        access: proxy
-        isDefault: true
-      - name: Loki
-        type: loki
-        url: http://obs-loki:3100
-        access: proxy
-        isDefault: false
-    # Provision dashboards from the jobradar-grafana-dashboards ConfigMap (created in Task 14).
+      dashboards:
+        enabled: false
+    # Static datasource provisioning — mounts directly, no sidecar needed.
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+          - name: Prometheus
+            type: prometheus
+            url: http://obs-kube-prometheus-stack-prometheus:9090
+            access: proxy
+            isDefault: true
+          - name: Loki
+            type: loki
+            url: http://obs-loki:3100
+            access: proxy
+            isDefault: false
+    # Static dashboard provisioning from ConfigMap.
     dashboardProviders:
       dashboardproviders.yaml:
         apiVersion: 1
