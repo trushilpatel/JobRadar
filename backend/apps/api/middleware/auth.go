@@ -62,22 +62,32 @@ var errJWKSUnavailable = errors.New("auth: jwks unavailable")
 // boot (ES256 via JWKS OR HS256 via shared secret — never both) and verifies
 // signature, iss, aud, exp (with skew), then enforces the email allowlist via
 // constant-time compare.
-func Auth(cfg config.AuthConfig, log logger.Logger) (func(http.Handler) http.Handler, error) {
+func Auth(cfg config.AuthConfig, devToken string, log logger.Logger) (func(http.Handler) http.Handler, error) {
 	skew := time.Duration(cfg.ClockSkewSeconds) * time.Second
 	verifier, err := newVerifier(cfg, skew)
 	if err != nil {
 		return nil, fmt.Errorf("auth middleware: init verifier: %w", err)
 	}
-	return authHandler(cfg, verifier, log), nil
+	return authHandler(cfg, devToken, verifier, log), nil
 }
 
-func authHandler(cfg config.AuthConfig, verifier tokenVerifier, log logger.Logger) func(http.Handler) http.Handler {
+func authHandler(cfg config.AuthConfig, devToken string, verifier tokenVerifier, log logger.Logger) func(http.Handler) http.Handler {
 	expectedIssuer := strings.TrimRight(cfg.SupabaseProjectURL, "/") + "/auth/v1"
 	const expectedAudience = "authenticated"
 	skew := time.Duration(cfg.ClockSkewSeconds) * time.Second
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Dev bypass — only active when DEV_TOKEN env var is configured.
+			if devToken != "" && r.Header.Get("X-Dev-Token") == devToken {
+				ctx := context.WithValue(r.Context(), identityCtxKey{}, Identity{
+					UserID: "dev-bypass",
+					Email:  cfg.AllowedEmail,
+				})
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
 			raw, ok := extractBearer(r.Header.Get("Authorization"))
 			if !ok {
 				log.Warn("auth: missing or malformed bearer")

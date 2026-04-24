@@ -50,7 +50,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	authMW, err := middleware.Auth(cfg.Auth, log)
+	authMW, err := middleware.Auth(cfg.Auth, cfg.API.DevToken, log)
 	if err != nil {
 		log.Error("auth middleware init failed", err)
 		os.Exit(1)
