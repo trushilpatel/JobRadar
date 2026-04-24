@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
@@ -48,17 +49,19 @@ func main() {
 	svc := scansvc.NewSchedulerService(scansvc.NewQueueStore(database))
 	checkInterval := time.Duration(cfg.Scheduler.CheckIntervalSeconds) * time.Second
 	stuckTimeout := time.Duration(cfg.Scheduler.StuckTimeoutMinutes) * time.Minute
+	jitter := time.Duration(rand.Int63n(int64(checkInterval) / 10))
 
 	log.Info("started",
 		logger.Int("scan_interval_minutes", cfg.Scheduler.ScanIntervalMinutes),
 		logger.Dur("check_interval", checkInterval),
 		logger.Dur("stuck_timeout", stuckTimeout),
+		logger.Dur("jitter", jitter),
 	)
 
 	// Run immediately on startup so the first tick doesn't wait a full interval.
 	runCycle(ctx, log, svc, cfg.Scheduler.ScanIntervalMinutes, stuckTimeout)
 
-	ticker := time.NewTicker(checkInterval)
+	ticker := time.NewTicker(checkInterval + jitter)
 	defer ticker.Stop()
 
 	for {

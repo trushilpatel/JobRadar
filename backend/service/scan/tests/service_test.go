@@ -44,8 +44,21 @@ func (f *fakeQueueStore) ResetStuck(_ context.Context, _ time.Duration) error {
 }
 func (f *fakeQueueStore) PurgeInactive(_ context.Context) (int, error)      { return 0, f.err }
 func (f *fakeQueueStore) UpdateHeartbeat(_ context.Context, _ string) error { return f.err }
-func (f *fakeQueueStore) ListQueue(_ context.Context) ([]dto.ScanQueueItem, error) {
-	return f.items, f.err
+func (f *fakeQueueStore) ListQueue(_ context.Context, filter dto.QueueFilter) ([]dto.ScanQueueItem, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	var out []dto.ScanQueueItem
+	for _, item := range f.items {
+		if filter.Status != "" && item.Status != filter.Status {
+			continue
+		}
+		if filter.Source != "" && item.Source != filter.Source {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out, nil
 }
 
 // fakeScanLogReader is a test double for ScanLogReader.

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/errors"
@@ -92,15 +93,19 @@ func (s *implService) TriggerScanAll(ctx context.Context) (_ int, err error) {
 	if err != nil {
 		return 0, errors.ErrInternal.WithMessage("failed to fetch companies")
 	}
-	var count int
+	var count, failCount int
 	for _, c := range companies {
 		if !c.Active {
 			continue
 		}
 		if err := s.next.TriggerScan(ctx, c.ID); err != nil {
+			failCount++
 			continue
 		}
 		count++
+	}
+	if failCount > 0 {
+		return count, errors.ErrInternal.WithMessage(fmt.Sprintf("enqueued %d companies; %d failed to enqueue", count, failCount))
 	}
 	return count, nil
 }

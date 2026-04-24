@@ -146,6 +146,9 @@ func (c SchedulerConfig) Validate() error {
 	if c.StuckTimeoutMinutes <= 0 {
 		return fmt.Errorf("config: SCHEDULER_STUCK_TIMEOUT_MINUTES must be > 0, got %d", c.StuckTimeoutMinutes)
 	}
+	if c.StuckTimeoutMinutes > 1440 {
+		return fmt.Errorf("config: SCHEDULER_STUCK_TIMEOUT_MINUTES must be <= 1440 (24h), got %d", c.StuckTimeoutMinutes)
+	}
 	if c.CheckIntervalSeconds <= 0 {
 		return fmt.Errorf("config: SCHEDULER_CHECK_INTERVAL_SECONDS must be > 0, got %d", c.CheckIntervalSeconds)
 	}

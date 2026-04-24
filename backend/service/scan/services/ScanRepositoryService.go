@@ -47,8 +47,8 @@ type ScanQueueStore interface {
 	// UpdateHeartbeat refreshes the heartbeat timestamp for an in-progress row.
 	UpdateHeartbeat(ctx context.Context, id string) error
 
-	// ListQueue returns all active queue entries ordered by priority DESC, queued_at ASC.
-	ListQueue(ctx context.Context) ([]dto.ScanQueueItem, error)
+	// ListQueue returns queue entries matching filter, ordered by priority DESC, queued_at ASC.
+	ListQueue(ctx context.Context, filter dto.QueueFilter) ([]dto.ScanQueueItem, error)
 }
 
 // ScanLogWriter records scan summaries.
@@ -183,15 +183,22 @@ func (s *scanQueueStore) UpdateHeartbeat(ctx context.Context, id string) (err er
 	return s.db.WithContext(ctx).Exec(`UPDATE company_scan_queue SET heartbeat_at = NOW() WHERE id = ?`, id).Error
 }
 
-func (s *scanQueueStore) ListQueue(ctx context.Context) (_ []dto.ScanQueueItem, err error) {
+func (s *scanQueueStore) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ []dto.ScanQueueItem, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.ListQueue")
 	defer tracing.End(span, &err)
+	query := `SELECT id, company_id, status, source, priority, queued_at, started_at, heartbeat_at FROM company_scan_queue WHERE 1=1`
+	var args []any
+	if filter.Status != "" {
+		query += ` AND status = ?`
+		args = append(args, filter.Status)
+	}
+	if filter.Source != "" {
+		query += ` AND source = ?`
+		args = append(args, filter.Source)
+	}
+	query += ` ORDER BY priority DESC, queued_at ASC`
 	var items []dto.ScanQueueItem
-	err = s.db.WithContext(ctx).Raw(`
-		SELECT id, company_id, status, source, priority, queued_at, started_at, heartbeat_at
-		FROM company_scan_queue
-		ORDER BY priority DESC, queued_at ASC
-	`).Scan(&items).Error
+	err = s.db.WithContext(ctx).Raw(query, args...).Scan(&items).Error
 	return items, err
 }
 
@@ -417,18 +424,12 @@ func (s *repositoryService) GetStats(ctx context.Context, companyID string) (_ *
 func (s *repositoryService) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ []dto.QueueEntryView, err error) {
 	ctx, span := tracing.Start(ctx, "scan.repository.ListQueue")
 	defer tracing.End(span, &err)
-	items, err := s.queue.ListQueue(ctx)
+	items, err := s.queue.ListQueue(ctx, filter)
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch queue")
 	}
 	views := make([]dto.QueueEntryView, 0, len(items))
 	for _, item := range items {
-		if filter.Status != "" && item.Status != filter.Status {
-			continue
-		}
-		if filter.Source != "" && item.Source != filter.Source {
-			continue
-		}
 		views = append(views, dto.QueueEntryView{
 			ID:        item.ID,
 			CompanyID: item.CompanyID,
