@@ -1,2 +1,5 @@
 # Downloaded chart dependencies — do not commit
 *.tgz
+jaeger/
+kube-prometheus-stack/
+loki-stack/
