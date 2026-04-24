@@ -15,6 +15,9 @@ on:
         type: boolean
         default: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ── Detect which images actually need rebuilding ───────────────────────────
   changes:
@@ -35,9 +38,11 @@ jobs:
             backend:
               - "backend/**"
               - "infra/Dockerfile.backend"
+              - ".github/workflows/build.yml"
             crawler:
               - "backend/**"
               - "infra/Dockerfile.crawler"
+              - ".github/workflows/build.yml"
 
       - name: Resolve build flags
         id: result
