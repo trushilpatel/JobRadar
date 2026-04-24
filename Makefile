@@ -13,6 +13,10 @@ export GIT_SHA
         docker-up \
         local local-down prod prod-down \
         up rebuild rebuild-backend rebuild-crawler rebuild-console down logs build-docker \
+        k8s-build k8s-build-backend k8s-build-crawler \
+        k8s-up k8s-down k8s-migrate k8s-status \
+        k8s-logs k8s-logs-scheduler k8s-logs-crawler k8s-logs-filter k8s-logs-analyzer k8s-logs-api \
+        k8s-restart \
         install-hooks \
         help
 
@@ -182,6 +186,79 @@ logs: ## Tail logs for all services (Ctrl-C to stop)
 build-docker: ## Build all images without starting (GIT_SHA=$(GIT_SHA) baked into labels)
 	DOCKER_BUILDKIT=1 docker-compose build
 
+# ── Kubernetes (local k3d) ────────────────────────────────────────────────────
+
+K3D_CLUSTER ?= jobradar
+K8S_NS      ?= jobradar-local
+
+k8s-build-backend: ## Build backend image and import into k3d
+	docker build -t jobradar-backend:local -f infra/Dockerfile.backend ./backend
+	k3d image import jobradar-backend:local -c $(K3D_CLUSTER)
+
+k8s-build-crawler: ## Build crawler image and import into k3d
+	docker build -t jobradar-crawler:local -f infra/Dockerfile.crawler ./backend
+	k3d image import jobradar-crawler:local -c $(K3D_CLUSTER)
+
+k8s-build: k8s-build-backend k8s-build-crawler ## Build all images and import into k3d
+
+k8s-up: ## Deploy full stack to k3d (infra → migrate → workers → api)
+	kubectl apply -f k8s/scheduler/namespace.yaml
+	kubectl apply \
+		-f k8s/kafka/configmap.yaml \
+		-f k8s/kafka/service.yaml \
+		-f k8s/kafka/statefulset.yaml
+	kubectl apply \
+		-f k8s/redis/statefulset.yaml \
+		-f k8s/redis/service.yaml
+	kubectl wait --for=condition=ready pod/kafka-0 -n $(K8S_NS) --timeout=120s
+	kubectl wait --for=condition=ready pod/redis-0 -n $(K8S_NS) --timeout=60s
+	kubectl delete job jobradar-migrate -n $(K8S_NS) --ignore-not-found
+	kubectl apply -f k8s/migrate/job.yaml
+	kubectl wait --for=condition=complete job/jobradar-migrate -n $(K8S_NS) --timeout=120s
+	kubectl apply \
+		-f k8s/scheduler/configmap.yaml  -f k8s/scheduler/deployment.yaml \
+		-f k8s/crawler/configmap.yaml    -f k8s/crawler/deployment.yaml \
+		-f k8s/filter/configmap.yaml     -f k8s/filter/deployment.yaml \
+		-f k8s/analyzer/configmap.yaml   -f k8s/analyzer/deployment.yaml \
+		-f k8s/api/configmap.yaml        -f k8s/api/deployment.yaml -f k8s/api/service.yaml
+
+k8s-down: ## Tear down all k8s workloads (keeps secrets intact)
+	kubectl delete deployments,statefulsets,jobs,services,configmaps \
+		-l app=jobradar -n $(K8S_NS) --ignore-not-found
+
+k8s-migrate: ## Re-run database migrations (deletes prior job then waits for completion)
+	kubectl delete job jobradar-migrate -n $(K8S_NS) --ignore-not-found
+	kubectl apply -f k8s/migrate/job.yaml
+	kubectl wait --for=condition=complete job/jobradar-migrate -n $(K8S_NS) --timeout=120s
+	kubectl logs -l app=jobradar,component=migrate -n $(K8S_NS) --tail=20
+
+k8s-status: ## Show pod statuses and restart counts
+	kubectl get pods -n $(K8S_NS) -o wide
+
+k8s-logs: ## Tail logs for all jobradar services
+	kubectl logs -f -l app=jobradar -n $(K8S_NS) --max-log-requests=10 --prefix
+
+k8s-logs-scheduler: ## Tail scheduler logs
+	kubectl logs -f -l app=jobradar,component=scheduler -n $(K8S_NS)
+
+k8s-logs-crawler: ## Tail crawler logs
+	kubectl logs -f -l app=jobradar,component=crawler -n $(K8S_NS)
+
+k8s-logs-filter: ## Tail filter logs
+	kubectl logs -f -l app=jobradar,component=filter -n $(K8S_NS)
+
+k8s-logs-analyzer: ## Tail analyzer logs
+	kubectl logs -f -l app=jobradar,component=analyzer -n $(K8S_NS)
+
+k8s-logs-api: ## Tail api logs
+	kubectl logs -f -l app=jobradar,component=api -n $(K8S_NS)
+
+k8s-restart: ## Rolling restart all jobradar deployments
+	kubectl rollout restart deployment -l app=jobradar -n $(K8S_NS)
+
+k8s-restart-%: ## Rolling restart one service  e.g. make k8s-restart-api
+	kubectl rollout restart deployment/jobradar-$* -n $(K8S_NS)
+
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
 install-hooks: ## Install Husky git hooks (run once after cloning)
@@ -190,7 +267,7 @@ install-hooks: ## Install Husky git hooks (run once after cloning)
 # ── Help ──────────────────────────────────────────────────────────────────────
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_%/-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2}'
 
 .DEFAULT_GOAL := help

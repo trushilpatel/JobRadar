@@ -76,12 +76,12 @@ Analytics over all enriched jobs: funnel, role categories, company hiring veloci
 | Backend | Go |
 | Frontend | React + TypeScript + Tailwind |
 | Database | Supabase (PostgreSQL) |
-| Message queue | Kafka (Redpanda) |
+| Message queue | Kafka |
 | LLM | Gemini (via Google Generative AI SDK) |
 | Auth | Supabase (magic link / email OTP) |
 | Migrations | goose |
 | Reverse proxy | Caddy (prod) |
-| Containerisation | Docker Compose |
+| Containerisation | Docker Compose · Kubernetes (k3d) |
 
 ---
 
@@ -167,13 +167,54 @@ enricher:
 make dev          # Kafka + Redis in Docker; API + Vite on host at :8080 / :5173
 ```
 
-### Full local stack (everything in Docker, no Caddy)
+### Full local stack — Docker Compose
 ```bash
 make local        # API :8080, console :3000, Grafana :3001
 make local-down   # stop
 ```
 
-### Production (all profiles including Caddy + TLS)
+### Full local stack — Kubernetes (k3d)
+
+#### Prerequisites
+- [k3d](https://k3d.io) + [kubectl](https://kubernetes.io/docs/tasks/tools/) installed
+- k3d cluster created: `k3d cluster create jobradar --port 30080:30080@loadbalancer`
+
+#### First-time setup
+Create one secret per service (copy from the `secret.yaml.example` in each `k8s/<service>/` directory and apply):
+```bash
+# Example — repeat for kafka, crawler, filter, analyzer, api, migrate
+cp k8s/scheduler/secret.yaml.example k8s/scheduler/secret.yaml
+# edit with real values, then:
+kubectl apply -f k8s/scheduler/secret.yaml
+```
+
+#### Build images and deploy
+```bash
+make k8s-build    # build jobradar-backend:local + jobradar-crawler:local and import into k3d
+make k8s-up       # deploy infra (Kafka, Redis) → migrate → workers → API
+```
+
+The API is available at **`http://localhost:30080`** after `k8s-up` completes.
+
+#### Day-to-day commands
+```bash
+make k8s-status           # show all pod statuses
+make k8s-logs             # tail all service logs (prefixed by pod name)
+make k8s-logs-api         # tail a specific service  (also: -crawler, -filter, -analyzer, -scheduler)
+make k8s-restart          # rolling restart all deployments
+make k8s-restart-api      # rolling restart one service
+make k8s-migrate          # re-run migrations (idempotent)
+make k8s-down             # tear down workloads (secrets preserved)
+```
+
+#### After a code change
+```bash
+make k8s-build-backend    # rebuild + reimport backend image  (scheduler/filter/analyzer/api/migrate)
+make k8s-build-crawler    # rebuild + reimport crawler image
+make k8s-restart          # roll all deployments onto the new image
+```
+
+### Production (Docker Compose + Caddy + TLS)
 ```bash
 make prod         # requires DOMAIN + ACME_EMAIL in root .env
 make prod-down    # stop
@@ -181,7 +222,7 @@ make prod-down    # stop
 
 ### Useful commands
 ```bash
-make migrate          # run pending DB migrations
+make migrate          # run pending DB migrations (Docker / local Go)
 make db-truncate      # truncate all data except companies (requires DB_URL env var)
 make test             # run all Go tests
 make lint             # ESLint on console
