@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-enricher-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: enricher
+data:
+  KAFKA_BROKERS: {{ .Values.enricher.kafkaBrokers | quote }}
+  REDIS_ADDR: {{ .Values.enricher.redisAddr | quote }}
+  REDIS_DB: {{ .Values.enricher.redisDb | quote }}
+  ENRICHER_FETCH_CONCURRENCY: {{ .Values.enricher.fetchConcurrency | quote }}
+  ENRICHER_LLM_BATCH_SIZE: {{ .Values.enricher.llmBatchSize | quote }}
+  ENRICHER_FLUSH_TIMEOUT_SECONDS: {{ .Values.enricher.flushTimeoutSeconds | quote }}
+  ENRICHER_LLM_CALL_INTERVAL_SECONDS: {{ .Values.enricher.llmCallIntervalSeconds | quote }}
+  ENRICHER_DEFAULT_RPS: {{ .Values.enricher.defaultRps | quote }}
+  ENRICHER_DEFAULT_BURST: {{ .Values.enricher.defaultBurst | quote }}
+  ENRICHER_JITTER_MS: {{ .Values.enricher.jitterMs | quote }}
+  DISCARD_JOB_WITH_EXP_GT: {{ .Values.enricher.discardJobWithExpGt | quote }}
+  LLM_PROVIDER: {{ .Values.enricher.llmProvider | quote }}
+  LLM_COOLDOWN_BASE_SECONDS: {{ .Values.enricher.cooldownBaseSeconds | quote }}
+  LLM_COOLDOWN_MAX_SECONDS: {{ .Values.enricher.cooldownMaxSeconds | quote }}
+  LLM_COOLDOWN_JITTER: {{ .Values.enricher.cooldownJitter | quote }}
+  LOG_LEVEL: {{ .Values.enricher.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.enricher.logFormat | quote }}
+  METRICS_ADDR: {{ .Values.enricher.metricsAddr | quote }}
+  JAEGER_ENDPOINT: {{ .Values.enricher.jaegerEndpoint | quote }}
+  DB_SSLMODE: {{ .Values.enricher.dbSslmode | quote }}
+  DB_PORT: {{ .Values.enricher.dbPort | quote }}
