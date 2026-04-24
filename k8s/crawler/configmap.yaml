@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-crawler-config
+  namespace: jobradar-local
+  labels:
+    app: jobradar
+    component: crawler
+    environment: local
+data:
+  KAFKA_BROKERS: "kafka:9092"
+  SCAN_COMPANY_DELAY_SECONDS: "30"
+  CRAWLER_POLL_INTERVAL_SECONDS: "60"
+  CRAWLER_STUCK_TIMEOUT_SECONDS: "120"
+  CRAWLER_HEARTBEAT_INTERVAL_SECONDS: "30"
+  GOOGLE_SCRAPER_MIN_DELAY: "120000"
+  GOOGLE_SCRAPER_MAX_DELAY: "240000"
+  GOOGLE_SCRAPER_TIMEOUT_MS: "14400000"
+  GOOGLE_SCRAPER_MAX_PAGES: "0"
+  GOOGLE_SCRAPER_ENRICH_MIN: "60000"
+  GOOGLE_SCRAPER_ENRICH_MAX: "120000"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  METRICS_ADDR: ":9101"
+  JAEGER_ENDPOINT: ""
+  DB_SSLMODE: "require"
+  DB_PORT: "5432"
