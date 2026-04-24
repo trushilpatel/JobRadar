@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobradar-crawler
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: crawler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "jobradar.selectorLabels" (dict "component" "crawler") | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "jobradar.labels" . | nindent 8 }}
+        component: crawler
+    spec:
+      containers:
+        - name: crawler
+          image: {{ .Values.images.crawler.repository }}:{{ .Values.images.crawler.tag }}
+          imagePullPolicy: {{ .Values.images.crawler.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: jobradar-crawler-config
+            - secretRef:
+                name: jobradar-crawler-secret
+          ports:
+            - containerPort: 9101
+              name: metrics
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "250m"
+            limits:
+              memory: "3Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9101
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 9101
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          securityContext:
+            # Chrome (rod) needs SYS_ADMIN for user namespace sandboxing and
+            # write access to /tmp for its temp profile.
+            runAsNonRoot: false
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["SYS_ADMIN"]
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        # Chrome uses /dev/shm. Default 64Mi causes renderer crashes.
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "512Mi"
+      securityContext:
+        runAsNonRoot: false
