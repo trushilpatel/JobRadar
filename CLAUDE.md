@@ -126,6 +126,8 @@ These extend the rules in `.claude/rules/backend-solid.md`, `.claude/rules/backe
 
 ## Frontend code standards
 
+These extend the rules in `.claude/rules/frontend-components.md` and `.claude/rules/frontend-quality-attributes.md`.
+
 **Components**
 
 - Small, single-purpose, reusable — one concern per component
