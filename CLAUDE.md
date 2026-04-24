@@ -14,6 +14,8 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 
 | Path                              | What lives there                                                                  |
 | --------------------------------- | --------------------------------------------------------------------------------- |
+| `k8s/helm/jobradar/`              | Helm chart for all app services (api, console, workers, kafka, redis, migrate)    |
+| `k8s/helm/observability/`         | Helm chart for observability stack (Prometheus, Grafana, Loki, Jaeger, audit-sync)|
 | `backend/apps/crawler/`           | Crawler binary + engine + ATS adapters (Greenhouse, Lever, Ashby, Google, etc.)  |
 | `backend/apps/scheduler/`         | Scheduler binary — enqueues companies due for a scan                             |
 | `backend/apps/filter/`            | Filter binary + worker — LLM batch scoring, routes relevant jobs                 |

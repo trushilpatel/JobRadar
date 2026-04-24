@@ -19,31 +19,31 @@ graph TB
     Gemini[Google Gemini\nLLM API]
   end
 
-  subgraph VPS["VPS — Oracle Linux 9 (Docker Compose)"]
+  subgraph K8S["Kubernetes — jobradar-local namespace (Helm)"]
     Caddy[Caddy\nTLS · Reverse Proxy\n:80 / :443]
 
-    subgraph App["Application"]
-      Console[Frontend\nReact + Nginx\n:3000]
-      API[API Server\nChi router\n:8080]
+    subgraph App["Application  (helm: jobradar)"]
+      Console[Frontend\nReact + Nginx\nNodePort :30300]
+      API[API Server\nChi router\nNodePort :30080]
     end
 
-    subgraph Workers["Pipeline Workers"]
+    subgraph Workers["Pipeline Workers  (helm: jobradar)"]
       Scheduler[Scheduler\nevery 1 min]
       Crawler[Crawler\nATS adapters]
       Filter[Relevance Filter\nLLM batch scoring]
       Analyzer[Job Post Analyzer\nLLM enrichment]
     end
 
-    subgraph Infra["Infrastructure"]
-      Kafka[Kafka / Redpanda\n:29092 internal]
-      Redis[Redis\n:6379]
+    subgraph Infra["Infrastructure  (helm: jobradar)"]
+      Kafka[Kafka\n:9092 ClusterIP]
+      Redis[Redis\n:6379 ClusterIP]
     end
 
-    subgraph Obs["Observability"]
-      Prometheus[Prometheus\n:9090]
-      Grafana[Grafana\n:3001]
-      Loki[Loki\n:3100]
-      Jaeger[Jaeger\n:16686]
+    subgraph Obs["Observability  (helm: obs)"]
+      Prometheus[Prometheus\n:9090 ClusterIP]
+      Grafana[Grafana\nNodePort :30001]
+      Loki[Loki\n:3100 ClusterIP]
+      Jaeger[Jaeger\n:16686 ClusterIP]
     end
   end
 
@@ -74,8 +74,8 @@ graph TB
   API & Crawler & Filter & Analyzer -.->|OTel traces| Jaeger
   API & Scheduler & Crawler & Filter & Analyzer -.->|/metrics :910x| Prometheus
 
-  GHA -->|SSH + docker compose up| VPS
-  GHCR -->|docker pull| VPS
+  GHA -->|SSH + helm upgrade| K8S
+  GHCR -->|k3d image import| K8S
 ```
 
 ---
@@ -136,22 +136,23 @@ flowchart LR
 
 ## Component Reference
 
-| Component | Binary | Port | Profile | Memory |
-|---|---|---|---|---|
-| API Server | `/app/api` | `:8080` | `app` | 128 MB |
-| Scheduler | `/app/scheduler` | `:9101` | `workers` | 128 MB |
-| Crawler | `/app/crawler` | `:9102` | `workers` | 1 GB (Chromedp) |
-| Relevance Filter | `/app/filter` | `:9103` | `workers` | 128 MB |
-| Job Post Analyzer | `/app/enricher` | `:9104` | `workers` | 128 MB |
-| Migration runner | `/app/migrate` | — | `app` | — |
-| Frontend (Nginx) | — | `:3000` | `app` | — |
-| Caddy | — | `:80/:443` | `proxy` | — |
-| Kafka (Redpanda) | — | `:29092` | `infra` | 256 MB |
-| Redis | — | `:6379` | `infra` | — |
-| Prometheus | — | `:9090` | `obs` | — |
-| Grafana | — | `:3001` | `obs` | — |
-| Loki | — | `:3100` | `obs` | — |
-| Jaeger | — | `:16686` | `obs` | — |
+| Component | Binary | Internal port | External access | Helm chart | Memory |
+|---|---|---|---|---|---|
+| API Server | `/app/api` | `:8080` (http) `:9100` (metrics) | NodePort **:30080** | jobradar | 256 MB |
+| Scheduler | `/app/scheduler` | `:9101` (metrics) | ClusterIP only | jobradar | 128 MB |
+| Crawler | `/app/crawler` | `:9101` (metrics) | ClusterIP only | jobradar | 3 GB (Chrome) |
+| Relevance Filter | `/app/filter` | `:9101` (metrics) | ClusterIP only | jobradar | 256 MB |
+| Job Post Analyzer | `/app/enricher` | `:9101` (metrics) | ClusterIP only | jobradar | 256 MB |
+| Migration runner | `/app/migrate` | — | — | jobradar | — |
+| Frontend (Nginx) | — | `:8080` | NodePort **:30300** | jobradar | 64 MB |
+| Kafka | — | `:9092` | ClusterIP only | jobradar | 1 GB |
+| Redis | — | `:6379` | ClusterIP only | jobradar | 256 MB |
+| Grafana | — | `:3000` | NodePort **:30001** (`admin`/`admin`) | obs | — |
+| Prometheus | — | `:9090` | port-forward `:9090` | obs | — |
+| Loki | — | `:3100` | ClusterIP only | obs | — |
+| Jaeger | — | `:16686` | port-forward `:16686` | obs | — |
+| supabase-audit-sync | — | — | ClusterIP only | obs | 64 MB |
+| Caddy | — | `:80/:443` | Public (prod only) | — | — |
 
 ---
 

@@ -15,6 +15,7 @@ export GIT_SHA
         up rebuild rebuild-backend rebuild-crawler rebuild-console down logs build-docker \
         k8s-build k8s-build-backend k8s-build-crawler k8s-build-console \
         k8s-up k8s-down k8s-migrate k8s-status k8s-forward k8s-unforward \
+        k8s-obs-up k8s-obs-down k8s-obs-forward \
         k8s-logs k8s-logs-scheduler k8s-logs-crawler k8s-logs-filter k8s-logs-analyzer k8s-logs-api k8s-logs-console \
         k8s-restart \
         install-hooks \
@@ -213,35 +214,25 @@ k8s-build-console: ## Build console image (bakes VITE_ vars from root .env) and 
 
 k8s-build: k8s-build-backend k8s-build-crawler k8s-build-console ## Build all images and import into k3d
 
-k8s-up: ## Deploy full stack to k3d (infra → migrate → workers → api → console)
-	kubectl apply -f k8s/scheduler/namespace.yaml
-	kubectl apply \
-		-f k8s/kafka/configmap.yaml \
-		-f k8s/kafka/service.yaml \
-		-f k8s/kafka/statefulset.yaml
-	kubectl apply \
-		-f k8s/redis/statefulset.yaml \
-		-f k8s/redis/service.yaml
-	kubectl wait --for=condition=ready pod/kafka-0 -n $(K8S_NS) --timeout=120s
-	kubectl wait --for=condition=ready pod/redis-0 -n $(K8S_NS) --timeout=60s
-	kubectl delete job jobradar-migrate -n $(K8S_NS) --ignore-not-found
-	kubectl apply -f k8s/migrate/job.yaml
-	kubectl wait --for=condition=complete job/jobradar-migrate -n $(K8S_NS) --timeout=120s
-	kubectl apply \
-		-f k8s/scheduler/configmap.yaml  -f k8s/scheduler/deployment.yaml \
-		-f k8s/crawler/configmap.yaml    -f k8s/crawler/deployment.yaml \
-		-f k8s/filter/configmap.yaml     -f k8s/filter/deployment.yaml \
-		-f k8s/analyzer/configmap.yaml   -f k8s/analyzer/deployment.yaml \
-		-f k8s/api/configmap.yaml        -f k8s/api/deployment.yaml       -f k8s/api/service.yaml \
-		-f k8s/console/configmap.yaml    -f k8s/console/deployment.yaml   -f k8s/console/service.yaml
+k8s-up: ## Deploy app chart via Helm (namespace → kafka → redis → migrate → workers → api → console)
+	helm dependency update k8s/helm/jobradar 2>/dev/null || true
+	helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace
+	kubectl rollout status statefulset/kafka -n $(K8S_NS) --timeout=120s
+	kubectl rollout status statefulset/redis -n $(K8S_NS) --timeout=60s
 
-k8s-down: ## Tear down all k8s workloads (keeps secrets intact)
-	kubectl delete deployments,statefulsets,jobs,services,configmaps \
-		-l app=jobradar -n $(K8S_NS) --ignore-not-found
+k8s-down: ## Uninstall app Helm release (secrets and PVCs preserved)
+	helm uninstall jobradar -n $(K8S_NS) --ignore-not-found
 
-k8s-migrate: ## Re-run database migrations (deletes prior job then waits for completion)
+k8s-obs-up: ## Deploy observability chart (Prometheus + Grafana + Loki + Jaeger + audit-sync)
+	helm dependency update k8s/helm/observability
+	helm upgrade --install obs k8s/helm/observability -n $(K8S_NS) --create-namespace
+
+k8s-obs-down: ## Uninstall observability Helm release
+	helm uninstall obs -n $(K8S_NS) --ignore-not-found
+
+k8s-migrate: ## Re-run database migrations via Helm hook (deletes prior job first)
 	kubectl delete job jobradar-migrate -n $(K8S_NS) --ignore-not-found
-	kubectl apply -f k8s/migrate/job.yaml
+	helm upgrade jobradar k8s/helm/jobradar -n $(K8S_NS)
 	kubectl wait --for=condition=complete job/jobradar-migrate -n $(K8S_NS) --timeout=120s
 	kubectl logs -l app=jobradar,component=migrate -n $(K8S_NS) --tail=20
 
@@ -269,11 +260,19 @@ k8s-logs-api: ## Tail api logs
 k8s-logs-console: ## Tail console logs
 	kubectl logs -f -l app=jobradar,component=console -n $(K8S_NS)
 
-k8s-forward: ## Port-forward console :3000 and API :8080 to localhost (runs in background)
+k8s-forward: ## Port-forward console :3000 and API :8080 (when cluster has no NodePort mappings)
 	kubectl port-forward svc/jobradar-console -n $(K8S_NS) 3000:8080 &
 	kubectl port-forward svc/jobradar-api     -n $(K8S_NS) 8080:8080 &
 	@echo "Console → http://localhost:3000"
 	@echo "API     → http://localhost:8080"
+
+k8s-obs-forward: ## Port-forward Grafana :3001, Jaeger :16686, Prometheus :9090
+	kubectl port-forward svc/obs-grafana                              -n $(K8S_NS) 3001:80    &
+	kubectl port-forward svc/obs-jaeger                               -n $(K8S_NS) 16686:16686 &
+	kubectl port-forward svc/obs-kube-prometheus-stack-prometheus     -n $(K8S_NS) 9090:9090   &
+	@echo "Grafana    → http://localhost:3001  (admin / admin)"
+	@echo "Jaeger     → http://localhost:16686"
+	@echo "Prometheus → http://localhost:9090"
 
 k8s-unforward: ## Stop all kubectl port-forward processes
 	@pkill -f "kubectl port-forward" || true
