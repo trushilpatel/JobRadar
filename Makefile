@@ -214,9 +214,15 @@ k8s-build-console: ## Build console image (bakes VITE_ vars from root .env) and 
 
 k8s-build: k8s-build-backend k8s-build-crawler k8s-build-console ## Build all images and import into k3d
 
-k8s-up: ## Deploy app chart via Helm (namespace → kafka → redis → migrate → workers → api → console)
+k8s-up: ## Deploy app chart via Helm — reads DEV_TOKEN from backend/.env if set
 	helm dependency update k8s/helm/jobradar 2>/dev/null || true
-	helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace
+	@DEV_TOKEN=$$(grep -E '^DEV_TOKEN=' backend/.env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]'); \
+	if [ -n "$$DEV_TOKEN" ]; then \
+		echo "DEV_TOKEN loaded from backend/.env"; \
+		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace --set api.devToken="$$DEV_TOKEN"; \
+	else \
+		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace; \
+	fi
 	kubectl rollout status statefulset/kafka -n $(K8S_NS) --timeout=120s
 	kubectl rollout status statefulset/redis -n $(K8S_NS) --timeout=60s
 
