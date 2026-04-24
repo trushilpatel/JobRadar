@@ -1,0 +1,123 @@
+namespace: jobradar-local
+environment: local
+
+images:
+  backend:
+    repository: jobradar-backend
+    tag: local
+    pullPolicy: IfNotPresent
+  crawler:
+    repository: jobradar-crawler
+    tag: local
+    pullPolicy: IfNotPresent
+  console:
+    repository: jobradar-console
+    tag: local
+    pullPolicy: IfNotPresent
+  kafka:
+    repository: apache/kafka
+    tag: "3.9.0"
+    pullPolicy: IfNotPresent
+  redis:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+
+api:
+  nodePort: 30080
+  metricsAddr: ":9100"
+  logLevel: info
+  logFormat: json
+  jaegerEndpoint: ""
+  dbSslmode: require
+  dbPort: "5432"
+  supabaseProjectUrl: "https://gnwgoffnrxydkrkahhie.supabase.co"
+  allowedEmail: "trushilpatel9898@gmail.com"
+  jwtClockSkewSeconds: "60"
+  jwksCacheTtlSeconds: "600"
+  apiMaxBodyBytes: "1048576"
+
+console:
+  nodePort: 30300
+
+scheduler:
+  scanIntervalMinutes: "1440"
+  checkIntervalSeconds: "60"
+  stuckTimeoutMinutes: "30"
+  logLevel: info
+  logFormat: json
+  metricsAddr: ":9101"
+  jaegerEndpoint: ""
+  dbSslmode: require
+  dbPort: "5432"
+
+crawler:
+  kafkaBrokers: "kafka:9092"
+  pollIntervalSeconds: "60"
+  stuckTimeoutSeconds: "120"
+  heartbeatIntervalSeconds: "30"
+  scanCompanyDelaySeconds: "30"
+  googleMinDelay: "55000"
+  googleMaxDelay: "75000"
+  googleTimeoutMs: "18000000"
+  googleMaxPages: "0"
+  googleEnrichMin: "5000"
+  googleEnrichMax: "10000"
+  googleMaxDetailJobs: "0"
+  logLevel: info
+  logFormat: json
+  metricsAddr: ":9101"
+  jaegerEndpoint: ""
+  dbSslmode: require
+  dbPort: "5432"
+
+filter:
+  kafkaBrokers: "kafka:9092"
+  redisAddr: "redis:6379"
+  redisDb: "0"
+  batchSize: "50"
+  flushTimeoutSeconds: "30"
+  llmCallIntervalSeconds: "5"
+  llmProvider: gemini
+  cooldownBaseSeconds: "60"
+  cooldownMaxSeconds: "3600"
+  cooldownJitter: "0.2"
+  logLevel: info
+  logFormat: json
+  metricsAddr: ":9101"
+  jaegerEndpoint: ""
+  dbSslmode: require
+  dbPort: "5432"
+
+enricher:
+  kafkaBrokers: "kafka:9092"
+  redisAddr: "redis:6379"
+  redisDb: "0"
+  fetchConcurrency: "15"
+  llmBatchSize: "5"
+  flushTimeoutSeconds: "120"
+  llmCallIntervalSeconds: "5"
+  defaultRps: "2"
+  defaultBurst: "3"
+  jitterMs: "200"
+  discardJobWithExpGt: "0"
+  llmProvider: gemini
+  cooldownBaseSeconds: "60"
+  cooldownMaxSeconds: "3600"
+  cooldownJitter: "0.2"
+  logLevel: info
+  logFormat: json
+  metricsAddr: ":9101"
+  jaegerEndpoint: ""
+  dbSslmode: require
+  dbPort: "5432"
+
+kafka:
+  storage: 5Gi
+  storageClass: local-path
+  logRetentionHours: "168"
+  numPartitions: "1"
+
+redis:
+  storage: 1Gi
+  storageClass: local-path
