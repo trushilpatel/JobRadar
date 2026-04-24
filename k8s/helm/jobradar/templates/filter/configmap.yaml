@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-filter-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: filter
+data:
+  KAFKA_BROKERS: {{ .Values.filter.kafkaBrokers | quote }}
+  REDIS_ADDR: {{ .Values.filter.redisAddr | quote }}
+  REDIS_DB: {{ .Values.filter.redisDb | quote }}
+  FILTER_BATCH_SIZE: {{ .Values.filter.batchSize | quote }}
+  FILTER_FLUSH_TIMEOUT_SECONDS: {{ .Values.filter.flushTimeoutSeconds | quote }}
+  FILTER_LLM_CALL_INTERVAL_SECONDS: {{ .Values.filter.llmCallIntervalSeconds | quote }}
+  LLM_PROVIDER: {{ .Values.filter.llmProvider | quote }}
+  LLM_COOLDOWN_BASE_SECONDS: {{ .Values.filter.cooldownBaseSeconds | quote }}
+  LLM_COOLDOWN_MAX_SECONDS: {{ .Values.filter.cooldownMaxSeconds | quote }}
+  LLM_COOLDOWN_JITTER: {{ .Values.filter.cooldownJitter | quote }}
+  LOG_LEVEL: {{ .Values.filter.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.filter.logFormat | quote }}
+  METRICS_ADDR: {{ .Values.filter.metricsAddr | quote }}
+  JAEGER_ENDPOINT: {{ .Values.filter.jaegerEndpoint | quote }}
+  DB_SSLMODE: {{ .Values.filter.dbSslmode | quote }}
+  DB_PORT: {{ .Values.filter.dbPort | quote }}
