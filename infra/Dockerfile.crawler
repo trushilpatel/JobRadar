@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     nodejs \
     npm \
+    xvfb \
+    xauth \
     && rm -rf /var/lib/apt/lists/*
 
 # rod picks up CHROMIUM_PATH directly — no glob search or auto-download.

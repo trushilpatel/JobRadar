@@ -212,12 +212,13 @@ make local-down   # stop
 
 Two env files:
 
+- **`.env`** (repo root) — Docker Compose + infra vars; also symlinked as `ui/console/.env` for the Vite dev server
 - **`backend/.env`** — backend service config (DB, Kafka, Redis, LLM, Auth)
-- **`.env`** (repo root) — frontend build args
 
 Copy from examples:
 ```bash
-cp backend/example.env backend/.env
+cp .env.example .env
+cp backend/.env.example backend/.env
 ```
 
 ### Key variables (`backend/.env`)
