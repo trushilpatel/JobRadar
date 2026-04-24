@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobradar-api
+  namespace: jobradar-local
+  labels:
+    app: jobradar
+    component: api
+    environment: local
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jobradar
+      component: api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: jobradar
+        component: api
+        environment: local
+    spec:
+      containers:
+        - name: api
+          image: jobradar-backend:local
+          imagePullPolicy: Never
+          command: ["/app/api"]
+          envFrom:
+            - configMapRef:
+                name: jobradar-api-config
+            - secretRef:
+                name: jobradar-api-secret
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 9100
+              name: ops
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9100
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 9100
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      securityContext:
+        runAsNonRoot: true

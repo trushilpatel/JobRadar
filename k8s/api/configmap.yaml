@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-api-config
+  namespace: jobradar-local
+  labels:
+    app: jobradar
+    component: api
+    environment: local
+data:
+  METRICS_ADDR: ":9100"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  JAEGER_ENDPOINT: ""
+  DB_SSLMODE: "require"
+  DB_PORT: "5432"
+  SUPABASE_PROJECT_URL: "https://gnwgoffnrxydkrkahhie.supabase.co"
+  ALLOWED_EMAIL: "trushilpatel9898@gmail.com"
+  JWT_CLOCK_SKEW_SECONDS: "60"
+  JWKS_CACHE_TTL_SECONDS: "600"
+  API_MAX_BODY_BYTES: "1048576"

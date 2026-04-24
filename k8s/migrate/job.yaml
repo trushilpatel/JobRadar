@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jobradar-migrate
+  namespace: jobradar-local
+  labels:
+    app: jobradar
+    component: migrate
+    environment: local
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: jobradar
+        component: migrate
+        environment: local
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: jobradar-backend:local
+          imagePullPolicy: Never
+          command: ["/app/migrate", "/app/migrations"]
+          envFrom:
+            - secretRef:
+                name: jobradar-migrate-secret
+          env:
+            - name: DB_SSLMODE
+              value: "require"
+            - name: DB_PORT
+              value: "5432"
+            - name: LOG_FORMAT
+              value: "json"
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      securityContext:
+        runAsNonRoot: true

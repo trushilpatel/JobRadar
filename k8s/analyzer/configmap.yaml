@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-analyzer-config
+  namespace: jobradar-local
+  labels:
+    app: jobradar
+    component: analyzer
+    environment: local
+data:
+  KAFKA_BROKERS: "kafka:9092"
+  REDIS_ADDR: "redis:6379"
+  REDIS_DB: "0"
+  ENRICHER_FETCH_CONCURRENCY: "15"
+  ENRICHER_LLM_BATCH_SIZE: "5"
+  ENRICHER_FLUSH_TIMEOUT_SECONDS: "120"
+  ENRICHER_LLM_CALL_INTERVAL_SECONDS: "5"
+  ENRICHER_DEFAULT_RPS: "2"
+  ENRICHER_DEFAULT_BURST: "3"
+  ENRICHER_JITTER_MS: "200"
+  DISCARD_JOB_WITH_EXP_GT: "0"
+  LLM_PROVIDER: "gemini"
+  LLM_COOLDOWN_BASE_SECONDS: "60"
+  LLM_COOLDOWN_MAX_SECONDS: "3600"
+  LLM_COOLDOWN_JITTER: "0.2"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  METRICS_ADDR: ":9101"
+  JAEGER_ENDPOINT: ""
+  DB_SSLMODE: "require"
+  DB_PORT: "5432"
