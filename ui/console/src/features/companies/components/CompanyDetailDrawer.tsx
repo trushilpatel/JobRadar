@@ -8,12 +8,13 @@ import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { StatusPill, type StatusKind } from '@/components/ui/status-pill'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
 import { cn, formatRelativeTime } from '@/lib/utils'
+import { QUEUE_STATUS, SCAN_STATUS } from '@/features/companies/constants'
 import { ScanIntervalOverrideModal } from '@/features/settings/components/ScanIntervalOverrideModal'
 import { useScanIntervalOverride } from '@/features/settings/hooks/useScanIntervalOverride'
 
 interface CompanyDetailDrawerProps {
   company: Company
-  queueStatus?: 'queued' | 'processing'
+  queueStatus?: 'queued' | 'running'
   onClose: () => void
   onScan: (c: Company) => void
   onEdit: (c: Company) => void
@@ -71,13 +72,13 @@ export function CompanyDetailDrawer({
   }, [onClose])
 
   const kind: StatusKind =
-    queueStatus === 'processing'
+    queueStatus === QUEUE_STATUS.RUNNING
       ? 'running'
-      : queueStatus === 'queued'
+      : queueStatus === QUEUE_STATUS.QUEUED
         ? 'queued'
-        : company.last_scan_status === 'ok'
+        : company.last_scan_status === SCAN_STATUS.OK
           ? 'ok'
-          : company.last_scan_status === 'error'
+          : company.last_scan_status === SCAN_STATUS.ERROR
             ? 'error'
             : 'pending'
 
@@ -351,9 +352,9 @@ function safeHost(url: string) {
   }
 }
 
-function formatNext(next: string | null, queueStatus?: 'queued' | 'processing') {
-  if (queueStatus === 'processing') return 'now'
-  if (queueStatus === 'queued') return 'up next'
+function formatNext(next: string | null, queueStatus?: 'queued' | 'running') {
+  if (queueStatus === QUEUE_STATUS.RUNNING) return 'now'
+  if (queueStatus === QUEUE_STATUS.QUEUED) return 'up next'
   if (!next) return '—'
   const ms = new Date(next).getTime() - Date.now()
   if (ms <= 0) return '—'

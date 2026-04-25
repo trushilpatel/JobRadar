@@ -17,7 +17,7 @@ import (
 // ScanQueueStore manages the company scan work queue.
 type ScanQueueStore interface {
 	// Enqueue inserts a company into the queue. Silently no-ops if the company
-	// already has an active entry (queued or processing).
+	// already has an active entry (queued or running).
 	Enqueue(ctx context.Context, companyID, source string) error
 
 	// EnqueueDue atomically enqueues all companies currently due for a scan
@@ -34,13 +34,13 @@ type ScanQueueStore interface {
 	// Complete removes the queue entry. Call after scan succeeds or fails.
 	Complete(ctx context.Context, id string) error
 
-	// Remove deletes a queued entry by ID. No-ops if entry is processing or missing.
+	// Remove deletes a queued entry by ID. No-ops if entry is running or missing.
 	Remove(ctx context.Context, id string) error
 
-	// ResetStuck resets processing rows whose heartbeat (or started_at if no heartbeat yet) is older than staleDur.
+	// ResetStuck resets running rows whose heartbeat (or started_at if no heartbeat yet) is older than staleDur.
 	ResetStuck(ctx context.Context, staleDur time.Duration) error
 
-	// PurgeInactive deletes all queued (not processing) entries whose company
+	// PurgeInactive deletes all queued (not running) entries whose company
 	// is inactive. Returns the number of rows removed.
 	PurgeInactive(ctx context.Context) (int, error)
 
@@ -109,7 +109,7 @@ func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, so
 		WHERE c.active = true
 		  AND NOT EXISTS (
 		    SELECT 1 FROM company_scan_queue q
-		    WHERE q.company_id = c.id AND q.status IN ('queued','processing')
+		    WHERE q.company_id = c.id AND q.status IN ('queued','running')
 		  )
 		  AND (
 		    c.last_scan_at IS NULL
@@ -158,7 +158,7 @@ func (s *scanQueueStore) ClaimNext(ctx context.Context, adapterType string) (_ *
 		// Step 2: Claim the oldest queued item for this adapter type.
 		if err := tx.Raw(`
 			UPDATE company_scan_queue
-			SET status = 'processing', started_at = NOW(), heartbeat_at = NOW()
+			SET status = 'running', started_at = NOW(), heartbeat_at = NOW()
 			WHERE id = (
 			    SELECT id FROM company_scan_queue
 			    WHERE status = 'queued' AND adapter_type = ?
@@ -222,7 +222,7 @@ func (s *scanQueueStore) ResetStuck(ctx context.Context, staleDur time.Duration)
 	return s.db.WithContext(ctx).Exec(`
 		UPDATE company_scan_queue
 		SET status = 'queued', started_at = NULL, heartbeat_at = NULL
-		WHERE status = 'processing'
+		WHERE status = 'running'
 		  AND COALESCE(heartbeat_at, started_at) < NOW() - INTERVAL '1 second' * ?
 	`, int(staleDur.Seconds())).Error
 }

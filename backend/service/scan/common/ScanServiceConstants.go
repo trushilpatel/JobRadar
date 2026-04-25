@@ -9,8 +9,8 @@ const (
 
 // QueueStatus values for company_scan_queue.status
 const (
-	QueueStatusQueued     = "queued"
-	QueueStatusProcessing = "processing"
+	QueueStatusQueued  = "queued"
+	QueueStatusRunning = "running"
 )
 
 // QueueSource values for company_scan_queue.source

@@ -1,6 +1,7 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { RefreshCw, Pencil, Trash2, ExternalLink } from 'lucide-react'
 import type { Company } from '@/types'
+import { QUEUE_STATUS, SCAN_STATUS } from '@/features/companies/constants'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { Badge } from '@/components/ui/badge'
 import { StatusPill, type StatusKind } from '@/components/ui/status-pill'
@@ -16,7 +17,7 @@ export interface CompanyColumnActions {
   onDelete: (id: string) => void
   onToggleActive: (c: Company) => void
   scanning: Set<string>
-  queueMap: Map<string, 'queued' | 'processing'>
+  queueMap: Map<string, 'queued' | 'running'>
 }
 
 export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Company, unknown>[] {
@@ -64,13 +65,13 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
         const c = row.original
         const q = actions.queueMap.get(c.id)
         const kind: StatusKind =
-          q === 'processing'
+          q === QUEUE_STATUS.RUNNING
             ? 'running'
-            : q === 'queued'
+            : q === QUEUE_STATUS.QUEUED
               ? 'queued'
-              : c.last_scan_status === 'ok'
+              : c.last_scan_status === SCAN_STATUS.OK
                 ? 'ok'
-                : c.last_scan_status === 'error'
+                : c.last_scan_status === SCAN_STATUS.ERROR
                   ? 'error'
                   : 'pending'
         return <StatusPill status={kind} />
@@ -95,7 +96,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
           .concat(history)
 
         // Override the rightmost slot if currently running.
-        if (q === 'processing' && padded.length > 0) {
+        if (q === QUEUE_STATUS.RUNNING && padded.length > 0) {
           padded[padded.length - 1] = 'run'
         }
 
@@ -121,8 +122,8 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
       cell: ({ row }) => {
         const c = row.original
         const q = actions.queueMap.get(c.id)
-        if (q === 'processing') return <span className="text-xs text-blue-400">now</span>
-        if (q === 'queued') return <span className="text-xs text-amber-400">up next</span>
+        if (q === QUEUE_STATUS.RUNNING) return <span className="text-xs text-blue-400">now</span>
+        if (q === QUEUE_STATUS.QUEUED) return <span className="text-xs text-amber-400">up next</span>
         if (!c.next_scan_at) return <span className="text-xs text-slate-600">—</span>
         const ms = new Date(c.next_scan_at).getTime() - Date.now()
         if (ms <= 0) return <span className="text-xs text-slate-600">—</span>

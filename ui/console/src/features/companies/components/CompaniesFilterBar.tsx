@@ -2,6 +2,7 @@ import { Search, Filter, Power, Loader2, X, Plus, Play } from 'lucide-react'
 import { SegmentedSwitch } from '@/components/ui/segmented-switch'
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
 import type { ActiveFilter, StatusFilter } from '@/features/companies/hooks/useCompanies'
+import { STATUS_FILTER, ACTIVE_FILTER } from '@/features/companies/constants'
 
 interface CompaniesFilterBarProps {
   search: string
@@ -77,9 +78,9 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
           value={p.activeFilter}
           onChange={p.onActiveFilterChange}
           options={[
-            { value: 'all', label: 'All', accent: 'violet' },
-            { value: 'active', label: 'Active', accent: 'emerald' },
-            { value: 'inactive', label: 'Inactive', accent: 'violet' },
+            { value: ACTIVE_FILTER.ALL, label: 'All', accent: 'violet' },
+            { value: ACTIVE_FILTER.ACTIVE, label: 'Active', accent: 'emerald' },
+            { value: ACTIVE_FILTER.INACTIVE, label: 'Inactive', accent: 'violet' },
           ]}
         />
 
@@ -90,9 +91,9 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
           value={p.statusFilter}
           onChange={(v) => p.onStatusFilterChange(p.statusFilter === v ? 'none' : v)}
           options={[
-            { value: 'error', label: '✕ Errors', accent: 'red' },
-            { value: 'running', label: '⟳ Running', accent: 'blue' },
-            { value: 'queued', label: '· Queued', accent: 'amber' },
+            { value: STATUS_FILTER.ERROR, label: '✕ Errors', accent: 'red' },
+            { value: STATUS_FILTER.RUNNING, label: '⟳ Running', accent: 'blue' },
+            { value: STATUS_FILTER.QUEUED, label: '· Queued', accent: 'amber' },
           ]}
         />
 

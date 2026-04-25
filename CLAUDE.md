@@ -1,6 +1,6 @@
 # JobRadar
 
-Single-user automated job tracker. Monitors careers pages, filters via LLM, surfaces relevant jobs.
+Production-grade automated job tracker. Monitors careers pages, filters via LLM, surfaces relevant jobs.
 
 Full design spec: `Designs/job-tracker-final-architecture.md`
 

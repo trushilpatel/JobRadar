@@ -117,7 +117,7 @@ export interface QueueEntry {
   company_id: string
   company_name: string
   adapter_type: string
-  status: 'queued' | 'processing'
+  status: 'queued' | 'running'
   source: 'scheduler' | 'manual'
   priority: number
   queued_at: string

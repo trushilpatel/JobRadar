@@ -10,7 +10,7 @@ import (
 
 var validQueueStatuses = map[string]bool{
 	scancommon.QueueStatusQueued:     true,
-	scancommon.QueueStatusProcessing: true,
+	scancommon.QueueStatusRunning: true,
 }
 
 var validQueueSources = map[string]bool{
@@ -52,7 +52,7 @@ func (v *validationService) ListQueue(ctx context.Context, filter dto.QueueFilte
 		errs = append(errs, errors.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
-			Message: "status must be 'queued' or 'processing'",
+			Message: "status must be 'queued' or 'running'",
 		})
 	}
 	if filter.Source != "" && !validQueueSources[filter.Source] {
