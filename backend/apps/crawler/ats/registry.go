@@ -26,8 +26,9 @@ func Registry(adapterType string) (Adapter, error) {
 	return RegistryWithGoogleConfig(adapterType, google.Config{}, logger.NewNoop())
 }
 
-// SetBrowser calls WithBrowser on rod-based adapters (Google, Meta) if they support it.
-// HTTP-only adapters are left untouched. Safe to call with a nil browser.
+// SetBrowser calls WithBrowser on rod-based adapters (Meta) if they support it.
+// HTTP-only adapters (Google and the ATS adapters) are left untouched.
+// Safe to call with a nil browser.
 func SetBrowser(adp Adapter, b *rod.Browser) {
 	type browserSetter interface{ WithBrowser(*rod.Browser) }
 	if setter, ok := adp.(browserSetter); ok {
@@ -47,9 +48,9 @@ func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config, log l
 		return &ashby.Ashby{}, nil
 	case companycommon.AdapterGoogle:
 		if googleCfg == (google.Config{}) {
-			return google.NewRodGoogleDefault(), nil
+			return google.NewGoogleAdapterDefault(), nil
 		}
-		return google.NewRodGoogle(googleCfg, log), nil
+		return google.NewGoogleAdapter(googleCfg, log), nil
 	case companycommon.AdapterNetflix:
 		return netflix.New(), nil
 	case companycommon.AdapterUber:

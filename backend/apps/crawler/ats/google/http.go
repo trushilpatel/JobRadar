@@ -1,0 +1,524 @@
+package google
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"math/rand"
+	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/types"
+	"github.com/trushilpatel/jobradar/common/logger"
+)
+
+// careersURL is the filtered search URL the crawler walks. Pagination is
+// achieved by appending &page=N — Google Careers tracks pagination in the URL
+// (verified end-to-end against live HTML).
+const careersURL = "https://www.google.com/about/careers/applications/jobs/results?" +
+	"location=United%20States&target_level=EARLY&target_level=MID" +
+	"&employment_type=FULL_TIME&q=Software%20Engineering"
+
+// detailBase is the canonical prefix for an individual job's URL.
+// We always append "{id}-{slug}" without query parameters.
+const detailBase = "https://www.google.com/about/careers/applications/jobs/results/"
+
+// pageSize is the number of cards Google emits per listing page. Used to
+// derive the last page from the "Showing X to Y of N" total.
+const pageSize = 20
+
+// userAgent — same Chrome UA the rod adapter used. Pinned so HTTP headers
+// stay consistent across scans.
+const userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
+	"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+
+const acceptHeader = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+const acceptLangHeader = "en-US,en;q=0.9"
+
+// GoogleAdapter implements types.Adapter using plain HTTP + regex extraction.
+//
+// Replaces the previous browser-based (rod) approach. Google Careers is fully
+// server-side rendered — a plain HTTP GET returns the same DOM the browser
+// sees, including the qualifications sections. No JavaScript execution is
+// required at any step of the scan.
+type GoogleAdapter struct {
+	cfg           Config
+	log           logger.Logger
+	client        *http.Client
+	streamPublish func([]types.FetchJobsItem)
+	seenChecker   func(ctx context.Context, ids []string) (map[string]bool, error)
+}
+
+// NewGoogleAdapter constructs a GoogleAdapter with the given config.
+func NewGoogleAdapter(cfg Config, log logger.Logger) *GoogleAdapter {
+	return &GoogleAdapter{
+		cfg:    cfg,
+		log:    log,
+		client: &http.Client{Timeout: 30 * time.Second},
+	}
+}
+
+// NewGoogleAdapterDefault constructs a GoogleAdapter with production defaults
+// and a no-op logger. Convenient for tests and simple wiring.
+func NewGoogleAdapterDefault() *GoogleAdapter {
+	return NewGoogleAdapter(defaultConfig(), logger.NewNoop())
+}
+
+// CareersURL implements types.URLProvider.
+func (s *GoogleAdapter) CareersURL(_ string) string { return careersURL }
+
+// SetStreamPublish implements types.StreamPublisher.
+func (s *GoogleAdapter) SetStreamPublish(fn func([]types.FetchJobsItem)) {
+	s.streamPublish = fn
+}
+
+// SetSeenChecker implements types.SeenChecker.
+func (s *GoogleAdapter) SetSeenChecker(fn func(ctx context.Context, ids []string) (map[string]bool, error)) {
+	s.seenChecker = fn
+}
+
+// ── Regex patterns (RE2 — Go's regexp engine) ──────────────────────────────
+
+// reTotalCount captures the total job count from the "Showing X to Y of N"
+// indicator, used to terminate pagination when the last page is reached.
+var reTotalCount = regexp.MustCompile(`Showing\s+\d+\s+to\s+\d+\s+of\s+(\d+)`)
+
+// reAriaTitle finds each card's "Learn more about <title>" anchor.
+// On a 20-card listing page Google emits 20 of these (sometimes 21 — the
+// extra one is a self-link with no associated card content; we detect those
+// by absence of an href in the slice).
+var reAriaTitle = regexp.MustCompile(`aria-label="Learn more about ([^"]+)"`)
+
+// reHref pulls the canonical job ID and slug out of the card's anchor href.
+// href shape is `jobs/results/{id}-{slug}?…query` — we capture id and slug
+// up to the first `"` or `?`.
+var reHref = regexp.MustCompile(`href="jobs/results/(\d+)-([^"?]+)`)
+
+// reLocationBlock captures the wrapped location text. The icon close tag is
+// followed by nested <span>/<div> wrappers; the natural terminator is the
+// next <button> (the share/save action on every card). Strip tags after.
+var reLocationBlock = regexp.MustCompile(`(?is)>place</[^>]+>(.{0,800}?)<button`)
+
+// reOrgBlock captures the wrapped org text. Terminator is the start of the
+// next <i…> tag (the place icon that follows the org). Stopping at ">place<"
+// instead would leak the half-open <i…> attributes past the tag-strip.
+var reOrgBlock = regexp.MustCompile(`(?is)>corporate_fare</[^>]+>(.{0,400}?)<i\b`)
+
+// reDetailTitle pulls the job title from the <title> tag of the detail page.
+// Cleaner than scraping h3 (no duplicates / sidebar facets to disambiguate).
+var reDetailTitle = regexp.MustCompile(`(?i)<title>([^<]+?)\s*(?:—|-)\s*Google Careers</title>`)
+
+// reMinQual / rePrefQual / reResp match each section header followed
+// immediately by its <ul>…</ul> bullet list. Verified against the live SSR
+// HTML for multiple jobs.
+var (
+	reMinQual  = regexp.MustCompile(`(?is)<h3[^>]*>[^<]*Minimum qualifications[^<]*</h3>\s*<ul[^>]*>(.*?)</ul>`)
+	rePrefQual = regexp.MustCompile(`(?is)<h3[^>]*>[^<]*Preferred qualifications[^<]*</h3>\s*<ul[^>]*>(.*?)</ul>`)
+	reResp     = regexp.MustCompile(`(?is)<h3[^>]*>[^<]*Responsibilities[^<]*</h3>\s*<ul[^>]*>(.*?)</ul>`)
+)
+
+// reLi / reTag / reWS / rePlusMore are the post-process helpers: bullet
+// extraction inside a <ul>, generic tag stripping, whitespace collapsing,
+// and removal of "+N more" responsive truncation indicators in locations.
+var (
+	reLi       = regexp.MustCompile(`(?is)<li[^>]*>(.*?)</li>`)
+	reTag      = regexp.MustCompile(`<[^>]+>`)
+	reWS       = regexp.MustCompile(`\s+`)
+	rePlusMore = regexp.MustCompile(`(?i);?\s*\+\d+\s*more`)
+)
+
+// parsedJob is the in-package representation of a parsed listing card.
+// Description is empty until the detail page is fetched and enriched.
+type parsedJob struct {
+	ID          string // e.g. "google-12345"
+	Title       string
+	URL         string
+	Location    string
+	Org         string
+	Description string
+}
+
+// FetchJobs walks every listing page (paginating via &page=N), enriches each
+// new job with a detail-page fetch, and publishes results to Kafka.
+//
+// Pacing:
+//   - MinDelayMs/MaxDelayMs   between listing-page fetches (default 100-120 s)
+//   - EnrichMinMs/EnrichMaxMs between detail-page fetches  (default 5-10 s)
+//   - TimeoutMs               overall scan budget          (default 5 h)
+//
+// Reliability:
+//   - Detail-fetch failures NEVER drop the job: the thin item is published
+//     so the analyzer's own HTTP fallback can pick it up later.
+//   - Seen-checker failures don't loop the page; they advance pagination
+//     after treating every card as already-seen for that page.
+func (s *GoogleAdapter) FetchJobs(ctx context.Context, _ string) (types.FetchJobsResponse, error) {
+	start := time.Now()
+
+	if s.cfg.TimeoutMs > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutMs)*time.Millisecond)
+		defer cancel()
+	}
+
+	seenIDs := make(map[string]struct{})
+	var allPublished []types.FetchJobsItem
+	pageNum := 1
+	totalCommitted := 0
+	totalEnriched := 0
+
+scanLoop:
+	for {
+		if ctx.Err() != nil {
+			s.log.Warn("google/http: context cancelled")
+			break
+		}
+
+		listingURL := fmt.Sprintf("%s&page=%d", careersURL, pageNum)
+		s.log.Info("google/http: scanning listing page", logger.Int("page", pageNum))
+
+		html, err := s.fetch(ctx, listingURL)
+		if err != nil {
+			s.log.Warn("google/http: listing fetch failed",
+				logger.Int("page", pageNum),
+				logger.Str("error", err.Error()))
+			break
+		}
+
+		cards, total := parseListing(html)
+		s.log.Info("google/http: page scanned",
+			logger.Int("page", pageNum),
+			logger.Int(logger.FieldFetched, len(cards)),
+			logger.Int("total_in_search", total),
+		)
+
+		// ── Filter via seenChecker ─────────────────────────────────────────
+		ids := make([]string, len(cards))
+		for i, c := range cards {
+			ids[i] = c.ID
+		}
+		seenMap := map[string]bool{}
+		if s.seenChecker != nil {
+			seenMap, err = s.seenChecker(ctx, ids)
+			if err != nil {
+				s.log.Warn("google/http: seen check failed, skipping enrichment for this page",
+					logger.Str("error", err.Error()))
+				seenMap = make(map[string]bool, len(ids))
+				for _, id := range ids {
+					seenMap[id] = true
+				}
+			}
+		}
+		newCards := filterPageJobs(cards, seenMap, seenIDs)
+
+		s.log.Info("google/http: filtered new",
+			logger.Int(logger.FieldNew, len(newCards)),
+			logger.Int("skipped", len(cards)-len(newCards)),
+		)
+
+		// ── Detail enrichment — never drops on failure ─────────────────────
+		detailLimit := len(newCards)
+		if s.cfg.MaxDetailJobs > 0 && s.cfg.MaxDetailJobs < detailLimit {
+			detailLimit = s.cfg.MaxDetailJobs
+		}
+		committed := 0
+		enriched := 0
+		for i := 0; i < len(newCards); i++ {
+			if ctx.Err() != nil {
+				s.log.Warn("google/http: context cancelled during enrichment")
+				break scanLoop
+			}
+			enrichEnabled := s.cfg.EnrichMaxMs > 0 && i < detailLimit
+			if enrichEnabled {
+				if i > 0 {
+					if err := s.sleep(ctx, s.cfg.EnrichMinMs, s.cfg.EnrichMaxMs); err != nil {
+						break scanLoop
+					}
+				}
+				detailHTML, err := s.fetch(ctx, newCards[i].URL)
+				if err != nil {
+					s.log.Warn("google/http: detail fetch failed, publishing thin",
+						logger.Str(logger.FieldJobID, newCards[i].ID),
+						logger.Str("error", err.Error()),
+					)
+				} else {
+					desc := parseDetail(detailHTML, newCards[i].Title, newCards[i].Location)
+					if desc != "" {
+						newCards[i].Description = desc
+						enriched++
+					}
+				}
+			}
+			item := toItem(newCards[i])
+			if s.streamPublish != nil {
+				s.streamPublish([]types.FetchJobsItem{item})
+			}
+			allPublished = append(allPublished, item)
+			committed++
+		}
+		totalCommitted += committed
+		totalEnriched += enriched
+
+		s.log.Info("google/http: page committed",
+			logger.Int("page", pageNum),
+			logger.Int("committed", committed),
+			logger.Int("enriched", enriched),
+			logger.Int("total_committed", totalCommitted),
+			logger.Int("total_enriched", totalEnriched),
+			logger.Dur(logger.FieldDuration, time.Since(start)),
+		)
+
+		// ── Termination checks ─────────────────────────────────────────────
+		if s.cfg.MaxPages > 0 && pageNum >= s.cfg.MaxPages {
+			s.log.Info("google/http: max pages reached", logger.Int("page", pageNum))
+			break
+		}
+		if total > 0 && pageNum*pageSize >= total {
+			s.log.Info("google/http: covered all pages",
+				logger.Int("page", pageNum),
+				logger.Int("total", total))
+			break
+		}
+
+		// ── Inter-page pacing (configured), then advance ───────────────────
+		if err := s.sleep(ctx, s.cfg.MinDelayMs, s.cfg.MaxDelayMs); err != nil {
+			break
+		}
+		pageNum++
+	}
+
+	s.log.Info("google/http: scan complete",
+		logger.Int("pages", pageNum),
+		logger.Int("total_committed", totalCommitted),
+		logger.Int("total_enriched", totalEnriched),
+		logger.Dur(logger.FieldDuration, time.Since(start)),
+	)
+
+	return types.FetchJobsResponse{Jobs: allPublished}, nil
+}
+
+// fetch performs a single HTTP GET with pinned headers and the configured
+// client timeout. Returns the response body as a string for regex scanning.
+func (s *GoogleAdapter) fetch(ctx context.Context, url string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("new request: %w", err)
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", acceptHeader)
+	req.Header.Set("Accept-Language", acceptLangHeader)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("http do: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("http status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read body: %w", err)
+	}
+	return string(body), nil
+}
+
+// parseListing extracts every card from a listing-page HTML body and returns
+// the parsed jobs along with the search's total job count.
+//
+// Slicing strategy: each "Learn more about" anchor sits at the END of its
+// card's markup. Card[i]'s metadata (h3, place icon, corporate_fare icon,
+// href) lives between aria[i-1] and aria[i] (or [0..aria[0]] for the very
+// first card on the page).
+func parseListing(html string) ([]parsedJob, int) {
+	total := 0
+	if m := reTotalCount.FindStringSubmatch(html); m != nil {
+		if n, err := strconv.Atoi(m[1]); err == nil {
+			total = n
+		}
+	}
+
+	titleSubs := reAriaTitle.FindAllStringSubmatch(html, -1)
+	titleIdx := reAriaTitle.FindAllStringSubmatchIndex(html, -1)
+
+	cards := make([]parsedJob, 0, len(titleSubs))
+	for i, idx := range titleIdx {
+		title := strings.TrimSpace(titleSubs[i][1])
+
+		var sliceStart int
+		if i == 0 {
+			sliceStart = 0
+		} else {
+			sliceStart = titleIdx[i-1][1] // end of previous aria-label
+		}
+		sliceEnd := idx[0]
+		if sliceEnd <= sliceStart {
+			continue
+		}
+		block := html[sliceStart:sliceEnd]
+
+		hrefMatches := reHref.FindAllStringSubmatch(block, -1)
+		if len(hrefMatches) == 0 {
+			// The "extra" 21st aria-label (no associated card content) lands
+			// here and is silently skipped.
+			continue
+		}
+		// The last href in the block is this card's anchor target.
+		last := hrefMatches[len(hrefMatches)-1]
+		jobID, slug := last[1], last[2]
+		jobURL := detailBase + jobID + "-" + slug
+
+		var location, org string
+		if m := reLocationBlock.FindStringSubmatch(block); m != nil {
+			location = cleanText(m[1], true)
+		}
+		if m := reOrgBlock.FindStringSubmatch(block); m != nil {
+			org = cleanText(m[1], false)
+		}
+
+		cards = append(cards, parsedJob{
+			ID:       "google-" + jobID,
+			Title:    title,
+			URL:      jobURL,
+			Location: location,
+			Org:      org,
+		})
+	}
+	return cards, total
+}
+
+// parseDetail builds the canonical description string for one job from its
+// detail-page HTML. Falls back to the listing-page title/location if the
+// detail-page <title> tag is missing.
+func parseDetail(html, fallbackTitle, fallbackLocation string) string {
+	title := fallbackTitle
+	if m := reDetailTitle.FindStringSubmatch(html); m != nil {
+		title = strings.TrimSpace(m[1])
+	}
+	var b strings.Builder
+	b.WriteString(title)
+	b.WriteString("\n\n")
+	b.WriteString(fallbackLocation)
+	b.WriteString("\n\n")
+
+	sections := []struct {
+		label string
+		re    *regexp.Regexp
+	}{
+		{"Minimum qualifications", reMinQual},
+		{"Preferred qualifications", rePrefQual},
+		{"Responsibilities", reResp},
+	}
+	for _, sec := range sections {
+		m := sec.re.FindStringSubmatch(html)
+		if m == nil {
+			continue
+		}
+		liMatches := reLi.FindAllStringSubmatch(m[1], -1)
+		if len(liMatches) == 0 {
+			continue
+		}
+		// First write the section header — only after we have at least one
+		// non-empty bullet, so empty sections never produce a stray header.
+		var bullets []string
+		for _, li := range liMatches {
+			text := reTag.ReplaceAllString(li[1], " ")
+			text = reWS.ReplaceAllString(text, " ")
+			text = strings.TrimSpace(text)
+			if text != "" {
+				bullets = append(bullets, "- "+text)
+			}
+		}
+		if len(bullets) == 0 {
+			continue
+		}
+		b.WriteString(sec.label)
+		b.WriteString("\n")
+		for _, line := range bullets {
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// cleanText strips tags, collapses whitespace, optionally removes the
+// "+N more" responsive truncation indicators that appear inside multi-
+// location fields (e.g. "Kirkland, WA, USA; Sunnyvale, CA, USA; +2 more").
+func cleanText(raw string, stripPlusMore bool) string {
+	text := reTag.ReplaceAllString(raw, " ")
+	if stripPlusMore {
+		text = rePlusMore.ReplaceAllString(text, "")
+	}
+	text = reWS.ReplaceAllString(text, " ")
+	text = strings.TrimSpace(text)
+	text = strings.TrimRight(text, ";")
+	return strings.TrimSpace(text)
+}
+
+// filterPageJobs returns only jobs that are not already in the pipeline
+// ledger (per seenMap) and not already published earlier in this scan
+// (per localSeen). Updates localSeen for every ID encountered so subsequent
+// pages stay deduplicated. Same shape as the legacy implementation —
+// preserved verbatim so the unit tests remain valid.
+func filterPageJobs(pageJobs []parsedJob, seenMap map[string]bool, localSeen map[string]struct{}) []parsedJob {
+	var result []parsedJob
+	for _, job := range pageJobs {
+		if _, local := localSeen[job.ID]; local {
+			continue
+		}
+		localSeen[job.ID] = struct{}{}
+		if seenMap[job.ID] {
+			continue
+		}
+		result = append(result, job)
+	}
+	return result
+}
+
+// toItem maps a parsedJob to the engine's FetchJobsItem. When Description is
+// empty we leave FullContent nil so the analyzer's HTTP-fetch fallback runs;
+// non-empty Description bypasses the fallback.
+func toItem(j parsedJob) types.FetchJobsItem {
+	var fc *types.FullJobContent
+	if j.Description != "" {
+		fc = &types.FullJobContent{
+			Description: j.Description,
+			Department:  j.Org,
+		}
+	}
+	return types.FetchJobsItem{
+		ID:             j.ID,
+		Title:          j.Title,
+		URL:            j.URL,
+		Location:       j.Location,
+		EmploymentType: "full_time",
+		FullContent:    fc,
+	}
+}
+
+// sleep waits for a random duration in [minMs, maxMs) ms or returns ctx.Err()
+// if the context is cancelled first.
+func (s *GoogleAdapter) sleep(ctx context.Context, minMs, maxMs int) error {
+	if minMs >= maxMs {
+		maxMs = minMs + 1
+	}
+	d := time.Duration(minMs+rand.Intn(maxMs-minMs)) * time.Millisecond
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(d):
+		return nil
+	}
+}
+
+// Compile-time interface checks.
+var (
+	_ types.Adapter         = (*GoogleAdapter)(nil)
+	_ types.URLProvider     = (*GoogleAdapter)(nil)
+	_ types.StreamPublisher = (*GoogleAdapter)(nil)
+	_ types.SeenChecker     = (*GoogleAdapter)(nil)
+)

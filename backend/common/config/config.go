@@ -132,8 +132,10 @@ type GoogleScraperConfig struct {
 	EnrichMinMs   int
 	EnrichMaxMs   int
 	MaxDetailJobs int
-	ProfileDir    string
-	ChromiumPath  string
+	// ChromiumPath is used by the shared browser launcher for the (still
+	// rod-based) Meta adapter. The Google adapter itself is HTTP-only and
+	// does not consume this field.
+	ChromiumPath string
 }
 
 type SchedulerConfig struct {
@@ -273,14 +275,14 @@ func Load() *Config {
 			StuckTimeoutSeconds:      getEnvInt("CRAWLER_STUCK_TIMEOUT_SECONDS", 120),
 			HeartbeatIntervalSeconds: getEnvInt("CRAWLER_HEARTBEAT_INTERVAL_SECONDS", 30),
 			Google: GoogleScraperConfig{
-				MinDelayMs:    getEnvInt("GOOGLE_SCRAPER_MIN_DELAY", 15000),
-				MaxDelayMs:    getEnvInt("GOOGLE_SCRAPER_MAX_DELAY", 25000),
-				TimeoutMs:     getEnvInt("GOOGLE_SCRAPER_TIMEOUT_MS", 7200000),
+				// Listing pacing — defaults to 100-120 s for the HTTP-based scraper.
+				MinDelayMs:    getEnvInt("GOOGLE_SCRAPER_MIN_DELAY", 100000),
+				MaxDelayMs:    getEnvInt("GOOGLE_SCRAPER_MAX_DELAY", 120000),
+				TimeoutMs:     getEnvInt("GOOGLE_SCRAPER_TIMEOUT_MS", 18000000),
 				MaxPages:      getEnvInt("GOOGLE_SCRAPER_MAX_PAGES", 0),
-				EnrichMinMs:   getEnvInt("GOOGLE_SCRAPER_ENRICH_MIN", 8000),
-				EnrichMaxMs:   getEnvInt("GOOGLE_SCRAPER_ENRICH_MAX", 12000),
+				EnrichMinMs:   getEnvInt("GOOGLE_SCRAPER_ENRICH_MIN", 5000),
+				EnrichMaxMs:   getEnvInt("GOOGLE_SCRAPER_ENRICH_MAX", 10000),
 				MaxDetailJobs: getEnvInt("GOOGLE_SCRAPER_MAX_DETAIL_JOBS", 0),
-				ProfileDir:    getEnv("GOOGLE_SCRAPER_PROFILE_DIR", ""),
 				ChromiumPath:  getEnv("CHROMIUM_PATH", ""),
 			},
 		},

@@ -9,10 +9,8 @@ import (
 )
 
 // CrawlerService is the per-adapter worker for Google Careers.
-// It keeps warm-browser handling at the Run level — relaunching Chromium only
-// on crash rather than per scan. Phase 1: delegates directly to RunLoop
-// (engine creates its own browser per scan via RodGoogle.FetchJobs).
-// Phase 2 can inject a shared browser instance into the engine.
+// Delegates the claim → scan → complete loop to the BaseWorker; the actual
+// HTTP-based scan is performed by GoogleAdapter (see http.go).
 type CrawlerService struct {
 	workers.BaseWorker
 	cfg Config
@@ -32,7 +30,6 @@ func NewCrawlerService(q workers.CrawlerQueueService, s workers.Scanner, cfg Con
 func (s *CrawlerService) AdapterType() string { return "google" }
 
 // Run starts the claim → scan → complete loop. Blocks until ctx is cancelled.
-// Phase 1: delegates directly to RunLoop. Phase 2 will keep a browser warm here.
 func (s *CrawlerService) Run(ctx context.Context) {
 	s.RunLoop(ctx)
 }

@@ -36,8 +36,9 @@ func defaultConfig() Config {
 }
 
 // RodMeta implements types.Adapter using go-rod for in-process browser automation.
-// It replaces the Node.js/Playwright subprocess, enabling browser sharing with
-// other rod-based adapters (e.g. RodGoogle) via WithBrowser.
+// It replaces the Node.js/Playwright subprocess. WithBrowser allows sharing a
+// Chromium process if other rod-based adapters are added later (Google has
+// since moved to a pure-HTTP adapter — see ats/google/http.go).
 type RodMeta struct {
 	cfg           Config
 	browser       *rod.Browser              // shared browser; nil = launch own per scan
@@ -71,8 +72,8 @@ func NewRodMetaDefault() *RodMeta {
 }
 
 // WithBrowser sets a shared browser so FetchJobs opens a new tab instead of
-// launching a fresh Chromium process. Pass the same *rod.Browser used by
-// RodGoogle so both adapters share one process. Returns the receiver for chaining.
+// launching a fresh Chromium process. Useful if multiple rod-based adapters
+// run in the same crawler binary. Returns the receiver for chaining.
 func (m *RodMeta) WithBrowser(b *rod.Browser) *RodMeta {
 	m.browser = b
 	return m

@@ -84,12 +84,12 @@ func main() {
 		EnrichMinMs:   cfg.Crawler.Google.EnrichMinMs,
 		EnrichMaxMs:   cfg.Crawler.Google.EnrichMaxMs,
 		MaxDetailJobs: cfg.Crawler.Google.MaxDetailJobs,
-		ProfileDir:    cfg.Crawler.Google.ProfileDir,
-		ChromiumPath:  cfg.Crawler.Google.ChromiumPath,
 	}
 
-	// One shared Chromium process for all rod-based adapters.
+	// One shared Chromium process for the still-rod-based Meta adapter.
 	// Each scan opens a new tab; the browser stays alive for the pod lifetime.
+	// Google has its own pure-HTTP path (see ats/google/http.go) and does not
+	// touch this browser.
 	sharedBrowser, closeSharedBrowser := launchSharedBrowser(cfg.Crawler.Google.ChromiumPath, log)
 	defer closeSharedBrowser()
 	engine.WithBrowser(sharedBrowser)
@@ -161,8 +161,6 @@ func buildEngine(database *gorm.DB, producer *kafka.Producer, cfg *config.Config
 		EnrichMinMs:   cfg.Crawler.Google.EnrichMinMs,
 		EnrichMaxMs:   cfg.Crawler.Google.EnrichMaxMs,
 		MaxDetailJobs: cfg.Crawler.Google.MaxDetailJobs,
-		ProfileDir:    cfg.Crawler.Google.ProfileDir,
-		ChromiumPath:  cfg.Crawler.Google.ChromiumPath,
 	}
 
 	engine := NewEngine(companies, ledger, recorder, producer, googleCfg, log)
