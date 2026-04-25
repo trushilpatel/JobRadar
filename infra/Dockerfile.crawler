@@ -24,8 +24,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     ca-certificates \
     tzdata \
-    nodejs \
-    npm \
     xvfb \
     xauth \
     && rm -rf /var/lib/apt/lists/*
@@ -33,19 +31,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # rod picks up CHROMIUM_PATH directly — no glob search or auto-download.
 ENV CHROMIUM_PATH=/usr/bin/chromium
 
-# Meta's Playwright subprocess also uses this path instead of its own download.
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
-
 WORKDIR /app
 
 COPY --from=go-builder /out/crawler /app/crawler
-
-COPY apps/crawler/ats/meta/scraper/package.json /app/meta-scraper/
-RUN --mount=type=cache,target=/root/.npm \
-    cd /app/meta-scraper && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --cache /root/.npm
-COPY apps/crawler/ats/meta/scraper/scrape.js /app/meta-scraper/
-
-ENV META_SCRAPER_DIR=/app/meta-scraper
 
 ARG GIT_SHA=dev
 LABEL org.opencontainers.image.revision="${GIT_SHA}"

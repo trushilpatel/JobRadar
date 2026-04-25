@@ -12,9 +12,9 @@ spec:
     - name: broker
       port: 9092
       targetPort: 9092
-    - name: controller
-      port: 9093
-      targetPort: 9093
+    - name: admin
+      port: 9644
+      targetPort: 9644
   selector:
     {{- include "jobradar.selectorLabels" (dict "component" "kafka") | nindent 4 }}
 ---
@@ -32,5 +32,8 @@ spec:
     - name: broker
       port: 9092
       targetPort: 9092
+    - name: admin
+      port: 9644
+      targetPort: 9644
   selector:
     {{- include "jobradar.selectorLabels" (dict "component" "kafka") | nindent 4 }}

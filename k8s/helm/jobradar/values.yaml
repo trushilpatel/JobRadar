@@ -15,8 +15,8 @@ images:
     tag: local
     pullPolicy: IfNotPresent
   kafka:
-    repository: apache/kafka
-    tag: "3.9.0"
+    repository: docker.redpanda.com/redpandadata/redpanda
+    tag: "v24.3.6"
     pullPolicy: IfNotPresent
   redis:
     repository: redis
@@ -115,8 +115,8 @@ enricher:
 kafka:
   storage: 5Gi
   storageClass: local-path
-  logRetentionHours: "168"
-  numPartitions: "1"
+  retentionMs: "604800000"   # 7 days in ms
+  memory: "400M"             # Redpanda heap; explicit cap keeps RSS ~100Mi at idle
 
 redis:
   storage: 1Gi

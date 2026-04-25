@@ -7,10 +7,16 @@ kube-prometheus-stack:
   nodeExporter:
     enabled: false
   kubeStateMetrics:
-    enabled: true
+    enabled: false
 
   prometheus:
+    service:
+      type: NodePort
+      nodePort: 30090
     prometheusSpec:
+      scrapeInterval: "60s"
+      evaluationInterval: "60s"
+      retention: 24h
       storageSpec:
         volumeClaimTemplate:
           spec:
@@ -89,18 +95,15 @@ loki-stack:
       size: 5Gi
     config:
       limits_config:
-        retention_period: 72h
+        retention_period: 24h
   promtail:
-    enabled: true
+    enabled: false
 
 jaeger:
   provisionDataStore:
     cassandra: false
   allInOne:
-    enabled: true
-    extraEnv:
-      - name: COLLECTOR_OTLP_ENABLED
-        value: "true"
+    enabled: false
   storage:
     type: memory
   agent:
