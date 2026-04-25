@@ -212,7 +212,15 @@ make k8s-logs-crawler
 
 ### Crawler Dockerfile note
 
-The crawler image (`infra/Dockerfile.crawler`) uses **only Go + Chromium** — no Node.js, no npm, no Playwright subprocess. The Meta adapter was migrated to Go/rod. Do not re-add nodejs/npm to the Dockerfile.
+The crawler image (`infra/Dockerfile.crawler`) uses **only Go + Chromium** — no Node.js, no npm, no Playwright subprocess. Do not re-add nodejs/npm to the Dockerfile.
+
+Adapter implementation status:
+
+- **Google** — pure HTTP + RE2 regex (`backend/apps/crawler/ats/google/http.go`). Does not touch Chromium.
+- **Meta** — still rod-based (`backend/apps/crawler/ats/meta/rod.go`). This is the only reason Chromium is still baked into the image.
+- All ATS adapters (Greenhouse, Lever, Ashby, Apple, Microsoft, Netflix, Rippling, Uber) — pure HTTP / JSON.
+
+If Meta is ever ported off rod, Chromium can be removed from the image.
 
 ## Plan execution mode
 
