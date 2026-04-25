@@ -98,6 +98,14 @@ type KnownJobsProvider interface {
 	SetKnownJobIDs(ids map[string]struct{})
 }
 
+// SeenChecker is an optional interface for adapters that need to check which
+// job IDs are already in the pipeline ledger mid-scan. The engine injects a
+// HasSeenBatch callback so the adapter can make one batch DB call per listing
+// page instead of relying solely on the pre-scan knownIDs snapshot.
+type SeenChecker interface {
+	SetSeenChecker(fn func(ctx context.Context, ids []string) (map[string]bool, error))
+}
+
 // ContentFetcher is an optional interface for adapters that can fetch the full
 // content of a single job posting via their native API.
 //

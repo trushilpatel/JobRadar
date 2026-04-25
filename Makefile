@@ -18,6 +18,7 @@ export GIT_SHA
         k8s-obs-up k8s-obs-down k8s-obs-forward \
         k8s-logs k8s-logs-scheduler k8s-logs-crawler k8s-logs-filter k8s-logs-analyzer k8s-logs-api k8s-logs-console \
         k8s-restart \
+        k8s-preflight k8s-nuke \
         install-hooks \
         help
 
@@ -191,30 +192,71 @@ build-docker: ## Build all images without starting (GIT_SHA=$(GIT_SHA) baked int
 
 K3D_CLUSTER ?= jobradar
 K8S_NS      ?= jobradar-local
+K8S_CACHE   ?= .k8s-build-cache
 
 k8s-build-backend: ## Build backend image and import into k3d
-	docker build -t jobradar-backend:local -f infra/Dockerfile.backend ./backend
-	k3d image import jobradar-backend:local -c $(K3D_CLUSTER)
+	@mkdir -p $(K8S_CACHE)
+	@DIGEST=$$(find backend -type f \( -name "*.go" -o -name "go.mod" -o -name "go.sum" \) ! -path "*/apps/crawler/*" | sort | xargs shasum 2>/dev/null | shasum | cut -c1-16); \
+	CACHED=$$(cat $(K8S_CACHE)/backend 2>/dev/null || echo ""); \
+	if [ "$$DIGEST" = "$$CACHED" ]; then \
+		echo "  [skip] backend image is up to date"; \
+	else \
+		docker build -t jobradar-backend:local -f infra/Dockerfile.backend ./backend && \
+		k3d image import jobradar-backend:local -c $(K3D_CLUSTER) --mode=direct && \
+		printf '%s' "$$DIGEST" > $(K8S_CACHE)/backend; \
+	fi
 
 k8s-build-crawler: ## Build crawler image and import into k3d
-	docker build -t jobradar-crawler:local -f infra/Dockerfile.crawler ./backend
-	k3d image import jobradar-crawler:local -c $(K3D_CLUSTER)
+	@mkdir -p $(K8S_CACHE)
+	@DIGEST=$$(find backend -type f \( -name "*.go" -o -name "go.mod" -o -name "go.sum" \) | sort | xargs shasum 2>/dev/null | shasum | cut -c1-16); \
+	CACHED=$$(cat $(K8S_CACHE)/crawler 2>/dev/null || echo ""); \
+	if [ "$$DIGEST" = "$$CACHED" ]; then \
+		echo "  [skip] crawler image is up to date"; \
+	else \
+		docker build -t jobradar-crawler:local -f infra/Dockerfile.crawler ./backend && \
+		k3d image import jobradar-crawler:local -c $(K3D_CLUSTER) --mode=direct && \
+		printf '%s' "$$DIGEST" > $(K8S_CACHE)/crawler; \
+	fi
 
 k8s-build-console: ## Build console image (bakes VITE_ vars from root .env) and import into k3d
-	@set -a && . ./.env && set +a && \
-	docker build \
-		--build-arg VITE_SUPABASE_URL="$$VITE_SUPABASE_URL" \
-		--build-arg VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY" \
-		--build-arg VITE_APP_DOMAIN="$$VITE_APP_DOMAIN" \
-		--build-arg VITE_ALLOWED_EMAIL="$$VITE_ALLOWED_EMAIL" \
-		--build-arg GIT_SHA=$(GIT_SHA) \
-		-t jobradar-console:local \
-		-f ui/console/Dockerfile ./ui/console
-	k3d image import jobradar-console:local -c $(K3D_CLUSTER)
+	@mkdir -p $(K8S_CACHE)
+	@DIGEST=$$(find ui/console/src ui/console/public ui/console/index.html ui/console/package-lock.json ui/console/Dockerfile -type f 2>/dev/null | sort | xargs shasum 2>/dev/null | shasum | cut -c1-16); \
+	CACHED=$$(cat $(K8S_CACHE)/console 2>/dev/null || echo ""); \
+	if [ "$$DIGEST" = "$$CACHED" ]; then \
+		echo "  [skip] console image is up to date"; \
+	else \
+		set -a && . ./.env && set +a && \
+		docker build \
+			--build-arg VITE_SUPABASE_URL="$$VITE_SUPABASE_URL" \
+			--build-arg VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY" \
+			--build-arg VITE_APP_DOMAIN="$$VITE_APP_DOMAIN" \
+			--build-arg VITE_ALLOWED_EMAIL="$$VITE_ALLOWED_EMAIL" \
+			--build-arg GIT_SHA=$(GIT_SHA) \
+			-t jobradar-console:local \
+			-f ui/console/Dockerfile ./ui/console && \
+		k3d image import jobradar-console:local -c $(K3D_CLUSTER) --mode=direct && \
+		printf '%s' "$$DIGEST" > $(K8S_CACHE)/console; \
+	fi
 
-k8s-build: k8s-build-backend k8s-build-crawler k8s-build-console ## Build all images and import into k3d
+k8s-build: ## Build all images in parallel and import into k3d
+	$(MAKE) -j3 k8s-build-backend k8s-build-crawler k8s-build-console
 
-k8s-up: ## Deploy app chart via Helm — reads DEV_TOKEN from backend/.env if set
+k8s-preflight: ## Verify kubectl context is k3d-jobradar before any deploy
+	@CTX=$$(kubectl config current-context 2>/dev/null); \
+	if [ "$$CTX" != "k3d-jobradar" ]; then \
+		echo "ERROR: kubectl context is '$$CTX', expected 'k3d-jobradar'"; \
+		echo "Run: kubectl config use-context k3d-jobradar"; \
+		exit 1; \
+	fi
+	@echo "Context OK: k3d-jobradar"
+	@kubectl get nodes --no-headers 2>/dev/null | grep -q "Ready" || (echo "ERROR: cluster not reachable"; exit 1)
+	@echo "Cluster OK"
+	@for svc in api scheduler crawler filter enricher migrate; do \
+		kubectl get secret jobradar-$$svc-secret -n $(K8S_NS) >/dev/null 2>&1 || \
+		echo "WARN: secret jobradar-$$svc-secret missing — pods will fail with CreateContainerConfigError"; \
+	done
+
+k8s-up: k8s-preflight ## Deploy app chart via Helm — reads DEV_TOKEN from backend/.env if set
 	helm dependency update k8s/helm/jobradar 2>/dev/null || true
 	@DEV_TOKEN=$$(grep -E '^DEV_TOKEN=' backend/.env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]'); \
 	if [ -n "$$DEV_TOKEN" ]; then \
@@ -223,8 +265,15 @@ k8s-up: ## Deploy app chart via Helm — reads DEV_TOKEN from backend/.env if se
 	else \
 		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace; \
 	fi
-	kubectl rollout status statefulset/kafka -n $(K8S_NS) --timeout=120s
+	kubectl rollout status statefulset/kafka -n $(K8S_NS) --timeout=180s
 	kubectl rollout status statefulset/redis -n $(K8S_NS) --timeout=60s
+	kubectl get pods -n $(K8S_NS)
+
+k8s-nuke: ## Fully wipe namespace + PVCs — use when storage class or StatefulSet spec changed
+	helm uninstall jobradar -n $(K8S_NS) --ignore-not-found
+	kubectl delete pvc --all -n $(K8S_NS) --ignore-not-found 2>/dev/null || true
+	kubectl delete namespace $(K8S_NS) --ignore-not-found
+	@echo "Namespace wiped. Run make k8s-up to redeploy."
 
 k8s-down: ## Uninstall app Helm release (secrets and PVCs preserved)
 	helm uninstall jobradar -n $(K8S_NS) --ignore-not-found

@@ -1,6 +1,7 @@
 package google
 
 import (
+	"context"
 	"testing"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/types"
@@ -59,8 +60,11 @@ func TestRodGoogle_ImplementsURLProvider(t *testing.T) {
 	var _ types.URLProvider = (*RodGoogle)(nil)
 }
 
-func TestRodGoogle_ImplementsKnownJobsProvider(t *testing.T) {
-	var _ types.KnownJobsProvider = (*RodGoogle)(nil)
+func TestRodGoogle_DoesNotImplementKnownJobsProvider(t *testing.T) {
+	var g any = NewRodGoogleDefault()
+	if _, ok := g.(types.KnownJobsProvider); ok {
+		t.Error("RodGoogle should not implement KnownJobsProvider — it uses SeenChecker instead")
+	}
 }
 
 func TestRodGoogle_DoesNotImplementContentFetcher(t *testing.T) {
@@ -72,24 +76,16 @@ func TestRodGoogle_DoesNotImplementContentFetcher(t *testing.T) {
 
 // ── SetKnownJobIDs ───────────────────────────────────────────────────────────
 
-func TestSetKnownJobIDs_StoresIDs(t *testing.T) {
-	g := NewRodGoogleDefault()
-	ids := map[string]struct{}{"google-111": {}, "google-222": {}}
-	g.SetKnownJobIDs(ids)
-	if len(g.knownIDs) != 2 {
-		t.Errorf("knownIDs len: got %d, want 2", len(g.knownIDs))
-	}
-	if _, ok := g.knownIDs["google-111"]; !ok {
-		t.Error("knownIDs missing google-111")
-	}
-}
+// ── WithBrowser ──────────────────────────────────────────────────────────────
 
-func TestSetKnownJobIDs_NilClears(t *testing.T) {
+func TestWithBrowser_StoresBrowser(t *testing.T) {
 	g := NewRodGoogleDefault()
-	g.SetKnownJobIDs(map[string]struct{}{"google-111": {}})
-	g.SetKnownJobIDs(nil)
-	if len(g.knownIDs) != 0 {
-		t.Errorf("knownIDs should be empty after nil, got %d", len(g.knownIDs))
+	if g.browser != nil {
+		t.Fatal("browser should be nil before WithBrowser")
+	}
+	result := g.WithBrowser(nil)
+	if result != g {
+		t.Error("WithBrowser should return the same RodGoogle for chaining")
 	}
 }
 
@@ -129,5 +125,100 @@ func TestToRodItems_MapsFields(t *testing.T) {
 func TestToRodItems_EmptySlice(t *testing.T) {
 	if len(toRodItems(nil)) != 0 {
 		t.Error("expected empty slice for nil input")
+	}
+}
+
+// ── SeenChecker ──────────────────────────────────────────────────────────────
+
+func TestRodGoogle_ImplementsSeenChecker(t *testing.T) {
+	var _ types.SeenChecker = (*RodGoogle)(nil)
+}
+
+func TestSetSeenChecker_StoresAndCallsFunction(t *testing.T) {
+	g := NewRodGoogleDefault()
+	called := false
+	g.SetSeenChecker(func(ctx context.Context, ids []string) (map[string]bool, error) {
+		called = true
+		return map[string]bool{}, nil
+	})
+	_, _ = g.seenChecker(context.Background(), []string{"google-123"})
+	if !called {
+		t.Error("seenChecker was not stored or not called")
+	}
+}
+
+// ── filterPageJobs ───────────────────────────────────────────────────────────
+
+func TestFilterPageJobs_ReturnsOnlyUnseenJobs(t *testing.T) {
+	pageJobs := []jsJob{
+		{ID: "google-1"},
+		{ID: "google-2"},
+		{ID: "google-3"},
+	}
+	seenMap := map[string]bool{
+		"google-1": true,
+		"google-2": true,
+		"google-3": false,
+	}
+	localSeen := map[string]struct{}{}
+
+	result := filterPageJobs(pageJobs, seenMap, localSeen)
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 unseen job, got %d", len(result))
+	}
+	if result[0].ID != "google-3" {
+		t.Errorf("expected google-3, got %s", result[0].ID)
+	}
+}
+
+func TestFilterPageJobs_DeduplicatesWithinScan(t *testing.T) {
+	pageJobs := []jsJob{{ID: "google-1"}, {ID: "google-1"}}
+	seenMap := map[string]bool{"google-1": false}
+	localSeen := map[string]struct{}{}
+
+	result := filterPageJobs(pageJobs, seenMap, localSeen)
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 unique job, got %d", len(result))
+	}
+}
+
+func TestFilterPageJobs_SkipsJobsAlreadySeenThisScan(t *testing.T) {
+	pageJobs := []jsJob{{ID: "google-1"}}
+	seenMap := map[string]bool{"google-1": false}
+	localSeen := map[string]struct{}{"google-1": {}} // already processed on a prior page
+
+	result := filterPageJobs(pageJobs, seenMap, localSeen)
+
+	if len(result) != 0 {
+		t.Errorf("expected 0 jobs, got %d", len(result))
+	}
+}
+
+func TestFilterPageJobs_UpdatesLocalSeen(t *testing.T) {
+	pageJobs := []jsJob{{ID: "google-1"}, {ID: "google-2"}}
+	seenMap := map[string]bool{"google-1": false, "google-2": false}
+	localSeen := map[string]struct{}{}
+
+	filterPageJobs(pageJobs, seenMap, localSeen)
+
+	if _, ok := localSeen["google-1"]; !ok {
+		t.Error("localSeen should contain google-1 after filtering")
+	}
+	if _, ok := localSeen["google-2"]; !ok {
+		t.Error("localSeen should contain google-2 after filtering")
+	}
+}
+
+func TestFilterPageJobs_AllSeen_ReturnsEmpty(t *testing.T) {
+	pageJobs := []jsJob{{ID: "google-1"}, {ID: "google-2"}}
+	seenMap := map[string]bool{"google-1": true, "google-2": true}
+	localSeen := map[string]struct{}{}
+
+	result := filterPageJobs(pageJobs, seenMap, localSeen)
+
+	if len(result) != 0 {
+		t.Errorf("expected 0 jobs when all seen, got %d", len(result))
 	}
 }

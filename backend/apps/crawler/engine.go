@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-rod/rod"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
 	"github.com/trushilpatel/jobradar/common/kafka"
@@ -24,7 +25,14 @@ type Engine struct {
 	recorder  ScanRecorder
 	publisher kafka.Publisher
 	googleCfg google.Config
+	browser   *rod.Browser // shared Chromium; nil = adapters launch their own
 	log       logger.Logger
+}
+
+// WithBrowser sets a shared Chromium instance that rod-based adapters (Google, Meta)
+// will use instead of launching a fresh browser per scan.
+func (e *Engine) WithBrowser(b *rod.Browser) {
+	e.browser = b
 }
 
 func NewEngine(
@@ -119,6 +127,7 @@ func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, kn
 	}
 
 	// If the adapter supports skipping enrichment for known jobs, inject the set now.
+	// Used by adapters that rely on a pre-scan static snapshot (legacy path).
 	if setter, ok := adp.(ats.KnownJobsProvider); ok && len(knownIDs) > 0 {
 		idSet := make(map[string]struct{}, len(knownIDs))
 		for _, id := range knownIDs {
@@ -126,6 +135,16 @@ func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, kn
 		}
 		setter.SetKnownJobIDs(idSet)
 		log.Debug("injected known job IDs into adapter", logger.Int("count", len(idSet)))
+	}
+
+	// If the adapter supports live per-page seen checks, inject HasSeenBatch now.
+	// Preferred over KnownJobsProvider — one targeted DB call per page instead of
+	// a full pre-scan snapshot held in memory.
+	if sc, ok := adp.(ats.SeenChecker); ok {
+		sc.SetSeenChecker(func(ctx context.Context, ids []string) (map[string]bool, error) {
+			return e.ledger.HasSeenBatch(ctx, ids)
+		})
+		log.Debug("live seen checker enabled for adapter")
 	}
 
 	// If the adapter supports streaming, wire up a publish callback so jobs enter
@@ -137,6 +156,9 @@ func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, kn
 		log.Debug("streaming publish enabled for adapter")
 	}
 
+	if e.browser != nil {
+		ats.SetBrowser(adp, e.browser)
+	}
 	result, err := adp.FetchJobs(ctx, company.ID)
 	if err != nil {
 		return ats.FetchJobsResponse{}, fmt.Errorf("fetch failed: %w", err)

@@ -3,6 +3,7 @@ package ats
 import (
 	"fmt"
 
+	"github.com/go-rod/rod"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/apple"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/ashby"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
@@ -23,6 +24,15 @@ import (
 // For the Google adapter, use RegistryWithGoogleConfig to pass scraper settings.
 func Registry(adapterType string) (Adapter, error) {
 	return RegistryWithGoogleConfig(adapterType, google.Config{}, logger.NewNoop())
+}
+
+// SetBrowser calls WithBrowser on rod-based adapters (Google, Meta) if they support it.
+// HTTP-only adapters are left untouched. Safe to call with a nil browser.
+func SetBrowser(adp Adapter, b *rod.Browser) {
+	type browserSetter interface{ WithBrowser(*rod.Browser) }
+	if setter, ok := adp.(browserSetter); ok {
+		setter.WithBrowser(b)
+	}
 }
 
 // RegistryWithGoogleConfig is like Registry but passes scraper config and a logger
@@ -51,7 +61,7 @@ func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config, log l
 	case companycommon.AdapterApple:
 		return apple.New(), nil
 	case companycommon.AdapterMeta:
-		return meta.NewDefault(), nil
+		return meta.NewRodMetaDefault(), nil
 	default:
 		return nil, fmt.Errorf("unknown adapter type: %s", adapterType)
 	}

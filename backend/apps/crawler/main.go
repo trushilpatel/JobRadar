@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/launcher"
 	"gorm.io/gorm"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/apple"
@@ -15,7 +17,7 @@ import (
 	atsgoogle "github.com/trushilpatel/jobradar/apps/crawler/ats/google"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/greenhouse"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/lever"
-	"github.com/trushilpatel/jobradar/apps/crawler/ats/meta"
+	atsmeta "github.com/trushilpatel/jobradar/apps/crawler/ats/meta"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/microsoft"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/netflix"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/rippling"
@@ -86,26 +88,32 @@ func main() {
 		ChromiumPath:  cfg.Crawler.Google.ChromiumPath,
 	}
 
-	registry := workers.NewRegistry()
+	// One shared Chromium process for all rod-based adapters.
+	// Each scan opens a new tab; the browser stays alive for the pod lifetime.
+	sharedBrowser, closeSharedBrowser := launchSharedBrowser(cfg.Crawler.Google.ChromiumPath, log)
+	defer closeSharedBrowser()
+	engine.WithBrowser(sharedBrowser)
+
+	adapterRegistry := workers.NewRegistry()
 
 	// API adapters — one goroutine per adapter type.
-	registry.Register(greenhouse.NewCrawlerService(queue, engine, log))
-	registry.Register(lever.NewCrawlerService(queue, engine, log))
-	registry.Register(ashby.NewCrawlerService(queue, engine, log))
-	registry.Register(netflix.NewCrawlerService(queue, engine, log))
-	registry.Register(uber.NewCrawlerService(queue, engine, log))
-	registry.Register(microsoft.NewCrawlerService(queue, engine, log))
-	registry.Register(rippling.NewCrawlerService(queue, engine, log))
-	registry.Register(apple.NewCrawlerService(queue, engine, log))
+	adapterRegistry.Register(greenhouse.NewCrawlerService(queue, engine, log))
+	adapterRegistry.Register(lever.NewCrawlerService(queue, engine, log))
+	adapterRegistry.Register(ashby.NewCrawlerService(queue, engine, log))
+	adapterRegistry.Register(netflix.NewCrawlerService(queue, engine, log))
+	adapterRegistry.Register(uber.NewCrawlerService(queue, engine, log))
+	adapterRegistry.Register(microsoft.NewCrawlerService(queue, engine, log))
+	adapterRegistry.Register(rippling.NewCrawlerService(queue, engine, log))
+	adapterRegistry.Register(apple.NewCrawlerService(queue, engine, log))
 
-	// Browser adapters — keep process/browser warm across scans.
-	registry.Register(atsgoogle.NewCrawlerService(queue, engine, googleCfg, log))
-	registry.Register(meta.NewCrawlerService(queue, engine, log))
+	// Browser adapters — share one Chromium via tab-per-scan.
+	adapterRegistry.Register(atsgoogle.NewCrawlerService(queue, engine, googleCfg, log))
+	adapterRegistry.Register(atsmeta.NewCrawlerService(queue, engine, log))
 
 	log.Info("starting multi-lane crawler", logger.Int("adapters", 10))
 
 	var wg sync.WaitGroup
-	registry.StartAll(ctx, &wg)
+	adapterRegistry.StartAll(ctx, &wg)
 	wg.Wait()
 
 	log.Info("crawler stopped")
@@ -190,4 +198,39 @@ func (a *queueAdapter) Complete(ctx context.Context, id string) error {
 
 func (a *queueAdapter) UpdateHeartbeat(ctx context.Context, id string) error {
 	return a.svc.UpdateHeartbeat(ctx, id)
+}
+
+// launchSharedBrowser starts one Chromium process for the lifetime of the pod.
+// All rod-based adapters share it via tab-per-scan; no second process is ever started.
+// Returns a close func that must be deferred by the caller.
+func launchSharedBrowser(chromiumPath string, log logger.Logger) (*rod.Browser, func()) {
+	headless := os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == ""
+	l := launcher.New().Headless(headless).
+		Set("no-sandbox", "").
+		Set("disable-setuid-sandbox", "").
+		Set("disable-dev-shm-usage", "")
+
+	switch {
+	case chromiumPath != "":
+		l = l.Bin(chromiumPath)
+	case os.Getenv("CHROMIUM_PATH") != "":
+		l = l.Bin(os.Getenv("CHROMIUM_PATH"))
+	default:
+		if path, found := launcher.LookPath(); found {
+			l = l.Bin(path)
+		}
+	}
+
+	controlURL, err := l.Launch()
+	if err != nil {
+		log.Error("shared browser launch failed — rod adapters will launch own browsers", err)
+		return nil, func() {}
+	}
+	browser := rod.New().ControlURL(controlURL)
+	if err := browser.Connect(); err != nil {
+		log.Error("shared browser connect failed — rod adapters will launch own browsers", err)
+		return nil, func() {}
+	}
+	log.Info("shared browser started", logger.Bool("headless", headless))
+	return browser, func() { _ = browser.Close() }
 }

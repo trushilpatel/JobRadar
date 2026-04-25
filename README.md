@@ -45,7 +45,7 @@ Jobs are automatically discarded if the posting:
 ### Company Management
 - Add companies to monitor by careers URL
 - Manual scan trigger per company
-- Automatic scan scheduling via `SCAN_INTERVAL_MINUTES` (default: 8h)
+- Automatic scan scheduling via `SCAN_INTERVAL_MINUTES` (default: 24h)
 
 ### Dashboard
 Live stats: jobs scanned today, new/saved/applied counts, pipeline pending, pipeline errors.
@@ -100,7 +100,9 @@ Kubernetes with Helm is the primary way to run JobRadar locally. Everything runs
 k3d cluster create jobradar \
   --port "30080:30080@loadbalancer" \
   --port "30300:30300@loadbalancer" \
-  --port "30001:30001@loadbalancer"
+  --port "30001:30001@loadbalancer" \
+  --port "30090:30090@loadbalancer" \
+  --port "30686:30686@loadbalancer"
 ```
 
 This wires NodePorts directly to localhost — no port-forwarding needed for day-to-day use.
@@ -156,8 +158,8 @@ make k8s-obs-up         # helm install obs chart (Prometheus + Grafana + Loki + 
 | Console (UI) | http://localhost:30300 | Direct via NodePort |
 | API | http://localhost:30080 | Direct via NodePort |
 | Grafana | http://localhost:30001 | Login: `admin` / `admin` — change on first use |
-| Jaeger (tracing) | http://localhost:16686 | `make k8s-obs-forward` to expose |
-| Prometheus | http://localhost:9090 | `make k8s-obs-forward` to expose |
+| Jaeger (tracing) | http://localhost:30686 | Direct via NodePort |
+| Prometheus | http://localhost:30090 | Direct via NodePort |
 
 > If the cluster was created **without** the `--port` flags above, use `make k8s-forward` and `make k8s-obs-forward` instead.
 

@@ -169,6 +169,51 @@ After implementation, write a brief spec-style doc:
 - Concise — no padding or filler prose
 - Saved to `docs/superpowers/specs/` with date prefix
 
+## Kubernetes local deployment
+
+### Prerequisites — always verify before deploying
+
+- **kubectl context must be `k3d-jobradar`** — never `docker-desktop`. Check with `kubectl config current-context`. Switch with `kubectl config use-context k3d-jobradar`.
+- **Storage class is `local-path`** in both Helm charts — this is the only storage class k3d provides. Do NOT change it to `standard` (that's Docker Desktop's class).
+- **Images must be built and imported into k3d** before deploying — `make k8s-build` or individual `make k8s-build-{backend,crawler,console}`. Images imported into k3d are NOT available in Docker Desktop's Kubernetes and vice versa.
+
+### Deploy sequence
+
+```bash
+kubectl config use-context k3d-jobradar   # always verify context first
+make k8s-build                             # build + import all images into k3d
+make k8s-up                                # preflight check + helm install + wait for kafka/redis
+make k8s-logs-crawler                      # verify with logs
+```
+
+### Iterate on crawler only (fastest path)
+
+```bash
+make k8s-build-crawler                     # rebuild + reimport crawler image only
+make k8s-restart-crawler                   # rolling restart crawler pod
+make k8s-logs-crawler                      # watch logs
+```
+
+### Trigger a Google scan manually (for testing)
+
+```bash
+curl -X POST http://localhost:30080/companies/<company-id>/scan
+make k8s-logs-crawler
+```
+
+### Common failure modes
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `ErrImagePull` on all pods | Wrong kubectl context (docker-desktop) or images not imported | Switch context; run `make k8s-build` |
+| Kafka/Redis PVC stuck `Pending` | StatefulSet storage class mismatch or first-time WaitForFirstConsumer | Run `make k8s-nuke` then `make k8s-up` |
+| `TLS handshake timeout` | k3d API server still starting after restart | Wait ~30s; run `until kubectl get nodes 2>/dev/null | grep -q Ready; do sleep 3; done` |
+| Namespace stuck `Terminating` | Finalizers not cleared | Force-clear: `kubectl get ns <name> -o json \| python3 -c "import sys,json; d=json.load(sys.stdin); d['spec']['finalizers']=[]; print(json.dumps(d))" \| kubectl replace --raw "/api/v1/namespaces/<name>/finalize" -f -` |
+
+### Crawler Dockerfile note
+
+The crawler image (`infra/Dockerfile.crawler`) uses **only Go + Chromium** — no Node.js, no npm, no Playwright subprocess. The Meta adapter was migrated to Go/rod. Do not re-add nodejs/npm to the Dockerfile.
+
 ## Plan execution mode
 
 When executing an implementation plan, always use the **parallel subagent approach**:

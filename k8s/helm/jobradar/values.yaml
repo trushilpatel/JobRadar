@@ -60,7 +60,7 @@ crawler:
   googleMinDelay: "55000"
   googleMaxDelay: "75000"
   googleTimeoutMs: "18000000"
-  googleMaxPages: "0"
+  googleMaxPages: "1"
   googleEnrichMin: "5000"
   googleEnrichMax: "10000"
   googleMaxDetailJobs: "0"

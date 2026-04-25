@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -24,8 +25,9 @@ const careersURL = "https://www.google.com/about/careers/applications/jobs/resul
 type RodGoogle struct {
 	cfg           Config
 	log           logger.Logger
-	knownIDs      map[string]struct{}        // set by engine via SetKnownJobIDs before FetchJobs
-	streamPublish func([]types.FetchJobsItem) // set by engine via SetStreamPublish before FetchJobs
+	browser       *rod.Browser                                                    // shared browser; nil = launch own per scan
+	streamPublish func([]types.FetchJobsItem)                                     // set by engine via SetStreamPublish before FetchJobs
+	seenChecker   func(ctx context.Context, ids []string) (map[string]bool, error) // set by engine via SetSeenChecker before FetchJobs
 }
 
 // NewRodGoogle creates a RodGoogle adapter with the given config and logger.
@@ -38,6 +40,14 @@ func NewRodGoogleDefault() *RodGoogle {
 	return &RodGoogle{cfg: defaultConfig(), log: logger.NewNoop()}
 }
 
+// WithBrowser sets a shared browser so FetchJobs opens a new tab instead of
+// launching a fresh Chromium process. Pass the same *rod.Browser used by
+// RodMeta so both adapters share one process. Returns the receiver for chaining.
+func (s *RodGoogle) WithBrowser(b *rod.Browser) *RodGoogle {
+	s.browser = b
+	return s
+}
+
 // SetStreamPublish implements types.StreamPublisher.
 // The engine calls this before FetchJobs. After each listing page the adapter
 // calls fn with the new thin jobs so they enter Kafka without waiting for the
@@ -46,11 +56,29 @@ func (s *RodGoogle) SetStreamPublish(fn func([]types.FetchJobsItem)) {
 	s.streamPublish = fn
 }
 
-// SetKnownJobIDs implements types.KnownJobsProvider.
-// The engine calls this before FetchJobs so detail page visits are skipped for
-// jobs already in the pipeline ledger — only new job IDs get enriched.
-func (s *RodGoogle) SetKnownJobIDs(ids map[string]struct{}) {
-	s.knownIDs = ids
+// SetSeenChecker implements types.SeenChecker.
+// The engine injects HasSeenBatch so the adapter can do one live DB call per
+// listing page to find which job IDs are already in the pipeline ledger.
+func (s *RodGoogle) SetSeenChecker(fn func(ctx context.Context, ids []string) (map[string]bool, error)) {
+	s.seenChecker = fn
+}
+
+// filterPageJobs returns only jobs that are not already seen (per seenMap) and
+// not already processed earlier in this scan (per localSeen). It also updates
+// localSeen with every ID it encounters so subsequent pages stay deduplicated.
+func filterPageJobs(pageJobs []jsJob, seenMap map[string]bool, localSeen map[string]struct{}) []jsJob {
+	var result []jsJob
+	for _, job := range pageJobs {
+		if _, local := localSeen[job.ID]; local {
+			continue // already processed on a prior page this scan
+		}
+		localSeen[job.ID] = struct{}{}
+		if seenMap[job.ID] {
+			continue // already in pipeline ledger
+		}
+		result = append(result, job)
+	}
+	return result
 }
 
 // CareersURL returns the filtered Google Careers starting URL.
@@ -66,9 +94,15 @@ type jsJob struct {
 	Description string `json:"description"` // populated after detail page visit
 }
 
-// FetchJobs launches Chrome (headed, via rod + stealth), paginates through Google
-// Careers listing pages, and returns all collected job listings.
-// Detail page enrichment is not performed here — kept separate for validation.
+// FetchJobs uses a single browser page throughout. Google Careers is a SPA —
+// clicking a job card opens the detail panel inline on the right while the
+// listing and pagination remain intact on the left.
+//
+// Per-page loop:
+//  1. Extract job IDs from the current listing page.
+//  2. Filter to only jobs not already in the pipeline ledger (knownIDs).
+//  3. Click each new job card → detail panel renders → extract → publish to Kafka.
+//  4. Wait the inter-page delay, then click next page.
 func (s *RodGoogle) FetchJobs(ctx context.Context, _ string) (types.FetchJobsResponse, error) {
 	start := time.Now()
 
@@ -78,9 +112,16 @@ func (s *RodGoogle) FetchJobs(ctx context.Context, _ string) (types.FetchJobsRes
 		defer cancel()
 	}
 
-	browser, closeBrowser, err := s.launchBrowser()
-	if err != nil {
-		return types.FetchJobsResponse{}, fmt.Errorf("google/rod: %w", err)
+	var browser *rod.Browser
+	var closeBrowser func()
+	if s.browser != nil {
+		browser, closeBrowser = s.browser, func() {}
+	} else {
+		var err error
+		browser, closeBrowser, err = s.launchBrowser()
+		if err != nil {
+			return types.FetchJobsResponse{}, fmt.Errorf("google/rod: %w", err)
+		}
 	}
 	defer closeBrowser()
 
@@ -89,7 +130,6 @@ func (s *RodGoogle) FetchJobs(ctx context.Context, _ string) (types.FetchJobsRes
 		return types.FetchJobsResponse{}, fmt.Errorf("google/rod: stealth page: %w", err)
 	}
 	defer func() { _ = page.Close() }()
-
 	s.applyFingerprint(page)
 
 	s.log.Info("google/rod: navigating to careers page")
@@ -103,56 +143,107 @@ func (s *RodGoogle) FetchJobs(ctx context.Context, _ string) (types.FetchJobsRes
 		return types.FetchJobsResponse{}, err
 	}
 
-	var allJobs []jsJob
 	seenIDs := make(map[string]struct{})
+	var allPublished []types.FetchJobsItem
 	pageNum := 1
+	totalCommitted := 0
 
 	for {
-		select {
-		case <-ctx.Done():
-			s.log.Warn("google/rod: context cancelled during pagination")
-			goto done
-		default:
+		if ctx.Err() != nil {
+			s.log.Warn("google/rod: context cancelled")
+			break
 		}
 
+		s.log.Info("google/rod: scanning page", logger.Int("page", pageNum))
+
+		// ── Step 1: extract job IDs from current listing page ─────────────────
 		pageJobs, err := s.extractListingJobs(page)
 		if err != nil {
 			s.log.Warn("google/rod: extraction error", logger.Str("error", err.Error()))
 		}
 
-		newCount := 0
-		for _, job := range pageJobs {
-			if _, seen := seenIDs[job.ID]; !seen {
-				seenIDs[job.ID] = struct{}{}
-				allJobs = append(allJobs, job)
-				newCount++
-			}
+		// ── Step 2: one batch DB call — filter to only new, unvisited jobs ─────
+		ids := make([]string, len(pageJobs))
+		for i, j := range pageJobs {
+			ids[i] = j.ID
 		}
-		// No publish here — jobs are published after detail enrichment so Kafka
-		// always receives full content, never empty thin jobs.
+		seenMap, err := s.seenChecker(ctx, ids)
+		if err != nil {
+			s.log.Warn("google/rod: seen check failed, skipping page", logger.Str("error", err.Error()))
+			continue
+		}
+		newJobs := filterPageJobs(pageJobs, seenMap, seenIDs)
 
-		s.log.Info("google/rod: page scraped",
+		s.log.Info("google/rod: page scanned",
 			logger.Int("page", pageNum),
-			logger.Int("on_page", len(pageJobs)),
-			logger.Int("new", newCount),
-			logger.Int("total", len(allJobs)),
+			logger.Int(logger.FieldFetched, len(pageJobs)),
+			logger.Int(logger.FieldNew, len(newJobs)),
+			logger.Int("skipped", len(pageJobs)-len(newJobs)),
 		)
 
-		if s.cfg.MaxPages > 0 && pageNum >= s.cfg.MaxPages {
-			s.log.Info("google/rod: max pages reached", logger.Int("max_pages", s.cfg.MaxPages))
-			break
+		// ── Step 3: click each new job card, extract detail panel, publish ─────
+		committed := 0
+		detailLimit := len(newJobs)
+		if s.cfg.MaxDetailJobs > 0 && s.cfg.MaxDetailJobs < detailLimit {
+			detailLimit = s.cfg.MaxDetailJobs
 		}
 
+		for i, job := range newJobs {
+			if i >= detailLimit || s.cfg.EnrichMaxMs == 0 {
+				break
+			}
+			if ctx.Err() != nil {
+				s.log.Warn("google/rod: context cancelled during enrichment")
+				goto done
+			}
+			if i > 0 {
+				if err := s.sleep(ctx, s.cfg.EnrichMinMs, s.cfg.EnrichMaxMs); err != nil {
+					goto done
+				}
+			}
+
+			desc, err := s.clickAndExtractPanel(ctx, page, job)
+			if err != nil {
+				s.log.Warn("google/rod: panel extraction failed",
+					logger.Str(logger.FieldJobID, job.ID),
+					logger.Str("error", err.Error()),
+				)
+				continue
+			}
+			newJobs[i].Description = desc
+
+			item := toRodItems([]jsJob{newJobs[i]})
+			if s.streamPublish != nil {
+				s.streamPublish(item) // commit to Kafka + DB immediately
+			}
+			allPublished = append(allPublished, item...)
+			committed++
+		}
+
+		totalCommitted += committed
+		s.log.Info("google/rod: page committed",
+			logger.Int("page", pageNum),
+			logger.Int("committed", committed),
+			logger.Int("total_committed", totalCommitted),
+			logger.Dur(logger.FieldDuration, time.Since(start)),
+		)
+
+		// ── Step 4: check for next page ────────────────────────────────────────
+		if s.cfg.MaxPages > 0 && pageNum >= s.cfg.MaxPages {
+			s.log.Info("google/rod: max pages reached", logger.Int("page", pageNum))
+			break
+		}
 		hasNext, err := s.hasNextPage(page)
 		if err != nil || !hasNext {
-			s.log.Info("google/rod: pagination complete")
+			s.log.Info("google/rod: no more pages", logger.Int("page", pageNum))
 			break
 		}
 
+		// ── Step 5: wait, then advance to next page ────────────────────────────
+		s.log.Info("google/rod: advancing to next page", logger.Int("next", pageNum+1))
 		if err := s.sleep(ctx, s.cfg.MinDelayMs, s.cfg.MaxDelayMs); err != nil {
 			break
 		}
-
 		if err := s.clickNextPage(page); err != nil {
 			s.log.Warn("google/rod: next page click failed", logger.Str("error", err.Error()))
 			break
@@ -167,79 +258,13 @@ func (s *RodGoogle) FetchJobs(ctx context.Context, _ string) (types.FetchJobsRes
 	}
 
 done:
-	s.log.Info("google/rod: listing complete",
-		logger.Int(logger.FieldFetched, len(allJobs)),
+	s.log.Info("google/rod: scan complete",
+		logger.Int("pages", pageNum),
+		logger.Int("total_committed", totalCommitted),
 		logger.Dur(logger.FieldDuration, time.Since(start)),
 	)
 
-	// ── Phase 2: visit detail pages ───────────────────────────────────────────
-	enriched := 0
-	detailLimit := len(allJobs)
-	if s.cfg.MaxDetailJobs > 0 && s.cfg.MaxDetailJobs < detailLimit {
-		detailLimit = s.cfg.MaxDetailJobs
-	}
-
-	for i := range allJobs {
-		if i >= detailLimit {
-			break
-		}
-
-		select {
-		case <-ctx.Done():
-			s.log.Warn("google/rod: context cancelled during enrichment")
-			goto enrich_done
-		default:
-		}
-
-		// EnrichMaxMs == 0 signals skip enrichment entirely
-		if s.cfg.EnrichMaxMs == 0 {
-			break
-		}
-
-		if i > 0 {
-			if err := s.sleep(ctx, s.cfg.EnrichMinMs, s.cfg.EnrichMaxMs); err != nil {
-				goto enrich_done
-			}
-		}
-
-		// Skip detail visit for jobs already in the pipeline ledger — they were
-		// enriched on a previous scan. Only new job IDs need a detail page visit.
-		if _, known := s.knownIDs[allJobs[i].ID]; known {
-			continue
-		}
-
-		s.log.Info("google/rod: fetching detail page",
-			logger.Int("index", i+1),
-			logger.Int("total", len(allJobs)),
-			logger.Str(logger.FieldJobID, allJobs[i].ID),
-		)
-
-		desc, err := s.fetchDetailPage(ctx, page, allJobs[i])
-		if err != nil {
-			s.log.Warn("google/rod: detail page failed",
-				logger.Str(logger.FieldJobID, allJobs[i].ID),
-				logger.Str("error", err.Error()),
-			)
-			continue
-		}
-		allJobs[i].Description = desc
-		enriched++
-
-		// Publish this job to Kafka immediately after enrichment.
-		// Full content (description + qualifications) is always present here.
-		if s.streamPublish != nil {
-			s.streamPublish(toRodItems([]jsJob{allJobs[i]}))
-		}
-	}
-
-enrich_done:
-	s.log.Info("google/rod: enrichment complete",
-		logger.Int("enriched", enriched),
-		logger.Int("total", len(allJobs)),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
-	)
-
-	return types.FetchJobsResponse{Jobs: toRodItems(allJobs)}, nil
+	return types.FetchJobsResponse{Jobs: allPublished}, nil
 }
 
 // extractListingJobs runs the same DOM extraction logic as scrape.js inside rod's page.Eval.
@@ -302,16 +327,27 @@ func (s *RodGoogle) hasNextPage(page *rod.Page) (bool, error) {
 	return res.Value.Bool(), nil
 }
 
-// fetchDetailPage navigates to a job's detail URL and extracts the full description.
-// Uses the same page (no new tab) to keep the browser session consistent.
-func (s *RodGoogle) fetchDetailPage(ctx context.Context, page *rod.Page, job jsJob) (string, error) {
-	if err := page.Navigate(job.URL); err != nil {
-		return "", fmt.Errorf("navigate to detail: %w", err)
+// clickAndExtractPanel clicks the job card link on the listing page, waits for
+// the SPA detail panel to render inline, then extracts the description.
+// The listing and pagination remain intact — no navigation occurs.
+//
+// page.Element() polls until the element appears or its context deadline.
+// A 15s per-card timeout prevents the loop from blocking for hours when
+// Google changes DOM state (bot detection, panel overlay, SPA navigation).
+func (s *RodGoogle) clickAndExtractPanel(ctx context.Context, page *rod.Page, job jsJob) (string, error) {
+	idNum := strings.TrimPrefix(job.ID, "google-")
+	sel := fmt.Sprintf(`a[href*="jobs/results/%s"]`, idNum)
+
+	// Use a short deadline so a missing element fails fast rather than blocking
+	// for the entire 5-hour scan timeout.
+	el, err := page.Timeout(15 * time.Second).Element(sel)
+	if err != nil {
+		return "", fmt.Errorf("find card link: %w", err)
 	}
-	if err := page.WaitLoad(); err != nil {
-		s.log.Warn("google/rod: detail WaitLoad timed out, continuing")
+	if err := el.Click(proto.InputMouseButtonLeft, 1); err != nil {
+		return "", fmt.Errorf("click card: %w", err)
 	}
-	// Short wait for JS sections to render
+	// Wait for the detail panel to render.
 	if err := s.sleep(ctx, 2000, 3000); err != nil {
 		return "", err
 	}
@@ -425,7 +461,7 @@ func (s *RodGoogle) applyFingerprint(page *rod.Page) {
 }
 
 func (s *RodGoogle) clickNextPage(page *rod.Page) error {
-	el, err := page.Element(`a[aria-label="Go to next page"]`)
+	el, err := page.Timeout(15 * time.Second).Element(`a[aria-label="Go to next page"]`)
 	if err != nil {
 		return fmt.Errorf("find next page: %w", err)
 	}
@@ -513,8 +549,8 @@ func toRodItems(jobs []jsJob) []types.FetchJobsItem {
 
 // Compile-time interface checks.
 var (
-	_ types.Adapter          = (*RodGoogle)(nil)
-	_ types.URLProvider      = (*RodGoogle)(nil)
-	_ types.KnownJobsProvider = (*RodGoogle)(nil)
-	_ types.StreamPublisher   = (*RodGoogle)(nil)
+	_ types.Adapter        = (*RodGoogle)(nil)
+	_ types.URLProvider    = (*RodGoogle)(nil)
+	_ types.StreamPublisher = (*RodGoogle)(nil)
+	_ types.SeenChecker    = (*RodGoogle)(nil)
 )

@@ -47,6 +47,9 @@ secrets/
 k8s/**/secret.yaml
 
 .env
+# k8s image build digest cache (local only — used to skip unchanged builds)
+.k8s-build-cache/
+
 # Helm chart dependencies (downloaded, not committed)
 k8s/helm/observability/charts/*.tgz
 k8s/helm/observability/charts/jaeger/
