@@ -337,7 +337,7 @@ func (jp *JobPosting) toFetchJobContentResponse(jobID string) types.FetchJobCont
 // fetchAndParseDetail performs the HTTP GET against the canonical detail URL
 // and returns the parsed JobPosting. Pulled out so both FetchJobContent and
 // the smoke-test cmd can reuse the same network path.
-func (m *RodMeta) fetchAndParseDetail(ctx context.Context, url string) (*JobPosting, error) {
+func (m *MetaAdapter) fetchAndParseDetail(ctx context.Context, url string) (*JobPosting, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("meta/http: build request: %w", err)

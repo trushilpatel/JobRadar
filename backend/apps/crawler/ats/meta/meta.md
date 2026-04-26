@@ -1,18 +1,21 @@
 # Meta Careers Adapter
 
-Hybrid adapter: rod for the **listing** page (Meta's `/jobsearch` is fully React-rendered with rotating GraphQL CSRF tokens, so a browser is unavoidable), HTTP + JSON-LD for **detail** pages (every job page embeds a complete schema.org `JobPosting` payload, so detail enrichment runs without a browser).
+Pure-HTTP adapter — no go-rod, no Chromium, no JavaScript execution.
+
+- **Listing**: HTTP GET `https://www.metacareers.com/jobsearch/sitemap.xml` → ~895 numeric job IDs.
+- **Detail**: HTTP GET `https://www.metacareers.com/profile/job_details/{id}` → schema.org `JobPosting` JSON-LD embedded inline.
 
 ## Architecture
 
 ```
-Adapter.FetchJobs()                  ← single rod tab, listing only
-  → Opens Chromium via go-rod (shared browser or own instance)
-  → Navigates to metacareers.com/jobsearch
-  → Scrolls infinite scroll to collect all thin job cards
-  → Returns FetchJobsResponse with FullContent == nil (thin items)
+MetaAdapter.FetchJobs()
+  → HTTP GET /jobsearch/sitemap.xml
+  → parseSitemap → [job_id_1, job_id_2, …]
+  → streamPublish thin items (FullContent == nil) for each ID
+  → Returns FetchJobsResponse
 
-ContentFetcher.FetchJobContent(job)  ← analyzer calls this per thin item
-  → HTTP GET https://www.metacareers.com/profile/job_details/{id}
+MetaAdapter.FetchJobContent(job)            ← analyzer calls this per thin item
+  → HTTP GET /profile/job_details/{id}
   → Regex-finds <script type="application/ld+json"> block
   → json.Unmarshal into JobPosting struct
   → Returns FetchJobContentResponse with composed multi-section description
@@ -20,42 +23,50 @@ ContentFetcher.FetchJobContent(job)  ← analyzer calls this per thin item
 
 The analyzer is responsible for calling `FetchJobContent` for any item whose `FullContent` is nil — same pattern as Greenhouse, Lever, and Ashby.
 
+## Why a sitemap
+
+Meta's `/jobsearch` page is a React SPA that fetches data via `POST /graphql` with persisted-query `doc_id`s and rotating CSRF tokens (`lsd`, `__hsi`, `__rev`). Earlier adapter versions used a headless Chromium to wait for the SPA to render, then scraped the DOM. Then we discovered that Meta exposes a public sitemap covering every active job — advertised in `https://www.metacareers.com/robots.txt` under the `Sitemap:` directive — and dropped the browser entirely.
+
+The sitemap is the official crawler contract: stable URL, public XML, no auth, no JavaScript. Verified ~895 unique `<loc>` entries, all of the form `/profile/job_details/{numeric_id}`.
+
 ## Key files
 
 | File | Role |
 |------|------|
-| `rod.go` | `RodMeta` — listing-side browser automation; one tab, scroll-until-idle; thin-item publishing |
-| `http_detail.go` | `JobPosting` struct + `extractJobPosting` + `Compose` + `FetchJobContent` (HTTP + JSON-LD parser) |
-| `crawler.go` | `CrawlerService` — wraps `BaseWorker`, runs the poll loop |
-| `http_detail_test.go` | Unit tests for JSON-LD parsing edge cases (`flexString`, `jobLocations`, `extractJobPosting`, `Compose`, `FetchJobContent` against `httptest.Server`) |
-| `rod_test.go` | Tests for `RodMeta` constructor, interface compliance, listing-side helpers |
+| `meta.go` | `MetaAdapter` struct + `Config` + `New`/`NewDefault` + `FetchJobs` (sitemap-driven listing) + `FetchJobContent` (HTTP + JSON-LD). |
+| `sitemap.go` | `fetchSitemap` (HTTP) + `parseSitemap` (regex over `<loc>` tags). |
+| `http_detail.go` | `JobPosting` struct + custom unmarshallers (`flexString`, `jobLocations`) + `extractJobPosting` + `Compose` + `fetchAndParseDetail`. |
+| `crawler.go` | `CrawlerService` — wraps `BaseWorker`, runs the poll loop. |
+| `meta_test.go` | `MetaAdapter` constructor + interface compliance + `FetchJobs` end-to-end against a `httptest.Server`. |
+| `sitemap_test.go` | `parseSitemap` unit tests (dedupe, mixed case, non-job entries filtered, empty body). |
+| `http_detail_test.go` | JSON-LD parsing edge cases (`flexString`, `jobLocations`, `extractJobPosting`, `Compose`, `FetchJobContent`). |
 
 ## Interfaces implemented
 
 | Interface | Purpose |
 |-----------|---------|
-| `types.Adapter` | Required — `FetchJobs` (listing only) |
-| `types.URLProvider` | Returns `metacareers.com/jobsearch` |
-| `types.StreamPublisher` | Publishes thin items to Kafka after the listing scroll completes |
-| `types.ContentFetcher` | `FetchJobContent` — pulls JSON-LD detail pages over HTTP |
+| `types.Adapter` | Required — `FetchJobs` (sitemap-driven). |
+| `types.URLProvider` | Returns the human-facing careers page URL. |
+| `types.StreamPublisher` | Publishes thin items in one batch after the sitemap fetch completes. |
+| `types.ContentFetcher` | `FetchJobContent` — pulls JSON-LD detail pages over HTTP. |
 
 ## JSON-LD schema reference
 
-Every Meta detail page embeds a single `<script type="application/ld+json">` block with a `JobPosting` (schema.org). Verified across an 11-job sample (engineering / PM / design / production / energy infra). Coverage:
+Every Meta detail page embeds a single `<script type="application/ld+json">` block with a `JobPosting` (schema.org). Verified across a 21-job sample (engineering / PM / design / production / energy infra) drawn evenly from the full sitemap. Coverage:
 
 | Field | Coverage in sample | Where it goes |
 |-------|--------------------|---------------|
-| `title` | 11/11 | `FetchJobContentResponse.Title` |
-| `description` | 11/11 | composed into `Description` (intro paragraph) |
-| `responsibilities` | 11/11 | composed into `Description` (Responsibilities section) |
-| `qualifications` | 11/11 | composed into `Description` (Qualifications section) |
-| `employmentType` | 11/11 | always `"Full-time"` → mapped to `jobcommon.EmployFullTime` |
-| `datePosted` | 11/11 | `FetchJobContentResponse.PublishedDate` |
-| `validThrough` | 11/11 | included in composed metadata block |
-| `directApply` | 11/11 | currently composed-only (could feed future apply-method routing) |
-| `hiringOrganization.name` | 11/11 | `FetchJobContentResponse.Department` ("Meta") |
-| `jobLocation` (array) | 11/11 | flattened + deduped → `FetchJobContentResponse.Location` (first entry) |
-| `industry` / `occupationalCategory` / `baseSalary` / `skills` / `jobBenefits` | 0/11 | optional — struct fields exist but rarely populated |
+| `title` | 21/21 | `FetchJobContentResponse.Title` |
+| `description` | 21/21 | composed into `Description` (intro paragraph) |
+| `responsibilities` | 21/21 | composed into `Description` (Responsibilities section) |
+| `qualifications` | 21/21 | composed into `Description` (Qualifications section) |
+| `employmentType` | 21/21 | always `"Full-time"` → mapped to `jobcommon.EmployFullTime` |
+| `datePosted` | 21/21 | `FetchJobContentResponse.PublishedDate` |
+| `validThrough` | 21/21 | included in composed metadata block |
+| `directApply` | 21/21 | currently composed-only (could feed future apply-method routing) |
+| `hiringOrganization.name` | 21/21 | `FetchJobContentResponse.Department` ("Meta") |
+| `jobLocation` (array) | 21/21 | flattened + deduped → `FetchJobContentResponse.Location` (first entry) |
+| `industry` / `occupationalCategory` / `baseSalary` / `skills` / `jobBenefits` | 0/21 | optional — struct fields exist but rarely populated |
 
 ### `addressCountry` shape variations
 
@@ -76,28 +87,21 @@ JSON-LD allows `jobLocation` to be either a single object or an array. The custo
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `TimeoutMs` | 3600000 (1 h) | Overall scan timeout for the listing tab |
-| `MaxJobs` | 0 (all) | Cap on jobs collected from the listing scroll; 0 = no limit |
+| `TimeoutMs` | `600000` (10 min) | Overall scan timeout. The sitemap fetch is one HTTP call; the budget here covers the publish loop and any retries. |
 
-## Browser sharing
-
-`WithBrowser(b *rod.Browser)` lets RodMeta share a Chromium process if other rod-based adapters exist. Currently Meta is the only rod consumer (Google was migrated to pure HTTP — see `ats/google/http.go`).
-
-## Listing-page constraint
-
-Meta's `/jobsearch` is a React SPA that fetches data via `POST /graphql` with persisted-query `doc_id`s and rotating CSRF tokens (`lsd`, `__hsi`, `__rev`). Reverse-engineering that endpoint would require:
-
-1. Reading bundle JS dynamically to extract the current `doc_id` per query name (fragile — breaks on every Meta deploy).
-2. Or maintaining a hand-curated `doc_id` allowlist (operational toil).
-
-We chose to keep rod for listing instead. If a stable HTTP listing path emerges later, swap it in — the rest of this adapter (detail HTTP + JSON-LD) is unaffected.
+(All previous rod-related knobs — `MinDelayMs`, `MaxDelayMs`, `MaxJobs` — are gone in v4.)
 
 ## Header set required by Meta
 
-Plain `urllib`-style requests (just `User-Agent` + `Accept` + `Accept-Language`) get a **400** from Meta's edge. The full Chrome header set in `fetchAndParseDetail` includes the `sec-ch-ua-*` and `Sec-Fetch-*` headers Chrome sends; with those, requests succeed. If Meta tightens further we may need to mimic TLS fingerprint (e.g. `curl-cffi` / `utls`).
+Plain `urllib`-style requests (just `User-Agent` + `Accept` + `Accept-Language`) get a **400** from Meta's edge on detail pages. The full Chrome header set in `fetchAndParseDetail` includes the `sec-ch-ua-*` and `Sec-Fetch-*` headers Chrome sends; with those, requests succeed. The sitemap endpoint is more permissive but we send the same headers for consistency.
+
+## Test seam
+
+`sitemap.go` declares `sitemapURL` as a package `var` (not `const`) so tests can point `fetchSitemap` at a `httptest.Server` via `overrideSitemapURL(...)`. Production code never touches that helper.
 
 ## Migration history
 
 - v1: Node.js + Playwright subprocess (`scrape.js`).
 - v2: Go + go-rod for both listing and detail (single binary, removed Node from the crawler image).
-- v3 (current): Hybrid — rod for listing only, plain HTTP + JSON-LD for detail. Removes the second rod tab and ~all per-job browser navigations; ~10× faster detail enrichment.
+- v3: Hybrid — rod for listing only, plain HTTP + JSON-LD for detail.
+- v4 (current): **Pure HTTP — sitemap.xml for listing, JSON-LD for detail.** Drops rod, drops Chromium from the Docker image entirely. Listing time goes from minutes (rod scroll) to ~200 ms (one sitemap GET).

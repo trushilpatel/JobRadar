@@ -212,15 +212,13 @@ make k8s-logs-crawler
 
 ### Crawler Dockerfile note
 
-The crawler image (`infra/Dockerfile.crawler`) uses **only Go + Chromium** — no Node.js, no npm, no Playwright subprocess. Do not re-add nodejs/npm to the Dockerfile.
+The crawler image (`infra/Dockerfile.crawler`) is **pure Go** — no Node.js, no Chromium, no Playwright. All adapters speak plain HTTP. Do not add browser dependencies back.
 
-Adapter implementation status:
+Adapter implementation status (all pure HTTP):
 
-- **Google** — pure HTTP + RE2 regex (`backend/apps/crawler/ats/google/http.go`). Does not touch Chromium.
-- **Meta** — hybrid: rod for the listing scroll (`backend/apps/crawler/ats/meta/rod.go`), HTTP + JSON-LD for detail enrichment (`backend/apps/crawler/ats/meta/http_detail.go`). Implements both `Adapter` (listing) and `ContentFetcher` (detail). Chromium is only loaded for the listing tab.
-- All ATS adapters (Greenhouse, Lever, Ashby, Apple, Microsoft, Netflix, Rippling, Uber) — pure HTTP / JSON.
-
-If Meta's listing is ever served via stable HTTP/GraphQL (current barrier: rotating CSRF tokens + persisted-query `doc_id`s), Chromium can be removed from the image entirely.
+- **Google** — HTTP + RE2 regex over server-rendered HTML (`backend/apps/crawler/ats/google/http.go`).
+- **Meta** — HTTP + sitemap-driven listing + JSON-LD detail (`backend/apps/crawler/ats/meta/meta.go`, `sitemap.go`, `http_detail.go`). Implements both `Adapter` (listing) and `ContentFetcher` (detail).
+- ATS adapters (Greenhouse, Lever, Ashby, Apple, Microsoft, Netflix, Rippling, Uber) — HTTP / JSON APIs.
 
 ## Plan execution mode
 

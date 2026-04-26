@@ -3,7 +3,6 @@ package ats
 import (
 	"fmt"
 
-	"github.com/go-rod/rod"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/apple"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/ashby"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
@@ -21,19 +20,13 @@ import (
 // Registry returns the correct Adapter for a given adapter_type string.
 // The returned value may also implement ContentFetcher — callers should
 // type-assert to check (see job_post_analyzer).
+//
+// All adapters are pure-HTTP since the Meta sitemap migration; there is no
+// longer a browser-injection seam.
+//
 // For the Google adapter, use RegistryWithGoogleConfig to pass scraper settings.
 func Registry(adapterType string) (Adapter, error) {
 	return RegistryWithGoogleConfig(adapterType, google.Config{}, logger.NewNoop())
-}
-
-// SetBrowser calls WithBrowser on rod-based adapters (Meta) if they support it.
-// HTTP-only adapters (Google and the ATS adapters) are left untouched.
-// Safe to call with a nil browser.
-func SetBrowser(adp Adapter, b *rod.Browser) {
-	type browserSetter interface{ WithBrowser(*rod.Browser) }
-	if setter, ok := adp.(browserSetter); ok {
-		setter.WithBrowser(b)
-	}
 }
 
 // RegistryWithGoogleConfig is like Registry but passes scraper config and a logger
@@ -62,7 +55,7 @@ func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config, log l
 	case companycommon.AdapterApple:
 		return apple.New(), nil
 	case companycommon.AdapterMeta:
-		return meta.NewRodMetaDefault(), nil
+		return meta.New(meta.Config{TimeoutMs: 600000}, log), nil
 	default:
 		return nil, fmt.Errorf("unknown adapter type: %s", adapterType)
 	}

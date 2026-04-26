@@ -41,6 +41,12 @@ import urllib.request
 # directly. Verified via browser: 200 OK, no redirect, full JSON-LD payload.
 DETAIL_BASE = "https://www.metacareers.com/profile/job_details/"
 
+# Sitemap URL — public, advertised in /robots.txt under "Sitemap:".
+# Plain XML, ~116 KB, lists every active Meta job. No auth, no JS, no
+# rotating CSRF tokens. This replaces all of: rod listing scroll, GraphQL
+# reverse-engineering, ?page=N URL pagination.
+SITEMAP_URL = "https://www.metacareers.com/jobsearch/sitemap.xml"
+
 # Listing URL — pre-filtered to Full-time roles in the user's target offices.
 # NOT used by this POC (Meta's listing is fully client-rendered via GraphQL,
 # so an HTTP GET on this URL returns an empty SPA shell). Stored here for
@@ -131,6 +137,12 @@ RE_JSON_LD = re.compile(
 )
 RE_TAG = re.compile(r"<[^>]+>")
 RE_WS = re.compile(r"\s+")
+
+# Sitemap <loc> entries — we keep this regex simple rather than pulling in
+# xml.etree because the sitemap is a flat list of <loc> tags.
+RE_SITEMAP_LOC = re.compile(r"<loc>([^<]+)</loc>", re.IGNORECASE)
+# Job ID extracted from a /profile/job_details/{id} URL.
+RE_JOB_ID_FROM_URL = re.compile(r"/profile/job_details/(\d+)")
 
 
 # ── HTTP helper ────────────────────────────────────────────────────────────
@@ -389,10 +401,58 @@ def field_present(j: dict, key: str) -> bool:
     return True
 
 
-def run_batch(job_ids: list[str], insecure: bool, do_sleep: bool) -> int:
+# ── Sitemap-driven mode ────────────────────────────────────────────────────
+def fetch_sitemap_job_ids(ssl_ctx: ssl.SSLContext) -> list[str]:
+    """HTTP GET the public sitemap and return the list of job IDs in
+    declaration order. The sitemap is the official, public crawler contract
+    — no auth, no JS, no rotating tokens."""
+    print(f"[sitemap] GET {SITEMAP_URL}", flush=True)
+    xml = fetch(SITEMAP_URL, ssl_ctx)
+    print(f"  size={len(xml):,} bytes")
+    locs = RE_SITEMAP_LOC.findall(xml)
+    ids: list[str] = []
+    seen: set[str] = set()
+    for loc in locs:
+        m = RE_JOB_ID_FROM_URL.search(loc)
+        if not m:
+            continue
+        jid = m.group(1)
+        if jid in seen:
+            continue
+        seen.add(jid)
+        ids.append(jid)
+    print(f"  {len(locs)} <loc> entries → {len(ids)} unique job IDs")
+    return ids
+
+
+def run_sitemap(
+    sample_size: int, insecure: bool, do_sleep: bool, full_dump: bool
+) -> int:
+    """Pure-HTTP end-to-end: sitemap → detail pages → JSON-LD parse.
+    Validates that we can grab every signal Meta exposes without rod."""
+    ssl_ctx = _build_ssl_context(insecure)
+    ids = fetch_sitemap_job_ids(ssl_ctx)
+    if not ids:
+        print("[error] sitemap returned 0 job IDs")
+        return 1
+
+    if sample_size > 0 and sample_size < len(ids):
+        # Take an evenly-spaced sample so we cover early/middle/late entries.
+        step = len(ids) // sample_size
+        sample = [ids[i * step] for i in range(sample_size)]
+    else:
+        sample = ids
+
+    print(f"\n[sitemap] enriching {len(sample)} jobs"
+          f" (sample of {len(ids)} total)\n")
+    return run_batch(sample, insecure, do_sleep, ssl_ctx_override=ssl_ctx)
+
+
+def run_batch(job_ids: list[str], insecure: bool, do_sleep: bool,
+              ssl_ctx_override: ssl.SSLContext | None = None) -> int:
     """Run the parser across many jobs and print a coverage table.
     Catches edge cases the single-job test can't surface."""
-    ssl_ctx = _build_ssl_context(insecure)
+    ssl_ctx = ssl_ctx_override if ssl_ctx_override is not None else _build_ssl_context(insecure)
     rows = []  # one dict per job
     failed = []
 
@@ -543,7 +603,22 @@ def main() -> int:
         action="store_true",
         help="Run across the SAMPLE_JOB_IDS list and print a coverage table",
     )
+    p.add_argument(
+        "--sitemap",
+        action="store_true",
+        help="Pull every job ID from /jobsearch/sitemap.xml (HTTP only — no rod, "
+        "no GraphQL) and run the batch coverage report against a sample.",
+    )
+    p.add_argument(
+        "--sample",
+        type=int,
+        default=10,
+        help="With --sitemap: how many evenly-spaced jobs to enrich "
+        "(0 = all). Default 10.",
+    )
     args = p.parse_args()
+    if args.sitemap:
+        return run_sitemap(args.sample, args.insecure, args.sleep, full_dump=False)
     if args.batch:
         ids = args.job_id or SAMPLE_JOB_IDS
         return run_batch(ids, args.insecure, args.sleep)

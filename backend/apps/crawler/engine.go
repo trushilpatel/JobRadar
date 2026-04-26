@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-rod/rod"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
 	"github.com/trushilpatel/jobradar/common/kafka"
@@ -19,20 +18,16 @@ import (
 )
 
 // Engine crawls company careers pages, deduplicates jobs, and publishes new ones to Kafka.
+//
+// All adapters are pure-HTTP since the Meta sitemap migration; the engine no
+// longer needs a shared Chromium instance.
 type Engine struct {
 	companies CompanyReader
 	ledger    PipelineLedger
 	recorder  ScanRecorder
 	publisher kafka.Publisher
 	googleCfg google.Config
-	browser   *rod.Browser // shared Chromium; nil = adapters launch their own
 	log       logger.Logger
-}
-
-// WithBrowser sets a shared Chromium instance that rod-based adapters (Google, Meta)
-// will use instead of launching a fresh browser per scan.
-func (e *Engine) WithBrowser(b *rod.Browser) {
-	e.browser = b
 }
 
 func NewEngine(
@@ -166,9 +161,6 @@ func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, kn
 		log.Debug("streaming publish enabled for adapter")
 	}
 
-	if e.browser != nil {
-		ats.SetBrowser(adp, e.browser)
-	}
 	result, err := adp.FetchJobs(ctx, company.ID)
 	if err != nil {
 		return ats.FetchJobsResponse{}, false, fmt.Errorf("fetch failed: %w", err)

@@ -129,10 +129,6 @@ type GoogleScraperConfig struct {
 	MaxDelayMs int
 	TimeoutMs  int
 	MaxPages   int
-	// ChromiumPath is used by the shared browser launcher for the (still
-	// rod-based) Meta adapter. The Google adapter itself is HTTP-only and
-	// does not consume this field.
-	ChromiumPath string
 }
 
 type SchedulerConfig struct {
@@ -272,12 +268,11 @@ func Load() *Config {
 			StuckTimeoutSeconds:      getEnvInt("CRAWLER_STUCK_TIMEOUT_SECONDS", 120),
 			HeartbeatIntervalSeconds: getEnvInt("CRAWLER_HEARTBEAT_INTERVAL_SECONDS", 30),
 			Google: GoogleScraperConfig{
-				// Listing pacing — defaults to 100-120 s for the HTTP-based scraper.
-				MinDelayMs:   getEnvInt("GOOGLE_SCRAPER_MIN_DELAY", 20000),
-				MaxDelayMs:   getEnvInt("GOOGLE_SCRAPER_MAX_DELAY", 40000),
-				TimeoutMs:    getEnvInt("GOOGLE_SCRAPER_TIMEOUT_MS", 7200000),
-				MaxPages:     getEnvInt("GOOGLE_SCRAPER_MAX_PAGES", 0),
-				ChromiumPath: getEnv("CHROMIUM_PATH", ""),
+				// Listing pacing for the HTTP-based Google scraper.
+				MinDelayMs: getEnvInt("GOOGLE_SCRAPER_MIN_DELAY", 20000),
+				MaxDelayMs: getEnvInt("GOOGLE_SCRAPER_MAX_DELAY", 40000),
+				TimeoutMs:  getEnvInt("GOOGLE_SCRAPER_TIMEOUT_MS", 7200000),
+				MaxPages:   getEnvInt("GOOGLE_SCRAPER_MAX_PAGES", 0),
 			},
 		},
 		Scheduler: SchedulerConfig{

@@ -8,8 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/launcher"
 	"gorm.io/gorm"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/apple"
@@ -83,17 +81,10 @@ func main() {
 		MaxPages:   cfg.Crawler.Google.MaxPages,
 	}
 
-	// One shared Chromium process for the still-rod-based Meta adapter.
-	// Each scan opens a new tab; the browser stays alive for the pod lifetime.
-	// Google has its own pure-HTTP path (see ats/google/http.go) and does not
-	// touch this browser.
-	sharedBrowser, closeSharedBrowser := launchSharedBrowser(cfg.Crawler.Google.ChromiumPath, log)
-	defer closeSharedBrowser()
-	engine.WithBrowser(sharedBrowser)
-
+	// All adapters are pure-HTTP — no shared Chromium process needed.
 	adapterRegistry := workers.NewRegistry()
 
-	// API adapters — one goroutine per adapter type.
+	// ATS adapters — one goroutine per adapter type.
 	adapterRegistry.Register(greenhouse.NewCrawlerService(queue, engine, log))
 	adapterRegistry.Register(lever.NewCrawlerService(queue, engine, log))
 	adapterRegistry.Register(ashby.NewCrawlerService(queue, engine, log))
@@ -103,7 +94,7 @@ func main() {
 	adapterRegistry.Register(rippling.NewCrawlerService(queue, engine, log))
 	adapterRegistry.Register(apple.NewCrawlerService(queue, engine, log))
 
-	// Browser adapters — share one Chromium via tab-per-scan.
+	// HTTP-scrape adapters (regex / JSON-LD over plain HTTP).
 	adapterRegistry.Register(atsgoogle.NewCrawlerService(queue, engine, googleCfg, log))
 	adapterRegistry.Register(atsmeta.NewCrawlerService(queue, engine, log))
 
@@ -192,37 +183,3 @@ func (a *queueAdapter) UpdateHeartbeat(ctx context.Context, id string) error {
 	return a.svc.UpdateHeartbeat(ctx, id)
 }
 
-// launchSharedBrowser starts one Chromium process for the lifetime of the pod.
-// All rod-based adapters share it via tab-per-scan; no second process is ever started.
-// Returns a close func that must be deferred by the caller.
-func launchSharedBrowser(chromiumPath string, log logger.Logger) (*rod.Browser, func()) {
-	headless := os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == ""
-	l := launcher.New().Headless(headless).
-		Set("no-sandbox", "").
-		Set("disable-setuid-sandbox", "").
-		Set("disable-dev-shm-usage", "")
-
-	switch {
-	case chromiumPath != "":
-		l = l.Bin(chromiumPath)
-	case os.Getenv("CHROMIUM_PATH") != "":
-		l = l.Bin(os.Getenv("CHROMIUM_PATH"))
-	default:
-		if path, found := launcher.LookPath(); found {
-			l = l.Bin(path)
-		}
-	}
-
-	controlURL, err := l.Launch()
-	if err != nil {
-		log.Error("shared browser launch failed — rod adapters will launch own browsers", err)
-		return nil, func() {}
-	}
-	browser := rod.New().ControlURL(controlURL)
-	if err := browser.Connect(); err != nil {
-		log.Error("shared browser connect failed — rod adapters will launch own browsers", err)
-		return nil, func() {}
-	}
-	log.Info("shared browser started", logger.Bool("headless", headless))
-	return browser, func() { _ = browser.Close() }
-}

@@ -318,7 +318,7 @@ func TestFetchJobContent_EndToEndAgainstFakeServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	m := NewRodMeta(defaultConfig(), logger.NewNoop())
+	m := New(defaultConfig(), logger.NewNoop())
 	resp, err := m.FetchJobContent(context.Background(), types.RawJob{
 		ID:  "meta-12345",
 		URL: srv.URL + "/profile/job_details/12345",
@@ -343,7 +343,7 @@ func TestFetchJobContent_Surfaces404(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	m := NewRodMeta(defaultConfig(), logger.NewNoop())
+	m := New(defaultConfig(), logger.NewNoop())
 	_, err := m.FetchJobContent(context.Background(), types.RawJob{
 		ID:  "meta-99",
 		URL: srv.URL + "/profile/job_details/99",

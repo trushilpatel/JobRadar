@@ -15,21 +15,16 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     go build -o /out/crawler ./apps/crawler
 
 # ── Final image ───────────────────────────────────────────────────────────────
-# debian:bookworm-slim — Chromium is a real deb here (not a snap wrapper like Ubuntu).
-# The binary is bundled in the image; no external downloads happen at container startup.
+# All adapters are pure-HTTP since the Meta sitemap migration. No browser, no
+# Chromium, no JavaScript runtime. The crawler image is now ~30 MB instead of
+# the ~250 MB it was when Chromium was bundled for rod-based adapters.
 
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium \
     ca-certificates \
     tzdata \
-    xvfb \
-    xauth \
     && rm -rf /var/lib/apt/lists/*
-
-# rod picks up CHROMIUM_PATH directly — no glob search or auto-download.
-ENV CHROMIUM_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
