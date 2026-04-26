@@ -256,14 +256,15 @@ k8s-preflight: ## Verify kubectl context is k3d-jobradar before any deploy
 		echo "WARN: secret jobradar-$$svc-secret missing — pods will fail with CreateContainerConfigError"; \
 	done
 
-k8s-up: k8s-preflight ## Deploy app chart via Helm — reads DEV_TOKEN from backend/.env if set
+k8s-up: k8s-preflight ## Deploy app chart via Helm — reads DEV_TOKEN from backend/.env and values.local.yaml if present
 	helm dependency update k8s/helm/jobradar 2>/dev/null || true
 	@DEV_TOKEN=$$(grep -E '^DEV_TOKEN=' backend/.env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]'); \
+	LOCAL_VALUES=$$([ -f k8s/helm/jobradar/values.local.yaml ] && echo "-f k8s/helm/jobradar/values.local.yaml" || echo ""); \
 	if [ -n "$$DEV_TOKEN" ]; then \
 		echo "DEV_TOKEN loaded from backend/.env"; \
-		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace --set api.devToken="$$DEV_TOKEN"; \
+		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace $$LOCAL_VALUES --set api.devToken="$$DEV_TOKEN"; \
 	else \
-		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace; \
+		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace $$LOCAL_VALUES; \
 	fi
 	kubectl rollout status statefulset/kafka -n $(K8S_NS) --timeout=180s
 	kubectl rollout status statefulset/redis -n $(K8S_NS) --timeout=60s
@@ -287,7 +288,8 @@ k8s-obs-down: ## Uninstall observability Helm release
 
 k8s-migrate: ## Re-run database migrations via Helm hook (deletes prior job first)
 	kubectl delete job jobradar-migrate -n $(K8S_NS) --ignore-not-found
-	helm upgrade jobradar k8s/helm/jobradar -n $(K8S_NS)
+	@LOCAL_VALUES=$$([ -f k8s/helm/jobradar/values.local.yaml ] && echo "-f k8s/helm/jobradar/values.local.yaml" || echo ""); \
+	helm upgrade jobradar k8s/helm/jobradar -n $(K8S_NS) $$LOCAL_VALUES
 	kubectl wait --for=condition=complete job/jobradar-migrate -n $(K8S_NS) --timeout=120s
 	kubectl logs -l app=jobradar,component=migrate -n $(K8S_NS) --tail=20
 

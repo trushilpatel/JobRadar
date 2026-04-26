@@ -2,6 +2,8 @@ package workers
 
 import (
 	"context"
+	"fmt"
+	"runtime/debug"
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/logger"
@@ -87,7 +89,24 @@ func (w *BaseWorker) RunLoop(ctx context.Context) {
 		)
 
 		stop := w.startHeartbeat(ctx, item.ID)
-		w.scanner.RunForCompany(ctx, item.CompanyID)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					w.log.Error("panic in RunForCompany, recovering",
+						fmt.Errorf("panic: %v", r),
+						logger.Str("adapter_type", w.adapterType),
+						logger.Str(logger.FieldCompany, item.CompanyID),
+						logger.Str("stack", string(debug.Stack())),
+					)
+				}
+			}()
+			w.scanner.RunForCompany(ctx, item.CompanyID)
+		}()
+		if ctx.Err() != nil {
+			stop()
+			w.log.Info("adapter worker stopping after panic recovery", logger.Str("adapter_type", w.adapterType))
+			return
+		}
 		if err := w.queue.Complete(ctx, item.ID); err != nil {
 			w.log.Error("complete failed", err,
 				logger.Str("adapter_type", w.adapterType),

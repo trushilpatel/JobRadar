@@ -79,7 +79,17 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, r *kgo.Re
 	var job ats.RawJob
 	if err := json.Unmarshal(r.Value, &job); err != nil {
 		span.SetAttributes(attribute.String("outcome", "malformed"))
-		fetchLog.Warn("malformed message, skipping", logger.Err(err))
+		fetchLog.Warn("malformed message, routing to DLQ", logger.Err(err))
+		headers := []kgo.RecordHeader{
+			{Key: kafka.HeaderReason, Value: []byte("malformed")},
+			{Key: kafka.HeaderLastError, Value: []byte(err.Error())},
+		}
+		if perr := w.publisher.PublishWithHeaders(ctx, kafka.TopicJobListingsFilteredDLQ, r.Value, headers); perr != nil {
+			fetchLog.Error("publish malformed message to DLQ failed", perr)
+		}
+		if cerr := w.committer.CommitRecords(ctx, r); cerr != nil {
+			fetchLog.Error("commit malformed record failed", cerr)
+		}
 		return fetchedJob{}, false
 	}
 

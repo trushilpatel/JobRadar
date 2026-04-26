@@ -27,4 +27,5 @@ const (
 	HeaderRetryCount    = "retry_count"     // int as decimal string; 0 = fresh message
 	HeaderNextAttemptAt = "next_attempt_at" // unix milliseconds as decimal string
 	HeaderLastError     = "last_error"      // last error message — set on DLQ only
+	HeaderReason        = "reason"          // routing reason (e.g. "malformed") — set on DLQ only
 )

@@ -32,8 +32,10 @@ api:
   jaegerEndpoint: ""
   dbSslmode: require
   dbPort: "5432"
-  supabaseProjectUrl: "https://gnwgoffnrxydkrkahhie.supabase.co"
-  allowedEmail: "trushilpatel9898@gmail.com"
+  # Set in values.local.yaml — do not commit real values here
+  supabaseProjectUrl: ""
+  # Set in values.local.yaml — do not commit real values here
+  allowedEmail: ""
   jwtClockSkewSeconds: "60"
   jwksCacheTtlSeconds: "600"
   apiMaxBodyBytes: "1048576"

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -141,6 +142,7 @@ func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err e
 	fetchLog := w.log.With(logger.Str(logger.FieldFetchID, fetchID))
 
 	items := make([]chunkItem, 0, len(records))
+	var malformed []*kgo.Record
 	var (
 		firstOffset int64 = -1
 		lastOffset  int64 = -1
@@ -156,7 +158,15 @@ func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err e
 		msgCtx := tracing.ExtractKafka(ctx, r.Headers)
 		var job ats.RawJob
 		if jerr := json.Unmarshal(r.Value, &job); jerr != nil {
-			fetchLog.Warn("malformed message, skipping", logger.Err(jerr))
+			fetchLog.Warn("malformed message, routing to DLQ", logger.Err(jerr))
+			headers := []kgo.RecordHeader{
+				{Key: kafka.HeaderReason, Value: []byte("malformed")},
+				{Key: kafka.HeaderLastError, Value: []byte(jerr.Error())},
+			}
+			if perr := w.publisher.PublishWithHeaders(ctx, kafka.TopicJobListingsRawDLQ, r.Value, headers); perr != nil {
+				fetchLog.Error("publish malformed message to DLQ failed", perr)
+			}
+			malformed = append(malformed, r)
 			continue
 		}
 		items = append(items, chunkItem{
@@ -170,6 +180,11 @@ func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err e
 	}
 
 	if len(items) == 0 {
+		if len(malformed) > 0 {
+			if cerr := w.committer.CommitRecords(ctx, malformed...); cerr != nil {
+				fetchLog.Error("commit malformed records failed", cerr)
+			}
+		}
 		return nil
 	}
 
@@ -212,7 +227,33 @@ func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err e
 			}
 		}
 
-		w.processChunk(fetchCtx, chunk, fetchID, i, len(chunks))
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					ids := make([]string, 0, len(chunk))
+					for _, it := range chunk {
+						ids = append(ids, it.job.job.ID)
+					}
+					w.log.Error("panic in processChunk, recovering",
+						fmt.Errorf("panic: %v", r),
+						logger.Str(logger.FieldFetchID, fetchID),
+						logger.Int(logger.FieldChunkIndex, i),
+						logger.Str("stack", string(debug.Stack())),
+					)
+					if merr := w.ledger.UpdateSeenReasonBatch(fetchCtx, ids, jobcommon.SeenReasonError); merr != nil {
+						w.log.Error("mark error batch failed after panic", merr,
+							logger.Str(logger.FieldFetchID, fetchID),
+							logger.Int(logger.FieldChunkIndex, i),
+						)
+					}
+				}
+			}()
+			w.processChunk(fetchCtx, chunk, fetchID, i, len(chunks))
+		}()
+
+		if fetchCtx.Err() != nil {
+			return nil
+		}
 
 		recs := chunkRecords(chunk)
 		if cerr := w.committer.CommitRecords(fetchCtx, recs...); cerr != nil {
@@ -232,6 +273,12 @@ func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err e
 				logger.Int(logger.FieldOffset, int(last.Offset)),
 				logger.Int(logger.FieldPartition, int(last.Partition)),
 			)
+		}
+	}
+
+	if len(malformed) > 0 {
+		if cerr := w.committer.CommitRecords(fetchCtx, malformed...); cerr != nil {
+			fetchLog.Error("commit malformed records failed", cerr)
 		}
 	}
 

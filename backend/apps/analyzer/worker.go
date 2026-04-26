@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	stderrors "errors"
+	"fmt"
 	"net/http"
+	"runtime/debug"
 	"sort"
 	"time"
 
@@ -248,7 +250,28 @@ func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err e
 			}
 		}
 
-		routed := w.processGroup(fetchCtx, fetchLog, group, fetchID, i, len(groups))
+		var routed bool
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					w.log.Error("panic in processGroup, recovering",
+						fmt.Errorf("panic: %v", r),
+						logger.Str(logger.FieldFetchID, fetchID),
+						logger.Int(logger.FieldChunkIndex, i),
+						logger.Str("stack", string(debug.Stack())),
+					)
+					for _, fj := range group {
+						w.markError(fetchCtx, fj.job.ID)
+					}
+					routed = fetchCtx.Err() == nil
+				}
+			}()
+			routed = w.processGroup(fetchCtx, fetchLog, group, fetchID, i, len(groups))
+		}()
+
+		if fetchCtx.Err() != nil {
+			return nil
+		}
 		if !routed {
 			// Ctx cancel mid-EnrichBatch or mid-publish inside handleFailure
 			// means this group's jobs did not all reach a terminal routing.

@@ -8,7 +8,8 @@ metadata:
     component: migrate
 spec:
   ttlSecondsAfterFinished: 600
-  backoffLimit: 3
+  backoffLimit: 10
+  activeDeadlineSeconds: 300
   template:
     metadata:
       labels:
