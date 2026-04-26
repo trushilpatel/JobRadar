@@ -100,20 +100,43 @@ loki-stack:
     enabled: false
 
 jaeger:
-  provisionDataStore:
-    cassandra: false
-  allInOne:
-    enabled: false
-  storage:
-    type: memory
-  agent:
-    enabled: false
-  collector:
-    enabled: false
-  query:
-    enabled: false
-  ingress:
-    enabled: false
+  jaeger:
+    enabled: true
+    service:
+      type: ClusterIP
+  userconfig:
+    service:
+      extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [jaeger_storage_exporter]
+      telemetry:
+        resource:
+          service.name: jaeger
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    exporters:
+      jaeger_storage_exporter:
+        trace_storage: primary_store
+    extensions:
+      healthcheckv2:
+        use_v2: true
+        http:
+          endpoint: 0.0.0.0:13133
+      jaeger_query:
+        storage:
+          traces: primary_store
+      jaeger_storage:
+        backends:
+          primary_store:
+            memory:
+              max_traces: 100000
 
 supabaseAuditSync:
   image:

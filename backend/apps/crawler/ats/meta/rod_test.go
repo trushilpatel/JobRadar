@@ -21,10 +21,10 @@ func TestRodMeta_CareersURL(t *testing.T) {
 // ── Constructor ──────────────────────────────────────────────────────────────
 
 func TestNewRodMeta_StoresConfig(t *testing.T) {
-	cfg := Config{MinDelayMs: 1000, MaxDelayMs: 3000, TimeoutMs: 60000, MaxJobs: 5}
+	cfg := Config{TimeoutMs: 60000, MaxJobs: 5}
 	m := NewRodMeta(cfg, logger.NewNoop())
-	if m.cfg.MinDelayMs != 1000 {
-		t.Errorf("MinDelayMs: got %d, want 1000", m.cfg.MinDelayMs)
+	if m.cfg.TimeoutMs != 60000 {
+		t.Errorf("TimeoutMs: got %d, want 60000", m.cfg.TimeoutMs)
 	}
 	if m.cfg.MaxJobs != 5 {
 		t.Errorf("MaxJobs: got %d, want 5", m.cfg.MaxJobs)
@@ -34,8 +34,8 @@ func TestNewRodMeta_StoresConfig(t *testing.T) {
 func TestNewRodMetaDefault_UsesProductionDefaults(t *testing.T) {
 	m := NewRodMetaDefault()
 	def := defaultConfig()
-	if m.cfg.MinDelayMs != def.MinDelayMs {
-		t.Errorf("MinDelayMs: got %d, want %d", m.cfg.MinDelayMs, def.MinDelayMs)
+	if m.cfg.TimeoutMs != def.TimeoutMs {
+		t.Errorf("TimeoutMs: got %d, want %d", m.cfg.TimeoutMs, def.TimeoutMs)
 	}
 	if m.cfg.MaxJobs != def.MaxJobs {
 		t.Errorf("MaxJobs: got %d, want %d", m.cfg.MaxJobs, def.MaxJobs)
@@ -112,7 +112,6 @@ func TestToMetaItems_AllThinByDefault(t *testing.T) {
 		Title:    "Software Engineer",
 		URL:      "https://www.metacareers.com/profile/job_details/123",
 		Location: "Menlo Park, CA",
-		Team:     "Infrastructure",
 	}}
 	items := toMetaItems(jobs)
 	if len(items) != 1 {
@@ -133,25 +132,6 @@ func TestToMetaItems_AllThinByDefault(t *testing.T) {
 	}
 }
 
-// Pre-populated description (e.g. fixtures, backfill) is still respected.
-func TestToMetaItems_HonoursPrePopulatedDescription(t *testing.T) {
-	jobs := []metaJob{{
-		ID:          "meta-456",
-		Title:       "Engineer",
-		URL:         "https://www.metacareers.com/profile/job_details/456",
-		Location:    "Remote",
-		Team:        "Meta",
-		Description: "fixture description",
-	}}
-	items := toMetaItems(jobs)
-	if items[0].FullContent == nil {
-		t.Fatal("FullContent must be set when description is pre-populated")
-	}
-	if items[0].FullContent.Description != "fixture description" {
-		t.Errorf("Description: got %q", items[0].FullContent.Description)
-	}
-}
-
 func TestToMetaItems_EmptySlice(t *testing.T) {
 	if len(toMetaItems(nil)) != 0 {
 		t.Error("expected empty slice for nil input")
@@ -164,8 +144,8 @@ func TestToMetaItems_EmptySlice(t *testing.T) {
 // All Meta jobs are full-time — the site only lists full-time positions.
 func TestToMetaItems_AlwaysFullTimeEmployment(t *testing.T) {
 	jobs := []metaJob{
-		{ID: "meta-1", Title: "A", URL: "u", Location: "L", Team: "T", Description: "d"},
-		{ID: "meta-2", Title: "B", URL: "u", Location: "L", Team: "T"},
+		{ID: "meta-1", Title: "A", URL: "u", Location: "L"},
+		{ID: "meta-2", Title: "B", URL: "u", Location: "L"},
 	}
 	for _, item := range toMetaItems(jobs) {
 		if item.EmploymentType != "full_time" {
@@ -179,7 +159,7 @@ func TestToMetaItems_AlwaysFullTimeEmployment(t *testing.T) {
 // Verify that metaJob JSON tags match what the browser JS outputs.
 func TestMetaJob_JSONTagsMatchBrowserOutput(t *testing.T) {
 	// The browser eval returns lowercase keys; verify the struct can decode them.
-	raw := `{"id":"meta-1","title":"SWE","url":"https://example.com","location":"NYC","team":"Eng","description":"desc"}`
+	raw := `{"id":"meta-1","title":"SWE","url":"https://example.com","location":"NYC"}`
 	var job metaJob
 	if err := unmarshalMetaJob([]byte(raw), &job); err != nil {
 		t.Fatalf("unmarshal failed: %v", err)
@@ -187,7 +167,7 @@ func TestMetaJob_JSONTagsMatchBrowserOutput(t *testing.T) {
 	if job.ID != "meta-1" {
 		t.Errorf("ID: got %q", job.ID)
 	}
-	if job.Team != "Eng" {
-		t.Errorf("Team: got %q", job.Team)
+	if job.Location != "NYC" {
+		t.Errorf("Location: got %q", job.Location)
 	}
 }

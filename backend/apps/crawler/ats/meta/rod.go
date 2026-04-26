@@ -21,18 +21,14 @@ const metaCareersURL = "https://www.metacareers.com/jobsearch"
 
 // Config holds Meta scraper settings sourced from the central config.
 type Config struct {
-	MinDelayMs int // min delay between page navigations in ms
-	MaxDelayMs int // max delay between page navigations in ms
-	TimeoutMs  int // overall scan timeout in ms; 0 = no limit
-	MaxJobs    int // max jobs to fetch; 0 = all
+	TimeoutMs int // overall scan timeout in ms; 0 = no limit
+	MaxJobs   int // max jobs to fetch; 0 = all
 }
 
 func defaultConfig() Config {
 	return Config{
-		MinDelayMs: 3000,
-		MaxDelayMs: 8000,
-		TimeoutMs:  3600000, // 1 hour
-		MaxJobs:    0,
+		TimeoutMs: 3600000, // 1 hour
+		MaxJobs:   0,
 	}
 }
 
@@ -58,12 +54,10 @@ type RodMeta struct {
 // metaJob holds raw data extracted from Meta's career pages via rod page.Eval.
 // JSON tags match the keys returned by the browser JS.
 type metaJob struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Location    string `json:"location"`
-	Team        string `json:"team"`
-	Description string `json:"description"`
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	URL      string `json:"url"`
+	Location string `json:"location"`
 }
 
 // unmarshalMetaJob decodes a JSON object into a metaJob. Exposed so tests can
@@ -315,16 +309,8 @@ func (m *RodMeta) extractJobsFromPage(page *rod.Page) ([]metaJob, error) {
 						location = l; break;
 					}
 				}
-				let team = '';
-				for (let i = 1; i < Math.min(lines.length, 6); i++) {
-					const l = lines[i];
-					if (l !== location && !l.includes(',') && l !== 'Remote' &&
-						l !== 'Hybrid' && l !== 'Multiple Locations' && !/\+\d+ locations?/.test(l)) {
-						team = l; break;
-					}
-				}
 				jobs.push({ id: 'meta-' + jobID, title: title || 'Unknown Position',
-					url: absoluteURL, location: location || '', team: team || 'Meta' });
+					url: absoluteURL, location: location || '' });
 			} catch(_) {}
 		}
 		return JSON.stringify(jobs);
@@ -373,33 +359,17 @@ func (m *RodMeta) sleep(ctx context.Context, minMs, maxMs int) error {
 	}
 }
 
-// toMetaItems converts raw listing-card data to pipeline types. FullContent
-// is left nil — the analyzer downstream calls FetchJobContent (HTTP +
-// JSON-LD) to enrich each job. This matches the Greenhouse/Lever/Ashby
-// pattern: thin listing items, structured detail fetch on demand.
-//
-// Description / Team are still accepted on the metaJob struct for backward
-// compatibility with the in-package extractor, but FetchJobs no longer
-// populates them.
+// toMetaItems converts raw listing-card data to thin pipeline items.
+// FullContent is always nil — the analyzer calls FetchJobContent (HTTP + JSON-LD) per job.
 func toMetaItems(jobs []metaJob) []types.FetchJobsItem {
 	items := make([]types.FetchJobsItem, len(jobs))
 	for i, j := range jobs {
-		var fc *types.FullJobContent
-		if j.Description != "" {
-			// Belt-and-braces: if a future caller pre-populates Description
-			// (e.g. a fixture or a one-off backfill), still respect it.
-			fc = &types.FullJobContent{
-				Description: j.Description,
-				Department:  j.Team,
-			}
-		}
 		items[i] = types.FetchJobsItem{
 			ID:             j.ID,
 			Title:          j.Title,
 			URL:            j.URL,
 			Location:       j.Location,
 			EmploymentType: jobcommon.EmployFullTime,
-			FullContent:    fc,
 		}
 	}
 	return items

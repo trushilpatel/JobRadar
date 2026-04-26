@@ -76,8 +76,6 @@ JSON-LD allows `jobLocation` to be either a single object or an array. The custo
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `MinDelayMs` | 3000 | (legacy — was inter-detail pacing in the old per-job rod loop; unused now that detail is HTTP) |
-| `MaxDelayMs` | 8000 | (legacy — same as above) |
 | `TimeoutMs` | 3600000 (1 h) | Overall scan timeout for the listing tab |
 | `MaxJobs` | 0 (all) | Cap on jobs collected from the listing scroll; 0 = no limit |
 

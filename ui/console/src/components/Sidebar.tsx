@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/features/auth/store'
+import { LogoLockup } from '@/components/brand/Logo'
 
 const nav: { to: string; label: string; icon: React.ReactNode }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
@@ -43,9 +44,9 @@ export function Sidebar() {
         )}
       >
         {!collapsed && (
-          <div>
-            <span className="text-white font-semibold tracking-tight">JobRadar</span>
-            <span className="ml-2 text-xs text-violet-400 font-medium">beta</span>
+          <div className="flex items-center gap-2">
+            <LogoLockup className="text-white" />
+            <span className="text-xs text-violet-400 font-medium">beta</span>
           </div>
         )}
         <button

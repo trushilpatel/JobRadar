@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="JobRadar app icon">
+  <title>JobRadar</title>
+  <rect width="512" height="512" fill="#0F172A"/>
+  <g fill="none" stroke="#F8FAFC" stroke-linecap="round" stroke-linejoin="round" transform="translate(106 106) scale(6.25)">
+    <circle cx="24" cy="24" r="20" stroke-width="1.75"/>
+    <circle cx="24" cy="24" r="11" stroke-width="1.75" opacity="0.45"/>
+    <line x1="24" y1="24" x2="38" y2="14" stroke-width="1.75"/>
+    <circle cx="38" cy="14" r="3" fill="#F8FAFC" stroke="none"/>
+  </g>
+</svg>

@@ -3,6 +3,7 @@
     "superpowers@claude-plugins-official": true
   },
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash(mkdir *)",
       "Bash",

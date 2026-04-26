@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from './store'
 import { cn } from '@/lib/utils'
+import { LogoLockup } from '@/components/brand/Logo'
 
 export function LoginPage() {
   const session = useAuthStore((s) => s.session)
@@ -34,7 +35,9 @@ export function LoginPage() {
     <div className="flex h-screen w-full items-center justify-center bg-neutral-950 text-neutral-100">
       <div className="w-full max-w-sm rounded-xl border border-neutral-800 bg-neutral-900 p-8 shadow-xl">
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-semibold">JobRadar</h1>
+          <h1 className="flex justify-center text-white">
+            <LogoLockup size="lg" />
+          </h1>
           <p className="mt-2 text-sm text-neutral-400">Sign in to continue</p>
         </div>
 

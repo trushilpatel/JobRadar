@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 48" fill="currentColor" role="img" aria-label="JobRadar">
+  <title>JobRadar</title>
+  <text x="0" y="34" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif" font-size="32" font-weight="500" letter-spacing="-0.8">
+    Job<tspan font-weight="400" opacity="0.72">Radar</tspan>
+  </text>
+</svg>

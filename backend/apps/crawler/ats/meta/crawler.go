@@ -9,9 +9,7 @@ import (
 )
 
 // CrawlerService is the per-adapter worker for Meta Careers.
-// Meta uses a Node.js Playwright subprocess — the subprocess is launched fresh
-// per scan (no persistent process to keep warm), so this follows the same
-// simple RunLoop pattern as API adapters.
+// Delegates to BaseWorker's RunLoop (claim → scan → complete).
 type CrawlerService struct {
 	workers.BaseWorker
 }

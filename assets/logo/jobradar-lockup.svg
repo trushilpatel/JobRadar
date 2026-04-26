@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 56" fill="currentColor" role="img" aria-label="JobRadar">
+  <title>JobRadar</title>
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" transform="translate(4,4)">
+    <circle cx="24" cy="24" r="20" stroke-width="1.75"/>
+    <circle cx="24" cy="24" r="11" stroke-width="1.75" opacity="0.45"/>
+    <line x1="24" y1="24" x2="38" y2="14" stroke-width="1.75"/>
+    <circle cx="38" cy="14" r="3" fill="currentColor" stroke="none"/>
+  </g>
+  <text x="64" y="37" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif" font-size="28" font-weight="500" letter-spacing="-0.6">
+    Job<tspan font-weight="400" opacity="0.72">Radar</tspan>
+  </text>
+</svg>
