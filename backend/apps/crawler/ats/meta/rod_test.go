@@ -96,11 +96,10 @@ func TestWithBrowser_StoresBrowser(t *testing.T) {
 		t.Fatal("browser should be nil before WithBrowser")
 	}
 	// We can't construct a real *rod.Browser without Chrome, but we can verify
-	// that the field is set by passing nil (the method must accept it without panic).
-	result := m.WithBrowser(nil)
-	if result != m {
-		t.Error("WithBrowser should return the same RodMeta for chaining")
-	}
+	// that the field is settable by passing nil (must not panic).
+	m.WithBrowser(nil)
+	// browser field is unexported; we verify the method is callable and the
+	// engine's SetBrowser type-assertion succeeds by checking the interface below.
 }
 
 // ── toMetaItems ──────────────────────────────────────────────────────────────

@@ -90,10 +90,9 @@ func NewRodMetaDefault() *RodMeta {
 
 // WithBrowser sets a shared browser so FetchJobs opens a new tab instead of
 // launching a fresh Chromium process. Useful if multiple rod-based adapters
-// run in the same crawler binary. Returns the receiver for chaining.
-func (m *RodMeta) WithBrowser(b *rod.Browser) *RodMeta {
+// run in the same crawler binary.
+func (m *RodMeta) WithBrowser(b *rod.Browser) {
 	m.browser = b
-	return m
 }
 
 // SetStreamPublish implements types.StreamPublisher.
@@ -148,26 +147,28 @@ func (m *RodMeta) FetchJobs(ctx context.Context, _ string) (types.FetchJobsRespo
 		return types.FetchJobsResponse{}, err
 	}
 
-	allJobs, err := m.scrollToLoadAllJobs(ctx, listingPage, m.cfg.MaxJobs)
-	if err != nil {
+	// Accumulate items and stream-publish each delta as the scroll progresses.
+	// Jobs enter Kafka in batches rather than waiting for the full scroll to finish.
+	var allItems []types.FetchJobsItem
+	onNew := func(newJobs []metaJob) {
+		batch := toMetaItems(newJobs)
+		allItems = append(allItems, batch...)
+		if m.streamPublish != nil {
+			m.streamPublish(batch)
+		}
+	}
+
+	if err := m.scrollToLoadAllJobs(ctx, listingPage, m.cfg.MaxJobs, onNew); err != nil {
 		return types.FetchJobsResponse{}, fmt.Errorf("meta/rod: scroll: %w", err)
 	}
 
-	if len(allJobs) == 0 {
+	if len(allItems) == 0 {
 		m.log.Warn("meta/rod: no jobs found — page structure may have changed")
 		return types.FetchJobsResponse{}, nil
 	}
 
-	m.log.Info("meta/rod: listing complete", logger.Int(logger.FieldFetched, len(allJobs)))
-
-	// Publish all jobs as thin items. Description is intentionally left empty
-	// so toMetaItems leaves FullContent nil; the analyzer sees nil and calls
-	// our FetchJobContent (HTTP + JSON-LD) downstream.
-	items := toMetaItems(allJobs)
-	if m.streamPublish != nil {
-		m.streamPublish(items)
-	}
-	return types.FetchJobsResponse{Jobs: items}, nil
+	m.log.Info("meta/rod: listing complete", logger.Int(logger.FieldFetched, len(allItems)))
+	return types.FetchJobsResponse{Jobs: allItems}, nil
 }
 
 // FetchJobContent implements types.ContentFetcher.
@@ -218,17 +219,25 @@ func (m *RodMeta) acquireBrowser() (*rod.Browser, func(), error) {
 }
 
 // scrollToLoadAllJobs scrolls until no new job cards appear (infinite scroll)
-// or maxJobs is reached.
-func (m *RodMeta) scrollToLoadAllJobs(ctx context.Context, page *rod.Page, maxJobs int) ([]metaJob, error) {
+// or maxJobs is reached. onNew is called with each delta of newly visible jobs
+// so callers can stream-publish without waiting for the full scroll to finish.
+func (m *RodMeta) scrollToLoadAllJobs(ctx context.Context, page *rod.Page, maxJobs int, onNew func([]metaJob)) error {
 	prev := 0
 	stale := 0
 	const maxStale = 5
 
-	for scrolls := 0; scrolls < 100; scrolls++ {
+	notify := func(jobs []metaJob) {
+		if onNew != nil && len(jobs) > prev {
+			onNew(jobs[prev:])
+		}
+	}
+
+	for scrolls := 0; scrolls < 200; scrolls++ {
 		select {
 		case <-ctx.Done():
 			jobs, _ := m.extractJobsFromPage(page)
-			return jobs, nil
+			notify(jobs)
+			return nil
 		default:
 		}
 
@@ -246,15 +255,17 @@ func (m *RodMeta) scrollToLoadAllJobs(ctx context.Context, page *rod.Page, maxJo
 			if len(jobs) > maxJobs {
 				jobs = jobs[:maxJobs]
 			}
-			return jobs, nil
+			notify(jobs)
+			return nil
 		}
 
 		if len(jobs) == prev {
 			stale++
 			if stale >= maxStale {
-				return jobs, nil
+				return nil
 			}
 		} else {
+			notify(jobs)
 			stale = 0
 			prev = len(jobs)
 		}
@@ -264,11 +275,14 @@ func (m *RodMeta) scrollToLoadAllJobs(ctx context.Context, page *rod.Page, maxJo
 		}
 		if err := m.sleep(ctx, 1000, 2000); err != nil {
 			jobs, _ := m.extractJobsFromPage(page)
-			return jobs, nil
+			notify(jobs)
+			return nil
 		}
 	}
 
-	return m.extractJobsFromPage(page)
+	jobs, err := m.extractJobsFromPage(page)
+	notify(jobs)
+	return err
 }
 
 // extractJobsFromPage runs DOM extraction on the current listing page and
