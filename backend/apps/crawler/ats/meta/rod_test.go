@@ -52,13 +52,12 @@ func TestRodMeta_ImplementsURLProvider(t *testing.T) {
 	var _ types.URLProvider = (*RodMeta)(nil)
 }
 
-// RodMeta is a full-detail adapter — FullContent is set by the browser scrape.
-// The analyzer must NOT call FetchJobContent on it.
-func TestRodMeta_DoesNotImplementContentFetcher(t *testing.T) {
-	var a any = NewRodMetaDefault()
-	if _, ok := a.(types.ContentFetcher); ok {
-		t.Error("RodMeta must not implement ContentFetcher — it is a full-detail adapter")
-	}
+// RodMeta is now a hybrid adapter: rod for listing, HTTP+JSON-LD for detail.
+// It must implement ContentFetcher so the analyzer routes detail enrichment
+// through Meta's structured JobPosting payload instead of the generic HTTP
+// fallback.
+func TestRodMeta_ImplementsContentFetcher(t *testing.T) {
+	var _ types.ContentFetcher = (*RodMeta)(nil)
 }
 
 // ── StreamPublisher ──────────────────────────────────────────────────────────
@@ -106,14 +105,15 @@ func TestWithBrowser_StoresBrowser(t *testing.T) {
 
 // ── toMetaItems ──────────────────────────────────────────────────────────────
 
-func TestToMetaItems_PopulatesFullContentWhenDescriptionSet(t *testing.T) {
+// Listing-only path: every item must be thin (FullContent == nil) so the
+// analyzer routes detail enrichment through FetchJobContent.
+func TestToMetaItems_AllThinByDefault(t *testing.T) {
 	jobs := []metaJob{{
-		ID:          "meta-123",
-		Title:       "Software Engineer",
-		URL:         "https://www.metacareers.com/profile/job_details/123",
-		Location:    "Menlo Park, CA",
-		Team:        "Infrastructure",
-		Description: "Minimum qualifications:\n- 5 years experience",
+		ID:       "meta-123",
+		Title:    "Software Engineer",
+		URL:      "https://www.metacareers.com/profile/job_details/123",
+		Location: "Menlo Park, CA",
+		Team:     "Infrastructure",
 	}}
 	items := toMetaItems(jobs)
 	if len(items) != 1 {
@@ -129,34 +129,27 @@ func TestToMetaItems_PopulatesFullContentWhenDescriptionSet(t *testing.T) {
 	if item.Location != "Menlo Park, CA" {
 		t.Errorf("Location: got %q", item.Location)
 	}
-	if item.FullContent == nil {
-		t.Fatal("FullContent must not be nil when description is set")
-	}
-	if item.FullContent.Department != "Infrastructure" {
-		t.Errorf("Department: got %q, want Infrastructure", item.FullContent.Department)
-	}
-	if item.FullContent.Description == "" {
-		t.Error("Description must not be empty")
+	if item.FullContent != nil {
+		t.Error("FullContent must be nil for thin listing items — FetchJobContent populates detail")
 	}
 }
 
-// Jobs whose detail page wasn't visited (context cancelled mid-run) should have
-// nil FullContent so the analyzer falls back to its HTTP fetch.
-func TestToMetaItems_NilFullContentWhenNoDescription(t *testing.T) {
+// Pre-populated description (e.g. fixtures, backfill) is still respected.
+func TestToMetaItems_HonoursPrePopulatedDescription(t *testing.T) {
 	jobs := []metaJob{{
-		ID:       "meta-99",
-		Title:    "Engineer",
-		URL:      "https://www.metacareers.com/profile/job_details/99",
-		Location: "Remote",
-		Team:     "Meta",
-		// Description intentionally empty — detail page not visited
+		ID:          "meta-456",
+		Title:       "Engineer",
+		URL:         "https://www.metacareers.com/profile/job_details/456",
+		Location:    "Remote",
+		Team:        "Meta",
+		Description: "fixture description",
 	}}
 	items := toMetaItems(jobs)
-	if len(items) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(items))
+	if items[0].FullContent == nil {
+		t.Fatal("FullContent must be set when description is pre-populated")
 	}
-	if items[0].FullContent != nil {
-		t.Error("FullContent must be nil when description is empty — analyzer will HTTP-fetch it")
+	if items[0].FullContent.Description != "fixture description" {
+		t.Errorf("Description: got %q", items[0].FullContent.Description)
 	}
 }
 

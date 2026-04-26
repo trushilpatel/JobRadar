@@ -107,51 +107,34 @@ var reLocationBlock = regexp.MustCompile(`(?is)>place</[^>]+>(.{0,800}?)<button`
 // instead would leak the half-open <i…> attributes past the tag-strip.
 var reOrgBlock = regexp.MustCompile(`(?is)>corporate_fare</[^>]+>(.{0,400}?)<i\b`)
 
-// reDetailTitle pulls the job title from the <title> tag of the detail page.
-// Cleaner than scraping h3 (no duplicates / sidebar facets to disambiguate).
-var reDetailTitle = regexp.MustCompile(`(?i)<title>([^<]+?)\s*(?:—|-)\s*Google Careers</title>`)
-
-// reMinQual / rePrefQual / reResp match each section header followed
-// immediately by its <ul>…</ul> bullet list. Verified against the live SSR
-// HTML for multiple jobs.
+// reTag / reWS / rePlusMore are post-process helpers: generic tag stripping,
+// whitespace collapsing, and removal of "+N more" responsive truncation
+// indicators in locations.
 var (
-	reMinQual  = regexp.MustCompile(`(?is)<h3[^>]*>[^<]*Minimum qualifications[^<]*</h3>\s*<ul[^>]*>(.*?)</ul>`)
-	rePrefQual = regexp.MustCompile(`(?is)<h3[^>]*>[^<]*Preferred qualifications[^<]*</h3>\s*<ul[^>]*>(.*?)</ul>`)
-	reResp     = regexp.MustCompile(`(?is)<h3[^>]*>[^<]*Responsibilities[^<]*</h3>\s*<ul[^>]*>(.*?)</ul>`)
-)
-
-// reLi / reTag / reWS / rePlusMore are the post-process helpers: bullet
-// extraction inside a <ul>, generic tag stripping, whitespace collapsing,
-// and removal of "+N more" responsive truncation indicators in locations.
-var (
-	reLi       = regexp.MustCompile(`(?is)<li[^>]*>(.*?)</li>`)
 	reTag      = regexp.MustCompile(`<[^>]+>`)
 	reWS       = regexp.MustCompile(`\s+`)
 	rePlusMore = regexp.MustCompile(`(?i);?\s*\+\d+\s*more`)
 )
 
 // parsedJob is the in-package representation of a parsed listing card.
-// Description is empty until the detail page is fetched and enriched.
+// Detail-page content is fetched downstream by the analyzer.
 type parsedJob struct {
-	ID          string // e.g. "google-12345"
-	Title       string
-	URL         string
-	Location    string
-	Org         string
-	Description string
+	ID       string // e.g. "google-12345"
+	Title    string
+	URL      string
+	Location string
+	Org      string
 }
 
-// FetchJobs walks every listing page (paginating via &page=N), enriches each
-// new job with a detail-page fetch, and publishes results to Kafka.
+// FetchJobs walks every listing page (paginating via &page=N), parses listing
+// cards, and publishes thin items to Kafka. Detail-page fetching and LLM
+// enrichment are handled downstream by the analyzer.
 //
 // Pacing:
-//   - MinDelayMs/MaxDelayMs   between listing-page fetches (default 100-120 s)
-//   - EnrichMinMs/EnrichMaxMs between detail-page fetches  (default 5-10 s)
-//   - TimeoutMs               overall scan budget          (default 5 h)
+//   - MinDelayMs/MaxDelayMs between listing-page fetches (default 20-40 s)
+//   - TimeoutMs             overall scan budget          (default 2 h)
 //
 // Reliability:
-//   - Detail-fetch failures NEVER drop the job: the thin item is published
-//     so the analyzer's own HTTP fallback can pick it up later.
 //   - Seen-checker failures don't loop the page; they advance pagination
 //     after treating every card as already-seen for that page.
 func (s *GoogleAdapter) FetchJobs(ctx context.Context, _ string) (types.FetchJobsResponse, error) {
@@ -167,7 +150,6 @@ func (s *GoogleAdapter) FetchJobs(ctx context.Context, _ string) (types.FetchJob
 	var allPublished []types.FetchJobsItem
 	pageNum := 1
 	totalCommitted := 0
-	totalEnriched := 0
 
 scanLoop:
 	for {
@@ -218,40 +200,15 @@ scanLoop:
 			logger.Int("skipped", len(cards)-len(newCards)),
 		)
 
-		// ── Detail enrichment — never drops on failure ─────────────────────
-		detailLimit := len(newCards)
-		if s.cfg.MaxDetailJobs > 0 && s.cfg.MaxDetailJobs < detailLimit {
-			detailLimit = s.cfg.MaxDetailJobs
-		}
+		// Publish all new cards as thin items — the analyzer fetches detail
+		// pages and runs LLM enrichment downstream.
 		committed := 0
-		enriched := 0
-		for i := 0; i < len(newCards); i++ {
+		for _, card := range newCards {
 			if ctx.Err() != nil {
-				s.log.Warn("google/http: context cancelled during enrichment")
+				s.log.Warn("google/http: context cancelled during publish")
 				break scanLoop
 			}
-			enrichEnabled := s.cfg.EnrichMaxMs > 0 && i < detailLimit
-			if enrichEnabled {
-				if i > 0 {
-					if err := s.sleep(ctx, s.cfg.EnrichMinMs, s.cfg.EnrichMaxMs); err != nil {
-						break scanLoop
-					}
-				}
-				detailHTML, err := s.fetch(ctx, newCards[i].URL)
-				if err != nil {
-					s.log.Warn("google/http: detail fetch failed, publishing thin",
-						logger.Str(logger.FieldJobID, newCards[i].ID),
-						logger.Str("error", err.Error()),
-					)
-				} else {
-					desc := parseDetail(detailHTML, newCards[i].Title, newCards[i].Location)
-					if desc != "" {
-						newCards[i].Description = desc
-						enriched++
-					}
-				}
-			}
-			item := toItem(newCards[i])
+			item := toItem(card)
 			if s.streamPublish != nil {
 				s.streamPublish([]types.FetchJobsItem{item})
 			}
@@ -259,14 +216,11 @@ scanLoop:
 			committed++
 		}
 		totalCommitted += committed
-		totalEnriched += enriched
 
 		s.log.Info("google/http: page committed",
 			logger.Int("page", pageNum),
 			logger.Int("committed", committed),
-			logger.Int("enriched", enriched),
 			logger.Int("total_committed", totalCommitted),
-			logger.Int("total_enriched", totalEnriched),
 			logger.Dur(logger.FieldDuration, time.Since(start)),
 		)
 
@@ -292,7 +246,6 @@ scanLoop:
 	s.log.Info("google/http: scan complete",
 		logger.Int("pages", pageNum),
 		logger.Int("total_committed", totalCommitted),
-		logger.Int("total_enriched", totalEnriched),
 		logger.Dur(logger.FieldDuration, time.Since(start)),
 	)
 
@@ -389,62 +342,6 @@ func parseListing(html string) ([]parsedJob, int) {
 	return cards, total
 }
 
-// parseDetail builds the canonical description string for one job from its
-// detail-page HTML. Falls back to the listing-page title/location if the
-// detail-page <title> tag is missing.
-func parseDetail(html, fallbackTitle, fallbackLocation string) string {
-	title := fallbackTitle
-	if m := reDetailTitle.FindStringSubmatch(html); m != nil {
-		title = strings.TrimSpace(m[1])
-	}
-	var b strings.Builder
-	b.WriteString(title)
-	b.WriteString("\n\n")
-	b.WriteString(fallbackLocation)
-	b.WriteString("\n\n")
-
-	sections := []struct {
-		label string
-		re    *regexp.Regexp
-	}{
-		{"Minimum qualifications", reMinQual},
-		{"Preferred qualifications", rePrefQual},
-		{"Responsibilities", reResp},
-	}
-	for _, sec := range sections {
-		m := sec.re.FindStringSubmatch(html)
-		if m == nil {
-			continue
-		}
-		liMatches := reLi.FindAllStringSubmatch(m[1], -1)
-		if len(liMatches) == 0 {
-			continue
-		}
-		// First write the section header — only after we have at least one
-		// non-empty bullet, so empty sections never produce a stray header.
-		var bullets []string
-		for _, li := range liMatches {
-			text := reTag.ReplaceAllString(li[1], " ")
-			text = reWS.ReplaceAllString(text, " ")
-			text = strings.TrimSpace(text)
-			if text != "" {
-				bullets = append(bullets, "- "+text)
-			}
-		}
-		if len(bullets) == 0 {
-			continue
-		}
-		b.WriteString(sec.label)
-		b.WriteString("\n")
-		for _, line := range bullets {
-			b.WriteString(line)
-			b.WriteString("\n")
-		}
-		b.WriteString("\n")
-	}
-	return strings.TrimSpace(b.String())
-}
-
 // cleanText strips tags, collapses whitespace, optionally removes the
 // "+N more" responsive truncation indicators that appear inside multi-
 // location fields (e.g. "Kirkland, WA, USA; Sunnyvale, CA, USA; +2 more").
@@ -479,24 +376,15 @@ func filterPageJobs(pageJobs []parsedJob, seenMap map[string]bool, localSeen map
 	return result
 }
 
-// toItem maps a parsedJob to the engine's FetchJobsItem. When Description is
-// empty we leave FullContent nil so the analyzer's HTTP-fetch fallback runs;
-// non-empty Description bypasses the fallback.
+// toItem maps a parsedJob to a thin FetchJobsItem. FullContent is always nil
+// — the analyzer fetches the detail page and runs LLM enrichment downstream.
 func toItem(j parsedJob) types.FetchJobsItem {
-	var fc *types.FullJobContent
-	if j.Description != "" {
-		fc = &types.FullJobContent{
-			Description: j.Description,
-			Department:  j.Org,
-		}
-	}
 	return types.FetchJobsItem{
 		ID:             j.ID,
 		Title:          j.Title,
 		URL:            j.URL,
 		Location:       j.Location,
 		EmploymentType: "full_time",
-		FullContent:    fc,
 	}
 }
 

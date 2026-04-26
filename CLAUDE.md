@@ -217,10 +217,10 @@ The crawler image (`infra/Dockerfile.crawler`) uses **only Go + Chromium** — n
 Adapter implementation status:
 
 - **Google** — pure HTTP + RE2 regex (`backend/apps/crawler/ats/google/http.go`). Does not touch Chromium.
-- **Meta** — still rod-based (`backend/apps/crawler/ats/meta/rod.go`). This is the only reason Chromium is still baked into the image.
+- **Meta** — hybrid: rod for the listing scroll (`backend/apps/crawler/ats/meta/rod.go`), HTTP + JSON-LD for detail enrichment (`backend/apps/crawler/ats/meta/http_detail.go`). Implements both `Adapter` (listing) and `ContentFetcher` (detail). Chromium is only loaded for the listing tab.
 - All ATS adapters (Greenhouse, Lever, Ashby, Apple, Microsoft, Netflix, Rippling, Uber) — pure HTTP / JSON.
 
-If Meta is ever ported off rod, Chromium can be removed from the image.
+If Meta's listing is ever served via stable HTTP/GraphQL (current barrier: rotating CSRF tokens + persisted-query `doc_id`s), Chromium can be removed from the image entirely.
 
 ## Plan execution mode
 

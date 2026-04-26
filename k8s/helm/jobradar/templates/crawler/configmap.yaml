@@ -15,9 +15,6 @@ data:
   GOOGLE_SCRAPER_MAX_DELAY: {{ .Values.crawler.googleMaxDelay | quote }}
   GOOGLE_SCRAPER_TIMEOUT_MS: {{ .Values.crawler.googleTimeoutMs | quote }}
   GOOGLE_SCRAPER_MAX_PAGES: {{ .Values.crawler.googleMaxPages | quote }}
-  GOOGLE_SCRAPER_ENRICH_MIN: {{ .Values.crawler.googleEnrichMin | quote }}
-  GOOGLE_SCRAPER_ENRICH_MAX: {{ .Values.crawler.googleEnrichMax | quote }}
-  GOOGLE_SCRAPER_MAX_DETAIL_JOBS: {{ .Values.crawler.googleMaxDetailJobs | quote }}
   LOG_LEVEL: {{ .Values.crawler.logLevel | quote }}
   LOG_FORMAT: {{ .Values.crawler.logFormat | quote }}
   METRICS_ADDR: {{ .Values.crawler.metricsAddr | quote }}

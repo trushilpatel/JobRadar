@@ -57,13 +57,10 @@ crawler:
   pollIntervalSeconds: "60"
   stuckTimeoutSeconds: "120"
   heartbeatIntervalSeconds: "30"
-  googleMinDelay: "55000"
-  googleMaxDelay: "75000"
-  googleTimeoutMs: "18000000"
-  googleMaxPages: "1"
-  googleEnrichMin: "5000"
-  googleEnrichMax: "10000"
-  googleMaxDetailJobs: "0"
+  googleMinDelay: "20000"
+  googleMaxDelay: "40000"
+  googleTimeoutMs: "7200000"
+  googleMaxPages: "0"
   logLevel: info
   logFormat: json
   metricsAddr: ":9101"

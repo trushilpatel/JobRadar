@@ -2,6 +2,7 @@ package tracing
 
 import (
 	"context"
+	"sync"
 
 	"github.com/trushilpatel/jobradar/common/logger"
 	"go.opentelemetry.io/otel"
@@ -22,8 +23,11 @@ func Init(serviceName, endpoint string, log logger.Logger) func() {
 		return func() {}
 	}
 
+	var exportWarnOnce sync.Once
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-		log.Warn("tracing export failed (non-fatal)", logger.Err(err))
+		exportWarnOnce.Do(func() {
+			log.Warn("tracing export failed (non-fatal) — further failures suppressed", logger.Err(err))
+		})
 	}))
 
 	ctx := context.Background()

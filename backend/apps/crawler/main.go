@@ -77,13 +77,10 @@ func main() {
 	queue := &queueAdapter{svc: rawQueue}
 
 	googleCfg := atsgoogle.Config{
-		MinDelayMs:    cfg.Crawler.Google.MinDelayMs,
-		MaxDelayMs:    cfg.Crawler.Google.MaxDelayMs,
-		TimeoutMs:     cfg.Crawler.Google.TimeoutMs,
-		MaxPages:      cfg.Crawler.Google.MaxPages,
-		EnrichMinMs:   cfg.Crawler.Google.EnrichMinMs,
-		EnrichMaxMs:   cfg.Crawler.Google.EnrichMaxMs,
-		MaxDetailJobs: cfg.Crawler.Google.MaxDetailJobs,
+		MinDelayMs: cfg.Crawler.Google.MinDelayMs,
+		MaxDelayMs: cfg.Crawler.Google.MaxDelayMs,
+		TimeoutMs:  cfg.Crawler.Google.TimeoutMs,
+		MaxPages:   cfg.Crawler.Google.MaxPages,
 	}
 
 	// One shared Chromium process for the still-rod-based Meta adapter.
@@ -154,13 +151,10 @@ func buildEngine(database *gorm.DB, producer *kafka.Producer, cfg *config.Config
 	queue := scansvc.NewCrawlerQueueService(queueStore)
 
 	googleCfg := atsgoogle.Config{
-		MinDelayMs:    cfg.Crawler.Google.MinDelayMs,
-		MaxDelayMs:    cfg.Crawler.Google.MaxDelayMs,
-		TimeoutMs:     cfg.Crawler.Google.TimeoutMs,
-		MaxPages:      cfg.Crawler.Google.MaxPages,
-		EnrichMinMs:   cfg.Crawler.Google.EnrichMinMs,
-		EnrichMaxMs:   cfg.Crawler.Google.EnrichMaxMs,
-		MaxDetailJobs: cfg.Crawler.Google.MaxDetailJobs,
+		MinDelayMs: cfg.Crawler.Google.MinDelayMs,
+		MaxDelayMs: cfg.Crawler.Google.MaxDelayMs,
+		TimeoutMs:  cfg.Crawler.Google.TimeoutMs,
+		MaxPages:   cfg.Crawler.Google.MaxPages,
 	}
 
 	engine := NewEngine(companies, ledger, recorder, producer, googleCfg, log)

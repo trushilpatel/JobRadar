@@ -210,14 +210,20 @@ export function CompanyDetailDrawer({
             <StatTile value={stats?.new_this_month ?? '—'} accent="new" label="This month" />
           </div>
           {stats && (
-            <div className="grid grid-cols-3 gap-2 mt-2">
-              <StatTile value={stats.total_scans} label="Total scans" />
-              <StatTile value={stats.error_count} label="Errors" />
-              <StatTile
-                value={stats.avg_duration_ms != null ? formatMs(stats.avg_duration_ms) : '—'}
-                label="Avg time"
-              />
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <StatTile value={stats.total_fetched} label="All-time fetched" />
+                <StatTile value={stats.total_new} label="All-time new" />
+              </div>
+              <div className="grid grid-cols-3 gap-2 mt-2">
+                <StatTile value={stats.total_scans} label="Total scans" />
+                <StatTile value={stats.error_count} label="Errors" />
+                <StatTile
+                  value={stats.avg_duration_ms != null ? formatMs(stats.avg_duration_ms) : '—'}
+                  label="Avg time"
+                />
+              </div>
+            </>
           )}
         </Section>
 

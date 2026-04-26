@@ -19,7 +19,7 @@ One sub-package per platform. Each implements the `Adapter` interface (list jobs
 | `greenhouse` | JSON API        |
 | `lever`      | JSON API        |
 | `ashby`      | GraphQL API     |
-| `google`     | Playwright scraper (see `ats/google/scraper/`) |
+| `google`     | Pure HTTP + RE2 regex (`ats/google/http.go`) — no browser |
 | `netflix`    | HTML scrape     |
 | `uber`       | JSON API        |
 | others       | HTML scrape     |

@@ -95,7 +95,7 @@ func (e *Engine) scanCompany(ctx context.Context, company companymodel.Company) 
 		knownIDs = nil
 	}
 
-	result, err := e.fetchJobs(ctx, company, knownIDs, log)
+	result, streamed, err := e.fetchJobs(ctx, company, knownIDs, log)
 	if err != nil {
 		log.Error("scan failed", err)
 		errMsg := err.Error()
@@ -104,7 +104,15 @@ func (e *Engine) scanCompany(ctx context.Context, company companymodel.Company) 
 		return
 	}
 
-	newCount := e.publishNewJobs(ctx, result.Jobs, company, log)
+	// Streaming adapters publish per-page inside FetchJobs via the stream callback —
+	// result.Jobs is what was already committed to Kafka and the ledger. Skip the
+	// post-scan publish pass to avoid a redundant HasSeenBatch round-trip.
+	var newCount int
+	if streamed {
+		newCount = len(result.Jobs)
+	} else {
+		newCount = e.publishNewJobs(ctx, result.Jobs, company, log)
+	}
 	e.detectRemovedJobs(ctx, result.Jobs, knownIDs, log)
 
 	elapsed := time.Since(start)
@@ -120,10 +128,10 @@ func (e *Engine) scanCompany(ctx context.Context, company companymodel.Company) 
 	e.recordResult(ctx, company.ID, len(result.Jobs), newCount, elapsed, nil)
 }
 
-func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, knownIDs []string, log logger.Logger) (ats.FetchJobsResponse, error) {
+func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, knownIDs []string, log logger.Logger) (ats.FetchJobsResponse, bool, error) {
 	adp, err := ats.RegistryWithGoogleConfig(company.AdapterType, e.googleCfg, log)
 	if err != nil {
-		return ats.FetchJobsResponse{}, fmt.Errorf("no adapter for type %q: %w", company.AdapterType, err)
+		return ats.FetchJobsResponse{}, false, fmt.Errorf("no adapter for type %q: %w", company.AdapterType, err)
 	}
 
 	// If the adapter supports skipping enrichment for known jobs, inject the set now.
@@ -149,10 +157,12 @@ func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, kn
 
 	// If the adapter supports streaming, wire up a publish callback so jobs enter
 	// Kafka immediately after each page instead of waiting for the full scan.
+	streamed := false
 	if sp, ok := adp.(ats.StreamPublisher); ok {
 		sp.SetStreamPublish(func(items []ats.FetchJobsItem) {
 			e.publishNewJobs(ctx, items, company, log)
 		})
+		streamed = true
 		log.Debug("streaming publish enabled for adapter")
 	}
 
@@ -161,9 +171,9 @@ func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, kn
 	}
 	result, err := adp.FetchJobs(ctx, company.ID)
 	if err != nil {
-		return ats.FetchJobsResponse{}, fmt.Errorf("fetch failed: %w", err)
+		return ats.FetchJobsResponse{}, false, fmt.Errorf("fetch failed: %w", err)
 	}
-	return result, nil
+	return result, streamed, nil
 }
 
 func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, company companymodel.Company, log logger.Logger) int {

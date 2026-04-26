@@ -23,20 +23,17 @@ func TestGoogleAdapter_CareersURL(t *testing.T) {
 
 func TestNewGoogleAdapter_StoresConfig(t *testing.T) {
 	cfg := Config{
-		MinDelayMs:    5000,
-		MaxDelayMs:    8000,
-		TimeoutMs:     60000,
-		MaxPages:      2,
-		EnrichMinMs:   3000,
-		EnrichMaxMs:   5000,
-		MaxDetailJobs: 10,
+		MinDelayMs: 5000,
+		MaxDelayMs: 8000,
+		TimeoutMs:  60000,
+		MaxPages:   2,
 	}
 	g := NewGoogleAdapter(cfg, logger.NewNoop())
 	if g.cfg.MinDelayMs != 5000 {
 		t.Errorf("MinDelayMs: got %d, want 5000", g.cfg.MinDelayMs)
 	}
-	if g.cfg.MaxDetailJobs != 10 {
-		t.Errorf("MaxDetailJobs: got %d, want 10", g.cfg.MaxDetailJobs)
+	if g.cfg.MaxPages != 2 {
+		t.Errorf("MaxPages: got %d, want 2", g.cfg.MaxPages)
 	}
 }
 
@@ -71,20 +68,21 @@ func TestGoogleAdapter_DoesNotImplementKnownJobsProvider(t *testing.T) {
 func TestGoogleAdapter_DoesNotImplementContentFetcher(t *testing.T) {
 	var g any = NewGoogleAdapterDefault()
 	if _, ok := g.(types.ContentFetcher); ok {
-		t.Error("GoogleAdapter should not implement ContentFetcher — it is a full-detail adapter")
+		t.Error("GoogleAdapter should not implement ContentFetcher — it is a listing-only adapter; detail fetching is handled by the analyzer")
 	}
 }
 
 // ── toItem ───────────────────────────────────────────────────────────────────
 
-func TestToItem_FullDetailMapsFields(t *testing.T) {
+func TestToItem_AlwaysThin(t *testing.T) {
+	// The crawler is a listing-only scanner. FullContent is always nil so the
+	// analyzer's HTTP fetch + LLM enrichment runs for every Google job.
 	job := parsedJob{
-		ID:          "google-123",
-		Title:       "Software Engineer",
-		URL:         "https://www.google.com/about/careers/applications/jobs/results/123-software-engineer",
-		Location:    "Mountain View, CA, USA",
-		Org:         "YouTube",
-		Description: "Minimum qualifications:\n- 3 years experience",
+		ID:       "google-123",
+		Title:    "Software Engineer",
+		URL:      "https://www.google.com/about/careers/applications/jobs/results/123-software-engineer",
+		Location: "Mountain View, CA, USA",
+		Org:      "YouTube",
 	}
 	item := toItem(job)
 	if item.ID != "google-123" {
@@ -93,33 +91,8 @@ func TestToItem_FullDetailMapsFields(t *testing.T) {
 	if item.EmploymentType != "full_time" {
 		t.Errorf("EmploymentType: got %q, want full_time", item.EmploymentType)
 	}
-	if item.FullContent == nil {
-		t.Fatal("FullContent should not be nil for enriched job")
-	}
-	if item.FullContent.Department != "YouTube" {
-		t.Errorf("Department: got %q, want YouTube", item.FullContent.Department)
-	}
-	if item.FullContent.Description == "" {
-		t.Error("Description should not be empty")
-	}
-}
-
-func TestToItem_ThinJobLeavesFullContentNil(t *testing.T) {
-	// Empty Description signals a failed-or-skipped enrichment — analyzer's
-	// HTTP fallback handles it. FullContent must be nil to trigger that path.
-	job := parsedJob{
-		ID:       "google-456",
-		Title:    "Software Engineer",
-		URL:      "https://www.google.com/about/careers/applications/jobs/results/456-software-engineer",
-		Location: "Sunnyvale, CA, USA",
-		Org:      "Google",
-	}
-	item := toItem(job)
 	if item.FullContent != nil {
-		t.Errorf("FullContent should be nil for thin job (empty Description), got %+v", item.FullContent)
-	}
-	if item.ID != "google-456" {
-		t.Errorf("ID: got %q", item.ID)
+		t.Errorf("FullContent should always be nil (listing-only), got %+v", item.FullContent)
 	}
 }
 
@@ -285,68 +258,6 @@ func TestParseListing_ExtractsCardsAndTotal(t *testing.T) {
 	// "+2 more" should be stripped from multi-location strings.
 	if strings.Contains(c1.Location, "+2 more") {
 		t.Errorf("card[1].Location should not contain '+2 more': %q", c1.Location)
-	}
-}
-
-// ── parseDetail ──────────────────────────────────────────────────────────────
-
-const fixtureDetail = `<!doctype html><html><head>
-<title>Software Engineer, Search — Google Careers</title>
-</head><body>
-<h2>job details</h2>
-<h3>About the job</h3>
-<p>Google is...</p>
-<h3>Minimum qualifications:</h3>
-<ul>
-  <li>Bachelor's degree or equivalent practical experience.</li>
-  <li>3 years of experience with software development.</li>
-</ul>
-<h3>Preferred qualifications:</h3>
-<ul>
-  <li>Master's degree.</li>
-  <li>Experience with distributed systems.</li>
-</ul>
-<h3>Responsibilities</h3>
-<ul>
-  <li>Write code.</li>
-  <li>Review designs.</li>
-</ul>
-</body></html>`
-
-func TestParseDetail_BuildsDescriptionWithAllSections(t *testing.T) {
-	desc := parseDetail(fixtureDetail, "FALLBACK TITLE", "FALLBACK LOC")
-
-	if !strings.Contains(desc, "Software Engineer, Search") {
-		t.Error("description missing title from <title> tag")
-	}
-	if !strings.Contains(desc, "FALLBACK LOC") {
-		t.Error("description should include fallback location")
-	}
-	for _, header := range []string{
-		"Minimum qualifications",
-		"Preferred qualifications",
-		"Responsibilities",
-	} {
-		if !strings.Contains(desc, header) {
-			t.Errorf("description missing section header %q", header)
-		}
-	}
-	for _, bullet := range []string{
-		"- Bachelor's degree or equivalent practical experience.",
-		"- Master's degree.",
-		"- Write code.",
-	} {
-		if !strings.Contains(desc, bullet) {
-			t.Errorf("description missing bullet %q", bullet)
-		}
-	}
-}
-
-func TestParseDetail_FallsBackToProvidedTitleWhenTagMissing(t *testing.T) {
-	html := `<html><body><h3>Minimum qualifications</h3><ul><li>Foo</li></ul></body></html>`
-	desc := parseDetail(html, "Backup Title", "Backup Location")
-	if !strings.Contains(desc, "Backup Title") {
-		t.Errorf("description should fall back to provided title; got: %q", desc)
 	}
 }
 
