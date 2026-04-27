@@ -311,8 +311,37 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 
 	start := w.clock.Now()
 
-	inputs := make([]llmdto.JobsRelevanceFilterInput, len(chunk))
-	for i, item := range chunk {
+	// Partition: jobs without a title can't be scored — the LLM has no signal to
+	// evaluate relevance and will default to "EXCLUDE". Pass them through directly
+	// to the enricher which will fetch full content and do role_match there.
+	var scorable, passThrough []chunkItem
+	for _, item := range chunk {
+		if item.job.job.Title == "" {
+			passThrough = append(passThrough, item)
+		} else {
+			scorable = append(scorable, item)
+		}
+	}
+
+	for _, item := range passThrough {
+		w.publishDetail(ctx, item.job.job)
+	}
+	if len(passThrough) > 0 {
+		w.log.Info("chunk pass-through (no title)",
+			logger.Str(logger.FieldFetchID, fetchID),
+			logger.Int(logger.FieldChunkIndex, chunkIndex),
+			logger.Int("pass_through_count", len(passThrough)),
+		)
+		metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(passThrough)))
+	}
+
+	if len(scorable) == 0 {
+		metrics.FilterChunkDuration.WithLabelValues("relevant").Observe(w.clock.Now().Sub(start).Seconds())
+		return
+	}
+
+	inputs := make([]llmdto.JobsRelevanceFilterInput, len(scorable))
+	for i, item := range scorable {
 		inputs[i] = llmdto.JobsRelevanceFilterInput{
 			ID:       item.job.job.ID,
 			Title:    item.job.job.Title,
@@ -321,7 +350,7 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 	}
 
 	scoreCtx, scoreSpan := tracing.Start(ctx, "filter.worker.scoreBatch")
-	scoreSpan.SetAttributes(attribute.Int("batch.size", len(chunk)))
+	scoreSpan.SetAttributes(attribute.Int("batch.size", len(scorable)))
 	relevantIDs, err := w.scorer.ScoreBatch(scoreCtx, inputs)
 	if err != nil {
 		scoreSpan.SetAttributes(attribute.String("outcome", "error"))
@@ -332,7 +361,7 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 			logger.Str(logger.FieldFetchID, fetchID),
 			logger.Int(logger.FieldChunkIndex, chunkIndex),
 			logger.Int(logger.FieldChunkCount, chunkCount),
-			logger.Int(logger.FieldBatch, len(chunk)),
+			logger.Int(logger.FieldBatch, len(scorable)),
 		}
 		var exhausted *domainerr.LLMAllExhaustedError
 		if stderrors.As(err, &exhausted) {
@@ -347,7 +376,7 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		w.log.Error("ScoreBatch failed, routing chunk", err, fields...)
 
 		routeCtx, routeSpan := tracing.Start(ctx, "filter.worker.routeFailed")
-		outcome := w.routeFailedChunk(routeCtx, chunk, err)
+		outcome := w.routeFailedChunk(routeCtx, scorable, err)
 		routeSpan.SetAttributes(
 			attribute.Int("dlqed", len(outcome.DLQed)),
 			attribute.Int("retried", len(outcome.Retried)),
@@ -382,7 +411,7 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 			}
 		}
 
-		publishFailed := len(chunk) - len(outcome.DLQed) - len(outcome.Retried)
+		publishFailed := len(scorable) - len(outcome.DLQed) - len(outcome.Retried)
 		w.log.Info("chunk routed",
 			logger.Str(logger.FieldFetchID, fetchID),
 			logger.Int(logger.FieldChunkIndex, chunkIndex),
@@ -403,7 +432,7 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 	}
 
 	var irrelevantIDs []string
-	for _, item := range chunk {
+	for _, item := range scorable {
 		if relevant[item.job.job.ID] {
 			w.publishDetail(ctx, item.job.job)
 		} else {
@@ -438,7 +467,7 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		logger.Str(logger.FieldFetchID, fetchID),
 		logger.Int(logger.FieldChunkIndex, chunkIndex),
 		logger.Int(logger.FieldChunkCount, chunkCount),
-		logger.Int(logger.FieldBatch, len(chunk)),
+		logger.Int(logger.FieldBatch, len(scorable)),
 		logger.Int(logger.FieldRelevant, len(relevantIDs)),
 		logger.Int("irrelevant", len(irrelevantIDs)),
 	)

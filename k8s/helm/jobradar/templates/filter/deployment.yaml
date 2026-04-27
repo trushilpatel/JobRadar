@@ -19,6 +19,10 @@ spec:
         {{- include "jobradar.labels" . | nindent 8 }}
         component: filter
     spec:
+      volumes:
+        - name: llm-slots
+          configMap:
+            name: jobradar-llm-slots
       containers:
         - name: filter
           image: {{ .Values.images.backend.repository }}:{{ .Values.images.backend.tag }}
@@ -29,6 +33,12 @@ spec:
                 name: jobradar-filter-config
             - secretRef:
                 name: jobradar-filter-secret
+          env:
+            - name: LLM_SLOTS_CONFIG
+              value: /etc/jobradar/llm-slots.yaml
+          volumeMounts:
+            - name: llm-slots
+              mountPath: /etc/jobradar
           ports:
             - containerPort: 9101
               name: metrics

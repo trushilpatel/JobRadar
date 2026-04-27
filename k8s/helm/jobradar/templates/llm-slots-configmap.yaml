@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-llm-slots
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+data:
+  llm-slots.yaml: |
+    filter:
+      slots:
+        - key_id: {{ .Values.llmSlots.filterKeyId | quote }}
+          api_key: ${GEMINI_KEY}
+          model: {{ .Values.llmSlots.filterModel | quote }}
+          rpm: {{ .Values.llmSlots.filterRpm }}
+          rpd: {{ .Values.llmSlots.filterRpd }}
+          tpm_in: {{ .Values.llmSlots.filterTpmIn }}
+
+    enricher:
+      slots:
+        - key_id: {{ .Values.llmSlots.enricherKeyId | quote }}
+          api_key: ${GEMINI_KEY}
+          model: {{ .Values.llmSlots.enricherModel | quote }}
+          rpm: {{ .Values.llmSlots.enricherRpm }}
+          rpd: {{ .Values.llmSlots.enricherRpd }}
+          tpm_in: {{ .Values.llmSlots.enricherTpmIn }}

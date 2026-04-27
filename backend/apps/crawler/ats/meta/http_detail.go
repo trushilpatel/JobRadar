@@ -39,6 +39,24 @@ var reJSONLD = regexp.MustCompile(
 	`(?is)<script\s+type=["']application/ld\+json["'][^>]*>(.*?)</script>`,
 )
 
+// reMetaContent extracts the content attribute from a <meta> tag.
+var reMetaContent = regexp.MustCompile(`(?i)content=["']([^"']*)["']`)
+
+// extractMetaTag returns the content attribute of the first <meta> tag whose
+// name or property attribute matches the given value (case-insensitive).
+func extractMetaTag(body []byte, attr string) string {
+	re := regexp.MustCompile(`(?i)<meta[^>]+(?:name|property)=["']` + regexp.QuoteMeta(attr) + `["'][^>]*>`)
+	tag := re.Find(body)
+	if tag == nil {
+		return ""
+	}
+	m := reMetaContent.FindSubmatch(tag)
+	if m == nil {
+		return ""
+	}
+	return string(m[1])
+}
+
 // flexString decodes any of the string-shaped variants Meta emits in
 // schema.org address fields:
 //   - plain string                 ("USA")
@@ -368,7 +386,22 @@ func (m *MetaAdapter) fetchAndParseDetail(ctx context.Context, url string) (*Job
 	if err != nil {
 		return nil, fmt.Errorf("meta/http: read body: %w", err)
 	}
-	return extractJobPosting(body)
+	jp, err := extractJobPosting(body)
+	if err != nil {
+		// Some Meta pages are fully client-side rendered and omit JSON-LD from
+		// the server HTML. Fall back to og:title + og:description so the
+		// enricher can still run role_match against whatever content is available.
+		title := extractMetaTag(body, "og:title")
+		desc := extractMetaTag(body, "og:description")
+		if title == "" {
+			title = extractMetaTag(body, "title")
+		}
+		if title != "" {
+			return &JobPosting{Title: title, Description: desc}, nil
+		}
+		return nil, err
+	}
+	return jp, nil
 }
 
 // detailURLForJobID builds the canonical detail URL.

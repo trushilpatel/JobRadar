@@ -136,7 +136,7 @@ func (m *MetaAdapter) FetchJobContent(ctx context.Context, job types.RawJob) (ty
 	}
 	jp, err := m.fetchAndParseDetail(ctx, url)
 	if err != nil {
-		return types.FetchJobContentResponse{}, fmt.Errorf("meta/http: %w", err)
+		return types.FetchJobContentResponse{}, err
 	}
 	resp := jp.toFetchJobContentResponse(job.ID)
 	resp.URL = url

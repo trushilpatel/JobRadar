@@ -111,32 +111,32 @@ func (s *userDashboardRepository) GetCompanyVelocityDetailed(ctx context.Context
 	ctx, span := tracing.Start(ctx, "dashboard.store.GetCompanyVelocityDetailed")
 	defer tracing.End(span, &err)
 	err = s.db.WithContext(ctx).Raw(`
-		SELECT
-			c.id   AS company_id,
-			c.name AS company_name,
-			COUNT(*) FILTER (
-				WHERE ja.snapshotted_at >= DATE_TRUNC('week', NOW())
-			) AS week_current,
-			COUNT(*) FILTER (
-				WHERE ja.snapshotted_at >= DATE_TRUNC('week', NOW()) - INTERVAL '7 days'
-				  AND ja.snapshotted_at <  DATE_TRUNC('week', NOW())
-			) AS week_1,
-			COUNT(*) FILTER (
-				WHERE ja.snapshotted_at >= DATE_TRUNC('week', NOW()) - INTERVAL '14 days'
-				  AND ja.snapshotted_at <  DATE_TRUNC('week', NOW()) - INTERVAL '7 days'
-			) AS week_2,
-			COUNT(*) FILTER (
-				WHERE ja.snapshotted_at >= DATE_TRUNC('week', NOW()) - INTERVAL '21 days'
-				  AND ja.snapshotted_at <  DATE_TRUNC('week', NOW()) - INTERVAL '14 days'
-			) AS week_3
-		FROM job_analytics ja
-		JOIN companies c ON ja.company_id = c.id
-		WHERE ja.snapshotted_at >= DATE_TRUNC('week', NOW()) - INTERVAL '28 days'
-		GROUP BY c.id, c.name
-		HAVING COUNT(*) FILTER (
-			WHERE ja.snapshotted_at >= DATE_TRUNC('week', NOW())
-		) > 0
-		ORDER BY week_current DESC
+		WITH v AS (
+			SELECT
+				c.id   AS company_id,
+				c.name AS company_name,
+				COUNT(*) FILTER (
+					WHERE ja.snapshotted_at >= DATE_TRUNC('week', NOW())
+				) AS week_current,
+				COUNT(*) FILTER (
+					WHERE ja.snapshotted_at >= DATE_TRUNC('week', NOW()) - INTERVAL '7 days'
+					  AND ja.snapshotted_at <  DATE_TRUNC('week', NOW())
+				) AS week_1,
+				COUNT(*) FILTER (
+					WHERE ja.snapshotted_at >= DATE_TRUNC('week', NOW()) - INTERVAL '14 days'
+					  AND ja.snapshotted_at <  DATE_TRUNC('week', NOW()) - INTERVAL '7 days'
+				) AS week_2,
+				COUNT(*) FILTER (
+					WHERE ja.snapshotted_at >= DATE_TRUNC('week', NOW()) - INTERVAL '21 days'
+					  AND ja.snapshotted_at <  DATE_TRUNC('week', NOW()) - INTERVAL '14 days'
+				) AS week_3
+			FROM job_analytics ja
+			JOIN companies c ON ja.company_id = c.id
+			WHERE ja.snapshotted_at >= DATE_TRUNC('week', NOW()) - INTERVAL '28 days'
+			GROUP BY c.id, c.name
+		)
+		SELECT * FROM v
+		ORDER BY week_current DESC, (week_1 + week_2 + week_3) DESC
 		LIMIT ?
 	`, limit).Scan(&results).Error
 	return results, err

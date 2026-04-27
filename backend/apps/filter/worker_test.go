@@ -609,8 +609,10 @@ func TestProcessFetch_AllMalformedReturnsNil(t *testing.T) {
 	if err := w.processFetch(context.Background(), records); err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
-	if len(commit.batches) != 0 {
-		t.Errorf("expected no commit attempts, got %d", len(commit.batches))
+	// Malformed records are DLQ'd then committed so they don't re-deliver.
+	// All 2 malformed records land in one batch commit.
+	if len(commit.batches) != 1 {
+		t.Errorf("expected 1 commit (malformed batch), got %d", len(commit.batches))
 	}
 	if scorer.calls != 0 {
 		t.Errorf("expected no scorer calls, got %d", scorer.calls)

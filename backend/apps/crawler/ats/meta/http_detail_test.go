@@ -353,6 +353,90 @@ func TestFetchJobContent_Surfaces404(t *testing.T) {
 	}
 }
 
+// ── extractMetaTag ───────────────────────────────────────────────────────────
+
+func TestExtractMetaTag_OgTitle(t *testing.T) {
+	html := []byte(`<html><head>
+<meta property="og:title" content="UX Researcher, Qualitative" />
+<meta name="description" content="We design for humans." />
+</head></html>`)
+	if got := extractMetaTag(html, "og:title"); got != "UX Researcher, Qualitative" {
+		t.Errorf("og:title: got %q", got)
+	}
+}
+
+func TestExtractMetaTag_NameAttribute(t *testing.T) {
+	html := []byte(`<meta name="title" content="Software Engineer" />`)
+	if got := extractMetaTag(html, "title"); got != "Software Engineer" {
+		t.Errorf("name=title: got %q", got)
+	}
+}
+
+func TestExtractMetaTag_MissingReturnsEmpty(t *testing.T) {
+	if got := extractMetaTag([]byte(`<html></html>`), "og:title"); got != "" {
+		t.Errorf("missing tag: got %q, want empty", got)
+	}
+}
+
+// ── FetchJobContent — meta-tag fallback when JSON-LD absent ─────────────────
+
+const fixtureNoJSONLD = `<!DOCTYPE html><html><head>
+<meta name="title" content="UX Researcher, Qualitative" />
+<meta property="og:title" content="UX Researcher, Qualitative" />
+<meta property="og:description" content="Our UX Research team is designing for the global spectrum of human needs." />
+</head><body><div>Page content loaded by React.</div></body></html>`
+
+func TestFetchJobContent_FallsBackToMetaTagsWhenNoJSONLD(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(fixtureNoJSONLD))
+	}))
+	defer srv.Close()
+
+	m := New(defaultConfig(), logger.NewNoop())
+	resp, err := m.FetchJobContent(context.Background(), types.RawJob{
+		ID:  "meta-2396505620550988",
+		URL: srv.URL + "/profile/job_details/2396505620550988",
+	})
+	if err != nil {
+		t.Fatalf("FetchJobContent: expected fallback success, got error: %v", err)
+	}
+	if resp.Title != "UX Researcher, Qualitative" {
+		t.Errorf("Title: got %q, want 'UX Researcher, Qualitative'", resp.Title)
+	}
+	if !strings.Contains(resp.Description, "UX Research") {
+		t.Errorf("Description: expected og:description content, got %q", resp.Description)
+	}
+}
+
+func TestFetchJobContent_ErrorHasNoDoublePrefix(t *testing.T) {
+	// When the page has no JSON-LD and no meta tags, error should say
+	// "meta/http: ..." exactly once, not "meta/http: meta/http: ...".
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body>nothing</body></html>`))
+	}))
+	defer srv.Close()
+
+	m := New(defaultConfig(), logger.NewNoop())
+	_, err := m.FetchJobContent(context.Background(), types.RawJob{
+		ID:  "meta-1",
+		URL: srv.URL + "/profile/job_details/1",
+	})
+	if err == nil {
+		t.Fatal("expected error when page has no JSON-LD and no meta tags")
+	}
+	msg := err.Error()
+	first := strings.Index(msg, "meta/http:")
+	if first == -1 {
+		t.Errorf("error missing 'meta/http:' prefix: %q", msg)
+		return
+	}
+	if strings.Contains(msg[first+1:], "meta/http:") {
+		t.Errorf("double 'meta/http:' prefix in error: %q", msg)
+	}
+}
+
 // ── Sanity check: JSON tags produce expected wire format ─────────────────────
 
 func TestJobPosting_RoundTripsThroughJSON(t *testing.T) {

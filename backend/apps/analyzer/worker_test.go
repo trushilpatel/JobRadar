@@ -852,7 +852,8 @@ func TestProcessFetch_ZeroFetchedNoCommits(t *testing.T) {
 	clk := &fakeClock{now: time.Now()}
 	w := makeWorkerFull(scorer, pipeline, publisher, ledger, commit, clk, 5)
 
-	// Malformed records — all rejected in fetchOne.
+	// Malformed records — all rejected in fetchOne. Each is committed individually
+	// after DLQ publish so it doesn't re-deliver.
 	records := []*kgo.Record{
 		{Value: []byte("not json"), Partition: 0, Offset: 1},
 		{Value: []byte("{{{"), Partition: 0, Offset: 2},
@@ -860,8 +861,8 @@ func TestProcessFetch_ZeroFetchedNoCommits(t *testing.T) {
 	if err := w.processFetch(context.Background(), records); err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
-	if len(commit.batches) != 0 {
-		t.Errorf("expected no commit attempts, got %d", len(commit.batches))
+	if len(commit.batches) != 2 {
+		t.Errorf("expected 2 commits (one per malformed record), got %d", len(commit.batches))
 	}
 }
 

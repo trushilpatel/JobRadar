@@ -1,0 +1,706 @@
+company,domain,ats,slug,status,actual_jobs,stored_jobs,delta,note,investors,api_url
+Valence,valence.co,Ashby,valence,empty,0,17,-17,API returned 0 job postings,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Reflection AI,reflection.ai,Ashby,reflection-ai,http_502,-1,36,0,HTTP Error 502: Bad Gateway,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+0x Labs,0x.org,Ashby,0x-labs,not_found,-1,6,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+7AI,7ai.com,Ashby,7ai,not_found,-1,26,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Adaptive,adaptive.build,Ashby,adaptive-build,not_found,-1,9,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Adaptive Security,adaptivesecurity.com,Ashby,adaptive-security,not_found,-1,17,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Air Space Intelligence,airspace-intelligence.com,Ashby,airspace-intelligence,not_found,-1,23,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Alchemy,alchemy.com,Ashby,alchemy-com,not_found,-1,30,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,"a16z,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Alleviate Health,alleviatehealth.care,Ashby,alleviate-health,not_found,-1,5,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Ambience Healthcare,ambiencehealthcare.com,Ashby,ambience-healthcare,not_found,-1,26,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Ambient,ambient.ai,Ashby,ambient,not_found,-1,29,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Ansible Health,ansiblehealth.com,Ashby,ansible-health,not_found,-1,4,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Archive Resale,archiveresale.co,Ashby,archive-resale,not_found,-1,3,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Arena,arena.ai,Ashby,lmarena,not_found,-1,19,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,"a16z,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Aspora,aspora.com,Ashby,vance,not_found,-1,22,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Assort Health,assorthealth.com,Ashby,assort-health,not_found,-1,25,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Axion,axionray.com,Ashby,axion-ray,not_found,-1,10,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Bayesian Health,bayesianhealth.com,Ashby,bayesian-health,not_found,-1,11,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Bedrock Security,bedrock.security,Ashby,bedrock-security,not_found,-1,7,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Blackbird,blackbird.xyz,Ashby,blackbird,not_found,-1,17,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Bounce,usebounce.com,Ashby,use-bounce,not_found,-1,14,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Braintrust Data,braintrust.dev,Ashby,braintrust-data,not_found,-1,37,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,"a16z,Greylock",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Bretton AI,bretton.com,Ashby,greenlite,not_found,-1,7,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Bunkerhill Health,bunkerhillhealth.com,Ashby,bunkerhill-health,not_found,-1,5,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Camber,camber.health,Ashby,juniper-behavioral-health,not_found,-1,20,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Cantina,cantina.com,Ashby,airtime,not_found,-1,15,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Character.AI,character.ai,Ashby,character.ai,not_found,-1,16,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Clipboard Health,clipboardhealth.com,Ashby,clipboard-health,not_found,-1,50,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Clutch,withclutch.com,Ashby,clutch,not_found,-1,5,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Collaborative Robotics,co.bot,Ashby,collaborative-robotics,not_found,-1,14,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Common Room,commonroom.io,Ashby,common-room,not_found,-1,12,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Counsel Health,counselhealth.com,Ashby,counsel-health,not_found,-1,13,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Crux,cruxclimate.com,Ashby,crux,not_found,-1,17,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Cylake,cylake.com,Ashby,cylake,not_found,-1,11,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Delphi,delphi.ai,Ashby,delphi-gg,not_found,-1,7,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Dialogue,dialogueai.com,Ashby,dialogue,not_found,-1,4,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Distyl AI,distyl.ai,Ashby,distyl-ai,not_found,-1,28,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Dome Systems,domesystems.ai,Ashby,dome-systems,not_found,-1,5,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Dominion Dynamics,dominion-dynamics.com,Ashby,dominion-dynamics,not_found,-1,15,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+EigenLayer,eigenlayer.xyz,Ashby,eigen-layer,not_found,-1,3,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Fable Security,fablesecurity.com,Ashby,fable-security,not_found,-1,9,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Fern,buildwithfern.com,Ashby,fern,not_found,-1,8,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Fin,fin.tech,Ashby,tiplink,not_found,-1,9,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Flow Engineering,flowengineering.com,Ashby,flow-engineering,not_found,-1,11,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Front,frontapp.com,Ashby,front,not_found,-1,41,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Grepr,grepr.ai,Ashby,grepr-ai,not_found,-1,4,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Hatch,usehatchapp.com,Ashby,hatch-app,not_found,-1,10,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Hilbert,hilberts.ai,Ashby,hilbert,not_found,-1,22,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Hook,hook.co,Ashby,hook-co,not_found,-1,7,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Ideogram,ideogram.ai,Ashby,mobius-ai,not_found,-1,12,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Infinitus Systems,infinitus.ai,Ashby,infinitus-systems,not_found,-1,11,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Ironclad,ironcladapp.com,Ashby,ironclad,not_found,-1,45,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Jasper,jasper.ai,Ashby,jasper,not_found,-1,10,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Kaizen Labs,kaizenlabs.co,Ashby,kaizen-labs,not_found,-1,12,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Keycard,keycard.ai,Ashby,keycard,not_found,-1,2,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Legend,legend.xyz,Ashby,legend,not_found,-1,2,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Leona Health,leona.health,Ashby,leona-health,not_found,-1,5,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Lido,lido.fi,Ashby,lido,not_found,-1,3,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Lightfield,lightfield.app,Ashby,tome,not_found,-1,13,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,"Lightspeed,Greylock",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Lilt,lilt.com,Ashby,lilt,not_found,-1,9,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Linera,linera.io,Ashby,linera,not_found,-1,1,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Lio,lio.ai,Ashby,lio-ai,not_found,-1,35,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Listen Labs,listenlabs.ai,Ashby,listen-labs,not_found,-1,22,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Mach Industries,machindustries.com,Ashby,mach-industries,not_found,-1,70,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Magic Eden,magiceden.io,Ashby,magic-eden,not_found,-1,4,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,"Sequoia,Lightspeed,Greylock",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Material Security,material.security,Ashby,material-security,not_found,-1,8,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Mem Protocol,mem.co,Ashby,mem-protocol,not_found,-1,4,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Method Security,method.security,Ashby,method-security,not_found,-1,5,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Midstream Health,midstream.health,Ashby,midstream-health,not_found,-1,6,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Mind Robotics,mindrobotics.com,Ashby,mind-robotics,not_found,-1,13,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Mirelo AI,mirelo.ai,Ashby,mirelo-ai,not_found,-1,8,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Moment,withmoment.com,Ashby,with-moment,not_found,-1,12,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,"a16z,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Moonvalley,moonvalley.com,Ashby,moonvalley,not_found,-1,8,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Multiverse IO,multiverse.io,Ashby,multiverse-io,not_found,-1,41,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Mysten Labs,mystenlabs.com,Ashby,mysten-labs,not_found,-1,10,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,"a16z,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Nexus,nexus.xyz,Ashby,nexus-xyz,not_found,-1,4,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Nirvana Insurance,nirvanatech.com,Ashby,nirvana-insurance,not_found,-1,1,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Noetica AI,noetica.ai,Ashby,noetica-ai,not_found,-1,1,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Notable,notablehealth.com,Ashby,notable-health,not_found,-1,16,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+OP Labs,oplabs.co,Ashby,op-labs,not_found,-1,8,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Opal,opal.dev,Ashby,opal-security,not_found,-1,9,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Patch,patch.io,Ashby,patch,not_found,-1,8,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Pearl Health,pearlhealth.com,Ashby,pearl-health,not_found,-1,15,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Perplexity AI,perplexity.ai,Ashby,perplexity-ai,not_found,-1,72,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Polygon Technology,polygon.technology,Ashby,polygon-technology,not_found,-1,8,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Proof of Play,proofofplay.com,Ashby,proof-of-play,not_found,-1,4,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Protege,withprotege.ai,Ashby,with-protege,not_found,-1,8,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Pylon,usepylon.com,Ashby,use-pylon,not_found,-1,32,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Rain,rain.xyz,Ashby,rain-xyz,not_found,-1,68,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Recall.ai,recall.ai,Ashby,recall.ai,not_found,-1,5,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Relevance AI,relevanceai.com,Ashby,relevance-ai,not_found,-1,20,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Reliable Robotics Corporation,reliable.co,Ashby,reliable-robotics-corporation,not_found,-1,68,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Resolve AI,resolve.ai,Ashby,resolve-ai,not_found,-1,18,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,"Lightspeed,Greylock",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+RevenueBase,revenuebase.ai,Ashby,revenuebase,not_found,-1,8,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Ricursive Intelligence,ricursive.com,Ashby,ricursive-intelligence,not_found,-1,8,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+RobCo,rob.co,Ashby,the-robot-company,not_found,-1,34,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,"Sequoia,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Rune Technologies,runetech.co,Ashby,rune-technologies,not_found,-1,12,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Series Entertainment,series.inc,Ashby,series-entertainment,not_found,-1,1,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Sesame,sesame.com,Ashby,sesame-ai,not_found,-1,32,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,"a16z,Sequoia",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Sky Mavis,skymavis.com,Ashby,sky-mavis,not_found,-1,5,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Slingshot AI,slingshot.xyz,Ashby,slingshot-ai,not_found,-1,4,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Socket.dev,socket.dev,Ashby,socket-dev,not_found,-1,19,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Solana Foundation,solana.org,Ashby,solana-foundation,not_found,-1,10,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Sphere,getsphere.com,Ashby,get-sphere,not_found,-1,11,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Squint,squint.ai,Ashby,squint,not_found,-1,6,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Stacks,stacks.ai,Ashby,stacks-ai,not_found,-1,14,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Stainless,stainlessapi.com,Ashby,stainless,not_found,-1,16,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,"a16z,Sequoia",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Stuut,stuut.co,Ashby,stuut,not_found,-1,13,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Sui Foundation,suifoundation.org,Ashby,sui-foundation,not_found,-1,1,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Summer Health,summerhealth.com,Ashby,summer-health,not_found,-1,2,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Sweep,sweep.io,Ashby,sweep-io,not_found,-1,13,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+TENEX.AI,tenex.ai,Ashby,tenex.ai,not_found,-1,46,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Tako,usetako.com,Ashby,use-tako,not_found,-1,14,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Talos,talos.com,Ashby,talos,not_found,-1,23,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Teleport,goteleport.com,Ashby,go-teleport,not_found,-1,30,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+The Believer Company,believer.gg,Ashby,the-believer-company,not_found,-1,1,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,"a16z,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+The Better Money Company,bettermoney.com,Ashby,the-better-money-company,not_found,-1,7,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+The Mobile-First Company,themobilefirstcompany.com,Ashby,the-mobile-first-company,not_found,-1,12,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+USHP,ushphealth.com,Ashby,ushp,not_found,-1,27,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+UniSwap,uniswap.org,Ashby,uniswap-protocol,not_found,-1,8,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Valon Labs,valon.ai,Ashby,valon-labs,not_found,-1,29,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Vapi,vapi.ai,Ashby,superpowered,not_found,-1,24,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Walrus Foundation,walrus.xyz,Ashby,walrus-foundation,not_found,-1,2,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Weekend,volleythat.com,Ashby,volley,not_found,-1,5,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+XBOW,xbow.com,Ashby,xbow,not_found,-1,37,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+XMTP Labs,xmtp.org,Ashby,xmtp-labs,not_found,-1,1,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+krea.ai,krea.ai,Ashby,krea.ai,not_found,-1,14,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+lemon.markets,lemon.markets,Ashby,lemon.markets,not_found,-1,11,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+sound.xyz,sound.xyz,Ashby,sound,not_found,-1,2,0,jobBoardWithTeams returned null — slug wrong or company not on Ashby,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+1Password,1password.com,Ashby,1password,ok,82,82,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+ADDI,addi.com,Ashby,addi,ok,30,30,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+AKASA,akasa.com,Ashby,akasa,ok,7,7,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+AirGarage,airgarage.com,Ashby,airgarage,ok,8,8,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+AirOps,airops.com,Ashby,airops,ok,32,32,0,,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Airbound,airbound.co,Ashby,airbound,ok,2,2,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Aiwyn,aiwyn.ai,Ashby,aiwyn,ok,11,11,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Amca,amca.co,Ashby,amca,ok,14,14,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Amperos,amperos.com,Ashby,amperos,ok,12,12,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Anrok,anrok.com,Ashby,anrok,ok,18,18,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Anterior,anterior.com,Ashby,anterior,ok,3,3,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+AnyScale,anyscale.com,Ashby,anyscale,ok,12,12,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Anything,anything.com,Ashby,anything,ok,6,6,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Apollo GraphQL,apollographql.com,Ashby,apollo-graphql,ok,8,8,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Apron,getapron.com,Ashby,apron,ok,5,5,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Aquant,aquant.io,Ashby,aquant,ok,5,5,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Archy,archy.com,Ashby,archy,ok,15,16,-1,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Asimov,asimov.com,Ashby,asimov,ok,4,4,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Astro Mechanica,astromecha.co,Ashby,astro-mechanica,ok,25,25,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Atomic,atomic.financial,Ashby,atomic,ok,10,3,7,,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Bankjoy,bankjoy.com,Ashby,bankjoy,ok,7,7,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Bastion,bastion.com,Ashby,bastion,ok,7,7,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Benchling,benchling.com,Ashby,benchling,ok,54,54,0,,"a16z,Sequoia",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+BetterUp,betterup.com,Ashby,betterup,ok,38,38,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Brale,brale.xyz,Ashby,brale,ok,5,5,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Breaker,breakerindustries.com,Ashby,breaker,ok,4,4,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Brigit,hellobrigit.com,Ashby,brigit,ok,10,10,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Brisk Teaching,briskteaching.com,Ashby,brisk-teaching,ok,9,9,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Cambly,cambly.com,Ashby,cambly,ok,6,6,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Cape,cape.co,Ashby,cape,ok,25,25,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Cartesia,cartesia.ai,Ashby,cartesia,ok,31,31,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Catena Labs,catenalabs.com,Ashby,catena-labs,ok,2,2,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+ChartHop,charthop.com,Ashby,charthop,ok,1,1,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Chestnut,chestnutfi.com,Ashby,chestnut,ok,4,4,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Choco,choco.com,Ashby,choco,ok,4,4,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Clerk,clerk.com,Ashby,clerk,ok,2,2,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Cluely,cluely.com,Ashby,cluely,ok,4,4,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Coder,coder.com,Ashby,coder,ok,4,4,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Cogent Security,cogent.security,Ashby,cogent-security,ok,15,15,0,,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Commure,commure.com,Ashby,commure,ok,88,88,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Composio,composio.dev,Ashby,composio,ok,12,12,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+ConductorAI,conductorai.co,Ashby,conductorai,ok,7,7,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Convex,convex.dev,Ashby,convex-dev,ok,3,3,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Crete Professionals Alliance,cretepa.com,Ashby,crete-professionals-alliance,ok,85,85,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Crosby,crosby.ai,Ashby,crosby,ok,23,22,1,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Curri,curri.com,Ashby,curri,ok,25,25,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+DeepL,deepl.com,Ashby,deepl,ok,54,56,-2,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Doctronic,doctronic.ai,Ashby,doctronic,ok,23,23,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Doppel,doppel.com,Ashby,doppel,ok,11,11,0,,"a16z,BVP",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Doppler,doppler.com,Ashby,doppler,ok,3,3,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+DualEntry,dualentry.com,Ashby,dualentry,ok,42,42,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Dust,dust.tt,Ashby,dust,ok,23,23,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Electric,electric.ai,Ashby,electric,ok,2,2,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+EngFlow,engflow.com,Ashby,engflow,ok,11,11,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Enter,getenter.ai,Ashby,enter-ai,ok,17,17,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Envoy,envoy.com,Ashby,envoy,ok,28,28,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+EvenUp,evenuplaw.com,Ashby,evenup,ok,86,86,0,,"Lightspeed,BVP",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Exa,exa.ai,Ashby,exa,ok,31,31,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Fathom,fathomhealth.com,Ashby,fathom,ok,1,1,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Fiddler AI,fiddler.ai,Ashby,fiddler-ai,ok,9,9,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Fieldguide,fieldguide.io,Ashby,fieldguide,ok,41,42,-1,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Filmhub,filmhub.com,Ashby,filmhub,ok,4,4,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Finch,finchlegal.com,Ashby,finch-legal,ok,17,17,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Fizz,fizzsocial.app,Ashby,fizz,ok,3,3,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Found,found.app,Ashby,found,ok,2,2,0,,"Sequoia,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Foursquare,foursquare.com,Ashby,foursquare,ok,3,3,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Foxglove,foxglove.dev,Ashby,foxglove,ok,20,20,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Freed,getfreed.ai,Ashby,freed,ok,8,8,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Glimpse,tryglimpse.com,Ashby,glimpse,ok,12,12,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+GoodData,gooddata.com,Ashby,gooddata,ok,9,9,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Granola,granola.so,Ashby,granola,ok,18,18,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Graphite,graphite.dev,Ashby,graphite,ok,12,12,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Halliday,halliday.xyz,Ashby,halliday,ok,2,2,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Halter,halterhq.com,Ashby,halter,ok,101,101,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Handshake,joinhandshake.com,Ashby,handshake,ok,127,127,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Hedra,hedra.com,Ashby,hedra,ok,4,4,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Helion,helionenergy.com,Ashby,helion,ok,121,122,-1,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Hercules,hercules.app,Ashby,hercules,ok,22,22,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Heron Power,heronpower.com,Ashby,heron-power,ok,36,36,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+HockeyStack,hockeystack.com,Ashby,hockeystack,ok,20,20,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Hyperscience,hyperscience.com,Ashby,hyperscience,ok,3,3,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Iambic Therapeutics,iambic.ai,Ashby,iambic-therapeutics,ok,14,14,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Improbable,improbable.io,Ashby,improbable,ok,9,9,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Inductive Bio,inductive.bio,Ashby,inductive-bio,ok,9,9,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Inertia,inertia.com,Ashby,inertia,ok,18,18,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Inferact,inferact.ai,Ashby,inferact,ok,5,5,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Infinite Machine,infinitemachine.com,Ashby,infinite-machine,ok,6,6,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Infracost,infracost.io,Ashby,infracost,ok,1,1,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Inngest,inngest.com,Ashby,inngest,ok,3,3,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Insitro,insitro.com,Ashby,insitro,ok,14,14,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Intro,intro.co,Ashby,intro,ok,8,8,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Inworld AI,inworld.ai,Ashby,inworld-ai,ok,15,15,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Kalshi,kalshi.com,Ashby,kalshi,ok,34,34,0,,"a16z,Sequoia",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Kindred,livekindred.com,Ashby,kindred,ok,6,6,0,,"a16z,BVP",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Kodex,kodexglobal.com,Ashby,kodex,ok,2,2,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+LangChain,langchain.com,Ashby,langchain,ok,90,90,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Langfuse,langfuse.com,Ashby,langfuse,ok,11,11,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Legora,legora.com,Ashby,legora,ok,142,142,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Lightspark,lightspark.com,Ashby,lightspark,ok,9,9,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Linear,linear.app,Ashby,linear,ok,22,22,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+LlamaIndex,llamaindex.ai,Ashby,llamaindex,ok,12,12,0,,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Macroscope,macroscope.com,Ashby,macroscope,ok,2,2,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Magentic,magentic.com,Ashby,magentic,ok,7,7,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Mandolin,mandolin.com,Ashby,mandolin,ok,6,6,0,,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Meter,meter.com,Ashby,meter,ok,61,61,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Method,methodfi.com,Ashby,method,ok,17,17,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Middesk,middesk.com,Ashby,middesk,ok,14,14,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Mintlify,mintlify.com,Ashby,mintlify,ok,18,18,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Mirage,mirage.app,Ashby,mirage,ok,20,20,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Miter,miter.com,Ashby,miter,ok,12,12,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+ModernFi,modernfi.com,Ashby,modernfi,ok,5,5,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Modus,modusalliance.com,Ashby,modus,ok,10,10,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+MotherDuck,motherduck.com,Ashby,motherduck,ok,7,7,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Mux,mux.com,Ashby,mux,ok,2,2,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+NODA AI,nodaintelligence.ai,Ashby,noda-ai,ok,16,16,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Nash,nash.ai,Ashby,nash,ok,21,21,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Neko Health,nekohealth.com,Ashby,neko-health,ok,52,52,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Netic,netic.ai,Ashby,netic,ok,22,22,0,,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Newfront,newfront.com,Ashby,newfront,ok,19,19,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Nomic,nomic.foundation,Ashby,nomic,ok,3,2,1,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Notion,notion.so,Ashby,notion,ok,141,141,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Odyssey,withodyssey.com,Ashby,odyssey,ok,3,3,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+OpenRouter,openrouter.ai,Ashby,openrouter,ok,13,13,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+OpenSea,opensea.io,Ashby,opensea,ok,5,5,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Orb,withorb.com,Ashby,orb,ok,12,12,0,,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Orchestra,orchestra.bio,Ashby,orchestra-bio,ok,3,3,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Oso,osohq.com,Ashby,oso,ok,7,7,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Outsmart,outsmartcollege.com,Ashby,outsmart,ok,7,7,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Palmstreet,palmstreet.app,Ashby,palmstreet,ok,3,3,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Partiful,partiful.com,Ashby,partiful,ok,13,13,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Payrails,payrails.com,Ashby,payrails,ok,5,5,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Periodic Labs,periodic.com,Ashby,periodic-labs,ok,26,26,0,,"a16z,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Phantom,phantom.app,Ashby,phantom,ok,20,19,1,,"a16z,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Phylo,phylo.bio,Ashby,phylo,ok,3,3,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Pika,pika.art,Ashby,pika,ok,2,2,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Pinecone,pinecone.io,Ashby,pinecone,ok,8,8,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Pivotal Health,pivotalhealth.ai,Ashby,pivotal-health,ok,21,21,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Podium Automation,podiumautomation.com,Ashby,podium-automation,ok,3,3,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Post,post.news,Ashby,post,ok,4,4,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Prefect,prefect.io,Ashby,prefect,ok,4,4,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Prelude,prelude.org,Ashby,prelude,ok,16,8,8,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Preql,preql.com,Ashby,preql,ok,2,2,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Profound,tryprofound.com,Ashby,profound,ok,74,76,-2,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Promise,promisestudios.com,Ashby,promise-studios,ok,3,3,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Propel,joinpropel.com,Ashby,propel,ok,10,10,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Prosper AI,getprosper.ai,Ashby,prosper-ai,ok,5,5,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Proxima Fusion,proximafusion.com,Ashby,proxima-fusion,ok,35,35,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Pryzm,pryzm.io,Ashby,pryzm,ok,6,6,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Quora,quora.com,Ashby,quora,ok,3,3,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Ramp,ramp.com,Ashby,ramp,ok,128,128,0,,"Lightspeed,BVP,Greylock",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Rasa,rasa.com,Ashby,rasa,ok,8,8,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Reflect Orbital,reflectorbital.com,Ashby,reflect-orbital,ok,19,19,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Reindeer AI,reindeer.ai,Ashby,reindeer-ai,ok,7,7,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Render,render.com,Ashby,render,ok,20,20,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Resend,resend.com,Ashby,resend,ok,5,5,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Rev,rev.com,Ashby,rev,ok,5,5,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Rewind,rewind.com,Ashby,rewind,ok,3,3,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Rillet,rillet.io,Ashby,rillet,ok,27,27,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Roebling,roebling.co,Ashby,roebling,ok,3,3,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Rothy's,rothys.com,Ashby,rothys,ok,66,66,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Runway,runway.com,Ashby,runway,ok,4,4,0,,"a16z,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Rutter,rutterapi.com,Ashby,rutter,ok,1,1,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Salient,trysalient.com,Ashby,salient,ok,5,5,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Sardine,sardine.ai,Ashby,sardine,ok,21,21,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Semgrep,semgrep.dev,Ashby,semgrep,ok,38,38,0,,"Sequoia,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+SentiLink,sentilink.com,Ashby,sentilink,ok,43,44,-1,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Sierra,sierra.ai,Ashby,sierra,ok,131,131,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Sleeper,sleeper.com,Ashby,sleeper,ok,14,14,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Snapdocs,snapdocs.com,Ashby,snapdocs,ok,3,3,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Sola,sola.ai,Ashby,sola,ok,6,6,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Sorare,sorare.com,Ashby,sorare,ok,3,3,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Sprig,sprig.com,Ashby,sprig,ok,6,6,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Sprinter Health,sprinterhealth.com,Ashby,sprinter-health,ok,45,45,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Statsig,statsig.com,Ashby,statsig,ok,7,7,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Strava,strava.com,Ashby,strava,ok,25,25,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Strella,strella.io,Ashby,strella,ok,3,3,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Substack,substack.com,Ashby,substack,ok,17,17,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Suno,suno.com,Ashby,suno,ok,43,43,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Supabase,supabase.io,Ashby,supabase,ok,42,42,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Svix,svix.com,Ashby,svix,ok,5,5,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Synctera,synctera.com,Ashby,synctera,ok,2,2,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+TRM Labs,trmlabs.com,Ashby,trm-labs,ok,82,82,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Tabs,tabs.inc,Ashby,tabs,ok,34,34,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Tacto,tacto.ai,Ashby,tacto,ok,25,25,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Tavus,tavus.io,Ashby,tavus,ok,13,13,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Tennr,tennr.com,Ashby,tennr,ok,24,24,0,,"a16z,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+The Exploration Company,exploration.space,Ashby,the-exploration-company,ok,109,109,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Titan,titanvest.com,Ashby,titan,ok,14,14,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Toma,toma.com,Ashby,toma,ok,2,2,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Tourlane,tourlane.com,Ashby,tourlane,ok,10,10,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Traversal,traversal.com,Ashby,traversal,ok,10,10,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+TruckSmarter,trucksmarter.com,Ashby,trucksmarter,ok,7,7,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Truemed,truemed.com,Ashby,truemed,ok,8,8,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Turquoise Health,turquoise.health,Ashby,turquoise-health,ok,13,12,1,,"a16z,BVP",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Upside,upside.com,Ashby,upside,ok,22,22,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Upvest,upvest.co,Ashby,upvest,ok,33,33,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Vanta,vanta.com,Ashby,vanta,ok,159,159,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Vantage,vantage.sh,Ashby,vantage,ok,10,10,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Vertice,vertice.one,Ashby,vertice,ok,52,52,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Vesta,usevesta.com,Ashby,vesta,ok,7,7,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Viggle,viggle.ai,Ashby,viggle,ok,7,7,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Voldex,voldex.com,Ashby,voldex,ok,5,5,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Vori,vori.com,Ashby,vori,ok,12,12,0,,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Watershed,watershed.com,Ashby,watershed,ok,39,39,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Wheel,wheel.com,Ashby,wheel,ok,12,12,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+WireScreen,wirescreen.ai,Ashby,wirescreen,ok,6,6,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Wonderful,wonderful.ai,Ashby,wonderful,ok,24,24,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+WorkOS,workos.com,Ashby,workos,ok,31,31,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Wrapbook,wrapbook.com,Ashby,wrapbook,ok,16,16,0,,"a16z,BVP",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Zapier,zapier.com,Ashby,zapier,ok,23,23,0,,"Sequoia,BVP",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+Zefir,zefir.fr,Ashby,zefir,ok,21,21,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+ZeroMark,zeromark.com,Ashby,zeromark,ok,10,10,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+baseten,baseten.co,Ashby,baseten,ok,56,53,3,,Greylock,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+brightwheel,mybrightwheel.com,Ashby,brightwheel,ok,34,34,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+carwow,carwow.co.uk,Ashby,carwow,ok,40,40,0,,BVP,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+hyperexponential,hyperexponential.com,Ashby,hyperexponential,ok,35,35,0,,a16z,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+k-ID,k-id.com,Ashby,k-id,ok,13,13,0,,"a16z,Lightspeed",https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+n8n.io,n8n.io,Ashby,n8n,ok,43,43,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+thatgamecompany,thatgamecompany.com,Ashby,thatgamecompany,ok,28,28,0,,Sequoia,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+truthsystems,truthsystems.ai,Ashby,truthsystems,ok,4,4,0,,Lightspeed,https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams
+At-Bay,at-bay.com,Greenhouse,atbay,empty,0,27,-27,API returned 0 jobs,Lightspeed,https://boards-api.greenhouse.io/v1/boards/atbay/jobs?content=false
+AMP Sortation,ampsortation.com,Greenhouse,amprobotics,http_404,-1,9,0,Slug not found — likely dashes stripped wrong or wrong ATS,Sequoia,https://boards-api.greenhouse.io/v1/boards/amprobotics/jobs?content=false
+Ada,ada.support,Greenhouse,ada,http_404,-1,12,0,Slug not found — likely dashes stripped wrong or wrong ATS,BVP,https://boards-api.greenhouse.io/v1/boards/ada/jobs?content=false
+Andreessen Horowitz,a16z.com,Greenhouse,andreessenhorowitz,http_404,-1,21,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/andreessenhorowitz/jobs?content=false
+Atomic AI,atomic.ai,Greenhouse,atomicai,http_404,-1,2,0,Slug not found — likely dashes stripped wrong or wrong ATS,Greylock,https://boards-api.greenhouse.io/v1/boards/atomicai/jobs?content=false
+Augment,augmentcode.com,Greenhouse,augment,http_404,-1,6,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/augment/jobs?content=false
+Ava Labs,avalabs.org,Greenhouse,avalabs,http_404,-1,7,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/avalabs/jobs?content=false
+Avalanche,avax.network,Greenhouse,avalanche,http_404,-1,1,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/avalanche/jobs?content=false
+Bevi,bevi.co,Greenhouse,bevi,http_404,-1,5,0,Slug not found — likely dashes stripped wrong or wrong ATS,BVP,https://boards-api.greenhouse.io/v1/boards/bevi/jobs?content=false
+BlueVine,bluevine.com,Greenhouse,bluevine,http_404,-1,9,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/bluevine/jobs?content=false
+Bolt,bolt.eu,Greenhouse,bolteu,http_404,-1,303,0,Slug not found — likely dashes stripped wrong or wrong ATS,Sequoia,https://boards-api.greenhouse.io/v1/boards/bolteu/jobs?content=false
+Builder.io,builder.io,Greenhouse,builder.io,http_404,-1,15,0,Slug not found — likely dashes stripped wrong or wrong ATS,Greylock,https://boards-api.greenhouse.io/v1/boards/builder.io/jobs?content=false
+Cedar,cedar.com,Greenhouse,cedar,http_404,-1,11,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/cedar/jobs?content=false
+Clear Ballot Group,clearballot.com,Greenhouse,clearballotgroup,http_404,-1,6,0,Slug not found — likely dashes stripped wrong or wrong ATS,BVP,https://boards-api.greenhouse.io/v1/boards/clearballotgroup/jobs?content=false
+Cross River,crossriverbank.com,Greenhouse,crossriver,http_404,-1,19,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/crossriver/jobs?content=false
+Current,current.com,Greenhouse,current,http_404,-1,23,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/current/jobs?content=false
+DEFCON AI,defconai.com,Greenhouse,defconai,http_404,-1,4,0,Slug not found — likely dashes stripped wrong or wrong ATS,BVP,https://boards-api.greenhouse.io/v1/boards/defconai/jobs?content=false
+Dagster,dagster.io,Greenhouse,elementl,http_404,-1,4,0,Slug not found — likely dashes stripped wrong or wrong ATS,Sequoia,https://boards-api.greenhouse.io/v1/boards/elementl/jobs?content=false
+Daylight Energy,godaylight.com,Greenhouse,daylightenergy,http_404,-1,6,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/daylightenergy/jobs?content=false
+Eon.io,eon.io,Greenhouse,eon.io,http_404,-1,22,0,Slug not found — likely dashes stripped wrong or wrong ATS,"Sequoia,Lightspeed",https://boards-api.greenhouse.io/v1/boards/eon.io/jobs?content=false
+Farther,farther.com,Greenhouse,farther,http_404,-1,38,0,Slug not found — likely dashes stripped wrong or wrong ATS,"Lightspeed,BVP",https://boards-api.greenhouse.io/v1/boards/farther/jobs?content=false
+GLG,glginsights.com,Greenhouse,glg,http_404,-1,77,0,Slug not found — likely dashes stripped wrong or wrong ATS,BVP,https://boards-api.greenhouse.io/v1/boards/glg/jobs?content=false
+Gladly,gladly.com,Greenhouse,gladly,http_404,-1,6,0,Slug not found — likely dashes stripped wrong or wrong ATS,Greylock,https://boards-api.greenhouse.io/v1/boards/gladly/jobs?content=false
+Glean,glean.com,Greenhouse,glean,http_404,-1,177,0,Slug not found — likely dashes stripped wrong or wrong ATS,"Sequoia,Lightspeed",https://boards-api.greenhouse.io/v1/boards/glean/jobs?content=false
+Gong,gong.io,Greenhouse,gong,http_404,-1,102,0,Slug not found — likely dashes stripped wrong or wrong ATS,Sequoia,https://boards-api.greenhouse.io/v1/boards/gong/jobs?content=false
+Guild Education,guild.com,Greenhouse,guildeducation,http_404,-1,16,0,Slug not found — likely dashes stripped wrong or wrong ATS,BVP,https://boards-api.greenhouse.io/v1/boards/guildeducation/jobs?content=false
+HAUS LABORATORIES,hauslabs.com,Greenhouse,hauslaboratories,http_404,-1,6,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/hauslaboratories/jobs?content=false
+Hebbia AI,hebbia.ai,Greenhouse,hebbiaai,http_404,-1,33,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/hebbiaai/jobs?content=false
+Herald,heraldapi.com,Greenhouse,herald,http_404,-1,5,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/herald/jobs?content=false
+K2 Space,k2space.com,Greenhouse,k2space,http_404,-1,141,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/k2space/jobs?content=false
+Kodiak Robotics,kodiak.ai,Greenhouse,kodiakrobotics,http_404,-1,63,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/kodiakrobotics/jobs?content=false
+Ladder,ladderlife.com,Greenhouse,ladderlife,http_404,-1,4,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/ladderlife/jobs?content=false
+Medallion,medallion.co,Greenhouse,medallion,http_404,-1,10,0,Slug not found — likely dashes stripped wrong or wrong ATS,Sequoia,https://boards-api.greenhouse.io/v1/boards/medallion/jobs?content=false
+Medium.com,medium.com,Greenhouse,medium.com,http_404,-1,3,0,Slug not found — likely dashes stripped wrong or wrong ATS,"a16z,Greylock",https://boards-api.greenhouse.io/v1/boards/medium.com/jobs?content=false
+Mercury,mercury.com,Greenhouse,mercurybankingforstartups,http_404,-1,66,0,Slug not found — likely dashes stripped wrong or wrong ATS,"a16z,Sequoia",https://boards-api.greenhouse.io/v1/boards/mercurybankingforstartups/jobs?content=false
+NEAR Protocol,near.org,Greenhouse,nearprotocol,http_404,-1,1,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/nearprotocol/jobs?content=false
+Navan,navan.com,Greenhouse,navan,http_404,-1,210,0,Slug not found — likely dashes stripped wrong or wrong ATS,"a16z,Lightspeed",https://boards-api.greenhouse.io/v1/boards/navan/jobs?content=false
+Noom,noom.com,Greenhouse,noom,http_404,-1,14,0,Slug not found — likely dashes stripped wrong or wrong ATS,Sequoia,https://boards-api.greenhouse.io/v1/boards/noom/jobs?content=false
+Octant,octant.bio,Greenhouse,octant,http_404,-1,2,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/octant/jobs?content=false
+Olema Oncology,olema.com,Greenhouse,olemaoncology,http_404,-1,35,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/olemaoncology/jobs?content=false
+Panther,runpanther.io,Greenhouse,panther,http_404,-1,9,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/panther/jobs?content=false
+Pave,pave.com,Greenhouse,pave,http_404,-1,17,0,Slug not found — likely dashes stripped wrong or wrong ATS,"a16z,BVP",https://boards-api.greenhouse.io/v1/boards/pave/jobs?content=false
+Payhawk,payhawk.com,Greenhouse,payhawkcom,http_404,-1,47,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/payhawkcom/jobs?content=false
+Peregrine,peregrine.io,Greenhouse,peregrine,http_404,-1,116,0,Slug not found — likely dashes stripped wrong or wrong ATS,Sequoia,https://boards-api.greenhouse.io/v1/boards/peregrine/jobs?content=false
+Pilot,pilot.com,Greenhouse,pilotcom,http_404,-1,20,0,Slug not found — likely dashes stripped wrong or wrong ATS,Sequoia,https://boards-api.greenhouse.io/v1/boards/pilotcom/jobs?content=false
+Point,point.com,Greenhouse,point,http_404,-1,25,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/point/jobs?content=false
+Privy,privy.io,Greenhouse,privy,http_404,-1,7,0,Slug not found — likely dashes stripped wrong or wrong ATS,Sequoia,https://boards-api.greenhouse.io/v1/boards/privy/jobs?content=false
+Razorpay,razorpay.com,Greenhouse,razorpay,http_404,-1,48,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/razorpay/jobs?content=false
+Science Corporation,science.xyz,Greenhouse,science.xyz,http_404,-1,9,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/science.xyz/jobs?content=false
+Setpoint.io,setpoint.io,Greenhouse,setpoint.io,http_404,-1,18,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/setpoint.io/jobs?content=false
+Skild AI,skild.ai,Greenhouse,skildai,http_404,-1,46,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/skildai/jobs?content=false
+Sourcegraph,sourcegraph.com,Greenhouse,sourcegraph,http_404,-1,6,0,Slug not found — likely dashes stripped wrong or wrong ATS,"a16z,Sequoia",https://boards-api.greenhouse.io/v1/boards/sourcegraph/jobs?content=false
+Standard Nuclear,standardnuclear.com,Greenhouse,standardnuclear,http_404,-1,21,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/standardnuclear/jobs?content=false
+Tessell,tessell.com,Greenhouse,tessell,http_404,-1,23,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/tessell/jobs?content=false
+Thinking Machines Lab,thinkingmachines.ai,Greenhouse,thinkingmachineslab,http_404,-1,29,0,Slug not found — likely dashes stripped wrong or wrong ATS,"a16z,Lightspeed",https://boards-api.greenhouse.io/v1/boards/thinkingmachineslab/jobs?content=false
+Toss,toss.im,Greenhouse,toss,http_404,-1,494,0,Slug not found — likely dashes stripped wrong or wrong ATS,BVP,https://boards-api.greenhouse.io/v1/boards/toss/jobs?content=false
+Unconventional AI,unconv.ai,Greenhouse,unconventionalai,http_404,-1,11,0,Slug not found — likely dashes stripped wrong or wrong ATS,"a16z,Lightspeed",https://boards-api.greenhouse.io/v1/boards/unconventionalai/jobs?content=false
+Unframe AI,unframe.ai,Greenhouse,unframeai,http_404,-1,55,0,Slug not found — likely dashes stripped wrong or wrong ATS,BVP,https://boards-api.greenhouse.io/v1/boards/unframeai/jobs?content=false
+UnitedMasters,unitedmasters.com,Greenhouse,unitedmasters,http_404,-1,15,0,Slug not found — likely dashes stripped wrong or wrong ATS,a16z,https://boards-api.greenhouse.io/v1/boards/unitedmasters/jobs?content=false
+Vinted,vinted.com,Greenhouse,vinted,http_404,-1,166,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/vinted/jobs?content=false
+Vise,vise.com,Greenhouse,vise,http_404,-1,11,0,Slug not found — likely dashes stripped wrong or wrong ATS,Sequoia,https://boards-api.greenhouse.io/v1/boards/vise/jobs?content=false
+Warp,warp.dev,Greenhouse,warpdev,http_404,-1,4,0,Slug not found — likely dashes stripped wrong or wrong ATS,Sequoia,https://boards-api.greenhouse.io/v1/boards/warpdev/jobs?content=false
+Watershed Informatics,watershed.ai,Greenhouse,watershedinformatics,http_404,-1,8,0,Slug not found — likely dashes stripped wrong or wrong ATS,BVP,https://boards-api.greenhouse.io/v1/boards/watershedinformatics/jobs?content=false
+Wiz,wiz.io,Greenhouse,wiz,http_404,-1,179,0,Slug not found — likely dashes stripped wrong or wrong ATS,"a16z,Sequoia,Lightspeed",https://boards-api.greenhouse.io/v1/boards/wiz/jobs?content=false
+Zipline,flyzipline.com,Greenhouse,zipline,http_404,-1,193,0,Slug not found — likely dashes stripped wrong or wrong ATS,"a16z,Sequoia",https://boards-api.greenhouse.io/v1/boards/zipline/jobs?content=false
+dbt Labs,getdbt.com,Greenhouse,fishtownanalytics,http_404,-1,48,0,Slug not found — likely dashes stripped wrong or wrong ATS,"a16z,Sequoia",https://boards-api.greenhouse.io/v1/boards/fishtownanalytics/jobs?content=false
+eko,eko.com,Greenhouse,eko.com,http_404,-1,8,0,Slug not found — likely dashes stripped wrong or wrong ATS,Sequoia,https://boards-api.greenhouse.io/v1/boards/eko.com/jobs?content=false
+evermore,evermoreoutcomes.com,Greenhouse,sodahealth,http_404,-1,4,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/sodahealth/jobs?content=false
+ezCater,ezcater.com,Greenhouse,ezcater,http_404,-1,25,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/ezcater/jobs?content=false
+ngrok,ngrok.com,Greenhouse,ngrok,http_404,-1,7,0,Slug not found — likely dashes stripped wrong or wrong ATS,Lightspeed,https://boards-api.greenhouse.io/v1/boards/ngrok/jobs?content=false
+Abnormal AI,abnormal.ai,Greenhouse,abnormalsecurity,ok,102,102,0,,Greylock,https://boards-api.greenhouse.io/v1/boards/abnormalsecurity/jobs?content=false
+Alloy,alloy.com,Greenhouse,alloy,ok,17,17,0,,"Lightspeed,BVP",https://boards-api.greenhouse.io/v1/boards/alloy/jobs?content=false
+Alpha-9 Oncology,a9oncology.com,Greenhouse,alpha9oncology,ok,2,2,0,,"a16z,Lightspeed",https://boards-api.greenhouse.io/v1/boards/alpha9oncology/jobs?content=false
+Anduril Industries,anduril.com,Greenhouse,andurilindustries,ok,1855,1853,2,,"a16z,Lightspeed",https://boards-api.greenhouse.io/v1/boards/andurilindustries/jobs?content=false
+Anthropic,anthropic.com,Greenhouse,anthropic,ok,453,453,0,,BVP,https://boards-api.greenhouse.io/v1/boards/anthropic/jobs?content=false
+Apiiro,apiiro.com,Greenhouse,apiiro,ok,11,11,0,,Greylock,https://boards-api.greenhouse.io/v1/boards/apiiro/jobs?content=false
+Apollo,apollo.io,Greenhouse,apollo,ok,3,44,-41,,Sequoia,https://boards-api.greenhouse.io/v1/boards/apollo/jobs?content=false
+Applied Intuition,appliedintuition.com,Greenhouse,appliedintuition,ok,196,196,0,,a16z,https://boards-api.greenhouse.io/v1/boards/appliedintuition/jobs?content=false
+Aptos Labs,aptoslabs.com,Greenhouse,aptoslabs,ok,5,5,0,,a16z,https://boards-api.greenhouse.io/v1/boards/aptoslabs/jobs?content=false
+Arc Boat Company,arcboats.com,Greenhouse,arcboatcompany,ok,14,14,0,,a16z,https://boards-api.greenhouse.io/v1/boards/arcboatcompany/jobs?content=false
+Astranis,astranis.com,Greenhouse,astranis,ok,120,120,0,,a16z,https://boards-api.greenhouse.io/v1/boards/astranis/jobs?content=false
+Attentive Mobile,attentive.com,Greenhouse,attentive,ok,59,59,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/attentive/jobs?content=false
+AudioMob,audiomob.com,Greenhouse,audiomob,ok,4,4,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/audiomob/jobs?content=false
+Aurora Innovation,aurora.tech,Greenhouse,aurorainnovation,ok,172,172,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/aurorainnovation/jobs?content=false
+Auterion,auterion.com,Greenhouse,auterion,ok,38,38,0,,BVP,https://boards-api.greenhouse.io/v1/boards/auterion/jobs?content=false
+Axonius,axonius.com,Greenhouse,axonius,ok,35,35,0,,"Lightspeed,BVP",https://boards-api.greenhouse.io/v1/boards/axonius/jobs?content=false
+Azra Games,azragames.com,Greenhouse,azragames,ok,1,1,0,,a16z,https://boards-api.greenhouse.io/v1/boards/azragames/jobs?content=false
+Beacon Software,beaconsoftware.com,Greenhouse,beaconsoftware,ok,34,34,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/beaconsoftware/jobs?content=false
+Betterment,betterment.com,Greenhouse,betterment,ok,34,34,0,,BVP,https://boards-api.greenhouse.io/v1/boards/betterment/jobs?content=false
+Beyond,beyondpricing.com,Greenhouse,beyond,ok,7,7,0,,BVP,https://boards-api.greenhouse.io/v1/boards/beyond/jobs?content=false
+BigID,bigid.com,Greenhouse,bigid,ok,31,31,0,,BVP,https://boards-api.greenhouse.io/v1/boards/bigid/jobs?content=false
+Black Forest Labs,blackforestlabs.ai,Greenhouse,blackforestlabs,ok,13,13,0,,a16z,https://boards-api.greenhouse.io/v1/boards/blackforestlabs/jobs?content=false
+Blockchain.com,blockchain.com,Greenhouse,blockchain,ok,44,44,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/blockchain/jobs?content=false
+BloomReach,bloomreach.com,Greenhouse,bloomreach,ok,87,87,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/bloomreach/jobs?content=false
+Bold,agebold.com,Greenhouse,bold,ok,1,10,-9,,a16z,https://boards-api.greenhouse.io/v1/boards/bold/jobs?content=false
+Bold Metrics,boldmetrics.com,Greenhouse,boldmetrics,ok,1,1,0,,BVP,https://boards-api.greenhouse.io/v1/boards/boldmetrics/jobs?content=false
+Bonfire Studios,bonfirestudios.com,Greenhouse,bonfirestudios,ok,1,6,-5,,a16z,https://boards-api.greenhouse.io/v1/boards/bonfirestudios/jobs?content=false
+Calm,calm.com,Greenhouse,calm,ok,3,3,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/calm/jobs?content=false
+Cameo,cameo.com,Greenhouse,cameo,ok,3,3,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/cameo/jobs?content=false
+Candid,candidco.com,Greenhouse,candid,ok,4,4,0,,BVP,https://boards-api.greenhouse.io/v1/boards/candid/jobs?content=false
+Capitolis,capitolis.com,Greenhouse,capitolis,ok,1,1,0,,a16z,https://boards-api.greenhouse.io/v1/boards/capitolis/jobs?content=false
+Carbon,carbon3d.com,Greenhouse,carbon,ok,14,14,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/carbon/jobs?content=false
+Carta,carta.com,Greenhouse,carta,ok,61,61,0,,"a16z,Lightspeed",https://boards-api.greenhouse.io/v1/boards/carta/jobs?content=false
+Cato Networks,catonetworks.com,Greenhouse,catonetworks,ok,148,149,-1,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/catonetworks/jobs?content=false
+Chainguard,chainguard.dev,Greenhouse,chainguard,ok,59,58,1,,"Sequoia,Lightspeed",https://boards-api.greenhouse.io/v1/boards/chainguard/jobs?content=false
+Chariot Defense,chariotdefense.com,Greenhouse,chariotdefense,ok,3,3,0,,a16z,https://boards-api.greenhouse.io/v1/boards/chariotdefense/jobs?content=false
+ClickHouse,clickhouse.com,Greenhouse,clickhouse,ok,167,167,0,,"Lightspeed,BVP",https://boards-api.greenhouse.io/v1/boards/clickhouse/jobs?content=false
+CopilotIQ,copilotiq.com,Greenhouse,copilotiq,ok,5,5,0,,BVP,https://boards-api.greenhouse.io/v1/boards/copilotiq/jobs?content=false
+Cortex,getcortexapp.com,Greenhouse,cortex,ok,6,6,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/cortex/jobs?content=false
+Cresta,cresta.com,Greenhouse,cresta,ok,121,121,0,,"a16z,Sequoia,Greylock",https://boards-api.greenhouse.io/v1/boards/cresta/jobs?content=false
+Cribl,cribl.io,Greenhouse,cribl,ok,55,55,0,,"Sequoia,Greylock",https://boards-api.greenhouse.io/v1/boards/cribl/jobs?content=false
+Crossbeam,crossbeam.com,Greenhouse,crossbeam,ok,2,2,0,,a16z,https://boards-api.greenhouse.io/v1/boards/crossbeam/jobs?content=false
+Culture AMP,cultureamp.com,Greenhouse,cultureamp,ok,22,22,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/cultureamp/jobs?content=false
+Dashlane,dashlane.com,Greenhouse,dashlane,ok,14,14,0,,"Sequoia,BVP",https://boards-api.greenhouse.io/v1/boards/dashlane/jobs?content=false
+DataHub,datahub.com,Greenhouse,acryldata,ok,7,7,0,,BVP,https://boards-api.greenhouse.io/v1/boards/acryldata/jobs?content=false
+Databricks,databricks.com,Greenhouse,databricks,ok,832,834,-2,,"a16z,Lightspeed",https://boards-api.greenhouse.io/v1/boards/databricks/jobs?content=false
+Daybreak Health,daybreakhealth.com,Greenhouse,daybreakhealth,ok,39,39,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/daybreakhealth/jobs?content=false
+Descript,descript.com,Greenhouse,descript,ok,24,24,0,,a16z,https://boards-api.greenhouse.io/v1/boards/descript/jobs?content=false
+Dialpad,dialpad.com,Greenhouse,dialpad,ok,92,92,0,,a16z,https://boards-api.greenhouse.io/v1/boards/dialpad/jobs?content=false
+Discord,discord.com,Greenhouse,discord,ok,83,83,0,,"BVP,Greylock",https://boards-api.greenhouse.io/v1/boards/discord/jobs?content=false
+Dremio,dremio.com,Greenhouse,dremio,ok,12,12,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/dremio/jobs?content=false
+Dyno Therapeutics,dynotx.com,Greenhouse,dynotherapeutics,ok,1,1,0,,a16z,https://boards-api.greenhouse.io/v1/boards/dynotherapeutics/jobs?content=false
+Earli,earli.com,Greenhouse,earli,ok,3,3,0,,a16z,https://boards-api.greenhouse.io/v1/boards/earli/jobs?content=false
+Earnin,earnin.com,Greenhouse,earnin,ok,51,51,0,,a16z,https://boards-api.greenhouse.io/v1/boards/earnin/jobs?content=false
+Epic Games,epicgames.com,Greenhouse,epicgames,ok,76,76,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/epicgames/jobs?content=false
+Ethos Life,ethoslife.com,Greenhouse,ethoslife,ok,39,39,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/ethoslife/jobs?content=false
+Eve,eve.legal,Greenhouse,eve,ok,33,33,0,,"a16z,Lightspeed",https://boards-api.greenhouse.io/v1/boards/eve/jobs?content=false
+Everlaw,everlaw.com,Greenhouse,everlaw,ok,31,31,0,,a16z,https://boards-api.greenhouse.io/v1/boards/everlaw/jobs?content=false
+FERMAT,fermatcommerce.com,Greenhouse,fermat,ok,4,4,0,,Greylock,https://boards-api.greenhouse.io/v1/boards/fermat/jobs?content=false
+FOLX Health,folxhealth.com,Greenhouse,folxhealth,ok,14,14,0,,BVP,https://boards-api.greenhouse.io/v1/boards/folxhealth/jobs?content=false
+"Faire Wholesale, Inc.",faire.com,Greenhouse,faire,ok,72,72,0,,"Sequoia,Lightspeed",https://boards-api.greenhouse.io/v1/boards/faire/jobs?content=false
+FalconX,falconx.io,Greenhouse,falconx,ok,27,27,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/falconx/jobs?content=false
+Figma,figma.com,Greenhouse,figma,ok,160,160,0,,"a16z,Sequoia",https://boards-api.greenhouse.io/v1/boards/figma/jobs?content=false
+Fireblocks,fireblocks.com,Greenhouse,fireblocks,ok,45,45,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/fireblocks/jobs?content=false
+Fireworks AI,fireworks.ai,Greenhouse,fireworksai,ok,31,31,0,,"Sequoia,Lightspeed",https://boards-api.greenhouse.io/v1/boards/fireworksai/jobs?content=false
+Fivetran,fivetran.com,Greenhouse,fivetran,ok,188,188,0,,a16z,https://boards-api.greenhouse.io/v1/boards/fivetran/jobs?content=false
+Flexport,flexport.com,Greenhouse,flexport,ok,123,123,0,,a16z,https://boards-api.greenhouse.io/v1/boards/flexport/jobs?content=false
+Flock Homes,flockhomes.com,Greenhouse,flockhomes,ok,3,3,0,,a16z,https://boards-api.greenhouse.io/v1/boards/flockhomes/jobs?content=false
+Formation Bio,formation.bio,Greenhouse,formationbio,ok,19,19,0,,a16z,https://boards-api.greenhouse.io/v1/boards/formationbio/jobs?content=false
+Forter,forter.com,Greenhouse,forter,ok,52,52,0,,"Sequoia,BVP",https://boards-api.greenhouse.io/v1/boards/forter/jobs?content=false
+Forward Networks,forwardnetworks.com,Greenhouse,forwardnetworks,ok,21,21,0,,a16z,https://boards-api.greenhouse.io/v1/boards/forwardnetworks/jobs?content=false
+Freenome,freenome.com,Greenhouse,freenome,ok,30,30,0,,a16z,https://boards-api.greenhouse.io/v1/boards/freenome/jobs?content=false
+Frontera Health,fronterahealth.com,Greenhouse,fronterahealth,ok,11,11,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/fronterahealth/jobs?content=false
+Gensyn,gensyn.ai,Greenhouse,gensyn,ok,5,5,0,,a16z,https://boards-api.greenhouse.io/v1/boards/gensyn/jobs?content=false
+GigFinesse,gigfinesse.com,Greenhouse,gigfinesse,ok,6,6,0,,BVP,https://boards-api.greenhouse.io/v1/boards/gigfinesse/jobs?content=false
+GlossGenius,glossgenius.com,Greenhouse,glossgenius,ok,32,32,0,,BVP,https://boards-api.greenhouse.io/v1/boards/glossgenius/jobs?content=false
+Glossier,glossier.com,Greenhouse,glossier,ok,16,16,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/glossier/jobs?content=false
+Goodfire,goodfire.ai,Greenhouse,goodfire,ok,18,18,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/goodfire/jobs?content=false
+Grafana Labs,grafana.com,Greenhouse,grafanalabs,ok,161,161,0,,"Sequoia,Lightspeed",https://boards-api.greenhouse.io/v1/boards/grafanalabs/jobs?content=false
+Graphcore,graphcore.ai,Greenhouse,graphcore,ok,132,132,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/graphcore/jobs?content=false
+Gyde,gydehealth.ai,Greenhouse,gyde,ok,3,2,1,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/gyde/jobs?content=false
+Headway,headway.co,Greenhouse,headway,ok,82,82,0,,a16z,https://boards-api.greenhouse.io/v1/boards/headway/jobs?content=false
+Helsing,helsing.ai,Greenhouse,helsing,ok,107,107,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/helsing/jobs?content=false
+Hex Technologies,hex.tech,Greenhouse,hextechnologies,ok,33,33,0,,"a16z,Sequoia",https://boards-api.greenhouse.io/v1/boards/hextechnologies/jobs?content=false
+Honor,joinhonor.com,Greenhouse,honor,ok,22,21,1,,a16z,https://boards-api.greenhouse.io/v1/boards/honor/jobs?content=false
+House Rx,houserx.com,Greenhouse,houserx,ok,17,17,0,,BVP,https://boards-api.greenhouse.io/v1/boards/houserx/jobs?content=false
+Hungryroot,hungryroot.com,Greenhouse,hungryroot,ok,11,11,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/hungryroot/jobs?content=false
+Imply,imply.io,Greenhouse,imply,ok,9,9,0,,"a16z,BVP",https://boards-api.greenhouse.io/v1/boards/imply/jobs?content=false
+Inceptive,inceptive.life,Greenhouse,inceptive,ok,6,6,0,,a16z,https://boards-api.greenhouse.io/v1/boards/inceptive/jobs?content=false
+Incognia,incognia.com,Greenhouse,incognia,ok,9,9,0,,BVP,https://boards-api.greenhouse.io/v1/boards/incognia/jobs?content=false
+Instabase,instabase.com,Greenhouse,instabase,ok,12,12,0,,"a16z,Greylock",https://boards-api.greenhouse.io/v1/boards/instabase/jobs?content=false
+Instacart,instacart.com,Greenhouse,instacart,ok,129,129,0,,"a16z,Sequoia",https://boards-api.greenhouse.io/v1/boards/instacart/jobs?content=false
+Instawork,instawork.com,Greenhouse,instawork,ok,47,47,0,,Greylock,https://boards-api.greenhouse.io/v1/boards/instawork/jobs?content=false
+Intercom,intercom.com,Greenhouse,intercom,ok,175,175,0,,BVP,https://boards-api.greenhouse.io/v1/boards/intercom/jobs?content=false
+JOOPITER,joopiter.com,Greenhouse,joopiter,ok,2,2,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/joopiter/jobs?content=false
+Ketryx,ketryx.com,Greenhouse,ketryx,ok,19,19,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/ketryx/jobs?content=false
+KoBold Metals,koboldmetals.com,Greenhouse,koboldmetals,ok,25,26,-1,,a16z,https://boards-api.greenhouse.io/v1/boards/koboldmetals/jobs?content=false
+Komodo Health,komodohealth.com,Greenhouse,komodohealth,ok,39,39,0,,a16z,https://boards-api.greenhouse.io/v1/boards/komodohealth/jobs?content=false
+LTSE,ltse.com,Greenhouse,ltse,ok,4,4,0,,a16z,https://boards-api.greenhouse.io/v1/boards/ltse/jobs?content=false
+Labelbox,labelbox.com,Greenhouse,labelbox,ok,9,9,0,,a16z,https://boards-api.greenhouse.io/v1/boards/labelbox/jobs?content=false
+LaunchDarkly,launchdarkly.com,Greenhouse,launchdarkly,ok,43,43,0,,BVP,https://boards-api.greenhouse.io/v1/boards/launchdarkly/jobs?content=false
+LayerZero Labs,layerzero.network,Greenhouse,layerzerolabs,ok,18,18,0,,"a16z,Sequoia",https://boards-api.greenhouse.io/v1/boards/layerzerolabs/jobs?content=false
+Ledgy,ledgy.com,Greenhouse,ledgy,ok,8,8,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/ledgy/jobs?content=false
+Lithic,lithic.com,Greenhouse,lithic,ok,17,17,0,,BVP,https://boards-api.greenhouse.io/v1/boards/lithic/jobs?content=false
+Litify,litify.com,Greenhouse,litify,ok,5,5,0,,BVP,https://boards-api.greenhouse.io/v1/boards/litify/jobs?content=false
+Lookout,lookout.com,Greenhouse,lookout,ok,6,6,0,,a16z,https://boards-api.greenhouse.io/v1/boards/lookout/jobs?content=false
+Lumos,lumosidentity.com,Greenhouse,lumos,ok,15,15,0,,a16z,https://boards-api.greenhouse.io/v1/boards/lumos/jobs?content=false
+Magic Leap,magicleap.com,Greenhouse,magicleap,ok,7,7,0,,a16z,https://boards-api.greenhouse.io/v1/boards/magicleap/jobs?content=false
+MaintainX,getmaintainx.com,Greenhouse,maintainx,ok,139,139,0,,BVP,https://boards-api.greenhouse.io/v1/boards/maintainx/jobs?content=false
+ManyChat,manychat.com,Greenhouse,manychat,ok,38,38,0,,BVP,https://boards-api.greenhouse.io/v1/boards/manychat/jobs?content=false
+Materialize,materialize.com,Greenhouse,materialize,ok,4,4,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/materialize/jobs?content=false
+Matik,matik.io,Greenhouse,matik,ok,1,1,0,,a16z,https://boards-api.greenhouse.io/v1/boards/matik/jobs?content=false
+Maven,maven.com,Greenhouse,maven,ok,5,5,0,,a16z,https://boards-api.greenhouse.io/v1/boards/maven/jobs?content=false
+Maven Clinic,mavenclinic.com,Greenhouse,mavenclinic,ok,24,24,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/mavenclinic/jobs?content=false
+Maze Therapeutics,mazetx.com,Greenhouse,mazetherapeutics,ok,11,11,0,,a16z,https://boards-api.greenhouse.io/v1/boards/mazetherapeutics/jobs?content=false
+Melio,meliopayments.com,Greenhouse,melio,ok,20,19,1,,BVP,https://boards-api.greenhouse.io/v1/boards/melio/jobs?content=false
+Metronome,getmetronome.com,Greenhouse,metronome,ok,3,3,0,,a16z,https://boards-api.greenhouse.io/v1/boards/metronome/jobs?content=false
+Mithril,mithril.ai,Greenhouse,foundry,ok,19,6,13,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/foundry/jobs?content=false
+Mixpanel,mixpanel.com,Greenhouse,mixpanel,ok,52,52,0,,a16z,https://boards-api.greenhouse.io/v1/boards/mixpanel/jobs?content=false
+Moveworks,moveworks.com,Greenhouse,moveworks,ok,54,54,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/moveworks/jobs?content=false
+Mutiny,mutinyhq.com,Greenhouse,mutiny,ok,9,9,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/mutiny/jobs?content=false
+Nansen,nansen.ai,Greenhouse,nansen,ok,4,4,0,,a16z,https://boards-api.greenhouse.io/v1/boards/nansen/jobs?content=false
+Nas Company,nas.io,Greenhouse,nascompany,ok,20,20,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/nascompany/jobs?content=false
+Netlify,netlify.com,Greenhouse,netlify,ok,2,2,0,,"a16z,BVP",https://boards-api.greenhouse.io/v1/boards/netlify/jobs?content=false
+Neuralink,neuralink.com,Greenhouse,neuralink,ok,63,63,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/neuralink/jobs?content=false
+Nuro,nuro.ai,Greenhouse,nuro,ok,94,94,0,,Greylock,https://boards-api.greenhouse.io/v1/boards/nuro/jobs?content=false
+Obsidian Security,obsidiansecurity.com,Greenhouse,obsidiansecurity,ok,27,27,0,,Greylock,https://boards-api.greenhouse.io/v1/boards/obsidiansecurity/jobs?content=false
+OfferUp,offerup.com,Greenhouse,offerup,ok,6,6,0,,a16z,https://boards-api.greenhouse.io/v1/boards/offerup/jobs?content=false
+Omada Health,omadahealth.com,Greenhouse,omadahealth,ok,24,24,0,,a16z,https://boards-api.greenhouse.io/v1/boards/omadahealth/jobs?content=false
+Optimal Dynamics,optimaldynamics.com,Greenhouse,optimaldynamics,ok,6,6,0,,BVP,https://boards-api.greenhouse.io/v1/boards/optimaldynamics/jobs?content=false
+Oshi Health,oshihealth.com,Greenhouse,oshihealth,ok,1,1,0,,BVP,https://boards-api.greenhouse.io/v1/boards/oshihealth/jobs?content=false
+Outschool,outschool.com,Greenhouse,outschool,ok,3,3,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/outschool/jobs?content=false
+Pacific Fusion,pacificfusion.com,Greenhouse,pacificfusion,ok,32,32,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/pacificfusion/jobs?content=false
+PicsArt,picsart.com,Greenhouse,picsart,ok,3,3,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/picsart/jobs?content=false
+Pindrop Security,pindrop.com,Greenhouse,pindropsecurity,ok,15,15,0,,a16z,https://boards-api.greenhouse.io/v1/boards/pindropsecurity/jobs?content=false
+PlanetScale,planetscale.com,Greenhouse,planetscale,ok,7,7,0,,a16z,https://boards-api.greenhouse.io/v1/boards/planetscale/jobs?content=false
+Polychain Capital,polychain.capital,Greenhouse,polychaincapital,ok,3,3,0,,a16z,https://boards-api.greenhouse.io/v1/boards/polychaincapital/jobs?content=false
+Pomelo Care,pomelocare.com,Greenhouse,pomelocare,ok,47,47,0,,a16z,https://boards-api.greenhouse.io/v1/boards/pomelocare/jobs?content=false
+Postscript,postscript.io,Greenhouse,postscript,ok,7,7,0,,Greylock,https://boards-api.greenhouse.io/v1/boards/postscript/jobs?content=false
+Qventus,qventus.com,Greenhouse,qventus,ok,16,16,0,,BVP,https://boards-api.greenhouse.io/v1/boards/qventus/jobs?content=false
+Radiant Security,radiantsecurity.ai,Greenhouse,radiantsecurity,ok,9,9,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/radiantsecurity/jobs?content=false
+Redpanda Data,redpanda.com,Greenhouse,redpandadata,ok,8,8,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/redpandadata/jobs?content=false
+Remote,remote.com,Greenhouse,remote,ok,2,289,-287,,Sequoia,https://boards-api.greenhouse.io/v1/boards/remote/jobs?content=false
+RigUp,rigup.com,Greenhouse,rigup,ok,7,7,0,,a16z,https://boards-api.greenhouse.io/v1/boards/rigup/jobs?content=false
+Roofstock,roofstock.com,Greenhouse,roofstock,ok,41,41,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/roofstock/jobs?content=false
+SafeBreach,safebreach.com,Greenhouse,safebreach,ok,1,1,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/safebreach/jobs?content=false
+Salt Security,salt.security,Greenhouse,saltsecurity,ok,11,11,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/saltsecurity/jobs?content=false
+SecurityScorecard,securityscorecard.com,Greenhouse,securityscorecard,ok,72,72,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/securityscorecard/jobs?content=false
+Senra Systems,senrasystems.us,Greenhouse,senrasystems,ok,23,23,0,,a16z,https://boards-api.greenhouse.io/v1/boards/senrasystems/jobs?content=false
+Shift Technology,shift-technology.com,Greenhouse,shifttechnology,ok,33,33,0,,BVP,https://boards-api.greenhouse.io/v1/boards/shifttechnology/jobs?content=false
+ShopMy,shopmy.us,Greenhouse,shopmy,ok,34,34,0,,BVP,https://boards-api.greenhouse.io/v1/boards/shopmy/jobs?content=false
+Shopmonkey,shopmonkey.io,Greenhouse,shopmonkey,ok,12,12,0,,BVP,https://boards-api.greenhouse.io/v1/boards/shopmonkey/jobs?content=false
+Sila Nanotechnologies,silanano.com,Greenhouse,silananotechnologies,ok,36,36,0,,BVP,https://boards-api.greenhouse.io/v1/boards/silananotechnologies/jobs?content=false
+Sisense,sisense.com,Greenhouse,sisense,ok,7,7,0,,BVP,https://boards-api.greenhouse.io/v1/boards/sisense/jobs?content=false
+Sixfold,sixfold.ai,Greenhouse,sixfold,ok,6,6,0,,BVP,https://boards-api.greenhouse.io/v1/boards/sixfold/jobs?content=false
+Snackpass,snackpass.co,Greenhouse,snackpass,ok,1,1,0,,a16z,https://boards-api.greenhouse.io/v1/boards/snackpass/jobs?content=false
+Snorkel AI,snorkel.ai,Greenhouse,snorkelai,ok,50,50,0,,"Lightspeed,Greylock",https://boards-api.greenhouse.io/v1/boards/snorkelai/jobs?content=false
+SpaceX,spacex.com,Greenhouse,spacex,ok,1595,1596,-1,,Sequoia,https://boards-api.greenhouse.io/v1/boards/spacex/jobs?content=false
+Spade,spade.com,Greenhouse,spade,ok,5,5,0,,a16z,https://boards-api.greenhouse.io/v1/boards/spade/jobs?content=false
+Stability AI,stability.ai,Greenhouse,stabilityai,ok,13,13,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/stabilityai/jobs?content=false
+Stack Overflow,stackoverflow.com,Greenhouse,stackexchange,ok,5,5,0,,a16z,https://boards-api.greenhouse.io/v1/boards/stackexchange/jobs?content=false
+Starburst,starburst.io,Greenhouse,starburst,ok,30,30,0,,a16z,https://boards-api.greenhouse.io/v1/boards/starburst/jobs?content=false
+Stripe,stripe.com,Greenhouse,stripe,ok,491,492,-1,,"a16z,Sequoia,Lightspeed",https://boards-api.greenhouse.io/v1/boards/stripe/jobs?content=false
+Syndio,synd.io,Greenhouse,syndio,ok,9,9,0,,BVP,https://boards-api.greenhouse.io/v1/boards/syndio/jobs?content=false
+Tanium,tanium.com,Greenhouse,tanium,ok,84,84,0,,a16z,https://boards-api.greenhouse.io/v1/boards/tanium/jobs?content=false
+Temporal Technologies,temporal.io,Greenhouse,temporaltechnologies,ok,45,45,0,,"a16z,Sequoia,Lightspeed",https://boards-api.greenhouse.io/v1/boards/temporaltechnologies/jobs?content=false
+Thatch,thatch.ai,Greenhouse,thatch,ok,16,16,0,,a16z,https://boards-api.greenhouse.io/v1/boards/thatch/jobs?content=false
+Thumbtack,thumbtack.com,Greenhouse,thumbtack,ok,39,39,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/thumbtack/jobs?content=false
+Thunes,thunes.com,Greenhouse,thunes,ok,51,51,0,,BVP,https://boards-api.greenhouse.io/v1/boards/thunes/jobs?content=false
+TollBit,tollbit.com,Greenhouse,tollbit,ok,1,1,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/tollbit/jobs?content=false
+Torq,torq.io,Greenhouse,torq,ok,44,44,0,,BVP,https://boards-api.greenhouse.io/v1/boards/torq/jobs?content=false
+Trade Republic,traderepublic.com,Greenhouse,traderepublic,ok,1,55,-54,,Sequoia,https://boards-api.greenhouse.io/v1/boards/traderepublic/jobs?content=false
+Truework,truework.com,Greenhouse,truework,ok,1,1,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/truework/jobs?content=false
+Truffle Security,trufflesecurity.com,Greenhouse,trufflesecurity,ok,7,7,0,,a16z,https://boards-api.greenhouse.io/v1/boards/trufflesecurity/jobs?content=false
+TurbineOne,turbineone.com,Greenhouse,turbineone,ok,9,9,0,,BVP,https://boards-api.greenhouse.io/v1/boards/turbineone/jobs?content=false
+Typeface,typeface.ai,Greenhouse,typeface,ok,31,31,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/typeface/jobs?content=false
+Udio,udio.com,Greenhouse,udio,ok,5,5,0,,a16z,https://boards-api.greenhouse.io/v1/boards/udio/jobs?content=false
+Ultima Genomics,ultimagenomics.com,Greenhouse,ultimagenomics,ok,17,17,0,,"a16z,Lightspeed",https://boards-api.greenhouse.io/v1/boards/ultimagenomics/jobs?content=false
+VTS,vts.com,Greenhouse,vts,ok,11,11,0,,BVP,https://boards-api.greenhouse.io/v1/boards/vts/jobs?content=false
+Verkada,verkada.com,Greenhouse,verkada,ok,303,305,-2,,"Sequoia,Lightspeed",https://boards-api.greenhouse.io/v1/boards/verkada/jobs?content=false
+Vestwell,vestwell.com,Greenhouse,vestwell,ok,12,12,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/vestwell/jobs?content=false
+Vim,getvim.com,Greenhouse,vim,ok,3,3,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/vim/jobs?content=false
+Virtru,virtru.com,Greenhouse,virtru,ok,23,23,0,,BVP,https://boards-api.greenhouse.io/v1/boards/virtru/jobs?content=false
+Voxel51,voxel51.com,Greenhouse,voxel51,ok,4,4,0,,BVP,https://boards-api.greenhouse.io/v1/boards/voxel51/jobs?content=false
+Waymark,waymarkcare.com,Greenhouse,waymark,ok,13,13,0,,a16z,https://boards-api.greenhouse.io/v1/boards/waymark/jobs?content=false
+Waymo,waymo.com,Greenhouse,waymo,ok,378,378,0,,"a16z,BVP",https://boards-api.greenhouse.io/v1/boards/waymo/jobs?content=false
+Weee!,sayweee.com,Greenhouse,weee,ok,28,28,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/weee/jobs?content=false
+Wildlife Studios,wildlifestudios.com,Greenhouse,wildlifestudios,ok,26,26,0,,BVP,https://boards-api.greenhouse.io/v1/boards/wildlifestudios/jobs?content=false
+Wingspan,wingspan.app,Greenhouse,wingspan,ok,5,5,0,,a16z,https://boards-api.greenhouse.io/v1/boards/wingspan/jobs?content=false
+Wisetack,wisetack.com,Greenhouse,wisetack,ok,2,2,0,,Greylock,https://boards-api.greenhouse.io/v1/boards/wisetack/jobs?content=false
+Wonderschool,wonderschool.com,Greenhouse,wonderschool,ok,11,11,0,,a16z,https://boards-api.greenhouse.io/v1/boards/wonderschool/jobs?content=false
+WorkBoard,workboard.com,Greenhouse,workboard,ok,7,7,0,,"a16z,Lightspeed",https://boards-api.greenhouse.io/v1/boards/workboard/jobs?content=false
+World Labs,worldlabs.ai,Greenhouse,worldlabs,ok,13,13,0,,a16z,https://boards-api.greenhouse.io/v1/boards/worldlabs/jobs?content=false
+Xaira Therapeutics,xaira.com,Greenhouse,xairatherapeutics,ok,17,17,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/xairatherapeutics/jobs?content=false
+Yotpo,yotpo.com,Greenhouse,yotpo,ok,48,48,0,,BVP,https://boards-api.greenhouse.io/v1/boards/yotpo/jobs?content=false
+Yugabyte,yugabyte.com,Greenhouse,yugabyte,ok,22,22,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/yugabyte/jobs?content=false
+Zola,zola.com,Greenhouse,zola,ok,6,6,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/zola/jobs?content=false
+"goop,com",goop.com,Greenhouse,goop,ok,16,16,0,,Lightspeed,https://boards-api.greenhouse.io/v1/boards/goop/jobs?content=false
+onXmaps,onxmaps.com,Greenhouse,onxmaps,ok,25,25,0,,BVP,https://boards-api.greenhouse.io/v1/boards/onxmaps/jobs?content=false
+reddit,reddit.com,Greenhouse,reddit,ok,148,148,0,,Sequoia,https://boards-api.greenhouse.io/v1/boards/reddit/jobs?content=false
+xAI,x.ai,Greenhouse,xai,ok,231,231,0,,"a16z,Lightspeed",https://boards-api.greenhouse.io/v1/boards/xai/jobs?content=false
+Alif Semiconductor,alifsemi.com,Lever,alif-semiconductor,http_404,-1,10,0,Company slug not found on Lever,Lightspeed,https://api.lever.co/v0/postings/alif-semiconductor?mode=json&limit=1
+Alloy Automation,runalloy.com,Lever,alloy-automation,http_404,-1,3,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/alloy-automation?mode=json&limit=1
+Backstory,backstory.ai,Lever,people.ai,http_404,-1,5,0,Company slug not found on Lever,"a16z,Lightspeed",https://api.lever.co/v0/postings/people.ai?mode=json&limit=1
+Belong,belonghome.com,Lever,belong-home,http_404,-1,44,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/belong-home?mode=json&limit=1
+Clubhouse,clubhouse.com,Lever,clubhouse,http_404,-1,1,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/clubhouse?mode=json&limit=1
+Compound,compound.finance,Lever,compound,http_404,-1,1,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/compound?mode=json&limit=1
+Dolls Kill,dollskill.com,Lever,dolls-kill,http_404,-1,8,0,Company slug not found on Lever,Sequoia,https://api.lever.co/v0/postings/dolls-kill?mode=json&limit=1
+Espresso Systems,espressosys.com,Lever,espresso-systems,http_404,-1,5,0,Company slug not found on Lever,"a16z,Greylock",https://api.lever.co/v0/postings/espresso-systems?mode=json&limit=1
+Flow,flow.life,Lever,flow-life,http_404,-1,40,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/flow-life?mode=json&limit=1
+Fulcrum,fulcrumpro.com,Lever,fulcrum,http_404,-1,4,0,Company slug not found on Lever,BVP,https://api.lever.co/v0/postings/fulcrum?mode=json&limit=1
+GenEdit,genedit.com,Lever,genedit,http_404,-1,3,0,Company slug not found on Lever,Sequoia,https://api.lever.co/v0/postings/genedit?mode=json&limit=1
+Good Eggs,goodeggs.com,Lever,good-eggs,http_404,-1,1,0,Company slug not found on Lever,Sequoia,https://api.lever.co/v0/postings/good-eggs?mode=json&limit=1
+Included Health,includedhealth.com,Lever,included-health,http_404,-1,52,0,Company slug not found on Lever,Greylock,https://api.lever.co/v0/postings/included-health?mode=json&limit=1
+JITx,jitx.com,Lever,jitx,http_404,-1,1,0,Company slug not found on Lever,Sequoia,https://api.lever.co/v0/postings/jitx?mode=json&limit=1
+Jeeves,tryjeeves.com,Lever,jeeves,http_404,-1,60,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/jeeves?mode=json&limit=1
+Karius,kariusdx.com,Lever,karius,http_404,-1,12,0,Company slug not found on Lever,Lightspeed,https://api.lever.co/v0/postings/karius?mode=json&limit=1
+Luxury Presence,luxurypresence.com,Lever,luxury-presence,http_404,-1,43,0,Company slug not found on Lever,BVP,https://api.lever.co/v0/postings/luxury-presence?mode=json&limit=1
+Lyra Health,lyrahealth.com,Lever,lyra-health,http_404,-1,413,0,Company slug not found on Lever,Greylock,https://api.lever.co/v0/postings/lyra-health?mode=json&limit=1
+Management Leadership for Tomorrow,mlt.org,Lever,management-leadership-for-tomorrow,http_404,-1,5,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/management-leadership-for-tomorrow?mode=json&limit=1
+Meeno,meeno.com,Lever,amorai,http_404,-1,1,0,Company slug not found on Lever,Sequoia,https://api.lever.co/v0/postings/amorai?mode=json&limit=1
+Mistral AI,mistral.ai,Lever,mistral-ai,http_404,-1,156,0,Company slug not found on Lever,"a16z,Lightspeed",https://api.lever.co/v0/postings/mistral-ai?mode=json&limit=1
+Offchain Labs,offchainlabs.com,Lever,offchain-labs,http_404,-1,11,0,Company slug not found on Lever,Lightspeed,https://api.lever.co/v0/postings/offchain-labs?mode=json&limit=1
+Onehouse,onehouse.ai,Lever,onehouse,http_404,-1,13,0,Company slug not found on Lever,Greylock,https://api.lever.co/v0/postings/onehouse?mode=json&limit=1
+Orca Bio,orcabio.com,Lever,orca-bio,http_404,-1,35,0,Company slug not found on Lever,Lightspeed,https://api.lever.co/v0/postings/orca-bio?mode=json&limit=1
+Outreach.io,outreach.io,Lever,outreach.io,http_404,-1,29,0,Company slug not found on Lever,Sequoia,https://api.lever.co/v0/postings/outreach.io?mode=json&limit=1
+Pendulum Therapeutics,pendulum.co,Lever,pendulum-therapeutics,http_404,-1,6,0,Company slug not found on Lever,Sequoia,https://api.lever.co/v0/postings/pendulum-therapeutics?mode=json&limit=1
+Quantum Circuits,quantumcircuits.com,Lever,quantum-circuits,http_404,-1,7,0,Company slug not found on Lever,Sequoia,https://api.lever.co/v0/postings/quantum-circuits?mode=json&limit=1
+Rezo Therapeutics,rezotx.com,Lever,rezo-therapeutics,http_404,-1,2,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/rezo-therapeutics?mode=json&limit=1
+Rigetti Computing,rigetti.com,Lever,rigetti-computing,http_404,-1,16,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/rigetti-computing?mode=json&limit=1
+Sandbox VR,sandboxvr.com,Lever,sandbox-vr,http_404,-1,32,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/sandbox-vr?mode=json&limit=1
+Shield AI,shield.ai,Lever,shield-ai,http_404,-1,288,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/shield-ai?mode=json&limit=1
+Shippo,goshippo.com,Lever,shippo,http_404,-1,4,0,Company slug not found on Lever,BVP,https://api.lever.co/v0/postings/shippo?mode=json&limit=1
+Spruce Systems,spruceid.com,Lever,spruce-systems,http_404,-1,7,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/spruce-systems?mode=json&limit=1
+Telda,telda.app,Lever,telda,http_404,-1,5,0,Company slug not found on Lever,Sequoia,https://api.lever.co/v0/postings/telda?mode=json&limit=1
+Theorycraft Games,theorycraftgames.com,Lever,theorycraft-games,http_404,-1,1,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/theorycraft-games?mode=json&limit=1
+Topography Health,jointopo.com,Lever,topography-health,http_404,-1,3,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/topography-health?mode=json&limit=1
+Torch Technology,torchdental.com,Lever,torch-technology,http_404,-1,9,0,Company slug not found on Lever,BVP,https://api.lever.co/v0/postings/torch-technology?mode=json&limit=1
+Trunk,trunk.io,Lever,trunk,http_404,-1,4,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/trunk?mode=json&limit=1
+UnifyID,unify.id,Lever,unifyid,http_404,-1,9,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/unifyid?mode=json&limit=1
+VeeFriends,veefriends.com,Lever,veefriends,http_404,-1,1,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/veefriends?mode=json&limit=1
+Very Good Security,verygoodsecurity.com,Lever,very-good-security,http_404,-1,4,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/very-good-security?mode=json&limit=1
+Wintermute,wintermute.com,Lever,wintermute,http_404,-1,27,0,Company slug not found on Lever,Lightspeed,https://api.lever.co/v0/postings/wintermute?mode=json&limit=1
+Xentral,xentral.com,Lever,xentral,http_404,-1,13,0,Company slug not found on Lever,"Sequoia,Lightspeed",https://api.lever.co/v0/postings/xentral?mode=json&limit=1
+Zuma,getzuma.com,Lever,zuma,http_404,-1,6,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/zuma?mode=json&limit=1
+Zus Health,zushealth.com,Lever,zus-health,http_404,-1,6,0,Company slug not found on Lever,a16z,https://api.lever.co/v0/postings/zus-health?mode=json&limit=1
+Zūm,ridezum.com,Lever,zum,http_404,-1,63,0,Company slug not found on Lever,Sequoia,https://api.lever.co/v0/postings/zum?mode=json&limit=1
+ANYbotics,anybotics.com,Lever,anybotics,ok,26,26,0,,BVP,https://api.lever.co/v0/postings/anybotics?mode=json&limit=1
+Acceldata,acceldata.io,Lever,acceldata,ok,39,39,0,,Lightspeed,https://api.lever.co/v0/postings/acceldata?mode=json&limit=1
+Aledade,aledade.com,Lever,aledade,ok,76,76,0,,Lightspeed,https://api.lever.co/v0/postings/aledade?mode=json&limit=1
+Alluxio,alluxio.io,Lever,alluxio,ok,7,7,0,,a16z,https://api.lever.co/v0/postings/alluxio?mode=json&limit=1
+Anchorage,anchorage.com,Lever,anchorage,ok,94,94,0,,a16z,https://api.lever.co/v0/postings/anchorage?mode=json&limit=1
+AppZen,appzen.com,Lever,appzen,ok,30,30,0,,Lightspeed,https://api.lever.co/v0/postings/appzen?mode=json&limit=1
+CX2,cx2.com,Lever,cx2,ok,9,9,0,,a16z,https://api.lever.co/v0/postings/cx2?mode=json&limit=1
+CaptivateIQ,captivateiq.com,Lever,captivateiq,ok,33,33,0,,"Sequoia,BVP",https://api.lever.co/v0/postings/captivateiq?mode=json&limit=1
+Cents,trycents.com,Lever,cents,ok,9,9,0,,BVP,https://api.lever.co/v0/postings/cents?mode=json&limit=1
+CertiK,certik.org,Lever,certik,ok,19,19,0,,Lightspeed,https://api.lever.co/v0/postings/certik?mode=json&limit=1
+Clari,clari.com,Lever,clari,ok,4,4,0,,Sequoia,https://api.lever.co/v0/postings/clari?mode=json&limit=1
+Cloudinary,cloudinary.com,Lever,cloudinary,ok,32,32,0,,BVP,https://api.lever.co/v0/postings/cloudinary?mode=json&limit=1
+Cyngn,cyngn.com,Lever,cyngn,ok,14,14,0,,a16z,https://api.lever.co/v0/postings/cyngn?mode=json&limit=1
+Dexterity,dexterity.ai,Lever,dexterity,ok,26,26,0,,Lightspeed,https://api.lever.co/v0/postings/dexterity?mode=json&limit=1
+DroneDeploy,dronedeploy.com,Lever,dronedeploy,ok,10,10,0,,BVP,https://api.lever.co/v0/postings/dronedeploy?mode=json&limit=1
+Enable,enable.com,Lever,enable,ok,6,6,0,,Lightspeed,https://api.lever.co/v0/postings/enable?mode=json&limit=1
+Exowatt,exowatt.com,Lever,exowatt,ok,10,10,0,,a16z,https://api.lever.co/v0/postings/exowatt?mode=json&limit=1
+Finix,finixpayments.com,Lever,finix,ok,9,9,0,,Lightspeed,https://api.lever.co/v0/postings/finix?mode=json&limit=1
+Fintual,fintual.cl,Lever,fintual,ok,3,3,0,,Sequoia,https://api.lever.co/v0/postings/fintual?mode=json&limit=1
+Greenlight,greenlightcard.com,Lever,greenlight,ok,18,18,0,,a16z,https://api.lever.co/v0/postings/greenlight?mode=json&limit=1
+Gushwork,gushwork.ai,Lever,gushwork,ok,9,9,0,,Lightspeed,https://api.lever.co/v0/postings/gushwork?mode=json&limit=1
+Houzz,houzz.com,Lever,houzz,ok,11,11,0,,Sequoia,https://api.lever.co/v0/postings/houzz?mode=json&limit=1
+Matillion,matillion.com,Lever,matillion,ok,18,18,0,,Lightspeed,https://api.lever.co/v0/postings/matillion?mode=json&limit=1
+Neighbor,neighbor.com,Lever,neighbor,ok,5,5,0,,a16z,https://api.lever.co/v0/postings/neighbor?mode=json&limit=1
+NimbleRX,nimblerx.com,Lever,nimblerx,ok,17,17,0,,Sequoia,https://api.lever.co/v0/postings/nimblerx?mode=json&limit=1
+PayJoy,payjoy.com,Lever,payjoy,ok,97,98,-1,,Greylock,https://api.lever.co/v0/postings/payjoy?mode=json&limit=1
+Pennylane,pennylane.tech,Lever,pennylane,ok,19,19,0,,Sequoia,https://api.lever.co/v0/postings/pennylane?mode=json&limit=1
+Plaid,plaid.com,Lever,plaid,ok,92,92,0,,a16z,https://api.lever.co/v0/postings/plaid?mode=json&limit=1
+Regrello,regrello.com,Lever,regrello,ok,14,14,0,,a16z,https://api.lever.co/v0/postings/regrello?mode=json&limit=1
+Restaurant365,restaurant365.com,Lever,restaurant365,ok,28,28,0,,BVP,https://api.lever.co/v0/postings/restaurant365?mode=json&limit=1
+SnapLogic,snaplogic.com,Lever,snaplogic,ok,6,6,0,,a16z,https://api.lever.co/v0/postings/snaplogic?mode=json&limit=1
+StackBlitz,stackblitz.com,Lever,stackblitz,ok,1,1,0,,Greylock,https://api.lever.co/v0/postings/stackblitz?mode=json&limit=1
+Thunkable,thunkable.com,Lever,thunkable,ok,4,4,0,,Lightspeed,https://api.lever.co/v0/postings/thunkable?mode=json&limit=1
+Tonkean,tonkean.com,Lever,tonkean,ok,6,6,0,,Lightspeed,https://api.lever.co/v0/postings/tonkean?mode=json&limit=1
+Yubico,yubico.com,Lever,yubico,ok,21,21,0,,a16z,https://api.lever.co/v0/postings/yubico?mode=json&limit=1
+Yuno,y.uno,Lever,yuno,ok,26,26,0,,a16z,https://api.lever.co/v0/postings/yuno?mode=json&limit=1
+Zerion,zerion.io,Lever,zerion,ok,1,1,0,,Lightspeed,https://api.lever.co/v0/postings/zerion?mode=json&limit=1
+intenseye,intenseye.com,Lever,intenseye,ok,1,1,0,,Lightspeed,https://api.lever.co/v0/postings/intenseye?mode=json&limit=1
+knownwell,knownwell.co,Lever,knownwell,ok,8,8,0,,a16z,https://api.lever.co/v0/postings/knownwell?mode=json&limit=1

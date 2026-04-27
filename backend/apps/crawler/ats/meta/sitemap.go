@@ -44,6 +44,16 @@ func (m *MetaAdapter) fetchSitemap(ctx context.Context) ([]string, error) {
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/xml,text/xml,*/*;q=0.8")
 	req.Header.Set("Accept-Language", acceptLangHeader)
+	// Meta's CDN validates the Sec-Fetch/sec-ch-ua headers on the sitemap
+	// endpoint; requests without them (Chrome UA + basic headers only) get 400.
+	req.Header.Set("sec-ch-ua", `"Chromium";v="121", "Not A(Brand";v="99", "Google Chrome";v="121"`)
+	req.Header.Set("sec-ch-ua-mobile", "?0")
+	req.Header.Set("sec-ch-ua-platform", `"macOS"`)
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
 
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
