@@ -36,7 +36,7 @@ VALUES
     ('notion',                              'Notion',                              'https://jobs.ashbyhq.com/notion',                                                     'ashby',      true, 'ok', NULL),
     ('airbnb',                              'Airbnb',                              'https://job-boards.greenhouse.io/airbnb',                                             'greenhouse', true, 'ok', NULL),
     ('coinbase',                            'Coinbase',                            'https://job-boards.greenhouse.io/coinbase',                                           'greenhouse', true, 'ok', NULL),
-    ('databricks',                          'Databricks',                          'https://jobs.ashbyhq.com/databricks',                                                 'ashby',      true, 'ok', NULL),
+    ('databricks',                          'Databricks',                          'https://boards-api.greenhouse.io/v1/boards/databricks/jobs',                          'greenhouse', true, 'ok', NULL),
     ('anyscale',                            'anyscale',                            'https://jobs.ashbyhq.com/anyscale',                                                   'ashby',      true, 'ok', NULL),
     ('whatnot',                             'Whatnot',                             'https://jobs.ashbyhq.com/whatnot',                                                    'ashby',      true, 'ok', NULL),
     ('cribl',                               'cribl',                               'https://boards-api.greenhouse.io/v1/boards/cribl/jobs',                               'greenhouse', true, 'ok', NULL),
