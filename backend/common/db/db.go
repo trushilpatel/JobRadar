@@ -16,7 +16,14 @@ import (
 // pool stays warm under bursty traffic. Callers pick a pool size that fits
 // their workload and the shared upstream connection limit.
 func Open(cfg config.DatabaseConfig, maxOpenConns int) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(cfg.DSN()), &gorm.Config{
+	// PreferSimpleProtocol disables server-side prepared statements so the DSN
+	// can point at the PgBouncer transaction-mode pooler (port 6543). pgx v5
+	// uses extended protocol by default, which transaction mode does not support.
+	dialector := postgres.New(postgres.Config{
+		DSN:                  cfg.DSN(),
+		PreferSimpleProtocol: true,
+	})
+	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
@@ -77,4 +84,14 @@ func Ping(database *gorm.DB) error {
 		return err
 	}
 	return sqlDB.Ping()
+}
+
+// PoolReady reports whether the connection pool is initialised without
+// acquiring a connection. Unlike Ping, this never blocks waiting for a free
+// slot, so it is safe to use as a Kubernetes readiness check. Transient pool
+// saturation (all connections busy) returns nil — the process is healthy and
+// will serve traffic once pressure drops.
+func PoolReady(database *gorm.DB) error {
+	_, err := database.DB()
+	return err
 }

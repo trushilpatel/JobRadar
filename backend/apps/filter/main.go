@@ -101,7 +101,7 @@ func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gor
 		return nil, nil, nil, nil, err
 	}
 
-	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
+	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.PoolReady(database) })
 
 	if err := kafka.EnsureTopics(ctx, cfg.Kafka,
 		kafka.TopicJobListingsRaw,

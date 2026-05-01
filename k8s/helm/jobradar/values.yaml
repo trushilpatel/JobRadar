@@ -31,7 +31,7 @@ api:
   logFormat: json
   jaegerEndpoint: ""
   dbSslmode: require
-  dbPort: "5432"
+  dbPort: "6543"
   # Set in values.local.yaml — do not commit real values here
   supabaseProjectUrl: ""
   # Set in values.local.yaml — do not commit real values here
@@ -52,7 +52,7 @@ scheduler:
   metricsAddr: ":9101"
   jaegerEndpoint: ""
   dbSslmode: require
-  dbPort: "5432"
+  dbPort: "6543"
 
 crawler:
   kafkaBrokers: "kafka:9092"
@@ -68,7 +68,7 @@ crawler:
   metricsAddr: ":9101"
   jaegerEndpoint: ""
   dbSslmode: require
-  dbPort: "5432"
+  dbPort: "6543"
 
 filter:
   kafkaBrokers: "kafka:9092"
@@ -86,7 +86,7 @@ filter:
   metricsAddr: ":9101"
   jaegerEndpoint: ""
   dbSslmode: require
-  dbPort: "5432"
+  dbPort: "6543"
 
 enricher:
   kafkaBrokers: "kafka:9092"
@@ -109,7 +109,7 @@ enricher:
   metricsAddr: ":9101"
   jaegerEndpoint: ""
   dbSslmode: require
-  dbPort: "5432"
+  dbPort: "6543"
 
 llmSlots:
   filterKeyId: enricher_slots_2

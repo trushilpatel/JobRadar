@@ -39,7 +39,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
+	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.PoolReady(database) })
 
 	// Ensure analyzer-owned retry + DLQ topics exist before any producer/consumer
 	// connects. The main .filtered topic is created by the filter worker — do not

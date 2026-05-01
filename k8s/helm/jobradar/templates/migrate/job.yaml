@@ -29,7 +29,7 @@ spec:
             - name: DB_SSLMODE
               value: "require"
             - name: DB_PORT
-              value: "5432"
+              value: "6543"
             - name: LOG_FORMAT
               value: "json"
           resources:

@@ -56,7 +56,7 @@ func NewOpsRouter(database *gorm.DB) *chi.Mux {
 		w.WriteHeader(http.StatusOK)
 	})
 	r.Get("/ready", func(w http.ResponseWriter, _ *http.Request) {
-		if err := db.Ping(database); err != nil {
+		if err := db.PoolReady(database); err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
 		}
