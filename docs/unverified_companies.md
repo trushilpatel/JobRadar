@@ -21,7 +21,6 @@
 | Current | `current` | https://job-boards.greenhouse.io/current |
 | Dagster | `elementl` | https://job-boards.greenhouse.io/elementl |
 | Daylight Energy | `daylightenergy` | https://job-boards.greenhouse.io/daylightenergy |
-| dbt Labs | `fishtownanalytics` | https://job-boards.greenhouse.io/fishtownanalytics |
 | DEFCON AI | `defconai` | https://job-boards.greenhouse.io/defconai |
 | eko | `eko.com` | https://job-boards.greenhouse.io/eko.com |
 | Eon.io | `eon.io` | https://job-boards.greenhouse.io/eon.io |
@@ -29,9 +28,7 @@
 | ezCater | `ezcater` | https://job-boards.greenhouse.io/ezcater |
 | Farther | `farther` | https://job-boards.greenhouse.io/farther |
 | Gladly | `gladly` | https://job-boards.greenhouse.io/gladly |
-| Glean | `glean` | https://job-boards.greenhouse.io/glean |
 | GLG | `glg` | https://job-boards.greenhouse.io/glg |
-| Gong | `gong` | https://job-boards.greenhouse.io/gong |
 | Guild Education | `guildeducation` | https://job-boards.greenhouse.io/guildeducation |
 | HAUS LABORATORIES | `hauslaboratories` | https://job-boards.greenhouse.io/hauslaboratories |
 | Hebbia AI | `hebbiaai` | https://job-boards.greenhouse.io/hebbiaai |
@@ -41,7 +38,6 @@
 | Ladder | `ladderlife` | https://job-boards.greenhouse.io/ladderlife |
 | Medallion | `medallion` | https://job-boards.greenhouse.io/medallion |
 | Medium.com | `medium.com` | https://job-boards.greenhouse.io/medium.com |
-| Mercury | `mercurybankingforstartups` | https://job-boards.greenhouse.io/mercurybankingforstartups |
 | Navan | `navan` | https://job-boards.greenhouse.io/navan |
 | NEAR Protocol | `nearprotocol` | https://job-boards.greenhouse.io/nearprotocol |
 | ngrok | `ngrok` | https://job-boards.greenhouse.io/ngrok |
@@ -59,7 +55,6 @@
 | Science Corporation | `science.xyz` | https://job-boards.greenhouse.io/science.xyz |
 | Setpoint.io | `setpoint.io` | https://job-boards.greenhouse.io/setpoint.io |
 | Skild AI | `skildai` | https://job-boards.greenhouse.io/skildai |
-| Sourcegraph | `sourcegraph` | https://job-boards.greenhouse.io/sourcegraph |
 | Standard Nuclear | `standardnuclear` | https://job-boards.greenhouse.io/standardnuclear |
 | Tessell | `tessell` | https://job-boards.greenhouse.io/tessell |
 | Thinking Machines Lab | `thinkingmachineslab` | https://job-boards.greenhouse.io/thinkingmachineslab |
@@ -71,8 +66,6 @@
 | Vise | `vise` | https://job-boards.greenhouse.io/vise |
 | Warp | `warpdev` | https://job-boards.greenhouse.io/warpdev |
 | Watershed Informatics | `watershedinformatics` | https://job-boards.greenhouse.io/watershedinformatics |
-| Wiz | `wiz` | https://job-boards.greenhouse.io/wiz |
-| Zipline | `zipline` | https://job-boards.greenhouse.io/zipline |
 
 ## Ashby
 
@@ -102,10 +95,8 @@
 | Bunkerhill Health | `bunkerhill-health` | https://jobs.ashbyhq.com/bunkerhill-health |
 | Camber | `juniper-behavioral-health` | https://jobs.ashbyhq.com/juniper-behavioral-health |
 | Cantina | `airtime` | https://jobs.ashbyhq.com/airtime |
-| Character.AI | `character.ai` | https://jobs.ashbyhq.com/character.ai |
 | Clipboard Health | `clipboard-health` | https://jobs.ashbyhq.com/clipboard-health |
 | Clutch | `clutch` | https://jobs.ashbyhq.com/clutch |
-| Collaborative Robotics | `collaborative-robotics` | https://jobs.ashbyhq.com/collaborative-robotics |
 | Common Room | `common-room` | https://jobs.ashbyhq.com/common-room |
 | Counsel Health | `counsel-health` | https://jobs.ashbyhq.com/counsel-health |
 | Crux | `crux` | https://jobs.ashbyhq.com/crux |
@@ -161,7 +152,6 @@
 | Opal | `opal-security` | https://jobs.ashbyhq.com/opal-security |
 | Patch | `patch` | https://jobs.ashbyhq.com/patch |
 | Pearl Health | `pearl-health` | https://jobs.ashbyhq.com/pearl-health |
-| Perplexity AI | `perplexity-ai` | https://jobs.ashbyhq.com/perplexity-ai |
 | Polygon Technology | `polygon-technology` | https://jobs.ashbyhq.com/polygon-technology |
 | Proof of Play | `proof-of-play` | https://jobs.ashbyhq.com/proof-of-play |
 | Protege | `with-protege` | https://jobs.ashbyhq.com/with-protege |
@@ -193,7 +183,6 @@
 | Sweep | `sweep-io` | https://jobs.ashbyhq.com/sweep-io |
 | Tako | `use-tako` | https://jobs.ashbyhq.com/use-tako |
 | Talos | `talos` | https://jobs.ashbyhq.com/talos |
-| Teleport | `go-teleport` | https://jobs.ashbyhq.com/go-teleport |
 | TENEX.AI | `tenex.ai` | https://jobs.ashbyhq.com/tenex.ai |
 | The Believer Company | `the-believer-company` | https://jobs.ashbyhq.com/the-believer-company |
 | The Better Money Company | `the-better-money-company` | https://jobs.ashbyhq.com/the-better-money-company |
@@ -231,7 +220,6 @@
 | Lyra Health | `lyra-health` | https://jobs.lever.co/lyra-health |
 | Management Leadership for Tomorrow | `management-leadership-for-tomorrow` | https://jobs.lever.co/management-leadership-for-tomorrow |
 | Meeno | `amorai` | https://jobs.lever.co/amorai |
-| Mistral AI | `mistral-ai` | https://jobs.lever.co/mistral-ai |
 | Offchain Labs | `offchain-labs` | https://jobs.lever.co/offchain-labs |
 | Onehouse | `onehouse` | https://jobs.lever.co/onehouse |
 | Orca Bio | `orca-bio` | https://jobs.lever.co/orca-bio |

@@ -1,7 +1,7 @@
 # migrations/ — Database migrations
 
 Uses goose. Every file needs `-- +goose Up` and `-- +goose Down` sections.
-Run: `go run ./apps/migrate` or `make migrate`. Currently at migration **036**.
+Run: `go run ./apps/migrate` or `make migrate`. Currently at migration **040**.
 
 ## Rules
 

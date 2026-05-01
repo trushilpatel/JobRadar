@@ -51,6 +51,7 @@
 | Databricks | `databricks` |
 | DataHub | `acryldata` |
 | Daybreak Health | `daybreakhealth` |
+| dbt Labs | `dbtlabsinc` |
 | Descript | `descript` |
 | Dialpad | `dialpad` |
 | Discord | `discord` |
@@ -79,9 +80,11 @@
 | Frontera Health | `fronterahealth` |
 | Gensyn | `gensyn` |
 | GigFinesse | `gigfinesse` |
+| Glean | `gleanwork` |
 | GlossGenius | `glossgenius` |
 | Glossier | `glossier` |
 | Goodfire | `goodfire` |
+| Gong | `gongio` |
 | goop,com | `goop` |
 | Grafana Labs | `grafanalabs` |
 | Graphcore | `graphcore` |
@@ -121,6 +124,7 @@
 | Maven Clinic | `mavenclinic` |
 | Maze Therapeutics | `mazetherapeutics` |
 | Melio | `melio` |
+| Mercury | `mercury` |
 | Metronome | `metronome` |
 | Mithril | `foundry` |
 | Mixpanel | `mixpanel` |
@@ -164,6 +168,7 @@
 | Sixfold | `sixfold` |
 | Snackpass | `snackpass` |
 | Snorkel AI | `snorkelai` |
+| Sourcegraph | `sourcegraph91` |
 | SpaceX | `spacex` |
 | Spade | `spade` |
 | Stability AI | `stabilityai` |
@@ -197,6 +202,7 @@
 | Wildlife Studios | `wildlifestudios` |
 | Wingspan | `wingspan` |
 | Wisetack | `wisetack` |
+| Wiz | `wizinc` |
 | Wonderschool | `wonderschool` |
 | WorkBoard | `workboard` |
 | World Labs | `worldlabs` |
@@ -204,6 +210,7 @@
 | Xaira Therapeutics | `xairatherapeutics` |
 | Yotpo | `yotpo` |
 | Yugabyte | `yugabyte` |
+| Zipline | `flyzipline` |
 | Zola | `zola` |
 
 ## Ashby
@@ -245,6 +252,7 @@
 | Cartesia | `cartesia` |
 | carwow | `carwow` |
 | Catena Labs | `catena-labs` |
+| Character.AI | `character` |
 | ChartHop | `charthop` |
 | Chestnut | `chestnut` |
 | Choco | `choco` |
@@ -252,6 +260,7 @@
 | Cluely | `cluely` |
 | Coder | `coder` |
 | Cogent Security | `cogent-security` |
+| Collaborative Robotics | `cobot` |
 | Commure | `commure` |
 | Composio | `composio` |
 | ConductorAI | `conductorai` |
@@ -348,6 +357,7 @@
 | Partiful | `partiful` |
 | Payrails | `payrails` |
 | Periodic Labs | `periodic-labs` |
+| Perplexity AI | `perplexity` |
 | Phantom | `phantom` |
 | Phylo | `phylo` |
 | Pika | `pika` |
@@ -460,6 +470,7 @@
 | intenseye | `intenseye` |
 | knownwell | `knownwell` |
 | Matillion | `matillion` |
+| Mistral AI | `mistral` |
 | Neighbor | `neighbor` |
 | NimbleRX | `nimblerx` |
 | PayJoy | `payjoy` |
@@ -470,6 +481,7 @@
 | SnapLogic | `snaplogic` |
 | StackBlitz | `stackblitz` |
 | Thunkable | `thunkable` |
+| Teleport | `teleport` |
 | Tonkean | `tonkean` |
 | Yubico | `yubico` |
 | Yuno | `yuno` |
