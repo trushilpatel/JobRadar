@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
 import { fetchJobs, fetchJobCounts, type JobFilters } from '@/api/jobs'
@@ -22,8 +22,22 @@ export function useJobs() {
   const [expFilter, setExpFilter] = useState<string[]>([])
   const [dateFilter, setDateFilter] = useState<DateFilter>(initialDateFilter)
 
-  // Search
-  const [searchQuery, setSearchQuery] = useState('')
+  // Search: raw value drives the input; debouncedSearch drives the API query
+  const [searchQuery, setSearchQueryRaw] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function setSearchQuery(value: string) {
+    setSearchQueryRaw(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => setDebouncedSearch(value), 300)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
 
   // Sorting
   const [sorting, setSorting] = useState<SortingState>([])
@@ -35,10 +49,11 @@ export function useJobs() {
   const sortBy = sorting[0]?.id
   const sortDir = sorting[0] ? (sorting[0].desc ? 'desc' : 'asc') : undefined
 
-  // Stable filter object — only changes when a filter value changes
+  // Stable filter object — debouncedSearch prevents a query per keystroke
   const filters = useMemo<JobFilters>(
     () => ({
       status: tab,
+      search: debouncedSearch || undefined,
       companies: selectedCompanies.length > 0 ? selectedCompanies : undefined,
       remote: remoteFilter || undefined,
       onSite: onSiteFilter || undefined,
@@ -48,7 +63,7 @@ export function useJobs() {
       sortBy,
       sortDir,
     }),
-    [tab, selectedCompanies, remoteFilter, onSiteFilter, expFilter, dateFilter, sortBy, sortDir]
+    [tab, debouncedSearch, selectedCompanies, remoteFilter, onSiteFilter, expFilter, dateFilter, sortBy, sortDir]
   )
 
   // Reset to page 1 when filters change
@@ -88,7 +103,9 @@ export function useJobs() {
   }, [jobs])
 
   function resetFilters() {
-    setSearchQuery('')
+    setSearchQueryRaw('')
+    setDebouncedSearch('')
+    if (debounceRef.current) clearTimeout(debounceRef.current)
     setSelectedCompanies([])
     setRemoteFilter(false)
     setOnSiteFilter(false)
@@ -116,7 +133,7 @@ export function useJobs() {
     tab,
     setTab,
 
-    // Search
+    // Search — searchQuery is the raw input value; debouncedSearch drives the API
     searchQuery,
     setSearchQuery,
 
