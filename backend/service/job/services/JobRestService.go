@@ -77,6 +77,9 @@ func (h *RestService) List(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("sort_dir"); v != "" {
 		filter.SortDir = v
 	}
+	if v := q.Get("search"); v != "" {
+		filter.Search = v
+	}
 
 	jobs, total, err := h.next.List(r.Context(), filter, p.Page, p.Limit)
 	if err != nil {

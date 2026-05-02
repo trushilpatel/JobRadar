@@ -244,3 +244,44 @@ func TestJobHandlerList_ExperienceRangesInvalidDropped(t *testing.T) {
 		t.Errorf("range[0] = {Min:%d Max:%v}, want {2 5}", r0.Min, r0.Max)
 	}
 }
+
+// captureFilterSvc records the filter passed to List so tests can assert on it.
+type captureFilterSvc struct {
+	lastFilter jobdto.JobFilter
+}
+
+func (f *captureFilterSvc) List(_ context.Context, filter jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
+	f.lastFilter = filter
+	return nil, 0, nil
+}
+func (f *captureFilterSvc) Get(_ context.Context, _ string) (*jobmodel.Job, error) {
+	return nil, nil
+}
+func (f *captureFilterSvc) GetCounts(_ context.Context) (*jobdto.JobCounts, error) {
+	return &jobdto.JobCounts{}, nil
+}
+func (f *captureFilterSvc) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error {
+	return nil
+}
+func (f *captureFilterSvc) SetSaved(_ context.Context, _ string, _ bool) error { return nil }
+func (f *captureFilterSvc) SetStatus(_ context.Context, _, _ string) error     { return nil }
+func (f *captureFilterSvc) SetNotes(_ context.Context, _, _ string) error      { return nil }
+func (f *captureFilterSvc) MarkApplied(_ context.Context, _ string) error      { return nil }
+
+var _ jobsvc.Service = (*captureFilterSvc)(nil)
+
+func TestJobHandlerList_SearchParamForwarded(t *testing.T) {
+	fake := &captureFilterSvc{}
+	r := newJobTestRouter(fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/jobs?search=backend+engineer", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("got status %d, want 200", w.Code)
+	}
+	if fake.lastFilter.Search != "backend engineer" {
+		t.Errorf("Search = %q, want %q", fake.lastFilter.Search, "backend engineer")
+	}
+}
