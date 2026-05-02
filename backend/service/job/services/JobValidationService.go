@@ -58,6 +58,13 @@ func (v *validationService) List(ctx context.Context, filter dto.JobFilter, page
 			})
 		}
 	}
+	if len(filter.Search) > 200 {
+		errs = append(errs, errors.ValidationError{
+			Field:   "search",
+			Code:    "INVALID_VALUE",
+			Message: "search must be 200 characters or fewer",
+		})
+	}
 	if page < 1 {
 		errs = append(errs, errors.ValidationError{
 			Field:   "page",

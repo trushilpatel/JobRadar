@@ -2,6 +2,7 @@ package services_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
@@ -59,6 +60,10 @@ func TestValidateList(t *testing.T) {
 		{name: "valid exp 5+", filter: jobdto.JobFilter{ExperienceRanges: []jobdto.ExperienceRange{{Min: 5}}}, page: 1, limit: 20},
 		{name: "invalid exp max <= min", filter: jobdto.JobFilter{ExperienceRanges: []jobdto.ExperienceRange{{Min: 5, Max: ptrInt(3)}}}, page: 1, limit: 20, wantErr: true},
 		{name: "invalid exp negative min", filter: jobdto.JobFilter{ExperienceRanges: []jobdto.ExperienceRange{{Min: -1, Max: ptrInt(2)}}}, page: 1, limit: 20, wantErr: true},
+		{name: "search valid", filter: jobdto.JobFilter{Search: "golang engineer"}, page: 1, limit: 20},
+		{name: "search empty valid", filter: jobdto.JobFilter{Search: ""}, page: 1, limit: 20},
+		{name: "search exactly 200 chars valid", filter: jobdto.JobFilter{Search: strings.Repeat("a", 200)}, page: 1, limit: 20},
+		{name: "search 201 chars invalid", filter: jobdto.JobFilter{Search: strings.Repeat("a", 201)}, page: 1, limit: 20, wantErr: true},
 	}
 
 	for _, tc := range tests {
