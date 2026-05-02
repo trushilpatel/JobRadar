@@ -48,23 +48,38 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, page, limi
 	defer tracing.End(span, &err)
 	query := s.db.WithContext(ctx).Model(&jobmodel.Job{})
 
-	// Status — always applied; "saved" is a boolean flag, not a status value
+	// Join companies when needed for search (company name match) or sorting by company.
+	// The FK job_feed.company_id → companies.id guarantees at most one match per row.
+	if filter.Search != "" || filter.SortBy == "company" {
+		query = query.Joins("LEFT JOIN companies ON companies.id = job_feed.company_id")
+	}
+
+	// Status — "saved" is a boolean flag, not a status value
 	if filter.Status == jobcommon.JobStatusSaved {
 		query = query.Where("saved = ?", true)
 	} else if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)
 	}
 
+	// Search: case-insensitive match on title, location, or company name
+	if filter.Search != "" {
+		term := "%" + filter.Search + "%"
+		query = query.Where(
+			"(job_feed.title ILIKE ? OR job_feed.location ILIKE ? OR companies.name ILIKE ?)",
+			term, term, term,
+		)
+	}
+
 	if len(filter.Companies) > 0 {
-		query = query.Where("company_id IN ?", filter.Companies)
+		query = query.Where("job_feed.company_id IN ?", filter.Companies)
 	}
 
 	if filter.Remote != nil {
-		query = query.Where("remote = ?", *filter.Remote)
+		query = query.Where("job_feed.remote = ?", *filter.Remote)
 	}
 
 	if filter.OnSite {
-		query = query.Where("remote = ?", false)
+		query = query.Where("job_feed.remote = ?", false)
 	}
 
 	if len(filter.EmployTypes) > 0 {
@@ -116,29 +131,22 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, page, limi
 
 	// Whitelist sort columns to prevent SQL injection.
 	var col string
-	var needsCompanyJoin bool
 	switch filter.SortBy {
 	case "title":
-		col = "title"
+		col = "job_feed.title"
 	case "company":
 		col = "companies.name"
-		needsCompanyJoin = true
 	default:
-		col = "added_at"
+		col = "job_feed.added_at"
 	}
 	dir := "DESC"
 	if filter.SortDir == "asc" {
 		dir = "ASC"
 	}
 
-	dataQuery := query
-	if needsCompanyJoin {
-		dataQuery = dataQuery.Joins("JOIN companies ON companies.id = job_feed.company_id")
-	}
-
 	var jobs []jobmodel.Job
 	offset := (page - 1) * limit
-	err = dataQuery.Order(col + " " + dir).Offset(offset).Limit(limit).Preload("Company").Find(&jobs).Error
+	err = query.Order(col + " " + dir).Offset(offset).Limit(limit).Preload("Company").Find(&jobs).Error
 	return jobs, total, err
 }
 
