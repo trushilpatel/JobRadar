@@ -49,19 +49,6 @@ export function JobsPage() {
     jobs.dateFilter !== 'all',
   ].filter(Boolean).length
 
-  const displayJobs = jobs.searchQuery.trim()
-    ? jobs.jobs.filter((j) => {
-        const q = jobs.searchQuery.toLowerCase()
-        return (
-          j.title.toLowerCase().includes(q) ||
-          (j.company?.name ?? '').toLowerCase().includes(q) ||
-          (j.location ?? '').toLowerCase().includes(q)
-        )
-      })
-    : jobs.jobs
-
-  const displayTotal = jobs.searchQuery.trim() ? displayJobs.length : jobs.total
-
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <JobStatusTabs
@@ -75,7 +62,7 @@ export function JobsPage() {
           <div className="flex items-baseline gap-3">
             <h1 className="text-lg font-semibold text-white">Jobs</h1>
             <span className="text-xs text-slate-400">
-              {displayTotal} job{displayTotal !== 1 ? 's' : ''}
+              {jobs.total} job{jobs.total !== 1 ? 's' : ''}
               {activeFilterCount > 0 && (
                 <>
                   {' '}
@@ -129,8 +116,8 @@ export function JobsPage() {
       {/* Content: table + optional detail panel */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <JobsTable
-          jobs={displayJobs}
-          total={displayTotal}
+          jobs={jobs.jobs}
+          total={jobs.total}
           loading={jobs.isLoading}
           tab={jobs.tab}
           page={jobs.page}
@@ -147,7 +134,7 @@ export function JobsPage() {
             })
           }}
           onSelectAll={(checked) => {
-            setSelectedIds(checked ? new Set(displayJobs.map((j) => j.id)) : new Set())
+            setSelectedIds(checked ? new Set(jobs.jobs.map((j) => j.id)) : new Set())
           }}
           onPageChange={jobs.setPage}
           onLimitChange={(l) => {
