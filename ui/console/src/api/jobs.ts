@@ -10,6 +10,7 @@ export interface JobsPage {
 
 export interface JobFilters {
   status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
+  search?: string
   companies?: string[]
   remote?: boolean
   onSite?: boolean
@@ -34,6 +35,7 @@ export async function fetchJobs(filters: JobFilters, page = 1, limit = 20): Prom
   p.set('page', String(page))
   p.set('limit', String(limit))
 
+  if (filters.search) p.set('search', filters.search)
   filters.companies?.forEach((c) => p.append('companies', c))
   if (filters.remote) p.set('remote', 'true')
   if (filters.onSite) p.set('on_site', 'true')
