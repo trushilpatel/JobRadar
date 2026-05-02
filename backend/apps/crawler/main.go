@@ -182,4 +182,3 @@ func (a *queueAdapter) Complete(ctx context.Context, id string) error {
 func (a *queueAdapter) UpdateHeartbeat(ctx context.Context, id string) error {
 	return a.svc.UpdateHeartbeat(ctx, id)
 }
-

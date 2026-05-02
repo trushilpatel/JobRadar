@@ -4,7 +4,7 @@
 //
 //   - Listing  : HTTP GET /jobsearch/sitemap.xml → ~895 numeric job IDs
 //   - Detail   : HTTP GET /profile/job_details/{id} → schema.org JobPosting
-//                JSON-LD embedded in <script type="application/ld+json">
+//     JSON-LD embedded in <script type="application/ld+json">
 //
 // Meta v3 used go-rod to scroll Meta's React SPA listing because the
 // /jobsearch HTML shell is empty until JavaScript bootstraps. v4 replaces

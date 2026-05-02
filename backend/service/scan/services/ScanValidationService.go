@@ -9,7 +9,7 @@ import (
 )
 
 var validQueueStatuses = map[string]bool{
-	scancommon.QueueStatusQueued:     true,
+	scancommon.QueueStatusQueued:  true,
 	scancommon.QueueStatusRunning: true,
 }
 

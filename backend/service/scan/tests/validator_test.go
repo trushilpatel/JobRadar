@@ -49,7 +49,7 @@ func TestValidateListQueue(t *testing.T) {
 	}{
 		{name: "empty filter", filter: dto.QueueFilter{}},
 		{name: "valid status queued", filter: dto.QueueFilter{Status: "queued"}},
-		{name: "valid status processing", filter: dto.QueueFilter{Status: "processing"}},
+		{name: "valid status running", filter: dto.QueueFilter{Status: "running"}},
 		{name: "valid source manual", filter: dto.QueueFilter{Source: "manual"}},
 		{name: "valid source scheduler", filter: dto.QueueFilter{Source: "scheduler"}},
 		{name: "invalid status", filter: dto.QueueFilter{Status: "invalid"}, wantErr: true},

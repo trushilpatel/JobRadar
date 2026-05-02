@@ -13,13 +13,13 @@ import (
 // App holds all domain handlers wired together.
 // Dependencies are injected by Wire (or manually in tests/main.go).
 type App struct {
-	companyHandler           *companysvc.RestRouter
-	scanHandler              *scansvc.RestRouter
-	adapterConfigHandler     *scansvc.AdapterConfigRestRouter
-	jobHandler               *jobsvc.RestRouter
-	applicationHandler       *application.Handler
-	dashboardHandler         *dashboard.Handler
-	insightsHandler          *insightssvc.RestRouter
+	companyHandler       *companysvc.RestRouter
+	scanHandler          *scansvc.RestRouter
+	adapterConfigHandler *scansvc.AdapterConfigRestRouter
+	jobHandler           *jobsvc.RestRouter
+	applicationHandler   *application.Handler
+	dashboardHandler     *dashboard.Handler
+	insightsHandler      *insightssvc.RestRouter
 }
 
 // NewApp constructs the App from fully-wired domain handlers.
