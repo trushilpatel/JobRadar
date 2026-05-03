@@ -66,6 +66,12 @@ func (f *fakeJobService) MarkApplied(_ context.Context, _ string) error {
 	f.markAppliedCalled = true
 	return f.err
 }
+func (f *fakeJobService) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
+	return 0, nil
+}
+func (f *fakeJobService) GetJobPostIDs(_ context.Context, _ []string) ([]string, error) {
+	return nil, nil
+}
 
 func TestCreate_JobNotFound(t *testing.T) {
 	next := &fakeApplicationService{}
