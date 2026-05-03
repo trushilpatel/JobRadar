@@ -14,6 +14,7 @@ import (
 type SnapshotWriter interface {
 	InsertSnapshot(ctx context.Context, input dto.SnapshotInput) error
 	UpdateSnapshotAction(ctx context.Context, id, action string) error
+	UpdateSnapshotActionBatch(ctx context.Context, ids []string, action string) error
 }
 
 type snapshotStore struct {
@@ -59,6 +60,21 @@ func (s *snapshotStore) UpdateSnapshotAction(ctx context.Context, id, action str
 	now := time.Now()
 	return s.db.WithContext(ctx).Model(&jobmodel.JobSnapshot{}).
 		Where("id = ?", id).
+		Updates(map[string]any{
+			"user_action": action,
+			"actioned_at": now,
+		}).Error
+}
+
+func (s *snapshotStore) UpdateSnapshotActionBatch(ctx context.Context, ids []string, action string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.UpdateSnapshotActionBatch")
+	defer tracing.End(span, &err)
+	if len(ids) == 0 {
+		return nil
+	}
+	now := time.Now()
+	return s.db.WithContext(ctx).Model(&jobmodel.JobSnapshot{}).
+		Where("id IN ?", ids).
 		Updates(map[string]any{
 			"user_action": action,
 			"actioned_at": now,

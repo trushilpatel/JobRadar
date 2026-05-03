@@ -18,6 +18,7 @@ type JobReader interface {
 	GetJobByID(ctx context.Context, id string) (*jobmodel.Job, error)
 	GetJobCounts(ctx context.Context) (*dto.JobCounts, error)
 	GetJobsAddedByDay(ctx context.Context, days int) ([]dto.DailyJobCount, error)
+	GetJobPostIDs(ctx context.Context, ids []string) ([]string, error)
 }
 
 // JobWriter is for the LLM enricher to insert completed job results.
@@ -25,6 +26,7 @@ type JobWriter interface {
 	InsertJob(ctx context.Context, job *jobmodel.Job) error
 	DeleteJob(ctx context.Context, id string) error
 	UpdateJobStatus(ctx context.Context, id, status string) error
+	UpdateJobStatusBatch(ctx context.Context, ids []string, status string) (int64, error)
 	UpdateJobSaved(ctx context.Context, id string, saved bool) error
 	UpdateJobNotes(ctx context.Context, id, notes string) error
 }
@@ -150,6 +152,18 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, page, limi
 	return jobs, total, err
 }
 
+func (s *jobStore) GetJobPostIDs(ctx context.Context, ids []string) (jobPostIDs []string, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.GetJobPostIDs")
+	defer tracing.End(span, &err)
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	err = s.db.WithContext(ctx).Model(&jobmodel.Job{}).
+		Where("id IN ?", ids).
+		Pluck("job_post_id", &jobPostIDs).Error
+	return jobPostIDs, err
+}
+
 func (s *jobStore) GetJobByID(ctx context.Context, id string) (_ *jobmodel.Job, err error) {
 	ctx, span := tracing.Start(ctx, "job.store.GetJobByID")
 	defer tracing.End(span, &err)
@@ -179,6 +193,18 @@ func (s *jobStore) UpdateJobStatus(ctx context.Context, id, status string) (err 
 	return s.db.WithContext(ctx).Model(&jobmodel.Job{}).
 		Where("id = ?", id).
 		Update("status", status).Error
+}
+
+func (s *jobStore) UpdateJobStatusBatch(ctx context.Context, ids []string, status string) (_ int64, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.UpdateJobStatusBatch")
+	defer tracing.End(span, &err)
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := s.db.WithContext(ctx).Model(&jobmodel.Job{}).
+		Where("id IN ?", ids).
+		Update("status", status)
+	return result.RowsAffected, result.Error
 }
 
 func (s *jobStore) UpdateJobSaved(ctx context.Context, id string, saved bool) (err error) {
