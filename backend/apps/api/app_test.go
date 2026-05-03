@@ -226,7 +226,7 @@ func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ jobdto.DismissIn
 func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error { return nil }
 func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error     { return nil }
 func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error      { return nil }
-func (f *fakeJobService) MarkApplied(_ context.Context, _ string) error { return nil }
+func (f *fakeJobService) MarkApplied(_ context.Context, _ string) error      { return nil }
 func (f *fakeJobService) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
 	return 0, nil
 }

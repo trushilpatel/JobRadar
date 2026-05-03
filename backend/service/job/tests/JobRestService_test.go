@@ -40,7 +40,7 @@ func (f *fakeJobSvc) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput)
 func (f *fakeJobSvc) SetSaved(_ context.Context, _ string, _ bool) error { return f.err }
 func (f *fakeJobSvc) SetStatus(_ context.Context, _, _ string) error     { return f.err }
 func (f *fakeJobSvc) SetNotes(_ context.Context, _, _ string) error      { return f.err }
-func (f *fakeJobSvc) MarkApplied(_ context.Context, _ string) error { return f.err }
+func (f *fakeJobSvc) MarkApplied(_ context.Context, _ string) error      { return f.err }
 func (f *fakeJobSvc) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
 	return 0, f.err
 }
@@ -203,7 +203,7 @@ func (c *capturingService) Dismiss(_ context.Context, _ string, _ jobdto.Dismiss
 func (c *capturingService) SetSaved(_ context.Context, _ string, _ bool) error { return nil }
 func (c *capturingService) SetStatus(_ context.Context, _, _ string) error     { return nil }
 func (c *capturingService) SetNotes(_ context.Context, _, _ string) error      { return nil }
-func (c *capturingService) MarkApplied(_ context.Context, _ string) error { return nil }
+func (c *capturingService) MarkApplied(_ context.Context, _ string) error      { return nil }
 func (c *capturingService) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
 	return 0, nil
 }
@@ -278,7 +278,7 @@ func (f *captureFilterSvc) Dismiss(_ context.Context, _ string, _ jobdto.Dismiss
 func (f *captureFilterSvc) SetSaved(_ context.Context, _ string, _ bool) error { return nil }
 func (f *captureFilterSvc) SetStatus(_ context.Context, _, _ string) error     { return nil }
 func (f *captureFilterSvc) SetNotes(_ context.Context, _, _ string) error      { return nil }
-func (f *captureFilterSvc) MarkApplied(_ context.Context, _ string) error { return nil }
+func (f *captureFilterSvc) MarkApplied(_ context.Context, _ string) error      { return nil }
 func (f *captureFilterSvc) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
 	return 0, nil
 }
@@ -301,5 +301,48 @@ func TestJobHandlerList_SearchParamForwarded(t *testing.T) {
 	}
 	if fake.lastFilter.Search != "backend engineer" {
 		t.Errorf("Search = %q, want %q", fake.lastFilter.Search, "backend engineer")
+	}
+}
+
+func TestBulkDismissHandler_OK(t *testing.T) {
+	r := newJobTestRouter(&fakeJobSvc{})
+
+	body, _ := json.Marshal(map[string][]string{"ids": {"j1", "j2"}})
+	req := httptest.NewRequest(http.MethodPost, "/jobs/dismiss/bulk", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("got status %d, want 200: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"dismissed"`) {
+		t.Errorf("body missing dismissed field: %s", w.Body.String())
+	}
+}
+
+func TestBulkDismissHandler_BadBody(t *testing.T) {
+	r := newJobTestRouter(&fakeJobSvc{})
+
+	req := httptest.NewRequest(http.MethodPost, "/jobs/dismiss/bulk", strings.NewReader("not-json"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("got status %d, want 400", w.Code)
+	}
+}
+
+func TestBulkDismissHandler_ServiceError(t *testing.T) {
+	r := newJobTestRouter(&fakeJobSvc{err: errors.ErrInternal.WithMessage("db error")})
+
+	body, _ := json.Marshal(map[string][]string{"ids": {"j1"}})
+	req := httptest.NewRequest(http.MethodPost, "/jobs/dismiss/bulk", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("got status %d, want 500", w.Code)
 	}
 }

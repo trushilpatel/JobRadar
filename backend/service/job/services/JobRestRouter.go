@@ -15,6 +15,7 @@ func NewRestRouter(h *RestService) *RestRouter {
 
 // Register mounts all job routes onto r.
 func (r *RestRouter) Register(router chi.Router) {
+	router.Post("/jobs/dismiss/bulk", r.handler.BulkDismiss)
 	router.Get("/jobs", r.handler.List)
 	router.Get("/jobs/counts", r.handler.GetCounts)
 	router.Get("/jobs/{id}", r.handler.Get)

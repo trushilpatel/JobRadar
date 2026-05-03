@@ -26,7 +26,7 @@ func (n *noopService) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput
 func (n *noopService) SetSaved(_ context.Context, _ string, _ bool) error               { return nil }
 func (n *noopService) SetStatus(_ context.Context, _, _ string) error                   { return nil }
 func (n *noopService) SetNotes(_ context.Context, _, _ string) error                    { return nil }
-func (n *noopService) MarkApplied(_ context.Context, _ string) error { return nil }
+func (n *noopService) MarkApplied(_ context.Context, _ string) error                    { return nil }
 func (n *noopService) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
 	return 0, nil
 }

@@ -131,6 +131,30 @@ func (h *RestService) Dismiss(w http.ResponseWriter, r *http.Request) {
 	handler.Respond(w, http.StatusOK, map[string]string{"id": id, "reason": input.Reason})
 }
 
+// POST /jobs/dismiss/bulk
+func (h *RestService) BulkDismiss(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+
+	input := dto.BulkDismissInput{
+		IDs:    body.IDs,
+		Reason: jobcommon.DiscardReasonNotRelevant,
+	}
+
+	n, err := h.next.BulkDismiss(r.Context(), input)
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+
+	handler.Respond(w, http.StatusOK, map[string]int{"dismissed": n})
+}
+
 // PATCH /jobs/:id/save
 func (h *RestService) SetSaved(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
