@@ -80,6 +80,11 @@ export async function dismissJob(id: string, reason: string, note?: string): Pro
   await apiClient.delete<void>(`/jobs/${id}`, { reason, note: note ?? '' })
 }
 
+// POST /jobs/dismiss/bulk
+export async function bulkDismissJobs(ids: string[]): Promise<{ dismissed: number }> {
+  return apiClient.post<{ dismissed: number }>('/jobs/dismiss/bulk', { ids })
+}
+
 // GET /jobs/:id/applications
 export async function fetchApplications(jobId: string): Promise<JobApplication[]> {
   return apiClient.get<JobApplication[]>(`/jobs/${jobId}/applications`)

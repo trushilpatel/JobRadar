@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { setJobStatus, dismissJob } from '@/api/jobs'
+import { setJobStatus, dismissJob, bulkDismissJobs } from '@/api/jobs'
 import type { JobStatus } from '@/types'
 
 export function useJobActions() {
@@ -27,13 +27,12 @@ export function useJobActions() {
   })
 
   const bulkDismiss = useMutation({
-    mutationFn: (ids: string[]) =>
-      Promise.all(ids.map((id) => dismissJob(id, 'user_not_relevant'))),
-    onSuccess: (_, ids) => {
-      toast.success(`${ids.length} job${ids.length !== 1 ? 's' : ''} dismissed`)
+    mutationFn: (ids: string[]) => bulkDismissJobs(ids),
+    onSuccess: (result) => {
+      toast.success(`${result.dismissed} job${result.dismissed !== 1 ? 's' : ''} dismissed`)
       invalidateJobs()
     },
-    onError: () => toast.error('Failed to dismiss some jobs'),
+    onError: () => toast.error('Failed to dismiss jobs'),
   })
 
   return { setStatus, dismiss, bulkDismiss }
