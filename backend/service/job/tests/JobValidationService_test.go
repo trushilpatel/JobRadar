@@ -126,3 +126,36 @@ func TestValidateSetStatus(t *testing.T) {
 		t.Error("expected error for empty status")
 	}
 }
+
+func TestValidateBulkDismiss(t *testing.T) {
+	v := newValidator()
+
+	ids101 := make([]string, 101)
+	for i := range ids101 {
+		ids101[i] = "x"
+	}
+
+	tests := []struct {
+		name    string
+		ids     []string
+		wantErr bool
+	}{
+		{name: "valid single", ids: []string{"j1"}},
+		{name: "valid 100", ids: make([]string, 100)},
+		{name: "nil ids", ids: nil, wantErr: true},
+		{name: "empty ids", ids: []string{}, wantErr: true},
+		{name: "101 ids", ids: ids101, wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := v.BulkDismiss(context.Background(), jobdto.BulkDismissInput{
+				IDs:    tc.ids,
+				Reason: jobcommon.DiscardReasonNotRelevant,
+			})
+			if (err != nil) != tc.wantErr {
+				t.Errorf("BulkDismiss() error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}

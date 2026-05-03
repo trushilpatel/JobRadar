@@ -122,3 +122,26 @@ func (v *validationService) SetStatus(ctx context.Context, id, status string) er
 func (v *validationService) SetNotes(ctx context.Context, id, notes string) error {
 	return v.next.SetNotes(ctx, id, notes)
 }
+
+// BulkDismiss validates the bulk dismiss input before delegating.
+func (v *validationService) BulkDismiss(ctx context.Context, input dto.BulkDismissInput) (int, error) {
+	var errs errors.ValidationErrors
+	if len(input.IDs) == 0 {
+		errs = append(errs, errors.ValidationError{
+			Field:   "ids",
+			Code:    "REQUIRED",
+			Message: "ids must not be empty",
+		})
+	}
+	if len(input.IDs) > 100 {
+		errs = append(errs, errors.ValidationError{
+			Field:   "ids",
+			Code:    "INVALID_VALUE",
+			Message: "ids must contain 100 or fewer entries",
+		})
+	}
+	if len(errs) > 0 {
+		return 0, errs
+	}
+	return v.next.BulkDismiss(ctx, input)
+}
