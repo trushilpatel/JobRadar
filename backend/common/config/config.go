@@ -80,7 +80,7 @@ type DatabaseConfig struct {
 
 func (c DatabaseConfig) DSN() string {
 	return fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s statement_cache_capacity=0 default_query_exec_mode=simple_protocol",
 		c.Host, c.Port, c.User, c.Password, c.Name, c.SSLMode,
 	)
 }
