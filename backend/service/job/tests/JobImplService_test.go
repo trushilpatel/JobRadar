@@ -243,6 +243,64 @@ func TestSetStatus_NoSnapshotBackfillForNew(t *testing.T) {
 	}
 }
 
+func TestBulkDismiss_DismissesAll(t *testing.T) {
+	js := &fakeJobStore{
+		jobPostIDs: map[string]string{"j1": "jp1", "j2": "jp2"},
+	}
+	discard := &fakeDiscardStore{}
+	snapshot := &fakeSnapshotWriter{}
+	ledger := &fakeLedgerWriter{}
+
+	svc := newImplService(js, ledger, discard, snapshot, &fakeApplicationWriter{})
+	n, err := svc.BulkDismiss(context.Background(), jobdto.BulkDismissInput{
+		IDs:    []string{"j1", "j2"},
+		Reason: jobcommon.DiscardReasonNotRelevant,
+	})
+	if err != nil {
+		t.Fatalf("BulkDismiss() error = %v", err)
+	}
+	if n != 2 {
+		t.Errorf("expected 2 dismissed, got %d", n)
+	}
+	if !discard.insertCalled {
+		t.Error("expected InsertDiscardBatch to be called")
+	}
+	if !js.updateStatusCalled {
+		t.Error("expected UpdateJobStatusBatch to be called")
+	}
+	if !snapshot.updateCalled {
+		t.Error("expected UpdateSnapshotActionBatch to be called")
+	}
+}
+
+func TestBulkDismiss_SnapshotFailureIsNonFatal(t *testing.T) {
+	js := &fakeJobStore{jobPostIDs: map[string]string{"j1": "jp1"}}
+	snapshot := &fakeSnapshotWriter{err: errors.New("snapshot failure")}
+
+	svc := newImplService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
+	_, err := svc.BulkDismiss(context.Background(), jobdto.BulkDismissInput{
+		IDs:    []string{"j1"},
+		Reason: jobcommon.DiscardReasonNotRelevant,
+	})
+	if err != nil {
+		t.Fatalf("BulkDismiss() must not return error when snapshot fails, got: %v", err)
+	}
+}
+
+func TestBulkDismiss_DiscardFailureIsFatal(t *testing.T) {
+	js := &fakeJobStore{jobPostIDs: map[string]string{"j1": "jp1"}}
+	discard := &fakeDiscardStore{err: errors.New("db error")}
+
+	svc := newImplService(js, &fakeLedgerWriter{}, discard, &fakeSnapshotWriter{}, &fakeApplicationWriter{})
+	_, err := svc.BulkDismiss(context.Background(), jobdto.BulkDismissInput{
+		IDs:    []string{"j1"},
+		Reason: jobcommon.DiscardReasonNotRelevant,
+	})
+	if err == nil {
+		t.Fatal("expected error when discard fails")
+	}
+}
+
 // Ensure test doubles implement interfaces.
 var _ jobsvc.JobStore = (*fakeJobStore)(nil)
 var _ jobsvc.SeenLedgerWriter = (*fakeLedgerWriter)(nil)

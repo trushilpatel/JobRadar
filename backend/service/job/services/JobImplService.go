@@ -57,6 +57,36 @@ func (s *implService) Dismiss(ctx context.Context, id string, input dto.DismissI
 	return nil
 }
 
+// BulkDismiss dismisses multiple jobs in one call: records batch discards, updates the ledger,
+// bulk-updates job_feed status, and non-fatally backfills analytics snapshots.
+func (s *implService) BulkDismiss(ctx context.Context, input dto.BulkDismissInput) (n int, err error) {
+	ctx, span := tracing.Start(ctx, "job.service.BulkDismiss")
+	defer tracing.End(span, &err)
+
+	if err := s.discard.InsertDiscardBatch(ctx, input.IDs, input.Reason); err != nil {
+		return 0, errors.ErrInternal.WithMessage("failed to record dismissals")
+	}
+
+	jobPostIDs, err := s.next.GetJobPostIDs(ctx, input.IDs)
+	if err != nil {
+		return 0, err
+	}
+
+	if err := s.ledger.UpdateSeenReasonBatch(ctx, jobPostIDs, jobcommon.SeenReasonUserDismissed); err != nil {
+		return 0, errors.ErrInternal.WithMessage("failed to update seen ledger")
+	}
+
+	n, err = s.next.BulkDismiss(ctx, input)
+	if err != nil {
+		return 0, err
+	}
+
+	// Non-fatal: snapshot may not exist for older jobs
+	_ = s.snapshot.UpdateSnapshotActionBatch(ctx, input.IDs, jobcommon.JobStatusDismissed)
+
+	return n, nil
+}
+
 // SetSaved updates the saved flag for a job and non-fatally backfills the snapshot.
 func (s *implService) SetSaved(ctx context.Context, id string, saved bool) (err error) {
 	ctx, span := tracing.Start(ctx, "job.service.SetSaved")
