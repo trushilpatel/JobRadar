@@ -16,12 +16,17 @@ function Stage({
       <span
         className={cn(
           'text-[18px] font-semibold leading-tight tabular-nums',
-          valueClass ?? 'text-white'
+          value === 0 ? 'text-white/25' : (valueClass ?? 'text-white')
         )}
       >
         {value}
       </span>
-      <span className="text-[9px] uppercase tracking-[0.08em] text-slate-500 mt-0.5 text-center whitespace-nowrap">
+      <span
+        className={cn(
+          'text-[10px] uppercase tracking-[0.08em] mt-0.5 text-center whitespace-nowrap',
+          value === 0 ? 'text-slate-700' : 'text-slate-500'
+        )}
+      >
         {label}
       </span>
     </div>
@@ -60,8 +65,12 @@ export function PipelineStrip() {
 
   return (
     <div className="flex items-center">
-      <Stage label="Total" value={data.total_companies} />
-      <Arrow />
+      {data.total_companies !== data.active_companies && (
+        <>
+          <Stage label="Total" value={data.total_companies} />
+          <Arrow />
+        </>
+      )}
       <Stage label="Active" value={data.active_companies} valueClass="text-emerald-400" />
       <Arrow />
       <Stage label="Queued" value={data.queued} valueClass="text-amber-400" />

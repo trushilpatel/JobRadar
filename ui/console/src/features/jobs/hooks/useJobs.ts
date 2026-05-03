@@ -16,7 +16,8 @@ export function useJobs() {
   const [tab, setTab] = useState<TabKey>('new')
 
   // Filter state
-  const [selectedCompanies, setSelectedCompanies] = useState<string[]>([])
+  const initialCompanies = (location.state as { companies?: string[] } | null)?.companies ?? []
+  const [selectedCompanies, setSelectedCompanies] = useState<string[]>(initialCompanies)
   const [remoteFilter, setRemoteFilter] = useState(false)
   const [onSiteFilter, setOnSiteFilter] = useState(false)
   const [expFilter, setExpFilter] = useState<string[]>([])
@@ -75,14 +76,18 @@ export function useJobs() {
   const query = useQuery({
     queryKey: ['jobs', filters, page, limit],
     queryFn: () => fetchJobs(filters, page, limit),
+    staleTime: 30_000,
   })
 
   const countsQuery = useQuery({
     queryKey: ['jobs', 'counts'],
     queryFn: fetchJobCounts,
+    staleTime: 30_000,
   })
 
-  const jobs = query.data?.data ?? []
+  // Stable reference — avoids companies useMemo invalidating on every render
+  // when query.data?.data is undefined (the `?? []` fallback creates a new array each time).
+  const jobs = useMemo(() => query.data?.data ?? [], [query.data])
   const total = query.data?.total ?? 0
   const counts: Partial<Record<TabKey, number>> = countsQuery.data
     ? {

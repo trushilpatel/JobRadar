@@ -1,4 +1,4 @@
-import { X, ExternalLink, Wifi, Briefcase, DollarSign, Trash2, MapPin } from 'lucide-react'
+import { X, ExternalLink, Wifi, Briefcase, DollarSign, Trash2, MapPin, ShieldAlert, Globe, BadgeCheck } from 'lucide-react'
 import type { Job, JobStatus } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
 import { formatSalary } from '@/services/jobs.service'
@@ -70,7 +70,22 @@ export function JobDetailPanel({ job, onClose, onStatusChange, onDismiss }: JobD
           )}
           {job.employ_type && (
             <span className="flex items-center gap-1 text-xs text-slate-400 bg-white/[0.05] border border-white/[0.07] px-2.5 py-1 rounded-lg">
-              <Briefcase size={11} /> {job.employ_type.replace('_', ' ')}
+              <Briefcase size={11} /> {job.employ_type.replaceAll('_', ' ')}
+            </span>
+          )}
+          {job.sponsorship && (
+            <span className="flex items-center gap-1 text-xs text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1 rounded-lg">
+              <Globe size={11} /> Sponsors visa
+            </span>
+          )}
+          {job.requires_citizen && (
+            <span className="flex items-center gap-1 text-xs text-orange-300 bg-orange-500/10 border border-orange-500/20 px-2.5 py-1 rounded-lg">
+              <BadgeCheck size={11} /> Citizen required
+            </span>
+          )}
+          {job.security_clearance && (
+            <span className="flex items-center gap-1 text-xs text-red-300 bg-red-500/10 border border-red-500/20 px-2.5 py-1 rounded-lg">
+              <ShieldAlert size={11} /> Clearance required
             </span>
           )}
         </div>

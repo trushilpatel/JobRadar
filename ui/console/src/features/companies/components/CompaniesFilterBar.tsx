@@ -1,4 +1,7 @@
-import { Search, Filter, Power, Loader2, X, Plus, Play } from 'lucide-react'
+import { useState } from 'react'
+import { Search, Filter, Power, Loader2, X, Plus, Play, XCircle, RefreshCw, Clock, FilterX } from 'lucide-react'
+import * as Dialog from '@radix-ui/react-dialog'
+import { cn } from '@/lib/utils'
 import { SegmentedSwitch } from '@/components/ui/segmented-switch'
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
 import type { ActiveFilter, StatusFilter } from '@/features/companies/hooks/useCompanies'
@@ -25,6 +28,7 @@ interface CompaniesFilterBarProps {
   runningAll: boolean
   onRunAll: () => void
   onReset: () => void
+  hasActiveFilters: boolean
 
   onAddClick: () => void
 }
@@ -34,6 +38,9 @@ function Divider() {
 }
 
 export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
+  const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false)
+  const [runAllConfirmOpen, setRunAllConfirmOpen] = useState(false)
+
   return (
     <div className="px-6 py-3 border-b border-white/[0.07] flex items-center gap-2">
       {/* Left: filters */}
@@ -91,17 +98,22 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
           value={p.statusFilter}
           onChange={(v) => p.onStatusFilterChange(p.statusFilter === v ? 'none' : v)}
           options={[
-            { value: STATUS_FILTER.ERROR, label: '✕ Errors', accent: 'red' },
-            { value: STATUS_FILTER.RUNNING, label: '⟳ Running', accent: 'blue' },
-            { value: STATUS_FILTER.QUEUED, label: '· Queued', accent: 'amber' },
+            { value: STATUS_FILTER.ERROR, label: <span className="flex items-center gap-1"><XCircle size={11} />Errors</span>, accent: 'red' },
+            { value: STATUS_FILTER.RUNNING, label: <span className="flex items-center gap-1"><RefreshCw size={11} />Running</span>, accent: 'blue' },
+            { value: STATUS_FILTER.QUEUED, label: <span className="flex items-center gap-1"><Clock size={11} />Queued</span>, accent: 'amber' },
           ]}
         />
 
         <button
           type="button"
           onClick={p.onReset}
-          className="text-[11px] text-slate-500 hover:text-slate-300 px-1"
+          className={cn(
+            'flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 px-1 transition-opacity',
+            p.hasActiveFilters ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          )}
+          title="Reset filters"
         >
+          <FilterX size={12} />
           Reset
         </button>
       </div>
@@ -110,7 +122,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
       <div className="flex-1 flex items-center justify-center gap-2">
         <button
           type="button"
-          onClick={p.onBulkToggle}
+          onClick={p.bulkAllActive ? () => setDeactivateConfirmOpen(true) : p.onBulkToggle}
           disabled={p.bulkToggling}
           className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
         >
@@ -119,7 +131,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         </button>
         <button
           type="button"
-          onClick={p.onRunAll}
+          onClick={() => setRunAllConfirmOpen(true)}
           disabled={p.runningAll}
           className="flex items-center gap-1.5 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
         >
@@ -137,6 +149,50 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         <Plus size={12} />
         Add Company
       </button>
+
+      <Dialog.Root open={deactivateConfirmOpen} onOpenChange={setDeactivateConfirmOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-[#13131a] border border-white/10 rounded-xl shadow-2xl p-6">
+            <Dialog.Title className="text-base font-semibold text-white mb-2">Deactivate all companies?</Dialog.Title>
+            <Dialog.Description className="text-sm text-slate-400 mb-5">
+              This will stop all future scans for every active company. You can reactivate them individually or all at once.
+            </Dialog.Description>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setDeactivateConfirmOpen(false)}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-white/5 hover:bg-white/10 text-slate-300 transition-colors">
+                Cancel
+              </button>
+              <button type="button" onClick={() => { setDeactivateConfirmOpen(false); p.onBulkToggle() }}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition-colors">
+                Deactivate all
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root open={runAllConfirmOpen} onOpenChange={setRunAllConfirmOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-[#13131a] border border-white/10 rounded-xl shadow-2xl p-6">
+            <Dialog.Title className="text-base font-semibold text-white mb-2">Queue all companies for scan?</Dialog.Title>
+            <Dialog.Description className="text-sm text-slate-400 mb-5">
+              This will queue all active companies for an immediate scan. This may generate significant load.
+            </Dialog.Description>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setRunAllConfirmOpen(false)}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-white/5 hover:bg-white/10 text-slate-300 transition-colors">
+                Cancel
+              </button>
+              <button type="button" onClick={() => { setRunAllConfirmOpen(false); p.onRunAll() }}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors">
+                Queue all
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }

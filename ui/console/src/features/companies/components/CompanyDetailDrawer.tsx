@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import * as Dialog from '@radix-ui/react-dialog'
 import { X, Trash2, RefreshCw, Pencil, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Company, ScanStats } from '@/types'
 import { fetchScanStats } from '@/api/companies'
@@ -33,8 +35,11 @@ export function CompanyDetailDrawer({
   const [loading, setLoading] = useState(false)
   const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set())
   const [scanConfig, setScanConfig] = useState<EffectiveScanConfig | null>(null)
+  const [scanConfigError, setScanConfigError] = useState(false)
   const [overrideModalOpen, setOverrideModalOpen] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const { setOverride } = useScanIntervalOverride(company.id)
+  const navigate = useNavigate()
 
   function toggleError(id: number) {
     setExpandedErrors((prev) => {
@@ -58,9 +63,10 @@ export function CompanyDetailDrawer({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setScanConfig(null)
+    setScanConfigError(false)
     getCompanyScanConfig(company.id)
       .then(setScanConfig)
-      .catch(() => setScanConfig(null))
+      .catch(() => { setScanConfig(null); setScanConfigError(true) })
   }, [company.id])
 
   useEffect(() => {
@@ -96,14 +102,6 @@ export function CompanyDetailDrawer({
       {/* Header */}
       <div className="relative px-5 pt-4 pb-3 border-b border-white/[0.07]">
         <div className="absolute top-3 right-3 flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onDelete(company.id)}
-            title="Delete"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-          >
-            <Trash2 size={14} />
-          </button>
           <button
             type="button"
             onClick={onClose}
@@ -143,6 +141,13 @@ export function CompanyDetailDrawer({
             className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors"
           >
             <Pencil size={12} /> Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeleteConfirmOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 px-2.5 py-1.5 rounded-lg transition-colors"
+          >
+            <Trash2 size={12} /> Delete
           </button>
         </div>
       </div>
@@ -199,6 +204,8 @@ export function CompanyDetailDrawer({
                 )}
               </div>
             </div>
+          ) : scanConfigError ? (
+            <p className="text-xs text-slate-500">Scan interval unavailable</p>
           ) : (
             <div className="h-8 bg-white/5 rounded animate-pulse" />
           )}
@@ -224,6 +231,15 @@ export function CompanyDetailDrawer({
                 />
               </div>
             </>
+          )}
+          {stats && stats.total_new > 0 && (
+            <button
+              type="button"
+              onClick={() => navigate('/jobs', { state: { companies: [company.name] } })}
+              className="mt-3 flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+            >
+              View {stats.total_new} jobs →
+            </button>
           )}
         </Section>
 
@@ -285,6 +301,34 @@ export function CompanyDetailDrawer({
           )}
         </Section>
       </div>
+
+      <Dialog.Root open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-[#13131a] border border-white/10 rounded-xl shadow-2xl p-6">
+            <Dialog.Title className="text-base font-semibold text-white mb-2">Delete company?</Dialog.Title>
+            <Dialog.Description className="text-sm text-slate-400 mb-5">
+              This will permanently delete {company.name} and all its scan history. This cannot be undone.
+            </Dialog.Description>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => { setDeleteConfirmOpen(false); onDelete(company.id) }}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       {scanConfig && (
         <ScanIntervalOverrideModal

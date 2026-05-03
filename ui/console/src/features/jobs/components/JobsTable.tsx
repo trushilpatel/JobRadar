@@ -47,7 +47,6 @@ export function JobsTable({
   sorting,
   onSortingChange,
 }: JobsTableProps) {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const columns = useMemo(
     () =>
       buildJobColumns({
@@ -56,7 +55,7 @@ export function JobsTable({
         onToggleSelect,
         onSelectAll,
       }),
-    [selectedIds, jobs]
+    [selectedIds, jobs, onToggleSelect, onSelectAll]
   )
 
   return (

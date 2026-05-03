@@ -53,6 +53,7 @@ interface JobFiltersProps {
   dateFilter: DateFilter
   onDateChange: (v: DateFilter) => void
   onReset: () => void
+  hasActiveFilters: boolean
 }
 
 const EXP_OPTIONS = ['0-2', '2-5', '5+'] as const
@@ -78,6 +79,7 @@ export function JobFilters({
   dateFilter,
   onDateChange,
   onReset,
+  hasActiveFilters,
 }: JobFiltersProps) {
   function toggleExp(opt: string) {
     onExpChange(expFilter.includes(opt) ? expFilter.filter((v) => v !== opt) : [...expFilter, opt])
@@ -146,11 +148,14 @@ export function JobFilters({
         On-site
       </FilterPill>
 
-      <Divider />
-
-      <button onClick={onReset} className="text-[11px] text-slate-500 hover:text-slate-300 px-2">
-        Reset
-      </button>
+      {hasActiveFilters && (
+        <>
+          <Divider />
+          <button onClick={onReset} className="text-[11px] text-slate-500 hover:text-slate-300 px-2">
+            Reset
+          </button>
+        </>
+      )}
     </div>
   )
 }

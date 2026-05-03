@@ -41,7 +41,7 @@ function buildUrl(adapter: string, id: string): string {
 
 const FIXED_URL_ADAPTERS = new Set(['google', 'netflix', 'uber', 'apple', 'meta', 'microsoft', 'rippling'])
 
-const EMPTY_FORM = { id: '', name: '', url: '', adapter_type: 'greenhouse', active: false }
+const EMPTY_FORM = { id: '', name: '', url: '', adapter_type: 'greenhouse', active: true }
 
 export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdated }: Props) {
   const isEdit = !!initialData
@@ -109,7 +109,11 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.id || !form.name || (!FIXED_URL_ADAPTERS.has(form.adapter_type) && !form.url)) {
-      setGlobalError('ID, name, and URL are required')
+      setGlobalError(
+        FIXED_URL_ADAPTERS.has(form.adapter_type)
+          ? 'Identifier and name are required'
+          : 'Identifier, name, and URL are required'
+      )
       return
     }
     setLoading(true)
@@ -170,7 +174,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
               {fieldErrors.adapter_type && <p className="text-xs text-red-400 mt-1">{fieldErrors.adapter_type}</p>}
             </Field>
 
-            <Field label="Company ID" hint={isEdit ? 'Cannot be changed' : 'Unique slug, e.g. stripe'}>
+            <Field label="Identifier (slug)" hint={isEdit ? 'Cannot be changed' : 'Unique slug, e.g. stripe'}>
               <input
                 value={form.id}
                 onChange={e => !isEdit && handleIdChange(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
@@ -191,7 +195,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
               {fieldErrors.name && <p className="text-xs text-red-400 mt-1">{fieldErrors.name}</p>}
             </Field>
 
-            <Field label="Careers URL" hint={urlHint}>
+            <Field label="Careers URL" hint={isEdit ? undefined : urlHint}>
               <div className="relative">
                 <input
                   value={form.url}
@@ -231,11 +235,14 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                   )}
                 </div>
               </div>
+              {hasTemplate && !urlManuallyEdited && form.url && !isEdit && (
+                <p className="text-[11px] text-violet-400/70 mt-1">✓ Auto-filled from identifier</p>
+              )}
               {fieldErrors.url && <p className="text-xs text-red-400 mt-1">{fieldErrors.url}</p>}
             </Field>
 
             <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-300">Active (start scanning)</span>
+              <span className="text-sm text-slate-300">Start scanning immediately</span>
               <button
                 type="button"
                 role="switch"

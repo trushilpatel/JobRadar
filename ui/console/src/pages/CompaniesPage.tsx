@@ -24,7 +24,13 @@ export function CompaniesPage() {
   const [panelWidth, setPanelWidth] = useState(420)
   const [adapterOptions, setAdapterOptions] = useState<string[]>([...ADAPTER_TYPES])
 
-  const bulkAllActive = c.totalActive > 0 && c.totalActive === c.total
+  const bulkAllActive = c.companies.length > 0 && c.companies.every((co) => co.active)
+
+  const hasActiveFilters =
+    c.search !== '' ||
+    c.adapters.length > 0 ||
+    c.activeFilter !== 'all' ||
+    c.statusFilter !== 'none'
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -53,6 +59,7 @@ export function CompaniesPage() {
         runningAll={actions.runningAll}
         onRunAll={actions.scanAll}
         onReset={c.resetFilters}
+        hasActiveFilters={hasActiveFilters}
         onAddClick={() => setAddOpen(true)}
       />
 

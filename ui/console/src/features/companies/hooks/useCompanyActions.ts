@@ -31,7 +31,6 @@ export function useCompanyActions() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this company? This cannot be undone.')) return
     try {
       await deleteCompany(id)
       toast.success('Company deleted')

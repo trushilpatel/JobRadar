@@ -1,5 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { RefreshCw, Pencil, Trash2, ExternalLink } from 'lucide-react'
+import * as Tooltip from '@radix-ui/react-tooltip'
 import type { Company } from '@/types'
 import { QUEUE_STATUS, SCAN_STATUS } from '@/features/companies/constants'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
@@ -31,17 +32,16 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
         return (
           <div className="flex items-center gap-2.5 min-w-0">
             <CompanyAvatar name={c.name} />
-            <div className="min-w-0">
+            <div className="min-w-0 flex items-center gap-1.5">
               <p className="text-sm font-medium text-white truncate">{c.name}</p>
               <a
                 href={c.url}
                 target="_blank"
                 rel="noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 transition-colors mt-0.5 w-fit"
+                className="text-slate-500 hover:text-slate-300 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
               >
-                {safeHost(c.url)}
-                <ExternalLink size={9} />
+                <ExternalLink size={10} />
               </a>
             </div>
           </div>
@@ -82,7 +82,24 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
       id: 'history',
       size: 100,
       enableSorting: false,
-      header: () => <span className="text-slate-400">Last 10 scans</span>,
+      header: () => (
+        <Tooltip.Provider delayDuration={200}>
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+              <span className="text-slate-400 cursor-help">Last 10 scans</span>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content
+                className="z-50 bg-slate-800 border border-white/10 text-xs text-slate-300 px-2.5 py-1.5 rounded-lg shadow-lg"
+                sideOffset={4}
+              >
+                green = ok · amber = running · red = error · grey = no data
+                <Tooltip.Arrow className="fill-slate-800" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+        </Tooltip.Provider>
+      ),
       cell: ({ row }) => {
         const c = row.original
         const q = actions.queueMap.get(c.id)
@@ -184,7 +201,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
                 'p-1.5 rounded-md transition-colors',
                 isScanning
                   ? 'text-violet-400 bg-violet-500/10'
-                  : 'text-slate-500 hover:text-violet-300 hover:bg-violet-500/10 opacity-0 group-hover:opacity-100'
+                  : 'text-slate-500 hover:text-violet-300 hover:bg-violet-500/10 opacity-0 group-hover:opacity-100 focus-within:opacity-100'
               )}
             >
               <RefreshCw size={14} className={isScanning ? 'animate-spin' : ''} />
@@ -193,7 +210,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
               type="button"
               onClick={() => actions.onEdit(c)}
               title="Edit"
-              className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-white/[0.06] transition-colors opacity-0 group-hover:opacity-100"
+              className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-white/[0.06] transition-colors opacity-0 group-hover:opacity-100 focus-within:opacity-100"
             >
               <Pencil size={14} />
             </button>
@@ -201,7 +218,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
               type="button"
               onClick={() => actions.onDelete(c.id)}
               title="Delete"
-              className="p-1.5 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+              className="p-1.5 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100 focus-within:opacity-100"
             >
               <Trash2 size={14} />
             </button>
@@ -213,14 +230,6 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────
-
-function safeHost(url: string) {
-  try {
-    return new URL(url).hostname
-  } catch {
-    return url
-  }
-}
 
 function relativeTime(d: Date) {
   const s = Math.floor((Date.now() - d.getTime()) / 1000)

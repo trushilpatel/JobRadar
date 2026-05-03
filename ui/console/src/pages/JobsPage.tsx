@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Trash2 } from 'lucide-react'
 import type { Job, JobStatus } from '@/types'
 import { ResizeHandle } from '@/components/ui/resize-handle'
@@ -40,6 +40,22 @@ export function JobsPage() {
     setSelectedIds(new Set())
   }
 
+  const handleToggleSelect = useCallback((id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const n = new Set(prev)
+      if (checked) n.add(id)
+      else n.delete(id)
+      return n
+    })
+  }, [])
+
+  const handleSelectAll = useCallback(
+    (checked: boolean) => {
+      setSelectedIds(checked ? new Set(jobs.jobs.map((j) => j.id)) : new Set())
+    },
+    [jobs.jobs]
+  )
+
   const activeFilterCount = [
     jobs.searchQuery.length > 0,
     jobs.selectedCompanies.length > 0,
@@ -56,6 +72,8 @@ export function JobsPage() {
         onChange={(t) => {
           jobs.setTab(t)
           jobs.setPage(1)
+          setActiveJob(null)
+          setSelectedIds(new Set())
         }}
         counts={jobs.counts}
         leftSlot={
@@ -92,6 +110,7 @@ export function JobsPage() {
         dateFilter={jobs.dateFilter}
         onDateChange={jobs.setDateFilter}
         onReset={jobs.resetFilters}
+        hasActiveFilters={activeFilterCount > 0}
       />
 
       {/* Bulk action bar */}
@@ -125,17 +144,8 @@ export function JobsPage() {
           selectedIds={selectedIds}
           activeJobId={activeJob?.id ?? null}
           onRowClick={setActiveJob}
-          onToggleSelect={(id, checked) => {
-            setSelectedIds((prev) => {
-              const n = new Set(prev)
-              if (checked) n.add(id)
-              else n.delete(id)
-              return n
-            })
-          }}
-          onSelectAll={(checked) => {
-            setSelectedIds(checked ? new Set(jobs.jobs.map((j) => j.id)) : new Set())
-          }}
+          onToggleSelect={handleToggleSelect}
+          onSelectAll={handleSelectAll}
           onPageChange={jobs.setPage}
           onLimitChange={(l) => {
             jobs.setLimit(l)
@@ -164,6 +174,7 @@ export function JobsPage() {
       </div>
 
       <DismissModal
+        key={dismissTarget?.id ?? ''}
         open={!!dismissTarget}
         jobTitle={dismissTarget?.title ?? ''}
         onConfirm={handleDismissConfirm}

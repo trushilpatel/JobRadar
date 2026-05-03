@@ -18,6 +18,9 @@ interface DismissModalProps {
   onCancel: () => void
 }
 
+// State lives inside so each mount starts fresh at index 0.
+// The caller should pass a key prop (e.g. key={dismissTarget?.id}) so
+// this component remounts whenever the target job changes.
 export function DismissModal({ open, jobTitle, onConfirm, onCancel }: DismissModalProps) {
   const [selectedIdx, setSelectedIdx] = useState(0)
 

@@ -1,10 +1,11 @@
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 export type SegmentedAccent = 'violet' | 'emerald' | 'red' | 'blue' | 'amber'
 
 export interface SegmentedOption<T extends string> {
   value: T
-  label: string
+  label: ReactNode
   count?: number
   accent?: SegmentedAccent
 }

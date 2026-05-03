@@ -69,6 +69,7 @@ export function CompaniesHeader({
         <button
           type="button"
           onClick={toggleAutoRefresh}
+          aria-label={autoRefresh ? 'Auto-refresh: on' : 'Auto-refresh: off'}
           title={
             autoRefresh
               ? 'Auto-refresh on — click to disable'
@@ -82,16 +83,17 @@ export function CompaniesHeader({
           )}
         >
           <Timer size={12} />
-          <span>30s</span>
+          <span>{autoRefresh ? 'Live' : 'Auto'}</span>
         </button>
 
         <button
           type="button"
           onClick={refresh}
-          title="Refresh data"
-          className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white transition-colors"
+          aria-label="Refresh data"
+          className="flex items-center gap-1 px-2 py-1.5 rounded-lg border text-xs font-medium transition-colors bg-white/5 border-white/10 text-slate-400 hover:text-white"
         >
-          <RefreshCw size={14} />
+          <RefreshCw size={12} />
+          <span>Refresh</span>
         </button>
       </div>
     </div>
