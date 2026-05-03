@@ -35,6 +35,9 @@ func (f *pipelineJobWriter) UpdateJobSaved(_ context.Context, _ string, _ bool) 
 	return f.savedErr
 }
 func (f *pipelineJobWriter) UpdateJobNotes(_ context.Context, _, _ string) error { return f.notesErr }
+func (f *pipelineJobWriter) UpdateJobStatusBatch(_ context.Context, _ []string, _ string) (int64, error) {
+	return 0, nil
+}
 
 type pipelineLedgerStore struct {
 	hasSeen           bool
@@ -65,6 +68,10 @@ func (f *pipelineSnapshotWriter) InsertSnapshot(_ context.Context, _ jobdto.Snap
 	return f.insertErr
 }
 func (f *pipelineSnapshotWriter) UpdateSnapshotAction(_ context.Context, _, _ string) error {
+	f.updateCalled = true
+	return f.updateErr
+}
+func (f *pipelineSnapshotWriter) UpdateSnapshotActionBatch(_ context.Context, _ []string, _ string) error {
 	f.updateCalled = true
 	return f.updateErr
 }

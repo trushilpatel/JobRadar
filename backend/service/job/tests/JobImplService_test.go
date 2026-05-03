@@ -16,10 +16,11 @@ import (
 // --- Test doubles ---
 
 type fakeJobStore struct {
-	job   *jobmodel.Job
-	jobs  []jobmodel.Job
-	total int64
-	err   error
+	job        *jobmodel.Job
+	jobs       []jobmodel.Job
+	total      int64
+	err        error
+	jobPostIDs map[string]string // job_feed id → job_post_id
 
 	updateStatusCalled bool
 	updateSavedCalled  bool
@@ -58,6 +59,22 @@ func (f *fakeJobStore) GetJobCounts(_ context.Context) (*jobdto.JobCounts, error
 func (f *fakeJobStore) GetJobsAddedByDay(_ context.Context, days int) ([]jobdto.DailyJobCount, error) {
 	return nil, f.err
 }
+func (f *fakeJobStore) GetJobPostIDs(_ context.Context, ids []string) ([]string, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	var result []string
+	for _, id := range ids {
+		if jp, ok := f.jobPostIDs[id]; ok {
+			result = append(result, jp)
+		}
+	}
+	return result, nil
+}
+func (f *fakeJobStore) UpdateJobStatusBatch(_ context.Context, ids []string, _ string) (int64, error) {
+	f.updateStatusCalled = true
+	return int64(len(ids)), f.err
+}
 
 type fakeLedgerWriter struct {
 	err error
@@ -89,6 +106,10 @@ func (f *fakeDiscardStore) InsertDiscard(_ context.Context, jobResultID, reason,
 	f.insertCalled = true
 	return f.err
 }
+func (f *fakeDiscardStore) InsertDiscardBatch(_ context.Context, _ []string, _ string) error {
+	f.insertCalled = true
+	return f.err
+}
 
 type fakeSnapshotWriter struct {
 	err          error
@@ -99,6 +120,10 @@ func (f *fakeSnapshotWriter) InsertSnapshot(_ context.Context, input jobdto.Snap
 	return f.err
 }
 func (f *fakeSnapshotWriter) UpdateSnapshotAction(_ context.Context, id, action string) error {
+	f.updateCalled = true
+	return f.err
+}
+func (f *fakeSnapshotWriter) UpdateSnapshotActionBatch(_ context.Context, _ []string, _ string) error {
 	f.updateCalled = true
 	return f.err
 }

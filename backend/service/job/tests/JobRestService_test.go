@@ -40,7 +40,13 @@ func (f *fakeJobSvc) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput)
 func (f *fakeJobSvc) SetSaved(_ context.Context, _ string, _ bool) error { return f.err }
 func (f *fakeJobSvc) SetStatus(_ context.Context, _, _ string) error     { return f.err }
 func (f *fakeJobSvc) SetNotes(_ context.Context, _, _ string) error      { return f.err }
-func (f *fakeJobSvc) MarkApplied(_ context.Context, _ string) error      { return f.err }
+func (f *fakeJobSvc) MarkApplied(_ context.Context, _ string) error { return f.err }
+func (f *fakeJobSvc) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
+	return 0, f.err
+}
+func (f *fakeJobSvc) GetJobPostIDs(_ context.Context, _ []string) ([]string, error) {
+	return nil, f.err
+}
 
 var _ jobsvc.Service = (*fakeJobSvc)(nil)
 
@@ -197,7 +203,13 @@ func (c *capturingService) Dismiss(_ context.Context, _ string, _ jobdto.Dismiss
 func (c *capturingService) SetSaved(_ context.Context, _ string, _ bool) error { return nil }
 func (c *capturingService) SetStatus(_ context.Context, _, _ string) error     { return nil }
 func (c *capturingService) SetNotes(_ context.Context, _, _ string) error      { return nil }
-func (c *capturingService) MarkApplied(_ context.Context, _ string) error      { return nil }
+func (c *capturingService) MarkApplied(_ context.Context, _ string) error { return nil }
+func (c *capturingService) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
+	return 0, nil
+}
+func (c *capturingService) GetJobPostIDs(_ context.Context, _ []string) ([]string, error) {
+	return nil, nil
+}
 
 var _ jobsvc.Service = (*capturingService)(nil)
 
@@ -266,7 +278,13 @@ func (f *captureFilterSvc) Dismiss(_ context.Context, _ string, _ jobdto.Dismiss
 func (f *captureFilterSvc) SetSaved(_ context.Context, _ string, _ bool) error { return nil }
 func (f *captureFilterSvc) SetStatus(_ context.Context, _, _ string) error     { return nil }
 func (f *captureFilterSvc) SetNotes(_ context.Context, _, _ string) error      { return nil }
-func (f *captureFilterSvc) MarkApplied(_ context.Context, _ string) error      { return nil }
+func (f *captureFilterSvc) MarkApplied(_ context.Context, _ string) error { return nil }
+func (f *captureFilterSvc) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
+	return 0, nil
+}
+func (f *captureFilterSvc) GetJobPostIDs(_ context.Context, _ []string) ([]string, error) {
+	return nil, nil
+}
 
 var _ jobsvc.Service = (*captureFilterSvc)(nil)
 

@@ -19,6 +19,8 @@ type Service interface {
 	// MarkApplied advances the job status to "applied" without requiring callers to
 	// import job domain constants.
 	MarkApplied(ctx context.Context, id string) error
+	BulkDismiss(ctx context.Context, input dto.BulkDismissInput) (int, error)
+	GetJobPostIDs(ctx context.Context, ids []string) ([]string, error)
 }
 
 // LedgerService is the interface pipeline workers use for job dedup and removal tracking.
@@ -101,4 +103,12 @@ func (b *BaseService) SetNotes(ctx context.Context, id, notes string) error {
 
 func (b *BaseService) MarkApplied(ctx context.Context, id string) error {
 	return b.next.MarkApplied(ctx, id)
+}
+
+func (b *BaseService) BulkDismiss(ctx context.Context, input dto.BulkDismissInput) (int, error) {
+	return b.next.BulkDismiss(ctx, input)
+}
+
+func (b *BaseService) GetJobPostIDs(ctx context.Context, ids []string) ([]string, error) {
+	return b.next.GetJobPostIDs(ctx, ids)
 }

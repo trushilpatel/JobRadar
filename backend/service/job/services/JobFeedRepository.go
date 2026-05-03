@@ -361,3 +361,23 @@ func (r *repositoryService) SetNotes(ctx context.Context, id, notes string) (err
 func (r *repositoryService) MarkApplied(ctx context.Context, id string) error {
 	return r.SetStatus(ctx, id, jobcommon.JobStatusApplied)
 }
+
+func (r *repositoryService) BulkDismiss(ctx context.Context, input dto.BulkDismissInput) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "job.repository.BulkDismiss")
+	defer tracing.End(span, &err)
+	n, err := r.store.UpdateJobStatusBatch(ctx, input.IDs, jobcommon.JobStatusDismissed)
+	if err != nil {
+		return 0, errors.ErrInternal.WithMessage("failed to bulk update job status")
+	}
+	return int(n), nil
+}
+
+func (r *repositoryService) GetJobPostIDs(ctx context.Context, ids []string) (_ []string, err error) {
+	ctx, span := tracing.Start(ctx, "job.repository.GetJobPostIDs")
+	defer tracing.End(span, &err)
+	jobPostIDs, err := r.store.GetJobPostIDs(ctx, ids)
+	if err != nil {
+		return nil, errors.ErrInternal.WithMessage("failed to fetch job post IDs")
+	}
+	return jobPostIDs, nil
+}
