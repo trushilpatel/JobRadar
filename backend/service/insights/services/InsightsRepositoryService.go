@@ -51,6 +51,7 @@ func (s *repositoryService) CompanyActivity(ctx context.Context) (_ interface{},
 		WHERE j.added_at >= NOW() - INTERVAL '90 days'
 		GROUP BY c.name, DATE_TRUNC('week', j.added_at)
 		ORDER BY week DESC, count DESC
+		LIMIT 200
 	`).Scan(&results).Error
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch company activity")
@@ -100,6 +101,7 @@ func (s *repositoryService) Location(ctx context.Context) (_ interface{}, err er
 		FROM job_analytics
 		GROUP BY country
 		ORDER BY count DESC
+		LIMIT 50
 	`).Scan(&countries).Error
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch location breakdown")
@@ -190,6 +192,7 @@ func (s *repositoryService) RoleCategories(ctx context.Context) (_ interface{}, 
 		FROM job_analytics
 		GROUP BY role_category
 		ORDER BY count DESC
+		LIMIT 25
 	`).Scan(&results).Error
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch role categories")

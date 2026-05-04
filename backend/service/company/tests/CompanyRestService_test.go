@@ -32,6 +32,9 @@ func (f *fakeService) List(_ context.Context, _ companydto.CompanyFilter, _, _ i
 func (f *fakeService) GetAll(_ context.Context) ([]companydto.CompanyView, error) {
 	return f.listResult, f.err
 }
+func (f *fakeService) GetByIDs(_ context.Context, _ []string) ([]companydto.CompanyView, error) {
+	return f.listResult, f.err
+}
 func (f *fakeService) Get(_ context.Context, _ string) (*companymodel.Company, error) {
 	return f.getResult, f.err
 }

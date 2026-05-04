@@ -17,6 +17,9 @@ func (n *noopService) List(_ context.Context, _ companydto.CompanyFilter, _, _ i
 	return companydto.CompanyListResult{}, nil
 }
 func (n *noopService) GetAll(_ context.Context) ([]companydto.CompanyView, error) { return nil, nil }
+func (n *noopService) GetByIDs(_ context.Context, _ []string) ([]companydto.CompanyView, error) {
+	return nil, nil
+}
 func (n *noopService) Get(_ context.Context, _ string) (*companymodel.Company, error) {
 	return nil, nil
 }

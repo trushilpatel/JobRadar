@@ -34,6 +34,7 @@ export function CompanyDetailDrawer({
   const [stats, setStats] = useState<ScanStats | null>(null)
   const [loading, setLoading] = useState(false)
   const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set())
+  const [logsOpen, setLogsOpen] = useState(false)
   const [scanConfig, setScanConfig] = useState<EffectiveScanConfig | null>(null)
   const [scanConfigError, setScanConfigError] = useState(false)
   const [overrideModalOpen, setOverrideModalOpen] = useState(false)

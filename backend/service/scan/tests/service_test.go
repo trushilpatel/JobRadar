@@ -15,15 +15,15 @@ import (
 
 // fakeQueueStore is a test double for ScanQueueStore.
 type fakeQueueStore struct {
-	items              []dto.ScanQueueItem
-	err                error
-	enqueueCalled      bool
-	removeCalled       bool
-	enqueueDueResult   int
-	enqueueDueCalled   bool
-	enqueueAllResult   int
-	enqueueAllCalled   bool
-	resetStuckCalled   bool
+	items            []dto.ScanQueueItem
+	err              error
+	enqueueCalled    bool
+	removeCalled     bool
+	enqueueDueResult int
+	enqueueDueCalled bool
+	enqueueAllResult int
+	enqueueAllCalled bool
+	resetStuckCalled bool
 }
 
 func (f *fakeQueueStore) Enqueue(_ context.Context, _, _ string) error {
@@ -98,6 +98,22 @@ func (f *fakeCompanyService) List(_ context.Context, _ company.CompanyFilter, _,
 }
 func (f *fakeCompanyService) GetAll(_ context.Context) ([]company.CompanyView, error) {
 	return f.views, f.err
+}
+func (f *fakeCompanyService) GetByIDs(_ context.Context, ids []string) ([]company.CompanyView, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	idx := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		idx[id] = struct{}{}
+	}
+	var out []company.CompanyView
+	for _, v := range f.views {
+		if _, ok := idx[v.ID]; ok {
+			out = append(out, v)
+		}
+	}
+	return out, nil
 }
 func (f *fakeCompanyService) Get(_ context.Context, _ string) (*companymodel.Company, error) {
 	return f.company, f.err

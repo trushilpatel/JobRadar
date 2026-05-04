@@ -85,6 +85,7 @@ func (s *implService) TriggerScan(ctx context.Context, companyID string) (err er
 }
 
 // ListQueue fetches raw entries from next, then enriches them with company metadata.
+// Only the companies referenced by the queue entries are fetched.
 func (s *implService) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ []dto.QueueEntryView, err error) {
 	ctx, span := tracing.Start(ctx, "scan.impl.ListQueue")
 	defer tracing.End(span, &err)
@@ -94,13 +95,23 @@ func (s *implService) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ 
 		return nil, err
 	}
 
-	allCompanies, err := s.companySvc.GetAll(ctx)
+	// Collect the unique company IDs referenced by the queue entries.
+	seen := make(map[string]struct{}, len(views))
+	ids := make([]string, 0, len(views))
+	for _, v := range views {
+		if _, ok := seen[v.CompanyID]; !ok {
+			seen[v.CompanyID] = struct{}{}
+			ids = append(ids, v.CompanyID)
+		}
+	}
+
+	companies, err := s.companySvc.GetByIDs(ctx, ids)
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch companies")
 	}
 
-	companyMap := make(map[string]company.CompanyView, len(allCompanies))
-	for _, c := range allCompanies {
+	companyMap := make(map[string]company.CompanyView, len(companies))
+	for _, c := range companies {
 		companyMap[c.ID] = c
 	}
 

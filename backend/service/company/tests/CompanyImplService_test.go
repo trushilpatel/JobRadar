@@ -61,6 +61,22 @@ func (f *fakeStore) GetCompanyCounts(_ context.Context) (total, active int64, er
 	}
 	return int64(len(f.companies)), active, f.err
 }
+func (f *fakeStore) GetCompaniesByIDs(_ context.Context, ids []string) ([]companymodel.Company, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	idx := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		idx[id] = struct{}{}
+	}
+	var out []companymodel.Company
+	for _, c := range f.companies {
+		if _, ok := idx[c.ID]; ok {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
 func (f *fakeStore) CreateCompany(_ context.Context, c companymodel.Company) error {
 	f.createCalled = true
 	return f.err

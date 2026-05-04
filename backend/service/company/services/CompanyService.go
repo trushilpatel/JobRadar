@@ -13,6 +13,9 @@ type Service interface {
 	// GetAll returns every company as a view without pagination.
 	// Used by internal workers that need the full set (e.g. scan queue enrichment).
 	GetAll(ctx context.Context) ([]companydto.CompanyView, error)
+	// GetByIDs returns only the companies whose IDs are in the given slice as views.
+	// Returns an empty slice (not an error) when ids is empty.
+	GetByIDs(ctx context.Context, ids []string) ([]companydto.CompanyView, error)
 	Get(ctx context.Context, id string) (*companymodel.Company, error)
 	Create(ctx context.Context, input companydto.CreateCompanyInput) (*companymodel.Company, error)
 	Update(ctx context.Context, id string, input companydto.UpdateCompanyInput) error
@@ -41,6 +44,10 @@ func (b *BaseService) List(ctx context.Context, filter companydto.CompanyFilter,
 
 func (b *BaseService) GetAll(ctx context.Context) ([]companydto.CompanyView, error) {
 	return b.next.GetAll(ctx)
+}
+
+func (b *BaseService) GetByIDs(ctx context.Context, ids []string) ([]companydto.CompanyView, error) {
+	return b.next.GetByIDs(ctx, ids)
 }
 
 func (b *BaseService) Get(ctx context.Context, id string) (*companymodel.Company, error) {

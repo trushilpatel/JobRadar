@@ -8,6 +8,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/tracing"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
@@ -22,6 +23,9 @@ type CompanyReader interface {
 	// GetCompanyCounts returns (total, total_active) across all companies,
 	// regardless of the current filter — used for header stats.
 	GetCompanyCounts(ctx context.Context) (total, active int64, error error)
+	// GetCompaniesByIDs returns only the companies whose IDs are in the given slice.
+	// Returns an empty slice (not an error) when ids is empty.
+	GetCompaniesByIDs(ctx context.Context, ids []string) ([]companymodel.Company, error)
 }
 
 // CompanyWriter covers mutations from the API.
@@ -166,6 +170,17 @@ func (s *companyStore) GetCompanyCounts(ctx context.Context) (total, active int6
 	return counts.Total, counts.Active, err
 }
 
+func (s *companyStore) GetCompaniesByIDs(ctx context.Context, ids []string) (_ []companymodel.Company, err error) {
+	ctx, span := tracing.Start(ctx, "company.store.GetCompaniesByIDs")
+	defer tracing.End(span, &err)
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var companies []companymodel.Company
+	err = s.db.WithContext(ctx).Where("id IN ?", ids).Find(&companies).Error
+	return companies, err
+}
+
 func (s *companyStore) UpdateScanStatus(ctx context.Context, id, status string) (err error) {
 	ctx, span := tracing.Start(ctx, "company.store.UpdateScanStatus")
 	defer tracing.End(span, &err)
@@ -199,14 +214,31 @@ func NewRepositoryService(s Store) Service {
 func (r *repositoryService) List(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (_ companydto.CompanyListResult, err error) {
 	ctx, span := tracing.Start(ctx, "company.repository.List")
 	defer tracing.End(span, &err)
-	companies, total, err := r.store.GetCompanies(ctx, filter, page, limit)
-	if err != nil {
+
+	var (
+		companies   []companymodel.Company
+		total       int64
+		totalActive int64
+	)
+
+	g, gctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		var e error
+		companies, total, e = r.store.GetCompanies(gctx, filter, page, limit)
+		return e
+	})
+
+	g.Go(func() error {
+		var e error
+		_, totalActive, e = r.store.GetCompanyCounts(gctx)
+		return e
+	})
+
+	if err = g.Wait(); err != nil {
 		return companydto.CompanyListResult{}, errors.ErrInternal.WithMessage("failed to fetch companies")
 	}
-	_, totalActive, err := r.store.GetCompanyCounts(ctx)
-	if err != nil {
-		return companydto.CompanyListResult{}, errors.ErrInternal.WithMessage("failed to fetch company counts")
-	}
+
 	views := make([]companydto.CompanyView, 0, len(companies))
 	for _, c := range companies {
 		views = append(views, companydto.CompanyView{Company: c})
@@ -305,6 +337,20 @@ func (r *repositoryService) Delete(ctx context.Context, id string) (err error) {
 		return errors.ErrInternal.WithMessage("failed to delete company")
 	}
 	return nil
+}
+
+func (r *repositoryService) GetByIDs(ctx context.Context, ids []string) (_ []companydto.CompanyView, err error) {
+	ctx, span := tracing.Start(ctx, "company.repository.GetByIDs")
+	defer tracing.End(span, &err)
+	companies, err := r.store.GetCompaniesByIDs(ctx, ids)
+	if err != nil {
+		return nil, errors.ErrInternal.WithMessage("failed to fetch companies by IDs")
+	}
+	views := make([]companydto.CompanyView, 0, len(companies))
+	for _, c := range companies {
+		views = append(views, companydto.CompanyView{Company: c})
+	}
+	return views, nil
 }
 
 func (r *repositoryService) SetAllActive(ctx context.Context, active bool) (err error) {

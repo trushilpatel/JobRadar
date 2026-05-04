@@ -50,11 +50,12 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, page, limi
 	defer tracing.End(span, &err)
 	query := s.db.WithContext(ctx).Model(&jobmodel.Job{})
 
-	// Join companies when needed for search (company name match) or sorting by company.
+	// Always join companies via GORM's association eager-loading syntax.
+	// This issues a single SQL query (one JOIN) instead of a separate SELECT per batch.
 	// The FK job_feed.company_id → companies.id guarantees at most one match per row.
-	if filter.Search != "" || filter.SortBy == "company" {
-		query = query.Joins("LEFT JOIN companies ON companies.id = job_feed.company_id")
-	}
+	// Using Joins("Company") here also satisfies search/sort conditions that reference
+	// companies.name, so no separate conditional join is needed.
+	query = query.Joins("Company")
 
 	if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)
@@ -145,7 +146,7 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, page, limi
 
 	var jobs []jobmodel.Job
 	offset := (page - 1) * limit
-	err = query.Order(col + " " + dir).Offset(offset).Limit(limit).Preload("Company").Find(&jobs).Error
+	err = query.Order(col + " " + dir).Offset(offset).Limit(limit).Find(&jobs).Error
 	return jobs, total, err
 }
 
@@ -165,7 +166,7 @@ func (s *jobStore) GetJobByID(ctx context.Context, id string) (_ *jobmodel.Job, 
 	ctx, span := tracing.Start(ctx, "job.store.GetJobByID")
 	defer tracing.End(span, &err)
 	var job jobmodel.Job
-	err = s.db.WithContext(ctx).Preload("Company").Where("id = ?", id).First(&job).Error
+	err = s.db.WithContext(ctx).Joins("Company").Where("job_feed.id = ?", id).First(&job).Error
 	if err != nil {
 		return nil, err
 	}

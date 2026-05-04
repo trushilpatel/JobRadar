@@ -118,6 +118,7 @@ func (s *applicationRepository) getApplicationsByJobID(jobResultID string) ([]ap
 	var apps []appmodel.JobApplication
 	err := s.db.Where("job_result_id = ?", jobResultID).
 		Order("stage_at ASC").
+		Limit(100).
 		Find(&apps).Error
 	return apps, err
 }
