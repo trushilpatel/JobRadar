@@ -32,8 +32,15 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `backend/service/insights/`       | Analytics and insights queries                                                    |
 | `backend/service/scan/`           | Scan result recording — models in `scan/models/` (package `scanmodel`)            |
 | `backend/service/llm/`            | LLM business logic — `JobsRelevanceFilter` + `JobPostEnricher` interfaces, Gemini impl, prompts |
+| `backend/service/user/`           | User domain (Phase 1) — Get/Provision/UpdateProfile/Delete + cache decorator + `/api/me` |
+| `backend/service/role/`           | Role domain (Phase 1) — RBAC0: Grant/Revoke/ListForUser/ListAll                  |
+| `backend/service/audit/`          | Admin audit log domain (Phase 1) — Append/List for `admin_audit_log`             |
+| `backend/common/identity/`        | Identity struct + `context.Context` helpers (Phase 1)                            |
 | `backend/platform/`                  | Infrastructure plumbing (db, kafka, logger, metrics, tracing)                     |
 | `backend/platform/tracing/`          | OTel tracing init, Start/End span helpers, Kafka propagation                      |
+| `backend/platform/cache/`            | Cache interface + Redis/Memory/Noop impls + `GetOrLoad[T]` single-flight (Phase 1) |
+| `backend/platform/ratelimit/`        | Token-bucket Limiter + Redis/Memory impls + `ScopeFromMethod` helper (Phase 1)   |
+| `backend/platform/supabaseadmin/`    | Supabase admin REST client — `DeleteUser` for hard account deletion (Phase 1)    |
 | `backend/migrations/`             | goose SQL migration files                                                         |
 | `infra/`                          | Dockerfiles + Loki/Prometheus/Kafka ops configs                                   |
 
@@ -59,6 +66,10 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `job_analytics`           | Append-only analytics record written by job_post_analyzer; survives job dismissal         |
 | `job_application_tracker` | Application stage tracking                                                                |
 | `job_dismissal_log`       | Dismiss log with reason and note                                                          |
+| `users`                   | Phase 1 — registered users (id, email citext, display_name, status, timestamps)           |
+| `roles`                   | Phase 1 — RBAC0 role catalog (`user`, `admin`); seeded by migration 043                   |
+| `user_roles`              | Phase 1 — user↔role join; cascade rules: user_id CASCADE, role_id RESTRICT, granted_by SET NULL |
+| `admin_audit_log`         | Phase 1 — append-only audit trail for admin mutations (actor, action, target, payload)    |
 
 ## Job status flow
 
@@ -74,6 +85,28 @@ new → dismissed          (user dismisses — job row kept for FK integrity, hi
 - `SCAN_INTERVAL_MINUTES` (default `1440` = 24h) controls how often each company is scanned
 - Scheduler checks every 1 min; only enqueues companies where `last_scan_at` is NULL or older than the interval
 - Manual trigger (`POST /companies/:id/scan`) bypasses the cooldown — always enqueues immediately
+
+## Multi-user (Phase 1)
+
+Phase 1 of the multi-user rollout has shipped — additive only, nothing existing was removed. Phase 2 (per-user data model, `/api` vs `/admin` route split, companies public/operational split, `job_feed`→`jobs` rename) and Phase 3 (frontend admin UI, `/me` integration, role-gated nav) are **planned and not yet shipped**. Roadmap: [`Designs/multi-user-rollout-plan.md`](Designs/multi-user-rollout-plan.md). Locked Phase 1 contracts: [`Designs/phase1-contracts.md`](Designs/phase1-contracts.md).
+
+What shipped in Phase 1:
+
+- New tables (migration `043_phase1_users_roles_audit.sql`): `users`, `roles`, `user_roles`, `admin_audit_log`
+- Platform packages: `backend/common/identity/`, `backend/platform/cache/`, `backend/platform/ratelimit/`, `backend/platform/supabaseadmin/`
+- Service slices: `backend/service/user/` (with cache decorator), `backend/service/role/`, `backend/service/audit/`
+- Test helper: `backend/service/testutil/` — `AssertUserScoped` for repo guard tests (consumed in Phase 2 when user-scoped repos land)
+- Middleware in `backend/apps/api/middleware/`: `RequireIdentity` (DB-backed enrichment + caching + lazy provisioning + status check), `RequireRole(role)`, `RateLimit(limiter)` (per-user, method-derived scope, fail-open on Redis outage, returns 429 + `Retry-After`), `AuditAdminMutation(svc)` (appends to `admin_audit_log` on 2xx mutating responses)
+- Endpoints: `GET /api/me`, `PATCH /api/me`, `DELETE /api/me` (Supabase admin delete → DB cascade)
+
+Concepts established in Phase 1:
+
+- RBAC0 — `roles` + `user_roles` join only; no permissions table yet
+- Identity flows via `context.Context` — repos take `userID` explicitly, services pull from ctx via `identity.FromContext` / `UserIDFrom` / `IsAdmin`
+- Decorator chain extended with cache layer: `Rest → Validation → Cache → Impl → Repo`
+- Source of truth for role membership is Postgres (`user_roles`) — never JWT custom claims
+
+New env vars: `ADMIN_EMAILS`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_READ_RPM`, `RATE_LIMIT_WRITE_RPM`, `RATE_LIMIT_ADMIN_RPM`, `CACHE_TTL_USER_SECONDS`.
 
 ## Dashboard stats fields
 

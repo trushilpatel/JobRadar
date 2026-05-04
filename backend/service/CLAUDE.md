@@ -35,10 +35,12 @@ Each domain uses a **decorator chain** where every layer wraps the next via a si
 ### Chain order
 
 ```
-RestRouter → RestService → ValidationService → ImplService → RepositoryService
-                ↓               ↓                  ↓               ↓
-           (has next)      (BaseService)       (BaseService)    (terminal — no next)
+RestRouter → RestService → ValidationService → CacheService → ImplService → RepositoryService
+                ↓               ↓                  ↓               ↓             ↓
+           (has next)      (BaseService)       (BaseService)   (BaseService)  (terminal — no next)
 ```
+
+`CacheService` is **optional** — only present in slices that read user-scoped or hot data (e.g. `service/user/`). It embeds `BaseService`, overrides read methods to call `cache.GetOrLoad`, and invalidates on writes. Backed by `backend/platform/cache.Cache` (Redis in prod, Memory/Noop in tests). Slices without caching needs simply omit this layer.
 
 ### Contract file — `{Domain}Service.go`
 
@@ -192,6 +194,9 @@ router  := NewRestRouter(handler)
 | `dashboard/`   | Dashboard stats (job counts, daily activity) + pipeline status (DB stats + Kafka lag)   |
 | `insights/`    | Analytics queries: tech stack, funnel, location, sponsorship, velocity, role categories |
 | `scan/`        | Scan result recording — used by the crawler pipeline worker (not the API)               |
+| `user/`        | Phase 1 — user profile (Get / Provision / UpdateProfile / Delete), cache decorator, `/api/me` handler |
+| `role/`        | Phase 1 — RBAC0 (Grant / Revoke / ListForUser / ListAll); no REST surface in Phase 1    |
+| `audit/`       | Phase 1 — admin audit log (Append / List); consumed by `AuditAdminMutation` middleware  |
 
 ## General rules
 

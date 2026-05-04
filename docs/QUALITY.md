@@ -12,6 +12,7 @@ These 11 attributes are the non-negotiable qualities every feature must uphold, 
 | Backend | Per-job error isolation — one bad Kafka record never stops a worker |
 | Backend | `job_pipeline_ledger` tracks every job — no silent drops anywhere in the pipeline |
 | Backend | SQL `CHECK` constraints + matching Go constants — constrained values enforced at both layers |
+| Backend | Cache reads via `backend/platform/cache.Cache` (Redis) with `GetOrLoad[T]` single-flight — concurrent misses collapse into one DB load, no stampedes |
 | Frontend | All HTTP through `lib/api-client.ts` — auth, error handling, envelope unwrapping in one place |
 | Frontend | All domain types in `types/index.ts` — one source of truth, no duplicated definitions |
 
@@ -25,6 +26,7 @@ These 11 attributes are the non-negotiable qualities every feature must uphold, 
 | Backend | Workers are stateless — crash and restart without data loss |
 | Backend | Explicit `CommitRecords` after processing — uncommitted records replay on restart |
 | Backend | `company_scan_queue` heartbeat + `ResetStuck` — crawler crashes auto-recovered on next scheduler tick |
+| Backend | Per-user rate limit (`backend/platform/ratelimit`) **fails open** on Redis outage — limiter errors don't reject legitimate traffic |
 | Frontend | TanStack Query `staleTime: 30s` + `gcTime: 5m` — cached data keeps the UI functional during network hiccups |
 | Frontend | Auth token auto-refreshed on 401 with deduplication — users never see an unexpected logout |
 
@@ -64,6 +66,7 @@ These 11 attributes are the non-negotiable qualities every feature must uphold, 
 | Backend | Validation layer in the decorator chain catches bad input before business logic |
 | Backend | Every feature ships with tests — not as an afterthought |
 | Backend | Type system enforces contracts — narrow interfaces prevent depending on implementation details |
+| Backend | User-scoped repos take `userID` explicit; `service/testutil.AssertUserScoped` (Phase 1, consumed by Phase 2 repos) guards every method against an empty userID |
 | Frontend | No `any` types — all props, API responses, and state explicitly typed |
 | Frontend | Static CONFIG maps for display variants — no switch statements, no missed cases |
 | Frontend | `cn()` for all className composition — no conflicting Tailwind classes |
@@ -78,6 +81,7 @@ These 11 attributes are the non-negotiable qualities every feature must uphold, 
 | Backend | Each file has one clear reason to change — split when a file handles more than one concern |
 | Backend | Decorator chain — extend behaviour by wrapping, never modifying working code |
 | Backend | All logging through `platform/logger.Logger` with field key constants — never raw strings |
+| Backend | Identity flows via `context.Context` (`backend/common/identity`) — services pull `userID` from ctx, repos take it as an explicit parameter; one place to change the auth model |
 | Frontend | Feature-slice structure (`features/auth/`, `features/jobs/`, etc.) — change one feature without touching others |
 | Frontend | `lib/queryClient.ts` holds TanStack Query defaults — tune globally in one place |
 
@@ -91,6 +95,7 @@ These 11 attributes are the non-negotiable qualities every feature must uphold, 
 | Backend | Feature-slice packages in `service/` — each domain owns models, DTOs, stores, services, handlers |
 | Backend | ATS adapters are isolated — new adapter = new package + one line in `registry.go` |
 | Backend | Pipeline workers are independent processes — connected only by Kafka and the DB |
+| Backend | Identity decoupled from transport — `backend/common/identity` is consumed by middleware, services, and tests via the same context API |
 | Frontend | Presentational components (`StatusPill`, `KpiCard`) carry no domain knowledge |
 | Frontend | API functions in `api/*.ts` are pure — no UI concerns, no side effects |
 
@@ -118,6 +123,7 @@ These 11 attributes are the non-negotiable qualities every feature must uphold, 
 | Backend | Structured logging with field key constants — Loki-queryable by `job_id`, `company_id`, etc. |
 | Backend | Per-fetch UUID baked into log context — trace one job through all workers |
 | Backend | `job_pipeline_ledger` + `company_scan_log` — full audit trail; nothing happens without a record |
+| Backend | `admin_audit_log` (Phase 1) — every admin mutation appends an entry via `AuditAdminMutation` middleware; full forensic trail of who did what |
 | Frontend | Query keys as structured string arrays (`['company', id]`) — greppable, precisely invalidatable |
 | Frontend | Zustand auth store is the single source of session truth — one place to inspect |
 

@@ -3,6 +3,8 @@
 All API routes require auth (`Authorization: Bearer <jwt>` or `X-Dev-Token` locally).
 Base URL: `http://localhost:8080`
 
+> **Phase 1 (multi-user)** is shipped — identity flows via context, RBAC0 tables exist, `/api/me` works. Phase 2 (per-user data model, `/api` vs `/admin` split, companies public/operational split, `job_feed`→`jobs` rename) and Phase 3 (frontend admin UI) are **planned**. See [`Designs/multi-user-rollout-plan.md`](../Designs/multi-user-rollout-plan.md).
+
 ---
 
 ## API Routes
@@ -79,6 +81,42 @@ Base URL: `http://localhost:8080`
 | GET | `/insights/sponsorship` | [InsightsRestRouter.go](../backend/service/insights/services/InsightsRestRouter.go) |
 | GET | `/insights/velocity` | [InsightsRestRouter.go](../backend/service/insights/services/InsightsRestRouter.go) |
 | GET | `/insights/role-categories` | [InsightsRestRouter.go](../backend/service/insights/services/InsightsRestRouter.go) |
+
+### Identity (Phase 1)
+| Method | Path | Source |
+|---|---|---|
+| GET | `/api/me` | [UserRestRouter.go](../backend/service/user/services/UserRestRouter.go) — returns Identity bundle (id, email, display_name, status, roles) |
+| PATCH | `/api/me` | [UserRestRouter.go](../backend/service/user/services/UserRestRouter.go) — update `display_name` |
+| DELETE | `/api/me` | [UserRestRouter.go](../backend/service/user/services/UserRestRouter.go) — hard delete: Supabase admin DELETE → DB cascade |
+
+> **Planned (Phase 2):** route tree splits into `/api/*` (RequireAuth) and `/admin/*` (RequireAuth + RequireRole("admin")). Insights, scans, queue, adapter-configs, pipeline dashboard move under `/admin/*`. See [`Designs/multi-user-rollout-plan.md`](../Designs/multi-user-rollout-plan.md).
+
+---
+
+## Database Tables (Phase 1 additions)
+
+| Table | Role | Migration |
+|---|---|---|
+| `users` | Registered users — id (UUID), email (citext, unique), display_name, status (`active`\|`suspended`), timestamps | [043](../backend/migrations/043_phase1_users_roles_audit.sql) |
+| `roles` | RBAC0 role catalog — seeded with `user`, `admin` | [043](../backend/migrations/043_phase1_users_roles_audit.sql) |
+| `user_roles` | User↔role join (composite PK); cascades: user_id CASCADE, role_id RESTRICT, granted_by SET NULL | [043](../backend/migrations/043_phase1_users_roles_audit.sql) |
+| `admin_audit_log` | Append-only admin audit trail (actor, action, target_type, target_id, payload JSONB) | [043](../backend/migrations/043_phase1_users_roles_audit.sql) |
+
+> **Planned (Phase 2):** `user_job_state`, `company_scan_settings`; rename `job_feed` → `jobs` (per-user columns dropped); `job_application_tracker.user_id` NOT NULL; drop `job_dismissal_log`; `companies` operational columns extracted.
+
+---
+
+## Environment variables (Phase 1 additions)
+
+| Var | Purpose |
+|---|---|
+| `ADMIN_EMAILS` | Comma-separated emails granted `admin` role on first login |
+| `SUPABASE_URL` | Supabase project URL (used by `backend/platform/supabaseadmin`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key for admin DELETE user calls |
+| `RATE_LIMIT_READ_RPM` | Per-user rate limit for GET/HEAD/OPTIONS (default 30) |
+| `RATE_LIMIT_WRITE_RPM` | Per-user rate limit for mutating methods (default 20) |
+| `RATE_LIMIT_ADMIN_RPM` | Per-user rate limit for admin scope (default 120) |
+| `CACHE_TTL_USER_SECONDS` | TTL for user-cache decorator (default 60) |
 
 ---
 

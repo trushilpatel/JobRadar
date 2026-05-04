@@ -297,6 +297,18 @@ Add allowed redirect URLs in Supabase → Authentication → URL Configuration:
 - Local dev (Vite): `http://localhost:5173/auth/callback`
 - Production: `https://<your-domain>/auth/callback`
 
+### Multi-user (Phase 1)
+
+Phase 1 of the multi-user rollout has shipped — see [`Designs/multi-user-rollout-plan.md`](Designs/multi-user-rollout-plan.md):
+
+- New tables: `users`, `roles`, `user_roles`, `admin_audit_log` (migration `043`)
+- On first login, the user is provisioned in `users` and granted `user`. If their email is in `ADMIN_EMAILS`, they also get `admin`.
+- Identity flows via `context.Context` — middleware enriches every request with the caller's `Identity`.
+- `GET /api/me`, `PATCH /api/me`, `DELETE /api/me` are live.
+- Per-user rate limit (Redis token bucket, fail-open) — defaults: 30 rpm read, 20 rpm write.
+
+Phase 2 (per-user data model, `/api` vs `/admin` route split) and Phase 3 (frontend admin UI) are **planned**.
+
 ---
 
 ## Useful commands
