@@ -42,6 +42,12 @@ func (s *applicationRepository) ListAll(page, limit int) ([]ApplicationWithJob, 
 
 func (s *applicationRepository) ListActive() ([]ApplicationWithJob, error) {
 	var results []ApplicationWithJob
+	interviewingStages := []string{
+		appcommon.StagePhoneScreen,
+		appcommon.StageTechnical,
+		appcommon.StageFinalRound,
+		appcommon.StageOffer,
+	}
 	err := s.db.Raw(`
 		SELECT DISTINCT ON (ja.job_result_id)
 			ja.*,
@@ -51,9 +57,9 @@ func (s *applicationRepository) ListActive() ([]ApplicationWithJob, error) {
 		FROM job_application_tracker ja
 		JOIN job_feed j ON ja.job_result_id = j.id
 		JOIN companies c ON j.company_id = c.id
-		WHERE ja.stage != ?
+		WHERE ja.stage IN ?
 		ORDER BY ja.job_result_id, ja.stage_at DESC
-	`, appcommon.StageRejected).Scan(&results).Error
+	`, interviewingStages).Scan(&results).Error
 	return results, err
 }
 
