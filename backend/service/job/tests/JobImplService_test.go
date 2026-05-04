@@ -2,10 +2,13 @@ package services_test
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"testing"
+	"time"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/identity"
+	"github.com/trushilpatel/jobradar/platform/cache"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
@@ -15,295 +18,349 @@ import (
 
 // --- Test doubles ---
 
-type fakeJobStore struct {
-	job        *jobmodel.Job
+type fakeJobReader struct {
 	jobs       []jobmodel.Job
-	total      int64
+	next       string
+	job        *jobmodel.Job
 	err        error
-	jobPostIDs map[string]string // job_feed id → job_post_id
-
-	updateStatusCalled bool
-	updateSavedCalled  bool
-	updateNotesCalled  bool
+	getByIDErr error
+	calls      int // counts GetJobs invocations to assert cache hit/miss
 }
 
-func (f *fakeJobStore) GetJobs(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int64, error) {
-	return f.jobs, f.total, f.err
+func (f *fakeJobReader) GetJobs(_ context.Context, _ jobdto.JobFilter, _ string, _ int) ([]jobmodel.Job, string, error) {
+	f.calls++
+	return f.jobs, f.next, f.err
 }
-func (f *fakeJobStore) GetJobByID(_ context.Context, id string) (*jobmodel.Job, error) {
-	if f.err != nil {
-		return nil, f.err
+func (f *fakeJobReader) GetJobByID(_ context.Context, _ string) (*jobmodel.Job, error) {
+	if f.getByIDErr != nil {
+		return nil, f.getByIDErr
 	}
-	if f.job != nil && f.job.ID == id {
-		return f.job, nil
-	}
-	return nil, gorm.ErrRecordNotFound
+	return f.job, nil
 }
-func (f *fakeJobStore) InsertJob(_ context.Context, job *jobmodel.Job) error { return f.err }
-func (f *fakeJobStore) DeleteJob(_ context.Context, id string) error         { return f.err }
-func (f *fakeJobStore) UpdateJobStatus(_ context.Context, id, status string) error {
-	f.updateStatusCalled = true
-	return f.err
+func (f *fakeJobReader) GetJobsByIDs(_ context.Context, _ []string) ([]jobmodel.Job, error) {
+	return f.jobs, nil
 }
-func (f *fakeJobStore) UpdateJobSaved(_ context.Context, id string, saved bool) error {
-	f.updateSavedCalled = true
-	return f.err
+func (f *fakeJobReader) GetJobsAddedByDay(_ context.Context, _ int) ([]jobdto.DailyJobCount, error) {
+	return nil, nil
 }
-func (f *fakeJobStore) UpdateJobNotes(_ context.Context, id, notes string) error {
-	f.updateNotesCalled = true
-	return f.err
-}
-func (f *fakeJobStore) GetJobCounts(_ context.Context) (*jobdto.JobCounts, error) {
-	return &jobdto.JobCounts{}, f.err
-}
-func (f *fakeJobStore) GetJobsAddedByDay(_ context.Context, days int) ([]jobdto.DailyJobCount, error) {
-	return nil, f.err
-}
-func (f *fakeJobStore) GetJobPostIDs(_ context.Context, ids []string) ([]string, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	var result []string
+func (f *fakeJobReader) GetJobPostIDs(_ context.Context, ids []string) ([]string, error) {
+	out := make([]string, 0, len(ids))
 	for _, id := range ids {
-		if jp, ok := f.jobPostIDs[id]; ok {
-			result = append(result, jp)
-		}
+		out = append(out, "post-"+id)
 	}
-	return result, nil
+	return out, nil
 }
-func (f *fakeJobStore) UpdateJobStatusBatch(_ context.Context, ids []string, _ string) (int64, error) {
-	f.updateStatusCalled = true
-	return int64(len(ids)), f.err
+func (f *fakeJobReader) CountAll(_ context.Context) (int64, error) { return int64(len(f.jobs)), nil }
+
+type fakeUserState struct {
+	getResult    *jobmodel.UserJobState
+	getErr       error
+	manyResult   map[string]*jobmodel.UserJobState
+	upsertCalls  int
+	lastUpsertID string
+	upsertState  jobdto.UpsertState
+	bulkCalls    int
+	bulkIDs      []string
+	deleteCalls  int
+	countsResult jobdto.Counts
+	countsErr    error
+	upsertErr    error
 }
 
-type fakeLedgerWriter struct {
-	err error
+func (f *fakeUserState) Get(_ context.Context, userID, jobID string) (*jobmodel.UserJobState, error) {
+	if userID == "" {
+		return nil, apperr.ErrInternal.WithMessage("user id required")
+	}
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
+	return f.getResult, nil
+}
+func (f *fakeUserState) GetMany(_ context.Context, userID string, _ []string) (map[string]*jobmodel.UserJobState, error) {
+	if userID == "" {
+		return nil, apperr.ErrInternal.WithMessage("user id required")
+	}
+	if f.manyResult == nil {
+		return map[string]*jobmodel.UserJobState{}, nil
+	}
+	return f.manyResult, nil
+}
+func (f *fakeUserState) Upsert(_ context.Context, userID, jobID string, state jobdto.UpsertState) error {
+	if userID == "" {
+		return apperr.ErrInternal.WithMessage("user id required")
+	}
+	f.upsertCalls++
+	f.lastUpsertID = jobID
+	f.upsertState = state
+	return f.upsertErr
+}
+func (f *fakeUserState) UpsertBulkDismiss(_ context.Context, userID string, ids []string, _ string, _ string) error {
+	if userID == "" {
+		return apperr.ErrInternal.WithMessage("user id required")
+	}
+	f.bulkCalls++
+	f.bulkIDs = ids
+	return nil
+}
+func (f *fakeUserState) Delete(_ context.Context, userID, _ string) error {
+	if userID == "" {
+		return apperr.ErrInternal.WithMessage("user id required")
+	}
+	f.deleteCalls++
+	return nil
+}
+func (f *fakeUserState) CountsByUser(_ context.Context, userID string) (jobdto.Counts, error) {
+	if userID == "" {
+		return jobdto.Counts{}, apperr.ErrInternal.WithMessage("user id required")
+	}
+	return f.countsResult, f.countsErr
 }
 
-func (f *fakeLedgerWriter) MarkSeen(_ context.Context, jobID, companyID, reason string) error {
-	return f.err
-}
-func (f *fakeLedgerWriter) UpdateSeenReason(_ context.Context, jobID, reason string) error {
-	return f.err
-}
-func (f *fakeLedgerWriter) UpdateSeenReasonBatch(_ context.Context, ids []string, reason string) error {
-	return f.err
-}
-func (f *fakeLedgerWriter) MarkSeenBatch(_ context.Context, ids []string, companyID, reason string) error {
-	return f.err
-}
-func (f *fakeLedgerWriter) UpdateRetryBatch(_ context.Context, entries []jobsvc.RetryLedgerEntry) error {
-	return f.err
-}
-func (f *fakeLedgerWriter) MarkRemovedBatch(_ context.Context, ids []string) error { return f.err }
+type fakeSnapshot struct{}
 
-type fakeDiscardStore struct {
-	err          error
-	insertCalled bool
+func (fakeSnapshot) InsertSnapshot(_ context.Context, _ jobdto.SnapshotInput) error { return nil }
+func (fakeSnapshot) UpdateSnapshotAction(_ context.Context, _, _ string) error      { return nil }
+func (fakeSnapshot) UpdateSnapshotActionBatch(_ context.Context, _ []string, _ string) error {
+	return nil
 }
 
-func (f *fakeDiscardStore) InsertDiscard(_ context.Context, jobResultID, reason, note string) error {
-	f.insertCalled = true
-	return f.err
-}
-func (f *fakeDiscardStore) InsertDiscardBatch(_ context.Context, _ []string, _ string) error {
-	f.insertCalled = true
-	return f.err
+type fakeAppWriter struct{ calls int }
+
+func (f *fakeAppWriter) InsertAppliedApplication(_ context.Context, _ string) error {
+	f.calls++
+	return nil
 }
 
-type fakeSnapshotWriter struct {
-	err          error
-	updateCalled bool
+type fakeLedgerWriter struct{ calls int }
+
+func (f *fakeLedgerWriter) MarkSeen(_ context.Context, _, _, _ string) error { return nil }
+func (f *fakeLedgerWriter) MarkSeenBatch(_ context.Context, _ []string, _, _ string) error {
+	return nil
+}
+func (f *fakeLedgerWriter) UpdateSeenReason(_ context.Context, _, _ string) error {
+	f.calls++
+	return nil
+}
+func (f *fakeLedgerWriter) UpdateSeenReasonBatch(_ context.Context, _ []string, _ string) error {
+	return nil
+}
+func (f *fakeLedgerWriter) UpdateRetryBatch(_ context.Context, _ []jobsvc.RetryLedgerEntry) error {
+	return nil
+}
+func (f *fakeLedgerWriter) MarkRemovedBatch(_ context.Context, _ []string) error { return nil }
+
+// helper — wires the impl service for tests with a memory cache.
+func newSvc(reader *fakeJobReader, state *fakeUserState, app *fakeAppWriter, led *fakeLedgerWriter, c cache.Cache) jobsvc.JobService {
+	return jobsvc.NewImplService(reader, state, fakeSnapshot{}, app, led, c, nil)
 }
 
-func (f *fakeSnapshotWriter) InsertSnapshot(_ context.Context, input jobdto.SnapshotInput) error {
-	return f.err
-}
-func (f *fakeSnapshotWriter) UpdateSnapshotAction(_ context.Context, id, action string) error {
-	f.updateCalled = true
-	return f.err
-}
-func (f *fakeSnapshotWriter) UpdateSnapshotActionBatch(_ context.Context, _ []string, _ string) error {
-	f.updateCalled = true
-	return f.err
-}
-
-type fakeApplicationWriter struct {
-	err error
-}
-
-func (f *fakeApplicationWriter) InsertApplication(jobResultID, stage, note string) error {
-	return f.err
-}
-func (f *fakeApplicationWriter) InsertAppliedApplication(_ string) error      { return f.err }
-func (f *fakeApplicationWriter) InsertInterviewingApplication(_ string) error { return f.err }
-func (f *fakeApplicationWriter) InsertOfferApplication(_ string) error        { return f.err }
-
-// newImplService builds an implService with a repositoryService wrapping the given store.
-func newImplService(js *fakeJobStore, ledger jobsvc.SeenLedgerWriter, discard jobsvc.DiscardStore, snapshot jobsvc.SnapshotWriter, app jobsvc.ApplicationWriter) jobsvc.Service {
-	repo := jobsvc.NewRepositoryService(js)
-	return jobsvc.NewService(repo, ledger, discard, snapshot, app)
+func ctxAs(userID string) context.Context {
+	return identity.WithTestIdentity(context.Background(), userID)
 }
 
 // --- Tests ---
 
-func TestList_ReturnsPaged(t *testing.T) {
+func TestImpl_List_OverlayMerge(t *testing.T) {
+	now := time.Now()
+	jobs := []jobmodel.Job{{ID: "j1"}, {ID: "j2"}, {ID: "j3"}}
+	overlay := map[string]*jobmodel.UserJobState{
+		"j2": {UserID: "u1", JobID: "j2", Status: jobmodel.StatusSaved, SavedAt: &now},
+	}
+	reader := &fakeJobReader{jobs: jobs}
+	state := &fakeUserState{manyResult: overlay}
+
+	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, cache.NewMemoryCache())
+	res, err := svc.List(ctxAs("u1"), jobdto.JobFilter{}, "", 10)
+	if err != nil {
+		t.Fatalf("List() err = %v", err)
+	}
+	if len(res.Items) != 3 {
+		t.Fatalf("want 3 items, got %d", len(res.Items))
+	}
+	if res.Items[0].UserState.Status != jobcommon.JobStatusNew {
+		t.Errorf("j1 should overlay to new, got %q", res.Items[0].UserState.Status)
+	}
+	if res.Items[1].UserState.Status != jobmodel.StatusSaved {
+		t.Errorf("j2 should overlay to saved, got %q", res.Items[1].UserState.Status)
+	}
+}
+
+func TestImpl_List_StatusFilterAppliedAfterMerge(t *testing.T) {
+	now := time.Now()
 	jobs := []jobmodel.Job{{ID: "j1"}, {ID: "j2"}}
-	svc := newImplService(&fakeJobStore{jobs: jobs, total: 2}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{}, &fakeApplicationWriter{})
+	overlay := map[string]*jobmodel.UserJobState{
+		"j1": {Status: jobmodel.StatusSaved, SavedAt: &now},
+	}
+	svc := newSvc(&fakeJobReader{jobs: jobs}, &fakeUserState{manyResult: overlay}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
 
-	result, total, err := svc.List(context.Background(), jobdto.JobFilter{Status: "new"}, 1, 20)
+	res, err := svc.List(ctxAs("u1"), jobdto.JobFilter{Status: jobmodel.StatusSaved}, "", 10)
 	if err != nil {
-		t.Fatalf("List() error = %v", err)
+		t.Fatalf("List err = %v", err)
 	}
-	if len(result) != 2 {
-		t.Errorf("expected 2 jobs, got %d", len(result))
-	}
-	if total != 2 {
-		t.Errorf("expected total 2, got %d", total)
+	if len(res.Items) != 1 || res.Items[0].ID != "j1" {
+		t.Fatalf("want only j1, got %+v", res.Items)
 	}
 }
 
-func TestGet_NotFound(t *testing.T) {
-	svc := newImplService(&fakeJobStore{}, &fakeLedgerWriter{}, &fakeDiscardStore{}, &fakeSnapshotWriter{}, &fakeApplicationWriter{})
+func TestImpl_List_CacheHitSkipsDB(t *testing.T) {
+	jobs := []jobmodel.Job{{ID: "j1"}}
+	reader := &fakeJobReader{jobs: jobs}
+	state := &fakeUserState{}
+	c := cache.NewMemoryCache()
+	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, c)
 
-	_, err := svc.Get(context.Background(), "missing")
-	if err == nil {
-		t.Fatal("expected error for missing job")
+	if _, err := svc.List(ctxAs("u1"), jobdto.JobFilter{}, "", 10); err != nil {
+		t.Fatalf("first List err = %v", err)
 	}
-	var sErr *apperr.ServiceError
-	if !errors.As(err, &sErr) || sErr.Code != "NOT_FOUND" {
-		t.Errorf("expected NOT_FOUND error, got %v", err)
+	if _, err := svc.List(ctxAs("u1"), jobdto.JobFilter{}, "", 10); err != nil {
+		t.Fatalf("second List err = %v", err)
+	}
+	if reader.calls != 1 {
+		t.Errorf("expected 1 DB call (second served from cache), got %d", reader.calls)
 	}
 }
 
-func TestDismiss_MultiStep(t *testing.T) {
-	job := &jobmodel.Job{ID: "j1", JobPostID: "jp1"}
-	js := &fakeJobStore{job: job}
-	discard := &fakeDiscardStore{}
-	snapshot := &fakeSnapshotWriter{}
-	ledger := &fakeLedgerWriter{}
+func TestImpl_Get_NotFound(t *testing.T) {
+	svc := newSvc(&fakeJobReader{getByIDErr: gorm.ErrRecordNotFound}, &fakeUserState{}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
+	_, err := svc.Get(ctxAs("u1"), "missing")
+	var serr *apperr.ServiceError
+	if !stderrors.As(err, &serr) || serr.Code != "NOT_FOUND" {
+		t.Fatalf("want NOT_FOUND, got %v", err)
+	}
+}
 
-	svc := newImplService(js, ledger, discard, snapshot, &fakeApplicationWriter{})
-	err := svc.Dismiss(context.Background(), "j1", jobdto.DismissInput{Reason: jobcommon.DiscardReasonDismissed})
+func TestImpl_Get_OverlayMissingMeansNew(t *testing.T) {
+	job := &jobmodel.Job{ID: "j1"}
+	reader := &fakeJobReader{job: job}
+	state := &fakeUserState{getErr: apperr.ErrNotFound.WithMessage("not found")}
+
+	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
+	view, err := svc.Get(ctxAs("u1"), "j1")
 	if err != nil {
-		t.Fatalf("Dismiss() error = %v", err)
+		t.Fatalf("Get err = %v", err)
 	}
-
-	if !discard.insertCalled {
-		t.Error("expected InsertDiscard to be called")
-	}
-	if !js.updateStatusCalled {
-		t.Error("expected UpdateJobStatus to be called")
-	}
-	// snapshot update is non-fatal and always attempted
-	if !snapshot.updateCalled {
-		t.Error("expected UpdateSnapshotAction to be called")
+	if view.UserState.Status != jobcommon.JobStatusNew {
+		t.Errorf("missing overlay should default to 'new', got %q", view.UserState.Status)
 	}
 }
 
-func TestSetSaved_NonFatalSnapshot(t *testing.T) {
-	js := &fakeJobStore{}
-	snapshot := &fakeSnapshotWriter{err: errors.New("snapshot error")} // non-fatal error
-	svc := newImplService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
+func TestImpl_SetSaved_RequiresUserID(t *testing.T) {
+	svc := newSvc(&fakeJobReader{}, &fakeUserState{}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
+	if err := svc.SetSaved(context.Background(), "j1", true); err == nil {
+		t.Fatal("expected error without identity in ctx")
+	}
+}
 
-	err := svc.SetSaved(context.Background(), "j1", true)
+func TestImpl_SetSaved_DeletesWhenFalse(t *testing.T) {
+	state := &fakeUserState{}
+	svc := newSvc(&fakeJobReader{}, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
+	if err := svc.SetSaved(ctxAs("u1"), "j1", false); err != nil {
+		t.Fatalf("SetSaved err = %v", err)
+	}
+	if state.deleteCalls != 1 {
+		t.Errorf("expected Delete to be called, got %d", state.deleteCalls)
+	}
+}
+
+func TestImpl_SetStatus_AppliedTriggersAppWriter(t *testing.T) {
+	state := &fakeUserState{}
+	app := &fakeAppWriter{}
+	svc := newSvc(&fakeJobReader{}, state, app, &fakeLedgerWriter{}, nil)
+	if err := svc.SetStatus(ctxAs("u1"), "j1", jobmodel.StatusApplied); err != nil {
+		t.Fatalf("SetStatus err = %v", err)
+	}
+	if app.calls != 1 {
+		t.Errorf("expected app writer to be called, got %d", app.calls)
+	}
+	if state.upsertState.Status != jobmodel.StatusApplied {
+		t.Errorf("upsert status = %q, want %q", state.upsertState.Status, jobmodel.StatusApplied)
+	}
+}
+
+func TestImpl_Dismiss_UpsertsAndUpdatesLedger(t *testing.T) {
+	job := &jobmodel.Job{ID: "j1", JobPostID: "post-1"}
+	state := &fakeUserState{}
+	led := &fakeLedgerWriter{}
+	svc := newSvc(&fakeJobReader{job: job}, state, &fakeAppWriter{}, led, nil)
+	if err := svc.Dismiss(ctxAs("u1"), "j1", jobcommon.DismissalReasonUserDismissed, "ok"); err != nil {
+		t.Fatalf("Dismiss err = %v", err)
+	}
+	if state.upsertState.Status != jobmodel.StatusDismissed {
+		t.Errorf("upsert status = %q, want %q", state.upsertState.Status, jobmodel.StatusDismissed)
+	}
+	if led.calls != 1 {
+		t.Errorf("expected ledger update, got %d", led.calls)
+	}
+}
+
+func TestImpl_BulkDismiss_DelegatesAll(t *testing.T) {
+	state := &fakeUserState{}
+	svc := newSvc(&fakeJobReader{}, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
+	if err := svc.BulkDismiss(ctxAs("u1"), []string{"j1", "j2"}, jobcommon.DismissalReasonNotRelevant, ""); err != nil {
+		t.Fatalf("BulkDismiss err = %v", err)
+	}
+	if state.bulkCalls != 1 {
+		t.Errorf("expected one bulk call, got %d", state.bulkCalls)
+	}
+	if len(state.bulkIDs) != 2 {
+		t.Errorf("expected 2 ids, got %d", len(state.bulkIDs))
+	}
+}
+
+func TestImpl_GetCounts_RequiresUserID(t *testing.T) {
+	svc := newSvc(&fakeJobReader{}, &fakeUserState{}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
+	if _, err := svc.GetCounts(context.Background()); err == nil {
+		t.Fatal("expected error without identity in ctx")
+	}
+}
+
+func TestImpl_GetCounts_CacheHit(t *testing.T) {
+	state := &fakeUserState{countsResult: jobdto.Counts{Saved: 3, Applied: 2}}
+	c := cache.NewMemoryCache()
+	svc := newSvc(&fakeJobReader{}, state, &fakeAppWriter{}, &fakeLedgerWriter{}, c)
+
+	first, err := svc.GetCounts(ctxAs("u1"))
 	if err != nil {
-		t.Fatalf("SetSaved() should not return error even if snapshot fails, got: %v", err)
+		t.Fatalf("first GetCounts err = %v", err)
 	}
-	if !js.updateSavedCalled {
-		t.Error("expected UpdateJobSaved to be called")
+	if first.Saved != 3 {
+		t.Errorf("first counts saved = %d, want 3", first.Saved)
 	}
-}
-
-func TestSetStatus_BackfillsSnapshotOnApplied(t *testing.T) {
-	js := &fakeJobStore{}
-	snapshot := &fakeSnapshotWriter{}
-	svc := newImplService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
-
-	err := svc.SetStatus(context.Background(), "j1", jobcommon.JobStatusApplied)
+	// Mutate the underlying source — second call must come from cache.
+	state.countsResult = jobdto.Counts{Saved: 99}
+	second, err := svc.GetCounts(ctxAs("u1"))
 	if err != nil {
-		t.Fatalf("SetStatus() error = %v", err)
+		t.Fatalf("second GetCounts err = %v", err)
 	}
-	if !snapshot.updateCalled {
-		t.Error("expected UpdateSnapshotAction to be called for applied status")
+	if second.Saved != 3 {
+		t.Errorf("second counts (cached) saved = %d, want 3", second.Saved)
 	}
 }
 
-func TestSetStatus_NoSnapshotBackfillForNew(t *testing.T) {
-	js := &fakeJobStore{}
-	snapshot := &fakeSnapshotWriter{}
-	svc := newImplService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
+func TestImpl_SetStatus_InvalidatesCountsCache(t *testing.T) {
+	state := &fakeUserState{countsResult: jobdto.Counts{Saved: 1}}
+	c := cache.NewMemoryCache()
+	svc := newSvc(&fakeJobReader{}, state, &fakeAppWriter{}, &fakeLedgerWriter{}, c)
 
-	err := svc.SetStatus(context.Background(), "j1", jobcommon.JobStatusNew)
+	if _, err := svc.GetCounts(ctxAs("u1")); err != nil {
+		t.Fatalf("prime err = %v", err)
+	}
+	state.countsResult = jobdto.Counts{Saved: 5}
+	if err := svc.SetStatus(ctxAs("u1"), "j1", jobmodel.StatusSaved); err != nil {
+		t.Fatalf("SetStatus err = %v", err)
+	}
+	got, err := svc.GetCounts(ctxAs("u1"))
 	if err != nil {
-		t.Fatalf("SetStatus() error = %v", err)
+		t.Fatalf("GetCounts err = %v", err)
 	}
-	if snapshot.updateCalled {
-		t.Error("expected UpdateSnapshotAction NOT to be called for new status")
-	}
-}
-
-func TestBulkDismiss_DismissesAll(t *testing.T) {
-	js := &fakeJobStore{
-		jobPostIDs: map[string]string{"j1": "jp1", "j2": "jp2"},
-	}
-	discard := &fakeDiscardStore{}
-	snapshot := &fakeSnapshotWriter{}
-	ledger := &fakeLedgerWriter{}
-
-	svc := newImplService(js, ledger, discard, snapshot, &fakeApplicationWriter{})
-	n, err := svc.BulkDismiss(context.Background(), jobdto.BulkDismissInput{
-		IDs:    []string{"j1", "j2"},
-		Reason: jobcommon.DiscardReasonNotRelevant,
-	})
-	if err != nil {
-		t.Fatalf("BulkDismiss() error = %v", err)
-	}
-	if n != 2 {
-		t.Errorf("expected 2 dismissed, got %d", n)
-	}
-	if !discard.insertCalled {
-		t.Error("expected InsertDiscardBatch to be called")
-	}
-	if !js.updateStatusCalled {
-		t.Error("expected UpdateJobStatusBatch to be called")
-	}
-	if !snapshot.updateCalled {
-		t.Error("expected UpdateSnapshotActionBatch to be called")
+	if got.Saved != 5 {
+		t.Errorf("after invalidation got = %d, want 5", got.Saved)
 	}
 }
 
-func TestBulkDismiss_SnapshotFailureIsNonFatal(t *testing.T) {
-	js := &fakeJobStore{jobPostIDs: map[string]string{"j1": "jp1"}}
-	snapshot := &fakeSnapshotWriter{err: errors.New("snapshot failure")}
-
-	svc := newImplService(js, &fakeLedgerWriter{}, &fakeDiscardStore{}, snapshot, &fakeApplicationWriter{})
-	_, err := svc.BulkDismiss(context.Background(), jobdto.BulkDismissInput{
-		IDs:    []string{"j1"},
-		Reason: jobcommon.DiscardReasonNotRelevant,
-	})
-	if err != nil {
-		t.Fatalf("BulkDismiss() must not return error when snapshot fails, got: %v", err)
-	}
-}
-
-func TestBulkDismiss_DiscardFailureIsFatal(t *testing.T) {
-	js := &fakeJobStore{jobPostIDs: map[string]string{"j1": "jp1"}}
-	discard := &fakeDiscardStore{err: errors.New("db error")}
-
-	svc := newImplService(js, &fakeLedgerWriter{}, discard, &fakeSnapshotWriter{}, &fakeApplicationWriter{})
-	_, err := svc.BulkDismiss(context.Background(), jobdto.BulkDismissInput{
-		IDs:    []string{"j1"},
-		Reason: jobcommon.DiscardReasonNotRelevant,
-	})
-	if err == nil {
-		t.Fatal("expected error when discard fails")
-	}
-}
-
-// Ensure test doubles implement interfaces.
-var _ jobsvc.JobStore = (*fakeJobStore)(nil)
+// Compile-time interface checks.
+var _ jobsvc.JobReader = (*fakeJobReader)(nil)
+var _ jobsvc.UserJobStateRepository = (*fakeUserState)(nil)
+var _ jobsvc.SnapshotWriter = fakeSnapshot{}
+var _ jobsvc.ApplicationWriter = (*fakeAppWriter)(nil)
 var _ jobsvc.SeenLedgerWriter = (*fakeLedgerWriter)(nil)
-var _ jobsvc.DiscardStore = (*fakeDiscardStore)(nil)
-var _ jobsvc.SnapshotWriter = (*fakeSnapshotWriter)(nil)
-var _ jobsvc.ApplicationWriter = (*fakeApplicationWriter)(nil)

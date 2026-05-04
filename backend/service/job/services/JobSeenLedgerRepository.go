@@ -13,46 +13,22 @@ import (
 )
 
 // RetryLedgerEntry describes a per-job retry state update destined for
-// job_pipeline_ledger. Used by UpdateRetryBatch to write distinct retry_count
-// and next_attempt_at values for many rows in a single round trip.
+// job_pipeline_ledger. Used by UpdateRetryBatch to write distinct
+// retry_count and next_attempt_at values for many rows in a single call.
 type RetryLedgerEntry struct {
 	JobID         string
 	RetryCount    int
 	NextAttemptAt time.Time
 }
 
-// SeenLedgerReader checks if a job has already been processed.
-type SeenLedgerReader interface {
-	HasSeen(ctx context.Context, jobID string) (bool, error)
-	HasSeenBatch(ctx context.Context, jobIDs []string) (map[string]bool, error)
-}
-
-// SeenLedgerWriter marks jobs as seen or updates their reason.
-type SeenLedgerWriter interface {
-	MarkSeen(ctx context.Context, jobID, companyID, reason string) error
-	MarkSeenBatch(ctx context.Context, jobIDs []string, companyID, reason string) error
-	UpdateSeenReason(ctx context.Context, jobID, reason string) error
-	UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason string) error
-	UpdateRetryBatch(ctx context.Context, entries []RetryLedgerEntry) error
-	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
-}
-
-// SeenLedgerCompanyReader provides company-scoped reads on the ledger.
-type SeenLedgerCompanyReader interface {
-	GetActiveJobIDsByCompany(ctx context.Context, companyID string) ([]string, error)
-}
-
-// SeenLedgerStore composes all ledger interfaces.
-type SeenLedgerStore interface {
-	SeenLedgerReader
-	SeenLedgerWriter
-	SeenLedgerCompanyReader
-}
-
+// seenLedgerStore is the GORM-backed terminal repo for the
+// job_pipeline_ledger table. It implements the SeenLedgerStore composite
+// interface declared in JobService.go.
 type seenLedgerStore struct {
 	db *gorm.DB
 }
 
+// NewSeenLedgerStore constructs the ledger store.
 func NewSeenLedgerStore(db *gorm.DB) SeenLedgerStore {
 	return &seenLedgerStore{db: db}
 }
@@ -176,4 +152,34 @@ func (s *seenLedgerStore) GetActiveJobIDsByCompany(ctx context.Context, companyI
 		Where("company_id = ? AND removed_at IS NULL", companyID).
 		Pluck("job_id", &ids).Error
 	return ids, err
+}
+
+// -----------------------------------------------------------------------------
+// LedgerService — narrow façade for crawler workers (HasSeenBatch /
+// MarkSeenBatch / GetActiveJobIDsByCompany / MarkRemovedBatch).
+// -----------------------------------------------------------------------------
+
+type ledgerService struct {
+	store SeenLedgerStore
+}
+
+// NewLedgerService constructs the ledger façade workers consume.
+func NewLedgerService(s SeenLedgerStore) LedgerService {
+	return &ledgerService{store: s}
+}
+
+func (l *ledgerService) HasSeenBatch(ctx context.Context, jobIDs []string) (map[string]bool, error) {
+	return l.store.HasSeenBatch(ctx, jobIDs)
+}
+
+func (l *ledgerService) MarkSeenBatch(ctx context.Context, jobIDs []string, companyID, reason string) error {
+	return l.store.MarkSeenBatch(ctx, jobIDs, companyID, reason)
+}
+
+func (l *ledgerService) GetActiveJobIDsByCompany(ctx context.Context, companyID string) ([]string, error) {
+	return l.store.GetActiveJobIDsByCompany(ctx, companyID)
+}
+
+func (l *ledgerService) MarkRemovedBatch(ctx context.Context, jobIDs []string) error {
+	return l.store.MarkRemovedBatch(ctx, jobIDs)
 }

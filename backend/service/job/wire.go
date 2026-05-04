@@ -5,16 +5,19 @@ import (
 	svc "github.com/trushilpatel/jobradar/service/job/services"
 )
 
-// ProviderSet is the Wire provider set for the job domain.
+// ProviderSet is the Wire provider set for the job domain. The decorator
+// chain is composed RestRouter → RestService → ValidationService →
+// ImplService (terminal, holds JobReader + UserJobStateRepository + cache).
 var ProviderSet = wire.NewSet(
 	svc.NewRestRouter,
 	svc.NewRestService,
-	svc.NewValidator,
-	svc.NewService,
-	svc.NewRepositoryService,
+	svc.NewValidationService,
+	svc.NewImplService,
 	svc.NewJobStore,
+	svc.NewUserJobStateRepository,
 	svc.NewSeenLedgerStore,
-	svc.NewDiscardStore,
+	svc.NewLedgerService,
 	svc.NewSnapshotStore,
 	svc.NewTechTagStore,
+	svc.NewPipelineService,
 )

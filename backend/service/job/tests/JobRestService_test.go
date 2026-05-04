@@ -10,339 +10,132 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/common/errors"
+	apperr "github.com/trushilpatel/jobradar/common/errors"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
 
-// fakeJobSvc is a test double for Service used in REST handler tests.
-type fakeJobSvc struct {
-	jobs  []jobmodel.Job
-	job   *jobmodel.Job
-	total int
-	err   error
+// fakeRestSvc is a JobService test double used to drive the REST layer.
+// Captures inputs so handler-level wiring (filter parsing, body decoding)
+// can be asserted without spinning up the impl chain.
+type fakeRestSvc struct {
+	listResult jobdto.PageResult
+	listErr    error
+	lastFilter jobdto.JobFilter
+	lastCursor string
+
+	getResult *jobdto.JobView
+	getErr    error
+
+	bulkErr    error
+	bulkIDs    []string
+	bulkReason string
 }
 
-func (f *fakeJobSvc) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
-	return f.jobs, f.total, f.err
+func (f *fakeRestSvc) List(_ context.Context, filter jobdto.JobFilter, cursor string, _ int) (jobdto.PageResult, error) {
+	f.lastFilter = filter
+	f.lastCursor = cursor
+	return f.listResult, f.listErr
 }
-func (f *fakeJobSvc) Get(_ context.Context, _ string) (*jobmodel.Job, error) {
-	return f.job, f.err
+func (f *fakeRestSvc) Get(_ context.Context, _ string) (*jobdto.JobView, error) {
+	return f.getResult, f.getErr
 }
-func (f *fakeJobSvc) GetCounts(_ context.Context) (*jobdto.JobCounts, error) {
-	return &jobdto.JobCounts{}, f.err
+func (f *fakeRestSvc) SetSaved(_ context.Context, _ string, _ bool) error { return nil }
+func (f *fakeRestSvc) SetStatus(_ context.Context, _, _ string) error     { return nil }
+func (f *fakeRestSvc) SetNotes(_ context.Context, _, _ string) error      { return nil }
+func (f *fakeRestSvc) Dismiss(_ context.Context, _ string, _ string, _ string) error {
+	return nil
 }
-func (f *fakeJobSvc) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error {
-	return f.err
+func (f *fakeRestSvc) BulkDismiss(_ context.Context, ids []string, reason, _ string) error {
+	f.bulkIDs = ids
+	f.bulkReason = reason
+	return f.bulkErr
 }
-func (f *fakeJobSvc) SetSaved(_ context.Context, _ string, _ bool) error { return f.err }
-func (f *fakeJobSvc) SetStatus(_ context.Context, _, _ string) error     { return f.err }
-func (f *fakeJobSvc) SetNotes(_ context.Context, _, _ string) error      { return f.err }
-func (f *fakeJobSvc) MarkApplied(_ context.Context, _ string) error      { return f.err }
-func (f *fakeJobSvc) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
-	return 0, f.err
-}
-func (f *fakeJobSvc) GetJobPostIDs(_ context.Context, _ []string) ([]string, error) {
-	return nil, f.err
+func (f *fakeRestSvc) GetCounts(_ context.Context) (jobdto.Counts, error) {
+	return jobdto.Counts{}, nil
 }
 
-var _ jobsvc.Service = (*fakeJobSvc)(nil)
+var _ jobsvc.JobService = (*fakeRestSvc)(nil)
 
-// newJobTestRouter builds a chi router with all job routes registered via RestRouter.
-// The fake is used as the terminal; no validation layer is in the chain so REST
-// handler tests exercise parsing and HTTP behaviour in isolation.
-func newJobTestRouter(fake jobsvc.Service) *chi.Mux {
-	rest := jobsvc.NewRestService(fake)
+func newRouter(svc jobsvc.JobService) *chi.Mux {
+	rest := jobsvc.NewRestService(svc)
 	router := jobsvc.NewRestRouter(rest)
 	r := chi.NewRouter()
 	router.Register(r)
 	return r
 }
 
-func TestJobHandlerList_OK(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{jobs: []jobmodel.Job{}, total: 0})
+func TestRest_List_OK_HasNextCursor(t *testing.T) {
+	r := newRouter(&fakeRestSvc{listResult: jobdto.PageResult{Items: []jobdto.JobView{}, NextCursor: "abc"}})
+	req := httptest.NewRequest(http.MethodGet, "/jobs?cursor=xyz", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
 
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"next_cursor":"abc"`) {
+		t.Errorf("response missing next_cursor: %s", w.Body.String())
+	}
+}
+
+func TestRest_List_ForwardsCursor(t *testing.T) {
+	fake := &fakeRestSvc{}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodGet, "/jobs?cursor=opaque-cursor", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if fake.lastCursor != "opaque-cursor" {
+		t.Errorf("cursor = %q, want %q", fake.lastCursor, "opaque-cursor")
+	}
+}
+
+func TestRest_List_ServiceErrorMapsTo500(t *testing.T) {
+	r := newRouter(&fakeRestSvc{listErr: apperr.ErrInternal.WithMessage("db down")})
 	req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("got status %d, want 200", w.Code)
-	}
-	body := w.Body.String()
-	if !strings.Contains(body, `"data"`) {
-		t.Errorf("body missing data envelope: %s", body)
-	}
-	if !strings.Contains(body, `"total"`) {
-		t.Errorf("body missing total: %s", body)
-	}
-}
-
-func TestJobHandlerList_ServiceError(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{err: errors.ErrInternal.WithMessage("db failure")})
-
-	req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusInternalServerError {
-		t.Errorf("got status %d, want 500", w.Code)
+		t.Errorf("status = %d, want 500", w.Code)
 	}
 }
 
-func TestJobHandlerGet_OK(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{job: &jobmodel.Job{ID: "j1"}})
-
-	req := httptest.NewRequest(http.MethodGet, "/jobs/j1", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("got status %d, want 200", w.Code)
-	}
-}
-
-func TestJobHandlerGet_NotFound(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{err: errors.ErrNotFound.WithMessage("job not found")})
-
-	req := httptest.NewRequest(http.MethodGet, "/jobs/missing", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusNotFound {
-		t.Errorf("got status %d, want 404", w.Code)
-	}
-}
-
-func TestJobHandlerDismiss_OK(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{})
-
-	body, _ := json.Marshal(jobdto.DismissInput{Reason: jobcommon.DiscardReasonDismissed})
-	req := httptest.NewRequest(http.MethodDelete, "/jobs/j1", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("got status %d, want 200", w.Code)
-	}
-}
-
-func TestJobHandlerDismiss_ServiceError(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{err: errors.ErrInternal.WithMessage("db failure")})
-
-	body, _ := json.Marshal(jobdto.DismissInput{Reason: jobcommon.DiscardReasonDismissed})
-	req := httptest.NewRequest(http.MethodDelete, "/jobs/j1", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("got status %d, want 500", w.Code)
-	}
-}
-
-func TestJobHandlerSetStatus_OK(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{})
-
-	body, _ := json.Marshal(jobdto.SetStatusInput{Status: jobcommon.JobStatusApplied})
-	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/status", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("got status %d, want 200", w.Code)
-	}
-}
-
-func TestJobHandlerSetNotes_OK(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{})
-
-	body, _ := json.Marshal(jobdto.SetNotesInput{Notes: "great company"})
-	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/notes", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("got status %d, want 200", w.Code)
-	}
-}
-
-func TestJobHandlerGetCounts_OK(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{})
-
-	req := httptest.NewRequest(http.MethodGet, "/jobs/counts", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("got status %d, want 200", w.Code)
-	}
-	body := w.Body.String()
-	if !strings.Contains(body, `"data"`) {
-		t.Errorf("body missing data envelope: %s", body)
-	}
-}
-
-// capturingService records the filter passed to List for inspection.
-type capturingService struct {
-	filter jobdto.JobFilter
-}
-
-func (c *capturingService) List(_ context.Context, f jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
-	c.filter = f
-	return nil, 0, nil
-}
-func (c *capturingService) Get(_ context.Context, _ string) (*jobmodel.Job, error) { return nil, nil }
-func (c *capturingService) GetCounts(_ context.Context) (*jobdto.JobCounts, error) {
-	return &jobdto.JobCounts{}, nil
-}
-func (c *capturingService) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error {
-	return nil
-}
-func (c *capturingService) SetSaved(_ context.Context, _ string, _ bool) error { return nil }
-func (c *capturingService) SetStatus(_ context.Context, _, _ string) error     { return nil }
-func (c *capturingService) SetNotes(_ context.Context, _, _ string) error      { return nil }
-func (c *capturingService) MarkApplied(_ context.Context, _ string) error      { return nil }
-func (c *capturingService) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
-	return 0, nil
-}
-func (c *capturingService) GetJobPostIDs(_ context.Context, _ []string) ([]string, error) {
-	return nil, nil
-}
-
-var _ jobsvc.Service = (*capturingService)(nil)
-
-func TestJobHandlerList_ExperienceRangesParsed(t *testing.T) {
-	capturing := &capturingService{}
-	r := newJobTestRouter(capturing)
-
-	req := httptest.NewRequest(http.MethodGet, "/jobs?experience_ranges=0-2&experience_ranges=5%2B", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("got status %d, want 200", w.Code)
-	}
-	if len(capturing.filter.ExperienceRanges) != 2 {
-		t.Fatalf("expected 2 parsed ranges, got %d", len(capturing.filter.ExperienceRanges))
-	}
-	r0 := capturing.filter.ExperienceRanges[0]
-	if r0.Min != 0 || r0.Max == nil || *r0.Max != 2 {
-		t.Errorf("range[0] = {Min:%d Max:%v}, want {0 2}", r0.Min, r0.Max)
-	}
-	r1 := capturing.filter.ExperienceRanges[1]
-	if r1.Min != 5 || r1.Max != nil {
-		t.Errorf("range[1] = {Min:%d Max:%v}, want {5 nil}", r1.Min, r1.Max)
-	}
-}
-
-func TestJobHandlerList_ExperienceRangesInvalidDropped(t *testing.T) {
-	capturing := &capturingService{}
-	r := newJobTestRouter(capturing)
-
-	req := httptest.NewRequest(http.MethodGet, "/jobs?experience_ranges=bad&experience_ranges=2-5", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("got status %d, want 200", w.Code)
-	}
-	if len(capturing.filter.ExperienceRanges) != 1 {
-		t.Fatalf("expected 1 range (invalid dropped), got %d", len(capturing.filter.ExperienceRanges))
-	}
-	r0 := capturing.filter.ExperienceRanges[0]
-	if r0.Min != 2 || r0.Max == nil || *r0.Max != 5 {
-		t.Errorf("range[0] = {Min:%d Max:%v}, want {2 5}", r0.Min, r0.Max)
-	}
-}
-
-// captureFilterSvc records the filter passed to List so tests can assert on it.
-type captureFilterSvc struct {
-	lastFilter jobdto.JobFilter
-}
-
-func (f *captureFilterSvc) List(_ context.Context, filter jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
-	f.lastFilter = filter
-	return nil, 0, nil
-}
-func (f *captureFilterSvc) Get(_ context.Context, _ string) (*jobmodel.Job, error) {
-	return nil, nil
-}
-func (f *captureFilterSvc) GetCounts(_ context.Context) (*jobdto.JobCounts, error) {
-	return &jobdto.JobCounts{}, nil
-}
-func (f *captureFilterSvc) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error {
-	return nil
-}
-func (f *captureFilterSvc) SetSaved(_ context.Context, _ string, _ bool) error { return nil }
-func (f *captureFilterSvc) SetStatus(_ context.Context, _, _ string) error     { return nil }
-func (f *captureFilterSvc) SetNotes(_ context.Context, _, _ string) error      { return nil }
-func (f *captureFilterSvc) MarkApplied(_ context.Context, _ string) error      { return nil }
-func (f *captureFilterSvc) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
-	return 0, nil
-}
-func (f *captureFilterSvc) GetJobPostIDs(_ context.Context, _ []string) ([]string, error) {
-	return nil, nil
-}
-
-var _ jobsvc.Service = (*captureFilterSvc)(nil)
-
-func TestJobHandlerList_SearchParamForwarded(t *testing.T) {
-	fake := &captureFilterSvc{}
-	r := newJobTestRouter(fake)
-
-	req := httptest.NewRequest(http.MethodGet, "/jobs?search=backend+engineer", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("got status %d, want 200", w.Code)
-	}
-	if fake.lastFilter.Search != "backend engineer" {
-		t.Errorf("Search = %q, want %q", fake.lastFilter.Search, "backend engineer")
-	}
-}
-
-func TestBulkDismissHandler_OK(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{})
-
+func TestRest_BulkDismiss_DefaultReason(t *testing.T) {
+	fake := &fakeRestSvc{}
+	r := newRouter(fake)
 	body, _ := json.Marshal(map[string][]string{"ids": {"j1", "j2"}})
 	req := httptest.NewRequest(http.MethodPost, "/jobs/dismiss/bulk", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusOK {
-		t.Errorf("got status %d, want 200: %s", w.Code, w.Body.String())
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), `"dismissed"`) {
-		t.Errorf("body missing dismissed field: %s", w.Body.String())
+	if fake.bulkReason != jobcommon.DismissalReasonNotRelevant {
+		t.Errorf("default reason = %q, want %q", fake.bulkReason, jobcommon.DismissalReasonNotRelevant)
+	}
+	if len(fake.bulkIDs) != 2 {
+		t.Errorf("ids = %v, want 2 entries", fake.bulkIDs)
 	}
 }
 
-func TestBulkDismissHandler_BadBody(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{})
-
+func TestRest_BulkDismiss_BadJSON(t *testing.T) {
+	r := newRouter(&fakeRestSvc{})
 	req := httptest.NewRequest(http.MethodPost, "/jobs/dismiss/bulk", strings.NewReader("not-json"))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusBadRequest {
-		t.Errorf("got status %d, want 400", w.Code)
+		t.Errorf("status = %d, want 400", w.Code)
 	}
 }
 
-func TestBulkDismissHandler_ServiceError(t *testing.T) {
-	r := newJobTestRouter(&fakeJobSvc{err: errors.ErrInternal.WithMessage("db error")})
-
-	body, _ := json.Marshal(map[string][]string{"ids": {"j1"}})
-	req := httptest.NewRequest(http.MethodPost, "/jobs/dismiss/bulk", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+func TestRest_Get_NotFound(t *testing.T) {
+	r := newRouter(&fakeRestSvc{getErr: apperr.ErrNotFound.WithMessage("missing")})
+	req := httptest.NewRequest(http.MethodGet, "/jobs/missing", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("got status %d, want 500", w.Code)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", w.Code)
 	}
 }

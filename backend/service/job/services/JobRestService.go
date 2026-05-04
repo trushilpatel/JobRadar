@@ -8,56 +8,57 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/apps/api/handler"
-	"github.com/trushilpatel/jobradar/apps/api/request"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 )
 
-// RestService handles HTTP requests for the job domain.
-// It parses requests, calls the service chain, and writes responses.
-// Routing belongs in RestRouter.
+// RestService is the HTTP adapter for the JobService chain. It parses
+// requests, calls the service chain (which pulls userID from ctx via
+// middleware), and writes JSON responses via the shared handler helpers.
 type RestService struct {
-	next Service
+	next JobService
 }
 
 // NewRestService constructs a RestService.
-func NewRestService(next Service) *RestService {
+func NewRestService(next JobService) *RestService {
 	return &RestService{next: next}
 }
 
-// GET /jobs?status=new&page=1&limit=20&remote=true&sponsorship=true&...
-func (h *RestService) List(w http.ResponseWriter, r *http.Request) {
-	p := request.ParsePagination(r)
+// list serves GET /api/jobs with keyset pagination via ?cursor=... .
+// Limit is clamped to [1,100]; defaults to 20. Filter parsing mirrors the
+// previous offset-paginated handler so existing query strings remain
+// compatible (except `page=` is now ignored).
+func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+
+	limit := 20
+	if v := q.Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
 
 	var expRanges []dto.ExperienceRange
 	for _, raw := range q["experience_ranges"] {
-		if r, ok := parseExperienceRange(raw); ok {
-			expRanges = append(expRanges, r)
+		if rng, ok := parseExperienceRange(raw); ok {
+			expRanges = append(expRanges, rng)
 		}
 	}
 
 	filter := dto.JobFilter{
 		Status:           q.Get("status"),
-		Companies:        q["companies"],    // ?companies=stripe&companies=google
-		EmployTypes:      q["employ_types"], // ?employ_types=full_time
+		Companies:        q["companies"],
+		EmployTypes:      q["employ_types"],
 		ExperienceRanges: expRanges,
+		Search:           q.Get("search"),
 	}
-
-	if filter.Status == "" {
-		filter.Status = jobcommon.JobStatusNew
-	}
-
-	if v := q.Get("remote"); v == "true" {
-		t := true
-		filter.Remote = &t
+	if v := q.Get("remote"); v != "" {
+		b := v == "true"
+		filter.Remote = &b
 	}
 	if v := q.Get("sponsorship"); v != "" {
 		b := v == "true"
 		filter.Sponsorship = &b
-	}
-	if q.Get("no_requirements") == "true" {
-		filter.NoRequirements = true
 	}
 	if v := q.Get("requires_citizen"); v != "" {
 		b := v == "true"
@@ -66,99 +67,47 @@ func (h *RestService) List(w http.ResponseWriter, r *http.Request) {
 	if q.Get("on_site") == "true" {
 		filter.OnSite = true
 	}
+	if q.Get("no_requirements") == "true" {
+		filter.NoRequirements = true
+	}
 	if v := q.Get("days_added"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			filter.DaysAdded = &n
 		}
 	}
-	if v := q.Get("sort_by"); v != "" {
-		filter.SortBy = v
-	}
-	if v := q.Get("sort_dir"); v != "" {
-		filter.SortDir = v
-	}
-	if v := q.Get("search"); v != "" {
-		filter.Search = v
-	}
 
-	jobs, total, err := h.next.List(r.Context(), filter, p.Page, p.Limit)
+	page, err := h.next.List(r.Context(), filter, q.Get("cursor"), limit)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
 	}
-
-	handler.RespondPaged(w, http.StatusOK, jobs, total, p.Page, p.Limit)
+	handler.Respond(w, http.StatusOK, page)
 }
 
-// GET /jobs/counts
-func (h *RestService) GetCounts(w http.ResponseWriter, r *http.Request) {
-	counts, err := h.next.GetCounts(r.Context())
+// counts serves GET /api/jobs/counts.
+func (h *RestService) counts(w http.ResponseWriter, r *http.Request) {
+	c, err := h.next.GetCounts(r.Context())
 	if err != nil {
 		handler.HandleError(w, err)
 		return
 	}
-	handler.Respond(w, http.StatusOK, counts)
+	handler.Respond(w, http.StatusOK, c)
 }
 
-// GET /jobs/:id
-func (h *RestService) Get(w http.ResponseWriter, r *http.Request) {
+// get serves GET /api/jobs/{id}.
+func (h *RestService) get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-
 	job, err := h.next.Get(r.Context(), id)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
 	}
-
 	handler.Respond(w, http.StatusOK, job)
 }
 
-// DELETE /jobs/:id
-func (h *RestService) Dismiss(w http.ResponseWriter, r *http.Request) {
+// setSaved serves PATCH /api/jobs/{id}/save.
+func (h *RestService) setSaved(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-
-	var input dto.DismissInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
-		return
-	}
-
-	if err := h.next.Dismiss(r.Context(), id, input); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	handler.Respond(w, http.StatusOK, map[string]string{"id": id, "reason": input.Reason})
-}
-
-// POST /jobs/dismiss/bulk
-func (h *RestService) BulkDismiss(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		IDs []string `json:"ids"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
-		return
-	}
-
-	input := dto.BulkDismissInput{
-		IDs:    body.IDs,
-		Reason: jobcommon.DiscardReasonNotRelevant,
-	}
-
-	n, err := h.next.BulkDismiss(r.Context(), input)
-	if err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	handler.Respond(w, http.StatusOK, map[string]int{"dismissed": n})
-}
-
-// PATCH /jobs/:id/save
-func (h *RestService) SetSaved(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-
 	var body struct {
 		Saved bool `json:"saved"`
 	}
@@ -166,51 +115,80 @@ func (h *RestService) SetSaved(w http.ResponseWriter, r *http.Request) {
 		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
 		return
 	}
-
 	if err := h.next.SetSaved(r.Context(), id, body.Saved); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
-
 	handler.Respond(w, http.StatusOK, map[string]bool{"saved": body.Saved})
 }
 
-// PATCH /jobs/:id/status
-func (h *RestService) SetStatus(w http.ResponseWriter, r *http.Request) {
+// setStatus serves PATCH /api/jobs/{id}/status.
+func (h *RestService) setStatus(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-
 	var input dto.SetStatusInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
 		return
 	}
-
 	if err := h.next.SetStatus(r.Context(), id, input.Status); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
-
 	handler.Respond(w, http.StatusOK, map[string]string{"status": input.Status})
 }
 
-// PATCH /jobs/:id/notes
-func (h *RestService) SetNotes(w http.ResponseWriter, r *http.Request) {
+// setNotes serves PATCH /api/jobs/{id}/notes.
+func (h *RestService) setNotes(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-
 	var input dto.SetNotesInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
 		return
 	}
-
 	if err := h.next.SetNotes(r.Context(), id, input.Notes); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
-
 	handler.Respond(w, http.StatusOK, map[string]string{"notes": input.Notes})
 }
 
+// dismiss serves DELETE /api/jobs/{id}.
+func (h *RestService) dismiss(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var input dto.DismissInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		// DELETE may have empty body — default reason kicks in.
+		input.Reason = jobcommon.DismissalReasonUserDismissed
+	}
+	if input.Reason == "" {
+		input.Reason = jobcommon.DismissalReasonUserDismissed
+	}
+	if err := h.next.Dismiss(r.Context(), id, input.Reason, input.Note); err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, map[string]string{"id": id, "reason": input.Reason})
+}
+
+// bulkDismiss serves POST /api/jobs/dismiss/bulk.
+func (h *RestService) bulkDismiss(w http.ResponseWriter, r *http.Request) {
+	var input dto.BulkDismissInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+	if input.Reason == "" {
+		input.Reason = jobcommon.DismissalReasonNotRelevant
+	}
+	if err := h.next.BulkDismiss(r.Context(), input.IDs, input.Reason, input.Note); err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, map[string]int{"dismissed": len(input.IDs)})
+}
+
+// parseExperienceRange parses "0-2" or "5+" into an ExperienceRange.
+// Invalid strings return ok=false so callers can drop them silently.
 func parseExperienceRange(s string) (dto.ExperienceRange, bool) {
 	if rest, ok := strings.CutSuffix(s, "+"); ok {
 		min, err := strconv.Atoi(rest)

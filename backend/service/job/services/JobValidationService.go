@@ -6,40 +6,44 @@ import (
 	"github.com/trushilpatel/jobradar/common/errors"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 )
 
+// validationService validates inputs before delegating to next. All other
+// methods auto-delegate via BaseService.
 type validationService struct {
 	BaseService
 }
 
-// NewValidator constructs a validation Service that validates inputs before
-// delegating to next.
-func NewValidator(next Service) Service {
+// NewValidationService wraps next with input validation. Returns
+// JobService so the chain composes uniformly.
+func NewValidationService(next JobService) JobService {
 	return &validationService{BaseService: NewBaseService(next)}
 }
 
+// validJobStatuses are the per-user status values clients may pass through
+// SetStatus or as a List filter. "new" is allowed as a filter value (it
+// means "no row"); SetStatus rejects "new" because it isn't a writable
+// state.
 var validJobStatuses = map[string]bool{
-	jobcommon.JobStatusNew:          true,
-	jobcommon.JobStatusSaved:        true,
-	jobcommon.JobStatusApplied:      true,
-	jobcommon.JobStatusInterviewing: true,
-	jobcommon.JobStatusOffer:        true,
+	jobcommon.JobStatusNew:       true,
+	jobcommon.JobStatusSaved:     true,
+	jobcommon.JobStatusApplied:   true,
+	jobcommon.JobStatusDismissed: true,
 }
 
-var validDiscardReasons = map[string]bool{
-	jobcommon.DiscardReasonDismissed:   true,
-	jobcommon.DiscardReasonNotRelevant: true,
+var validDismissalReasons = map[string]bool{
+	jobcommon.DismissalReasonUserDismissed: true,
+	jobcommon.DismissalReasonNotRelevant:   true,
 }
 
 // List validates filter and pagination before delegating.
-func (v *validationService) List(ctx context.Context, filter dto.JobFilter, page, limit int) ([]jobmodel.Job, int, error) {
+func (v *validationService) List(ctx context.Context, filter dto.JobFilter, cursor string, limit int) (dto.PageResult, error) {
 	var errs errors.ValidationErrors
 	if filter.Status != "" && !validJobStatuses[filter.Status] {
 		errs = append(errs, errors.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
-			Message: "status must be 'new', 'saved', 'applied', 'interviewing', or 'offer'",
+			Message: "status must be 'new', 'saved', 'applied', or 'dismissed'",
 		})
 	}
 	for _, r := range filter.ExperienceRanges {
@@ -65,30 +69,62 @@ func (v *validationService) List(ctx context.Context, filter dto.JobFilter, page
 			Message: "search must be 200 characters or fewer",
 		})
 	}
-	if page < 1 {
-		errs = append(errs, errors.ValidationError{
-			Field:   "page",
-			Code:    "INVALID_VALUE",
-			Message: "page must be >= 1",
-		})
-	}
-	if limit < 1 || limit > 100 {
+	if limit < 0 || limit > 100 {
 		errs = append(errs, errors.ValidationError{
 			Field:   "limit",
 			Code:    "INVALID_VALUE",
-			Message: "limit must be between 1 and 100",
+			Message: "limit must be between 0 and 100",
 		})
 	}
 	if len(errs) > 0 {
-		return nil, 0, errs
+		return dto.PageResult{}, errs
 	}
-	return v.next.List(ctx, filter, page, limit)
+	return v.next.List(ctx, filter, cursor, limit)
 }
 
-// Dismiss validates the dismiss input before delegating.
-func (v *validationService) Dismiss(ctx context.Context, id string, input dto.DismissInput) error {
+// Dismiss validates the reason before delegating.
+func (v *validationService) Dismiss(ctx context.Context, id string, reason, note string) error {
+	if !validDismissalReasons[reason] {
+		return errors.ValidationErrors{{
+			Field:   "reason",
+			Code:    "INVALID_VALUE",
+			Message: "reason must be 'user_dismissed' or 'user_not_relevant'",
+		}}
+	}
+	return v.next.Dismiss(ctx, id, reason, note)
+}
+
+// SetStatus validates the status value before delegating. "new" is
+// rejected because it is not a writable status (delete the row instead).
+func (v *validationService) SetStatus(ctx context.Context, id, status string) error {
+	if status == jobcommon.JobStatusNew || !validJobStatuses[status] {
+		return errors.ValidationErrors{{
+			Field:   "status",
+			Code:    "INVALID_VALUE",
+			Message: "status must be 'saved', 'applied', or 'dismissed'",
+		}}
+	}
+	return v.next.SetStatus(ctx, id, status)
+}
+
+// BulkDismiss validates the IDs slice and reason before delegating.
+func (v *validationService) BulkDismiss(ctx context.Context, ids []string, reason, note string) error {
 	var errs errors.ValidationErrors
-	if !validDiscardReasons[input.Reason] {
+	if len(ids) == 0 {
+		errs = append(errs, errors.ValidationError{
+			Field:   "ids",
+			Code:    "REQUIRED",
+			Message: "ids must not be empty",
+		})
+	}
+	if len(ids) > 100 {
+		errs = append(errs, errors.ValidationError{
+			Field:   "ids",
+			Code:    "INVALID_VALUE",
+			Message: "ids must contain 100 or fewer entries",
+		})
+	}
+	if reason != "" && !validDismissalReasons[reason] {
 		errs = append(errs, errors.ValidationError{
 			Field:   "reason",
 			Code:    "INVALID_VALUE",
@@ -98,50 +134,5 @@ func (v *validationService) Dismiss(ctx context.Context, id string, input dto.Di
 	if len(errs) > 0 {
 		return errs
 	}
-	return v.next.Dismiss(ctx, id, input)
-}
-
-// SetStatus validates the status value before delegating.
-func (v *validationService) SetStatus(ctx context.Context, id, status string) error {
-	var errs errors.ValidationErrors
-	if !validJobStatuses[status] {
-		errs = append(errs, errors.ValidationError{
-			Field:   "status",
-			Code:    "INVALID_VALUE",
-			Message: "status must be 'new', 'saved', 'applied', 'interviewing', or 'offer'",
-		})
-	}
-	if len(errs) > 0 {
-		return errs
-	}
-	return v.next.SetStatus(ctx, id, status)
-}
-
-// SetNotes delegates directly — notes have no constraints.
-// (BaseService delegation would also work, but being explicit avoids confusion.)
-func (v *validationService) SetNotes(ctx context.Context, id, notes string) error {
-	return v.next.SetNotes(ctx, id, notes)
-}
-
-// BulkDismiss validates the bulk dismiss input before delegating.
-func (v *validationService) BulkDismiss(ctx context.Context, input dto.BulkDismissInput) (int, error) {
-	var errs errors.ValidationErrors
-	if len(input.IDs) == 0 {
-		errs = append(errs, errors.ValidationError{
-			Field:   "ids",
-			Code:    "REQUIRED",
-			Message: "ids must not be empty",
-		})
-	}
-	if len(input.IDs) > 100 {
-		errs = append(errs, errors.ValidationError{
-			Field:   "ids",
-			Code:    "INVALID_VALUE",
-			Message: "ids must contain 100 or fewer entries",
-		})
-	}
-	if len(errs) > 0 {
-		return 0, errs
-	}
-	return v.next.BulkDismiss(ctx, input)
+	return v.next.BulkDismiss(ctx, ids, reason, note)
 }
