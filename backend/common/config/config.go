@@ -38,6 +38,7 @@ type MultiUserConfig struct {
 	RateLimitWriteRPM      int
 	RateLimitAdminRPM      int
 	CacheTTLUserSeconds    int
+	CacheTTLCompanySeconds int
 }
 
 // AuthConfig holds Supabase auth verification settings. Exactly one of
@@ -319,6 +320,7 @@ func Load() *Config {
 			RateLimitWriteRPM:      getEnvInt("RATE_LIMIT_WRITE_RPM", 20),
 			RateLimitAdminRPM:      getEnvInt("RATE_LIMIT_ADMIN_RPM", 120),
 			CacheTTLUserSeconds:    getEnvInt("CACHE_TTL_USER_SECONDS", 60),
+			CacheTTLCompanySeconds: getEnvInt("CACHE_TTL_COMPANY_SECONDS", 60),
 		},
 	}
 }

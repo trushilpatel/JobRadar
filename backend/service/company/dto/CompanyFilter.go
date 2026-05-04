@@ -1,11 +1,13 @@
 package dto
 
-// CompanyFilter holds optional filter criteria for listing companies.
+// CompanyFilter holds optional filter criteria for listing companies. Used
+// for both the public list endpoint (operational fields ignored) and the
+// admin list endpoint (operational fields honoured against scan_settings).
 type CompanyFilter struct {
-	Active         *bool
-	AdapterTypes   []string // filter by adapter_type IN (...) — OR across values
-	Search         string   // ILIKE match on name
-	LastScanStatus string   // filter by last_scan_status (e.g. "error")
-	SortBy         string   // "name" | "adapter_type" | "last_scan_at" — defaults to "name"
-	SortDir        string   // "asc" | "desc" — defaults to "asc"
+	Search       string   // ILIKE match on name (public + admin)
+	AdapterTypes []string // admin-only: scan_settings.adapter_type IN (...)
+	Active       *bool    // admin-only: scan_settings.active = ?
+	HasSettings  *bool    // admin-only: filter by presence/absence of scan_settings row
+	SortBy       string   // "name" — defaults to "name"
+	SortDir      string   // "asc" | "desc" — defaults to "asc"
 }

@@ -2,24 +2,21 @@ package services
 
 import "github.com/go-chi/chi/v5"
 
-// RestRouter registers company routes onto a chi.Router.
-// It owns all routing logic; RestService owns only HTTP handler methods.
+// RestRouter mounts the public company routes onto a chi.Router. Routes are
+// relative; the parent router decides where to mount them (Phase 2 mounts
+// under /api per phase2-contracts.md).
 type RestRouter struct {
 	handler *RestService
 }
 
-// NewRestRouter constructs a RestRouter.
+// NewRestRouter constructs the public RestRouter.
 func NewRestRouter(h *RestService) *RestRouter {
 	return &RestRouter{handler: h}
 }
 
-// Register mounts all company routes onto router.
+// Register mounts the public read routes. Mutations live on the admin
+// chain (CompanyAdminRestRouter).
 func (rr *RestRouter) Register(router chi.Router) {
-	router.Route("/companies", func(r chi.Router) {
-		r.Get("/", rr.handler.List)
-		r.Post("/", rr.handler.Create)
-		r.Patch("/active", rr.handler.SetAllActive)
-		r.Patch("/{id}", rr.handler.Update)
-		r.Delete("/{id}", rr.handler.Delete)
-	})
+	router.Get("/companies", rr.handler.list)
+	router.Get("/companies/{id}", rr.handler.get)
 }
