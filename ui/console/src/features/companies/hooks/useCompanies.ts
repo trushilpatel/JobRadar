@@ -119,7 +119,10 @@ export function useCompanies() {
     totalActive,
     counts,
     queueMap,
-    loading: companiesQuery.isLoading,
+    loading:
+      companiesQuery.isLoading ||
+      ((statusFilter === STATUS_FILTER.RUNNING || statusFilter === STATUS_FILTER.QUEUED) &&
+        queueQuery.isLoading),
     refetch: async () => {
       await Promise.all([companiesQuery.refetch(), queueQuery.refetch()])
     },

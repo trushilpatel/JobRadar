@@ -150,7 +150,7 @@ func (s *companyStore) GetCompanies(ctx context.Context, filter companydto.Compa
 
 	var companies []companymodel.Company
 	offset := (page - 1) * limit
-	err = q.Order(col + " " + dir).Offset(offset).Limit(limit).Find(&companies).Error
+	err = q.Order(col + " " + dir + " NULLS LAST").Offset(offset).Limit(limit).Find(&companies).Error
 	return companies, total, err
 }
 
