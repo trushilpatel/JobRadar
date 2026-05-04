@@ -36,8 +36,8 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `backend/service/role/`           | Role domain (Phase 1) — RBAC0: Grant/Revoke/ListForUser/ListAll                  |
 | `backend/service/audit/`          | Admin audit log domain (Phase 1) — Append/List for `admin_audit_log`             |
 | `backend/common/identity/`        | Identity struct + `context.Context` helpers (Phase 1)                            |
-| `backend/platform/`                  | Infrastructure plumbing (db, kafka, logger, metrics, tracing)                     |
-| `backend/platform/tracing/`          | OTel tracing init, Start/End span helpers, Kafka propagation                      |
+| `backend/common/`                    | Pre-Phase-1 infrastructure plumbing (config, db, errors, kafka, logger, metrics, redis, tracing) |
+| `backend/common/tracing/`            | OTel tracing init, Start/End span helpers, Kafka propagation                      |
 | `backend/platform/cache/`            | Cache interface + Redis/Memory/Noop impls + `GetOrLoad[T]` single-flight (Phase 1) |
 | `backend/platform/ratelimit/`        | Token-bucket Limiter + Redis/Memory impls + `ScopeFromMethod` helper (Phase 1)   |
 | `backend/platform/supabaseadmin/`    | Supabase admin REST client — `DeleteUser` for hard account deletion (Phase 1)    |
@@ -96,8 +96,9 @@ What shipped in Phase 1:
 - Platform packages: `backend/common/identity/`, `backend/platform/cache/`, `backend/platform/ratelimit/`, `backend/platform/supabaseadmin/`
 - Service slices: `backend/service/user/` (with cache decorator), `backend/service/role/`, `backend/service/audit/`
 - Test helper: `backend/service/testutil/` — `AssertUserScoped` for repo guard tests (consumed in Phase 2 when user-scoped repos land)
-- Middleware in `backend/apps/api/middleware/`: `RequireIdentity` (DB-backed enrichment + caching + lazy provisioning + status check), `RequireRole(role)`, `RateLimit(limiter)` (per-user, method-derived scope, fail-open on Redis outage, returns 429 + `Retry-After`), `AuditAdminMutation(svc)` (appends to `admin_audit_log` on 2xx mutating responses)
-- Endpoints: `GET /api/me`, `PATCH /api/me`, `DELETE /api/me` (Supabase admin delete → DB cascade)
+- Middleware in `backend/apps/api/middleware/`: `RequireIdentity` (DB-backed enrichment + caching + lazy provisioning + status check + `ADMIN_EMAILS` auto-grant), `RequireRole(role)`, `RateLimit(limiter)` (per-user, method-derived scope, fail-open on Redis outage, returns 429 + `Retry-After`), `AuditAdminMutation(svc)` (appends to `admin_audit_log` on 2xx mutating responses)
+- `auth.go` extended with exported `VerifyJWT(r) (sub, email, error)` consumed by `RequireIdentity`. Legacy `Auth` / `RequireAuth` (and the `ALLOWED_EMAIL` single-email allowlist they enforce) is unchanged for routes not yet migrated to `RequireIdentity`.
+- Endpoints (only): `GET /api/me`, `PATCH /api/me` (display_name only), `DELETE /api/me` (Supabase admin delete → DB cascade)
 
 Concepts established in Phase 1:
 

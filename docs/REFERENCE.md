@@ -3,7 +3,11 @@
 All API routes require auth (`Authorization: Bearer <jwt>` or `X-Dev-Token` locally).
 Base URL: `http://localhost:8080`
 
-> **Phase 1 (multi-user)** is shipped — identity flows via context, RBAC0 tables exist, `/api/me` works. Phase 2 (per-user data model, `/api` vs `/admin` split, companies public/operational split, `job_feed`→`jobs` rename) and Phase 3 (frontend admin UI) are **planned**. See [`Designs/multi-user-rollout-plan.md`](../Designs/multi-user-rollout-plan.md).
+Two auth gates coexist after Phase 1:
+- **Legacy `RequireAuth` (`Auth` middleware)** — JWT verify + `ALLOWED_EMAIL` single-email allowlist. Still gates every route below except the `/api/me` endpoints.
+- **Phase 1 `RequireIdentity`** — JWT verify (via the exported `VerifyJWT` helper) + DB-backed identity enrichment, cache-aside lookup, lazy provisioning into `users`/`user_roles`, `ADMIN_EMAILS` auto-grant, and suspended-user 403. Currently mounted only on `/api/me`. Decorator pairs `RateLimit(limiter)` (per-user token bucket, fail-open) and `AuditAdminMutation(svc)` (admin mutation audit log) live in the same middleware package.
+
+> **Phase 1 (multi-user)** is shipped — identity flows via context, RBAC0 tables exist, `/api/me` works. Phase 2 (per-user data model, `/api` vs `/admin` split, companies public/operational split, `job_feed`→`jobs` rename) and Phase 3 (frontend admin UI) are **planned and not yet shipped**. See [`Designs/multi-user-rollout-plan.md`](../Designs/multi-user-rollout-plan.md) and locked Phase 1 contracts in [`Designs/phase1-contracts.md`](../Designs/phase1-contracts.md).
 
 ---
 
@@ -98,7 +102,7 @@ Base URL: `http://localhost:8080`
 | Table | Role | Migration |
 |---|---|---|
 | `users` | Registered users — id (UUID), email (citext, unique), display_name, status (`active`\|`suspended`), timestamps | [043](../backend/migrations/043_phase1_users_roles_audit.sql) |
-| `roles` | RBAC0 role catalog — seeded with `user`, `admin` | [043](../backend/migrations/043_phase1_users_roles_audit.sql) |
+| `roles` | RBAC0 role catalog — TEXT PK, seeded with `user`, `admin` (no `permissions` table yet — deferred to RBAC1) | [043](../backend/migrations/043_phase1_users_roles_audit.sql) |
 | `user_roles` | User↔role join (composite PK); cascades: user_id CASCADE, role_id RESTRICT, granted_by SET NULL | [043](../backend/migrations/043_phase1_users_roles_audit.sql) |
 | `admin_audit_log` | Append-only admin audit trail (actor, action, target_type, target_id, payload JSONB) | [043](../backend/migrations/043_phase1_users_roles_audit.sql) |
 

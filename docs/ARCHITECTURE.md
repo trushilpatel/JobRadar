@@ -128,6 +128,10 @@ flowchart LR
 | `job_analytics` | Analyzer | Insights | Append-only enriched snapshot; never deleted |
 | `job_application_tracker` | API | API | Application stage history per job |
 | `job_dismissal_log` | API | API | Dismiss log with reason and note |
+| `users` (Phase 1) | API (`RequireIdentity` / `service/user`) | API | Registered users — id, email (citext), display_name, status |
+| `roles` (Phase 1) | Migration `043` (seeded) | API | RBAC0 role catalog — `user`, `admin` |
+| `user_roles` (Phase 1) | API (`service/role`, `RequireIdentity` lazy provisioning) | API | User↔role join (composite PK) |
+| `admin_audit_log` (Phase 1) | `AuditAdminMutation` middleware (`service/audit`) | API | Append-only admin audit trail |
 
 ---
 

@@ -17,7 +17,7 @@ HTTP server on `:8080`. Mounts all service routers, handles graceful shutdown.
 | Package      | Role                                                                        |
 | ------------ | --------------------------------------------------------------------------- |
 | `handler/`   | `Respond[T]`, `RespondPaged[T]`, `RespondError`, `HandleError` helpers      |
-| `middleware/`| Request logger, metrics middleware                                          |
+| `middleware/`| Request logger, metrics, body limit, security headers, `Auth` / `RequireAuth` (legacy email allowlist via `ALLOWED_EMAIL`), exported `VerifyJWT(r)` helper, plus Phase 1: `RequireIdentity` (DB-backed enrichment + cache-aside + lazy provisioning + status check + `ADMIN_EMAILS` auto-grant), `RequireRole(role)`, `RateLimit(limiter)` (per-user, method-derived scope, fail-open on Redis outage, 429 + `Retry-After`), `AuditAdminMutation(svc)` (appends `admin_audit_log` on 2xx mutating responses) |
 | `request/`   | Pagination parsing, query param helpers                                     |
 | `response/`  | Shared response envelope types                                              |
 

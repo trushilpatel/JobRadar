@@ -1,7 +1,7 @@
 # migrations/ — Database migrations
 
 Uses goose. Every file needs `-- +goose Up` and `-- +goose Down` sections.
-Run: `go run ./apps/migrate` or `make migrate`. Currently at migration **042**.
+Run: `go run ./apps/migrate` or `make migrate`. Currently at migration **043** (`043_phase1_users_roles_audit.sql` — adds `users`, `roles`, `user_roles`, `admin_audit_log`).
 
 ## Rules
 
