@@ -67,7 +67,7 @@ new → saved → applied    (user advances)
 new → dismissed          (user dismisses — job row kept for FK integrity, hidden from feed)
 ```
 
-`dismissed` jobs still exist in `job_feed` but are excluded from feed queries (`WHERE status = 'new'`). Analytics come from `job_analytics`, not `job_feed`.
+`dismissed` jobs still exist in `job_feed` but are excluded from feed queries (`WHERE status = 'new'`). Historical analytics come from `job_analytics`; current-state aggregations (e.g. funnel stage counts) read `job_feed.status` directly.
 
 ## Scan scheduling
 
@@ -100,7 +100,7 @@ Full reference: [`docs/QUALITY.md`](docs/QUALITY.md). Detailed rules auto-load v
 - All DB access goes through `{Domain}RepositoryService.go` — no raw GORM outside those files
 - Domain errors come from `common/domain/` (`domain.ErrNotFound`, `domain.ErrInternal`, etc.) — never use `fmt.Errorf` for sentinel errors that handlers inspect
 - All typed values (status, stage, reason) use constants from the owning service's `common/` package — never raw strings
-- Insights query `job_analytics`, not `job_feed` — snapshot rows are never deleted
+- Insights query `job_analytics` for historical/time-series data (snapshot rows are never deleted); `job_feed` is acceptable for current-state aggregations where `job_analytics.user_action` would give stale counts due to its overwrite semantics (e.g. the pipeline funnel reads `job_feed.status` for saved/applied/dismissed counts)
 - job_listing_relevance_filter batch failures mark jobs as `error` in `job_pipeline_ledger` — never re-queue to Kafka
 - All logging goes through `platform/logger.Logger` — never use stdlib `log` package directly
 - Field keys must use constants from `platform/logger/fields.go` — never raw strings

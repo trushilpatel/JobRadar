@@ -24,6 +24,7 @@ Base URL: `http://localhost:8080`
 | POST | `/companies/scan-all` | [ScanRestRouter.go](../backend/service/scan/services/ScanRestRouter.go) |
 | POST | `/companies/{id}/scan` | [ScanRestRouter.go](../backend/service/scan/services/ScanRestRouter.go) |
 | GET | `/companies/{id}/scan-stats` | [ScanRestRouter.go](../backend/service/scan/services/ScanRestRouter.go) |
+| GET | `/companies/{id}/analytics` | [ScanRestRouter.go](../backend/service/scan/services/ScanRestRouter.go) |
 
 ### Adapter Config
 | Method | Path | Source |
@@ -40,6 +41,7 @@ Base URL: `http://localhost:8080`
 | GET | `/jobs/counts` | [JobRestRouter.go](../backend/service/job/services/JobRestRouter.go) |
 | GET | `/jobs/{id}` | [JobRestRouter.go](../backend/service/job/services/JobRestRouter.go) |
 | DELETE | `/jobs/{id}` | [JobRestRouter.go](../backend/service/job/services/JobRestRouter.go) |
+| POST | `/jobs/dismiss/bulk` | [JobRestRouter.go](../backend/service/job/services/JobRestRouter.go) |
 | PATCH | `/jobs/{id}/save` | [JobRestRouter.go](../backend/service/job/services/JobRestRouter.go) |
 | PATCH | `/jobs/{id}/status` | [JobRestRouter.go](../backend/service/job/services/JobRestRouter.go) |
 | PATCH | `/jobs/{id}/notes` | [JobRestRouter.go](../backend/service/job/services/JobRestRouter.go) |
