@@ -15,13 +15,15 @@ import (
 
 // fakeQueueStore is a test double for ScanQueueStore.
 type fakeQueueStore struct {
-	items            []dto.ScanQueueItem
-	err              error
-	enqueueCalled    bool
-	removeCalled     bool
-	enqueueDueResult int
-	enqueueDueCalled bool
-	resetStuckCalled bool
+	items              []dto.ScanQueueItem
+	err                error
+	enqueueCalled      bool
+	removeCalled       bool
+	enqueueDueResult   int
+	enqueueDueCalled   bool
+	enqueueAllResult   int
+	enqueueAllCalled   bool
+	resetStuckCalled   bool
 }
 
 func (f *fakeQueueStore) Enqueue(_ context.Context, _, _ string) error {
@@ -31,6 +33,10 @@ func (f *fakeQueueStore) Enqueue(_ context.Context, _, _ string) error {
 func (f *fakeQueueStore) EnqueueDue(_ context.Context, _ int, _ string) (int, error) {
 	f.enqueueDueCalled = true
 	return f.enqueueDueResult, f.err
+}
+func (f *fakeQueueStore) EnqueueAll(_ context.Context, _ string) (int, error) {
+	f.enqueueAllCalled = true
+	return f.enqueueAllResult, f.err
 }
 func (f *fakeQueueStore) ClaimNext(_ context.Context, _ string) (*dto.ScanQueueItem, error) {
 	return nil, f.err

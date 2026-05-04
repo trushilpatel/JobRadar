@@ -26,6 +26,11 @@ type ScanQueueStore interface {
 	// uses FOR UPDATE SKIP LOCKED so two instances never double-enqueue.
 	EnqueueDue(ctx context.Context, intervalMinutes int, source string) (int, error)
 
+	// EnqueueAll immediately enqueues every active company that is not already
+	// queued or running. Used by manual "scan all" — bypasses the scan-interval
+	// cooldown. Returns the number of rows inserted.
+	EnqueueAll(ctx context.Context, source string) (int, error)
+
 	// ClaimNext atomically claims the next queued item for the given adapterType,
 	// enforcing the inter-company delay from adapter_configs via a FOR UPDATE lock.
 	// Returns nil, nil if the queue is empty or the delay has not elapsed.
@@ -123,6 +128,25 @@ func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, so
 		ON CONFLICT DO NOTHING
 		RETURNING company_id
 	`, source, intervalMinutes).Scan(&ids).Error
+	return len(ids), err
+}
+
+func (s *scanQueueStore) EnqueueAll(ctx context.Context, source string) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.EnqueueAll")
+	defer tracing.End(span, &err)
+	var ids []string
+	err = s.db.WithContext(ctx).Raw(`
+		INSERT INTO company_scan_queue (company_id, source, adapter_type)
+		SELECT c.id, ?, c.adapter_type
+		FROM companies c
+		WHERE c.active = true
+		  AND NOT EXISTS (
+		    SELECT 1 FROM company_scan_queue q
+		    WHERE q.company_id = c.id AND q.status IN ('queued','running')
+		  )
+		ON CONFLICT DO NOTHING
+		RETURNING company_id
+	`, source).Scan(&ids).Error
 	return len(ids), err
 }
 
@@ -455,9 +479,14 @@ func (s *repositoryService) TriggerScan(ctx context.Context, companyID string) (
 	return nil
 }
 
-// TriggerScanAll is not implemented at the repository level — ImplService overrides this.
-func (s *repositoryService) TriggerScanAll(_ context.Context) (int, error) {
-	return 0, fmt.Errorf("scan.repositoryService: TriggerScanAll not implemented at repository level")
+func (s *repositoryService) TriggerScanAll(ctx context.Context) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.TriggerScanAll")
+	defer tracing.End(span, &err)
+	n, err := s.queue.EnqueueAll(ctx, scancommon.QueueSourceManual)
+	if err != nil {
+		return 0, errors.ErrInternal.WithMessage("failed to enqueue all active companies")
+	}
+	return n, nil
 }
 
 func (s *repositoryService) GetStats(ctx context.Context, companyID string) (_ *dto.ScanStatsView, err error) {

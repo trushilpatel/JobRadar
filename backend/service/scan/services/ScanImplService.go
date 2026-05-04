@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/errors"
@@ -83,31 +82,6 @@ func (s *implService) TriggerScan(ctx context.Context, companyID string) (err er
 		return err // already a ServiceError from company.Service
 	}
 	return s.next.TriggerScan(ctx, companyID)
-}
-
-// TriggerScanAll enqueues every active company for an immediate manual scan.
-func (s *implService) TriggerScanAll(ctx context.Context) (_ int, err error) {
-	ctx, span := tracing.Start(ctx, "scan.impl.TriggerScanAll")
-	defer tracing.End(span, &err)
-	companies, err := s.companySvc.GetAll(ctx)
-	if err != nil {
-		return 0, errors.ErrInternal.WithMessage("failed to fetch companies")
-	}
-	var count, failCount int
-	for _, c := range companies {
-		if !c.Active {
-			continue
-		}
-		if err := s.next.TriggerScan(ctx, c.ID); err != nil {
-			failCount++
-			continue
-		}
-		count++
-	}
-	if failCount > 0 {
-		return count, errors.ErrInternal.WithMessage(fmt.Sprintf("enqueued %d companies; %d failed to enqueue", count, failCount))
-	}
-	return count, nil
 }
 
 // ListQueue fetches raw entries from next, then enriches them with company metadata.
