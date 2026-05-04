@@ -23,6 +23,21 @@ type Config struct {
 	Observability ObservabilityConfig
 	Auth          AuthConfig
 	API           APIConfig
+	MultiUser     MultiUserConfig
+}
+
+// MultiUserConfig holds Phase 1 multi-user knobs: admin promotion list,
+// Supabase admin client credentials, per-scope rate limits, and identity
+// cache TTL. All values have sensible defaults so a stock dev environment
+// boots without needing to set them.
+type MultiUserConfig struct {
+	AdminEmails            []string
+	SupabaseURL            string
+	SupabaseServiceRoleKey string
+	RateLimitReadRPM       int
+	RateLimitWriteRPM      int
+	RateLimitAdminRPM      int
+	CacheTTLUserSeconds    int
 }
 
 // AuthConfig holds Supabase auth verification settings. Exactly one of
@@ -295,6 +310,15 @@ func Load() *Config {
 		API: APIConfig{
 			MaxBodyBytes: int64(getEnvInt("API_MAX_BODY_BYTES", 1048576)),
 			DevToken:     os.Getenv("DEV_TOKEN"),
+		},
+		MultiUser: MultiUserConfig{
+			AdminEmails:            splitCSV(getEnv("ADMIN_EMAILS", "")),
+			SupabaseURL:            getEnv("SUPABASE_URL", ""),
+			SupabaseServiceRoleKey: getEnv("SUPABASE_SERVICE_ROLE_KEY", ""),
+			RateLimitReadRPM:       getEnvInt("RATE_LIMIT_READ_RPM", 30),
+			RateLimitWriteRPM:      getEnvInt("RATE_LIMIT_WRITE_RPM", 20),
+			RateLimitAdminRPM:      getEnvInt("RATE_LIMIT_ADMIN_RPM", 120),
+			CacheTTLUserSeconds:    getEnvInt("CACHE_TTL_USER_SECONDS", 60),
 		},
 	}
 }

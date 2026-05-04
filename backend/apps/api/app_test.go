@@ -186,6 +186,9 @@ func (f *fakeCompanyService) List(_ context.Context, _ company.CompanyFilter, _,
 func (f *fakeCompanyService) GetAll(_ context.Context) ([]company.CompanyView, error) {
 	return nil, nil
 }
+func (f *fakeCompanyService) GetByIDs(_ context.Context, _ []string) ([]company.CompanyView, error) {
+	return nil, nil
+}
 func (f *fakeCompanyService) Get(_ context.Context, _ string) (*companymodel.Company, error) {
 	return nil, nil
 }

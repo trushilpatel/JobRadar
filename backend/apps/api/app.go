@@ -12,6 +12,12 @@ import (
 
 // App holds all domain handlers wired together.
 // Dependencies are injected by Wire (or manually in tests/main.go).
+//
+// Phase 1 multi-user services (user / role / audit) and the /api/me handler
+// are not wired through this struct — they are constructed in main.go via
+// buildMultiUser so the runtime-built middleware (RequireIdentity, RateLimit)
+// can be threaded into the user RestRouter without forcing those middleware
+// dependencies through the wire graph.
 type App struct {
 	companyHandler       *companysvc.RestRouter
 	scanHandler          *scansvc.RestRouter
