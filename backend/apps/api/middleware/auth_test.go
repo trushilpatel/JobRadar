@@ -589,6 +589,89 @@ func TestDevBypassDisabledWhenTokenEmpty(t *testing.T) {
 	}
 }
 
+// TestVerifyJWT_DirectCall covers the public extraction helper used by the
+// new RequireIdentity middleware. Asserts that VerifyJWT honours the same
+// signature/claims rules as the classic Auth middleware but does NOT enforce
+// the email allowlist — that's RequireIdentity's job (and it doesn't enforce
+// it either, by design — Phase 1 swaps the allowlist for role+status).
+func TestVerifyJWT_DirectCall(t *testing.T) {
+	cfg := baseHSConfig()
+	if _, err := Auth(cfg, "", logger.NewNoop()); err != nil {
+		t.Fatalf("Auth init: %v", err)
+	}
+
+	t.Run("valid token returns sub+email", func(t *testing.T) {
+		tok := signToken(t, tokenOptions{
+			alg: "HS256", hmacKey: []byte(testHMACSecret),
+			issuer: testIssuer, audience: testAudience, email: "foo@example.com",
+			expiresAt: time.Now().Add(5 * time.Minute), subject: "user-x",
+		})
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Authorization", "Bearer "+tok)
+		sub, email, err := VerifyJWT(r)
+		if err != nil {
+			t.Fatalf("VerifyJWT: %v", err)
+		}
+		if sub != "user-x" || email != "foo@example.com" {
+			t.Fatalf("sub=%q email=%q", sub, email)
+		}
+	})
+
+	t.Run("non-allowlisted email still verifies — VerifyJWT does not gate", func(t *testing.T) {
+		tok := signToken(t, tokenOptions{
+			alg: "HS256", hmacKey: []byte(testHMACSecret),
+			issuer: testIssuer, audience: testAudience, email: "intruder@example.com",
+			expiresAt: time.Now().Add(5 * time.Minute), subject: "user-y",
+		})
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Authorization", "Bearer "+tok)
+		_, _, err := VerifyJWT(r)
+		if err != nil {
+			t.Fatalf("VerifyJWT must not enforce allowlist, got err: %v", err)
+		}
+	})
+
+	t.Run("expired token rejected", func(t *testing.T) {
+		tok := signToken(t, tokenOptions{
+			alg: "HS256", hmacKey: []byte(testHMACSecret),
+			issuer: testIssuer, audience: testAudience, email: testAllowedEml,
+			expiresAt: time.Now().Add(-10 * time.Minute), subject: "user-z",
+		})
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Authorization", "Bearer "+tok)
+		_, _, err := VerifyJWT(r)
+		if err == nil {
+			t.Fatal("expected error for expired token")
+		}
+	})
+
+	t.Run("missing bearer rejected", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		_, _, err := VerifyJWT(r)
+		if err == nil {
+			t.Fatal("expected error for missing bearer")
+		}
+	})
+
+	t.Run("dev token bypass", func(t *testing.T) {
+		const devToken = "dev-test-token-verify"
+		cfg2 := baseHSConfig()
+		cfg2.AllowedEmail = "dev@example.com"
+		if _, err := Auth(cfg2, devToken, logger.NewNoop()); err != nil {
+			t.Fatalf("Auth init: %v", err)
+		}
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("X-Dev-Token", devToken)
+		sub, email, err := VerifyJWT(r)
+		if err != nil {
+			t.Fatalf("VerifyJWT: %v", err)
+		}
+		if sub != "dev-bypass" || email != "dev@example.com" {
+			t.Fatalf("sub=%q email=%q", sub, email)
+		}
+	})
+}
+
 // TestExtractBearer verifies the Authorization header parser accepts well-formed
 // bearers and rejects everything else, including case-insensitive prefix.
 func TestExtractBearer(t *testing.T) {

@@ -58,6 +58,45 @@ type tokenVerifier interface {
 // remote JWKS endpoint cannot be reached. Maps to HTTP 503 Retry-After.
 var errJWKSUnavailable = errors.New("auth: jwks unavailable")
 
+// ErrJWKSUnavailable is the exported alias of errJWKSUnavailable so callers of
+// the public VerifyJWT helper can `errors.Is` it without seeing the
+// internals of this package.
+var ErrJWKSUnavailable = errJWKSUnavailable
+
+// jwtPipeline holds the verifier + per-instance config used by both the
+// classic Auth middleware and the public VerifyJWT helper. It is built once
+// at boot via SetupJWT and read concurrently — never mutated after init.
+type jwtPipeline struct {
+	verifier         tokenVerifier
+	devToken         string
+	allowedDevEmail  string
+	expectedIssuer   string
+	expectedAudience string
+	skew             time.Duration
+}
+
+// jwtPipelineSlot stores the most recent pipeline initialised in this process.
+// The classic Auth middleware closes over its own copy via authHandler — this
+// slot is only used by VerifyJWT, which has no closure to capture config in.
+// Synchronised via mu because Auth() is normally called once at boot but tests
+// call it many times in the same process.
+var (
+	jwtPipelineMu   sync.RWMutex
+	jwtPipelineSlot *jwtPipeline
+)
+
+func storeJWTPipeline(p *jwtPipeline) {
+	jwtPipelineMu.Lock()
+	defer jwtPipelineMu.Unlock()
+	jwtPipelineSlot = p
+}
+
+func loadJWTPipeline() *jwtPipeline {
+	jwtPipelineMu.RLock()
+	defer jwtPipelineMu.RUnlock()
+	return jwtPipelineSlot
+}
+
 // Auth builds the authentication middleware. Selects a single verifier at
 // boot (ES256 via JWKS OR HS256 via shared secret — never both) and verifies
 // signature, iss, aud, exp (with skew), then enforces the email allowlist via
@@ -68,7 +107,61 @@ func Auth(cfg config.AuthConfig, devToken string, log logger.Logger) (func(http.
 	if err != nil {
 		return nil, fmt.Errorf("auth middleware: init verifier: %w", err)
 	}
+	pipeline := &jwtPipeline{
+		verifier:         verifier,
+		devToken:         devToken,
+		allowedDevEmail:  cfg.AllowedEmail,
+		expectedIssuer:   strings.TrimRight(cfg.SupabaseProjectURL, "/") + "/auth/v1",
+		expectedAudience: "authenticated",
+		skew:             skew,
+	}
+	storeJWTPipeline(pipeline)
 	return authHandler(cfg, devToken, verifier, log), nil
+}
+
+// errJWTPipelineNotInitialised is returned by VerifyJWT when no Auth
+// middleware has been built in this process — a programmer error in wiring.
+var errJWTPipelineNotInitialised = errors.New("auth: VerifyJWT called before Auth was initialised")
+
+// VerifyJWT runs the same JWT verification the Auth middleware does — bearer
+// extraction, signature, iss, aud, exp (with skew) — and returns the JWT
+// `sub` and `email` claims. It does NOT enforce the email allowlist; callers
+// that want allowlist semantics should use the Auth middleware directly.
+//
+// The dev-token bypass mirrors Auth: a request carrying a matching X-Dev-Token
+// header short-circuits to (subject="dev-bypass", email=AllowedEmail) without
+// touching the verifier. This keeps the new RequireIdentity middleware
+// usable in dev environments without a real Supabase session.
+//
+// Auth must have been called once before VerifyJWT — typically at process
+// boot. Calling VerifyJWT in a process that never built Auth returns
+// errJWTPipelineNotInitialised.
+func VerifyJWT(r *http.Request) (subject, email string, err error) {
+	p := loadJWTPipeline()
+	if p == nil {
+		return "", "", errJWTPipelineNotInitialised
+	}
+
+	// Dev bypass — only active when DEV_TOKEN is configured for this process.
+	if p.devToken != "" && r.Header.Get("X-Dev-Token") == p.devToken {
+		return "dev-bypass", p.allowedDevEmail, nil
+	}
+
+	raw, ok := extractBearer(r.Header.Get("Authorization"))
+	if !ok {
+		return "", "", errors.New("auth: missing or malformed bearer")
+	}
+	tok, claims, err := p.verifier.Verify(raw)
+	if err != nil {
+		return "", "", err
+	}
+	if !tok.Valid {
+		return "", "", errors.New("auth: token invalid after parse")
+	}
+	if err := validateStandardClaims(claims, p.expectedIssuer, p.expectedAudience, p.skew); err != nil {
+		return "", "", err
+	}
+	return claims.Subject, claims.Email, nil
 }
 
 func authHandler(cfg config.AuthConfig, devToken string, verifier tokenVerifier, log logger.Logger) func(http.Handler) http.Handler {
