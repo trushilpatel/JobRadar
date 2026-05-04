@@ -1,0 +1,64 @@
+import { useQuery } from '@tanstack/react-query'
+import { fetchLocation } from '@/api/insights'
+import type { LocationData } from '@/types'
+import { InsightCard, InsightEmpty, InsightSkeleton } from './InsightCard'
+
+function LocationContent({ data }: { data: LocationData }) {
+  const countries = data?.countries ?? []
+  const states = data?.states ?? []
+  if (countries.length === 0 && states.length === 0) return <InsightEmpty />
+  const maxC = countries[0]?.count ?? 1
+  const maxS = states[0]?.count ?? 1
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div>
+        <p className="text-xs text-slate-500 mb-3 uppercase tracking-wider">By Country</p>
+        <div className="space-y-2">
+          {countries.slice(0, 8).map(({ country, count }) => (
+            <div key={country} className="flex items-center gap-3">
+              <span className="w-20 shrink-0 text-xs text-slate-300 truncate">{country}</span>
+              <div className="flex-1 bg-white/[0.04] rounded-full h-1.5 overflow-hidden">
+                <div className="h-full bg-violet-500 rounded-full" style={{ width: `${(count / maxC) * 100}%` }} />
+              </div>
+              <span className="w-8 text-right text-xs text-slate-400 shrink-0">{count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <p className="text-xs text-slate-500 mb-3 uppercase tracking-wider">USA by State</p>
+        {states.length === 0 ? (
+          <p className="text-xs text-slate-600">No US state data yet</p>
+        ) : (
+          <div className="space-y-2">
+            {states.slice(0, 8).map(({ state, count }) => (
+              <div key={state} className="flex items-center gap-3">
+                <span className="w-12 shrink-0 text-xs text-slate-300">{state}</span>
+                <div className="flex-1 bg-white/[0.04] rounded-full h-1.5 overflow-hidden">
+                  <div className="h-full bg-sky-500 rounded-full" style={{ width: `${(count / maxS) * 100}%` }} />
+                </div>
+                <span className="w-8 text-right text-xs text-slate-400 shrink-0">{count}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function LocationPanel() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['insights-location'],
+    queryFn: fetchLocation,
+    staleTime: 30_000,
+  })
+  return (
+    <InsightCard
+      title="Location Breakdown"
+      subtitle="Where jobs are located (structured, extracted by LLM)"
+    >
+      {isLoading ? <InsightSkeleton /> : <LocationContent data={data ?? { countries: [], states: [] }} />}
+    </InsightCard>
+  )
+}

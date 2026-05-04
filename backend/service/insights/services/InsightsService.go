@@ -8,13 +8,13 @@ import (
 
 // InsightsService defines all analytics queries for the insights domain.
 type InsightsService interface {
-	TechStack(ctx context.Context) (interface{}, error)
-	CompanyActivity(ctx context.Context) (interface{}, error)
-	Funnel(ctx context.Context) (interface{}, error)
-	Location(ctx context.Context) (interface{}, error)
-	Sponsorship(ctx context.Context, filter dto.InsightsFilter) (interface{}, error)
-	Velocity(ctx context.Context) (interface{}, error)
-	RoleCategories(ctx context.Context) (interface{}, error)
+	TechStack(ctx context.Context) (any, error)
+	CompanyActivity(ctx context.Context) (any, error)
+	Funnel(ctx context.Context) (any, error)
+	Location(ctx context.Context) (any, error)
+	Sponsorship(ctx context.Context, filter dto.InsightsFilter) (any, error)
+	Velocity(ctx context.Context) (any, error)
+	RoleCategories(ctx context.Context) (any, error)
 	GetPipelineCounts(ctx context.Context) (dto.PipelineCounts, error)
 }
 
@@ -32,31 +32,31 @@ func NewBaseService(next InsightsService) BaseService {
 	return BaseService{next: next}
 }
 
-func (b *BaseService) TechStack(ctx context.Context) (interface{}, error) {
+func (b *BaseService) TechStack(ctx context.Context) (any, error) {
 	return b.next.TechStack(ctx)
 }
 
-func (b *BaseService) CompanyActivity(ctx context.Context) (interface{}, error) {
+func (b *BaseService) CompanyActivity(ctx context.Context) (any, error) {
 	return b.next.CompanyActivity(ctx)
 }
 
-func (b *BaseService) Funnel(ctx context.Context) (interface{}, error) {
+func (b *BaseService) Funnel(ctx context.Context) (any, error) {
 	return b.next.Funnel(ctx)
 }
 
-func (b *BaseService) Location(ctx context.Context) (interface{}, error) {
+func (b *BaseService) Location(ctx context.Context) (any, error) {
 	return b.next.Location(ctx)
 }
 
-func (b *BaseService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) (interface{}, error) {
+func (b *BaseService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) (any, error) {
 	return b.next.Sponsorship(ctx, filter)
 }
 
-func (b *BaseService) Velocity(ctx context.Context) (interface{}, error) {
+func (b *BaseService) Velocity(ctx context.Context) (any, error) {
 	return b.next.Velocity(ctx)
 }
 
-func (b *BaseService) RoleCategories(ctx context.Context) (interface{}, error) {
+func (b *BaseService) RoleCategories(ctx context.Context) (any, error) {
 	return b.next.RoleCategories(ctx)
 }
 

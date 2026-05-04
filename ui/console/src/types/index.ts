@@ -33,6 +33,20 @@ export interface ScanStats {
   recent_runs: ScanRun[]
 }
 
+export interface MonthlyJobPoint {
+  month: string
+  new: number
+  removed: number
+}
+
+export interface CompanyAnalytics {
+  monthly: MonthlyJobPoint[]
+  velocity: {
+    this_week: number
+    last_week: number
+  }
+}
+
 export const ADAPTER_TYPES = [
   'greenhouse',
   'lever',
@@ -216,4 +230,59 @@ export interface PipelineStats {
   awaiting_enrichment: number
   new_jobs_24h: number
   errors_24h: number
+}
+
+// ── Insights ────────────────────────────────────────────────────────────────
+
+export interface TechCount {
+  tech: string
+  count: number
+}
+
+export interface CompanyWeekCount {
+  company_name: string
+  week: string
+  count: number
+}
+
+export interface FunnelStep {
+  stage: string
+  count: number
+}
+
+export interface LocationCount {
+  country: string
+  count: number
+}
+
+export interface StateCount {
+  state: string
+  count: number
+}
+
+export interface LocationData {
+  countries: LocationCount[]
+  states: StateCount[]
+}
+
+export interface SponsorshipDay {
+  date: string
+  total: number
+  sponsored: number
+}
+
+export interface CompanyVelocityInsight {
+  company_id: string
+  company_name: string
+  week_current: number
+  week_1: number
+  week_2: number
+  week_3: number
+  multiplier: number
+  velocity_tag: 'spike' | 'rising' | 'normal'
+}
+
+export interface RoleCategoryCount {
+  category: string
+  count: number
 }

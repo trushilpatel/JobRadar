@@ -17,7 +17,7 @@ func NewValidationService(next InsightsService) InsightsService {
 }
 
 // Sponsorship validates that filter.Days >= 1 before delegating.
-func (v *validationService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) (interface{}, error) {
+func (v *validationService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) (any, error) {
 	var errs errors.ValidationErrors
 	if filter.Days < 1 {
 		errs = append(errs, errors.ValidationError{

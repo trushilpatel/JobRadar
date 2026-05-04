@@ -19,7 +19,7 @@ func NewRepositoryService(db *gorm.DB) InsightsService {
 	return &repositoryService{db: db}
 }
 
-func (s *repositoryService) TechStack(ctx context.Context) (_ interface{}, err error) {
+func (s *repositoryService) TechStack(ctx context.Context) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.TechStack")
 	defer tracing.End(span, &err)
 	var results []dto.TechCount
@@ -37,7 +37,7 @@ func (s *repositoryService) TechStack(ctx context.Context) (_ interface{}, err e
 	return results, nil
 }
 
-func (s *repositoryService) CompanyActivity(ctx context.Context) (_ interface{}, err error) {
+func (s *repositoryService) CompanyActivity(ctx context.Context) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.CompanyActivity")
 	defer tracing.End(span, &err)
 	var results []dto.CompanyActivityItem
@@ -59,7 +59,7 @@ func (s *repositoryService) CompanyActivity(ctx context.Context) (_ interface{},
 	return results, nil
 }
 
-func (s *repositoryService) Funnel(ctx context.Context) (_ interface{}, err error) {
+func (s *repositoryService) Funnel(ctx context.Context) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.Funnel")
 	defer tracing.End(span, &err)
 	var rows []struct {
@@ -92,7 +92,7 @@ func (s *repositoryService) Funnel(ctx context.Context) (_ interface{}, err erro
 	}, nil
 }
 
-func (s *repositoryService) Location(ctx context.Context) (_ interface{}, err error) {
+func (s *repositoryService) Location(ctx context.Context) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.Location")
 	defer tracing.End(span, &err)
 	var countries []dto.LocationCount
@@ -120,13 +120,13 @@ func (s *repositoryService) Location(ctx context.Context) (_ interface{}, err er
 		return nil, errors.ErrInternal.WithMessage("failed to fetch state breakdown")
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"countries": countries,
 		"states":    states,
 	}, nil
 }
 
-func (s *repositoryService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) (_ interface{}, err error) {
+func (s *repositoryService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.Sponsorship")
 	defer tracing.End(span, &err)
 	days := filter.Days
@@ -150,31 +150,38 @@ func (s *repositoryService) Sponsorship(ctx context.Context, filter dto.Insights
 	return results, nil
 }
 
-func (s *repositoryService) Velocity(ctx context.Context) (_ interface{}, err error) {
+func (s *repositoryService) Velocity(ctx context.Context) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.Velocity")
 	defer tracing.End(span, &err)
 	var results []dto.CompanyVelocity
 	err = s.db.WithContext(ctx).Raw(`
-		WITH weekly AS (
+		WITH v AS (
 			SELECT
-				s.company_id,
+				c.id   AS company_id,
 				c.name AS company_name,
 				COUNT(*) FILTER (
 					WHERE s.snapshotted_at >= DATE_TRUNC('week', CURRENT_DATE)
-				) AS this_week,
+				) AS week_current,
 				COUNT(*) FILTER (
 					WHERE s.snapshotted_at >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
 					  AND s.snapshotted_at <  DATE_TRUNC('week', CURRENT_DATE)
-				) AS last_week
+				) AS week_1,
+				COUNT(*) FILTER (
+					WHERE s.snapshotted_at >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '14 days'
+					  AND s.snapshotted_at <  DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
+				) AS week_2,
+				COUNT(*) FILTER (
+					WHERE s.snapshotted_at >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '21 days'
+					  AND s.snapshotted_at <  DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '14 days'
+				) AS week_3
 			FROM job_analytics s
 			JOIN companies c ON s.company_id = c.id
-			WHERE s.snapshotted_at >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
-			GROUP BY s.company_id, c.name
+			WHERE s.snapshotted_at >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '28 days'
+			GROUP BY c.id, c.name
 		)
-		SELECT *, (this_week - last_week) AS delta
-		FROM weekly
-		WHERE this_week > 0 OR last_week > 0
-		ORDER BY delta DESC, this_week DESC
+		SELECT * FROM v
+		WHERE week_current > 0 OR week_1 > 0
+		ORDER BY week_current DESC, (week_1 + week_2 + week_3) DESC
 		LIMIT ?
 	`, 20).Scan(&results).Error
 	if err != nil {
@@ -183,7 +190,7 @@ func (s *repositoryService) Velocity(ctx context.Context) (_ interface{}, err er
 	return results, nil
 }
 
-func (s *repositoryService) RoleCategories(ctx context.Context) (_ interface{}, err error) {
+func (s *repositoryService) RoleCategories(ctx context.Context) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.RoleCategories")
 	defer tracing.End(span, &err)
 	var results []dto.RoleCategoryCount
