@@ -455,7 +455,7 @@ func (s *scanLogStore) GetCompanyAnalytics(ctx context.Context, companyID string
 			COUNT(*)                                                              AS count
 		FROM job_analytics
 		WHERE company_id = ?
-		  AND snapshotted_at >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months'
+		  AND snapshotted_at >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months'
 		GROUP BY DATE_TRUNC('month', snapshotted_at)
 		ORDER BY month_start
 	`, companyID).Scan(&newRows).Error; err != nil {
@@ -476,7 +476,7 @@ func (s *scanLogStore) GetCompanyAnalytics(ctx context.Context, companyID string
 		FROM job_pipeline_ledger
 		WHERE company_id = ?
 		  AND removed_at IS NOT NULL
-		  AND removed_at >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months'
+		  AND removed_at >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months'
 		GROUP BY DATE_TRUNC('month', removed_at)
 		ORDER BY month_start
 	`, companyID).Scan(&removedRows).Error; err != nil {
@@ -500,16 +500,16 @@ func (s *scanLogStore) GetCompanyAnalytics(ctx context.Context, companyID string
 		return dto.CompanyAnalytics{}, err
 	}
 
-	// Build ordered month index covering all 6 months
+	// Build ordered month index covering all 12 months
 	type monthKey struct {
 		start time.Time
 		label string
 	}
 	now := time.Now()
-	months := make([]monthKey, 6)
-	for i := 5; i >= 0; i-- {
+	months := make([]monthKey, 12)
+	for i := 11; i >= 0; i-- {
 		t := time.Date(now.Year(), now.Month()-time.Month(i), 1, 0, 0, 0, 0, time.UTC)
-		months[5-i] = monthKey{
+		months[11-i] = monthKey{
 			start: time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC),
 			label: t.Format("Jan 2006"),
 		}
@@ -524,7 +524,7 @@ func (s *scanLogStore) GetCompanyAnalytics(ctx context.Context, companyID string
 		removedByMonth[r.Month] = r.Count
 	}
 
-	points := make([]dto.MonthlyJobPoint, 0, 6)
+	points := make([]dto.MonthlyJobPoint, 0, 12)
 	for _, m := range months {
 		points = append(points, dto.MonthlyJobPoint{
 			Month:   m.label,

@@ -264,6 +264,7 @@ export function CompanyDetailDrawer({
                     tick={{ fontSize: 9, fill: '#64748b' }}
                     axisLine={false}
                     tickLine={false}
+                    interval={1}
                   />
                   <YAxis hide />
                   <RechartTooltip content={<HiringTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.08)', strokeWidth: 1 }} />

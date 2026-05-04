@@ -45,7 +45,7 @@ export function useCompanyActions() {
     try {
       await triggerScan(company.id)
       toast.success(`Scan queued for ${company.name}`)
-      qc.invalidateQueries({ queryKey: ['companies', 'queue'] })
+      qc.invalidateQueries({ queryKey: ['scan-queue'] })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to queue scan')
     } finally {
@@ -62,7 +62,7 @@ export function useCompanyActions() {
     try {
       const { queued } = await triggerScanAll()
       toast.success(`${queued} ${queued === 1 ? 'company' : 'companies'} queued for scan`)
-      qc.invalidateQueries({ queryKey: ['companies', 'queue'] })
+      qc.invalidateQueries({ queryKey: ['scan-queue'] })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to queue scans')
     } finally {

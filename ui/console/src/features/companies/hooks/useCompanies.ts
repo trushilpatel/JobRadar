@@ -64,7 +64,7 @@ export function useCompanies() {
   })
 
   const queueQuery = useQuery({
-    queryKey: ['companies', 'queue'],
+    queryKey: ['scan-queue'],
     queryFn: fetchQueue,
     refetchInterval: 15_000,
   })
