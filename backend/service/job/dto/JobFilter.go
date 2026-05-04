@@ -4,7 +4,7 @@ package dto
 // Every field is optional — zero value means "no filter on this field".
 type JobFilter struct {
 	Status           string            `json:"status"`    // "new" | "saved" | "applied" | "interviewing" | "offer"
-	Companies        []string          `json:"companies"` // filter by company_id (exact match, OR across values)
+	Companies        []string          `json:"companies"` // filter by company name (exact match, OR across values)
 	Search           string            // ILIKE match on title, location, or company name
 	Remote           *bool             // remote = true/false
 	OnSite           bool              // remote = false (on-site only)

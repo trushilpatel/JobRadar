@@ -62,33 +62,32 @@ func (s *repositoryService) CompanyActivity(ctx context.Context) (_ any, err err
 func (s *repositoryService) Funnel(ctx context.Context) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.Funnel")
 	defer tracing.End(span, &err)
-	var rows []struct {
-		Action *string
-		Count  int
+	var result struct {
+		Enriched  int `gorm:"column:enriched"`
+		Saved     int `gorm:"column:saved"`
+		Applied   int `gorm:"column:applied"`
+		Dismissed int `gorm:"column:dismissed"`
 	}
+	// enriched = all-time total from job_analytics (append-only, survives dismissal).
+	// saved/applied/dismissed = current distribution from job_feed (rows are never deleted).
+	// applied includes interviewing and offer — all stages beyond initial application.
 	err = s.db.WithContext(ctx).Raw(`
-		SELECT user_action AS action, COUNT(*) AS count
-		FROM job_analytics
-		GROUP BY user_action
-	`).Scan(&rows).Error
+		SELECT
+			(SELECT COUNT(*) FROM job_analytics)                                         AS enriched,
+			COUNT(*) FILTER (WHERE status = 'saved')                                     AS saved,
+			COUNT(*) FILTER (WHERE status IN ('applied', 'interviewing', 'offer'))       AS applied,
+			COUNT(*) FILTER (WHERE status = 'dismissed')                                 AS dismissed
+		FROM job_feed
+	`).Scan(&result).Error
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch funnel")
 	}
 
-	counts := map[string]int{}
-	total := 0
-	for _, r := range rows {
-		total += r.Count
-		if r.Action != nil {
-			counts[*r.Action] = r.Count
-		}
-	}
-
 	return []dto.FunnelStep{
-		{Stage: "enriched", Count: total},
-		{Stage: jobcommon.JobStatusSaved, Count: counts[jobcommon.JobStatusSaved]},
-		{Stage: jobcommon.JobStatusApplied, Count: counts[jobcommon.JobStatusApplied]},
-		{Stage: jobcommon.JobStatusDismissed, Count: counts[jobcommon.JobStatusDismissed]},
+		{Stage: "enriched", Count: result.Enriched},
+		{Stage: jobcommon.JobStatusSaved, Count: result.Saved},
+		{Stage: jobcommon.JobStatusApplied, Count: result.Applied},
+		{Stage: jobcommon.JobStatusDismissed, Count: result.Dismissed},
 	}, nil
 }
 

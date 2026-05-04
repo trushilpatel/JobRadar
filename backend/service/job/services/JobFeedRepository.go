@@ -71,7 +71,7 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, page, limi
 	}
 
 	if len(filter.Companies) > 0 {
-		query = query.Where("job_feed.company_id IN ?", filter.Companies)
+		query = query.Where("companies.name IN ?", filter.Companies)
 	}
 
 	if filter.Remote != nil {
