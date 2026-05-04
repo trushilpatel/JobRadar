@@ -21,7 +21,7 @@ export function CompaniesPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [editCompany, setEditCompany] = useState<Company | null>(null)
   const [drawerCompany, setDrawerCompany] = useState<Company | null>(null)
-  const [panelWidth, setPanelWidth] = useState(420)
+  const [panelWidth, setPanelWidth] = useState(480)
   const [adapterOptions, setAdapterOptions] = useState<string[]>([...ADAPTER_TYPES])
 
   const bulkAllActive = c.companies.length > 0 && c.companies.every((co) => co.active)
@@ -105,7 +105,6 @@ export function CompaniesPage() {
             >
               <CompanyDetailDrawer
                 company={drawerCompany}
-                queueStatus={c.queueMap.get(drawerCompany.id)}
                 onClose={() => setDrawerCompany(null)}
                 onScan={actions.scan}
                 onEdit={setEditCompany}

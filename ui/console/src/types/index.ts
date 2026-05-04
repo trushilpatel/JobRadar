@@ -7,7 +7,6 @@ export interface Company {
   created_at: string
   last_scan_at: string | null
   last_scan_status: 'ok' | 'error' | 'pending' | null
-  next_scan_at: string | null
   // Real scan history from company_scan_log: true=ok, false=error, oldest→newest.
   // Populated by the list endpoint. Absent for companies with no scan runs yet.
   scan_history?: boolean[]

@@ -4,19 +4,12 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { X, Trash2, RefreshCw, Pencil, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Company, ScanStats } from '@/types'
 import { fetchScanStats } from '@/api/companies'
-import { getCompanyScanConfig } from '@/api/adapterConfigs'
-import type { EffectiveScanConfig } from '@/api/adapterConfigs'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
-import { StatusPill, type StatusKind } from '@/components/ui/status-pill'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
 import { cn, formatRelativeTime } from '@/lib/utils'
-import { QUEUE_STATUS, SCAN_STATUS } from '@/features/companies/constants'
-import { ScanIntervalOverrideModal } from '@/features/settings/components/ScanIntervalOverrideModal'
-import { useScanIntervalOverride } from '@/features/settings/hooks/useScanIntervalOverride'
 
 interface CompanyDetailDrawerProps {
   company: Company
-  queueStatus?: 'queued' | 'running'
   onClose: () => void
   onScan: (c: Company) => void
   onEdit: (c: Company) => void
@@ -25,7 +18,6 @@ interface CompanyDetailDrawerProps {
 
 export function CompanyDetailDrawer({
   company,
-  queueStatus,
   onClose,
   onScan,
   onEdit,
@@ -35,11 +27,7 @@ export function CompanyDetailDrawer({
   const [loading, setLoading] = useState(false)
   const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set())
   const [logsOpen, setLogsOpen] = useState(false)
-  const [scanConfig, setScanConfig] = useState<EffectiveScanConfig | null>(null)
-  const [scanConfigError, setScanConfigError] = useState(false)
-  const [overrideModalOpen, setOverrideModalOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-  const { setOverride } = useScanIntervalOverride(company.id)
   const navigate = useNavigate()
 
   function toggleError(id: number) {
@@ -62,15 +50,6 @@ export function CompanyDetailDrawer({
   }, [company.id])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setScanConfig(null)
-    setScanConfigError(false)
-    getCompanyScanConfig(company.id)
-      .then(setScanConfig)
-      .catch(() => { setScanConfig(null); setScanConfigError(true) })
-  }, [company.id])
-
-  useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
     }
@@ -78,24 +57,12 @@ export function CompanyDetailDrawer({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const kind: StatusKind =
-    queueStatus === QUEUE_STATUS.RUNNING
-      ? 'running'
-      : queueStatus === QUEUE_STATUS.QUEUED
-        ? 'queued'
-        : company.last_scan_status === SCAN_STATUS.OK
-          ? 'ok'
-          : company.last_scan_status === SCAN_STATUS.ERROR
-            ? 'error'
-            : 'pending'
-
   const history: HistoryPoint[] = (stats?.recent_runs ?? [])
     .slice(0, 10)
     .reverse()
     .map((r) => (r.error ? 'err' : 'ok'))
 
   const successCount = history.filter((p) => p === 'ok').length
-  const errorCount = history.filter((p) => p === 'err').length
   const successRate = history.length ? Math.round((successCount / history.length) * 100) : 0
 
   return (
@@ -105,6 +72,22 @@ export function CompanyDetailDrawer({
         <div className="absolute top-3 right-3 flex items-center gap-1">
           <button
             type="button"
+            onClick={() => onEdit(company)}
+            title="Edit"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+          >
+            <Pencil size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeleteConfirmOpen(true)}
+            title="Delete"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-white/[0.06] transition-colors"
+          >
+            <Trash2 size={14} />
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             title="Close"
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
@@ -112,195 +95,161 @@ export function CompanyDetailDrawer({
             <X size={14} />
           </button>
         </div>
-        <div className="flex items-start gap-3 pr-16">
+        <div className="flex items-start gap-3 pr-24">
           <CompanyAvatar name={company.name} size="md" />
           <div className="min-w-0 flex-1">
             <p className="text-base font-semibold text-white leading-tight">{company.name}</p>
             <p className="text-sm text-slate-400 mt-0.5 truncate">
-              {safeHost(company.url)} · {company.adapter_type}
+              <a
+                href={company.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-white transition-colors"
+              >
+                {safeHost(company.url)}
+              </a>
+              {' · '}{company.adapter_type}
             </p>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-1.5 mt-3">
-          <StatusPill status={kind} />
-          <PillBadge>
-            Last: {company.last_scan_at ? formatRelativeTime(company.last_scan_at) : '—'}
-          </PillBadge>
-          <PillBadge>Next: {formatNext(company.next_scan_at, queueStatus)}</PillBadge>
-        </div>
-        <div className="flex items-center gap-2 mt-3">
-          <button
-            type="button"
-            onClick={() => onScan(company)}
-            className="flex items-center gap-1.5 text-xs text-white bg-violet-600 hover:bg-violet-500 px-2.5 py-1.5 rounded-lg transition-colors"
-          >
-            <RefreshCw size={12} /> Scan now
-          </button>
-          <button
-            type="button"
-            onClick={() => onEdit(company)}
-            className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors"
-          >
-            <Pencil size={12} /> Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleteConfirmOpen(true)}
-            className="flex items-center gap-1.5 text-xs text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 px-2.5 py-1.5 rounded-lg transition-colors"
-          >
-            <Trash2 size={12} /> Delete
-          </button>
         </div>
       </div>
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-        <Section title="Last 10 scans">
+        {/* Scan status zone — tonal background */}
+        <div className="bg-white/[0.03] rounded-lg px-3 py-3 space-y-2">
           {loading ? (
-            <div className="h-4 w-24 bg-white/5 rounded animate-pulse" />
+            <div className="h-10 bg-white/5 rounded animate-pulse" />
           ) : history.length ? (
-            <div className="flex items-center gap-2">
-              <ScanHistoryBar history={history} />
-              <span className="text-xs text-slate-400">
-                {successRate}% success{errorCount ? ` · ${errorCount} errors` : ''}
-              </span>
-            </div>
-          ) : (
-            <p className="text-xs text-slate-500">No scans yet</p>
-          )}
-        </Section>
-
-        <Section title="Scan Interval">
-          {scanConfig ? (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Adapter default</span>
-                <span className="text-white/70">{scanConfig.effective_scan_interval_minutes} min</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Custom override</span>
-                {scanConfig.company_override !== null ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-violet-300 font-medium">{scanConfig.company_override} min</span>
-                    <button
-                      type="button"
-                      onClick={() => void setOverride(null)}
-                      title="Clear override"
-                      className="text-slate-500 hover:text-red-400 transition-colors"
-                    >
-                      <X size={11} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-500">—</span>
-                    <button
-                      type="button"
-                      onClick={() => setOverrideModalOpen(true)}
-                      className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
-                    >
-                      Set override
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : scanConfigError ? (
-            <p className="text-xs text-slate-500">Scan interval unavailable</p>
-          ) : (
-            <div className="h-8 bg-white/5 rounded animate-pulse" />
-          )}
-        </Section>
-
-        <Section title="Activity">
-          <div className="grid grid-cols-2 gap-2">
-            <StatTile value={stats?.new_today ?? '—'} accent="new" label="Last 24 hours" />
-            <StatTile value={stats?.new_this_month ?? '—'} accent="new" label="This month" />
-          </div>
-          {stats && (
             <>
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <StatTile value={stats.total_fetched} label="All-time fetched" />
-                <StatTile value={stats.total_new} label="All-time new" />
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div className="shrink-0">
+                    <ScanHistoryBar history={history} />
+                  </div>
+                  <span className="text-xs text-slate-400 shrink-0">{successRate}%</span>
+                  {stats?.avg_duration_ms != null && (
+                    <span className="text-xs text-slate-500 shrink-0">· avg {formatMs(stats.avg_duration_ms)}</span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onScan(company)}
+                  className="flex items-center gap-1.5 text-xs text-white bg-violet-600 hover:bg-violet-500 px-2.5 py-1.5 rounded-lg transition-colors shrink-0"
+                >
+                  <RefreshCw size={11} /> Scan now
+                </button>
               </div>
-              <div className="grid grid-cols-3 gap-2 mt-2">
-                <StatTile value={stats.total_scans} label="Total scans" />
-                <StatTile value={stats.error_count} label="Errors" />
-                <StatTile
-                  value={stats.avg_duration_ms != null ? formatMs(stats.avg_duration_ms) : '—'}
-                  label="Avg time"
-                />
-              </div>
+              <span className="text-xs text-slate-500">
+                Last scan {company.last_scan_at ? formatRelativeTime(company.last_scan_at) : '—'}
+              </span>
             </>
+          ) : (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-500">No scans yet</span>
+              <button
+                type="button"
+                onClick={() => onScan(company)}
+                className="flex items-center gap-1.5 text-xs text-white bg-violet-600 hover:bg-violet-500 px-2.5 py-1.5 rounded-lg transition-colors"
+              >
+                <RefreshCw size={11} /> Scan now
+              </button>
+            </div>
           )}
+        </div>
+
+        <Section title="New jobs">
+          <div className="grid grid-cols-3 gap-2">
+            <StatTile value={stats?.new_today ?? '—'} label="Today" />
+            <StatTile value={stats?.new_this_month ?? '—'} label="30 days" />
+            <StatTile value={stats?.total_new ?? '—'} label="All time" />
+          </div>
           {stats && stats.total_new > 0 && (
             <button
               type="button"
               onClick={() => navigate('/jobs', { state: { companies: [company.name] } })}
-              className="mt-3 flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+              className="mt-2 w-full flex items-center justify-between px-3 py-2 border border-white/[0.07] rounded-lg text-xs text-slate-300 hover:text-white hover:border-white/20 transition-colors"
             >
-              View {stats.total_new} jobs →
+              <span>View {stats.total_new} new jobs</span>
+              <span className="text-slate-500">→</span>
             </button>
           )}
         </Section>
 
-        <Section title="Recent runs">
-          {loading ? (
-            <div className="space-y-1">
-              <div className="h-4 bg-white/5 rounded animate-pulse" />
-              <div className="h-4 bg-white/5 rounded animate-pulse" />
-            </div>
-          ) : (stats?.recent_runs ?? []).length === 0 ? (
-            <p className="text-xs text-slate-500">No runs yet</p>
-          ) : (
-            <div className="text-xs">
-              {(stats?.recent_runs ?? []).slice(0, 10).map((r) => (
-                <div key={r.id} className="border-b border-white/[0.04]">
-                  <div
-                    className={cn(
-                      'flex items-center justify-between py-1.5',
-                      r.error && 'cursor-pointer'
-                    )}
-                    onClick={() => r.error && toggleError(r.id)}
-                  >
-                    <span className="text-slate-300 flex items-center gap-1.5">
-                      {formatRelativeTime(r.scanned_at)}
-                      {r.duration_ms != null && (
-                        <span className="text-slate-600">{formatMs(r.duration_ms)}</span>
-                      )}
-                    </span>
-                    <span
+        {/* Recent run logs — collapsible */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setLogsOpen((v) => !v)}
+            className="flex items-center justify-between w-full mb-2 group"
+          >
+            <h3 className="text-[10px] font-medium text-slate-500 uppercase tracking-wider group-hover:text-slate-400 transition-colors">
+              Recent run logs
+            </h3>
+            {logsOpen ? (
+              <ChevronUp size={12} className="text-slate-500 group-hover:text-slate-400 transition-colors" />
+            ) : (
+              <ChevronDown size={12} className="text-slate-500 group-hover:text-slate-400 transition-colors" />
+            )}
+          </button>
+          {logsOpen && (
+            loading ? (
+              <div className="space-y-1">
+                <div className="h-4 bg-white/5 rounded animate-pulse" />
+                <div className="h-4 bg-white/5 rounded animate-pulse" />
+              </div>
+            ) : (stats?.recent_runs ?? []).length === 0 ? (
+              <p className="text-xs text-slate-500">No runs yet</p>
+            ) : (
+              <div className="text-xs">
+                {(stats?.recent_runs ?? []).slice(0, 10).map((r) => (
+                  <div key={r.id} className="border-b border-white/[0.04]">
+                    <div
                       className={cn(
-                        'flex items-center gap-1',
-                        r.error ? 'text-red-400' : 'text-emerald-400'
+                        'flex items-center justify-between py-1.5',
+                        r.error && 'cursor-pointer'
                       )}
+                      onClick={() => r.error && toggleError(r.id)}
                     >
-                      {r.error ? (
-                        <>
-                          Error
-                          {expandedErrors.has(r.id) ? (
-                            <ChevronUp size={10} />
-                          ) : (
-                            <ChevronDown size={10} />
-                          )}
-                        </>
-                      ) : (
-                        `OK · ${r.jobs_fetched} fetched${r.jobs_new ? ` · ${r.jobs_new} new` : ''}`
-                      )}
-                    </span>
-                  </div>
-                  {r.error && expandedErrors.has(r.id) && (
-                    <div className="pb-2">
-                      <p className="text-[11px] text-red-300 font-mono bg-red-950/20 rounded p-2 break-all leading-relaxed">
-                        {r.error}
-                      </p>
+                      <span className="text-slate-300 flex items-center gap-1.5">
+                        {formatRelativeTime(r.scanned_at)}
+                        {r.duration_ms != null && (
+                          <span className="text-slate-600">{formatMs(r.duration_ms)}</span>
+                        )}
+                      </span>
+                      <span
+                        className={cn(
+                          'flex items-center gap-1',
+                          r.error ? 'text-red-400' : 'text-emerald-400'
+                        )}
+                      >
+                        {r.error ? (
+                          <>
+                            Error
+                            {expandedErrors.has(r.id) ? (
+                              <ChevronUp size={10} />
+                            ) : (
+                              <ChevronDown size={10} />
+                            )}
+                          </>
+                        ) : (
+                          `OK · ${r.jobs_fetched} fetched${r.jobs_new ? ` · ${r.jobs_new} new` : ''}`
+                        )}
+                      </span>
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                    {r.error && expandedErrors.has(r.id) && (
+                      <div className="pb-2">
+                        <p className="text-[11px] text-red-300 font-mono bg-red-950/20 rounded p-2 break-all leading-relaxed">
+                          {r.error}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
           )}
-        </Section>
+        </div>
       </div>
 
       <Dialog.Root open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
@@ -331,16 +280,6 @@ export function CompanyDetailDrawer({
         </Dialog.Portal>
       </Dialog.Root>
 
-      {scanConfig && (
-        <ScanIntervalOverrideModal
-          open={overrideModalOpen}
-          onClose={() => setOverrideModalOpen(false)}
-          companyId={company.id}
-          companyName={company.name}
-          adapterDefault={scanConfig.effective_scan_interval_minutes}
-          currentOverride={scanConfig.company_override}
-        />
-      )}
     </div>
   )
 }
@@ -367,31 +306,12 @@ function Section({
   )
 }
 
-function StatTile({
-  value,
-  label,
-  accent,
-}: {
-  value: string | number
-  label: string
-  accent?: 'new'
-}) {
+function StatTile({ value, label }: { value: string | number; label: string }) {
   return (
     <div className="border border-white/[0.07] rounded-lg px-3 py-2.5">
-      <div className="flex items-baseline gap-1.5">
-        <div className="text-lg font-semibold text-white">{value}</div>
-        {accent === 'new' && <div className="text-[10px] text-emerald-400">new</div>}
-      </div>
+      <div className="text-lg font-semibold text-white">{value}</div>
       <div className="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">{label}</div>
     </div>
-  )
-}
-
-function PillBadge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-xs text-slate-400 bg-white/[0.05] border border-white/[0.07] px-2 py-0.5 rounded-md">
-      {children}
-    </span>
   )
 }
 
@@ -403,17 +323,6 @@ function safeHost(url: string) {
   }
 }
 
-function formatNext(next: string | null, queueStatus?: 'queued' | 'running') {
-  if (queueStatus === QUEUE_STATUS.RUNNING) return 'now'
-  if (queueStatus === QUEUE_STATUS.QUEUED) return 'up next'
-  if (!next) return '—'
-  const ms = new Date(next).getTime() - Date.now()
-  if (ms <= 0) return '—'
-  const mins = Math.floor(ms / 60000)
-  if (mins < 60) return `in ${mins}m`
-  const hrs = Math.floor(mins / 60)
-  return `in ${hrs}h`
-}
 
 function formatMs(ms: number) {
   if (ms < 1000) return `${Math.round(ms)}ms`

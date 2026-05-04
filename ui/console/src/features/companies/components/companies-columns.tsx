@@ -132,23 +132,6 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
     },
 
     {
-      accessorKey: 'next_scan_at',
-      size: 110,
-      enableSorting: false,
-      header: () => <span className="text-slate-400">Next scan</span>,
-      cell: ({ row }) => {
-        const c = row.original
-        const q = actions.queueMap.get(c.id)
-        if (q === QUEUE_STATUS.RUNNING) return <span className="text-xs text-blue-400">now</span>
-        if (q === QUEUE_STATUS.QUEUED) return <span className="text-xs text-amber-400">up next</span>
-        if (!c.next_scan_at) return <span className="text-xs text-slate-600">—</span>
-        const ms = new Date(c.next_scan_at).getTime() - Date.now()
-        if (ms <= 0) return <span className="text-xs text-slate-600">—</span>
-        return <span className="text-xs text-slate-400">in {duration(ms)}</span>
-      },
-    },
-
-    {
       id: 'active',
       size: 72,
       enableSorting: false,
@@ -239,10 +222,3 @@ function relativeTime(d: Date) {
   return `${Math.floor(s / 86400)}d ago`
 }
 
-function duration(ms: number) {
-  const mins = Math.floor(ms / 60000)
-  if (mins < 60) return `${mins}m`
-  const hrs = Math.floor(mins / 60)
-  const rem = mins % 60
-  return rem > 0 ? `${hrs}h ${rem}m` : `${hrs}h`
-}
