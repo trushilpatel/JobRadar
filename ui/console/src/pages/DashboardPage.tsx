@@ -9,14 +9,14 @@ export function DashboardPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-auto">
       <div className="flex-1 px-6 py-6 space-y-4">
-        {/* Row 1: My Progress + Market */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ProgressPanel />
-          <MarketPanel />
+        {/* Row 1: Progress + Market side-by-side (left) | Heatmap 2×26 (right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+          <div className="grid grid-cols-2 gap-4">
+            <ProgressPanel />
+            <MarketPanel />
+          </div>
+          <HeatmapPanel />
         </div>
-
-        {/* Row 2: Hiring Activity Heatmap */}
-        <HeatmapPanel />
 
         {/* Row 3: Interviewing + Velocity */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

@@ -5,7 +5,7 @@ import type { WeeklyCount } from '@/types'
 
 const HEAT_COLORS = ['#1c1c1e', '#085041', '#0f6e56', '#1d9e75', '#5dcaa5']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const COLS = 26
+const HALF = 26
 
 function buildWeekGrid(sparse: WeeklyCount[]): Array<{ weekStart: string; count: number }> {
   const map = new Map(sparse.map((w) => [w.week_start, w.job_count]))
@@ -45,6 +45,66 @@ function formatWeekLabel(weekStart: string, count: number): string {
     : `${month} ${day}, ${year} — ${count} new job${count === 1 ? '' : 's'}`
 }
 
+function HeatRow({
+  slice,
+  max,
+  offset,
+}: {
+  slice: Array<{ weekStart: string; count: number }>
+  max: number
+  offset: number
+}) {
+  return (
+    <div className="space-y-1">
+      {/* Month labels */}
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: `repeat(${HALF}, 1fr)`, gap: '3px' }}
+      >
+        {slice.map((w, col) => (
+          <div
+            key={col}
+            className="text-[10px] text-slate-600 text-center leading-none"
+            style={{ minWidth: 0 }}
+          >
+            {col % 4 === 0 ? monthLabel(w.weekStart) : ''}
+          </div>
+        ))}
+      </div>
+
+      {/* Cells */}
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: `repeat(${HALF}, 1fr)`, gap: '3px' }}
+      >
+        {slice.map((w, col) => {
+          const ci = colorIndex(w.count, max)
+          return (
+            <TooltipPrimitive.Root key={offset + col}>
+              <TooltipPrimitive.Trigger asChild>
+                <div
+                  className="rounded-[3px] cursor-pointer transition-opacity hover:opacity-75"
+                  style={{ background: HEAT_COLORS[ci], aspectRatio: '1' }}
+                />
+              </TooltipPrimitive.Trigger>
+              <TooltipPrimitive.Portal>
+                <TooltipPrimitive.Content
+                  side="top"
+                  sideOffset={6}
+                  className="z-50 rounded-md bg-[#1e1e23] border border-white/[0.1] px-2.5 py-1.5 text-[11px] text-slate-200 shadow-xl"
+                >
+                  {formatWeekLabel(w.weekStart, w.count)}
+                  <TooltipPrimitive.Arrow className="fill-[#1e1e23]" />
+                </TooltipPrimitive.Content>
+              </TooltipPrimitive.Portal>
+            </TooltipPrimitive.Root>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function HeatmapPanel() {
   const {
     data: sparse = [],
@@ -58,6 +118,8 @@ export function HeatmapPanel() {
 
   const weeks = buildWeekGrid(sparse)
   const max = Math.max(...weeks.map((w) => w.count), 1)
+  const firstHalf = weeks.slice(0, HALF)
+  const secondHalf = weeks.slice(HALF)
 
   return (
     <TooltipPrimitive.Provider delayDuration={120}>
@@ -67,64 +129,18 @@ export function HeatmapPanel() {
         </p>
 
         {isLoading ? (
-          <div className="h-16 bg-white/[0.03] rounded-lg animate-pulse" />
+          <div className="h-24 bg-white/[0.03] rounded-lg animate-pulse" />
         ) : isError ? (
-          <div className="h-16 flex items-center justify-center text-xs text-slate-500">
+          <div className="h-24 flex items-center justify-center text-xs text-slate-500">
             Failed to load heatmap data
           </div>
         ) : (
-          <>
-            {/* Month labels row */}
-            <div
-              className="grid mb-1"
-              style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)`, gap: '3px' }}
-            >
-              {Array.from({ length: COLS }, (_, col) => {
-                const label = col % 4 === 0 ? monthLabel(weeks[col]?.weekStart ?? '') : ''
-                return (
-                  <div
-                    key={col}
-                    className="text-[10px] text-slate-600 text-center leading-none"
-                    style={{ minWidth: 0 }}
-                  >
-                    {label}
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Heatmap grid */}
-            <div
-              className="grid"
-              style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)`, gap: '3px' }}
-            >
-              {weeks.map((w, i) => {
-                const ci = colorIndex(w.count, max)
-                return (
-                  <TooltipPrimitive.Root key={i}>
-                    <TooltipPrimitive.Trigger asChild>
-                      <div
-                        className="rounded-[3px] cursor-pointer transition-opacity hover:opacity-75"
-                        style={{ background: HEAT_COLORS[ci], aspectRatio: '1' }}
-                      />
-                    </TooltipPrimitive.Trigger>
-                    <TooltipPrimitive.Portal>
-                      <TooltipPrimitive.Content
-                        side="top"
-                        sideOffset={6}
-                        className="z-50 rounded-md bg-[#1e1e23] border border-white/[0.1] px-2.5 py-1.5 text-[11px] text-slate-200 shadow-xl"
-                      >
-                        {formatWeekLabel(w.weekStart, w.count)}
-                        <TooltipPrimitive.Arrow className="fill-[#1e1e23]" />
-                      </TooltipPrimitive.Content>
-                    </TooltipPrimitive.Portal>
-                  </TooltipPrimitive.Root>
-                )
-              })}
-            </div>
+          <div className="space-y-3">
+            <HeatRow slice={firstHalf} max={max} offset={0} />
+            <HeatRow slice={secondHalf} max={max} offset={HALF} />
 
             {/* Legend */}
-            <div className="flex items-center justify-end mt-3 gap-1.5">
+            <div className="flex items-center justify-end gap-1.5">
               <span className="text-[11px] text-slate-600">fewer</span>
               <div className="flex gap-[3px]">
                 {HEAT_COLORS.map((c, i) => (
@@ -137,7 +153,7 @@ export function HeatmapPanel() {
               </div>
               <span className="text-[11px] text-slate-600">more</span>
             </div>
-          </>
+          </div>
         )}
       </div>
     </TooltipPrimitive.Provider>
