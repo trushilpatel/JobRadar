@@ -73,6 +73,7 @@ type ScanLogReader interface {
 	GetScanHistories(ctx context.Context, companyIDs []string) (map[string][]bool, error)
 	GetJobsScannedToday(ctx context.Context) (int64, error)
 	GetScansByDay(ctx context.Context, days int) ([]dto.DailyScanCount, error)
+	GetCompanyAnalytics(ctx context.Context, companyID string) (dto.CompanyAnalytics, error)
 }
 
 // ScanLogStore is the full interface for scan log read+write.
@@ -437,6 +438,107 @@ func (s *scanLogStore) GetScansByDay(ctx context.Context, days int) (results []d
 	return results, err
 }
 
+func (s *scanLogStore) GetCompanyAnalytics(ctx context.Context, companyID string) (_ dto.CompanyAnalytics, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.GetCompanyAnalytics")
+	defer tracing.End(span, &err)
+
+	// Monthly new jobs from job_analytics
+	var newRows []struct {
+		MonthStart time.Time
+		Month      string
+		Count      int
+	}
+	if err = s.db.WithContext(ctx).Raw(`
+		SELECT
+			DATE_TRUNC('month', snapshotted_at)                                  AS month_start,
+			TO_CHAR(DATE_TRUNC('month', snapshotted_at), 'Mon YYYY')             AS month,
+			COUNT(*)                                                              AS count
+		FROM job_analytics
+		WHERE company_id = ?
+		  AND snapshotted_at >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months'
+		GROUP BY DATE_TRUNC('month', snapshotted_at)
+		ORDER BY month_start
+	`, companyID).Scan(&newRows).Error; err != nil {
+		return dto.CompanyAnalytics{}, err
+	}
+
+	// Monthly removed jobs from job_pipeline_ledger
+	var removedRows []struct {
+		MonthStart time.Time
+		Month      string
+		Count      int
+	}
+	if err = s.db.WithContext(ctx).Raw(`
+		SELECT
+			DATE_TRUNC('month', removed_at)                                      AS month_start,
+			TO_CHAR(DATE_TRUNC('month', removed_at), 'Mon YYYY')                 AS month,
+			COUNT(*)                                                              AS count
+		FROM job_pipeline_ledger
+		WHERE company_id = ?
+		  AND removed_at IS NOT NULL
+		  AND removed_at >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months'
+		GROUP BY DATE_TRUNC('month', removed_at)
+		ORDER BY month_start
+	`, companyID).Scan(&removedRows).Error; err != nil {
+		return dto.CompanyAnalytics{}, err
+	}
+
+	// Velocity: this week vs last week (from job_analytics)
+	var vel struct {
+		ThisWeek int
+		LastWeek int
+	}
+	if err = s.db.WithContext(ctx).Raw(`
+		SELECT
+			COUNT(*) FILTER (WHERE snapshotted_at >= DATE_TRUNC('week', CURRENT_DATE))                                                             AS this_week,
+			COUNT(*) FILTER (WHERE snapshotted_at >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
+			                   AND snapshotted_at  < DATE_TRUNC('week', CURRENT_DATE))                                                             AS last_week
+		FROM job_analytics
+		WHERE company_id = ?
+		  AND snapshotted_at >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
+	`, companyID).Scan(&vel).Error; err != nil {
+		return dto.CompanyAnalytics{}, err
+	}
+
+	// Build ordered month index covering all 6 months
+	type monthKey struct {
+		start time.Time
+		label string
+	}
+	now := time.Now()
+	months := make([]monthKey, 6)
+	for i := 5; i >= 0; i-- {
+		t := time.Date(now.Year(), now.Month()-time.Month(i), 1, 0, 0, 0, 0, time.UTC)
+		months[5-i] = monthKey{
+			start: time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC),
+			label: t.Format("Jan 2006"),
+		}
+	}
+
+	newByMonth := make(map[string]int, len(newRows))
+	for _, r := range newRows {
+		newByMonth[r.Month] = r.Count
+	}
+	removedByMonth := make(map[string]int, len(removedRows))
+	for _, r := range removedRows {
+		removedByMonth[r.Month] = r.Count
+	}
+
+	points := make([]dto.MonthlyJobPoint, 0, 6)
+	for _, m := range months {
+		points = append(points, dto.MonthlyJobPoint{
+			Month:   m.label,
+			New:     newByMonth[m.label],
+			Removed: removedByMonth[m.label],
+		})
+	}
+
+	return dto.CompanyAnalytics{
+		Monthly:  points,
+		Velocity: dto.CompanyVelocity{ThisWeek: vel.ThisWeek, LastWeek: vel.LastWeek},
+	}, nil
+}
+
 // --- repositoryService: terminal Service implementation ---
 
 type repositoryService struct {
@@ -539,4 +641,14 @@ func (s *repositoryService) RemoveFromQueue(ctx context.Context, entryID string)
 		return errors.ErrInternal.WithMessage("failed to remove queue entry")
 	}
 	return nil
+}
+
+func (s *repositoryService) GetAnalytics(ctx context.Context, companyID string) (_ *dto.CompanyAnalytics, err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.GetAnalytics")
+	defer tracing.End(span, &err)
+	a, err := s.scanLog.GetCompanyAnalytics(ctx, companyID)
+	if err != nil {
+		return nil, errors.ErrInternal.WithMessage("failed to fetch company analytics")
+	}
+	return &a, nil
 }

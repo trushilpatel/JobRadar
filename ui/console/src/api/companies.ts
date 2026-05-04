@@ -1,4 +1,4 @@
-import type { Company, ScanStats, QueueEntry } from '@/types'
+import type { Company, ScanStats, QueueEntry, CompanyAnalytics } from '@/types'
 import { apiClient } from '@/lib/api-client'
 
 export interface CompanyFilters {
@@ -79,4 +79,8 @@ export async function fetchQueue(): Promise<QueueEntry[]> {
 
 export async function removeFromQueue(entryId: string): Promise<void> {
   await apiClient.delete<void>(`/companies/queue/${entryId}`)
+}
+
+export async function fetchCompanyAnalytics(id: string): Promise<CompanyAnalytics> {
+  return apiClient.get<CompanyAnalytics>(`/companies/${encodeURIComponent(id)}/analytics`)
 }

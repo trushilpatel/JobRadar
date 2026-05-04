@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X, Trash2, RefreshCw, Pencil, ChevronDown, ChevronUp } from 'lucide-react'
-import type { Company, ScanStats } from '@/types'
-import { fetchScanStats } from '@/api/companies'
+import { useQuery } from '@tanstack/react-query'
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartTooltip, ResponsiveContainer } from 'recharts'
+import type { Company, ScanStats, CompanyAnalytics } from '@/types'
+import { fetchScanStats, fetchCompanyAnalytics } from '@/api/companies'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
 import { cn, formatRelativeTime } from '@/lib/utils'
@@ -29,6 +31,11 @@ export function CompanyDetailDrawer({
   const [logsOpen, setLogsOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const navigate = useNavigate()
+
+  const { data: analytics } = useQuery<CompanyAnalytics>({
+    queryKey: ['company-analytics', company.id],
+    queryFn: () => fetchCompanyAnalytics(company.id),
+  })
 
   function toggleError(id: number) {
     setExpandedErrors((prev) => {
@@ -57,13 +64,18 @@ export function CompanyDetailDrawer({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const history: HistoryPoint[] = (stats?.recent_runs ?? [])
-    .slice(0, 10)
-    .reverse()
-    .map((r) => (r.error ? 'err' : 'ok'))
+  const history: HistoryPoint[] = (() => {
+    const runs = (stats?.recent_runs ?? [])
+      .slice(0, 10)
+      .reverse()
+      .map<HistoryPoint>((r) => (r.error ? 'err' : 'ok'))
+    const padding: HistoryPoint[] = Array(Math.max(0, 10 - runs.length)).fill('idle')
+    return [...padding, ...runs]
+  })()
 
   const successCount = history.filter((p) => p === 'ok').length
-  const successRate = history.length ? Math.round((successCount / history.length) * 100) : 0
+  const scannedCount = history.filter((p) => p !== 'idle').length
+  const successRate = scannedCount ? Math.round((successCount / scannedCount) * 100) : 0
 
   return (
     <div className="flex flex-col h-full bg-[#0d0d14]">
@@ -124,28 +136,88 @@ export function CompanyDetailDrawer({
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-        {/* Scan status zone — tonal background */}
-        <div className="bg-white/[0.03] rounded-lg px-3 py-3 space-y-2">
-          {loading ? (
-            <div className="h-10 bg-white/5 rounded animate-pulse" />
-          ) : history.length ? (
-            <>
-              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Last 10 scans</span>
-              <div className="flex items-center gap-2 w-full">
-                <ScanHistoryBar history={history} />
-                <span className="text-xs text-slate-400 shrink-0">{successRate}%</span>
+        <Section title="Recent scans">
+          <div className="flex gap-2">
+            <div className="flex-1 border border-white/[0.07] rounded-lg px-3 py-2.5 flex flex-col justify-between gap-2">
+              {loading ? (
+                <div className="h-4 bg-white/5 rounded animate-pulse" />
+              ) : (
+                <>
+                  <ScanHistoryBar history={history} className="w-full justify-between" />
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500">{successRate}% success</span>
+                </>
+              )}
+            </div>
+            <div className="border border-white/[0.07] rounded-lg px-3 py-2.5 flex flex-col justify-between shrink-0 w-24">
+              <div className="text-sm font-semibold text-white">
+                {company.last_scan_at ? formatRelativeTime(company.last_scan_at) : '—'}
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-500">
-                <span>Last scan {company.last_scan_at ? formatRelativeTime(company.last_scan_at) : '—'}</span>
-                {stats?.avg_duration_ms != null && (
-                  <span>· avg {formatMs(stats.avg_duration_ms)}</span>
-                )}
+              <div className="text-[10px] uppercase tracking-wider text-slate-500">Last scan</div>
+            </div>
+            <div className="border border-white/[0.07] rounded-lg px-3 py-2.5 flex flex-col justify-between shrink-0 w-20">
+              <div className="text-sm font-semibold text-white">
+                {loading ? '—' : stats?.avg_duration_ms != null ? formatMs(stats.avg_duration_ms) : '—'}
               </div>
-            </>
-          ) : (
-            <span className="text-xs text-slate-500">No scans yet</span>
+              <div className="text-[10px] uppercase tracking-wider text-slate-500">Avg time</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLogsOpen((v) => !v)}
+            className="mt-2 w-full flex items-center justify-between px-3 py-2 border border-white/[0.07] rounded-lg text-xs text-slate-400 hover:text-white hover:border-white/20 transition-colors"
+          >
+            <span>Logs</span>
+            {logsOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+          {logsOpen && (
+            loading ? (
+              <div className="mt-2 space-y-1">
+                <div className="h-4 bg-white/5 rounded animate-pulse" />
+                <div className="h-4 bg-white/5 rounded animate-pulse" />
+              </div>
+            ) : (stats?.recent_runs ?? []).length === 0 ? (
+              <p className="mt-2 text-xs text-slate-500">No runs yet</p>
+            ) : (
+              <div className="mt-2 text-xs">
+                {(stats?.recent_runs ?? []).slice(0, 10).map((r) => (
+                  <div key={r.id} className="border-b border-white/[0.04]">
+                    <div
+                      className={cn(
+                        'flex items-center justify-between py-1.5',
+                        r.error && 'cursor-pointer'
+                      )}
+                      onClick={() => r.error && toggleError(r.id)}
+                    >
+                      <span className="text-slate-300 flex items-center gap-1.5">
+                        {formatRelativeTime(r.scanned_at)}
+                        {r.duration_ms != null && (
+                          <span className="text-slate-600">{formatMs(r.duration_ms)}</span>
+                        )}
+                      </span>
+                      <span className={cn('flex items-center gap-1', r.error ? 'text-red-400' : 'text-emerald-400')}>
+                        {r.error ? (
+                          <>
+                            Error
+                            {expandedErrors.has(r.id) ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                          </>
+                        ) : (
+                          `OK · ${r.jobs_fetched} fetched${r.jobs_new ? ` · ${r.jobs_new} new` : ''}`
+                        )}
+                      </span>
+                    </div>
+                    {r.error && expandedErrors.has(r.id) && (
+                      <div className="pb-2">
+                        <p className="text-[11px] text-red-300 font-mono bg-red-950/20 rounded p-2 break-all leading-relaxed">
+                          {r.error}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
           )}
-        </div>
+        </Section>
 
         <Section title="New jobs">
           <div className="grid grid-cols-3 gap-2">
@@ -165,80 +237,63 @@ export function CompanyDetailDrawer({
           )}
         </Section>
 
-        {/* Recent run logs — collapsible */}
-        <div>
-          <button
-            type="button"
-            onClick={() => setLogsOpen((v) => !v)}
-            className="flex items-center justify-between w-full mb-2 group"
-          >
-            <h3 className="text-[10px] font-medium text-slate-500 uppercase tracking-wider group-hover:text-slate-400 transition-colors">
-              Recent run logs
-            </h3>
-            {logsOpen ? (
-              <ChevronUp size={12} className="text-slate-500 group-hover:text-slate-400 transition-colors" />
-            ) : (
-              <ChevronDown size={12} className="text-slate-500 group-hover:text-slate-400 transition-colors" />
-            )}
-          </button>
-          {logsOpen && (
-            loading ? (
-              <div className="space-y-1">
-                <div className="h-4 bg-white/5 rounded animate-pulse" />
-                <div className="h-4 bg-white/5 rounded animate-pulse" />
-              </div>
-            ) : (stats?.recent_runs ?? []).length === 0 ? (
-              <p className="text-xs text-slate-500">No runs yet</p>
-            ) : (
-              <div className="text-xs">
-                {(stats?.recent_runs ?? []).slice(0, 10).map((r) => (
-                  <div key={r.id} className="border-b border-white/[0.04]">
-                    <div
-                      className={cn(
-                        'flex items-center justify-between py-1.5',
-                        r.error && 'cursor-pointer'
-                      )}
-                      onClick={() => r.error && toggleError(r.id)}
-                    >
-                      <span className="text-slate-300 flex items-center gap-1.5">
-                        {formatRelativeTime(r.scanned_at)}
-                        {r.duration_ms != null && (
-                          <span className="text-slate-600">{formatMs(r.duration_ms)}</span>
-                        )}
-                      </span>
-                      <span
-                        className={cn(
-                          'flex items-center gap-1',
-                          r.error ? 'text-red-400' : 'text-emerald-400'
-                        )}
-                      >
-                        {r.error ? (
-                          <>
-                            Error
-                            {expandedErrors.has(r.id) ? (
-                              <ChevronUp size={10} />
-                            ) : (
-                              <ChevronDown size={10} />
-                            )}
-                          </>
-                        ) : (
-                          `OK · ${r.jobs_fetched} fetched${r.jobs_new ? ` · ${r.jobs_new} new` : ''}`
-                        )}
-                      </span>
-                    </div>
-                    {r.error && expandedErrors.has(r.id) && (
-                      <div className="pb-2">
-                        <p className="text-[11px] text-red-300 font-mono bg-red-950/20 rounded p-2 break-all leading-relaxed">
-                          {r.error}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )
+        <Section
+          title="Hiring Activity"
+          aside={analytics ? velocityLabel(analytics.velocity.this_week, analytics.velocity.last_week) : undefined}
+        >
+          {!analytics ? (
+            <div className="h-28 bg-white/5 rounded animate-pulse" />
+          ) : analytics.monthly.every((p) => p.new === 0 && p.removed === 0) ? (
+            <p className="text-xs text-slate-500">No hiring data yet</p>
+          ) : (
+            <div className="h-28">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={analytics.monthly} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gradNew" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gradRemoved" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f87171" stopOpacity={0.18} />
+                      <stop offset="95%" stopColor="#f87171" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fontSize: 9, fill: '#64748b' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis hide />
+                  <RechartTooltip content={<HiringTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.08)', strokeWidth: 1 }} />
+                  <Area
+                    type="monotone"
+                    dataKey="new"
+                    name="New"
+                    stroke="#10b981"
+                    strokeWidth={1.5}
+                    fill="url(#gradNew)"
+                    dot={false}
+                    activeDot={{ r: 3, fill: '#10b981', strokeWidth: 0 }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="removed"
+                    name="Removed"
+                    stroke="#f87171"
+                    strokeWidth={1.5}
+                    strokeDasharray="3 3"
+                    fill="url(#gradRemoved)"
+                    dot={false}
+                    activeDot={{ r: 3, fill: '#f87171', strokeWidth: 0 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           )}
-        </div>
+        </Section>
+
       </div>
 
       <Dialog.Root open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
@@ -316,4 +371,30 @@ function safeHost(url: string) {
 function formatMs(ms: number) {
   if (ms < 1000) return `${Math.round(ms)}ms`
   return `${(ms / 1000).toFixed(1)}s`
+}
+
+function HiringTooltip({ active, payload, label }: { active?: boolean; payload?: {value: number; name: string}[]; label?: string }) {
+  if (!active || !payload?.length) return null
+  const newCount = payload.find((p) => p.name === 'New')?.value ?? 0
+  const removed = payload.find((p) => p.name === 'Removed')?.value ?? 0
+  const net = newCount - removed
+  return (
+    <div className="bg-[#13131a] border border-white/10 rounded-lg px-3 py-2 text-xs shadow-xl">
+      <p className="text-slate-400 mb-1.5 font-medium">{label}</p>
+      <div className="flex flex-col gap-1">
+        <span className="text-emerald-400">+{newCount} new</span>
+        {removed > 0 && <span className="text-red-400">−{removed} removed</span>}
+        <span className={cn('font-semibold mt-0.5', net >= 0 ? 'text-white' : 'text-red-300')}>
+          net {net >= 0 ? '+' : ''}{net}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function velocityLabel(thisWeek: number, lastWeek: number): string {
+  const delta = thisWeek - lastWeek
+  if (delta === 0) return `${thisWeek} new this week`
+  const sign = delta > 0 ? '↑' : '↓'
+  return `${sign} ${Math.abs(delta)} · ${thisWeek} this week`
 }

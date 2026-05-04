@@ -85,6 +85,9 @@ func (f *fakeScanLogReader) GetJobsScannedToday(_ context.Context) (int64, error
 func (f *fakeScanLogReader) GetScansByDay(_ context.Context, _ int) ([]dto.DailyScanCount, error) {
 	return nil, f.err
 }
+func (f *fakeScanLogReader) GetCompanyAnalytics(_ context.Context, _ string) (dto.CompanyAnalytics, error) {
+	return dto.CompanyAnalytics{}, f.err
+}
 
 // fakeCompanyService is a test double for company.Service.
 type fakeCompanyService struct {

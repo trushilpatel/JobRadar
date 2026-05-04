@@ -22,6 +22,7 @@ type Service interface {
 	TriggerScan(ctx context.Context, companyID string) error
 	TriggerScanAll(ctx context.Context) (int, error)
 	GetStats(ctx context.Context, companyID string) (*dto.ScanStatsView, error)
+	GetAnalytics(ctx context.Context, companyID string) (*dto.CompanyAnalytics, error)
 	ListQueue(ctx context.Context, filter dto.QueueFilter) ([]dto.QueueEntryView, error)
 	RemoveFromQueue(ctx context.Context, entryID string) error
 }
@@ -63,6 +64,10 @@ func (b *BaseService) TriggerScanAll(ctx context.Context) (int, error) {
 
 func (b *BaseService) GetStats(ctx context.Context, companyID string) (*dto.ScanStatsView, error) {
 	return b.next.GetStats(ctx, companyID)
+}
+
+func (b *BaseService) GetAnalytics(ctx context.Context, companyID string) (*dto.CompanyAnalytics, error) {
+	return b.next.GetAnalytics(ctx, companyID)
 }
 
 func (b *BaseService) ListQueue(ctx context.Context, filter dto.QueueFilter) ([]dto.QueueEntryView, error) {

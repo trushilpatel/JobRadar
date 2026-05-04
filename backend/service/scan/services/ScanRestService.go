@@ -79,3 +79,14 @@ func (h *RestService) TriggerScan(w http.ResponseWriter, r *http.Request) {
 
 	handler.Respond(w, http.StatusAccepted, map[string]string{"company_id": id, "status": "scan_queued"})
 }
+
+// GET /companies/:id/analytics
+func (h *RestService) Analytics(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	a, err := h.next.GetAnalytics(r.Context(), id)
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, a)
+}

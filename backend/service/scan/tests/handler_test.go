@@ -33,6 +33,9 @@ func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error   {
 func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (int, error)    { return 0, f.err }
 func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error { return f.err }
 func (f *fakeScanService) PurgeInactive(_ context.Context) (int, error)        { return 0, f.err }
+func (f *fakeScanService) GetAnalytics(_ context.Context, _ string) (*dto.CompanyAnalytics, error) {
+	return &dto.CompanyAnalytics{}, f.err
+}
 
 // newScanTestRouter wires the full decorator chain under test using the given
 // service as the terminal, then mounts all routes onto a chi router.

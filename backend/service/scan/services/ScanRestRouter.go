@@ -20,4 +20,5 @@ func (r *RestRouter) Register(router chi.Router) {
 	router.Post("/companies/scan-all", r.handler.TriggerScanAll)
 	router.Get("/companies/{id}/scan-stats", r.handler.ScanStats)
 	router.Post("/companies/{id}/scan", r.handler.TriggerScan)
+	router.Get("/companies/{id}/analytics", r.handler.Analytics)
 }

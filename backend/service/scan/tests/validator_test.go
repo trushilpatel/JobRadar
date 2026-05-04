@@ -25,6 +25,9 @@ func (n *noopService) RemoveFromQueue(_ context.Context, _ string) error   { ret
 func (n *noopService) EnqueueDue(_ context.Context, _ int) (int, error)    { return 0, nil }
 func (n *noopService) ResetStuck(_ context.Context, _ time.Duration) error { return nil }
 func (n *noopService) PurgeInactive(_ context.Context) (int, error)        { return 0, nil }
+func (n *noopService) GetAnalytics(_ context.Context, _ string) (*dto.CompanyAnalytics, error) {
+	return &dto.CompanyAnalytics{}, nil
+}
 
 var _ svc.Service = (*noopService)(nil)
 
