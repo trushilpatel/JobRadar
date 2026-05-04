@@ -72,6 +72,14 @@ export function CompanyDetailDrawer({
         <div className="absolute top-3 right-3 flex items-center gap-1">
           <button
             type="button"
+            onClick={() => onScan(company)}
+            title="Scan now"
+            className="flex items-center gap-1.5 text-xs text-white bg-violet-600 hover:bg-violet-500 px-2.5 py-1.5 rounded-lg transition-colors"
+          >
+            <RefreshCw size={12} /> Scan now
+          </button>
+          <button
+            type="button"
             onClick={() => onEdit(company)}
             title="Edit"
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
@@ -95,7 +103,7 @@ export function CompanyDetailDrawer({
             <X size={14} />
           </button>
         </div>
-        <div className="flex items-start gap-3 pr-24">
+        <div className="flex items-start gap-3 pr-36">
           <CompanyAvatar name={company.name} size="md" />
           <div className="min-w-0 flex-1">
             <p className="text-base font-semibold text-white leading-tight">{company.name}</p>
@@ -122,39 +130,20 @@ export function CompanyDetailDrawer({
             <div className="h-10 bg-white/5 rounded animate-pulse" />
           ) : history.length ? (
             <>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <div className="shrink-0">
-                    <ScanHistoryBar history={history} />
-                  </div>
-                  <span className="text-xs text-slate-400 shrink-0">{successRate}%</span>
-                  {stats?.avg_duration_ms != null && (
-                    <span className="text-xs text-slate-500 shrink-0">· avg {formatMs(stats.avg_duration_ms)}</span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onScan(company)}
-                  className="flex items-center gap-1.5 text-xs text-white bg-violet-600 hover:bg-violet-500 px-2.5 py-1.5 rounded-lg transition-colors shrink-0"
-                >
-                  <RefreshCw size={11} /> Scan now
-                </button>
+              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Last 10 scans</span>
+              <div className="flex items-center gap-2 w-full">
+                <ScanHistoryBar history={history} />
+                <span className="text-xs text-slate-400 shrink-0">{successRate}%</span>
               </div>
-              <span className="text-xs text-slate-500">
-                Last scan {company.last_scan_at ? formatRelativeTime(company.last_scan_at) : '—'}
-              </span>
+              <div className="flex items-center gap-3 text-xs text-slate-500">
+                <span>Last scan {company.last_scan_at ? formatRelativeTime(company.last_scan_at) : '—'}</span>
+                {stats?.avg_duration_ms != null && (
+                  <span>· avg {formatMs(stats.avg_duration_ms)}</span>
+                )}
+              </div>
             </>
           ) : (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500">No scans yet</span>
-              <button
-                type="button"
-                onClick={() => onScan(company)}
-                className="flex items-center gap-1.5 text-xs text-white bg-violet-600 hover:bg-violet-500 px-2.5 py-1.5 rounded-lg transition-colors"
-              >
-                <RefreshCw size={11} /> Scan now
-              </button>
-            </div>
+            <span className="text-xs text-slate-500">No scans yet</span>
           )}
         </div>
 
