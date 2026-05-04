@@ -59,8 +59,7 @@ export function JobsPage() {
   const activeFilterCount = [
     jobs.searchQuery.length > 0,
     jobs.selectedCompanies.length > 0,
-    jobs.remoteFilter,
-    jobs.onSiteFilter,
+    jobs.locationFilter !== 'any',
     jobs.expFilter.length > 0,
     jobs.dateFilter !== 'all',
   ].filter(Boolean).length
@@ -101,10 +100,8 @@ export function JobsPage() {
         companies={jobs.companies}
         selectedCompanies={jobs.selectedCompanies}
         onCompaniesChange={jobs.setSelectedCompanies}
-        remoteFilter={jobs.remoteFilter}
-        onRemoteChange={jobs.setRemoteFilter}
-        onSiteFilter={jobs.onSiteFilter}
-        onOnSiteChange={jobs.setOnSiteFilter}
+        locationFilter={jobs.locationFilter}
+        onLocationChange={jobs.setLocationFilter}
         expFilter={jobs.expFilter}
         onExpChange={jobs.setExpFilter}
         dateFilter={jobs.dateFilter}

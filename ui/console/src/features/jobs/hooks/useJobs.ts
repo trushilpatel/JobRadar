@@ -6,6 +6,7 @@ import type { SortingState } from '@/components/ui/data-table'
 
 export type TabKey = 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
 export type DateFilter = 'all' | '24h' | '7d' | '30d'
+export type LocationFilter = 'any' | 'remote' | 'onsite'
 
 export function useJobs() {
   const location = useLocation()
@@ -18,8 +19,8 @@ export function useJobs() {
   // Filter state
   const initialCompanies = (location.state as { companies?: string[] } | null)?.companies ?? []
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>(initialCompanies)
-  const [remoteFilter, setRemoteFilter] = useState(false)
-  const [onSiteFilter, setOnSiteFilter] = useState(false)
+  // Single 3-way location filter — replaces the old pair of independent booleans
+  const [locationFilter, setLocationFilter] = useState<LocationFilter>('any')
   const [expFilter, setExpFilter] = useState<string[]>([])
   const [dateFilter, setDateFilter] = useState<DateFilter>(initialDateFilter)
 
@@ -56,20 +57,19 @@ export function useJobs() {
       status: tab,
       search: debouncedSearch || undefined,
       companies: selectedCompanies.length > 0 ? selectedCompanies : undefined,
-      remote: remoteFilter || undefined,
-      onSite: onSiteFilter || undefined,
+      remote: locationFilter === 'remote' || undefined,
+      onSite: locationFilter === 'onsite' || undefined,
       experienceRanges: expFilter.length > 0 ? expFilter : undefined,
       daysAdded:
         dateFilter === '24h' ? 1 : dateFilter === '7d' ? 7 : dateFilter === '30d' ? 30 : undefined,
       sortBy,
       sortDir,
     }),
-    [tab, debouncedSearch, selectedCompanies, remoteFilter, onSiteFilter, expFilter, dateFilter, sortBy, sortDir]
+    [tab, debouncedSearch, selectedCompanies, locationFilter, expFilter, dateFilter, sortBy, sortDir]
   )
 
   // Reset to page 1 when filters change
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1)
   }, [filters])
 
@@ -99,21 +99,34 @@ export function useJobs() {
       }
     : {}
 
-  // Companies for the multi-select dropdown — derived from current page results
-  const companies = useMemo(() => {
-    const names = Array.from(
-      new Set(jobs.map((j) => j.company?.name ?? j.company_id).filter(Boolean))
-    )
-    return (names as string[]).sort()
-  }, [jobs])
+  // ── Accumulated companies ──────────────────────────────────────────────────
+  // Companies seen across all pages for the current filter context.
+  // Resets when any non-company filter changes (tab, search, location, exp, date)
+  // so the list stays relevant to the current query without a separate API call.
+  const companyAccumKey = `${tab}|${debouncedSearch}|${locationFilter}|${expFilter.join(',')}|${dateFilter}`
+  const seenCompaniesRef = useRef<{ key: string; names: Set<string> }>({
+    key: '',
+    names: new Set(),
+  })
+  if (seenCompaniesRef.current.key !== companyAccumKey) {
+    seenCompaniesRef.current = { key: companyAccumKey, names: new Set() }
+  }
+  jobs.forEach((j) => {
+    const name = j.company?.name ?? j.company_id
+    if (name) seenCompaniesRef.current.names.add(name as string)
+  })
+  const companies = useMemo(
+    () => Array.from(seenCompaniesRef.current.names).sort(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [jobs] // jobs changing means new companies may have arrived
+  )
 
   function resetFilters() {
     setSearchQueryRaw('')
     setDebouncedSearch('')
     if (debounceRef.current) clearTimeout(debounceRef.current)
     setSelectedCompanies([])
-    setRemoteFilter(false)
-    setOnSiteFilter(false)
+    setLocationFilter('any')
     setExpFilter([])
     setDateFilter('all')
     setSorting([])
@@ -145,10 +158,8 @@ export function useJobs() {
     // Filters
     selectedCompanies,
     setSelectedCompanies,
-    remoteFilter,
-    setRemoteFilter,
-    onSiteFilter,
-    setOnSiteFilter,
+    locationFilter,
+    setLocationFilter,
     expFilter,
     setExpFilter,
     dateFilter,

@@ -56,10 +56,7 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, page, limi
 		query = query.Joins("LEFT JOIN companies ON companies.id = job_feed.company_id")
 	}
 
-	// Status — "saved" is a boolean flag, not a status value
-	if filter.Status == jobcommon.JobStatusSaved {
-		query = query.Where("saved = ?", true)
-	} else if filter.Status != "" {
+	if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)
 	}
 
@@ -190,9 +187,12 @@ func (s *jobStore) DeleteJob(ctx context.Context, id string) (err error) {
 func (s *jobStore) UpdateJobStatus(ctx context.Context, id, status string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.UpdateJobStatus")
 	defer tracing.End(span, &err)
+	// Keep the saved boolean in sync with the status column so that both
+	// GetJobCounts (which uses status) and any saved-flag reads stay consistent.
+	savedFlag := status == jobcommon.JobStatusSaved
 	return s.db.WithContext(ctx).Model(&jobmodel.Job{}).
 		Where("id = ?", id).
-		Update("status", status).Error
+		Updates(map[string]any{"status": status, "saved": savedFlag}).Error
 }
 
 func (s *jobStore) UpdateJobStatusBatch(ctx context.Context, ids []string, status string) (_ int64, err error) {

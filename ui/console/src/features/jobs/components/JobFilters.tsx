@@ -1,7 +1,7 @@
 import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
-import type { DateFilter } from '@/features/jobs/hooks/useJobs'
+import type { DateFilter, LocationFilter } from '@/features/jobs/hooks/useJobs'
 
 // ── FilterPill ─────────────────────────────────────────────────────────────────
 
@@ -44,10 +44,8 @@ interface JobFiltersProps {
   companies: string[]
   selectedCompanies: string[]
   onCompaniesChange: (v: string[]) => void
-  remoteFilter: boolean
-  onRemoteChange: (v: boolean) => void
-  onSiteFilter: boolean
-  onOnSiteChange: (v: boolean) => void
+  locationFilter: LocationFilter
+  onLocationChange: (v: LocationFilter) => void
   expFilter: string[]
   onExpChange: (v: string[]) => void
   dateFilter: DateFilter
@@ -57,11 +55,19 @@ interface JobFiltersProps {
 }
 
 const EXP_OPTIONS = ['0-2', '2-5', '5+'] as const
-const DATE_OPTIONS: { value: DateFilter; label: string }[] = [
-  { value: 'all', label: 'Any' },
+
+// Date options without "Any" — 24h/7d/30d all inactive = any date.
+// Clicking an active date pill deselects it (resets to all).
+const DATE_OPTIONS: { value: Exclude<DateFilter, 'all'>; label: string }[] = [
   { value: '24h', label: '24h' },
   { value: '7d', label: '7d' },
   { value: '30d', label: '30d' },
+]
+
+// Location options as a mutually-exclusive 3-way toggle
+const LOCATION_OPTIONS: { value: LocationFilter; label: string; color: 'violet' | 'emerald' }[] = [
+  { value: 'remote', label: 'Remote', color: 'emerald' },
+  { value: 'onsite', label: 'On-site', color: 'violet' },
 ]
 
 export function JobFilters({
@@ -70,10 +76,8 @@ export function JobFilters({
   companies,
   selectedCompanies,
   onCompaniesChange,
-  remoteFilter,
-  onRemoteChange,
-  onSiteFilter,
-  onOnSiteChange,
+  locationFilter,
+  onLocationChange,
   expFilter,
   onExpChange,
   dateFilter,
@@ -83,6 +87,16 @@ export function JobFilters({
 }: JobFiltersProps) {
   function toggleExp(opt: string) {
     onExpChange(expFilter.includes(opt) ? expFilter.filter((v) => v !== opt) : [...expFilter, opt])
+  }
+
+  function toggleDate(value: Exclude<DateFilter, 'all'>) {
+    // Clicking the active date pill deselects it (resets to all)
+    onDateChange(dateFilter === value ? 'all' : value)
+  }
+
+  function toggleLocation(value: LocationFilter) {
+    // Clicking the active location option resets to any
+    onLocationChange(locationFilter === value ? 'any' : value)
   }
 
   return (
@@ -124,7 +138,7 @@ export function JobFilters({
         <FilterPill
           key={d.value}
           active={dateFilter === d.value}
-          onClick={() => onDateChange(d.value)}
+          onClick={() => toggleDate(d.value)}
         >
           {d.label}
         </FilterPill>
@@ -132,21 +146,16 @@ export function JobFilters({
 
       <Divider />
 
-      <FilterPill
-        color="emerald"
-        active={remoteFilter}
-        onClick={() => onRemoteChange(!remoteFilter)}
-      >
-        Remote
-      </FilterPill>
-
-      <FilterPill
-        color="violet"
-        active={onSiteFilter}
-        onClick={() => onOnSiteChange(!onSiteFilter)}
-      >
-        On-site
-      </FilterPill>
+      {LOCATION_OPTIONS.map((loc) => (
+        <FilterPill
+          key={loc.value}
+          color={loc.color}
+          active={locationFilter === loc.value}
+          onClick={() => toggleLocation(loc.value)}
+        >
+          {loc.label}
+        </FilterPill>
+      ))}
 
       {hasActiveFilters && (
         <>
