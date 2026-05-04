@@ -4,7 +4,9 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/trushilpatel/jobradar/common/errors"
+	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/identity"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
@@ -12,35 +14,97 @@ import (
 	"gorm.io/gorm"
 )
 
+// applicationRepository is the GORM-backed terminal ApplicationRepository
+// implementation. Every method takes userID explicitly; an empty userID is
+// rejected with ErrInternal.WithMessage("user id required") before the DB
+// is touched, so a forgotten ctx scoping never silently broadens a query
+// to all users.
 type applicationRepository struct {
 	db *gorm.DB
 }
 
-// NewApplicationRepositoryService constructs the terminal ApplicationService implementation.
-func NewApplicationRepositoryService(db *gorm.DB) ApplicationService {
+// NewApplicationRepositoryService constructs the per-user ApplicationRepository.
+func NewApplicationRepositoryService(db *gorm.DB) ApplicationRepository {
 	return &applicationRepository{db: db}
 }
 
-// NewApplicationWriter constructs an ApplicationWriter backed by the repository.
+// NewApplicationWriter constructs the narrow jobsvc.ApplicationWriter
+// contract backed by the same repository. The caller's userID is sourced
+// from ctx in InsertAppliedApplication.
 func NewApplicationWriter(db *gorm.DB) jobsvc.ApplicationWriter {
 	return &applicationRepository{db: db}
 }
 
-// --- ApplicationService interface ---
-
-func (s *applicationRepository) ListByJob(jobID string) ([]appmodel.JobApplication, error) {
-	return s.getApplicationsByJobID(jobID)
+// errNoUser is the canonical guard error for empty userID. The same error
+// instance is returned from every method so AssertUserScoped tests have a
+// stable check.
+func errNoUser() error {
+	return apperr.ErrInternal.WithMessage("user id required")
 }
 
-func (s *applicationRepository) ListAll(page, limit int) ([]ApplicationWithJob, int, error) {
-	apps, total, err := s.getLatestApplicationsWithJobPaged(page, limit)
-	if err != nil {
+// --- ApplicationRepository interface ---
+
+// ListByJob returns the application history for one (user, job_result_id) pair.
+func (s *applicationRepository) ListByJob(ctx context.Context, userID, jobID string) (_ []appmodel.JobApplication, err error) {
+	if userID == "" {
+		return nil, errNoUser()
+	}
+	ctx, span := tracing.Start(ctx, "application.repo.ListByJob")
+	defer tracing.End(span, &err)
+
+	var apps []appmodel.JobApplication
+	err = s.db.WithContext(ctx).
+		Where("user_id = ? AND job_result_id = ?", userID, jobID).
+		Order("stage_at ASC").
+		Limit(100).
+		Find(&apps).Error
+	return apps, err
+}
+
+// ListAll returns a paginated list of the latest application per
+// (user, job_result_id) belonging to userID.
+func (s *applicationRepository) ListAll(ctx context.Context, userID string, page, limit int) (_ []ApplicationWithJob, _ int, err error) {
+	if userID == "" {
+		return nil, 0, errNoUser()
+	}
+	ctx, span := tracing.Start(ctx, "application.repo.ListAll")
+	defer tracing.End(span, &err)
+
+	var results []ApplicationWithJob
+	var total int64
+
+	if err = s.db.WithContext(ctx).
+		Raw(`SELECT COUNT(DISTINCT job_result_id) FROM job_application_tracker WHERE user_id = ?`, userID).
+		Scan(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	return apps, int(total), nil
+
+	offset := (page - 1) * limit
+	err = s.db.WithContext(ctx).Raw(`
+		SELECT DISTINCT ON (ja.job_result_id)
+			ja.*,
+			j.title as job_title,
+			j.company_id,
+			c.name as company_name
+		FROM job_application_tracker ja
+		JOIN jobs j ON ja.job_result_id = j.id
+		JOIN companies c ON j.company_id = c.id
+		WHERE ja.user_id = ?
+		ORDER BY ja.job_result_id, ja.stage_at DESC
+		LIMIT ? OFFSET ?
+	`, userID, limit, offset).Scan(&results).Error
+	return results, int(total), err
 }
 
-func (s *applicationRepository) ListActive() ([]ApplicationWithJob, error) {
+// ListActive returns the latest application per (user, job_result_id) for
+// any application currently in an interview-track stage.
+func (s *applicationRepository) ListActive(ctx context.Context, userID string) (_ []ApplicationWithJob, err error) {
+	if userID == "" {
+		return nil, errNoUser()
+	}
+	ctx, span := tracing.Start(ctx, "application.repo.ListActive")
+	defer tracing.End(span, &err)
+
 	var results []ApplicationWithJob
 	interviewingStages := []string{
 		appcommon.StagePhoneScreen,
@@ -48,134 +112,105 @@ func (s *applicationRepository) ListActive() ([]ApplicationWithJob, error) {
 		appcommon.StageFinalRound,
 		appcommon.StageOffer,
 	}
-	err := s.db.Raw(`
+	err = s.db.WithContext(ctx).Raw(`
 		SELECT DISTINCT ON (ja.job_result_id)
 			ja.*,
 			j.title as job_title,
 			j.company_id,
 			c.name as company_name
 		FROM job_application_tracker ja
-		JOIN job_feed j ON ja.job_result_id = j.id
+		JOIN jobs j ON ja.job_result_id = j.id
 		JOIN companies c ON j.company_id = c.id
-		WHERE ja.stage IN ?
+		WHERE ja.user_id = ? AND ja.stage IN ?
 		ORDER BY ja.job_result_id, ja.stage_at DESC
-	`, interviewingStages).Scan(&results).Error
+	`, userID, interviewingStages).Scan(&results).Error
 	return results, err
 }
 
-func (s *applicationRepository) Create(_ context.Context, jobResultID string, input dto.CreateApplicationInput) (*appmodel.JobApplication, error) {
-	if err := s.insertApplication(jobResultID, input.Stage, input.Note); err != nil {
-		return nil, err
+// Create inserts a new application row scoped to (user, jobResultID).
+func (s *applicationRepository) Create(ctx context.Context, userID, jobResultID string, input dto.CreateApplicationInput) (*appmodel.JobApplication, error) {
+	if userID == "" {
+		return nil, errNoUser()
 	}
-	app := &appmodel.JobApplication{
-		JobResultID: jobResultID,
-		Stage:       input.Stage,
-	}
-	if input.Note != "" {
-		app.Note = &input.Note
-	}
-	return app, nil
+	return s.insertApplication(ctx, userID, jobResultID, input.Stage, input.Note)
 }
 
-func (s *applicationRepository) UpdateStage(_, appID string, input dto.UpdateStageInput) error {
+// UpdateStage updates the stage of an application owned by userID.
+func (s *applicationRepository) UpdateStage(ctx context.Context, userID, appID string, input dto.UpdateStageInput) (err error) {
+	if userID == "" {
+		return errNoUser()
+	}
 	id, err := parseAppID(appID)
 	if err != nil {
 		return err
 	}
-	return s.updateApplicationStage(id, input.Stage)
+	ctx, span := tracing.Start(ctx, "application.repo.UpdateStage")
+	defer tracing.End(span, &err)
+
+	return s.db.WithContext(ctx).Exec(
+		`UPDATE job_application_tracker SET stage = ?, stage_at = NOW() WHERE id = ? AND user_id = ?`,
+		input.Stage, id, userID,
+	).Error
 }
 
-func (s *applicationRepository) UpdateNote(_, appID string, input dto.UpdateNoteInput) error {
+// UpdateNote updates the note of an application owned by userID.
+func (s *applicationRepository) UpdateNote(ctx context.Context, userID, appID string, input dto.UpdateNoteInput) (err error) {
+	if userID == "" {
+		return errNoUser()
+	}
 	id, err := parseAppID(appID)
 	if err != nil {
 		return err
 	}
-	return s.updateApplicationNote(id, input.Note)
+	ctx, span := tracing.Start(ctx, "application.repo.UpdateNote")
+	defer tracing.End(span, &err)
+
+	return s.db.WithContext(ctx).Exec(
+		`UPDATE job_application_tracker SET note = ? WHERE id = ? AND user_id = ?`,
+		input.Note, id, userID,
+	).Error
 }
 
-// --- ApplicationWriter interface ---
+// --- jobsvc.ApplicationWriter interface ---
 
-// InsertAppliedApplication inserts an "applied" stage row.
-func (s *applicationRepository) InsertAppliedApplication(jobResultID string) error {
-	return s.insertApplication(jobResultID, appcommon.StageApplied, "")
+// InsertAppliedApplication inserts an "applied" stage row for the caller
+// in ctx. The userID is sourced from ctx (per the ApplicationWriter
+// contract) — empty userID is rejected with errNoUser().
+func (s *applicationRepository) InsertAppliedApplication(ctx context.Context, jobResultID string) error {
+	userID := identity.UserIDFrom(ctx)
+	if userID == "" {
+		return errNoUser()
+	}
+	_, err := s.insertApplication(ctx, userID, jobResultID, appcommon.StageApplied, "")
+	return err
 }
 
-// InsertInterviewingApplication inserts a "phone_screen" stage row.
-func (s *applicationRepository) InsertInterviewingApplication(jobResultID string) error {
-	return s.insertApplication(jobResultID, appcommon.StagePhoneScreen, "")
-}
-
-// InsertOfferApplication inserts an "offer" stage row.
-func (s *applicationRepository) InsertOfferApplication(jobResultID string) error {
-	return s.insertApplication(jobResultID, appcommon.StageOffer, "")
-}
-
-// --- unexported DB helpers ---
+// --- unexported helpers ---
 
 func parseAppID(s string) (int64, error) {
 	id, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return 0, errors.ErrBadRequest.WithMessage("invalid app_id")
+		return 0, apperr.ErrBadRequest.WithMessage("invalid app_id")
 	}
 	return id, nil
 }
 
-func (s *applicationRepository) getApplicationsByJobID(jobResultID string) ([]appmodel.JobApplication, error) {
-	var apps []appmodel.JobApplication
-	err := s.db.Where("job_result_id = ?", jobResultID).
-		Order("stage_at ASC").
-		Limit(100).
-		Find(&apps).Error
-	return apps, err
-}
+func (s *applicationRepository) insertApplication(ctx context.Context, userID, jobResultID, stage, note string) (_ *appmodel.JobApplication, err error) {
+	ctx, span := tracing.Start(ctx, "application.repo.insertApplication")
+	defer tracing.End(span, &err)
 
-func (s *applicationRepository) insertApplication(jobResultID, stage, note string) error {
 	var notePtr *string
 	if note != "" {
 		notePtr = &note
 	}
 	row := appmodel.JobApplication{
+		UserID:      userID,
 		JobResultID: jobResultID,
 		Stage:       stage,
 		Note:        notePtr,
 	}
-	return s.db.Create(&row).Error
-}
-
-func (s *applicationRepository) getLatestApplicationsWithJobPaged(page, limit int) ([]ApplicationWithJob, int64, error) {
-	var results []ApplicationWithJob
-	var total int64
-
-	if err := s.db.Raw(`SELECT COUNT(DISTINCT job_result_id) FROM job_application_tracker`).Scan(&total).Error; err != nil {
-		return nil, 0, err
+	if err = s.db.WithContext(ctx).Create(&row).Error; err != nil {
+		return nil, err
 	}
-
-	offset := (page - 1) * limit
-	err := s.db.Raw(`
-		SELECT DISTINCT ON (ja.job_result_id)
-			ja.*,
-			j.title as job_title,
-			j.company_id,
-			c.name as company_name
-		FROM job_application_tracker ja
-		JOIN job_feed j ON ja.job_result_id = j.id
-		JOIN companies c ON j.company_id = c.id
-		ORDER BY ja.job_result_id, ja.stage_at DESC
-		LIMIT ? OFFSET ?
-	`, limit, offset).Scan(&results).Error
-	return results, total, err
-}
-
-func (s *applicationRepository) updateApplicationStage(id int64, stage string) error {
-	return s.db.Exec(
-		`UPDATE job_application_tracker SET stage = ?, stage_at = NOW() WHERE id = ?`,
-		stage, id,
-	).Error
-}
-
-func (s *applicationRepository) updateApplicationNote(id int64, note string) error {
-	return s.db.Exec(
-		`UPDATE job_application_tracker SET note = ? WHERE id = ?`,
-		note, id,
-	).Error
+	return &row, nil
 }
