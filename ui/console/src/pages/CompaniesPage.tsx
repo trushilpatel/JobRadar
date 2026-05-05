@@ -66,7 +66,7 @@ export function CompaniesPage() {
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <CompaniesTable
           companies={c.companies}
-          total={['running', 'queued'].includes(c.statusFilter) ? c.companies.length : c.total}
+          total={['running', 'queued', 'error'].includes(c.statusFilter) ? c.companies.length : c.total}
           loading={c.loading}
           page={c.page}
           limit={c.limit}

@@ -24,7 +24,8 @@ export function CompaniesHeader({
   )
 
   const refresh = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['companies'] })
+    queryClient.invalidateQueries({ queryKey: ['admin-companies'] })
+    queryClient.invalidateQueries({ queryKey: ['scan-queue'] })
     queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] })
   }, [queryClient])
 
