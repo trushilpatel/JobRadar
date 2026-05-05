@@ -28,7 +28,7 @@ export function useCompanies() {
   }
 
   const sortBy = sorting[0]?.id
-  const sortDir = sorting[0] ? (sorting[0].desc ? 'desc' : 'asc') : undefined
+  const sortDir: 'asc' | 'desc' | undefined = sorting[0] ? (sorting[0].desc ? 'desc' : 'asc') : undefined
 
   // 'error' filter is client-side (admin API has no last_scan_status param);
   // 'running'/'queued' require the queue table — all three fetch the full set.
