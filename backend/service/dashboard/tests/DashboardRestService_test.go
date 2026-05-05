@@ -122,13 +122,21 @@ func (f *fakePipelineService) GetPipelineStats(_ context.Context) (*dto.Pipeline
 	return f.stats, f.err
 }
 
+// Phase 2: /dashboard/pipeline moved to /admin/dashboard/pipeline (PipelineRestRouter).
+// The following tests use PipelineRestService + PipelineRestRouter directly.
+
+func newPipelineTestRouter(svc dashboardsvc.PipelineService) *chi.Mux {
+	r := chi.NewRouter()
+	rest := dashboardsvc.NewPipelineRestService(svc)
+	router := dashboardsvc.NewPipelineRestRouter(rest)
+	router.Register(r)
+	return r
+}
+
 func TestDashboardHandlerPipeline_OK(t *testing.T) {
-	h := dashboardsvc.NewDashboardRestService(
-		&fakeDashboardService{},
-		nil,
-		&fakePipelineService{stats: &dto.PipelineStats{TotalCompanies: 5, ActiveCompanies: 4}},
-	)
-	r := newDashboardTestRouter(h)
+	r := newPipelineTestRouter(&fakePipelineService{
+		stats: &dto.PipelineStats{TotalCompanies: 5, ActiveCompanies: 4},
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/pipeline", nil)
 	w := httptest.NewRecorder()
@@ -143,12 +151,9 @@ func TestDashboardHandlerPipeline_OK(t *testing.T) {
 }
 
 func TestDashboardHandlerPipeline_ServiceError(t *testing.T) {
-	h := dashboardsvc.NewDashboardRestService(
-		&fakeDashboardService{},
-		nil,
-		&fakePipelineService{err: errors.ErrInternal.WithMessage("db down")},
-	)
-	r := newDashboardTestRouter(h)
+	r := newPipelineTestRouter(&fakePipelineService{
+		err: errors.ErrInternal.WithMessage("db down"),
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/pipeline", nil)
 	w := httptest.NewRecorder()

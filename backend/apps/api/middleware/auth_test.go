@@ -380,17 +380,20 @@ func TestAuth_AlgConfusion_ES256PublicKeyAsHS256_401(t *testing.T) {
 	}
 }
 
-func TestAuth_WrongEmail_403(t *testing.T) {
+// TestAuth_AnyEmail_Passes verifies Phase 2 behaviour: any valid JWT is
+// accepted regardless of email address — the allowlist was removed.
+// Per-route identity checks (RequireIdentity + RequireRole) gate access.
+func TestAuth_AnyEmail_Passes(t *testing.T) {
 	cfg := baseHSConfig()
 	mw, _ := Auth(cfg, "", logger.NewNoop())
 	tok := signToken(t, tokenOptions{
 		alg: "HS256", hmacKey: []byte(testHMACSecret),
-		issuer: testIssuer, audience: testAudience, email: "intruder@example.com",
+		issuer: testIssuer, audience: testAudience, email: "anyone@example.com",
 		expiresAt: time.Now().Add(5 * time.Minute),
 	})
 	w, _ := request(t, mw, "Bearer "+tok)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("got %d want 403", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("got %d want 200 — email allowlist should not reject valid JWTs", w.Code)
 	}
 }
 

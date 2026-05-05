@@ -72,7 +72,7 @@ func TestGetMeReturnsIdentityBundle(t *testing.T) {
 	srv := httptest.NewServer(newTestRouter(&stubService{}, ident))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/api/me/")
+	resp, err := http.Get(srv.URL + "/me/")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestPatchMeUpdatesProfile(t *testing.T) {
 	defer srv.Close()
 
 	body := strings.NewReader(`{"display_name":"Alice"}`)
-	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/api/me/", body)
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/me/", body)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PATCH: %v", err)
@@ -132,7 +132,7 @@ func TestPatchMeRejectsMalformedBody(t *testing.T) {
 	srv := httptest.NewServer(newTestRouter(svc, ident))
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/api/me/", strings.NewReader("not json"))
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/me/", strings.NewReader("not json"))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PATCH: %v", err)
@@ -150,7 +150,7 @@ func TestDeleteMeReturns204(t *testing.T) {
 	srv := httptest.NewServer(newTestRouter(svc, ident))
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/me/", nil)
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/me/", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE: %v", err)
