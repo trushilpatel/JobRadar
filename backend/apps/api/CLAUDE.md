@@ -17,14 +17,20 @@ HTTP server on `:8080`. Mounts all service routers, handles graceful shutdown.
 | Package      | Role                                                                        |
 | ------------ | --------------------------------------------------------------------------- |
 | `handler/`   | `Respond[T]`, `RespondPaged[T]`, `RespondError`, `HandleError` helpers      |
-| `middleware/`| Request logger, metrics, body limit, security headers, `Auth` / `RequireAuth` (legacy email allowlist via `ALLOWED_EMAIL`), exported `VerifyJWT(r)` helper, plus Phase 1: `RequireIdentity` (DB-backed enrichment + cache-aside + lazy provisioning + status check + `ADMIN_EMAILS` auto-grant), `RequireRole(role)`, `RateLimit(limiter)` (per-user, method-derived scope, fail-open on Redis outage, 429 + `Retry-After`), `AuditAdminMutation(svc)` (appends `admin_audit_log` on 2xx mutating responses) |
+| `middleware/`| Request logger, metrics, body limit, security headers, `Auth` (JWT verify + dev-bypass), exported `VerifyJWT(r)` helper; `RequireIdentity` (DB-backed enrichment + cache-aside + lazy provisioning + status check + `ADMIN_EMAILS` auto-grant); `RequireRole(role)`; `RateLimit(limiter)` (per-user, method-derived scope, fail-open on Redis outage, 429 + `Retry-After`); `AuditAdminMutation(svc)` (appends `admin_audit_log` on 2xx mutating responses) |
 | `request/`   | Pagination parsing, query param helpers                                     |
 | `response/`  | Shared response envelope types                                              |
+
+## Route structure (Phase 2)
+
+- `/api/*` — all user-facing routes; `RequireIdentity` + `RateLimit` applied globally via `NewRouter`
+- `/admin/*` — admin-only routes; `RequireIdentity` + `RequireRole("admin")` + `AuditAdminMutation` applied per-route group
+- `/health`, `/ready`, `/metrics` — operational endpoints; no auth; served on ops listener (`:9090`)
 
 ## Rules
 
 - All handlers use `handler.Respond`, `handler.RespondPaged`, or `handler.HandleError` — never raw `json.NewEncoder`
 - Route registration belongs in each service's `RestRouter` — `router.go` only mounts them
-- `wire_gen.go` is auto-generated — regenerate with `go generate ./apps/api/` after changing `wire.go`
+- `wire_gen.go` is manually maintained (Wire codegen removed); update it when changing `wire.go` provider signatures
 - 5-second graceful shutdown timeout on SIGINT/SIGTERM
 - `main.go` owns dashboard materialized view refresh via a background goroutine (`runRefresher`): pipeline stats every 3 min, heatmap every 5 min

@@ -7,7 +7,7 @@ Full design spec: `Designs/job-tracker-final-architecture.md`
 ## Pipeline
 
 ```
-company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → job_listings.raw (Kafka) → job_listing_relevance_filter → job_listings.filtered (Kafka) → job_post_analyzer → job_feed (DB) → API
+company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → job_listings.raw (Kafka) → job_listing_relevance_filter → job_listings.filtered (Kafka) → job_post_analyzer → jobs (DB) → API
 ```
 
 ## Directory map
@@ -19,7 +19,7 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `backend/apps/crawler/`           | Crawler binary + engine + ATS adapters (Greenhouse, Lever, Ashby, Google, etc.)  |
 | `backend/apps/scheduler/`         | Scheduler binary — enqueues companies due for a scan                             |
 | `backend/apps/filter/`            | Filter binary + worker — LLM batch scoring, routes relevant jobs                 |
-| `backend/apps/analyzer/`          | Analyzer binary + worker + techtag normalizer — LLM enrichment, writes job_feed  |
+| `backend/apps/analyzer/`          | Analyzer binary + worker + techtag normalizer — LLM enrichment, writes jobs table |
 | `backend/apps/api/`               | API binary + router + handlers + middleware + request/response helpers            |
 | `backend/apps/migrate/`           | Migration runner binary                                                           |
 | `backend/common/config/`          | Config struct + env var loading via godotenv                                      |
@@ -51,76 +51,86 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `apps/scheduler`          | Queries DB for companies due for a scan, inserts into `company_scan_queue`                        |
 | `apps/crawler`            | Polls `company_scan_queue` (DB), fetches careers pages, publishes to `job_listings.raw`           |
 | `apps/filter`             | Scores batches via LLM, routes relevant to `job_listings.filtered`                                |
-| `apps/analyzer`           | Fetches full job page (or uses pre-fetched FullContent), LLM enriches, writes to `job_feed` table |
+| `apps/analyzer`           | Fetches full job page (or uses pre-fetched FullContent), LLM enriches, writes to `jobs` table      |
 | `apps/api`                | REST API on `:8080`                                                                               |
 
 ## Database tables
 
 | Table                     | Role                                                                                      |
 | ------------------------- | ----------------------------------------------------------------------------------------- |
-| `companies`               | Tracked companies                                                                         |
+| `companies`               | Tracked companies (operational columns dropped in Phase 2; `company_scan_settings` holds scan config) |
+| `company_scan_settings`   | Per-company scan configuration (admin-managed); companies without a row are skipped by workers |
 | `company_scan_queue`      | Durable work queue for pending/in-progress company scans; deduped by unique partial index |
-| `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` tracks when a job disappears; `reason` includes `retry` (transient in-flight) with `retry_count` + `next_attempt_at` populated only while `reason='retry'`, written by the filter via `UpdateRetryBatch` |
 | `company_scan_log`        | Per-run scan summary (fetched, new, duration, error)                                      |
-| `job_feed`                | Operational feed — only `new`, `saved`, `applied`, `dismissed` rows live here             |
+| `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` tracks when a job disappears; `reason` includes `retry` (transient in-flight) with `retry_count` + `next_attempt_at` populated only while `reason='retry'`, written by the filter via `UpdateRetryBatch` |
+| `jobs`                    | Operational feed — global job rows; per-user status/notes live in `user_job_state`        |
+| `user_job_state`          | Per-user job state overlay: saved_at, applied_at, status, notes, dismissal reason/note    |
 | `job_analytics`           | Append-only analytics record written by job_post_analyzer; survives job dismissal         |
-| `job_application_tracker` | Application stage tracking                                                                |
-| `job_dismissal_log`       | Dismiss log with reason and note                                                          |
-| `users`                   | Phase 1 — registered users (id, email citext, display_name, status, timestamps)           |
-| `roles`                   | Phase 1 — RBAC0 role catalog (`user`, `admin`); seeded by migration 043                   |
-| `user_roles`              | Phase 1 — user↔role join; cascade rules: user_id CASCADE, role_id RESTRICT, granted_by SET NULL |
-| `admin_audit_log`         | Phase 1 — append-only audit trail for admin mutations (actor, action, target, payload)    |
+| `job_application_tracker` | Application stage tracking; includes `user_id NOT NULL` (Phase 2)                        |
+| `users`                   | Registered users (id, email citext, display_name, status, timestamps)                     |
+| `roles`                   | RBAC0 role catalog (`user`, `admin`); seeded by migration 043                             |
+| `user_roles`              | user↔role join; cascade rules: user_id CASCADE, role_id RESTRICT, granted_by SET NULL     |
+| `admin_audit_log`         | Append-only audit trail for admin mutations (actor, action, target, payload)              |
 
 ## Job status flow
 
 ```
 new → saved → applied    (user advances)
-new → dismissed          (user dismisses — job row kept for FK integrity, hidden from feed)
+new → dismissed          (user dismisses — job row kept in `jobs` for FK integrity)
 ```
 
-`dismissed` jobs still exist in `job_feed` but are excluded from feed queries (`WHERE status = 'new'`). Historical analytics come from `job_analytics`; current-state aggregations (e.g. funnel stage counts) read `job_feed.status` directly.
+Per-user status lives in `user_job_state` (upserted on every save/dismiss/status change). The feed query LEFT JOINs `user_job_state` and defaults to `new` when no row exists for the calling user. Historical analytics come from `job_analytics`; current-state aggregations (e.g. funnel stage counts) read `user_job_state.status` directly.
 
 ## Scan scheduling
 
 - `SCAN_INTERVAL_MINUTES` (default `1440` = 24h) controls how often each company is scanned
 - Scheduler checks every 1 min; only enqueues companies where `last_scan_at` is NULL or older than the interval
-- Manual trigger (`POST /companies/:id/scan`) bypasses the cooldown — always enqueues immediately
+- Manual trigger (`POST /api/companies/:id/scan`) bypasses the cooldown — always enqueues immediately
+- Workers skip companies that have no row in `company_scan_settings` (logged, not errored)
 
-## Multi-user (Phase 1)
+## Multi-user (Phases 1 + 2 shipped)
 
-Phase 1 of the multi-user rollout has shipped — additive only, nothing existing was removed. Phase 2 (per-user data model, `/api` vs `/admin` route split, companies public/operational split, `job_feed`→`jobs` rename) and Phase 3 (frontend admin UI, `/me` integration, role-gated nav) are **planned and not yet shipped**. Roadmap: [`Designs/multi-user-rollout-plan.md`](Designs/multi-user-rollout-plan.md). Locked Phase 1 contracts: [`Designs/phase1-contracts.md`](Designs/phase1-contracts.md).
+Phases 1 and 2 of the multi-user rollout have shipped. Phase 3 (frontend admin UI, `/me` integration, role-gated nav) is **in progress**. Roadmap: [`Designs/multi-user-rollout-plan.md`](Designs/multi-user-rollout-plan.md).
 
-What shipped in Phase 1:
-
-- New tables (migration `043_phase1_users_roles_audit.sql`): `users`, `roles`, `user_roles`, `admin_audit_log`
+**Phase 1 (additive):**
+- New tables (`043_phase1_users_roles_audit.sql`): `users`, `roles`, `user_roles`, `admin_audit_log`
 - Platform packages: `backend/common/identity/`, `backend/platform/cache/`, `backend/platform/ratelimit/`, `backend/platform/supabaseadmin/`
 - Service slices: `backend/service/user/` (with cache decorator), `backend/service/role/`, `backend/service/audit/`
-- Test helper: `backend/service/testutil/` — `AssertUserScoped` for repo guard tests (consumed in Phase 2 when user-scoped repos land)
-- Middleware in `backend/apps/api/middleware/`: `RequireIdentity` (DB-backed enrichment + caching + lazy provisioning + status check + `ADMIN_EMAILS` auto-grant), `RequireRole(role)`, `RateLimit(limiter)` (per-user, method-derived scope, fail-open on Redis outage, returns 429 + `Retry-After`), `AuditAdminMutation(svc)` (appends to `admin_audit_log` on 2xx mutating responses)
-- `auth.go` extended with exported `VerifyJWT(r) (sub, email, error)` consumed by `RequireIdentity`. Legacy `Auth` / `RequireAuth` (and the `ALLOWED_EMAIL` single-email allowlist they enforce) is unchanged for routes not yet migrated to `RequireIdentity`.
-- Endpoints (only): `GET /api/me`, `PATCH /api/me` (display_name only), `DELETE /api/me` (Supabase admin delete → DB cascade)
+- Test helper: `backend/service/testutil/` — `AssertUserScoped` for repo guard tests
+- Middleware: `RequireIdentity` (DB enrichment + caching + lazy provisioning + `ADMIN_EMAILS` auto-grant), `RequireRole(role)`, `RateLimit(limiter)` (per-user, method-derived scope, fail-open), `AuditAdminMutation(svc)`
+- Endpoints: `GET /api/me`, `PATCH /api/me`, `DELETE /api/me`
 
-Concepts established in Phase 1:
+**Phase 2 (hard-stop cutover):**
+- Schema migration (`044_phase2_multiuser_data_model.sql`): `job_feed` renamed to `jobs`; per-user columns dropped; `user_job_state` created; `company_scan_settings` created; `job_dismissal_log` dropped; `job_application_tracker.user_id NOT NULL`
+- Job slice: feed query LEFT JOINs `user_job_state`; save/status/notes/dismiss upsert into `user_job_state`
+- Application slice: every method takes explicit `userID`
+- Company slice split: public path (`CompanyService`: ListPublic, GetPublic) + admin path (`CompanyAdminService`: mutations)
+- Scan slice: reads scan config from `company_scan_settings`; companies without a row are skipped
+- Dashboard split: `DashboardService` (stats, activity) + `UserDashboardService` (progress, market, heatmap, velocity) + `PipelineService` (admin pipeline stats)
+- Router split: all user-facing routes under `/api` with `RequireIdentity` + `RateLimit`; admin routes under `/admin` with additional `RequireRole("admin")`; `auth.go` email allowlist removed (identity-gated per route instead)
 
+**Established concepts (both phases):**
 - RBAC0 — `roles` + `user_roles` join only; no permissions table yet
 - Identity flows via `context.Context` — repos take `userID` explicitly, services pull from ctx via `identity.FromContext` / `UserIDFrom` / `IsAdmin`
-- Decorator chain extended with cache layer: `Rest → Validation → Cache → Impl → Repo`
+- Decorator chain: `Rest → Validation → Cache → Impl → Repo`; CacheService optional per slice
 - Source of truth for role membership is Postgres (`user_roles`) — never JWT custom claims
 
 New env vars: `ADMIN_EMAILS`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_READ_RPM`, `RATE_LIMIT_WRITE_RPM`, `RATE_LIMIT_ADMIN_RPM`, `CACHE_TTL_USER_SECONDS`.
 
-## Dashboard stats fields
+## Dashboard endpoints
 
-`GET /dashboard/stats` returns:
+User-facing dashboard routes (all under `/api/dashboard/`):
 
-| Field                | Description                                                                         |
-| -------------------- | ----------------------------------------------------------------------------------- |
-| `jobs_scanned_today` | Total job pages fetched today across all companies                                  |
-| `jobs_new`           | Jobs in feed with status `new`                                                      |
-| `jobs_saved`         | Jobs with status `saved`                                                            |
-| `jobs_applied`       | Jobs with status `applied`                                                          |
-| `pipeline_pending`   | Jobs in `job_pipeline_ledger` with `reason='fetch'` but not yet in `job_feed` table |
-| `pipeline_errors`    | Jobs in `job_pipeline_ledger` with `reason='error'`                                 |
+| Route                         | Description                                                        |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `GET /api/dashboard/stats`    | Global scan stats (jobs scanned today, pipeline pending/errors)    |
+| `GET /api/dashboard/activity` | Daily activity counts (scan log, `?days=N`)                        |
+| `GET /api/dashboard/progress` | Per-user progress (new/saved/applied/dismissed from `user_job_state`) |
+| `GET /api/dashboard/market`   | Market stats (new jobs last 7d, companies active, sponsorship %)   |
+| `GET /api/dashboard/heatmap`  | Per-user weekly activity heatmap                                   |
+| `GET /api/dashboard/velocity` | Per-company new-job velocity (last 30d)                            |
+
+Admin-only: `GET /admin/dashboard/pipeline` — pipeline stats (total/active companies, Kafka lag).
 
 ## Core quality attributes
 
@@ -134,7 +144,7 @@ Full reference: [`docs/QUALITY.md`](docs/QUALITY.md). Detailed rules auto-load v
 - All DB access goes through `{Domain}RepositoryService.go` — no raw GORM outside those files
 - Domain errors come from `common/domain/` (`domain.ErrNotFound`, `domain.ErrInternal`, etc.) — never use `fmt.Errorf` for sentinel errors that handlers inspect
 - All typed values (status, stage, reason) use constants from the owning service's `common/` package — never raw strings
-- Insights query `job_analytics` for historical/time-series data (snapshot rows are never deleted); `job_feed` is acceptable for current-state aggregations where `job_analytics.user_action` would give stale counts due to its overwrite semantics (e.g. the pipeline funnel reads `job_feed.status` for saved/applied/dismissed counts)
+- Insights query `job_analytics` for historical/time-series data (snapshot rows are never deleted); `user_job_state` is the source of truth for current per-user status aggregations (e.g. the pipeline funnel reads `user_job_state.status` for saved/applied/dismissed counts)
 - job_listing_relevance_filter batch failures mark jobs as `error` in `job_pipeline_ledger` — never re-queue to Kafka
 - All logging goes through `platform/logger.Logger` — never use stdlib `log` package directly
 - Field keys must use constants from `platform/logger/fields.go` — never raw strings
