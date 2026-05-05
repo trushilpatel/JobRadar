@@ -1,3 +1,4 @@
+import { toast } from 'sonner'
 import { supabase } from './supabase'
 import { parseApiError } from './api-error'
 
@@ -102,6 +103,16 @@ async function request<T>(method: HttpMethod, path: string, init?: RequestInit):
       await signOutAndRedirect()
       throw new Error('Unauthorized')
     }
+  }
+
+  if (res.status === 429) {
+    const retryAfter = res.headers.get('Retry-After')
+    const seconds = retryAfter ? parseInt(retryAfter, 10) : null
+    const msg = seconds
+      ? `Rate limit exceeded. Try again in ${seconds}s.`
+      : 'Rate limit exceeded. Please slow down.'
+    toast.warning(msg)
+    throw await parseApiError(res, msg)
   }
 
   if (!res.ok) {

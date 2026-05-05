@@ -286,3 +286,13 @@ export interface RoleCategoryCount {
   category: string
   count: number
 }
+
+// ── Identity / multi-user ───────────────────────────────────────────────────
+
+export interface Identity {
+  user_id: string
+  email: string
+  display_name: string
+  status: 'active' | 'suspended'
+  roles: string[]
+}

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const getSession = vi.fn()
 const refreshSession = vi.fn()
 const signOut = vi.fn()
+const toastWarning = vi.fn()
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -13,6 +14,8 @@ vi.mock('@/lib/supabase', () => ({
     },
   },
 }))
+
+vi.mock('sonner', () => ({ toast: { warning: (...args: unknown[]) => toastWarning(...args) } }))
 
 const originalFetch = globalThis.fetch
 const originalLocation = window.location
@@ -50,6 +53,7 @@ beforeEach(() => {
   getSession.mockReset()
   refreshSession.mockReset()
   signOut.mockReset()
+  toastWarning.mockReset()
 })
 
 afterEach(() => {
@@ -169,5 +173,21 @@ describe('apiClient', () => {
     await expect(apiClient.get('/secure')).rejects.toThrow('forbidden')
     expect(refreshSession).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a warning toast on 429 with Retry-After header', async () => {
+    getSession.mockResolvedValue({ data: { session: { access_token: 't' } } })
+    const res = new Response(JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'slow down' } }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
+    })
+    const fetchMock = vi.fn().mockResolvedValue(res)
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { apiClient, __testing } = await import('@/lib/api-client')
+    __testing.resetPendingRefresh()
+
+    await expect(apiClient.get('/fast-endpoint')).rejects.toThrow()
+    expect(toastWarning).toHaveBeenCalledWith('Rate limit exceeded. Try again in 30s.')
   })
 })
