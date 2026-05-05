@@ -7,7 +7,7 @@ export interface JobsPage {
 }
 
 export interface JobFilters {
-  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
+  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected'
   search?: string
   companies?: string[]
   remote?: boolean
@@ -24,6 +24,7 @@ export interface JobCounts {
   applied: number
   interviewing: number
   offer: number
+  rejected: number
 }
 
 // GET /jobs — cursor-based keyset pagination (Phase 2)
@@ -63,7 +64,7 @@ export async function setJobSaved(id: string, saved: boolean): Promise<void> {
 // PATCH /jobs/:id/status
 export async function setJobStatus(
   id: string,
-  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
+  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected'
 ): Promise<void> {
   await apiClient.patch<void>(`/jobs/${id}/status`, { status })
 }
