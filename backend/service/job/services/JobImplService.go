@@ -106,11 +106,17 @@ type pageCacheEntry struct {
 //  2. On miss, hit the DB and write back.
 //  3. Always overlay the caller's user_job_state on top before returning.
 //
-// Status filter is applied AFTER the overlay merge — the cached page is
-// user-agnostic, so saved/applied/dismissed filtering happens in Go.
+// Non-"new" status tabs are routed to listByUserStatus which drives from
+// user_job_state directly, bypassing the shared cache.
 func (s *implService) List(ctx context.Context, filter dto.JobFilter, cursor string, limit int) (_ dto.PageResult, err error) {
 	ctx, span := tracing.Start(ctx, "job.impl.List")
 	defer tracing.End(span, &err)
+
+	// Non-"new" status tabs drive from user_job_state — the shared page cache
+	// is user-agnostic and in-memory status filtering produced sparse pages.
+	if filter.Status != "" && filter.Status != "new" {
+		return s.listByUserStatus(ctx, filter, cursor, limit)
+	}
 
 	userID := identity.UserIDFrom(ctx)
 
@@ -164,6 +170,29 @@ func (s *implService) List(ctx context.Context, filter dto.JobFilter, cursor str
 		views = append(views, view)
 	}
 	return dto.PageResult{Items: views, NextCursor: entry.NextCursor}, nil
+}
+
+// listByUserStatus serves status tabs other than "new". Drives from
+// user_job_state so every page is a full limit-sized result set — the
+// previous in-memory status filter on the global feed produced sparse pages.
+func (s *implService) listByUserStatus(ctx context.Context, filter dto.JobFilter, cursor string, limit int) (_ dto.PageResult, err error) {
+	ctx, span := tracing.Start(ctx, "job.impl.listByUserStatus")
+	defer tracing.End(span, &err)
+
+	userID := identity.UserIDFrom(ctx)
+	jobs, next, err := s.userState.GetJobsByStatus(ctx, userID, filter.Status, cursor, limit)
+	if err != nil {
+		return dto.PageResult{}, apperr.ErrInternal.WithMessage("failed to fetch jobs by status")
+	}
+
+	views := make([]dto.JobView, len(jobs))
+	for i, j := range jobs {
+		views[i] = dto.JobView{
+			Job:       j,
+			UserState: dto.UserJobStateView{Status: filter.Status},
+		}
+	}
+	return dto.PageResult{Items: views, NextCursor: next}, nil
 }
 
 // Get returns a single job + per-user overlay. Bypasses the page cache —

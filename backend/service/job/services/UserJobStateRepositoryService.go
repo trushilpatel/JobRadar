@@ -229,3 +229,43 @@ func (r *userJobStateRepository) CountsByUser(ctx context.Context, userID string
 	}
 	return out, nil
 }
+
+// GetJobsByStatus returns up to limit jobs for userID filtered by status,
+// ordered by (jobs.added_at DESC, jobs.id DESC) — same as the global feed.
+// Drives from user_job_state so every page is a full limit-sized result set.
+// Cursor format is identical to GetJobs (base64-encoded added_at|id).
+func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID, status, cursor string, limit int) (_ []jobmodel.Job, _ string, err error) {
+	ctx, span := tracing.Start(ctx, "job.userstate.GetJobsByStatus")
+	defer tracing.End(span, &err)
+
+	if userID == "" {
+		return nil, "", errNoUser()
+	}
+
+	cursorAt, cursorID, err := decodeCursor(cursor)
+	if err != nil {
+		return nil, "", err
+	}
+
+	query := r.db.WithContext(ctx).
+		Model(&jobmodel.Job{}).
+		Joins("Company").
+		Joins("INNER JOIN user_job_state ujs ON ujs.job_id = jobs.id AND ujs.user_id = ? AND ujs.status = ?", userID, status)
+
+	if !cursorAt.IsZero() {
+		query = query.Where("(jobs.added_at, jobs.id) < (?, ?)", cursorAt, cursorID)
+	}
+
+	var jobs []jobmodel.Job
+	if err = query.Order("jobs.added_at DESC, jobs.id DESC").Limit(limit + 1).Find(&jobs).Error; err != nil {
+		return nil, "", err
+	}
+
+	var next string
+	if len(jobs) > limit {
+		last := jobs[limit-1]
+		next = encodeCursor(last.AddedAt, last.ID)
+		jobs = jobs[:limit]
+	}
+	return jobs, next, nil
+}

@@ -68,6 +68,12 @@ type fakeUserState struct {
 	countsResult jobdto.Counts
 	countsErr    error
 	upsertErr    error
+	// GetJobsByStatus fields
+	statusJobs       []jobmodel.Job
+	statusNext       string
+	statusErr        error
+	statusCalls      int
+	lastStatusStatus string
 }
 
 func (f *fakeUserState) Get(_ context.Context, userID, jobID string) (*jobmodel.UserJobState, error) {
@@ -117,6 +123,15 @@ func (f *fakeUserState) CountsByUser(_ context.Context, userID string) (jobdto.C
 		return jobdto.Counts{}, apperr.ErrInternal.WithMessage("user id required")
 	}
 	return f.countsResult, f.countsErr
+}
+
+func (f *fakeUserState) GetJobsByStatus(_ context.Context, userID, status, _ string, _ int) ([]jobmodel.Job, string, error) {
+	if userID == "" {
+		return nil, "", apperr.ErrInternal.WithMessage("user id required")
+	}
+	f.statusCalls++
+	f.lastStatusStatus = status
+	return f.statusJobs, f.statusNext, f.statusErr
 }
 
 type fakeSnapshot struct{}
@@ -188,20 +203,25 @@ func TestImpl_List_OverlayMerge(t *testing.T) {
 	}
 }
 
-func TestImpl_List_StatusFilterAppliedAfterMerge(t *testing.T) {
-	now := time.Now()
-	jobs := []jobmodel.Job{{ID: "j1"}, {ID: "j2"}}
-	overlay := map[string]*jobmodel.UserJobState{
-		"j1": {Status: jobmodel.StatusSaved, SavedAt: &now},
+func TestImpl_List_SavedTab_BypassesGlobalFeed(t *testing.T) {
+	// Verifies that the saved tab routes to GetJobsByStatus (user_job_state driver)
+	// and does NOT use the global feed (GetJobs). Previously the saved tab fetched
+	// a global page and filtered in-memory, producing sparse results.
+	reader := &fakeJobReader{jobs: []jobmodel.Job{{ID: "j1"}, {ID: "j2"}}}
+	state := &fakeUserState{
+		statusJobs: []jobmodel.Job{{ID: "j1", Title: "Engineer", AddedAt: time.Now()}},
 	}
-	svc := newSvc(&fakeJobReader{jobs: jobs}, &fakeUserState{manyResult: overlay}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
+	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
 
 	res, err := svc.List(ctxAs("u1"), jobdto.JobFilter{Status: jobmodel.StatusSaved}, "", 10)
 	if err != nil {
 		t.Fatalf("List err = %v", err)
 	}
+	if reader.calls != 0 {
+		t.Fatalf("GetJobs should not be called for saved tab, called %d times", reader.calls)
+	}
 	if len(res.Items) != 1 || res.Items[0].ID != "j1" {
-		t.Fatalf("want only j1, got %+v", res.Items)
+		t.Fatalf("want only j1 from statusJobs, got %+v", res.Items)
 	}
 }
 
@@ -358,6 +378,75 @@ func TestImpl_SetStatus_InvalidatesCountsCache(t *testing.T) {
 	}
 	if got.Saved != 5 {
 		t.Errorf("after invalidation got = %d, want 5", got.Saved)
+	}
+}
+
+func TestList_SavedTab_RoutesToGetJobsByStatus(t *testing.T) {
+	reader := &fakeJobReader{}
+	state := &fakeUserState{
+		statusJobs: []jobmodel.Job{
+			{ID: "j1", Title: "Engineer", AddedAt: time.Now()},
+		},
+	}
+	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
+	ctx := ctxAs("u1")
+
+	result, err := svc.List(ctx, jobdto.JobFilter{Status: "saved"}, "", 20)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state.statusCalls != 1 {
+		t.Errorf("expected GetJobsByStatus called once, got %d", state.statusCalls)
+	}
+	if reader.calls != 0 {
+		t.Errorf("expected GetJobs not called for saved tab, got %d calls", reader.calls)
+	}
+	if state.lastStatusStatus != "saved" {
+		t.Errorf("expected status=saved, got %q", state.lastStatusStatus)
+	}
+	if len(result.Items) != 1 || result.Items[0].UserState.Status != "saved" {
+		t.Errorf("expected 1 item with status=saved, got %+v", result.Items)
+	}
+}
+
+func TestList_NewTab_UsesGlobalFeed(t *testing.T) {
+	reader := &fakeJobReader{
+		jobs: []jobmodel.Job{{ID: "j1", Title: "Engineer", AddedAt: time.Now()}},
+	}
+	state := &fakeUserState{}
+	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
+	ctx := ctxAs("u1")
+
+	_, err := svc.List(ctx, jobdto.JobFilter{Status: "new"}, "", 20)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state.statusCalls != 0 {
+		t.Errorf("expected GetJobsByStatus not called for new tab, got %d", state.statusCalls)
+	}
+	if reader.calls != 1 {
+		t.Errorf("expected GetJobs called once for new tab, got %d", reader.calls)
+	}
+}
+
+func TestList_AppliedTab_SetsStatusOnAllViews(t *testing.T) {
+	state := &fakeUserState{
+		statusJobs: []jobmodel.Job{
+			{ID: "j1", Title: "SWE", AddedAt: time.Now()},
+			{ID: "j2", Title: "SRE", AddedAt: time.Now().Add(-time.Hour)},
+		},
+	}
+	svc := newSvc(&fakeJobReader{}, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
+	ctx := ctxAs("u1")
+
+	result, err := svc.List(ctx, jobdto.JobFilter{Status: "applied"}, "", 20)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, item := range result.Items {
+		if item.UserState.Status != "applied" {
+			t.Errorf("expected status=applied on all views, got %q on item %s", item.UserState.Status, item.ID)
+		}
 	}
 }
 
