@@ -120,7 +120,7 @@ func TestGreenhouse_FetchJobs_MalformedJSON(t *testing.T) {
 func TestGreenhouse_CareersURL(t *testing.T) {
 	g := &Greenhouse{}
 	got := g.CareersURL("stripe")
-	want := "https://boards-api.greenhouse.io/v1/boards/stripe/jobs"
+	want := "https://job-boards.greenhouse.io/stripe"
 	if got != want {
 		t.Errorf("CareersURL(%q) = %q, want %q", "stripe", got, want)
 	}

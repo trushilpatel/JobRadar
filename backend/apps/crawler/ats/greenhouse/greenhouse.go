@@ -37,9 +37,10 @@ func (g *Greenhouse) contentURL(slug, id string) string {
 	return fmt.Sprintf("%s/v1/boards/%s/jobs/%s", base, slug, id)
 }
 
-// CareersURL returns the Greenhouse job board API URL for a given company slug.
+// CareersURL returns the public Greenhouse job board URL for a given company slug.
+// This is the human-readable page shown to users, not the internal API endpoint.
 func (g *Greenhouse) CareersURL(id string) string {
-	return fmt.Sprintf("https://boards-api.greenhouse.io/v1/boards/%s/jobs", id)
+	return "https://job-boards.greenhouse.io/" + id
 }
 
 // ── Internal API response structs ────────────────────────────────────────────
