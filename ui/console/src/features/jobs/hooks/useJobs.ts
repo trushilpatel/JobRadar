@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom'
 import { fetchJobs, fetchJobCounts, type JobFilters } from '@/api/jobs'
 import type { SortingState } from '@/components/ui/data-table'
 
-export type TabKey = 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
+export type TabKey = 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected'
 export type DateFilter = 'all' | '24h' | '7d' | '30d'
 export type LocationFilter = 'any' | 'remote' | 'onsite'
 
@@ -100,6 +100,7 @@ export function useJobs() {
         applied: countsQuery.data.applied,
         interviewing: countsQuery.data.interviewing,
         offer: countsQuery.data.offer,
+        rejected: countsQuery.data.rejected,
       }
     : {}
 

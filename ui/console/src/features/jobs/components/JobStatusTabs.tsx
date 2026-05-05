@@ -7,6 +7,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'applied', label: 'Applied' },
   { key: 'interviewing', label: 'Interviewing' },
   { key: 'offer', label: 'Offer' },
+  { key: 'rejected', label: 'Rejected' },
 ]
 
 interface JobStatusTabsProps {

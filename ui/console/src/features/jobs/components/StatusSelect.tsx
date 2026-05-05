@@ -24,9 +24,13 @@ const STATUS_CONFIG: Record<JobStatus, { label: string; classes: string }> = {
     label: 'Offer',
     classes: 'text-amber-300 bg-amber-500/10 border-amber-500/20',
   },
+  rejected: {
+    label: 'Rejected',
+    classes: 'text-red-300 bg-red-500/10 border-red-500/20',
+  },
 }
 
-const ALL_STATUSES: JobStatus[] = ['new', 'saved', 'applied', 'interviewing', 'offer']
+const ALL_STATUSES: JobStatus[] = ['new', 'saved', 'applied', 'interviewing', 'offer', 'rejected']
 
 interface StatusSelectProps {
   status: JobStatus
