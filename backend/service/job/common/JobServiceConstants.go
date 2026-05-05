@@ -4,10 +4,13 @@ package common
 // CHECK constraint on user_job_state.status. Note: "new" is intentionally
 // NOT a valid stored status — absence of a row implies "new".
 const (
-	JobStatusNew       = "new" // synthetic — never written, only returned via overlay
-	JobStatusSaved     = "saved"
-	JobStatusApplied   = "applied"
-	JobStatusDismissed = "dismissed"
+	JobStatusNew          = "new" // synthetic — never written, only returned via overlay
+	JobStatusSaved        = "saved"
+	JobStatusApplied      = "applied"
+	JobStatusDismissed    = "dismissed"
+	JobStatusInterviewing = "interviewing"
+	JobStatusOffer        = "offer"
+	JobStatusRejected     = "rejected"
 )
 
 // SeenReason values for job_pipeline_ledger.reason

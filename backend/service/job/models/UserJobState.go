@@ -35,7 +35,10 @@ func (UserJobState) TableName() string {
 // constraint. Absence of a row implies "new"; "new" is intentionally NOT a
 // valid stored status.
 const (
-	StatusSaved     = "saved"
-	StatusApplied   = "applied"
-	StatusDismissed = "dismissed"
+	StatusSaved        = "saved"
+	StatusApplied      = "applied"
+	StatusDismissed    = "dismissed"
+	StatusInterviewing = "interviewing"
+	StatusOffer        = "offer"
+	StatusRejected     = "rejected"
 )
