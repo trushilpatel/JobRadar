@@ -2,9 +2,7 @@ package services
 
 import "github.com/go-chi/chi/v5"
 
-// PipelineRestRouter mounts the admin pipeline dashboard route. Routes are
-// relative so the parent router decides the prefix (Phase 2 mounts under
-// /admin per phase2-contracts.md).
+// PipelineRestRouter mounts the admin pipeline dashboard route under /admin.
 type PipelineRestRouter struct {
 	handler *PipelineRestService
 }

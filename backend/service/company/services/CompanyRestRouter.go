@@ -2,9 +2,7 @@ package services
 
 import "github.com/go-chi/chi/v5"
 
-// RestRouter mounts the public company routes onto a chi.Router. Routes are
-// relative; the parent router decides where to mount them (Phase 2 mounts
-// under /api per phase2-contracts.md).
+// RestRouter mounts the public company routes under /api.
 type RestRouter struct {
 	handler *RestService
 }

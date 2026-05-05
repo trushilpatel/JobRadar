@@ -14,6 +14,7 @@ import { AccountPage } from '@/pages/AccountPage'
 import { AdminUsersPage } from '@/pages/admin/AdminUsersPage'
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage'
 import { AdminPipelinePage } from '@/pages/admin/AdminPipelinePage'
+import { AdminCompaniesPage } from '@/pages/admin/AdminCompaniesPage'
 import { RequireAdmin } from '@/features/auth/RequireAdmin'
 
 function AuthBootstrap({ children }: { children: React.ReactNode }) {
@@ -47,6 +48,7 @@ function ProtectedLayout() {
             <Route path="/admin/pipeline" element={<AdminPipelinePage />} />
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/audit" element={<AdminAuditPage />} />
+            <Route path="/admin/companies" element={<AdminCompaniesPage />} />
             <Route path="/insights" element={<InsightsPage />} />
           </Route>
         </Routes>

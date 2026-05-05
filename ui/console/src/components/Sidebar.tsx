@@ -26,6 +26,7 @@ const userNav: { to: string; label: string; icon: React.ReactNode }[] = [
 
 const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [
   { to: '/admin/pipeline', label: 'Pipeline', icon: <GitBranch size={16} /> },
+  { to: '/admin/companies', label: 'Companies', icon: <Building2 size={16} /> },
   { to: '/admin/users', label: 'Users', icon: <Users size={16} /> },
   { to: '/admin/audit', label: 'Audit Log', icon: <ClipboardList size={16} /> },
   { to: '/insights', label: 'Insights', icon: <BarChart2 size={16} /> },

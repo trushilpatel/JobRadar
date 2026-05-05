@@ -31,7 +31,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {
 	companyRestService := services.NewRestService(companyValidationService)
 	companyHandler := services.NewRestRouter(companyRestService)
 
-	// ── Company (admin chain — needed by scan service) ───────────────────────
+	// ── Company (admin chain — needed by scan service + /admin/companies) ──────
 	scanSettingsRepository := services.NewScanSettingsRepositoryService(db)
 	companyAdminRepositoryService := services.NewAdminRepositoryService(db)
 	// nil cache: cache invalidation is a no-op in this wiring context; the
@@ -39,6 +39,8 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {
 	// admin chain instance.
 	companyAdminImplService := services.NewAdminImplService(companyAdminRepositoryService, nil)
 	companyAdminValidationService := services.NewAdminValidationService(companyAdminImplService)
+	companyAdminRestService := services.NewAdminRestService(companyAdminValidationService)
+	companyAdminRouter := services.NewAdminRestRouter(companyAdminRestService)
 
 	// ── Scan ─────────────────────────────────────────────────────────────────
 	scanLogStore := services2.NewLogStore(db)
@@ -107,9 +109,10 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {
 	dashboardRestService := services4.NewDashboardRestService(dashboardService, userDashboardService, pipelineService)
 	dashboardRestRouter := services4.NewRestRouter(dashboardRestService)
 
-	app := NewApp(companyHandler, scanRestRouter, adapterConfigRestRouter, jobHandler, applicationRestRouter, dashboardRestRouter, insightsRestRouter, pipelineService)
+	app := NewApp(companyHandler, scanRestRouter, adapterConfigRestRouter, jobHandler, applicationRestRouter, dashboardRestRouter, insightsRestRouter, pipelineService, companyAdminRouter)
 	return app, nil
 }
+
 
 // wire.go helper functions (copied to wire_gen.go since they're used at runtime):
 

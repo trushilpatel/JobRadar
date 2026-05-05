@@ -21,7 +21,7 @@ HTTP server on `:8080`. Mounts all service routers, handles graceful shutdown.
 | `request/`   | Pagination parsing, query param helpers                                     |
 | `response/`  | Shared response envelope types                                              |
 
-## Route structure (Phase 2)
+## Route structure
 
 - `/api/*` — all user-facing routes; `RequireIdentity` + `RateLimit` applied globally via `NewRouter`
 - `/admin/*` — admin-only routes; `RequireIdentity` + `RequireRole("admin")` + `AuditAdminMutation` applied per-route group
@@ -31,6 +31,6 @@ HTTP server on `:8080`. Mounts all service routers, handles graceful shutdown.
 
 - All handlers use `handler.Respond`, `handler.RespondPaged`, or `handler.HandleError` — never raw `json.NewEncoder`
 - Route registration belongs in each service's `RestRouter` — `router.go` only mounts them
-- `wire_gen.go` is manually maintained (Wire codegen removed); update it when changing `wire.go` provider signatures
+- `wire_gen.go` is manually maintained (Wire codegen not used); update it when adding or removing providers in `wire.go`
 - 5-second graceful shutdown timeout on SIGINT/SIGTERM
 - `main.go` owns dashboard materialized view refresh via a background goroutine (`runRefresher`): pipeline stats every 3 min, heatmap every 5 min

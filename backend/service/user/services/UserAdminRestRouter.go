@@ -2,9 +2,7 @@ package services
 
 import "github.com/go-chi/chi/v5"
 
-// AdminRestRouter mounts the admin user routes. Routes are relative so the
-// parent router decides the prefix (Phase 2 mounts under /admin per
-// phase2-contracts.md).
+// AdminRestRouter mounts the admin user routes under /admin.
 type AdminRestRouter struct {
 	handler *AdminRestService
 }

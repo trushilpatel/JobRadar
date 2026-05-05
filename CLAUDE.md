@@ -2,8 +2,6 @@
 
 Production-grade automated job tracker. Monitors careers pages, filters via LLM, surfaces relevant jobs.
 
-Full design spec: `Designs/job-tracker-final-architecture.md`
-
 ## Pipeline
 
 ```
@@ -32,15 +30,15 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `backend/service/insights/`       | Analytics and insights queries                                                    |
 | `backend/service/scan/`           | Scan result recording — models in `scan/models/` (package `scanmodel`)            |
 | `backend/service/llm/`            | LLM business logic — `JobsRelevanceFilter` + `JobPostEnricher` interfaces, Gemini impl, prompts |
-| `backend/service/user/`           | User domain (Phase 1) — Get/Provision/UpdateProfile/Delete + cache decorator + `/api/me` |
-| `backend/service/role/`           | Role domain (Phase 1) — RBAC0: Grant/Revoke/ListForUser/ListAll                  |
-| `backend/service/audit/`          | Admin audit log domain (Phase 1) — Append/List for `admin_audit_log`             |
-| `backend/common/identity/`        | Identity struct + `context.Context` helpers (Phase 1)                            |
-| `backend/common/`                    | Pre-Phase-1 infrastructure plumbing (config, db, errors, kafka, logger, metrics, redis, tracing) |
+| `backend/service/user/`           | User domain — Get/Provision/UpdateProfile/Delete + cache decorator + `/api/me` + admin user management |
+| `backend/service/role/`           | Role domain — RBAC0: Grant/Revoke/ListForUser/ListAll                            |
+| `backend/service/audit/`          | Admin audit log domain — Append/List for `admin_audit_log`                       |
+| `backend/common/identity/`        | Identity struct + `context.Context` helpers                                       |
+| `backend/common/`                    | Infrastructure plumbing (config, db, errors, kafka, logger, metrics, redis, tracing) |
 | `backend/common/tracing/`            | OTel tracing init, Start/End span helpers, Kafka propagation                      |
-| `backend/platform/cache/`            | Cache interface + Redis/Memory/Noop impls + `GetOrLoad[T]` single-flight (Phase 1) |
-| `backend/platform/ratelimit/`        | Token-bucket Limiter + Redis/Memory impls + `ScopeFromMethod` helper (Phase 1)   |
-| `backend/platform/supabaseadmin/`    | Supabase admin REST client — `DeleteUser` for hard account deletion (Phase 1)    |
+| `backend/platform/cache/`            | Cache interface + Redis/Memory/Noop impls + `GetOrLoad[T]` single-flight          |
+| `backend/platform/ratelimit/`        | Token-bucket Limiter + Redis/Memory impls + `ScopeFromMethod` helper              |
+| `backend/platform/supabaseadmin/`    | Supabase admin REST client — `DeleteUser` for hard account deletion               |
 | `backend/migrations/`             | goose SQL migration files                                                         |
 | `infra/`                          | Dockerfiles + Loki/Prometheus/Kafka ops configs                                   |
 
@@ -58,7 +56,7 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 
 | Table                     | Role                                                                                      |
 | ------------------------- | ----------------------------------------------------------------------------------------- |
-| `companies`               | Tracked companies (operational columns dropped in Phase 2; `company_scan_settings` holds scan config) |
+| `companies`               | Tracked company catalog; operational columns dropped; `company_scan_settings` holds scan config |
 | `company_scan_settings`   | Per-company scan configuration (admin-managed); companies without a row are skipped by workers |
 | `company_scan_queue`      | Durable work queue for pending/in-progress company scans; deduped by unique partial index |
 | `company_scan_log`        | Per-run scan summary (fetched, new, duration, error)                                      |
@@ -66,7 +64,7 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 | `jobs`                    | Operational feed — global job rows; per-user status/notes live in `user_job_state`        |
 | `user_job_state`          | Per-user job state overlay: saved_at, applied_at, status, notes, dismissal reason/note    |
 | `job_analytics`           | Append-only analytics record written by job_post_analyzer; survives job dismissal         |
-| `job_application_tracker` | Application stage tracking; includes `user_id NOT NULL` (Phase 2)                        |
+| `job_application_tracker` | Application stage tracking; `user_id NOT NULL`                                            |
 | `users`                   | Registered users (id, email citext, display_name, status, timestamps)                     |
 | `roles`                   | RBAC0 role catalog (`user`, `admin`); seeded by migration 043                             |
 | `user_roles`              | user↔role join; cascade rules: user_id CASCADE, role_id RESTRICT, granted_by SET NULL     |
@@ -88,49 +86,41 @@ Per-user status lives in `user_job_state` (upserted on every save/dismiss/status
 - Manual trigger (`POST /api/companies/:id/scan`) bypasses the cooldown — always enqueues immediately
 - Workers skip companies that have no row in `company_scan_settings` (logged, not errored)
 
-## Multi-user (Phases 1 + 2 shipped)
+## Multi-user
 
-Phases 1 and 2 of the multi-user rollout have shipped. Phase 3 (frontend admin UI, `/me` integration, role-gated nav) is **in progress**. Roadmap: [`Designs/multi-user-rollout-plan.md`](Designs/multi-user-rollout-plan.md).
+All three phases shipped. See [`Designs/multi-user-rollout-plan.md`](Designs/multi-user-rollout-plan.md) for status and remaining E2E work.
 
-**Phase 1 (additive):**
-- New tables (`043_phase1_users_roles_audit.sql`): `users`, `roles`, `user_roles`, `admin_audit_log`
+**What's live:**
+- Tables: `users`, `roles`, `user_roles`, `admin_audit_log`, `user_job_state`, `company_scan_settings`
 - Platform packages: `backend/common/identity/`, `backend/platform/cache/`, `backend/platform/ratelimit/`, `backend/platform/supabaseadmin/`
-- Service slices: `backend/service/user/` (with cache decorator), `backend/service/role/`, `backend/service/audit/`
-- Test helper: `backend/service/testutil/` — `AssertUserScoped` for repo guard tests
-- Middleware: `RequireIdentity` (DB enrichment + caching + lazy provisioning + `ADMIN_EMAILS` auto-grant), `RequireRole(role)`, `RateLimit(limiter)` (per-user, method-derived scope, fail-open), `AuditAdminMutation(svc)`
-- Endpoints: `GET /api/me`, `PATCH /api/me`, `DELETE /api/me`
+- Service slices: `backend/service/user/` (with cache + admin), `backend/service/role/`, `backend/service/audit/`
+- Middleware: `RequireIdentity`, `RequireRole`, `RateLimit`, `AuditAdminMutation`
+- Company slice split: public path (`CompanyService`) + admin path (`CompanyAdminService`)
+- Job feed LEFT JOINs `user_job_state`; cursor (keyset) pagination; per-user state upserted on every action
+- Route split: `/api/*` (RequireIdentity + RateLimit); `/admin/*` (+ RequireRole("admin") + AuditAdminMutation)
+- Frontend: identity-aware Zustand store, role-gated admin nav, admin pages (pipeline, companies, users, audit log, insights), account page, 429 toast
 
-**Phase 2 (hard-stop cutover):**
-- Schema migration (`044_phase2_multiuser_data_model.sql`): `job_feed` renamed to `jobs`; per-user columns dropped; `user_job_state` created; `company_scan_settings` created; `job_dismissal_log` dropped; `job_application_tracker.user_id NOT NULL`
-- Job slice: feed query LEFT JOINs `user_job_state`; save/status/notes/dismiss upsert into `user_job_state`
-- Application slice: every method takes explicit `userID`
-- Company slice split: public path (`CompanyService`: ListPublic, GetPublic) + admin path (`CompanyAdminService`: mutations)
-- Scan slice: reads scan config from `company_scan_settings`; companies without a row are skipped
-- Dashboard split: `DashboardService` (stats, activity) + `UserDashboardService` (progress, market, heatmap, velocity) + `PipelineService` (admin pipeline stats)
-- Router split: all user-facing routes under `/api` with `RequireIdentity` + `RateLimit`; admin routes under `/admin` with additional `RequireRole("admin")`; `auth.go` email allowlist removed (identity-gated per route instead)
-
-**Established concepts (both phases):**
+**Core concepts:**
 - RBAC0 — `roles` + `user_roles` join only; no permissions table yet
 - Identity flows via `context.Context` — repos take `userID` explicitly, services pull from ctx via `identity.FromContext` / `UserIDFrom` / `IsAdmin`
 - Decorator chain: `Rest → Validation → Cache → Impl → Repo`; CacheService optional per slice
 - Source of truth for role membership is Postgres (`user_roles`) — never JWT custom claims
 
-New env vars: `ADMIN_EMAILS`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_READ_RPM`, `RATE_LIMIT_WRITE_RPM`, `RATE_LIMIT_ADMIN_RPM`, `CACHE_TTL_USER_SECONDS`.
+Env vars: `ADMIN_EMAILS`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_READ_RPM`, `RATE_LIMIT_WRITE_RPM`, `RATE_LIMIT_ADMIN_RPM`, `CACHE_TTL_USER_SECONDS`.
 
 ## Dashboard endpoints
 
 User-facing dashboard routes (all under `/api/dashboard/`):
 
-| Route                         | Description                                                        |
-| ----------------------------- | ------------------------------------------------------------------ |
-| `GET /api/dashboard/stats`    | Global scan stats (jobs scanned today, pipeline pending/errors)    |
-| `GET /api/dashboard/activity` | Daily activity counts (scan log, `?days=N`)                        |
-| `GET /api/dashboard/progress` | Per-user progress (new/saved/applied/dismissed from `user_job_state`) |
-| `GET /api/dashboard/market`   | Market stats (new jobs last 7d, companies active, sponsorship %)   |
-| `GET /api/dashboard/heatmap`  | Per-user weekly activity heatmap                                   |
-| `GET /api/dashboard/velocity` | Per-company new-job velocity (last 30d)                            |
-
-Admin-only: `GET /admin/dashboard/pipeline` — pipeline stats (total/active companies, Kafka lag).
+| Route                              | Description                                                           |
+| ---------------------------------- | --------------------------------------------------------------------- |
+| `GET /api/dashboard/stats`         | Global scan stats (jobs scanned today, pipeline pending/errors)       |
+| `GET /api/dashboard/activity`      | Daily activity counts (scan log, `?days=N`)                           |
+| `GET /api/dashboard/progress`      | Per-user progress (new/saved/applied/dismissed from `user_job_state`) |
+| `GET /api/dashboard/market`        | Market stats (new jobs last 7d, companies active, sponsorship %)      |
+| `GET /api/dashboard/heatmap`       | Per-user weekly activity heatmap                                      |
+| `GET /api/dashboard/velocity`      | Per-company new-job velocity (last 30d)                               |
+| `GET /admin/dashboard/pipeline`    | Admin-only — pipeline stats (total/active companies, Kafka lag)       |
 
 ## Core quality attributes
 

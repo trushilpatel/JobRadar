@@ -67,7 +67,7 @@ graph TB
   Analyzer -->|CONSUME| Kafka
   Analyzer -->|extract structured data| Gemini
   Analyzer -->|rate limit| Redis
-  Analyzer -->|INSERT job_feed + analytics| Supa
+  Analyzer -->|INSERT jobs + analytics| Supa
 
   Prometheus -->|datasource| Grafana
   Loki -->|datasource| Grafana
@@ -96,7 +96,7 @@ flowchart LR
   H -->|irrelevant| E
 
   I -->|CONSUME| J[Analyzer\nLLM enrichment]
-  J -->|INSERT| K[(job_feed)]
+  J -->|INSERT| K[(jobs)]
   J -->|INSERT| L[(job_analytics)]
   J -->|UPDATE| E
 ```
@@ -120,18 +120,19 @@ flowchart LR
 
 | Table | Written by | Read by | Purpose |
 |---|---|---|---|
-| `companies` | API | Scheduler, Crawler | Tracked company catalog |
+| `companies` | API (admin) | Scheduler, Crawler | Tracked company catalog (operational columns dropped; scan config in `company_scan_settings`) |
+| `company_scan_settings` | API (admin) | Scheduler, Crawler | Per-company scan config; companies without a row are skipped |
 | `company_scan_queue` | Scheduler, API | Crawler | Durable work queue — one row per pending scan |
 | `company_scan_log` | Crawler | API / Dashboard | Per-run scan summary |
 | `job_pipeline_ledger` | Crawler, Filter, Analyzer | Crawler | Dedup + pipeline state tracking |
-| `job_feed` | Analyzer | API | Active jobs — new / saved / applied / dismissed |
+| `jobs` | Analyzer | API | Global job rows (renamed from `job_feed`); per-user state in `user_job_state` |
+| `user_job_state` | API | API | Per-user overlay: status, notes, saved_at, applied_at, dismissal reason/note |
 | `job_analytics` | Analyzer | Insights | Append-only enriched snapshot; never deleted |
-| `job_application_tracker` | API | API | Application stage history per job |
-| `job_dismissal_log` | API | API | Dismiss log with reason and note |
-| `users` (Phase 1) | API (`RequireIdentity` / `service/user`) | API | Registered users — id, email (citext), display_name, status |
-| `roles` (Phase 1) | Migration `043` (seeded) | API | RBAC0 role catalog — `user`, `admin` |
-| `user_roles` (Phase 1) | API (`service/role`, `RequireIdentity` lazy provisioning) | API | User↔role join (composite PK) |
-| `admin_audit_log` (Phase 1) | `AuditAdminMutation` middleware (`service/audit`) | API | Append-only admin audit trail |
+| `job_application_tracker` | API | API | Application stage history per job; `user_id NOT NULL` |
+| `users` | API (`RequireIdentity` / `service/user`) | API | Registered users — id, email (citext), display_name, status |
+| `roles` | Migration `043` (seeded) | API | RBAC0 role catalog — `user`, `admin` |
+| `user_roles` | API (`service/role`, `RequireIdentity` lazy provisioning) | API | User↔role join (composite PK) |
+| `admin_audit_log` | `AuditAdminMutation` middleware (`service/audit`) | API | Append-only admin audit trail |
 
 ---
 

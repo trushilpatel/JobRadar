@@ -13,6 +13,7 @@ import (
 	"github.com/trushilpatel/jobradar/platform/ratelimit"
 	"github.com/trushilpatel/jobradar/platform/supabaseadmin"
 	auditsvc "github.com/trushilpatel/jobradar/service/audit/services"
+	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
 	rolesvc "github.com/trushilpatel/jobradar/service/role/services"
@@ -49,6 +50,8 @@ func buildMultiUser(
 	pipelineSvc dashboardsvc.PipelineService,
 	// insightsRouter is passed in so the insights routes move to /admin.
 	insightsRouter *insightssvc.RestRouter,
+	// companyAdminRouter mounts /admin/companies CRUD + scan-settings routes.
+	companyAdminRouter *companysvc.AdminRestRouter,
 ) *multiUser {
 	// ── User decorator chain ────────────────────────────────────────────────
 	userRepo := usersvc.NewRepositoryService(db)
@@ -109,6 +112,7 @@ func buildMultiUser(
 			auditAdminRouter,
 			pipelineRouter,
 			insightsRouter,
+			companyAdminRouter,
 		},
 	}
 

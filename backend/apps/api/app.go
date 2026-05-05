@@ -26,6 +26,8 @@ type App struct {
 	// insightsHandler is NOT returned by Handlers() — it moves to /admin in
 	// Phase 2 and is threaded through buildMultiUser via InsightsHandler().
 	insightsHandler *insightssvc.RestRouter
+	// companyAdminHandler mounts /admin/companies — threaded via CompanyAdminHandler().
+	companyAdminHandler *companysvc.AdminRestRouter
 	// pipelineSvc is exposed so main.go can thread it into the admin router
 	// without the Wire graph needing to know about buildMultiUser.
 	pipelineSvc dashboardsvc.PipelineService
@@ -42,6 +44,7 @@ func NewApp(
 	dashboardHandler *dashboard.Handler,
 	insightsHandler *insightssvc.RestRouter,
 	pipelineSvc dashboardsvc.PipelineService,
+	companyAdminHandler *companysvc.AdminRestRouter,
 ) *App {
 	return &App{
 		companyHandler:       companyHandler,
@@ -52,6 +55,7 @@ func NewApp(
 		dashboardHandler:     dashboardHandler,
 		insightsHandler:      insightsHandler,
 		pipelineSvc:          pipelineSvc,
+		companyAdminHandler:  companyAdminHandler,
 	}
 }
 
@@ -72,6 +76,11 @@ func (a *App) Handlers() []handler.RouteGroup {
 // InsightsHandler returns the insights router for admin mounting.
 func (a *App) InsightsHandler() *insightssvc.RestRouter {
 	return a.insightsHandler
+}
+
+// CompanyAdminHandler returns the company admin router for admin mounting.
+func (a *App) CompanyAdminHandler() *companysvc.AdminRestRouter {
+	return a.companyAdminHandler
 }
 
 // PipelineSvc returns the pipeline service for admin mounting.
