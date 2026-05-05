@@ -95,7 +95,8 @@ export async function fetchTechTrends(): Promise<TechTrends> {
 }
 
 export async function fetchPipelineStats(): Promise<PipelineStats> {
-  const data = await apiClient.get<Partial<PipelineStats> | null>('/dashboard/pipeline')
+  // Phase 2: pipeline moved to /admin/dashboard/pipeline (admin-only)
+  const data = await apiClient.get<Partial<PipelineStats> | null>('/admin/dashboard/pipeline')
   return {
     total_companies: data?.total_companies ?? 0,
     active_companies: data?.active_companies ?? 0,
