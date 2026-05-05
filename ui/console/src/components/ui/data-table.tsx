@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   type ColumnDef,
   type SortingState,
@@ -96,6 +96,38 @@ export function DataTable<TData>({
       : undefined,
   })
 
+  // Refs for each rendered row — used to scroll the active row into view.
+  const rowRefs = useRef<(HTMLTableRowElement | null)[]>([])
+
+  // Scroll the active row into view whenever selectedId changes (keyboard nav).
+  useEffect(() => {
+    if (!selectedId || !getRowId) return
+    const rows = table.getRowModel().rows
+    const idx = rows.findIndex((r) => getRowId(r.original) === selectedId)
+    if (idx >= 0) rowRefs.current[idx]?.scrollIntoView({ block: 'nearest' })
+  }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!onRowClick) return
+    const rows = table.getRowModel().rows
+    if (rows.length === 0) return
+
+    const currentIdx =
+      selectedId && getRowId
+        ? rows.findIndex((r) => getRowId(r.original) === selectedId)
+        : -1
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const next = Math.min(currentIdx + 1, rows.length - 1)
+      onRowClick(rows[next].original)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const prev = Math.max(currentIdx - 1, 0)
+      onRowClick(rows[prev].original)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
@@ -109,7 +141,11 @@ export function DataTable<TData>({
   }
 
   return (
-    <div className="flex flex-col">
+    <div
+      className="flex flex-col outline-none"
+      tabIndex={onRowClick ? 0 : undefined}
+      onKeyDown={handleKeyDown}
+    >
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((hg) => (
@@ -128,7 +164,7 @@ export function DataTable<TData>({
           ))}
         </TableHeader>
         <TableBody>
-          {table.getRowModel().rows.map((row) => {
+          {table.getRowModel().rows.map((row, index) => {
             const isSelected = selectedId !== undefined && getRowId?.(row.original) === selectedId
             const rowBg = getRowClassName
               ? getRowClassName(row.original)
@@ -138,6 +174,9 @@ export function DataTable<TData>({
             return (
               <TableRow
                 key={row.id}
+                ref={(el) => {
+                  rowRefs.current[index] = el
+                }}
                 onClick={() => onRowClick?.(row.original)}
                 className={cn(onRowClick && 'cursor-pointer', rowBg)}
               >
