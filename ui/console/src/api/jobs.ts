@@ -2,10 +2,8 @@ import type { Job, JobApplication } from '@/types'
 import { apiClient } from '@/lib/api-client'
 
 export interface JobsPage {
-  data: Job[]
-  total: number
-  page: number
-  limit: number
+  items: Job[]
+  next_cursor: string
 }
 
 export interface JobFilters {
@@ -28,12 +26,17 @@ export interface JobCounts {
   offer: number
 }
 
-// GET /jobs — all filters pushed to server, no client-side filtering
-export async function fetchJobs(filters: JobFilters, page = 1, limit = 20): Promise<JobsPage> {
+// GET /jobs — cursor-based keyset pagination (Phase 2)
+// cursor="" fetches the first page; subsequent pages use next_cursor from prior response.
+export async function fetchJobs(
+  filters: JobFilters,
+  cursor = '',
+  limit = 20
+): Promise<JobsPage> {
   const p = new URLSearchParams()
   p.set('status', filters.status)
-  p.set('page', String(page))
   p.set('limit', String(limit))
+  if (cursor) p.set('cursor', cursor)
 
   if (filters.search) p.set('search', filters.search)
   filters.companies?.forEach((c) => p.append('companies', c))

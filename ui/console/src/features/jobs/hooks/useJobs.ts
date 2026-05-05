@@ -44,9 +44,10 @@ export function useJobs() {
   // Sorting
   const [sorting, setSorting] = useState<SortingState>([])
 
-  // Pagination
-  const [page, setPage] = useState(1)
+  // Cursor-based pagination: cursors[0]="" (first page), cursors[n] = next_cursor from page n-1
+  const [cursors, setCursors] = useState<string[]>([''])
   const [limit, setLimit] = useState(20)
+  const page = cursors.length // 1-indexed page number for display
 
   const sortBy = sorting[0]?.id
   const sortDir = sorting[0] ? (sorting[0].desc ? 'desc' : 'asc') : undefined
@@ -68,14 +69,16 @@ export function useJobs() {
     [tab, debouncedSearch, selectedCompanies, locationFilter, expFilter, dateFilter, sortBy, sortDir]
   )
 
-  // Reset to page 1 when filters change
+  // Reset to first page when filters change
   useEffect(() => {
-    setPage(1)
+    setCursors([''])
   }, [filters])
 
+  const currentCursor = cursors[cursors.length - 1]
+
   const query = useQuery({
-    queryKey: ['jobs', filters, page, limit],
-    queryFn: () => fetchJobs(filters, page, limit),
+    queryKey: ['jobs', filters, currentCursor, limit],
+    queryFn: () => fetchJobs(filters, currentCursor, limit),
     staleTime: 30_000,
   })
 
@@ -86,9 +89,10 @@ export function useJobs() {
   })
 
   // Stable reference — avoids companies useMemo invalidating on every render
-  // when query.data?.data is undefined (the `?? []` fallback creates a new array each time).
-  const jobs = useMemo(() => query.data?.data ?? [], [query.data])
-  const total = query.data?.total ?? 0
+  // when query.data?.items is undefined (the `?? []` fallback creates a new array each time).
+  const jobs = useMemo(() => query.data?.items ?? [], [query.data])
+  const nextCursor = query.data?.next_cursor ?? ''
+  const hasNextPage = nextCursor !== ''
   const counts: Partial<Record<TabKey, number>> = countsQuery.data
     ? {
         new: countsQuery.data.new,
@@ -130,18 +134,32 @@ export function useJobs() {
     setExpFilter([])
     setDateFilter('all')
     setSorting([])
-    setPage(1)
+    setCursors([''])
   }
 
   function handleSortingChange(newSorting: SortingState) {
     setSorting(newSorting)
-    setPage(1)
+    setCursors([''])
+  }
+
+  function goToNextPage() {
+    if (hasNextPage) setCursors((prev) => [...prev, nextCursor])
+  }
+
+  function goToPrevPage() {
+    if (cursors.length > 1) setCursors((prev) => prev.slice(0, -1))
+  }
+
+  function goToFirstPage() {
+    setCursors([''])
   }
 
   return {
     // Query state
     jobs,
-    total,
+    hasNextPage,
+    hasPrevPage: cursors.length > 1,
+    page,
     companies,
     isLoading: query.isLoading,
     refetch: query.refetch,
@@ -171,8 +189,9 @@ export function useJobs() {
     handleSortingChange,
 
     // Pagination
-    page,
-    setPage,
+    goToNextPage,
+    goToPrevPage,
+    goToFirstPage,
     limit,
     setLimit,
   }
