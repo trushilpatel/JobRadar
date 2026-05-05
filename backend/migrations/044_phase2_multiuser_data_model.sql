@@ -130,6 +130,64 @@ CREATE INDEX idx_job_application_tracker_user_job
 -- ---------------------------------------------------------------------------
 DROP TABLE IF EXISTS job_dismissal_log;
 
+-- ---------------------------------------------------------------------------
+-- 8. Recreate mv_weekly_hiring_activity using the renamed `jobs` table.
+--    Phase 2 drops per-user status so all rows in `jobs` are fair game;
+--    no WHERE status filter needed.
+-- ---------------------------------------------------------------------------
+CREATE MATERIALIZED VIEW mv_weekly_hiring_activity AS
+SELECT
+    DATE_TRUNC('week', added_at)::date::text AS week_start,
+    COUNT(*)                                  AS job_count
+FROM jobs
+GROUP BY DATE_TRUNC('week', added_at)
+WITH DATA;
+CREATE UNIQUE INDEX idx_mv_weekly_hiring_week ON mv_weekly_hiring_activity(week_start);
+
+-- ---------------------------------------------------------------------------
+-- 9. Recreate mv_pipeline_db_stats.
+--    active_companies now comes from company_scan_settings (companies.active
+--    was dropped in step 5). new_jobs_24h queries `jobs` without a status
+--    filter (status moved to user_job_state). pipeline_pending joins `jobs`
+--    instead of `job_feed`.
+-- ---------------------------------------------------------------------------
+CREATE MATERIALIZED VIEW mv_pipeline_db_stats AS
+SELECT
+    1                           AS id,
+    c.total_companies,
+    c.active_companies,
+    q.queued,
+    q.crawling,
+    j.new_jobs_24h,
+    l.errors_24h,
+    p.pipeline_pending
+FROM
+    (SELECT
+        COUNT(*)                                                   AS total_companies,
+        COALESCE(
+            SUM(CASE WHEN css.active THEN 1 ELSE 0 END), 0
+        )::BIGINT                                                  AS active_companies
+     FROM companies
+     LEFT JOIN company_scan_settings css ON css.company_id = companies.id) c,
+    (SELECT
+        COUNT(*) FILTER (WHERE status = 'queued')  AS queued,
+        COUNT(*) FILTER (WHERE status = 'running') AS crawling
+     FROM company_scan_queue) q,
+    (SELECT COUNT(*) AS new_jobs_24h
+     FROM jobs
+     WHERE added_at >= NOW() - INTERVAL '24 hours') j,
+    (SELECT
+        COUNT(*) FILTER (WHERE reason = 'error'
+                           AND first_seen_at >= NOW() - INTERVAL '24 hours') AS errors_24h
+     FROM job_pipeline_ledger) l,
+    (SELECT COUNT(*) AS pipeline_pending
+     FROM job_pipeline_ledger lp
+     LEFT JOIN jobs jt ON jt.job_post_id = lp.job_id
+     WHERE lp.reason = 'fetch'
+       AND jt.job_post_id IS NULL) p
+WITH DATA;
+CREATE UNIQUE INDEX idx_mv_pipeline_db_stats ON mv_pipeline_db_stats(id);
+
 -- +goose StatementEnd
 
 
