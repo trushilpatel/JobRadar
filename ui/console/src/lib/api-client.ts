@@ -38,8 +38,18 @@ async function signOutAndRedirect(): Promise<void> {
 
 async function authHeader(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
-  return token ? { Authorization: `Bearer ${token}` } : {}
+  const session = data.session
+  if (!session) return {}
+
+  const expiresAt = session.expires_at ?? 0
+  if (expiresAt > 0 && expiresAt - Math.floor(Date.now() / 1000) < 60) {
+    await refreshOnce()
+    const { data: fresh } = await supabase.auth.getSession()
+    const token = fresh.session?.access_token
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
+
+  return { Authorization: `Bearer ${session.access_token}` }
 }
 
 function buildUrl(path: string): string {

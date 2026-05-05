@@ -42,13 +42,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ initialized: true })
     const { data } = await supabase.auth.getSession()
     const session = data.session
-    let identity: Identity | null = null
-    if (session) {
-      identity = await loadIdentity()
-    }
-    set({ session, identity, loading: false, isAdmin: isAdminIdentity(identity) })
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    // Unblock rendering immediately — identity loads in background
+    set({ session, loading: false })
+
+    if (session) {
+      loadIdentity().then((identity) => {
+        if (get().session) set({ identity, isAdmin: isAdminIdentity(identity) })
+      })
+    }
+
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      if (event === 'TOKEN_REFRESHED') {
+        set({ session: newSession })
+        return
+      }
       let newIdentity: Identity | null = null
       if (newSession) {
         newIdentity = await loadIdentity()
