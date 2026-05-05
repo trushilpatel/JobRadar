@@ -10,13 +10,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// SnapshotWriter is used by the enricher and API to record each enriched job.
-type SnapshotWriter interface {
-	InsertSnapshot(ctx context.Context, input dto.SnapshotInput) error
-	UpdateSnapshotAction(ctx context.Context, id, action string) error
-	UpdateSnapshotActionBatch(ctx context.Context, ids []string, action string) error
-}
-
+// snapshotStore is the GORM-backed implementation of SnapshotWriter
+// (interface declared in JobService.go).
 type snapshotStore struct {
 	db *gorm.DB
 }

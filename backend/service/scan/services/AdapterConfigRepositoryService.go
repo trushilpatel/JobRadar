@@ -12,12 +12,22 @@ import (
 )
 
 // AdapterConfigStore is the interface for adapter_configs DB operations.
-// Defined here alongside the implementation it abstracts.
+//
+// Phase 2: the per-company adapter selection and per-company scan-interval
+// override moved off `companies` onto `company_scan_settings`. The two
+// company-scoped methods below now read and write that table — the global
+// `adapter_configs` table itself is unchanged.
 type AdapterConfigStore interface {
 	ListConfigs(ctx context.Context) ([]scanmodel.AdapterConfig, error)
 	GetConfig(ctx context.Context, adapterType string) (scanmodel.AdapterConfig, error)
 	UpdateConfig(ctx context.Context, adapterType string, fields map[string]any) (scanmodel.AdapterConfig, error)
-	GetCompanyWithAdapter(ctx context.Context, companyID string) (companymodel.Company, error)
+	// GetCompanyScanSettings returns the scan_settings row for companyID.
+	// Used by GetEffectiveScanConfig to compute the effective scan interval
+	// from the company's adapter_type + override + global adapter_configs row.
+	GetCompanyScanSettings(ctx context.Context, companyID string) (companymodel.CompanyScanSettings, error)
+	// UpdateCompanyScanIntervalOverride patches the per-company interval
+	// override on `company_scan_settings`. Returns NOT_FOUND when the row
+	// does not exist — admins must onboard the company first.
 	UpdateCompanyScanIntervalOverride(ctx context.Context, companyID string, override *int) error
 }
 
@@ -63,20 +73,20 @@ func (s *adapterConfigStore) UpdateConfig(ctx context.Context, adapterType strin
 	return cfg, err
 }
 
-func (s *adapterConfigStore) GetCompanyWithAdapter(ctx context.Context, companyID string) (_ companymodel.Company, err error) {
-	ctx, span := tracing.Start(ctx, "adapterConfig.store.GetCompanyWithAdapter")
+func (s *adapterConfigStore) GetCompanyScanSettings(ctx context.Context, companyID string) (_ companymodel.CompanyScanSettings, err error) {
+	ctx, span := tracing.Start(ctx, "adapterConfig.store.GetCompanyScanSettings")
 	defer tracing.End(span, &err)
-	var company companymodel.Company
-	err = s.db.WithContext(ctx).First(&company, "id = ?", companyID).Error
-	return company, err
+	var settings companymodel.CompanyScanSettings
+	err = s.db.WithContext(ctx).First(&settings, "company_id = ?", companyID).Error
+	return settings, err
 }
 
 func (s *adapterConfigStore) UpdateCompanyScanIntervalOverride(ctx context.Context, companyID string, override *int) (err error) {
 	ctx, span := tracing.Start(ctx, "adapterConfig.store.UpdateCompanyScanIntervalOverride")
 	defer tracing.End(span, &err)
-	result := s.db.WithContext(ctx).Model(&companymodel.Company{}).
-		Where("id = ?", companyID).
-		Update("scan_interval_minutes_override", override)
+	result := s.db.WithContext(ctx).Model(&companymodel.CompanyScanSettings{}).
+		Where("company_id = ?", companyID).
+		Update("scan_interval_override", override)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -134,14 +144,16 @@ func (r *adapterConfigRepositoryService) UpdateAdapterConfig(ctx context.Context
 func (r *adapterConfigRepositoryService) GetEffectiveScanConfig(ctx context.Context, companyID string) (_ dto.EffectiveScanConfigDTO, err error) {
 	ctx, span := tracing.Start(ctx, "adapterConfig.repository.GetEffectiveScanConfig")
 	defer tracing.End(span, &err)
-	company, err := r.store.GetCompanyWithAdapter(ctx, companyID)
+	settings, err := r.store.GetCompanyScanSettings(ctx, companyID)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return dto.EffectiveScanConfigDTO{}, errors.ErrNotFound.WithMessage("company not found")
+			// Phase 2: a company without scan_settings is un-onboarded —
+			// surface the same NOT_FOUND so the API contract is unchanged.
+			return dto.EffectiveScanConfigDTO{}, errors.ErrNotFound.WithMessage("company has no scan settings configured")
 		}
-		return dto.EffectiveScanConfigDTO{}, errors.ErrInternal.WithMessage("failed to fetch company")
+		return dto.EffectiveScanConfigDTO{}, errors.ErrInternal.WithMessage("failed to fetch company scan settings")
 	}
-	adapterCfg, err := r.store.GetConfig(ctx, company.AdapterType)
+	adapterCfg, err := r.store.GetConfig(ctx, settings.AdapterType)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return dto.EffectiveScanConfigDTO{}, errors.ErrNotFound.WithMessage("adapter config not found")
@@ -149,15 +161,15 @@ func (r *adapterConfigRepositoryService) GetEffectiveScanConfig(ctx context.Cont
 		return dto.EffectiveScanConfigDTO{}, errors.ErrInternal.WithMessage("failed to fetch adapter config")
 	}
 	effective := adapterCfg.ScanIntervalMinutes
-	if company.ScanIntervalMinutesOverride != nil {
-		effective = *company.ScanIntervalMinutesOverride
+	if settings.ScanIntervalOverride != nil {
+		effective = *settings.ScanIntervalOverride
 	}
 	return dto.EffectiveScanConfigDTO{
 		CompanyID:                    companyID,
-		AdapterType:                  company.AdapterType,
+		AdapterType:                  settings.AdapterType,
 		AdapterScanIntervalMinutes:   adapterCfg.ScanIntervalMinutes,
 		EffectiveScanIntervalMinutes: effective,
-		ScanIntervalMinutesOverride:  company.ScanIntervalMinutesOverride,
+		ScanIntervalMinutesOverride:  settings.ScanIntervalOverride,
 		InterCompanyDelayS:           adapterCfg.InterCompanyDelayS,
 	}, nil
 }
@@ -167,7 +179,7 @@ func (r *adapterConfigRepositoryService) UpdateScanIntervalOverride(ctx context.
 	defer tracing.End(span, &err)
 	if err := r.store.UpdateCompanyScanIntervalOverride(ctx, companyID, override); err != nil {
 		if errors.IsNotFound(err) {
-			return errors.ErrNotFound.WithMessage("company not found")
+			return errors.ErrNotFound.WithMessage("company has no scan settings configured")
 		}
 		return errors.ErrInternal.WithMessage("failed to update scan interval override")
 	}

@@ -21,7 +21,7 @@ export function JobsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [panelWidth, setPanelWidth] = useState(440)
 
-  function handleStatusChange(job: Job, status: JobStatus) {
+  function handleStatusChange(job: Job, status: Exclude<JobStatus, 'dismissed'>) {
     actions.setStatus.mutate({ id: job.id, status })
     if (activeJob?.id === job.id) setActiveJob(null)
   }
@@ -70,7 +70,7 @@ export function JobsPage() {
         tab={jobs.tab}
         onChange={(t) => {
           jobs.setTab(t)
-          jobs.setPage(1)
+          jobs.goToFirstPage()
           setActiveJob(null)
           setSelectedIds(new Set())
         }}
@@ -79,15 +79,10 @@ export function JobsPage() {
           <div className="flex items-baseline gap-3">
             <h1 className="text-lg font-semibold text-white">Jobs</h1>
             <span className="text-xs text-slate-400">
-              {jobs.total} job{jobs.total !== 1 ? 's' : ''}
               {activeFilterCount > 0 && (
-                <>
-                  {' '}
-                  ·{' '}
-                  <span className="text-violet-300">
-                    {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''}
-                  </span>
-                </>
+                <span className="text-violet-300">
+                  {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
+                </span>
               )}
             </span>
           </div>
@@ -133,20 +128,23 @@ export function JobsPage() {
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <JobsTable
           jobs={jobs.jobs}
-          total={jobs.total}
           loading={jobs.isLoading}
           tab={jobs.tab}
           page={jobs.page}
           limit={jobs.limit}
+          total={jobs.counts[jobs.tab] ?? 0}
+          hasNextPage={jobs.hasNextPage}
           selectedIds={selectedIds}
           activeJobId={activeJob?.id ?? null}
           onRowClick={setActiveJob}
           onToggleSelect={handleToggleSelect}
           onSelectAll={handleSelectAll}
-          onPageChange={jobs.setPage}
+          onNextPage={jobs.goToNextPage}
+          onPrevPage={jobs.goToPrevPage}
+          onPageChange={jobs.goToFirstPage}
           onLimitChange={(l) => {
             jobs.setLimit(l)
-            jobs.setPage(1)
+            jobs.goToFirstPage()
           }}
           sorting={jobs.sorting}
           onSortingChange={jobs.handleSortingChange}

@@ -7,6 +7,11 @@ import (
 	"gorm.io/datatypes"
 )
 
+// Job is the global, per-company job record stored in the `jobs` table
+// (renamed from `job_feed` in migration 044). Per-user state — saved /
+// applied / dismissed, notes, dismissal reason — lives in UserJobState.
+// The absence of a UserJobState row for (user, job) means the job is
+// considered "new" for that user.
 type Job struct {
 	ID        string `gorm:"primaryKey"  json:"id"`
 	JobPostID string `gorm:"not null"    json:"job_post_id"`
@@ -32,15 +37,12 @@ type Job struct {
 	RoleBrief         *string        `json:"role_brief"`
 	Responsibilities  datatypes.JSON `json:"responsibilities"`
 
-	Status string  `gorm:"not null;default:'new'" json:"status"`
-	Saved  bool    `gorm:"not null;default:false" json:"saved"`
-	Notes  *string `json:"notes"`
-
 	AddedAt time.Time `gorm:"not null;autoCreateTime" json:"added_at"`
 
 	Company companymodel.Company `gorm:"foreignKey:CompanyID" json:"company"`
 }
 
+// TableName pins the GORM struct to the `jobs` table.
 func (Job) TableName() string {
-	return "job_feed"
+	return "jobs"
 }

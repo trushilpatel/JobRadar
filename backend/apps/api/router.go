@@ -15,18 +15,22 @@ import (
 	"gorm.io/gorm"
 )
 
-// NewRouter builds the public API router. Middleware chain is:
+// NewRouter builds the public API router. Middleware chain:
 // otelhttp → Logger → Metrics → Recoverer → SecurityHeaders → BodyLimit →
-// Auth → route groups. Operational endpoints (/metrics, /health, /ready)
-// live on a separate listener — see NewOpsRouter.
+// Auth → (per subrouter: RequireIdentity + RateLimit).
 //
-// authMiddleware is injected so main.go can fail fast when auth setup fails
-// (e.g. malformed JWKS URL); this keeps NewRouter free of fallible IO.
+// apiGroups are mounted under /api with RequireIdentity + RateLimit applied.
+// rootGroups (e.g. /admin/*) are mounted at root with their own middleware.
+// Operational endpoints (/metrics, /health, /ready) live on a separate
+// listener — see NewOpsRouter.
 func NewRouter(
 	log logger.Logger,
 	cfg *config.Config,
 	authMiddleware func(http.Handler) http.Handler,
-	groups []handler.RouteGroup,
+	identityMW func(http.Handler) http.Handler,
+	rateLimitMW func(http.Handler) http.Handler,
+	apiGroups []handler.RouteGroup,
+	rootGroups []handler.RouteGroup,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -38,7 +42,19 @@ func NewRouter(
 	r.Use(middleware.BodyLimit(cfg.API.MaxBodyBytes))
 	r.Use(authMiddleware)
 
-	for _, g := range groups {
+	r.Route("/api", func(api chi.Router) {
+		if identityMW != nil {
+			api.Use(identityMW)
+		}
+		if rateLimitMW != nil {
+			api.Use(rateLimitMW)
+		}
+		for _, g := range apiGroups {
+			g.Register(api)
+		}
+	})
+
+	for _, g := range rootGroups {
 		g.Register(r)
 	}
 

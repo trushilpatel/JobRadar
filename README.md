@@ -16,7 +16,7 @@ job_listing_crawler       ← fetches careers pages via ATS adapters
 job_listing_relevance_filter  ← LLM batch-scores job titles
         ↓  (Kafka: job_listings.filtered)
 job_post_analyzer         ← fetches full page, LLM enriches, eligibility check
-        ↓  (Supabase: job_feed)
+        ↓  (Supabase: jobs)
 REST API + React UI
 ```
 
@@ -65,7 +65,10 @@ Analytics over all enriched jobs: funnel, role categories, company hiring veloci
 | Apple | `backend/apps/crawler/ats/apple` |
 | Meta | `backend/apps/crawler/ats/meta` |
 | Microsoft | `backend/apps/crawler/ats/microsoft` |
-| Google (JS-rendered) | `backend/apps/crawler/ats/google` |
+| Google | `backend/apps/crawler/ats/google` (pure HTTP + RE2 — no browser) |
+| Netflix | `backend/apps/crawler/ats/netflix` |
+| Rippling | `backend/apps/crawler/ats/rippling` |
+| Uber | `backend/apps/crawler/ats/uber` |
 
 ---
 
@@ -232,7 +235,11 @@ cp backend/.env.example backend/.env
 | `DB_PASSWORD` | Supabase DB password |
 | `DB_SSLMODE` | Always `require` |
 | `SUPABASE_PROJECT_URL` | `https://<project-ref>.supabase.co` |
-| `ALLOWED_EMAIL` | Single email allowed through auth |
+| `ALLOWED_EMAIL` | Legacy single-email allowlist for routes still gated by `RequireAuth`. New per-user routes use `RequireIdentity` + `ADMIN_EMAILS` instead. |
+| `ADMIN_EMAILS` | Comma-separated emails granted the `admin` role on first login (Phase 1). |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Used by `backend/platform/supabaseadmin` for `DELETE /api/me` (Phase 1). |
+| `RATE_LIMIT_READ_RPM` / `RATE_LIMIT_WRITE_RPM` / `RATE_LIMIT_ADMIN_RPM` | Per-user token-bucket rate limits (defaults: 30 / 20 / 120). |
+| `CACHE_TTL_USER_SECONDS` | TTL for the user-cache decorator (default 60). |
 | `TARGET_ROLES` | Comma-separated target role titles |
 | `YEARS_EXP` | Your years of experience |
 | `DISCARD_JOB_WITH_EXP_GT` | Drop jobs requiring more than N years (0 = disabled) |
@@ -296,6 +303,22 @@ Add allowed redirect URLs in Supabase → Authentication → URL Configuration:
 - Local k8s: `http://localhost:30300/auth/callback`
 - Local dev (Vite): `http://localhost:5173/auth/callback`
 - Production: `https://<your-domain>/auth/callback`
+
+### Multi-user (Phase 1)
+
+Phase 1 of the multi-user rollout has shipped — see [`Designs/multi-user-rollout-plan.md`](Designs/multi-user-rollout-plan.md) and locked contracts in [`Designs/phase1-contracts.md`](Designs/phase1-contracts.md):
+
+- New tables: `users`, `roles`, `user_roles`, `admin_audit_log` (migration `043_phase1_users_roles_audit.sql`)
+- New platform packages: `backend/common/identity/`, `backend/platform/cache/`, `backend/platform/ratelimit/`, `backend/platform/supabaseadmin/`
+- New service slices (decorator chain): `backend/service/user/` (with cache decorator), `backend/service/role/` (no REST surface in Phase 1), `backend/service/audit/`
+- New middleware in `backend/apps/api/middleware/`: `RequireIdentity` (DB-backed enrichment, cache-aside, lazy provisioning, status check, ADMIN_EMAILS auto-grant), `RequireRole(role)`, `RateLimit(limiter)` (per-user, method-derived scope, fail-open on Redis outage, 429 + `Retry-After`), `AuditAdminMutation(svc)` (appends to `admin_audit_log` on 2xx mutating responses); legacy `RequireAuth` (and the `ALLOWED_EMAIL` allowlist it enforces) is unchanged for routes that haven't been migrated yet
+- `auth.go` exports a `VerifyJWT(r) (sub, email, error)` helper consumed by `RequireIdentity` so JWT verification logic stays in one place
+- On first login, the user is provisioned in `users` and granted `user`. If their email is in `ADMIN_EMAILS`, they also get `admin`. Source of truth for role membership is Postgres (`user_roles`) — never JWT custom claims.
+- Identity flows via `context.Context` — middleware enriches every request with the caller's `Identity`; services pull `userID` via `identity.FromContext` / `UserIDFrom` / `IsAdmin`
+- Endpoints: `GET /api/me`, `PATCH /api/me` (display_name only), `DELETE /api/me` (Supabase admin DELETE → DB cascade)
+- RBAC0 — `roles` + `user_roles` only; no `permissions` table yet (deferred to RBAC1)
+
+Phase 2 (per-user data model, `/api` vs `/admin` route split, companies public/operational split, `job_feed`→`jobs` rename) and Phase 3 (frontend admin UI, `/me` integration, role-gated nav) are **shipped**.
 
 ---
 

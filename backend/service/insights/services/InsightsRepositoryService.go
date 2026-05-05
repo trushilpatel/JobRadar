@@ -25,7 +25,7 @@ func (s *repositoryService) TechStack(ctx context.Context) (_ any, err error) {
 	var results []dto.TechCount
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT tech, COUNT(*) AS count
-		FROM job_feed, jsonb_array_elements_text(tech_stack) AS tech
+		FROM jobs, jsonb_array_elements_text(tech_stack) AS tech
 		WHERE tech_stack IS NOT NULL AND jsonb_typeof(tech_stack) = 'array'
 		GROUP BY tech
 		ORDER BY count DESC
@@ -46,7 +46,7 @@ func (s *repositoryService) CompanyActivity(ctx context.Context) (_ any, err err
 			c.name AS company_name,
 			TO_CHAR(DATE_TRUNC('week', j.added_at), 'YYYY-MM-DD') AS week,
 			COUNT(*) AS count
-		FROM job_feed j
+		FROM jobs j
 		JOIN companies c ON j.company_id = c.id
 		WHERE j.added_at >= NOW() - INTERVAL '90 days'
 		GROUP BY c.name, DATE_TRUNC('week', j.added_at)
@@ -69,15 +69,15 @@ func (s *repositoryService) Funnel(ctx context.Context) (_ any, err error) {
 		Dismissed int `gorm:"column:dismissed"`
 	}
 	// enriched = all-time total from job_analytics (append-only, survives dismissal).
-	// saved/applied/dismissed = current distribution from job_feed (rows are never deleted).
+	// saved/applied/dismissed = current per-user-state distribution from user_job_state (source of truth post-migration 044).
 	// applied includes interviewing and offer — all stages beyond initial application.
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT
-			(SELECT COUNT(*) FROM job_analytics)                                         AS enriched,
-			COUNT(*) FILTER (WHERE status = 'saved')                                     AS saved,
-			COUNT(*) FILTER (WHERE status IN ('applied', 'interviewing', 'offer'))       AS applied,
-			COUNT(*) FILTER (WHERE status = 'dismissed')                                 AS dismissed
-		FROM job_feed
+			(SELECT COUNT(*) FROM job_analytics)                                            AS enriched,
+			COUNT(*) FILTER (WHERE status = 'saved')                                        AS saved,
+			COUNT(*) FILTER (WHERE status IN ('applied', 'interviewing', 'offer'))          AS applied,
+			COUNT(*) FILTER (WHERE status = 'dismissed')                                    AS dismissed
+		FROM user_job_state
 	`).Scan(&result).Error
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch funnel")
@@ -218,7 +218,7 @@ func (s *repositoryService) GetPipelineCounts(ctx context.Context) (_ dto.Pipeli
 			COUNT(*) FILTER (WHERE l.reason = 'fetch' AND j.job_post_id IS NULL) AS pending,
 			COUNT(*) FILTER (WHERE l.reason = 'error') AS errors
 		FROM job_pipeline_ledger l
-		LEFT JOIN job_feed j ON j.job_post_id = l.job_id
+		LEFT JOIN jobs j ON j.job_post_id = l.job_id
 	`).Scan(&result).Error
 	if err != nil {
 		return dto.PipelineCounts{}, errors.ErrInternal.WithMessage("failed to fetch pipeline counts")

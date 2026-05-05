@@ -5,26 +5,67 @@ import {
   Briefcase,
   LayoutDashboard,
   BarChart2,
-  Settings,
   ChevronsLeft,
   ChevronsRight,
   LogOut,
+  Users,
+  ClipboardList,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/features/auth/store'
 import { LogoLockup } from '@/components/brand/Logo'
 
-const nav: { to: string; label: string; icon: React.ReactNode }[] = [
+const userNav: { to: string; label: string; icon: React.ReactNode }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
-  { to: '/companies', label: 'Companies', icon: <Building2 size={16} /> },
   { to: '/jobs', label: 'Jobs', icon: <Briefcase size={16} /> },
-  { to: '/insights', label: 'Insights', icon: <BarChart2 size={16} /> },
-  { to: '/settings', label: 'Settings', icon: <Settings size={16} /> },
 ]
+
+const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [
+  { to: '/admin/companies', label: 'Companies', icon: <Building2 size={16} /> },
+  { to: '/admin/users', label: 'Users', icon: <Users size={16} /> },
+  { to: '/admin/audit', label: 'Audit Log', icon: <ClipboardList size={16} /> },
+  { to: '/insights', label: 'Insights', icon: <BarChart2 size={16} /> },
+]
+
+function NavItem({
+  to,
+  label,
+  icon,
+  collapsed,
+}: {
+  to: string
+  label: string
+  icon: React.ReactNode
+  collapsed: boolean
+}) {
+  return (
+    <NavLink
+      to={to}
+      title={collapsed ? label : undefined}
+      className={({ isActive }) =>
+        cn(
+          'w-full flex items-center rounded-lg text-sm transition-colors',
+          collapsed ? 'justify-center p-2.5' : 'gap-2.5 px-3 py-2.5',
+          isActive
+            ? 'bg-violet-600/20 text-violet-300 font-medium'
+            : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <span className={cn('shrink-0', isActive ? 'text-violet-400' : '')}>{icon}</span>
+          {!collapsed && <span>{label}</span>}
+        </>
+      )}
+    </NavLink>
+  )
+}
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const session = useAuthStore((s) => s.session)
+  const isAdmin = useAuthStore((s) => s.isAdmin)
   const signOut = useAuthStore((s) => s.signOut)
   const email = session?.user?.email ?? ''
   const initials = email ? email[0].toUpperCase() : '?'
@@ -59,50 +100,60 @@ export function Sidebar() {
       </div>
 
       {/* Nav links */}
-      <nav className="flex-1 px-1.5 py-4 space-y-0.5">
-        {nav.map(({ to, label, icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            title={collapsed ? label : undefined}
-            className={({ isActive }) =>
-              cn(
-                'w-full flex items-center rounded-lg text-sm transition-colors',
-                collapsed ? 'justify-center p-2.5' : 'gap-2.5 px-3 py-2.5',
-                isActive
-                  ? 'bg-violet-600/20 text-violet-300 font-medium'
-                  : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <span className={cn('shrink-0', isActive ? 'text-violet-400' : '')}>{icon}</span>
-                {!collapsed && <span>{label}</span>}
-              </>
-            )}
-          </NavLink>
+      <nav className="flex-1 px-1.5 py-4 space-y-0.5 overflow-y-auto">
+        {userNav.map(({ to, label, icon }) => (
+          <NavItem key={to} to={to} label={label} icon={icon} collapsed={collapsed} />
         ))}
+
+        {isAdmin && (
+          <>
+            {!collapsed && (
+              <p className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-600 select-none">
+                Admin
+              </p>
+            )}
+            {collapsed && <div className="my-2 border-t border-white/[0.07]" />}
+            {adminNav.map(({ to, label, icon }) => (
+              <NavItem key={to} to={to} label={label} icon={icon} collapsed={collapsed} />
+            ))}
+          </>
+        )}
       </nav>
 
       {/* Footer */}
       <div className={cn('border-t border-white/[0.07]', collapsed ? 'px-1.5 py-3' : 'px-3 py-3')}>
         {collapsed ? (
-          <button
-            onClick={signOut}
+          <NavLink
+            to="/account"
             title={email}
-            className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-white/[0.05] transition-colors"
+            className={({ isActive }) =>
+              cn(
+                'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
+                isActive ? 'bg-violet-600/20' : 'hover:bg-white/[0.05]'
+              )
+            }
           >
             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
               {initials}
             </span>
-          </button>
+          </NavLink>
         ) : (
           <div className="flex items-center gap-2.5">
-            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
-              {initials}
-            </span>
-            <span className="flex-1 text-xs text-slate-400 truncate">{email}</span>
+            <NavLink
+              to="/account"
+              title="Account"
+              className={({ isActive }) =>
+                cn(
+                  'flex-1 flex items-center gap-2 rounded-lg px-1 py-1 -mx-1 transition-colors min-w-0',
+                  isActive ? 'text-violet-300' : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                )
+              }
+            >
+              <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
+                {initials}
+              </span>
+              <span className="text-xs truncate">{email}</span>
+            </NavLink>
             <button
               onClick={signOut}
               title="Sign out"

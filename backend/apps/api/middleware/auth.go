@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -58,17 +57,107 @@ type tokenVerifier interface {
 // remote JWKS endpoint cannot be reached. Maps to HTTP 503 Retry-After.
 var errJWKSUnavailable = errors.New("auth: jwks unavailable")
 
+// ErrJWKSUnavailable is the exported alias of errJWKSUnavailable so callers of
+// the public VerifyJWT helper can `errors.Is` it without seeing the
+// internals of this package.
+var ErrJWKSUnavailable = errJWKSUnavailable
+
+// jwtPipeline holds the verifier + per-instance config used by both the
+// classic Auth middleware and the public VerifyJWT helper. It is built once
+// at boot via SetupJWT and read concurrently — never mutated after init.
+type jwtPipeline struct {
+	verifier         tokenVerifier
+	devToken         string
+	expectedIssuer   string
+	expectedAudience string
+	skew             time.Duration
+}
+
+// jwtPipelineSlot stores the most recent pipeline initialised in this process.
+// The classic Auth middleware closes over its own copy via authHandler — this
+// slot is only used by VerifyJWT, which has no closure to capture config in.
+// Synchronised via mu because Auth() is normally called once at boot but tests
+// call it many times in the same process.
+var (
+	jwtPipelineMu   sync.RWMutex
+	jwtPipelineSlot *jwtPipeline
+)
+
+func storeJWTPipeline(p *jwtPipeline) {
+	jwtPipelineMu.Lock()
+	defer jwtPipelineMu.Unlock()
+	jwtPipelineSlot = p
+}
+
+func loadJWTPipeline() *jwtPipeline {
+	jwtPipelineMu.RLock()
+	defer jwtPipelineMu.RUnlock()
+	return jwtPipelineSlot
+}
+
 // Auth builds the authentication middleware. Selects a single verifier at
 // boot (ES256 via JWKS OR HS256 via shared secret — never both) and verifies
-// signature, iss, aud, exp (with skew), then enforces the email allowlist via
-// constant-time compare.
+// signature, iss, aud, and exp (with skew). Open signup is gated by
+// RequireIdentity + RequireRole — no email allowlist.
 func Auth(cfg config.AuthConfig, devToken string, log logger.Logger) (func(http.Handler) http.Handler, error) {
 	skew := time.Duration(cfg.ClockSkewSeconds) * time.Second
 	verifier, err := newVerifier(cfg, skew)
 	if err != nil {
 		return nil, fmt.Errorf("auth middleware: init verifier: %w", err)
 	}
+	pipeline := &jwtPipeline{
+		verifier:         verifier,
+		devToken:         devToken,
+		expectedIssuer:   strings.TrimRight(cfg.SupabaseProjectURL, "/") + "/auth/v1",
+		expectedAudience: "authenticated",
+		skew:             skew,
+	}
+	storeJWTPipeline(pipeline)
 	return authHandler(cfg, devToken, verifier, log), nil
+}
+
+// errJWTPipelineNotInitialised is returned by VerifyJWT when no Auth
+// middleware has been built in this process — a programmer error in wiring.
+var errJWTPipelineNotInitialised = errors.New("auth: VerifyJWT called before Auth was initialised")
+
+// VerifyJWT runs the same JWT verification the Auth middleware does — bearer
+// extraction, signature, iss, aud, exp (with skew) — and returns the JWT
+// `sub` and `email` claims.
+//
+// The dev-token bypass mirrors Auth: a request carrying a matching X-Dev-Token
+// header short-circuits to (subject="dev-bypass", email="") without touching
+// the verifier. This keeps RequireIdentity usable in dev environments without
+// a real Supabase session.
+//
+// Auth must have been called once before VerifyJWT — typically at process
+// boot. Calling VerifyJWT in a process that never built Auth returns
+// errJWTPipelineNotInitialised.
+func VerifyJWT(r *http.Request) (subject, email string, err error) {
+	p := loadJWTPipeline()
+	if p == nil {
+		return "", "", errJWTPipelineNotInitialised
+	}
+
+	// Dev bypass — only active when DEV_TOKEN is configured for this process.
+	if p.devToken != "" && r.Header.Get("X-Dev-Token") == p.devToken {
+		return "dev-bypass", "", nil
+	}
+
+	raw, ok := extractBearer(r.Header.Get("Authorization"))
+	if !ok {
+		return "", "", errors.New("auth: missing or malformed bearer")
+	}
+	tok, claims, err := p.verifier.Verify(raw)
+	if err != nil {
+		return "", "", err
+	}
+	if !tok.Valid {
+		return "", "", errors.New("auth: token invalid after parse")
+	}
+	if err := validateStandardClaims(claims, p.expectedIssuer, p.expectedAudience, p.skew); err != nil {
+		return "", "", err
+	}
+	return claims.Subject, claims.Email, nil
 }
 
 func authHandler(cfg config.AuthConfig, devToken string, verifier tokenVerifier, log logger.Logger) func(http.Handler) http.Handler {
@@ -82,7 +171,7 @@ func authHandler(cfg config.AuthConfig, devToken string, verifier tokenVerifier,
 			if devToken != "" && r.Header.Get("X-Dev-Token") == devToken {
 				ctx := context.WithValue(r.Context(), identityCtxKey{}, Identity{
 					UserID: "dev-bypass",
-					Email:  cfg.AllowedEmail,
+					Email:  "",
 				})
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
@@ -119,12 +208,8 @@ func authHandler(cfg config.AuthConfig, devToken string, verifier tokenVerifier,
 				return
 			}
 
-			if !emailMatches(claims.Email, cfg.AllowedEmail) {
-				log.Warn("auth: email not allowed", logger.Str(logger.FieldEmailDomain, domainOf(claims.Email)))
-				handler.RespondError(w, http.StatusForbidden, "FORBIDDEN", "access denied")
-				return
-			}
-
+			// Phase 2: email allowlist removed — RequireIdentity handles identity
+			// enrichment, provisioning, and status checks per-route.
 			ident := Identity{UserID: claims.Subject, Email: claims.Email}
 			ctx := context.WithValue(r.Context(), identityCtxKey{}, ident)
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -165,30 +250,6 @@ func validateStandardClaims(c *authClaims, issuer, audience string, skew time.Du
 
 func audienceContains(aud jwt.ClaimStrings, want string) bool {
 	return slices.Contains(aud, want)
-}
-
-// emailMatches performs a constant-time compare of two emails after lowering.
-// Returns false if either side is empty. Length mismatch short-circuits to a
-// dummy compare so the timing profile stays flat regardless of input length.
-func emailMatches(got, allowed string) bool {
-	if got == "" || allowed == "" {
-		return false
-	}
-	g := []byte(strings.ToLower(got))
-	a := []byte(strings.ToLower(allowed))
-	if len(g) != len(a) {
-		_ = subtle.ConstantTimeCompare(a, a)
-		return false
-	}
-	return subtle.ConstantTimeCompare(g, a) == 1
-}
-
-func domainOf(email string) string {
-	at := strings.LastIndex(email, "@")
-	if at < 0 || at == len(email)-1 {
-		return ""
-	}
-	return email[at+1:]
 }
 
 // newVerifier picks ES256-via-JWKS or HS256-via-secret based on cfg. The

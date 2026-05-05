@@ -14,7 +14,6 @@ data:
   DB_SSLMODE: {{ .Values.api.dbSslmode | quote }}
   DB_PORT: {{ .Values.api.dbPort | quote }}
   SUPABASE_PROJECT_URL: {{ .Values.api.supabaseProjectUrl | quote }}
-  ALLOWED_EMAIL: {{ .Values.api.allowedEmail | quote }}
   JWT_CLOCK_SKEW_SECONDS: {{ .Values.api.jwtClockSkewSeconds | quote }}
   JWKS_CACHE_TTL_SECONDS: {{ .Values.api.jwksCacheTtlSeconds | quote }}
   API_MAX_BODY_BYTES: {{ .Values.api.apiMaxBodyBytes | quote }}

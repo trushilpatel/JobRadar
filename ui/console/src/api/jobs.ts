@@ -1,15 +1,35 @@
-import type { Job, JobApplication } from '@/types'
+import type { Job, JobApplication, UserJobState } from '@/types'
 import { apiClient } from '@/lib/api-client'
 
+// The backend returns per-user state nested under user_state. Flatten the
+// frequently-accessed fields (status, notes, saved) to the top level so
+// all existing components keep working without change.
+function normalizeJob(raw: Job & { user_state?: Partial<UserJobState> }): Job {
+  const us = raw.user_state
+  return {
+    ...raw,
+    status: us?.status ?? 'new',
+    notes: us?.notes ?? null,
+    saved: us?.saved_at != null,
+    user_state: {
+      status: us?.status ?? 'new',
+      notes: us?.notes ?? null,
+      saved_at: us?.saved_at ?? null,
+      applied_at: us?.applied_at ?? null,
+      dismissed_at: us?.dismissed_at ?? null,
+      dismissal_reason: us?.dismissal_reason ?? null,
+      dismissal_note: us?.dismissal_note ?? null,
+    },
+  }
+}
+
 export interface JobsPage {
-  data: Job[]
-  total: number
-  page: number
-  limit: number
+  items: Job[]
+  next_cursor: string
 }
 
 export interface JobFilters {
-  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
+  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'dismissed' | 'rejected'
   search?: string
   companies?: string[]
   remote?: boolean
@@ -26,14 +46,20 @@ export interface JobCounts {
   applied: number
   interviewing: number
   offer: number
+  rejected: number
 }
 
-// GET /jobs — all filters pushed to server, no client-side filtering
-export async function fetchJobs(filters: JobFilters, page = 1, limit = 20): Promise<JobsPage> {
+// GET /jobs — cursor-based keyset pagination (Phase 2)
+// cursor="" fetches the first page; subsequent pages use next_cursor from prior response.
+export async function fetchJobs(
+  filters: JobFilters,
+  cursor = '',
+  limit = 20
+): Promise<JobsPage> {
   const p = new URLSearchParams()
   p.set('status', filters.status)
-  p.set('page', String(page))
   p.set('limit', String(limit))
+  if (cursor) p.set('cursor', cursor)
 
   if (filters.search) p.set('search', filters.search)
   filters.companies?.forEach((c) => p.append('companies', c))
@@ -44,12 +70,13 @@ export async function fetchJobs(filters: JobFilters, page = 1, limit = 20): Prom
   if (filters.sortBy) p.set('sort_by', filters.sortBy)
   if (filters.sortDir) p.set('sort_dir', filters.sortDir)
 
-  return apiClient.get<JobsPage>(`/jobs?${p}`)
+  const page = await apiClient.get<JobsPage>(`/jobs?${p}`)
+  return { ...page, items: page.items.map(normalizeJob) }
 }
 
 // GET /jobs/:id
 export async function fetchJob(id: string): Promise<Job> {
-  return apiClient.get<Job>(`/jobs/${id}`)
+  return normalizeJob(await apiClient.get<Job>(`/jobs/${id}`))
 }
 
 // PATCH /jobs/:id/save
@@ -60,7 +87,7 @@ export async function setJobSaved(id: string, saved: boolean): Promise<void> {
 // PATCH /jobs/:id/status
 export async function setJobStatus(
   id: string,
-  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
+  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected'
 ): Promise<void> {
   await apiClient.patch<void>(`/jobs/${id}/status`, { status })
 }
@@ -73,6 +100,11 @@ export async function setJobNotes(id: string, notes: string): Promise<void> {
 // GET /jobs/counts
 export async function fetchJobCounts(): Promise<JobCounts> {
   return apiClient.get<JobCounts>('/jobs/counts')
+}
+
+// GET /jobs/companies — all distinct company names in the jobs table
+export async function fetchJobCompanies(): Promise<string[]> {
+  return apiClient.get<string[]>('/jobs/companies')
 }
 
 // DELETE /jobs/:id  (dismiss)

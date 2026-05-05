@@ -1,13 +1,16 @@
 package common
 
-// JobStatus values for job_feed.status
+// JobStatus values for the per-user UserJobState.status column. Mirrors the
+// CHECK constraint on user_job_state.status. Note: "new" is intentionally
+// NOT a valid stored status — absence of a row implies "new".
 const (
-	JobStatusNew          = "new"
+	JobStatusNew          = "new" // synthetic — never written, only returned via overlay
 	JobStatusSaved        = "saved"
 	JobStatusApplied      = "applied"
+	JobStatusDismissed    = "dismissed"
 	JobStatusInterviewing = "interviewing"
 	JobStatusOffer        = "offer"
-	JobStatusDismissed    = "dismissed"
+	JobStatusRejected     = "rejected"
 )
 
 // SeenReason values for job_pipeline_ledger.reason
@@ -19,13 +22,15 @@ const (
 	SeenReasonError         = "error"
 )
 
-// DiscardReason values for job_dismissal_log.reason
+// DismissalReason values stored on user_job_state.dismissal_reason. The
+// allowed set is enforced at the application layer (the table itself does
+// not constrain it) so all dismissal flows write one of these values.
 const (
-	DiscardReasonDismissed   = "user_dismissed"
-	DiscardReasonNotRelevant = "user_not_relevant"
+	DismissalReasonUserDismissed = "user_dismissed"
+	DismissalReasonNotRelevant   = "user_not_relevant"
 )
 
-// EmployType values for job_feed.employ_type
+// EmployType values for jobs.employ_type
 const (
 	EmployFullTime   = "full_time"
 	EmployPartTime   = "part_time"

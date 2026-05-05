@@ -1,0 +1,234 @@
+package services
+
+import (
+	"context"
+	"errors"
+
+	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
+	companydto "github.com/trushilpatel/jobradar/service/company/dto"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
+	"gorm.io/gorm"
+)
+
+// ScanSettingsRepository is the single point of access for the
+// `company_scan_settings` table. It is consumed by:
+//
+//   - The admin chain (CompanyAdminImplService) — when admins create or
+//     update settings via /admin/companies/{id}/scan-settings.
+//   - Background workers (scheduler, crawler) — to read adapter_type /
+//     adapter_config / scan_interval_override / active, and to write
+//     scan-state outcomes (UpdateScanState).
+//
+// Every method rejects an empty companyID with ErrInternal.WithMessage(
+// "company id required") before touching the DB so a forgotten ctx scoping
+// can never silently broaden a query to the entire table.
+type ScanSettingsRepository interface {
+	Get(ctx context.Context, companyID string) (*companymodel.CompanyScanSettings, error)
+	GetMissing(ctx context.Context) ([]string, error)
+	Create(ctx context.Context, s companymodel.CompanyScanSettings) error
+	Update(ctx context.Context, companyID string, p companydto.CompanyScanSettingsInput) error
+	UpdateScanState(ctx context.Context, companyID string, st companydto.CompanyScanStateUpdate) error
+	Delete(ctx context.Context, companyID string) error
+}
+
+// scanSettingsRepository is the GORM-backed terminal implementation.
+type scanSettingsRepository struct {
+	db *gorm.DB
+}
+
+// NewScanSettingsRepositoryService constructs the ScanSettingsRepository.
+func NewScanSettingsRepositoryService(db *gorm.DB) ScanSettingsRepository {
+	return &scanSettingsRepository{db: db}
+}
+
+// errNoCompany is the canonical guard error for empty companyID. Returned
+// from every method so tests have a stable check.
+func errNoCompany() error {
+	return apperr.ErrInternal.WithMessage("company id required")
+}
+
+// Get returns the scan_settings row for companyID, or NOT_FOUND when no
+// row exists yet (post-cutover companies start without settings).
+func (r *scanSettingsRepository) Get(ctx context.Context, companyID string) (_ *companymodel.CompanyScanSettings, err error) {
+	if companyID == "" {
+		return nil, errNoCompany()
+	}
+	ctx, span := tracing.Start(ctx, "company.scan_settings.repo.Get")
+	defer tracing.End(span, &err)
+
+	var row companymodel.CompanyScanSettings
+	if err = r.db.WithContext(ctx).First(&row, "company_id = ?", companyID).Error; err != nil {
+		if apperr.IsNotFound(err) {
+			return nil, apperr.ErrNotFound.WithMessage("scan settings not found")
+		}
+		return nil, apperr.ErrInternal.WithMessage("failed to fetch scan settings")
+	}
+	return &row, nil
+}
+
+// GetMissing returns the IDs of every `companies` row that does NOT have
+// a matching `company_scan_settings` row. Admin UIs call this to surface
+// un-onboarded companies. Returns an empty slice (not nil) when none.
+func (r *scanSettingsRepository) GetMissing(ctx context.Context) (_ []string, err error) {
+	ctx, span := tracing.Start(ctx, "company.scan_settings.repo.GetMissing")
+	defer tracing.End(span, &err)
+
+	var ids []string
+	if err = r.db.WithContext(ctx).Raw(`
+		SELECT c.id
+		FROM companies c
+		LEFT JOIN company_scan_settings s ON s.company_id = c.id
+		WHERE s.company_id IS NULL
+		ORDER BY c.id
+	`).Scan(&ids).Error; err != nil {
+		return nil, apperr.ErrInternal.WithMessage("failed to fetch companies missing scan settings")
+	}
+	if ids == nil {
+		ids = []string{}
+	}
+	return ids, nil
+}
+
+// Create inserts a new scan_settings row. Returns CONFLICT when a row
+// already exists for the company.
+func (r *scanSettingsRepository) Create(ctx context.Context, s companymodel.CompanyScanSettings) (err error) {
+	if s.CompanyID == "" {
+		return errNoCompany()
+	}
+	ctx, span := tracing.Start(ctx, "company.scan_settings.repo.Create")
+	defer tracing.End(span, &err)
+
+	if err = r.db.WithContext(ctx).Create(&s).Error; err != nil {
+		if isUniqueViolation(err) {
+			return apperr.ErrConflict.WithMessage("scan settings already exist for company")
+		}
+		return apperr.ErrInternal.WithMessage("failed to create scan settings")
+	}
+	return nil
+}
+
+// Update applies a partial-patch to an existing scan_settings row. Returns
+// NOT_FOUND when no row exists yet — admins must Create first.
+func (r *scanSettingsRepository) Update(ctx context.Context, companyID string, p companydto.CompanyScanSettingsInput) (err error) {
+	if companyID == "" {
+		return errNoCompany()
+	}
+	if p.IsEmpty() {
+		return apperr.ErrBadRequest.WithMessage("at least one field must be provided")
+	}
+	ctx, span := tracing.Start(ctx, "company.scan_settings.repo.Update")
+	defer tracing.End(span, &err)
+
+	fields := scanSettingsInputToFields(p)
+	res := r.db.WithContext(ctx).
+		Model(&companymodel.CompanyScanSettings{}).
+		Where("company_id = ?", companyID).
+		Updates(fields)
+	if res.Error != nil {
+		return apperr.ErrInternal.WithMessage("failed to update scan settings")
+	}
+	if res.RowsAffected == 0 {
+		return apperr.ErrNotFound.WithMessage("scan settings not found")
+	}
+	return nil
+}
+
+// UpdateScanState is the worker-only write path. It applies a partial
+// state patch (last_scan_at / last_success_at / last_error_*) to a
+// scan_settings row. Returns NOT_FOUND when the row is missing — workers
+// should already have skipped such companies, so this is a defensive
+// signal.
+func (r *scanSettingsRepository) UpdateScanState(ctx context.Context, companyID string, st companydto.CompanyScanStateUpdate) (err error) {
+	if companyID == "" {
+		return errNoCompany()
+	}
+	ctx, span := tracing.Start(ctx, "company.scan_settings.repo.UpdateScanState")
+	defer tracing.End(span, &err)
+
+	fields := make(map[string]any)
+	if st.LastScanAt != nil {
+		fields["last_scan_at"] = *st.LastScanAt
+	}
+	if st.LastSuccessAt != nil {
+		fields["last_success_at"] = *st.LastSuccessAt
+	}
+	if st.LastErrorAt != nil {
+		fields["last_error_at"] = *st.LastErrorAt
+	}
+	if st.LastErrorMessage != nil {
+		fields["last_error_message"] = *st.LastErrorMessage
+	}
+	if st.ConsecutiveErrors != nil {
+		fields["consecutive_errors"] = *st.ConsecutiveErrors
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+
+	res := r.db.WithContext(ctx).
+		Model(&companymodel.CompanyScanSettings{}).
+		Where("company_id = ?", companyID).
+		Updates(fields)
+	if res.Error != nil {
+		return apperr.ErrInternal.WithMessage("failed to update scan state")
+	}
+	if res.RowsAffected == 0 {
+		return apperr.ErrNotFound.WithMessage("scan settings not found")
+	}
+	return nil
+}
+
+// Delete removes the scan_settings row. Idempotent: missing row is not an
+// error since CASCADE may have already removed it via a company delete.
+func (r *scanSettingsRepository) Delete(ctx context.Context, companyID string) (err error) {
+	if companyID == "" {
+		return errNoCompany()
+	}
+	ctx, span := tracing.Start(ctx, "company.scan_settings.repo.Delete")
+	defer tracing.End(span, &err)
+
+	if err = r.db.WithContext(ctx).
+		Delete(&companymodel.CompanyScanSettings{}, "company_id = ?", companyID).
+		Error; err != nil {
+		return apperr.ErrInternal.WithMessage("failed to delete scan settings")
+	}
+	return nil
+}
+
+// scanSettingsInputToFields converts a partial-patch input into the GORM
+// field map used by Update. Shared by the admin chain and the repo so the
+// column projection lives in one place.
+func scanSettingsInputToFields(p companydto.CompanyScanSettingsInput) map[string]any {
+	fields := make(map[string]any)
+	if p.AdapterType != nil {
+		fields["adapter_type"] = *p.AdapterType
+	}
+	if p.AdapterConfig != nil {
+		fields["adapter_config"] = *p.AdapterConfig
+	}
+	if p.ScanIntervalOverride != nil {
+		fields["scan_interval_override"] = *p.ScanIntervalOverride
+	}
+	if p.Active != nil {
+		fields["active"] = *p.Active
+	}
+	return fields
+}
+
+// isUniqueViolation detects PostgreSQL unique-constraint failures across
+// the GORM driver landscape. Errors carry a SQLSTATE 23505 — pgx wraps
+// the code on a *pgconn.PgError, and lib/pq returns a *pq.Error; gorm's
+// generic wrapper hides both behind ErrDuplicatedKey on recent versions.
+// We check both for portability across local dev and CI.
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+	// Fallback: substring match on SQLSTATE 23505 — defensive only, the
+	// gorm.ErrDuplicatedKey path is the supported one.
+	return errors.Is(err, gorm.ErrDuplicatedKey)
+}

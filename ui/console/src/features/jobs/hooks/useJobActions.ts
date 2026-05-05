@@ -8,7 +8,7 @@ export function useJobActions() {
   const invalidateJobs = () => queryClient.invalidateQueries({ queryKey: ['jobs'] })
 
   const setStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: JobStatus }) => setJobStatus(id, status),
+    mutationFn: ({ id, status }: { id: string; status: Exclude<JobStatus, 'dismissed'> }) => setJobStatus(id, status),
     onSuccess: (_, { status }) => {
       toast.success(`Moved to ${status}`)
       invalidateJobs()

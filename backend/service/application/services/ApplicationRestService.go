@@ -10,7 +10,9 @@ import (
 	"github.com/trushilpatel/jobradar/service/application/dto"
 )
 
-// RestService handles HTTP requests for the application domain.
+// RestService handles HTTP requests for the application domain. It owns
+// no business logic — it parses the request, calls next, and writes the
+// response via handler.Respond / handler.RespondPaged / handler.HandleError.
 type RestService struct {
 	next ApplicationService
 }
@@ -20,11 +22,11 @@ func NewApplicationRestService(next ApplicationService) *RestService {
 	return &RestService{next: next}
 }
 
-// GET /jobs/:id/applications
+// GET /jobs/{id}/applications
 func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
 
-	apps, err := h.next.ListByJob(jobID)
+	apps, err := h.next.ListByJob(r.Context(), jobID)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -33,7 +35,7 @@ func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
 	handler.Respond(w, http.StatusOK, apps)
 }
 
-// POST /jobs/:id/applications
+// POST /jobs/{id}/applications
 func (h *RestService) create(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
 
@@ -56,7 +58,7 @@ func (h *RestService) create(w http.ResponseWriter, r *http.Request) {
 func (h *RestService) listAll(w http.ResponseWriter, r *http.Request) {
 	p := request.ParsePagination(r)
 
-	apps, total, err := h.next.ListAll(p.Page, p.Limit)
+	apps, total, err := h.next.ListAll(r.Context(), p.Page, p.Limit)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
@@ -65,7 +67,7 @@ func (h *RestService) listAll(w http.ResponseWriter, r *http.Request) {
 	handler.RespondPaged(w, http.StatusOK, apps, total, p.Page, p.Limit)
 }
 
-// PATCH /jobs/:id/applications/:app_id/stage
+// PATCH /jobs/{id}/applications/{app_id}/stage
 func (h *RestService) updateStage(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "app_id")
@@ -76,7 +78,7 @@ func (h *RestService) updateStage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.next.UpdateStage(jobID, appID, input); err != nil {
+	if err := h.next.UpdateStage(r.Context(), jobID, appID, input); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -84,7 +86,7 @@ func (h *RestService) updateStage(w http.ResponseWriter, r *http.Request) {
 	handler.Respond(w, http.StatusOK, map[string]string{"app_id": appID, "stage": input.Stage})
 }
 
-// PATCH /applications/:id/stage — top-level shortcut used by the dashboard interviewing tracker
+// PATCH /applications/{id}/stage — top-level shortcut used by the dashboard interview tracker.
 func (h *RestService) updateStageByID(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "id")
 
@@ -94,8 +96,7 @@ func (h *RestService) updateStageByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// jobID unused by UpdateStage — pass empty string
-	if err := h.next.UpdateStage("", appID, input); err != nil {
+	if err := h.next.UpdateStageByID(r.Context(), appID, input); err != nil {
 		handler.HandleError(w, err)
 		return
 	}
@@ -103,7 +104,7 @@ func (h *RestService) updateStageByID(w http.ResponseWriter, r *http.Request) {
 	handler.Respond(w, http.StatusOK, map[string]string{"app_id": appID, "stage": input.Stage})
 }
 
-// PATCH /jobs/:id/applications/:app_id/note
+// PATCH /jobs/{id}/applications/{app_id}/note
 func (h *RestService) updateNote(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "app_id")
@@ -114,7 +115,7 @@ func (h *RestService) updateNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.next.UpdateNote(jobID, appID, input); err != nil {
+	if err := h.next.UpdateNote(r.Context(), jobID, appID, input); err != nil {
 		handler.HandleError(w, err)
 		return
 	}

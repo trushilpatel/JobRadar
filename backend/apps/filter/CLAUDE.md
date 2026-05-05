@@ -34,7 +34,7 @@ Design spec: `docs/superpowers/specs/2026-04-22-filter-simplification-design.md`
 - Columns `retry_count`, `next_attempt_at` are populated **only** while `reason='retry'`; NULL elsewhere.
 - `UpdateRetryBatch` (on `FilterLedger`) is the single path that writes retry state — per-row values in one round trip.
 - Transitions: `retry → llm_irrelevant` (scored irrelevant), `retry → retry` (fails again, count++ / next_attempt_at bumped), `retry → error` (retry budget exhausted → DLQ).
-- A relevant job that was previously retried keeps its final `retry_count` frozen — `job_feed` is downstream authority. Dashboards filtering "currently retrying" must use `reason='retry'`, never `retry_count > 0`.
+- A relevant job that was previously retried keeps its final `retry_count` frozen — `jobs` is downstream authority. Dashboards filtering "currently retrying" must use `reason='retry'`, never `retry_count > 0`.
 
 ## Observability
 

@@ -10,14 +10,14 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/common/errors"
+	apperr "github.com/trushilpatel/jobradar/common/errors"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	svc "github.com/trushilpatel/jobradar/service/application/services"
 )
 
-// fakeService is a test double for ApplicationService.
+// fakeService is a test double for ApplicationService used to drive the REST handler.
 type fakeService struct {
 	apps        []appmodel.JobApplication
 	appsWithJob []svc.ApplicationWithJob
@@ -26,22 +26,31 @@ type fakeService struct {
 	err         error
 }
 
-func (f *fakeService) ListByJob(_ string) ([]appmodel.JobApplication, error) {
+func (f *fakeService) ListByJob(_ context.Context, _ string) ([]appmodel.JobApplication, error) {
 	return f.apps, f.err
 }
-func (f *fakeService) ListAll(_, _ int) ([]svc.ApplicationWithJob, int, error) {
+func (f *fakeService) ListAll(_ context.Context, _, _ int) ([]svc.ApplicationWithJob, int, error) {
 	return f.appsWithJob, f.total, f.err
 }
-func (f *fakeService) ListActive() ([]svc.ApplicationWithJob, error) {
+func (f *fakeService) ListActive(_ context.Context) ([]svc.ApplicationWithJob, error) {
 	return f.appsWithJob, f.err
 }
 func (f *fakeService) Create(_ context.Context, _ string, _ dto.CreateApplicationInput) (*appmodel.JobApplication, error) {
 	return f.app, f.err
 }
-func (f *fakeService) UpdateStage(_, _ string, _ dto.UpdateStageInput) error { return f.err }
-func (f *fakeService) UpdateNote(_, _ string, _ dto.UpdateNoteInput) error   { return f.err }
+func (f *fakeService) UpdateStage(_ context.Context, _, _ string, _ dto.UpdateStageInput) error {
+	return f.err
+}
+func (f *fakeService) UpdateStageByID(_ context.Context, _ string, _ dto.UpdateStageInput) error {
+	return f.err
+}
+func (f *fakeService) UpdateNote(_ context.Context, _, _ string, _ dto.UpdateNoteInput) error {
+	return f.err
+}
 
-// newTestRouter wires a RestService directly (bypassing validation) and registers routes via RestRouter.
+// newTestRouter wires a RestService directly (bypassing validation) and
+// registers routes via RestRouter — tests below rely on the relative routes
+// declared by ApplicationRestRouter.
 func newTestRouter(next svc.ApplicationService) *chi.Mux {
 	r := chi.NewRouter()
 	h := svc.NewApplicationRestService(next)
@@ -77,7 +86,7 @@ func TestHandlerCreate_OK(t *testing.T) {
 }
 
 func TestHandlerCreate_NotFound(t *testing.T) {
-	r := newTestRouter(&fakeService{err: errors.ErrNotFound.WithMessage("job not found")})
+	r := newTestRouter(&fakeService{err: apperr.ErrNotFound.WithMessage("job not found")})
 
 	body, _ := json.Marshal(dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	req := httptest.NewRequest(http.MethodPost, "/jobs/missing/applications", bytes.NewReader(body))
@@ -109,6 +118,19 @@ func TestHandlerUpdateStage_OK(t *testing.T) {
 
 	body, _ := json.Marshal(dto.UpdateStageInput{Stage: appcommon.StageApplied})
 	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/applications/1/stage", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("got status %d, want 200", w.Code)
+	}
+}
+
+func TestHandlerUpdateStageByID_OK(t *testing.T) {
+	r := newTestRouter(&fakeService{})
+
+	body, _ := json.Marshal(dto.UpdateStageInput{Stage: appcommon.StageApplied})
+	req := httptest.NewRequest(http.MethodPatch, "/applications/1/stage", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

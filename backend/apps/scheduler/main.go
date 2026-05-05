@@ -96,18 +96,28 @@ func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerServi
 		log.Info("purged inactive company queue entries", logger.Int("purged", purged))
 	}
 
-	n, err := svc.EnqueueDue(ctx, intervalMinutes)
+	res, err := svc.EnqueueDue(ctx, intervalMinutes)
 	if err != nil {
 		metrics.SchedulerErrorsTotal.WithLabelValues("enqueue_due").Inc()
 		log.Error("enqueue due failed", err)
 	} else {
-		metrics.SchedulerCompaniesEnqueuedTotal.Add(float64(n))
+		metrics.SchedulerCompaniesEnqueuedTotal.Add(float64(res.Enqueued))
+	}
+
+	// Phase 2: surface companies skipped because they have no scan_settings
+	// row yet. Logged at INFO once per tick so admins can see the count even
+	// when no companies were enqueued (e.g. immediately after migration when
+	// the queue is idle but every company still needs onboarding).
+	if res.SkippedNoSettings > 0 {
+		log.Info("companies skipped — no scan_settings configured",
+			logger.Int("skipped_no_settings", res.SkippedNoSettings),
+		)
 	}
 
 	metrics.SchedulerRunDuration.Observe(time.Since(start).Seconds())
-	if n > 0 {
+	if res.Enqueued > 0 {
 		log.Info("cycle complete",
-			logger.Int(logger.FieldEnqueued, n),
+			logger.Int(logger.FieldEnqueued, res.Enqueued),
 			logger.Dur(logger.FieldDuration, time.Since(start)),
 		)
 	} else {

@@ -10,11 +10,8 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// TechTagWriter writes normalized technology tags for a job into job_tech_tags.
-type TechTagWriter interface {
-	InsertTechTags(ctx context.Context, jobID, companyID string, techs []string, taggedAt time.Time) error
-}
-
+// techTagStore is the GORM-backed implementation of TechTagWriter
+// (interface declared in JobService.go).
 type techTagStore struct {
 	db *gorm.DB
 }

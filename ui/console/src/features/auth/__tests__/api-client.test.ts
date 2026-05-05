@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const getSession = vi.fn()
 const refreshSession = vi.fn()
 const signOut = vi.fn()
+const toastWarning = vi.fn()
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -13,6 +14,8 @@ vi.mock('@/lib/supabase', () => ({
     },
   },
 }))
+
+vi.mock('sonner', () => ({ toast: { warning: (...args: unknown[]) => toastWarning(...args) } }))
 
 const originalFetch = globalThis.fetch
 const originalLocation = window.location
@@ -50,6 +53,7 @@ beforeEach(() => {
   getSession.mockReset()
   refreshSession.mockReset()
   signOut.mockReset()
+  toastWarning.mockReset()
 })
 
 afterEach(() => {
@@ -169,5 +173,60 @@ describe('apiClient', () => {
     await expect(apiClient.get('/secure')).rejects.toThrow('forbidden')
     expect(refreshSession).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  // ── Fix 2: proactive token refresh ─────────────────────────────────────────
+
+  it('refreshes proactively when token expires within 60 seconds', async () => {
+    const now = Math.floor(Date.now() / 1000)
+    getSession
+      .mockResolvedValueOnce({ data: { session: { access_token: 'expiring-token', expires_at: now + 30 } } })
+      .mockResolvedValueOnce({ data: { session: { access_token: 'fresh-token', expires_at: now + 3600 } } })
+    refreshSession.mockResolvedValue({ data: { session: { access_token: 'fresh-token' } }, error: null })
+
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { ok: true } }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { apiClient, __testing } = await import('@/lib/api-client')
+    __testing.resetPendingRefresh()
+    await apiClient.get('/secure')
+
+    // Proactive refresh — no 401 round-trip, only one fetch call
+    expect(refreshSession).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+    expect((init.headers as Headers).get('Authorization')).toBe('Bearer fresh-token')
+  })
+
+  it('does not proactively refresh when token has ample time remaining', async () => {
+    const now = Math.floor(Date.now() / 1000)
+    getSession.mockResolvedValue({
+      data: { session: { access_token: 'valid-token', expires_at: now + 3600 } },
+    })
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { ok: true } }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { apiClient, __testing } = await import('@/lib/api-client')
+    __testing.resetPendingRefresh()
+    await apiClient.get('/secure')
+
+    expect(refreshSession).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a warning toast on 429 with Retry-After header', async () => {
+    getSession.mockResolvedValue({ data: { session: { access_token: 't' } } })
+    const res = new Response(JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'slow down' } }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
+    })
+    const fetchMock = vi.fn().mockResolvedValue(res)
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { apiClient, __testing } = await import('@/lib/api-client')
+    __testing.resetPendingRefresh()
+
+    await expect(apiClient.get('/fast-endpoint')).rejects.toThrow()
+    expect(toastWarning).toHaveBeenCalledWith('Rate limit exceeded. Try again in 30s.')
   })
 })

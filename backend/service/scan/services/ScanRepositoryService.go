@@ -14,21 +14,38 @@ import (
 	"gorm.io/gorm"
 )
 
+// EnqueueDueResult is returned by EnqueueDue. Enqueued is the number of
+// companies inserted into the queue this tick. SkippedNoSettings is the
+// number of `companies` rows that were considered but skipped because they
+// have no matching `company_scan_settings` row (Phase 2: post-cutover
+// companies start un-onboarded for scanning). Workers/scheduler log
+// SkippedNoSettings once per cycle so admins can see which companies still
+// need configuration.
+type EnqueueDueResult struct {
+	Enqueued          int
+	SkippedNoSettings int
+}
+
 // ScanQueueStore manages the company scan work queue.
 type ScanQueueStore interface {
 	// Enqueue inserts a company into the queue. Silently no-ops if the company
-	// already has an active entry (queued or running).
+	// already has an active entry (queued or running). Returns NOT_FOUND when
+	// the company has no `company_scan_settings` row — manual triggers must
+	// reject un-onboarded companies with a clear error.
 	Enqueue(ctx context.Context, companyID, source string) error
 
 	// EnqueueDue atomically enqueues all companies currently due for a scan
-	// (active, last_scan_at past the interval, not already queued) in one query.
-	// Returns the number of companies enqueued. Safe for concurrent callers —
-	// uses FOR UPDATE SKIP LOCKED so two instances never double-enqueue.
-	EnqueueDue(ctx context.Context, intervalMinutes int, source string) (int, error)
+	// (scan_settings exists and active=true, last_scan_at past the effective
+	// interval, not already queued) in one query. Returns the number enqueued
+	// and the number of companies skipped because they have no scan_settings
+	// row yet. Safe for concurrent callers — uses ON CONFLICT DO NOTHING so
+	// two instances never double-enqueue.
+	EnqueueDue(ctx context.Context, intervalMinutes int, source string) (EnqueueDueResult, error)
 
-	// EnqueueAll immediately enqueues every active company that is not already
-	// queued or running. Used by manual "scan all" — bypasses the scan-interval
-	// cooldown. Returns the number of rows inserted.
+	// EnqueueAll immediately enqueues every active company (scan_settings
+	// exists and active=true) that is not already queued or running. Used by
+	// manual "scan all" — bypasses the scan-interval cooldown. Returns the
+	// number of rows inserted.
 	EnqueueAll(ctx context.Context, source string) (int, error)
 
 	// ClaimNext atomically claims the next queued item for the given adapterType,
@@ -57,10 +74,16 @@ type ScanQueueStore interface {
 }
 
 // ScanLogWriter records scan summaries.
+//
+// Phase 2: per-company operational state lives on `company_scan_settings`,
+// not `companies`. RecordScanResult writes the company_scan_log row and the
+// scan_settings state update in one transaction. consecutive_errors is reset
+// to 0 on success and incremented on error.
 type ScanLogWriter interface {
 	InsertCompanyScanLog(ctx context.Context, companyID string, jobsFetched, jobsNew, durationMs int, errMsg *string) error
-	// RecordScanResult atomically writes the scan log row and updates the company's
-	// last_scan_at / last_scan_status in a single transaction.
+	// RecordScanResult atomically writes the scan log row and updates the
+	// company's `company_scan_settings` row (last_scan_at + last_success_at /
+	// last_error_at + last_error_message + consecutive_errors).
 	// status must be "ok" or "error".
 	RecordScanResult(ctx context.Context, companyID, status string, jobsFetched, jobsNew, durationMs int, errMsg *string) error
 }
@@ -96,40 +119,63 @@ func NewQueueStore(db *gorm.DB) ScanQueueStore {
 func (s *scanQueueStore) Enqueue(ctx context.Context, companyID, source string) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.Enqueue")
 	defer tracing.End(span, &err)
+	// Phase 2: adapter_type lives on company_scan_settings, not companies.
+	// If the company has no settings row, the SELECT returns 0 rows and the
+	// INSERT is a no-op — caller (ImplService.TriggerScan) checks for the
+	// scan_settings row first and returns a clear error to the admin.
 	return s.db.WithContext(ctx).Exec(`
 		INSERT INTO company_scan_queue (company_id, source, adapter_type)
-		SELECT ?, ?, adapter_type FROM companies WHERE id = ?
+		SELECT ?, ?, adapter_type FROM company_scan_settings WHERE company_id = ?
 		ON CONFLICT DO NOTHING
 	`, companyID, source, companyID).Error
 }
 
-func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, source string) (_ int, err error) {
+func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, source string) (_ EnqueueDueResult, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.EnqueueDue")
 	defer tracing.End(span, &err)
+
+	// Phase 2 enqueue source is `company_scan_settings`, not `companies`.
+	// Companies without a scan_settings row are silently skipped here; the
+	// scheduler logs the count via the SkippedNoSettings field on the result.
 	var ids []string
-	err = s.db.WithContext(ctx).Raw(`
+	if err = s.db.WithContext(ctx).Raw(`
 		INSERT INTO company_scan_queue (company_id, source, adapter_type)
-		SELECT c.id, ?, c.adapter_type
-		FROM companies c
-		LEFT JOIN adapter_configs ac ON ac.adapter_type = c.adapter_type
-		WHERE c.active = true
+		SELECT s.company_id, ?, s.adapter_type
+		FROM company_scan_settings s
+		LEFT JOIN adapter_configs ac ON ac.adapter_type = s.adapter_type
+		WHERE s.active = true
 		  AND NOT EXISTS (
 		    SELECT 1 FROM company_scan_queue q
-		    WHERE q.company_id = c.id AND q.status IN ('queued','running')
+		    WHERE q.company_id = s.company_id AND q.status IN ('queued','running')
 		  )
 		  AND (
-		    c.last_scan_at IS NULL
-		    OR c.last_scan_at + COALESCE(
-		        c.scan_interval_minutes_override,
+		    s.last_scan_at IS NULL
+		    OR s.last_scan_at + COALESCE(
+		        s.scan_interval_override,
 		        ac.scan_interval_minutes,
 		        ?
 		    ) * INTERVAL '1 minute' <= NOW()
 		  )
-		ORDER BY c.last_scan_at ASC NULLS FIRST
+		ORDER BY s.last_scan_at ASC NULLS FIRST
 		ON CONFLICT DO NOTHING
 		RETURNING company_id
-	`, source, intervalMinutes).Scan(&ids).Error
-	return len(ids), err
+	`, source, intervalMinutes).Scan(&ids).Error; err != nil {
+		return EnqueueDueResult{}, err
+	}
+
+	// Count companies that exist but have no scan_settings row — surfaced
+	// once per scheduler tick so admins know they still need to onboard them.
+	var skipped int64
+	if err = s.db.WithContext(ctx).Raw(`
+		SELECT COUNT(*)
+		FROM companies c
+		LEFT JOIN company_scan_settings s ON s.company_id = c.id
+		WHERE s.company_id IS NULL
+	`).Scan(&skipped).Error; err != nil {
+		return EnqueueDueResult{}, err
+	}
+
+	return EnqueueDueResult{Enqueued: len(ids), SkippedNoSettings: int(skipped)}, nil
 }
 
 func (s *scanQueueStore) EnqueueAll(ctx context.Context, source string) (_ int, err error) {
@@ -138,12 +184,12 @@ func (s *scanQueueStore) EnqueueAll(ctx context.Context, source string) (_ int, 
 	var ids []string
 	err = s.db.WithContext(ctx).Raw(`
 		INSERT INTO company_scan_queue (company_id, source, adapter_type)
-		SELECT c.id, ?, c.adapter_type
-		FROM companies c
-		WHERE c.active = true
+		SELECT s.company_id, ?, s.adapter_type
+		FROM company_scan_settings s
+		WHERE s.active = true
 		  AND NOT EXISTS (
 		    SELECT 1 FROM company_scan_queue q
-		    WHERE q.company_id = c.id AND q.status IN ('queued','running')
+		    WHERE q.company_id = s.company_id AND q.status IN ('queued','running')
 		  )
 		ON CONFLICT DO NOTHING
 		RETURNING company_id
@@ -221,10 +267,18 @@ var errNoEligibleAdapter = fmt.Errorf("no eligible adapter row")
 func (s *scanQueueStore) PurgeInactive(ctx context.Context) (_ int, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.PurgeInactive")
 	defer tracing.End(span, &err)
+	// Phase 2: `active` lives on company_scan_settings. A company is
+	// considered inactive (queue-purgable) when its scan_settings row is
+	// active=false OR the scan_settings row is absent entirely.
 	result := s.db.WithContext(ctx).Exec(`
 		DELETE FROM company_scan_queue
 		WHERE status = 'queued'
-		  AND company_id IN (SELECT id FROM companies WHERE active = false)
+		  AND company_id IN (
+		    SELECT c.id
+		    FROM companies c
+		    LEFT JOIN company_scan_settings s ON s.company_id = c.id
+		    WHERE s.company_id IS NULL OR s.active = false
+		  )
 	`)
 	return int(result.RowsAffected), result.Error
 }
@@ -359,6 +413,9 @@ func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ dt
 func (s *scanLogStore) RecordScanResult(ctx context.Context, companyID, status string, jobsFetched, jobsNew, durationMs int, errMsg *string) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.RecordScanResult")
 	defer tracing.End(span, &err)
+	// Phase 2: write the scan log row AND patch company_scan_settings (the
+	// new home for last_scan_at / last_success_at / last_error_at /
+	// last_error_message / consecutive_errors) atomically.
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		row := scanmodel.CompanyScanLog{
 			CompanyID:   companyID,
@@ -370,12 +427,28 @@ func (s *scanLogStore) RecordScanResult(ctx context.Context, companyID, status s
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
-		return tx.Model(&companymodel.Company{}).
-			Where("id = ?", companyID).
-			Updates(map[string]any{
-				"last_scan_at":     gorm.Expr("NOW()"),
-				"last_scan_status": status,
-			}).Error
+
+		fields := map[string]any{
+			"last_scan_at": gorm.Expr("NOW()"),
+		}
+		if status == scancommon.ScanStatusOK {
+			fields["last_success_at"] = gorm.Expr("NOW()")
+			fields["consecutive_errors"] = 0
+			fields["last_error_message"] = nil
+		} else {
+			fields["last_error_at"] = gorm.Expr("NOW()")
+			if errMsg != nil {
+				fields["last_error_message"] = *errMsg
+			}
+			fields["consecutive_errors"] = gorm.Expr("consecutive_errors + 1")
+		}
+
+		// If no scan_settings row exists (worker should have skipped already)
+		// the UPDATE is a no-op — never an error. The companyScanLog row is
+		// still committed so the operational history is preserved.
+		return tx.Model(&companymodel.CompanyScanSettings{}).
+			Where("company_id = ?", companyID).
+			Updates(fields).Error
 	})
 }
 
@@ -552,14 +625,14 @@ func NewRepositoryService(queue ScanQueueStore, scanLog ScanLogReader, cfg Confi
 	return &repositoryService{queue: queue, scanLog: scanLog, config: cfg}
 }
 
-func (s *repositoryService) EnqueueDue(ctx context.Context, intervalMinutes int) (_ int, err error) {
+func (s *repositoryService) EnqueueDue(ctx context.Context, intervalMinutes int) (_ SchedulerCycleResult, err error) {
 	ctx, span := tracing.Start(ctx, "scan.repository.EnqueueDue")
 	defer tracing.End(span, &err)
-	n, err := s.queue.EnqueueDue(ctx, intervalMinutes, scancommon.QueueSourceScheduler)
+	res, err := s.queue.EnqueueDue(ctx, intervalMinutes, scancommon.QueueSourceScheduler)
 	if err != nil {
-		return 0, errors.ErrInternal.WithMessage("failed to enqueue due companies")
+		return SchedulerCycleResult{}, errors.ErrInternal.WithMessage("failed to enqueue due companies")
 	}
-	return n, nil
+	return SchedulerCycleResult(res), nil
 }
 
 func (s *repositoryService) ResetStuck(ctx context.Context, staleDur time.Duration) (err error) {

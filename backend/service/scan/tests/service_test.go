@@ -7,31 +7,34 @@ import (
 	"time"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
-	"github.com/trushilpatel/jobradar/service/company"
+	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
+	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 	svc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 // fakeQueueStore is a test double for ScanQueueStore.
 type fakeQueueStore struct {
-	items            []dto.ScanQueueItem
-	err              error
-	enqueueCalled    bool
-	removeCalled     bool
-	enqueueDueResult int
-	enqueueDueCalled bool
-	enqueueAllResult int
-	enqueueAllCalled bool
-	resetStuckCalled bool
+	items                 []dto.ScanQueueItem
+	err                   error
+	enqueueCalled         bool
+	removeCalled          bool
+	enqueueDueResult      svc.EnqueueDueResult
+	enqueueDueCalled      bool
+	enqueueAllResult      int
+	enqueueAllCalled      bool
+	resetStuckCalled      bool
+	enqueueDueArgInterval int
 }
 
 func (f *fakeQueueStore) Enqueue(_ context.Context, _, _ string) error {
 	f.enqueueCalled = true
 	return f.err
 }
-func (f *fakeQueueStore) EnqueueDue(_ context.Context, _ int, _ string) (int, error) {
+func (f *fakeQueueStore) EnqueueDue(_ context.Context, intervalMinutes int, _ string) (svc.EnqueueDueResult, error) {
 	f.enqueueDueCalled = true
+	f.enqueueDueArgInterval = intervalMinutes
 	return f.enqueueDueResult, f.err
 }
 func (f *fakeQueueStore) EnqueueAll(_ context.Context, _ string) (int, error) {
@@ -89,20 +92,61 @@ func (f *fakeScanLogReader) GetCompanyAnalytics(_ context.Context, _ string) (dt
 	return dto.CompanyAnalytics{}, f.err
 }
 
-// fakeCompanyService is a test double for company.Service.
-type fakeCompanyService struct {
-	company *companymodel.Company
-	views   []company.CompanyView
-	err     error
+// fakeScanSettingsRepo is a test double for companysvc.ScanSettingsRepository.
+// Only Get is exercised by the impl service today; other methods are stubs.
+type fakeScanSettingsRepo struct {
+	settings *companymodel.CompanyScanSettings
+	getErr   error
 }
 
-func (f *fakeCompanyService) List(_ context.Context, _ company.CompanyFilter, _, _ int) (company.CompanyListResult, error) {
-	return company.CompanyListResult{Items: f.views, Total: int64(len(f.views))}, f.err
+func (f *fakeScanSettingsRepo) Get(_ context.Context, _ string) (*companymodel.CompanyScanSettings, error) {
+	return f.settings, f.getErr
 }
-func (f *fakeCompanyService) GetAll(_ context.Context) ([]company.CompanyView, error) {
+func (f *fakeScanSettingsRepo) GetMissing(_ context.Context) ([]string, error) { return nil, nil }
+func (f *fakeScanSettingsRepo) Create(_ context.Context, _ companymodel.CompanyScanSettings) error {
+	return nil
+}
+func (f *fakeScanSettingsRepo) Update(_ context.Context, _ string, _ companydto.CompanyScanSettingsInput) error {
+	return nil
+}
+func (f *fakeScanSettingsRepo) UpdateScanState(_ context.Context, _ string, _ companydto.CompanyScanStateUpdate) error {
+	return nil
+}
+func (f *fakeScanSettingsRepo) Delete(_ context.Context, _ string) error { return nil }
+
+// fakeCompanyAdminService is a test double for companysvc.CompanyAdminService.
+// Only GetByIDs is exercised by the impl service today; other methods are stubs.
+type fakeCompanyAdminService struct {
+	views []companydto.CompanyAdminView
+	err   error
+}
+
+func (f *fakeCompanyAdminService) List(_ context.Context, _ companydto.CompanyFilter, _, _ int) (companydto.CompanyAdminListResult, error) {
+	return companydto.CompanyAdminListResult{Items: f.views, Total: int64(len(f.views))}, f.err
+}
+func (f *fakeCompanyAdminService) Get(_ context.Context, id string) (*companydto.CompanyAdminView, error) {
+	for i := range f.views {
+		if f.views[i].ID == id {
+			return &f.views[i], f.err
+		}
+	}
+	return nil, apperr.ErrNotFound.WithMessage("not found")
+}
+func (f *fakeCompanyAdminService) Create(_ context.Context, _ companydto.CompanyPublicInput, _ companydto.CompanyScanSettingsInput) (*companydto.CompanyAdminView, error) {
+	return nil, f.err
+}
+func (f *fakeCompanyAdminService) UpdatePublic(_ context.Context, _ string, _ companydto.CompanyPublicInput) error {
+	return f.err
+}
+func (f *fakeCompanyAdminService) UpdateScanSettings(_ context.Context, _ string, _ companydto.CompanyScanSettingsInput) error {
+	return f.err
+}
+func (f *fakeCompanyAdminService) Delete(_ context.Context, _ string) error     { return f.err }
+func (f *fakeCompanyAdminService) SetAllActive(_ context.Context, _ bool) error { return f.err }
+func (f *fakeCompanyAdminService) GetAll(_ context.Context) ([]companydto.CompanyAdminView, error) {
 	return f.views, f.err
 }
-func (f *fakeCompanyService) GetByIDs(_ context.Context, ids []string) ([]company.CompanyView, error) {
+func (f *fakeCompanyAdminService) GetByIDs(_ context.Context, ids []string) ([]companydto.CompanyAdminView, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -110,40 +154,29 @@ func (f *fakeCompanyService) GetByIDs(_ context.Context, ids []string) ([]compan
 	for _, id := range ids {
 		idx[id] = struct{}{}
 	}
-	var out []company.CompanyView
-	for _, v := range f.views {
-		if _, ok := idx[v.ID]; ok {
-			out = append(out, v)
+	var out []companydto.CompanyAdminView
+	for i := range f.views {
+		if _, ok := idx[f.views[i].ID]; ok {
+			out = append(out, f.views[i])
 		}
 	}
 	return out, nil
 }
-func (f *fakeCompanyService) Get(_ context.Context, _ string) (*companymodel.Company, error) {
-	return f.company, f.err
-}
-func (f *fakeCompanyService) Create(_ context.Context, _ company.CreateCompanyInput) (*companymodel.Company, error) {
-	return f.company, f.err
-}
-func (f *fakeCompanyService) Update(_ context.Context, _ string, _ company.UpdateCompanyInput) error {
-	return f.err
-}
-func (f *fakeCompanyService) Delete(_ context.Context, _ string) error { return f.err }
-func (f *fakeCompanyService) SetAllActive(_ context.Context, _ bool) error {
-	return f.err
-}
 
 // newImplService builds the full impl chain: repositoryService → implService.
-func newImplService(q *fakeQueueStore, log *fakeScanLogReader, companySvc company.Service, cfg svc.Config) svc.Service {
+func newImplService(q *fakeQueueStore, log *fakeScanLogReader, settings *fakeScanSettingsRepo, admin *fakeCompanyAdminService, cfg svc.Config) svc.Service {
 	repo := svc.NewRepositoryService(q, log, cfg)
-	return svc.NewService(repo, companySvc, cfg)
+	return svc.NewService(repo, settings, admin, cfg)
 }
 
 func TestTriggerScan_OK(t *testing.T) {
 	q := &fakeQueueStore{}
-	service := newImplService(q, &fakeScanLogReader{}, &fakeCompanyService{company: &companymodel.Company{ID: "stripe"}}, svc.Config{})
+	settings := &fakeScanSettingsRepo{
+		settings: &companymodel.CompanyScanSettings{CompanyID: "stripe", AdapterType: "greenhouse", Active: true},
+	}
+	service := newImplService(q, &fakeScanLogReader{}, settings, &fakeCompanyAdminService{}, svc.Config{})
 
-	err := service.TriggerScan(context.Background(), "stripe")
-	if err != nil {
+	if err := service.TriggerScan(context.Background(), "stripe"); err != nil {
 		t.Fatalf("TriggerScan() error = %v", err)
 	}
 	if !q.enqueueCalled {
@@ -151,19 +184,43 @@ func TestTriggerScan_OK(t *testing.T) {
 	}
 }
 
-func TestTriggerScan_CompanyNotFound(t *testing.T) {
+// TestTriggerScan_NoScanSettings asserts the impl service returns a clear
+// BAD_REQUEST when the company has no scan_settings row — admins onboard via
+// /admin/companies/{id}/scan-settings before triggering a manual scan.
+func TestTriggerScan_NoScanSettings(t *testing.T) {
 	q := &fakeQueueStore{}
-	service := newImplService(q, &fakeScanLogReader{}, &fakeCompanyService{
-		err: apperr.ErrNotFound.WithMessage("company not found"),
-	}, svc.Config{})
+	settings := &fakeScanSettingsRepo{
+		getErr: apperr.ErrNotFound.WithMessage("scan settings not found"),
+	}
+	service := newImplService(q, &fakeScanLogReader{}, settings, &fakeCompanyAdminService{}, svc.Config{})
 
-	err := service.TriggerScan(context.Background(), "missing")
+	err := service.TriggerScan(context.Background(), "stripe")
 	if err == nil {
-		t.Fatal("expected error for missing company")
+		t.Fatal("expected error when scan_settings missing")
 	}
 	var sErr *apperr.ServiceError
-	if !errors.As(err, &sErr) || sErr.Code != "NOT_FOUND" {
-		t.Errorf("expected NOT_FOUND error, got %v", err)
+	if !errors.As(err, &sErr) || sErr.Code != "BAD_REQUEST" {
+		t.Errorf("expected BAD_REQUEST, got %v", err)
+	}
+	if q.enqueueCalled {
+		t.Error("expected Enqueue NOT to be called when settings missing")
+	}
+}
+
+func TestTriggerScan_SettingsLookupInternalError(t *testing.T) {
+	q := &fakeQueueStore{}
+	settings := &fakeScanSettingsRepo{
+		getErr: apperr.ErrInternal.WithMessage("db down"),
+	}
+	service := newImplService(q, &fakeScanLogReader{}, settings, &fakeCompanyAdminService{}, svc.Config{})
+
+	err := service.TriggerScan(context.Background(), "stripe")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var sErr *apperr.ServiceError
+	if !errors.As(err, &sErr) || sErr.Code != "INTERNAL" {
+		t.Errorf("expected INTERNAL, got %v", err)
 	}
 }
 
@@ -172,14 +229,23 @@ func TestListQueue_EnrichesWithCompanyData(t *testing.T) {
 	items := []dto.ScanQueueItem{
 		{ID: "q1", CompanyID: "stripe", Status: "queued", Source: "manual", QueuedAt: time.Now()},
 	}
-	views := []company.CompanyView{
-		{Company: companymodel.Company{ID: "stripe", Name: "Stripe", AdapterType: "greenhouse", LastScanAt: &lastScan}},
+	views := []companydto.CompanyAdminView{
+		{
+			Company: companymodel.Company{ID: "stripe", Name: "Stripe"},
+			ScanSettings: &companydto.CompanyScanSettingsView{
+				CompanyID:   "stripe",
+				AdapterType: "greenhouse",
+				Active:      true,
+				LastScanAt:  &lastScan,
+			},
+		},
 	}
 
 	service := newImplService(
 		&fakeQueueStore{items: items},
 		&fakeScanLogReader{},
-		&fakeCompanyService{views: views},
+		&fakeScanSettingsRepo{},
+		&fakeCompanyAdminService{views: views},
 		svc.Config{ScanIntervalMinutes: 60},
 	)
 
@@ -201,6 +267,40 @@ func TestListQueue_EnrichesWithCompanyData(t *testing.T) {
 	}
 }
 
+// TestListQueue_CompanyMissingScanSettings asserts ListQueue still returns the
+// queue row even when its company has no scan_settings — the row is enriched
+// with the company name only; AdapterType / NextScanAt stay zero.
+func TestListQueue_CompanyMissingScanSettings(t *testing.T) {
+	items := []dto.ScanQueueItem{
+		{ID: "q1", CompanyID: "stripe", Status: "queued", Source: "manual"},
+	}
+	views := []companydto.CompanyAdminView{
+		{Company: companymodel.Company{ID: "stripe", Name: "Stripe"}, ScanSettings: nil},
+	}
+
+	service := newImplService(
+		&fakeQueueStore{items: items},
+		&fakeScanLogReader{},
+		&fakeScanSettingsRepo{},
+		&fakeCompanyAdminService{views: views},
+		svc.Config{ScanIntervalMinutes: 60},
+	)
+
+	result, err := service.ListQueue(context.Background(), dto.QueueFilter{})
+	if err != nil {
+		t.Fatalf("ListQueue() error = %v", err)
+	}
+	if result[0].CompanyName != "Stripe" {
+		t.Errorf("expected company name, got %q", result[0].CompanyName)
+	}
+	if result[0].AdapterType != "" {
+		t.Errorf("expected empty adapter, got %q", result[0].AdapterType)
+	}
+	if result[0].NextScanAt != nil {
+		t.Errorf("expected nil NextScanAt, got %v", result[0].NextScanAt)
+	}
+}
+
 func TestListQueue_FiltersStatus(t *testing.T) {
 	items := []dto.ScanQueueItem{
 		{ID: "q1", CompanyID: "c1", Status: "queued", Source: "manual"},
@@ -209,7 +309,8 @@ func TestListQueue_FiltersStatus(t *testing.T) {
 	service := newImplService(
 		&fakeQueueStore{items: items},
 		&fakeScanLogReader{},
-		&fakeCompanyService{views: []company.CompanyView{}},
+		&fakeScanSettingsRepo{},
+		&fakeCompanyAdminService{},
 		svc.Config{},
 	)
 
@@ -224,7 +325,7 @@ func TestListQueue_FiltersStatus(t *testing.T) {
 
 func TestRemoveFromQueue(t *testing.T) {
 	q := &fakeQueueStore{}
-	service := newImplService(q, &fakeScanLogReader{}, &fakeCompanyService{}, svc.Config{})
+	service := newImplService(q, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
 
 	if err := service.RemoveFromQueue(context.Background(), "q1"); err != nil {
 		t.Fatalf("RemoveFromQueue() error = %v", err)
@@ -235,15 +336,18 @@ func TestRemoveFromQueue(t *testing.T) {
 }
 
 func TestEnqueueDue_EnqueuesAll(t *testing.T) {
-	q := &fakeQueueStore{enqueueDueResult: 3}
-	service := newImplService(q, &fakeScanLogReader{}, &fakeCompanyService{}, svc.Config{})
+	q := &fakeQueueStore{enqueueDueResult: svc.EnqueueDueResult{Enqueued: 3, SkippedNoSettings: 2}}
+	service := newImplService(q, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
 
-	n, err := service.EnqueueDue(context.Background(), 1440)
+	res, err := service.EnqueueDue(context.Background(), 1440)
 	if err != nil {
 		t.Fatalf("EnqueueDue() error = %v", err)
 	}
-	if n != 3 {
-		t.Errorf("expected count 3, got %d", n)
+	if res.Enqueued != 3 {
+		t.Errorf("expected Enqueued 3, got %d", res.Enqueued)
+	}
+	if res.SkippedNoSettings != 2 {
+		t.Errorf("expected SkippedNoSettings 2, got %d", res.SkippedNoSettings)
 	}
 	if !q.enqueueDueCalled {
 		t.Error("expected EnqueueDue to be called on store")
@@ -251,21 +355,21 @@ func TestEnqueueDue_EnqueuesAll(t *testing.T) {
 }
 
 func TestEnqueueDue_NoDueCompanies(t *testing.T) {
-	q := &fakeQueueStore{enqueueDueResult: 0}
-	service := newImplService(q, &fakeScanLogReader{}, &fakeCompanyService{}, svc.Config{})
+	q := &fakeQueueStore{enqueueDueResult: svc.EnqueueDueResult{}}
+	service := newImplService(q, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
 
-	n, err := service.EnqueueDue(context.Background(), 1440)
+	res, err := service.EnqueueDue(context.Background(), 1440)
 	if err != nil {
 		t.Fatalf("EnqueueDue() error = %v", err)
 	}
-	if n != 0 {
-		t.Errorf("expected 0 when none due, got %d", n)
+	if res.Enqueued != 0 {
+		t.Errorf("expected 0 enqueued when none due, got %d", res.Enqueued)
 	}
 }
 
 func TestEnqueueDue_StoreError(t *testing.T) {
 	q := &fakeQueueStore{err: errors.New("db down")}
-	service := newImplService(q, &fakeScanLogReader{}, &fakeCompanyService{}, svc.Config{})
+	service := newImplService(q, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
 
 	_, err := service.EnqueueDue(context.Background(), 1440)
 	if err == nil {
@@ -279,7 +383,7 @@ func TestEnqueueDue_StoreError(t *testing.T) {
 
 func TestResetStuck_OK(t *testing.T) {
 	q := &fakeQueueStore{}
-	service := newImplService(q, &fakeScanLogReader{}, &fakeCompanyService{}, svc.Config{})
+	service := newImplService(q, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
 
 	if err := service.ResetStuck(context.Background(), 30*time.Minute); err != nil {
 		t.Fatalf("ResetStuck() error = %v", err)
@@ -291,7 +395,7 @@ func TestResetStuck_OK(t *testing.T) {
 
 func TestResetStuck_StoreError(t *testing.T) {
 	q := &fakeQueueStore{err: errors.New("db down")}
-	service := newImplService(q, &fakeScanLogReader{}, &fakeCompanyService{}, svc.Config{})
+	service := newImplService(q, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
 
 	err := service.ResetStuck(context.Background(), 30*time.Minute)
 	if err == nil {
@@ -306,4 +410,5 @@ func TestResetStuck_StoreError(t *testing.T) {
 // Ensure test doubles implement their interfaces.
 var _ svc.ScanQueueStore = (*fakeQueueStore)(nil)
 var _ svc.ScanLogReader = (*fakeScanLogReader)(nil)
-var _ company.Service = (*fakeCompanyService)(nil)
+var _ companysvc.ScanSettingsRepository = (*fakeScanSettingsRepo)(nil)
+var _ companysvc.CompanyAdminService = (*fakeCompanyAdminService)(nil)

@@ -29,8 +29,10 @@ func (f *fakeScanService) GetStats(_ context.Context, _ string) (*dto.ScanStatsV
 func (f *fakeScanService) ListQueue(_ context.Context, _ dto.QueueFilter) ([]dto.QueueEntryView, error) {
 	return f.queueResult, f.err
 }
-func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error   { return f.err }
-func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (int, error)    { return 0, f.err }
+func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error { return f.err }
+func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (svc.SchedulerCycleResult, error) {
+	return svc.SchedulerCycleResult{}, f.err
+}
 func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error { return f.err }
 func (f *fakeScanService) PurgeInactive(_ context.Context) (int, error)        { return 0, f.err }
 func (f *fakeScanService) GetAnalytics(_ context.Context, _ string) (*dto.CompanyAnalytics, error) {

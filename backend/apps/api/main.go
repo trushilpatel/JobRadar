@@ -12,7 +12,11 @@ import (
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/db"
 	"github.com/trushilpatel/jobradar/common/logger"
+	commonredis "github.com/trushilpatel/jobradar/common/redis"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	"github.com/trushilpatel/jobradar/platform/cache"
+	"github.com/trushilpatel/jobradar/platform/ratelimit"
+	"github.com/trushilpatel/jobradar/platform/supabaseadmin"
 	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 )
 
@@ -56,7 +60,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	apiRouter := NewRouter(log, cfg, authMW, app.Handlers())
+	// Phase 1 multi-user services + /api/me handler. Cache and limiter fall
+	// back to in-memory implementations when Redis is unreachable so the API
+	// still boots in test/dev environments without a live Redis.
+	muCache, muLimiter := buildMultiUserPlatform(cfg, log)
+	var supabaseClient supabaseadmin.Client
+	if cfg.MultiUser.SupabaseURL != "" && cfg.MultiUser.SupabaseServiceRoleKey != "" {
+		c, err := supabaseadmin.NewRESTClient(cfg.MultiUser.SupabaseURL, cfg.MultiUser.SupabaseServiceRoleKey, nil)
+		if err != nil {
+			// Non-fatal: in dev / test we ship without Supabase admin creds
+			// and /api/me DELETE fails loudly when invoked. GET + PATCH
+			// still work without Supabase.
+			log.Warn("supabase admin client unavailable", logger.Err(err))
+		} else {
+			supabaseClient = c
+		}
+	} else {
+		log.Warn("supabase admin client disabled — SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing")
+	}
+	mu := buildMultiUser(database, cfg, muCache, muLimiter, supabaseClient, log, app.PipelineSvc(), app.InsightsHandler(), app.CompanyAdminHandler())
+
+	apiGroups := append(app.Handlers(), mu.APIHandlers()...)
+	apiRouter := NewRouter(log, cfg, authMW, mu.IdentityMW(), mu.RateLimitMW(), apiGroups, mu.AdminHandlers())
 	opsRouter := NewOpsRouter(database)
 
 	apiSrv := &http.Server{
@@ -104,6 +129,37 @@ func main() {
 	defer cancel()
 	apiSrv.Shutdown(shutdownCtx) //nolint:errcheck
 	opsSrv.Shutdown(shutdownCtx) //nolint:errcheck
+}
+
+// buildMultiUserPlatform constructs the cache + rate-limiter pair used by
+// the Phase 1 multi-user middleware. Falls back to in-memory implementations
+// when Redis is unreachable — the goal is that a developer can boot the API
+// without standing up Redis first.
+//
+// Rate-limit refill rate is read RPM ÷ 60. Burst equals refill * 2 so a quiet
+// caller has a one-minute headroom to absorb a small spike before getting
+// throttled.
+func buildMultiUserPlatform(cfg *config.Config, log logger.Logger) (cache.Cache, ratelimit.Limiter) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	rdb, err := commonredis.New(ctx, cfg.Redis.Addr, cfg.Redis.DB)
+	if err != nil {
+		log.Warn("redis unavailable; using in-memory cache + limiter", logger.Err(err))
+		return cache.NewMemoryCache(), ratelimit.NewMemoryLimiter(20, 0.5)
+	}
+
+	c := cache.NewRedisCache(rdb)
+	// Use the write RPM as the conservative budget — read RPM is a higher
+	// limit but the limiter middleware picks the scope by HTTP method so
+	// either RPM is honoured for its scope.
+	burst := float64(cfg.MultiUser.RateLimitWriteRPM)
+	if burst <= 0 {
+		burst = 20
+	}
+	refill := burst / 60.0
+	limiter := ratelimit.NewRedisLimiter(rdb, burst, refill, "ratelimit")
+	return c, limiter
 }
 
 // runRefresher keeps dashboard materialized views up to date.

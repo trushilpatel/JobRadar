@@ -15,7 +15,7 @@ The system is operational and accessible when needed.
 - Workers are stateless — they can crash and restart without losing data
 - Kafka consumers use explicit `CommitRecords` after processing — uncommitted records replay on restart
 - `company_scan_queue` heartbeat + `ResetStuck` — crawler crashes are automatically recovered on next scheduler tick
-- Non-fatal writes — `job_analytics` snapshot failure never blocks the primary `job_feed` write
+- Non-fatal writes — `job_analytics` snapshot failure never blocks the primary `jobs` write
 
 ## Fault Tolerance
 The system continues operating despite partial failures.

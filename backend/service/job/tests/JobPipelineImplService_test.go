@@ -20,24 +20,13 @@ type pipelineJobWriter struct {
 	inserted  *jobmodel.Job
 	insertErr error
 	deleteErr error
-	statusErr error
-	savedErr  error
-	notesErr  error
 }
 
 func (f *pipelineJobWriter) InsertJob(_ context.Context, job *jobmodel.Job) error {
 	f.inserted = job
 	return f.insertErr
 }
-func (f *pipelineJobWriter) DeleteJob(_ context.Context, _ string) error          { return f.deleteErr }
-func (f *pipelineJobWriter) UpdateJobStatus(_ context.Context, _, _ string) error { return f.statusErr }
-func (f *pipelineJobWriter) UpdateJobSaved(_ context.Context, _ string, _ bool) error {
-	return f.savedErr
-}
-func (f *pipelineJobWriter) UpdateJobNotes(_ context.Context, _, _ string) error { return f.notesErr }
-func (f *pipelineJobWriter) UpdateJobStatusBatch(_ context.Context, _ []string, _ string) (int64, error) {
-	return 0, nil
-}
+func (f *pipelineJobWriter) DeleteJob(_ context.Context, _ string) error { return f.deleteErr }
 
 type pipelineLedgerStore struct {
 	hasSeen           bool
@@ -144,9 +133,6 @@ func TestSaveEnrichedJob_HappyPath(t *testing.T) {
 	}
 	if jobs.inserted.JobPostID != input.Raw.ID {
 		t.Errorf("JobPostID = %q, want %q", jobs.inserted.JobPostID, input.Raw.ID)
-	}
-	if jobs.inserted.Status != jobcommon.JobStatusNew {
-		t.Errorf("Status = %q, want %q", jobs.inserted.Status, jobcommon.JobStatusNew)
 	}
 	if jobs.inserted.ID == "" {
 		t.Error("expected a non-empty job ID (uuid)")

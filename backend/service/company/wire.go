@@ -1,3 +1,19 @@
+// Package company wires the two decorator chains exposed by the company
+// slice (public + admin) plus the standalone ScanSettings repository.
+//
+// Phase 2 chains:
+//
+//	public:
+//	  RepositoryService → ImplService → CacheService → ValidationService
+//	    → RestService → RestRouter
+//
+//	admin:
+//	  AdminRepositoryService → AdminImplService(+cache invalidation)
+//	    → AdminValidationService → AdminRestService → AdminRestRouter
+//
+// Both chains share the same *cache.Cache and the same TTL pulled from
+// MultiUserConfig.CacheTTLCompanySeconds. The admin chain calls
+// cache.Cache.Delete on company:public:{id} after every mutating method.
 package company
 
 import (
@@ -5,12 +21,29 @@ import (
 	"github.com/trushilpatel/jobradar/service/company/services"
 )
 
-// ProviderSet is the Wire provider set for the company domain.
-var ProviderSet = wire.NewSet(
+// PublicProviderSet wires the public read-only chain.
+var PublicProviderSet = wire.NewSet(
 	services.NewRestRouter,
 	services.NewRestService,
-	services.NewValidator,
-	services.NewService,
+	services.NewValidationService,
+	services.NewCacheService,
+	services.NewImplService,
 	services.NewRepositoryService,
-	services.NewStore,
+)
+
+// AdminProviderSet wires the admin chain plus the ScanSettings repository.
+var AdminProviderSet = wire.NewSet(
+	services.NewAdminRestRouter,
+	services.NewAdminRestService,
+	services.NewAdminValidationService,
+	services.NewAdminImplService,
+	services.NewAdminRepositoryService,
+	services.NewScanSettingsRepositoryService,
+)
+
+// ProviderSet is the union of the two chains — the API binary depends on
+// it for one-shot wiring.
+var ProviderSet = wire.NewSet(
+	PublicProviderSet,
+	AdminProviderSet,
 )

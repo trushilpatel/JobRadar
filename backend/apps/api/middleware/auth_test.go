@@ -173,7 +173,6 @@ func baseESConfig(jwksURL string) config.AuthConfig {
 	return config.AuthConfig{
 		SupabaseProjectURL:  testProjectURL,
 		SupabaseJWKSURL:     jwksURL,
-		AllowedEmail:        testAllowedEml,
 		ClockSkewSeconds:    60,
 		JWKSCacheTTLSeconds: 600,
 	}
@@ -183,7 +182,6 @@ func baseHSConfig() config.AuthConfig {
 	return config.AuthConfig{
 		SupabaseProjectURL:  testProjectURL,
 		SupabaseJWTSecret:   testHMACSecret,
-		AllowedEmail:        testAllowedEml,
 		ClockSkewSeconds:    60,
 		JWKSCacheTTLSeconds: 600,
 	}
@@ -380,17 +378,20 @@ func TestAuth_AlgConfusion_ES256PublicKeyAsHS256_401(t *testing.T) {
 	}
 }
 
-func TestAuth_WrongEmail_403(t *testing.T) {
+// TestAuth_AnyEmail_Passes verifies Phase 2 behaviour: any valid JWT is
+// accepted regardless of email address — the allowlist was removed.
+// Per-route identity checks (RequireIdentity + RequireRole) gate access.
+func TestAuth_AnyEmail_Passes(t *testing.T) {
 	cfg := baseHSConfig()
 	mw, _ := Auth(cfg, "", logger.NewNoop())
 	tok := signToken(t, tokenOptions{
 		alg: "HS256", hmacKey: []byte(testHMACSecret),
-		issuer: testIssuer, audience: testAudience, email: "intruder@example.com",
+		issuer: testIssuer, audience: testAudience, email: "anyone@example.com",
 		expiresAt: time.Now().Add(5 * time.Minute),
 	})
 	w, _ := request(t, mw, "Bearer "+tok)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("got %d want 403", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("got %d want 200 — email allowlist should not reject valid JWTs", w.Code)
 	}
 }
 
@@ -463,34 +464,10 @@ func TestFromContext_NoIdentity(t *testing.T) {
 	}
 }
 
-// TestEmailMatches_ConstantTime directly exercises the allowlist compare to
-// confirm length mismatch, case folding, and empty inputs behave correctly.
-func TestEmailMatches_ConstantTime(t *testing.T) {
-	cases := []struct {
-		got, allowed string
-		want         bool
-	}{
-		{"owner@example.com", "owner@example.com", true},
-		{"OWNER@example.com", "owner@example.com", true},
-		{"owner@example.com", "OWNER@example.com", true},
-		{"intruder@example.com", "owner@example.com", false},
-		{"", "owner@example.com", false},
-		{"owner@example.com", "", false},
-		{"different-length@example.com", "owner@example.com", false},
-	}
-	for _, tc := range cases {
-		if got := emailMatches(tc.got, tc.allowed); got != tc.want {
-			t.Errorf("emailMatches(%q, %q) = %v, want %v", tc.got, tc.allowed, got, tc.want)
-		}
-	}
-}
-
 func TestDevBypass(t *testing.T) {
 	const devToken = "test-dev-token-abc123"
-	const allowedEmail = "dev@example.com"
 
 	cfg := config.AuthConfig{
-		AllowedEmail:      allowedEmail,
 		SupabaseJWTSecret: "dummy-secret-for-test-only",
 	}
 
@@ -525,8 +502,8 @@ func TestDevBypass(t *testing.T) {
 		if gotIdent.UserID != "dev-bypass" {
 			t.Fatalf("expected UserID dev-bypass, got %q", gotIdent.UserID)
 		}
-		if gotIdent.Email != allowedEmail {
-			t.Fatalf("expected Email %q, got %q", allowedEmail, gotIdent.Email)
+		if gotIdent.Email != "" {
+			t.Fatalf("expected empty Email, got %q", gotIdent.Email)
 		}
 	})
 
@@ -560,7 +537,6 @@ func TestDevBypass(t *testing.T) {
 
 func TestDevBypassDisabledWhenTokenEmpty(t *testing.T) {
 	cfg := config.AuthConfig{
-		AllowedEmail:      "dev@example.com",
 		SupabaseJWTSecret: "dummy-secret-for-test-only",
 	}
 	log := logger.NewNoop()
@@ -587,6 +563,87 @@ func TestDevBypassDisabledWhenTokenEmpty(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rr.Code)
 	}
+}
+
+// TestVerifyJWT_DirectCall covers the public extraction helper used by the
+// new RequireIdentity middleware. Asserts that VerifyJWT honours the same
+// signature/claims rules as the classic Auth middleware but does NOT enforce
+// the email allowlist — that's RequireIdentity's job (and it doesn't enforce
+// it either, by design — Phase 1 swaps the allowlist for role+status).
+func TestVerifyJWT_DirectCall(t *testing.T) {
+	cfg := baseHSConfig()
+	if _, err := Auth(cfg, "", logger.NewNoop()); err != nil {
+		t.Fatalf("Auth init: %v", err)
+	}
+
+	t.Run("valid token returns sub+email", func(t *testing.T) {
+		tok := signToken(t, tokenOptions{
+			alg: "HS256", hmacKey: []byte(testHMACSecret),
+			issuer: testIssuer, audience: testAudience, email: "foo@example.com",
+			expiresAt: time.Now().Add(5 * time.Minute), subject: "user-x",
+		})
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Authorization", "Bearer "+tok)
+		sub, email, err := VerifyJWT(r)
+		if err != nil {
+			t.Fatalf("VerifyJWT: %v", err)
+		}
+		if sub != "user-x" || email != "foo@example.com" {
+			t.Fatalf("sub=%q email=%q", sub, email)
+		}
+	})
+
+	t.Run("non-allowlisted email still verifies — VerifyJWT does not gate", func(t *testing.T) {
+		tok := signToken(t, tokenOptions{
+			alg: "HS256", hmacKey: []byte(testHMACSecret),
+			issuer: testIssuer, audience: testAudience, email: "intruder@example.com",
+			expiresAt: time.Now().Add(5 * time.Minute), subject: "user-y",
+		})
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Authorization", "Bearer "+tok)
+		_, _, err := VerifyJWT(r)
+		if err != nil {
+			t.Fatalf("VerifyJWT must not enforce allowlist, got err: %v", err)
+		}
+	})
+
+	t.Run("expired token rejected", func(t *testing.T) {
+		tok := signToken(t, tokenOptions{
+			alg: "HS256", hmacKey: []byte(testHMACSecret),
+			issuer: testIssuer, audience: testAudience, email: testAllowedEml,
+			expiresAt: time.Now().Add(-10 * time.Minute), subject: "user-z",
+		})
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Authorization", "Bearer "+tok)
+		_, _, err := VerifyJWT(r)
+		if err == nil {
+			t.Fatal("expected error for expired token")
+		}
+	})
+
+	t.Run("missing bearer rejected", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		_, _, err := VerifyJWT(r)
+		if err == nil {
+			t.Fatal("expected error for missing bearer")
+		}
+	})
+
+	t.Run("dev token bypass", func(t *testing.T) {
+		const devToken = "dev-test-token-verify"
+		if _, err := Auth(baseHSConfig(), devToken, logger.NewNoop()); err != nil {
+			t.Fatalf("Auth init: %v", err)
+		}
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("X-Dev-Token", devToken)
+		sub, email, err := VerifyJWT(r)
+		if err != nil {
+			t.Fatalf("VerifyJWT: %v", err)
+		}
+		if sub != "dev-bypass" || email != "" {
+			t.Fatalf("sub=%q email=%q", sub, email)
+		}
+	})
 }
 
 // TestExtractBearer verifies the Authorization header parser accepts well-formed

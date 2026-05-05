@@ -63,7 +63,7 @@ export const ADAPTER_TYPES = [
 export type AdapterType = (typeof ADAPTER_TYPES)[number]
 
 // Job status constants (mirrors model/constants.go)
-export type JobStatus = 'new' | 'saved' | 'applied' | 'interviewing' | 'offer'
+export type JobStatus = 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'dismissed' | 'rejected'
 export type EmployType = 'full_time' | 'part_time' | 'contract' | 'internship'
 export type ApplicationStage =
   | 'applied'
@@ -78,6 +78,16 @@ export interface SalaryRange {
   max?: number
   currency?: string
   period?: string
+}
+
+export interface UserJobState {
+  status: JobStatus
+  notes: string | null
+  saved_at: string | null
+  applied_at: string | null
+  dismissed_at: string | null
+  dismissal_reason: string | null
+  dismissal_note: string | null
 }
 
 export interface Job {
@@ -99,9 +109,11 @@ export interface Job {
   security_clearance: boolean
   role_brief: string | null
   responsibilities: string[] | null
+  // Flattened from user_state for convenience — normalized in api/jobs.ts
   status: JobStatus
   saved: boolean
   notes: string | null
+  user_state: UserJobState
   added_at: string
   company: Company
 }
@@ -285,4 +297,14 @@ export interface CompanyVelocityInsight {
 export interface RoleCategoryCount {
   category: string
   count: number
+}
+
+// ── Identity / multi-user ───────────────────────────────────────────────────
+
+export interface Identity {
+  user_id: string
+  email: string
+  display_name: string
+  status: 'active' | 'suspended'
+  roles: string[]
 }

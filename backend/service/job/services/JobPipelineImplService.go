@@ -15,25 +15,29 @@ import (
 	"gorm.io/datatypes"
 )
 
-// pipelineLedger is the narrow ledger access the pipeline service needs.
-type pipelineLedger interface {
+// pipelineLedgerSink is the narrow subset of SeenLedgerStore the pipeline
+// service needs — keeping it small lets the analyzer mock a 2-method
+// double instead of the full ledger surface.
+type pipelineLedgerSink interface {
 	HasSeen(ctx context.Context, jobID string) (bool, error)
 	UpdateSeenReason(ctx context.Context, jobID, reason string) error
 }
 
 type pipelineService struct {
 	jobs     JobWriter
-	ledger   pipelineLedger
+	ledger   pipelineLedgerSink
 	snapshot SnapshotWriter
 	techTags TechTagWriter
 }
 
-// NewPipelineService constructs a PipelineService backed by the provided stores.
-func NewPipelineService(jobs JobWriter, ledger pipelineLedger, snapshot SnapshotWriter, techTags TechTagWriter) PipelineService {
+// NewPipelineService constructs a PipelineService backed by the provided
+// stores. The ledger argument can be any type satisfying the narrow
+// HasSeen + UpdateSeenReason pair (the full SeenLedgerStore qualifies).
+func NewPipelineService(jobs JobWriter, ledger pipelineLedgerSink, snapshot SnapshotWriter, techTags TechTagWriter) PipelineService {
 	return &pipelineService{jobs: jobs, ledger: ledger, snapshot: snapshot, techTags: techTags}
 }
 
-// SaveEnrichedJob builds the job row, inserts it into job_feed, writes the analytics
+// SaveEnrichedJob builds the job row, inserts it into `jobs`, writes the analytics
 // snapshot (non-fatal on failure), and marks the pipeline ledger as seen.
 func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.EnrichedJobInput) (err error) {
 	ctx, span := tracing.Start(ctx, "job.pipeline.SaveEnrichedJob")
@@ -140,7 +144,6 @@ func buildJobRow(input dto.EnrichedJobInput) (*jobmodel.Job, error) {
 		SecurityClearance: enriched.SecurityClearance,
 		RoleBrief:         nullableStr(enriched.RoleBrief),
 		Responsibilities:  datatypes.JSON(responsibilities),
-		Status:            jobcommon.JobStatusNew,
 	}, nil
 }
 

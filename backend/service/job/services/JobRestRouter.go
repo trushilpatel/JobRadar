@@ -2,8 +2,10 @@ package services
 
 import "github.com/go-chi/chi/v5"
 
-// RestRouter mounts all job routes onto a chi.Router.
-// It owns route registration; no business logic lives here.
+// RestRouter mounts the job routes onto a chi.Router. The router uses
+// RELATIVE paths — the parent (apps/api) is responsible for mounting
+// this group under /api so middleware (RequireIdentity + RateLimit) is
+// applied uniformly.
 type RestRouter struct {
 	handler *RestService
 }
@@ -13,14 +15,16 @@ func NewRestRouter(h *RestService) *RestRouter {
 	return &RestRouter{handler: h}
 }
 
-// Register mounts all job routes onto r.
+// Register mounts every job route under r. The parent router is expected
+// to have applied auth + rate-limit middleware before calling this.
 func (r *RestRouter) Register(router chi.Router) {
-	router.Post("/jobs/dismiss/bulk", r.handler.BulkDismiss)
-	router.Get("/jobs", r.handler.List)
-	router.Get("/jobs/counts", r.handler.GetCounts)
-	router.Get("/jobs/{id}", r.handler.Get)
-	router.Delete("/jobs/{id}", r.handler.Dismiss)
-	router.Patch("/jobs/{id}/save", r.handler.SetSaved)
-	router.Patch("/jobs/{id}/status", r.handler.SetStatus)
-	router.Patch("/jobs/{id}/notes", r.handler.SetNotes)
+	router.Post("/jobs/dismiss/bulk", r.handler.bulkDismiss)
+	router.Get("/jobs", r.handler.list)
+	router.Get("/jobs/companies", r.handler.companies)
+	router.Get("/jobs/counts", r.handler.counts)
+	router.Get("/jobs/{id}", r.handler.get)
+	router.Delete("/jobs/{id}", r.handler.dismiss)
+	router.Patch("/jobs/{id}/save", r.handler.setSaved)
+	router.Patch("/jobs/{id}/status", r.handler.setStatus)
+	router.Patch("/jobs/{id}/notes", r.handler.setNotes)
 }

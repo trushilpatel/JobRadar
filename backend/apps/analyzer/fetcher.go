@@ -119,7 +119,7 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, r *kgo.Re
 
 	// Thin adapters (e.g. Meta) publish RawJobs with empty Title/Location at
 	// listing time — the real values are only available after fetching the
-	// detail page. Backfill so buildJobRow writes the correct title to job_feed.
+	// detail page. Backfill so buildJobRow writes the correct title to `jobs`.
 	if job.Title == "" && content.Title != "" {
 		job.Title = content.Title
 	}

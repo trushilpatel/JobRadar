@@ -1,4 +1,5 @@
 export { LoginPage } from './LoginPage'
 export { AuthCallback } from './AuthCallback'
 export { RequireAuth } from './RequireAuth'
+export { RequireAdmin } from './RequireAdmin'
 export { useAuthStore } from './store'

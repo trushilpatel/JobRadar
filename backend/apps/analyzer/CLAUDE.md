@@ -1,6 +1,6 @@
 # apps/analyzer/ — Job post analyzer (enricher)
 
-Consumes `job_listings.filtered` (Kafka), fetches full job page content with per-adapter rate limiting, runs LLM enrichment in batches, writes final rows to `job_feed` and `job_analytics`.
+Consumes `job_listings.filtered` (Kafka), fetches full job page content with per-adapter rate limiting, runs LLM enrichment in batches, writes final rows to `jobs` and `job_analytics`.
 
 ## Two-stage flow per Kafka fetch
 

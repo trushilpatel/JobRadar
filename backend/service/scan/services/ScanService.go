@@ -7,9 +7,19 @@ import (
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
+// SchedulerCycleResult is the per-tick summary returned to the scheduler
+// binary. Enqueued counts companies inserted into the queue this tick;
+// SkippedNoSettings counts companies the scheduler ignored because they
+// have no `company_scan_settings` row yet (Phase 2: post-cutover companies
+// start un-onboarded for scanning until an admin configures them).
+type SchedulerCycleResult struct {
+	Enqueued          int
+	SkippedNoSettings int
+}
+
 // SchedulerService is the narrow interface the scheduler worker depends on.
 type SchedulerService interface {
-	EnqueueDue(ctx context.Context, intervalMinutes int) (int, error)
+	EnqueueDue(ctx context.Context, intervalMinutes int) (SchedulerCycleResult, error)
 	ResetStuck(ctx context.Context, staleDur time.Duration) error
 	// PurgeInactive removes queued (not processing) entries for companies that
 	// have been deactivated since they were enqueued. Returns number of rows removed.
@@ -18,7 +28,12 @@ type SchedulerService interface {
 
 // Service defines all business operations for the scan domain.
 type Service interface {
-	SchedulerService
+	// EnqueueDue mirrors SchedulerService.EnqueueDue but is exposed on the
+	// REST decorator chain too — the API binary uses the same Service
+	// interface for its scheduler-style endpoints.
+	EnqueueDue(ctx context.Context, intervalMinutes int) (SchedulerCycleResult, error)
+	ResetStuck(ctx context.Context, staleDur time.Duration) error
+	PurgeInactive(ctx context.Context) (int, error)
 	TriggerScan(ctx context.Context, companyID string) error
 	TriggerScanAll(ctx context.Context) (int, error)
 	GetStats(ctx context.Context, companyID string) (*dto.ScanStatsView, error)
@@ -42,7 +57,7 @@ func NewBaseService(next Service) BaseService {
 	return BaseService{next: next}
 }
 
-func (b *BaseService) EnqueueDue(ctx context.Context, intervalMinutes int) (int, error) {
+func (b *BaseService) EnqueueDue(ctx context.Context, intervalMinutes int) (SchedulerCycleResult, error) {
 	return b.next.EnqueueDue(ctx, intervalMinutes)
 }
 

@@ -7,8 +7,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// Store is a compatibility alias for ApplicationService.
-type Store = services.ApplicationService
+// Store is a compatibility alias for ApplicationRepository. Phase 2: the
+// store interface (per-user, takes userID explicitly) is distinct from the
+// user-facing ApplicationService — kept here only for legacy import paths
+// until B7 migrates them.
+type Store = services.ApplicationRepository
 
 // Service is a compatibility alias for ApplicationService.
 type Service = services.ApplicationService
@@ -28,8 +31,8 @@ type UpdateStageInput = dto.UpdateStageInput
 // UpdateNoteInput is a compatibility alias for dto.UpdateNoteInput.
 type UpdateNoteInput = dto.UpdateNoteInput
 
-// NewStore constructs the terminal ApplicationService (repository layer).
-func NewStore(db *gorm.DB) services.ApplicationService {
+// NewStore constructs the per-user ApplicationRepository (terminal repo).
+func NewStore(db *gorm.DB) services.ApplicationRepository {
 	return services.NewApplicationRepositoryService(db)
 }
 

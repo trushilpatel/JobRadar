@@ -7,6 +7,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'applied', label: 'Applied' },
   { key: 'interviewing', label: 'Interviewing' },
   { key: 'offer', label: 'Offer' },
+  { key: 'rejected', label: 'Rejected' },
 ]
 
 interface JobStatusTabsProps {
@@ -19,7 +20,7 @@ interface JobStatusTabsProps {
 export function JobStatusTabs({ tab, onChange, counts, leftSlot }: JobStatusTabsProps) {
   return (
     <div className="flex items-end gap-0.5 px-6 border-b border-white/[0.07]">
-      {leftSlot && <div className="flex items-center pb-3 mr-4 shrink-0">{leftSlot}</div>}
+      {leftSlot && <div className="flex items-center pb-2 mr-4 shrink-0">{leftSlot}</div>}
       {TABS.map((t) => (
         <button
           key={t.key}

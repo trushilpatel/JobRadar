@@ -1,3 +1,4 @@
+import { toast } from 'sonner'
 import { supabase } from './supabase'
 import { parseApiError } from './api-error'
 
@@ -37,8 +38,18 @@ async function signOutAndRedirect(): Promise<void> {
 
 async function authHeader(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
-  return token ? { Authorization: `Bearer ${token}` } : {}
+  const session = data.session
+  if (!session) return {}
+
+  const expiresAt = session.expires_at ?? 0
+  if (expiresAt > 0 && expiresAt - Math.floor(Date.now() / 1000) < 60) {
+    await refreshOnce()
+    const { data: fresh } = await supabase.auth.getSession()
+    const token = fresh.session?.access_token
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
+
+  return { Authorization: `Bearer ${session.access_token}` }
 }
 
 function buildUrl(path: string): string {
@@ -102,6 +113,16 @@ async function request<T>(method: HttpMethod, path: string, init?: RequestInit):
       await signOutAndRedirect()
       throw new Error('Unauthorized')
     }
+  }
+
+  if (res.status === 429) {
+    const retryAfter = res.headers.get('Retry-After')
+    const seconds = retryAfter ? parseInt(retryAfter, 10) : null
+    const msg = seconds
+      ? `Rate limit exceeded. Try again in ${seconds}s.`
+      : 'Rate limit exceeded. Please slow down.'
+    toast.warning(msg)
+    throw await parseApiError(res, msg)
   }
 
   if (!res.ok) {

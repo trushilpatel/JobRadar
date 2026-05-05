@@ -31,13 +31,18 @@ func (s *userDashboardRepository) GetProgressStats(ctx context.Context) (_ dto.P
 	ctx, span := tracing.Start(ctx, "dashboard.store.GetProgressStats")
 	defer tracing.End(span, &err)
 	var result dto.ProgressStats
+	// Phase 2: status moved from jobs to user_job_state (per-user).
+	// applied/saved/dismissed counts come from user_job_state; interviewing/offer
+	// stages are tracked in job_application_tracker. awaiting_reply = applied
+	// jobs with no advanced tracker stage.
 	err = s.db.WithContext(ctx).Raw(`
 		WITH status_counts AS (
 			SELECT
-				COUNT(*) FILTER (WHERE status = 'applied')      AS applied_count,
-				COUNT(*) FILTER (WHERE status = 'interviewing') AS interviewing_count,
-				COUNT(*) FILTER (WHERE status = 'offer')        AS offer_count
-			FROM job_feed
+				COUNT(*) FILTER (WHERE status = 'applied')  AS applied_count,
+				COUNT(*)                                     AS interviewing_count,
+				0                                            AS offer_count
+			FROM user_job_state
+			WHERE status = 'applied'
 		),
 		tracker_stats AS (
 			SELECT
@@ -45,16 +50,15 @@ func (s *userDashboardRepository) GetProgressStats(ctx context.Context) (_ dto.P
 					WHERE ja.stage IN ('phone_screen', 'technical', 'final_round')
 					  AND ja.stage_at >= DATE_TRUNC('week', NOW())
 				) AS interviewing_this_week,
-				COUNT(DISTINCT CASE
-					WHEN j.status = 'applied' AND advanced.job_result_id IS NULL THEN j.id
-				END) AS awaiting_reply
+				COUNT(DISTINCT ja.job_result_id) FILTER (
+					WHERE advanced.job_result_id IS NULL
+				) AS awaiting_reply
 			FROM job_application_tracker ja
-			JOIN job_feed j ON ja.job_result_id = j.id
 			LEFT JOIN (
 				SELECT DISTINCT job_result_id
 				FROM job_application_tracker
 				WHERE stage != 'applied'
-			) advanced ON advanced.job_result_id = j.id
+			) advanced ON advanced.job_result_id = ja.job_result_id
 		)
 		SELECT
 			sc.applied_count,
@@ -71,14 +75,15 @@ func (s *userDashboardRepository) GetMarketStats(ctx context.Context) (_ dto.Mar
 	ctx, span := tracing.Start(ctx, "dashboard.store.GetMarketStats")
 	defer tracing.End(span, &err)
 	var result dto.MarketStats
+	// Phase 2: status removed from jobs table (moved to user_job_state).
+	// total_open = all jobs not dismissed by this user (global count without
+	// per-user filter at the market stats level — these are market signals).
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT
 			COUNT(*) FILTER (
 				WHERE added_at >= CURRENT_DATE - INTERVAL '1 day'
 			) AS new_since_yesterday,
-			COUNT(*) FILTER (
-				WHERE status IN ('new', 'saved', 'applied', 'interviewing', 'offer')
-			) AS total_open,
+			COUNT(*)  AS total_open,
 			COUNT(*) FILTER (
 				WHERE added_at >= DATE_TRUNC('week', NOW())
 			) AS added_this_week,
@@ -86,7 +91,7 @@ func (s *userDashboardRepository) GetMarketStats(ctx context.Context) (_ dto.Mar
 				WHERE added_at >= DATE_TRUNC('week', NOW()) - INTERVAL '7 days'
 				  AND added_at <  DATE_TRUNC('week', NOW())
 			) AS added_last_week
-		FROM job_feed
+		FROM jobs
 	`).Scan(&result).Error
 	if err != nil {
 		return result, err
