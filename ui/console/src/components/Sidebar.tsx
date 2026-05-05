@@ -21,7 +21,7 @@ const userNav: { to: string; label: string; icon: React.ReactNode }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
   { to: '/companies', label: 'Companies', icon: <Building2 size={16} /> },
   { to: '/jobs', label: 'Jobs', icon: <Briefcase size={16} /> },
-  { to: '/settings', label: 'Settings', icon: <Settings size={16} /> },
+  { to: '/account', label: 'Account', icon: <Settings size={16} /> },
 ]
 
 const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [

@@ -10,6 +10,7 @@ import { JobsPage } from '@/pages/JobsPage'
 import { InsightsPage } from '@/pages/InsightsPage'
 import { LoginPage, AuthCallback, RequireAuth, useAuthStore } from '@/features/auth'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { AccountPage } from '@/pages/AccountPage'
 import { AdminUsersPage } from '@/pages/admin/AdminUsersPage'
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage'
 import { AdminPipelinePage } from '@/pages/admin/AdminPipelinePage'
@@ -40,6 +41,7 @@ function ProtectedLayout() {
           <Route path="/companies" element={<CompaniesPage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/account" element={<AccountPage />} />
           {/* Admin routes — server also enforces 403 for non-admins */}
           <Route element={<RequireAdmin />}>
             <Route path="/admin/pipeline" element={<AdminPipelinePage />} />
