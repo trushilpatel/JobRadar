@@ -219,6 +219,12 @@ func (r *userJobStateRepository) CountsByUser(ctx context.Context, userID string
 			out.Applied = r.Count
 		case jobmodel.StatusDismissed:
 			out.Dismissed = r.Count
+		case jobmodel.StatusInterviewing:
+			out.Interviewing = r.Count
+		case jobmodel.StatusOffer:
+			out.Offer = r.Count
+		case jobmodel.StatusRejected:
+			out.Rejected = r.Count
 		}
 	}
 	return out, nil
