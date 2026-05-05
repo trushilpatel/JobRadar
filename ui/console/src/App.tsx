@@ -10,6 +10,10 @@ import { JobsPage } from '@/pages/JobsPage'
 import { InsightsPage } from '@/pages/InsightsPage'
 import { LoginPage, AuthCallback, RequireAuth, useAuthStore } from '@/features/auth'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { AdminUsersPage } from '@/pages/admin/AdminUsersPage'
+import { AdminAuditPage } from '@/pages/admin/AdminAuditPage'
+import { AdminPipelinePage } from '@/pages/admin/AdminPipelinePage'
+import { RequireAdmin } from '@/features/auth/RequireAdmin'
 
 function AuthBootstrap({ children }: { children: React.ReactNode }) {
   const bootstrap = useAuthStore((s) => s.bootstrap)
@@ -35,8 +39,14 @@ function ProtectedLayout() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/companies" element={<CompaniesPage />} />
           <Route path="/jobs" element={<JobsPage />} />
-          <Route path="/insights" element={<InsightsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          {/* Admin routes — server also enforces 403 for non-admins */}
+          <Route element={<RequireAdmin />}>
+            <Route path="/admin/pipeline" element={<AdminPipelinePage />} />
+            <Route path="/admin/users" element={<AdminUsersPage />} />
+            <Route path="/admin/audit" element={<AdminAuditPage />} />
+            <Route path="/insights" element={<InsightsPage />} />
+          </Route>
         </Routes>
       </main>
     </div>
