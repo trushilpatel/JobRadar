@@ -27,7 +27,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
-	companysvc "github.com/trushilpatel/jobradar/service/company"
+	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
@@ -131,12 +131,11 @@ func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gor
 }
 
 func buildEngine(database *gorm.DB, producer *kafka.Producer, cfg *config.Config, log logger.Logger) (*Engine, scansvc.CrawlerQueueService) {
-	companyStore := companysvc.NewStore(database)
+	scanSettings := companysvc.NewScanSettingsRepositoryService(database)
 	ledgerStore := jobsvc.NewSeenLedgerStore(database)
 	scanLog := scansvc.NewLogStore(database)
 	queueStore := scansvc.NewQueueStore(database)
 
-	companies := companysvc.NewCrawlerReader(companyStore)
 	ledger := jobsvc.NewLedgerService(ledgerStore)
 	recorder := scansvc.NewCrawlerService(scanLog)
 	queue := scansvc.NewCrawlerQueueService(queueStore)
@@ -148,7 +147,7 @@ func buildEngine(database *gorm.DB, producer *kafka.Producer, cfg *config.Config
 		MaxPages:   cfg.Crawler.Google.MaxPages,
 	}
 
-	engine := NewEngine(companies, ledger, recorder, producer, googleCfg, log)
+	engine := NewEngine(scanSettings, ledger, recorder, producer, googleCfg, log)
 	return engine, queue
 }
 

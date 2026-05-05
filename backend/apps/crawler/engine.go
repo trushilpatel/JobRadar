@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"time"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
+	apperr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/kafka"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
@@ -19,10 +21,16 @@ import (
 
 // Engine crawls company careers pages, deduplicates jobs, and publishes new ones to Kafka.
 //
+// Phase 2: per-company scan configuration (adapter_type, adapter_config,
+// active flag) lives on `company_scan_settings`. RunForCompany pulls the
+// settings on every queue claim; companies without a settings row are
+// logged-and-completed without invoking any adapter so the queue never loops
+// on un-onboarded entries.
+//
 // All adapters are pure-HTTP since the Meta sitemap migration; the engine no
 // longer needs a shared Chromium instance.
 type Engine struct {
-	companies CompanyReader
+	settings  ScanSettingsReader
 	ledger    PipelineLedger
 	recorder  ScanRecorder
 	publisher kafka.Publisher
@@ -31,7 +39,7 @@ type Engine struct {
 }
 
 func NewEngine(
-	companies CompanyReader,
+	settings ScanSettingsReader,
 	ledger PipelineLedger,
 	recorder ScanRecorder,
 	publisher kafka.Publisher,
@@ -39,7 +47,7 @@ func NewEngine(
 	log logger.Logger,
 ) *Engine {
 	return &Engine{
-		companies: companies,
+		settings:  settings,
 		ledger:    ledger,
 		recorder:  recorder,
 		publisher: publisher,
@@ -49,52 +57,66 @@ func NewEngine(
 }
 
 // RunForCompany runs a scan for a single company by ID.
+//
+// Phase 2 graceful-skip contract:
+//   - scan_settings row missing  → log at INFO once, return; the worker
+//     completes the queue entry so the row never re-loops.
+//   - scan_settings.active=false → log at WARN, return; same handling.
+//   - any other Get error        → log at ERROR, return; the queue entry
+//     completes (no requeue) so a corrupt company can't block the lane.
 func (e *Engine) RunForCompany(ctx context.Context, companyID string) {
 	ctx, span := tracing.Start(ctx, "crawler.engine.RunForCompany")
 	defer tracing.End(span, nil)
-	company, err := e.companies.GetByID(ctx, companyID)
+	settings, err := e.settings.Get(ctx, companyID)
 	if err != nil {
-		e.log.Error("company not found", err, logger.Str(logger.FieldCompany, companyID))
+		var sErr *apperr.ServiceError
+		if stderrors.As(err, &sErr) && sErr.Code == "NOT_FOUND" {
+			e.log.Info("skipping company — no scan_settings configured",
+				logger.Str(logger.FieldCompany, companyID),
+			)
+			return
+		}
+		e.log.Error("failed to load scan_settings", err, logger.Str(logger.FieldCompany, companyID))
 		return
 	}
-	if !company.Active {
+	if !settings.Active {
 		e.log.Warn("skipping inactive company",
-			logger.Str(logger.FieldCompany, company.ID),
-			logger.Str("name", company.Name),
+			logger.Str(logger.FieldCompany, companyID),
+			logger.Str("adapter_type", settings.AdapterType),
 		)
 		return
 	}
 	e.log.Debug("triggered scan",
-		logger.Str(logger.FieldCompany, company.ID),
-		logger.Str("name", company.Name),
+		logger.Str(logger.FieldCompany, companyID),
+		logger.Str("adapter_type", settings.AdapterType),
 	)
-	e.scanCompany(ctx, company)
+	e.scanCompany(ctx, companyID, settings)
 }
 
-func (e *Engine) scanCompany(ctx context.Context, company companymodel.Company) {
+func (e *Engine) scanCompany(ctx context.Context, companyID string, settings *companymodel.CompanyScanSettings) {
 	ctx, span := tracing.Start(ctx, "crawler.engine.scanCompany")
 	defer tracing.End(span, nil)
 	start := time.Now()
 	log := e.log.With(
-		logger.Str(logger.FieldCompany, company.ID),
-		logger.Str("name", company.Name),
+		logger.Str(logger.FieldCompany, companyID),
+		logger.Str("adapter_type", settings.AdapterType),
 	)
 
 	// Fetch known job IDs upfront — used for two purposes:
 	//   1. Passed to the adapter (via KnownJobsProvider) to skip detail enrichment
 	//      for jobs already in the ledger, so only new jobs get detail page visits.
 	//   2. Reused in detectRemovedJobs to avoid a second DB round-trip.
-	knownIDs, err := e.ledger.GetActiveJobIDsByCompany(ctx, company.ID)
+	knownIDs, err := e.ledger.GetActiveJobIDsByCompany(ctx, companyID)
 	if err != nil {
 		log.Error("failed to load known job IDs — enrichment will run for all jobs", err)
 		knownIDs = nil
 	}
 
-	result, streamed, err := e.fetchJobs(ctx, company, knownIDs, log)
+	result, streamed, err := e.fetchJobs(ctx, companyID, settings.AdapterType, knownIDs, log)
 	if err != nil {
 		log.Error("scan failed", err)
 		errMsg := err.Error()
-		e.recordResult(ctx, company.ID, 0, 0, time.Since(start), &errMsg)
+		e.recordResult(ctx, companyID, 0, 0, time.Since(start), &errMsg)
 		metrics.CrawlerScansTotal.WithLabelValues("error").Inc()
 		return
 	}
@@ -106,7 +128,7 @@ func (e *Engine) scanCompany(ctx context.Context, company companymodel.Company) 
 	if streamed {
 		newCount = len(result.Jobs)
 	} else {
-		newCount = e.publishNewJobs(ctx, result.Jobs, company, log)
+		newCount = e.publishNewJobs(ctx, result.Jobs, companyID, settings.AdapterType, log)
 	}
 	e.detectRemovedJobs(ctx, result.Jobs, knownIDs, log)
 
@@ -120,13 +142,13 @@ func (e *Engine) scanCompany(ctx context.Context, company companymodel.Company) 
 		logger.Int(logger.FieldNew, newCount),
 		logger.Dur(logger.FieldDuration, elapsed.Round(time.Millisecond)),
 	)
-	e.recordResult(ctx, company.ID, len(result.Jobs), newCount, elapsed, nil)
+	e.recordResult(ctx, companyID, len(result.Jobs), newCount, elapsed, nil)
 }
 
-func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, knownIDs []string, log logger.Logger) (ats.FetchJobsResponse, bool, error) {
-	adp, err := ats.RegistryWithGoogleConfig(company.AdapterType, e.googleCfg, log)
+func (e *Engine) fetchJobs(ctx context.Context, companyID, adapterType string, knownIDs []string, log logger.Logger) (ats.FetchJobsResponse, bool, error) {
+	adp, err := ats.RegistryWithGoogleConfig(adapterType, e.googleCfg, log)
 	if err != nil {
-		return ats.FetchJobsResponse{}, false, fmt.Errorf("no adapter for type %q: %w", company.AdapterType, err)
+		return ats.FetchJobsResponse{}, false, fmt.Errorf("no adapter for type %q: %w", adapterType, err)
 	}
 
 	// If the adapter supports skipping enrichment for known jobs, inject the set now.
@@ -155,20 +177,20 @@ func (e *Engine) fetchJobs(ctx context.Context, company companymodel.Company, kn
 	streamed := false
 	if sp, ok := adp.(ats.StreamPublisher); ok {
 		sp.SetStreamPublish(func(items []ats.FetchJobsItem) {
-			e.publishNewJobs(ctx, items, company, log)
+			e.publishNewJobs(ctx, items, companyID, adapterType, log)
 		})
 		streamed = true
 		log.Debug("streaming publish enabled for adapter")
 	}
 
-	result, err := adp.FetchJobs(ctx, company.ID)
+	result, err := adp.FetchJobs(ctx, companyID)
 	if err != nil {
 		return ats.FetchJobsResponse{}, false, fmt.Errorf("fetch failed: %w", err)
 	}
 	return result, streamed, nil
 }
 
-func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, company companymodel.Company, log logger.Logger) int {
+func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, companyID, adapterType string, log logger.Logger) int {
 	if len(jobs) == 0 {
 		return 0
 	}
@@ -199,7 +221,7 @@ func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, c
 	// the next scan re-publishes those jobs. Downstream filter handles duplicates.
 	var publishedIDs []string
 	for _, job := range newJobs {
-		if err := e.publish(ctx, toRawJob(job, company.ID, company.AdapterType)); err != nil {
+		if err := e.publish(ctx, toRawJob(job, companyID, adapterType)); err != nil {
 			log.Error("publish failed", err, logger.Str(logger.FieldJobID, job.ID))
 			continue
 		}
@@ -209,7 +231,7 @@ func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, c
 		return 0
 	}
 
-	if err := e.ledger.MarkSeenBatch(ctx, publishedIDs, company.ID, jobcommon.SeenReasonFetch); err != nil {
+	if err := e.ledger.MarkSeenBatch(ctx, publishedIDs, companyID, jobcommon.SeenReasonFetch); err != nil {
 		// Jobs are in Kafka but not marked seen — next scan will re-publish them.
 		// Downstream filter deduplicates by job_id so this is safe.
 		log.Error("batch mark seen failed (jobs published, will be re-sent on next scan)", err)
