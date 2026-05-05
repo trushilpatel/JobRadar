@@ -41,7 +41,7 @@ function buildUrl(adapter: string, id: string): string {
 
 const FIXED_URL_ADAPTERS = new Set(['google', 'netflix', 'uber', 'apple', 'meta', 'microsoft', 'rippling'])
 
-const EMPTY_FORM = { id: '', name: '', url: '', adapter_type: 'greenhouse', active: true }
+const EMPTY_FORM = { id: '', name: '', website: '', adapter_type: 'greenhouse', active: true }
 
 export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdated }: Props) {
   const isEdit = !!initialData
@@ -58,7 +58,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
       setForm({
         id:           initialData.id,
         name:         initialData.name,
-        url:          initialData.url,
+        website:      initialData.url,
         adapter_type: initialData.adapter_type,
         active:       initialData.active,
       })
@@ -75,7 +75,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
     setForm(f => ({
       ...f,
       adapter_type: adapter,
-      url: !urlManuallyEdited ? buildUrl(adapter, f.id) : f.url,
+      website: !urlManuallyEdited ? buildUrl(adapter, f.id) : f.website,
     }))
     setFieldErrors({})
     setGlobalError('')
@@ -85,7 +85,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
     setForm(f => ({
       ...f,
       id,
-      url: !urlManuallyEdited ? buildUrl(f.adapter_type, id) : f.url,
+      website: !urlManuallyEdited ? buildUrl(f.adapter_type, id) : f.website,
     }))
     setFieldErrors({})
     setGlobalError('')
@@ -93,7 +93,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
 
   function handleUrlChange(url: string) {
     setUrlManuallyEdited(true)
-    setForm(f => ({ ...f, url }))
+    setForm(f => ({ ...f, website: url }))
     setFieldErrors({})
     setGlobalError('')
   }
@@ -108,7 +108,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.id || !form.name || (!FIXED_URL_ADAPTERS.has(form.adapter_type) && !form.url)) {
+    if (!form.id || !form.name || (!FIXED_URL_ADAPTERS.has(form.adapter_type) && !form.website)) {
       setGlobalError(
         FIXED_URL_ADAPTERS.has(form.adapter_type)
           ? 'Identifier and name are required'
@@ -119,7 +119,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
     setLoading(true)
     try {
       if (isEdit && initialData) {
-        await updateAdminCompany(initialData.id, { name: form.name, url: form.url })
+        await updateAdminCompany(initialData.id, { name: form.name, website: form.website })
         await updateAdminCompanyScanSettings(initialData.id, {
           adapter_type: form.adapter_type,
           active:       form.active,
@@ -127,12 +127,12 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
         onUpdated?.({ ...initialData, ...form })
       } else {
         const adminCompany = await createAdminCompany({
-          id:   form.id,
-          name: form.name,
-          url:  form.url,
+          id:      form.id,
+          name:    form.name,
+          website: form.website,
           scan_settings: { adapter_type: form.adapter_type, active: form.active },
         })
-        onCreated?.({ ...adminCompany, adapter_type: form.adapter_type, active: form.active, last_scan_at: null, last_scan_status: null })
+        onCreated?.({ ...adminCompany, url: adminCompany.website, adapter_type: form.adapter_type, active: form.active, last_scan_at: null, last_scan_status: null })
       }
       handleClose()
     } catch (err: unknown) {
@@ -202,13 +202,13 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
             <Field label="Careers URL" hint={isEdit ? undefined : urlHint}>
               <div className="relative">
                 <input
-                  value={form.url}
+                  value={form.website}
                   onChange={e => handleUrlChange(e.target.value)}
                   placeholder={hasTemplate && !isEdit ? 'Auto-filled — enter Company ID above' : 'https://...'}
                   className={cn(
                     inputClass,
                     'pr-9',
-                    hasTemplate && !urlManuallyEdited && form.url && 'text-slate-400'
+                    hasTemplate && !urlManuallyEdited && form.website && 'text-slate-400'
                   )}
                 />
                 <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
@@ -217,16 +217,16 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                       type="button"
                       onClick={() => {
                         setUrlManuallyEdited(false)
-                        setForm(f => ({ ...f, url: buildUrl(f.adapter_type, f.id) }))
+                        setForm(f => ({ ...f, website: buildUrl(f.adapter_type, f.id) }))
                       }}
                       className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
                     >
                       Reset
                     </button>
                   )}
-                  {form.url && (
+                  {form.website && (
                     <a
-                      href={form.url}
+                      href={form.website}
                       target="_blank"
                       rel="noreferrer"
                       tabIndex={-1}
@@ -239,10 +239,10 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                   )}
                 </div>
               </div>
-              {hasTemplate && !urlManuallyEdited && form.url && !isEdit && (
+              {hasTemplate && !urlManuallyEdited && form.website && !isEdit && (
                 <p className="text-[11px] text-violet-400/70 mt-1">✓ Auto-filled from identifier</p>
               )}
-              {fieldErrors.url && <p className="text-xs text-red-400 mt-1">{fieldErrors.url}</p>}
+              {fieldErrors.website && <p className="text-xs text-red-400 mt-1">{fieldErrors.website}</p>}
             </Field>
 
             <div className="flex items-center justify-between">

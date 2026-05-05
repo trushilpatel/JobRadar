@@ -40,15 +40,14 @@ export function Pagination({
   }
 
   return (
-    <div className={cn('flex items-center justify-between gap-4 px-1 py-3', className)}>
-      {/* Left: showing label */}
-      <p className="text-xs text-slate-500 shrink-0">
+    <div className={cn('flex items-center justify-end gap-3 px-4 py-2.5', className)}>
+      {/* Showing label */}
+      <p className="text-xs text-slate-500 shrink-0 mr-1">
         {total === 0 ? 'No results' : `Showing ${from}–${to} of ${total}`}
       </p>
 
-      {/* Center: page controls */}
+      {/* Page controls */}
       <div className="flex items-center gap-1">
-        {/* Prev */}
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
@@ -58,7 +57,6 @@ export function Pagination({
           Prev
         </button>
 
-        {/* Page numbers */}
         <div className="flex items-center gap-0.5">
           {getPages().map((p, i) =>
             p === 'ellipsis' ? (
@@ -82,7 +80,6 @@ export function Pagination({
           )}
         </div>
 
-        {/* Next */}
         <button
           onClick={() => onPageChange(page + 1)}
           disabled={page >= pageCount}
@@ -93,7 +90,7 @@ export function Pagination({
         </button>
       </div>
 
-      {/* Right: page size selector */}
+      {/* Rows selector */}
       {onLimitChange && (
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-xs text-slate-500">Rows</span>

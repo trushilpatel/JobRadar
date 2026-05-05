@@ -20,7 +20,7 @@ const BASE_SETTINGS: ScanSettingsView = {
 const BASE_COMPANY: AdminCompany = {
   id: 'stripe',
   name: 'Stripe',
-  url: 'https://stripe.com/jobs',
+  website: 'https://stripe.com/jobs',
   created_at: '2024-01-01T00:00:00Z',
   scan_settings: BASE_SETTINGS,
 }

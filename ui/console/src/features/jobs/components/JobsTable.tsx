@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { DataTable, type SortingState } from '@/components/ui/data-table'
+import { Pagination } from '@/components/ui/pagination'
 import type { Job } from '@/types'
 import type { TabKey } from '@/features/jobs/hooks/useJobs'
 import { buildJobColumns } from '@/features/jobs/components/jobs-columns'
@@ -11,8 +11,8 @@ interface JobsTableProps {
   tab: TabKey
   page: number
   limit: number
+  total: number
   hasNextPage: boolean
-  hasPrevPage: boolean
   selectedIds: Set<string>
   activeJobId: string | null
   onRowClick: (job: Job) => void
@@ -20,6 +20,7 @@ interface JobsTableProps {
   onSelectAll: (checked: boolean) => void
   onNextPage: () => void
   onPrevPage: () => void
+  onPageChange: (page: number) => void
   onLimitChange: (limit: number) => void
   sorting: SortingState
   onSortingChange: (sorting: SortingState) => void
@@ -34,16 +35,14 @@ const EMPTY_MESSAGES: Record<TabKey, string> = {
   rejected: 'No rejected jobs yet',
 }
 
-const LIMIT_OPTIONS = [20, 50, 100]
-
 export function JobsTable({
   jobs,
   loading,
   tab,
   page,
   limit,
+  total,
   hasNextPage,
-  hasPrevPage,
   selectedIds,
   activeJobId,
   onRowClick,
@@ -51,6 +50,7 @@ export function JobsTable({
   onSelectAll,
   onNextPage,
   onPrevPage,
+  onPageChange,
   onLimitChange,
   sorting,
   onSortingChange,
@@ -65,6 +65,22 @@ export function JobsTable({
       }),
     [selectedIds, jobs, onToggleSelect, onSelectAll]
   )
+
+  // Cursor-based pagination: translate to page-number-style for Pagination component.
+  // Page jumps are not supported (cursor chain must be walked), so onPageChange
+  // only handles prev (page-1) and next (page+1) from the Pagination buttons.
+  function handlePageChange(newPage: number) {
+    if (newPage < page) onPrevPage()
+    else if (newPage > page) onNextPage()
+  }
+
+  // Derive a synthetic total that makes "Showing X–Y of N" correct when the
+  // count is known, and gracefully caps when we're on the last page.
+  const syntheticTotal = total > 0
+    ? total
+    : hasNextPage
+      ? page * limit + 1   // unknown total, more pages exist — show at least one more
+      : (page - 1) * limit + jobs.length
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden min-w-0">
@@ -86,39 +102,14 @@ export function JobsTable({
         />
       </div>
 
-      {/* Cursor pagination controls */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/[0.07] shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">Rows</span>
-          <select
-            value={limit}
-            onChange={(e) => onLimitChange(Number(e.target.value))}
-            className="bg-white/[0.04] border border-white/[0.08] text-xs text-slate-300 rounded-lg px-2 py-1.5 focus:outline-none focus:border-violet-500 transition-colors cursor-pointer"
-          >
-            {LIMIT_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onPrevPage}
-            disabled={!hasPrevPage}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft size={13} /> Prev
-          </button>
-          <span className="px-2 text-xs text-slate-500">Page {page}</span>
-          <button
-            onClick={onNextPage}
-            disabled={!hasNextPage}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            Next <ChevronRight size={13} />
-          </button>
-        </div>
+      <div className="border-t border-white/[0.07] shrink-0">
+        <Pagination
+          page={page}
+          total={syntheticTotal}
+          limit={limit}
+          onPageChange={handlePageChange}
+          onLimitChange={(l) => { onLimitChange(l); onPageChange(1) }}
+        />
       </div>
     </div>
   )

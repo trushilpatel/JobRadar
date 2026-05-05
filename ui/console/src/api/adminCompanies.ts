@@ -19,7 +19,7 @@ export interface ScanSettingsView {
 export interface AdminCompany {
   id: string
   name: string
-  url: string
+  website: string
   created_at: string
   scan_settings: ScanSettingsView | null
 }
@@ -70,7 +70,7 @@ export async function fetchAdminCompanies(
 export async function createAdminCompany(data: {
   id: string
   name: string
-  url: string
+  website: string
   scan_settings?: { adapter_type: string; active: boolean }
 }): Promise<AdminCompany> {
   return apiClient.post<AdminCompany>('/admin/companies', data)
@@ -78,7 +78,7 @@ export async function createAdminCompany(data: {
 
 export async function updateAdminCompany(
   id: string,
-  fields: Partial<Pick<AdminCompany, 'name' | 'url'>>
+  fields: Partial<Pick<AdminCompany, 'name' | 'website'>>
 ): Promise<void> {
   await apiClient.patch<void>(`/admin/companies/${encodeURIComponent(id)}`, fields)
 }

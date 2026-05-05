@@ -80,6 +80,16 @@ export interface SalaryRange {
   period?: string
 }
 
+export interface UserJobState {
+  status: JobStatus
+  notes: string | null
+  saved_at: string | null
+  applied_at: string | null
+  dismissed_at: string | null
+  dismissal_reason: string | null
+  dismissal_note: string | null
+}
+
 export interface Job {
   id: string
   job_post_id: string
@@ -99,9 +109,11 @@ export interface Job {
   security_clearance: boolean
   role_brief: string | null
   responsibilities: string[] | null
+  // Flattened from user_state for convenience — normalized in api/jobs.ts
   status: JobStatus
   saved: boolean
   notes: string | null
+  user_state: UserJobState
   added_at: string
   company: Company
 }

@@ -132,8 +132,8 @@ export function JobsPage() {
           tab={jobs.tab}
           page={jobs.page}
           limit={jobs.limit}
+          total={jobs.counts[jobs.tab] ?? 0}
           hasNextPage={jobs.hasNextPage}
-          hasPrevPage={jobs.hasPrevPage}
           selectedIds={selectedIds}
           activeJobId={activeJob?.id ?? null}
           onRowClick={setActiveJob}
@@ -141,6 +141,7 @@ export function JobsPage() {
           onSelectAll={handleSelectAll}
           onNextPage={jobs.goToNextPage}
           onPrevPage={jobs.goToPrevPage}
+          onPageChange={jobs.goToFirstPage}
           onLimitChange={(l) => {
             jobs.setLimit(l)
             jobs.goToFirstPage()

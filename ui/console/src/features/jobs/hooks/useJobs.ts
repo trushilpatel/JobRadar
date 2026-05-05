@@ -69,10 +69,14 @@ export function useJobs() {
     [tab, debouncedSearch, selectedCompanies, locationFilter, expFilter, dateFilter, sortBy, sortDir]
   )
 
-  // Reset to first page when filters change
-  useEffect(() => {
+  // Reset cursor to page 1 when filters change. Adjusting state during render
+  // (storing previous value + comparing) is the React-recommended alternative to
+  // useEffect for derived state resets — avoids a second render pass from the effect.
+  const [prevFilters, setPrevFilters] = useState(filters)
+  if (prevFilters !== filters) {
+    setPrevFilters(filters)
     setCursors([''])
-  }, [filters])
+  }
 
   const currentCursor = cursors[cursors.length - 1]
 

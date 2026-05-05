@@ -1,5 +1,27 @@
-import type { Job, JobApplication } from '@/types'
+import type { Job, JobApplication, UserJobState } from '@/types'
 import { apiClient } from '@/lib/api-client'
+
+// The backend returns per-user state nested under user_state. Flatten the
+// frequently-accessed fields (status, notes, saved) to the top level so
+// all existing components keep working without change.
+function normalizeJob(raw: Job & { user_state?: Partial<UserJobState> }): Job {
+  const us = raw.user_state
+  return {
+    ...raw,
+    status: us?.status ?? 'new',
+    notes: us?.notes ?? null,
+    saved: us?.saved_at != null,
+    user_state: {
+      status: us?.status ?? 'new',
+      notes: us?.notes ?? null,
+      saved_at: us?.saved_at ?? null,
+      applied_at: us?.applied_at ?? null,
+      dismissed_at: us?.dismissed_at ?? null,
+      dismissal_reason: us?.dismissal_reason ?? null,
+      dismissal_note: us?.dismissal_note ?? null,
+    },
+  }
+}
 
 export interface JobsPage {
   items: Job[]
@@ -48,12 +70,13 @@ export async function fetchJobs(
   if (filters.sortBy) p.set('sort_by', filters.sortBy)
   if (filters.sortDir) p.set('sort_dir', filters.sortDir)
 
-  return apiClient.get<JobsPage>(`/jobs?${p}`)
+  const page = await apiClient.get<JobsPage>(`/jobs?${p}`)
+  return { ...page, items: page.items.map(normalizeJob) }
 }
 
 // GET /jobs/:id
 export async function fetchJob(id: string): Promise<Job> {
-  return apiClient.get<Job>(`/jobs/${id}`)
+  return normalizeJob(await apiClient.get<Job>(`/jobs/${id}`))
 }
 
 // PATCH /jobs/:id/save
