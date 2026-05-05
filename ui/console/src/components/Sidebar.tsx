@@ -5,7 +5,6 @@ import {
   Briefcase,
   LayoutDashboard,
   BarChart2,
-  Settings,
   ChevronsLeft,
   ChevronsRight,
   LogOut,
@@ -21,7 +20,6 @@ const userNav: { to: string; label: string; icon: React.ReactNode }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
   { to: '/companies', label: 'Companies', icon: <Building2 size={16} /> },
   { to: '/jobs', label: 'Jobs', icon: <Briefcase size={16} /> },
-  { to: '/account', label: 'Account', icon: <Settings size={16} /> },
 ]
 
 const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [
@@ -128,21 +126,37 @@ export function Sidebar() {
       {/* Footer */}
       <div className={cn('border-t border-white/[0.07]', collapsed ? 'px-1.5 py-3' : 'px-3 py-3')}>
         {collapsed ? (
-          <button
-            onClick={signOut}
+          <NavLink
+            to="/account"
             title={email}
-            className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-white/[0.05] transition-colors"
+            className={({ isActive }) =>
+              cn(
+                'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
+                isActive ? 'bg-violet-600/20' : 'hover:bg-white/[0.05]'
+              )
+            }
           >
             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
               {initials}
             </span>
-          </button>
+          </NavLink>
         ) : (
           <div className="flex items-center gap-2.5">
-            <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
-              {initials}
-            </span>
-            <span className="flex-1 text-xs text-slate-400 truncate">{email}</span>
+            <NavLink
+              to="/account"
+              title="Account"
+              className={({ isActive }) =>
+                cn(
+                  'flex-1 flex items-center gap-2 rounded-lg px-1 py-1 -mx-1 transition-colors min-w-0',
+                  isActive ? 'text-violet-300' : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                )
+              }
+            >
+              <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
+                {initials}
+              </span>
+              <span className="text-xs truncate">{email}</span>
+            </NavLink>
             <button
               onClick={signOut}
               title="Sign out"
