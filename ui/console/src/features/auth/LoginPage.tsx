@@ -38,7 +38,7 @@ export function LoginPage() {
           <h1 className="flex justify-center text-white">
             <LogoLockup size="lg" />
           </h1>
-          <p className="mt-2 text-sm text-neutral-400">Sign in to continue</p>
+          <p className="mt-2 text-sm text-neutral-400">Sign in or create an account</p>
         </div>
 
         {sent ? (
