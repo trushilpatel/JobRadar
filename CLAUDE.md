@@ -77,7 +77,7 @@ new → saved → applied    (user advances)
 new → dismissed          (user dismisses — job row kept in `jobs` for FK integrity)
 ```
 
-Per-user status lives in `user_job_state` (upserted on every save/dismiss/status change). The feed query LEFT JOINs `user_job_state` and defaults to `new` when no row exists for the calling user. Historical analytics come from `job_analytics`; current-state aggregations (e.g. funnel stage counts) read `user_job_state.status` directly.
+Per-user status lives in `user_job_state` (upserted on every save/dismiss/status change). The "new" tab uses a global feed query with a per-user overlay (GetMany on the fetched IDs); all other status tabs drive from `user_job_state` directly (INNER JOIN to `jobs`) so every page is a full limit-sized result set. Historical analytics come from `job_analytics`; current-state aggregations (e.g. funnel stage counts) read `user_job_state.status` directly.
 
 ## Scan scheduling
 
@@ -96,7 +96,7 @@ All three phases shipped. See [`Designs/multi-user-rollout-plan.md`](Designs/mul
 - Service slices: `backend/service/user/` (with cache + admin), `backend/service/role/`, `backend/service/audit/`
 - Middleware: `RequireIdentity`, `RequireRole`, `RateLimit`, `AuditAdminMutation`
 - Company slice split: public path (`CompanyService`) + admin path (`CompanyAdminService`)
-- Job feed LEFT JOINs `user_job_state`; cursor (keyset) pagination; per-user state upserted on every action
+- Job feed: "new" tab uses global feed + per-user overlay; other status tabs drive from `user_job_state` (INNER JOIN jobs); cursor (keyset) pagination; per-user state upserted on every action
 - Route split: `/api/*` (RequireIdentity + RateLimit); `/admin/*` (+ RequireRole("admin") + AuditAdminMutation)
 - Frontend: identity-aware Zustand store, role-gated admin nav, admin pages (pipeline, companies, users, audit log, insights), account page, 429 toast
 
