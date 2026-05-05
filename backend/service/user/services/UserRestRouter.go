@@ -22,10 +22,10 @@ func NewRestRouter(h *RestService, middlewares ...func(http.Handler) http.Handle
 	return &RestRouter{handler: h, middlewares: middlewares}
 }
 
-// Register satisfies handler.RouteGroup. The /api/me subtree gets its own
-// middleware chain so legacy routes are untouched while we migrate.
+// Register satisfies handler.RouteGroup. Mounts /me routes; the caller is
+// responsible for placing this group under the /api subrouter.
 func (rt *RestRouter) Register(r chi.Router) {
-	r.Route("/api/me", func(sub chi.Router) {
+	r.Route("/me", func(sub chi.Router) {
 		for _, mw := range rt.middlewares {
 			if mw != nil {
 				sub.Use(mw)

@@ -53,12 +53,9 @@ type AuthConfig struct {
 }
 
 // Validate enforces boot-time auth invariants. Refuses to start if both JWT
-// secret and JWKS URL are set, or if neither is set, or if AllowedEmail is
-// empty.
+// secret and JWKS URL are set, or if neither is set. AllowedEmail is no
+// longer required — Phase 2 uses open signup gated by RequireIdentity.
 func (c AuthConfig) Validate() error {
-	if c.AllowedEmail == "" {
-		return fmt.Errorf("config: ALLOWED_EMAIL must be set")
-	}
 	hasSecret := c.SupabaseJWTSecret != ""
 	hasJWKS := c.SupabaseJWKSURL != ""
 	if hasSecret && hasJWKS {

@@ -20,14 +20,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// multiUser bundles the Phase 1 multi-user services, the /api/me route
-// group, and the /admin/* route group with all admin service handlers.
+// multiUser bundles the Phase 2 multi-user services, the /me route group
+// (mounted under /api by NewRouter), and the /admin/* route group with all
+// admin service handlers.
 type multiUser struct {
-	userSvc  usersvc.Service
-	roleSvc  rolesvc.Service
-	auditSvc auditsvc.Service
-	router   handler.RouteGroup
-	admin    handler.RouteGroup
+	userSvc     usersvc.Service
+	roleSvc     rolesvc.Service
+	auditSvc    auditsvc.Service
+	identityMW  func(http.Handler) http.Handler
+	rateLimitMW func(http.Handler) http.Handler
+	router      handler.RouteGroup // /me routes — mounted under /api by NewRouter
+	admin       handler.RouteGroup // /admin/* routes — mounted at root by NewRouter
 }
 
 // buildMultiUser composes the user / role / audit decorator chains, wraps
@@ -110,28 +113,36 @@ func buildMultiUser(
 	}
 
 	return &multiUser{
-		userSvc:  userValid,
-		roleSvc:  roleValid,
-		auditSvc: auditImpl,
-		router:   meRouter,
-		admin:    adminGroup,
+		userSvc:     userValid,
+		roleSvc:     roleValid,
+		auditSvc:    auditImpl,
+		identityMW:  identityMW,
+		rateLimitMW: rateLimitMW,
+		router:      meRouter,
+		admin:       adminGroup,
 	}
 }
 
-// Handlers returns the /api/me and /admin/* route groups for mounting
-// alongside the rest of the App's handlers.
-func (m *multiUser) Handlers() []handler.RouteGroup {
-	if m == nil {
+// IdentityMW returns the RequireIdentity middleware for use on the /api subrouter.
+func (m *multiUser) IdentityMW() func(http.Handler) http.Handler { return m.identityMW }
+
+// RateLimitMW returns the RateLimit middleware for use on the /api subrouter.
+func (m *multiUser) RateLimitMW() func(http.Handler) http.Handler { return m.rateLimitMW }
+
+// APIHandlers returns route groups for the /api subrouter (currently just /me).
+func (m *multiUser) APIHandlers() []handler.RouteGroup {
+	if m == nil || m.router == nil {
 		return nil
 	}
-	groups := make([]handler.RouteGroup, 0, 2)
-	if m.router != nil {
-		groups = append(groups, m.router)
+	return []handler.RouteGroup{m.router}
+}
+
+// AdminHandlers returns the /admin/* route group for root-level mounting.
+func (m *multiUser) AdminHandlers() []handler.RouteGroup {
+	if m == nil || m.admin == nil {
+		return nil
 	}
-	if m.admin != nil {
-		groups = append(groups, m.admin)
-	}
-	return groups
+	return []handler.RouteGroup{m.admin}
 }
 
 // adminRouteGroup mounts all admin handlers under /admin with the full

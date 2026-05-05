@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/apps/api/middleware"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/db"
@@ -81,10 +80,8 @@ func main() {
 	}
 	mu := buildMultiUser(database, cfg, muCache, muLimiter, supabaseClient, log, app.PipelineSvc(), app.InsightsHandler())
 
-	groups := append([]handler.RouteGroup(nil), app.Handlers()...)
-	groups = append(groups, mu.Handlers()...)
-
-	apiRouter := NewRouter(log, cfg, authMW, groups)
+	apiGroups := append(app.Handlers(), mu.APIHandlers()...)
+	apiRouter := NewRouter(log, cfg, authMW, mu.IdentityMW(), mu.RateLimitMW(), apiGroups, mu.AdminHandlers())
 	opsRouter := NewOpsRouter(database)
 
 	apiSrv := &http.Server{

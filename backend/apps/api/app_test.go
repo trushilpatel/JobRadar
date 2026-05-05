@@ -8,11 +8,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/service/application"
+	appdto "github.com/trushilpatel/jobradar/service/application/dto"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	appsvc "github.com/trushilpatel/jobradar/service/application/services"
-	"github.com/trushilpatel/jobradar/service/company"
-	companymodel "github.com/trushilpatel/jobradar/service/company/models"
+	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	"github.com/trushilpatel/jobradar/service/dashboard"
 	dashboarddto "github.com/trushilpatel/jobradar/service/dashboard/dto"
@@ -20,23 +19,19 @@ import (
 	insightsdto "github.com/trushilpatel/jobradar/service/insights/dto"
 	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
-	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
-	"github.com/trushilpatel/jobradar/service/scan/dto"
+	scandto "github.com/trushilpatel/jobradar/service/scan/dto"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
-// buildTestApp creates an App with all real validators and nil-safe fake services.
-// We only need the route tree, not actual DB calls.
+// buildTestApp creates an App with minimal fakes — only route registration is tested.
 func buildTestApp() *App {
 	fakeCompany := &fakeCompanyService{}
-	companyValidation := company.NewValidator(fakeCompany)
-	companyRest := companysvc.NewRestService(companyValidation)
+	companyRest := companysvc.NewRestService(fakeCompany)
 	companyH := companysvc.NewRestRouter(companyRest)
 
 	fakeScan := &fakeScanService{}
-	scanValidation := scansvc.NewValidator(fakeScan)
-	scanRest := scansvc.NewRestService(scanValidation)
+	scanRest := scansvc.NewRestService(fakeScan)
 	scanH := scansvc.NewRestRouter(scanRest)
 
 	fakeAdapterCfg := &fakeAdapterConfigService{}
@@ -45,12 +40,11 @@ func buildTestApp() *App {
 	adapterCfgH := scansvc.NewAdapterConfigRestRouter(adapterCfgRest)
 
 	fakeJob := &fakeJobService{}
-	jobValidation := jobsvc.NewValidator(fakeJob)
-	jobRest := jobsvc.NewRestService(jobValidation)
+	jobRest := jobsvc.NewRestService(fakeJob)
 	jobH := jobsvc.NewRestRouter(jobRest)
 
 	fakeApp := &fakeAppService{}
-	appImpl := appsvc.NewApplicationImplService(fakeApp, &fakeJobService{})
+	appImpl := appsvc.NewApplicationImplService(fakeApp, fakeJob)
 	appValidation := appsvc.NewApplicationValidationService(appImpl)
 	appRest := appsvc.NewApplicationRestService(appValidation)
 	appH := appsvc.NewApplicationRestRouter(appRest)
@@ -95,9 +89,11 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 	app := buildTestApp()
 
 	r := chi.NewRouter()
-	for _, g := range app.Handlers() {
-		g.Register(r)
-	}
+	r.Route("/api", func(api chi.Router) {
+		for _, g := range app.Handlers() {
+			g.Register(api)
+		}
+	})
 
 	mounted := map[string]bool{}
 	_ = chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
@@ -106,40 +102,39 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 	})
 
 	expected := []struct{ method, route string }{
-		{http.MethodGet, "/adapter-configs"},
-		{http.MethodPatch, "/adapter-configs/{adapter_type}"},
-		{http.MethodPatch, "/companies/{id}/scan-interval-override"},
-		{http.MethodGet, "/companies/{id}/scan-config"},
-		{http.MethodGet, "/jobs"},
-		{http.MethodGet, "/jobs/{id}"},
-		{http.MethodDelete, "/jobs/{id}"},
-		{http.MethodPatch, "/jobs/{id}/save"},
-		{http.MethodPatch, "/jobs/{id}/status"},
-		{http.MethodPatch, "/jobs/{id}/notes"},
-		{http.MethodGet, "/jobs/{id}/applications"},
-		{http.MethodPost, "/jobs/{id}/applications"},
-		{http.MethodPatch, "/jobs/{id}/applications/{app_id}/stage"},
-		{http.MethodPatch, "/jobs/{id}/applications/{app_id}/note"},
-		{http.MethodGet, "/applications"},
-		{http.MethodGet, "/companies"},
-		{http.MethodPost, "/companies"},
-		{http.MethodPatch, "/companies/active"},
-		{http.MethodGet, "/companies/queue"},
-		{http.MethodDelete, "/companies/queue/{entry_id}"},
-		{http.MethodPatch, "/companies/{id}"},
-		{http.MethodDelete, "/companies/{id}"},
-		{http.MethodGet, "/companies/{id}/scan-stats"},
-		{http.MethodPost, "/companies/{id}/scan"},
-		{http.MethodGet, "/dashboard/stats"},
-		{http.MethodGet, "/dashboard/activity"},
-		{http.MethodGet, "/dashboard/pipeline"},
-		{http.MethodGet, "/insights/tech-stack"},
-		{http.MethodGet, "/insights/company-activity"},
-		{http.MethodGet, "/insights/funnel"},
-		{http.MethodGet, "/insights/location"},
-		{http.MethodGet, "/insights/sponsorship"},
-		{http.MethodGet, "/insights/velocity"},
-		{http.MethodGet, "/insights/role-categories"},
+		// Adapter configs (admin-accessible via /api in Phase 2)
+		{http.MethodGet, "/api/adapter-configs"},
+		{http.MethodPatch, "/api/adapter-configs/{adapter_type}"},
+		{http.MethodPatch, "/api/companies/{id}/scan-interval-override"},
+		{http.MethodGet, "/api/companies/{id}/scan-config"},
+		// Jobs
+		{http.MethodGet, "/api/jobs"},
+		{http.MethodGet, "/api/jobs/{id}"},
+		{http.MethodDelete, "/api/jobs/{id}"},
+		{http.MethodPatch, "/api/jobs/{id}/save"},
+		{http.MethodPatch, "/api/jobs/{id}/status"},
+		{http.MethodPatch, "/api/jobs/{id}/notes"},
+		// Applications
+		{http.MethodGet, "/api/jobs/{id}/applications"},
+		{http.MethodPost, "/api/jobs/{id}/applications"},
+		{http.MethodPatch, "/api/jobs/{id}/applications/{app_id}/stage"},
+		{http.MethodPatch, "/api/jobs/{id}/applications/{app_id}/note"},
+		{http.MethodGet, "/api/applications"},
+		// Companies (public read-only; mutations live under /admin)
+		{http.MethodGet, "/api/companies"},
+		{http.MethodGet, "/api/companies/{id}"},
+		// Scan operations
+		{http.MethodGet, "/api/companies/queue"},
+		{http.MethodDelete, "/api/companies/queue/{entry_id}"},
+		{http.MethodGet, "/api/companies/{id}/scan-stats"},
+		{http.MethodPost, "/api/companies/{id}/scan"},
+		// Dashboard (user-facing panels; pipeline stats live under /admin)
+		{http.MethodGet, "/api/dashboard/stats"},
+		{http.MethodGet, "/api/dashboard/activity"},
+		{http.MethodGet, "/api/dashboard/progress"},
+		{http.MethodGet, "/api/dashboard/market"},
+		{http.MethodGet, "/api/dashboard/heatmap"},
+		{http.MethodGet, "/api/dashboard/velocity"},
 	}
 
 	for _, tc := range expected {
@@ -154,9 +149,11 @@ func TestRouter_OperationalEndpointsSeparateFromHandlers(t *testing.T) {
 	app := buildTestApp()
 
 	r := chi.NewRouter()
-	for _, g := range app.Handlers() {
-		g.Register(r)
-	}
+	r.Route("/api", func(api chi.Router) {
+		for _, g := range app.Handlers() {
+			g.Register(api)
+		}
+	})
 
 	mounted := map[string]bool{}
 	_ = chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
@@ -180,82 +177,68 @@ func TestRouter_OperationalEndpointsSeparateFromHandlers(t *testing.T) {
 
 type fakeCompanyService struct{}
 
-func (f *fakeCompanyService) List(_ context.Context, _ company.CompanyFilter, _, _ int) (company.CompanyListResult, error) {
-	return company.CompanyListResult{}, nil
+func (f *fakeCompanyService) ListPublic(_ context.Context, _ companydto.CompanyFilter, _, _ int) (companydto.CompanyPublicListResult, error) {
+	return companydto.CompanyPublicListResult{}, nil
 }
-func (f *fakeCompanyService) GetAll(_ context.Context) ([]company.CompanyView, error) {
+func (f *fakeCompanyService) GetPublic(_ context.Context, _ string) (*companydto.CompanyPublicView, error) {
 	return nil, nil
 }
-func (f *fakeCompanyService) GetByIDs(_ context.Context, _ []string) ([]company.CompanyView, error) {
-	return nil, nil
-}
-func (f *fakeCompanyService) Get(_ context.Context, _ string) (*companymodel.Company, error) {
-	return nil, nil
-}
-func (f *fakeCompanyService) Create(_ context.Context, _ company.CreateCompanyInput) (*companymodel.Company, error) {
-	return nil, nil
-}
-func (f *fakeCompanyService) Update(_ context.Context, _ string, _ company.UpdateCompanyInput) error {
-	return nil
-}
-func (f *fakeCompanyService) Delete(_ context.Context, _ string) error     { return nil }
-func (f *fakeCompanyService) SetAllActive(_ context.Context, _ bool) error { return nil }
 
 type fakeScanService struct{}
 
 func (f *fakeScanService) TriggerScan(_ context.Context, _ string) error { return nil }
 func (f *fakeScanService) TriggerScanAll(_ context.Context) (int, error) { return 0, nil }
-func (f *fakeScanService) GetStats(_ context.Context, _ string) (*dto.ScanStatsView, error) {
+func (f *fakeScanService) GetStats(_ context.Context, _ string) (*scandto.ScanStatsView, error) {
 	return nil, nil
 }
-func (f *fakeScanService) ListQueue(_ context.Context, _ dto.QueueFilter) ([]dto.QueueEntryView, error) {
+func (f *fakeScanService) ListQueue(_ context.Context, _ scandto.QueueFilter) ([]scandto.QueueEntryView, error) {
 	return nil, nil
 }
-func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error   { return nil }
-func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (int, error)    { return 0, nil }
+func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error { return nil }
+func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (scansvc.SchedulerCycleResult, error) {
+	return scansvc.SchedulerCycleResult{}, nil
+}
 func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error { return nil }
 func (f *fakeScanService) PurgeInactive(_ context.Context) (int, error)        { return 0, nil }
-func (f *fakeScanService) GetAnalytics(_ context.Context, _ string) (*dto.CompanyAnalytics, error) {
-	return &dto.CompanyAnalytics{}, nil
+func (f *fakeScanService) GetAnalytics(_ context.Context, _ string) (*scandto.CompanyAnalytics, error) {
+	return &scandto.CompanyAnalytics{}, nil
 }
 
 type fakeJobService struct{}
 
-func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _, _ int) ([]jobmodel.Job, int, error) {
-	return nil, 0, nil
+func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _ string, _ int) (jobdto.PageResult, error) {
+	return jobdto.PageResult{}, nil
 }
-func (f *fakeJobService) Get(_ context.Context, _ string) (*jobmodel.Job, error) { return nil, nil }
-func (f *fakeJobService) GetCounts(_ context.Context) (*jobdto.JobCounts, error) { return nil, nil }
-func (f *fakeJobService) Dismiss(_ context.Context, _ string, _ jobdto.DismissInput) error {
+func (f *fakeJobService) Get(_ context.Context, _ string) (*jobdto.JobView, error) { return nil, nil }
+func (f *fakeJobService) Dismiss(_ context.Context, _ string, _, _ string) error   { return nil }
+func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error       { return nil }
+func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error           { return nil }
+func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error            { return nil }
+func (f *fakeJobService) BulkDismiss(_ context.Context, _ []string, _, _ string) error {
 	return nil
 }
-func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error { return nil }
-func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error     { return nil }
-func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error      { return nil }
-func (f *fakeJobService) MarkApplied(_ context.Context, _ string) error      { return nil }
-func (f *fakeJobService) BulkDismiss(_ context.Context, _ jobdto.BulkDismissInput) (int, error) {
-	return 0, nil
-}
-func (f *fakeJobService) GetJobPostIDs(_ context.Context, _ []string) ([]string, error) {
-	return nil, nil
+func (f *fakeJobService) GetCounts(_ context.Context) (jobdto.Counts, error) {
+	return jobdto.Counts{}, nil
 }
 
 type fakeAppService struct{}
 
-func (f *fakeAppService) ListByJob(_ string) ([]appmodel.JobApplication, error) {
+func (f *fakeAppService) ListByJob(_ context.Context, _, _ string) ([]appmodel.JobApplication, error) {
 	return nil, nil
 }
-func (f *fakeAppService) ListAll(_, _ int) ([]appsvc.ApplicationWithJob, int, error) {
+func (f *fakeAppService) ListAll(_ context.Context, _ string, _, _ int) ([]appsvc.ApplicationWithJob, int, error) {
 	return nil, 0, nil
 }
-func (f *fakeAppService) ListActive() ([]appsvc.ApplicationWithJob, error) { return nil, nil }
-func (f *fakeAppService) Create(_ context.Context, _ string, _ application.CreateApplicationInput) (*appmodel.JobApplication, error) {
+func (f *fakeAppService) ListActive(_ context.Context, _ string) ([]appsvc.ApplicationWithJob, error) {
 	return nil, nil
 }
-func (f *fakeAppService) UpdateStage(_, _ string, _ application.UpdateStageInput) error {
+func (f *fakeAppService) Create(_ context.Context, _, _ string, _ appdto.CreateApplicationInput) (*appmodel.JobApplication, error) {
+	return nil, nil
+}
+func (f *fakeAppService) UpdateStage(_ context.Context, _, _ string, _ appdto.UpdateStageInput) error {
 	return nil
 }
-func (f *fakeAppService) UpdateNote(_, _ string, _ application.UpdateNoteInput) error {
+func (f *fakeAppService) UpdateNote(_ context.Context, _, _ string, _ appdto.UpdateNoteInput) error {
 	return nil
 }
 
@@ -314,25 +297,25 @@ func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insightsdto.
 
 type fakeAdapterConfigService struct{}
 
-func (f *fakeAdapterConfigService) ListAdapterConfigs(_ context.Context) ([]dto.AdapterConfigDTO, error) {
+func (f *fakeAdapterConfigService) ListAdapterConfigs(_ context.Context) ([]scandto.AdapterConfigDTO, error) {
 	return nil, nil
 }
-func (f *fakeAdapterConfigService) UpdateAdapterConfig(_ context.Context, _ string, _ dto.UpdateAdapterConfigInput) (dto.AdapterConfigDTO, error) {
-	return dto.AdapterConfigDTO{}, nil
+func (f *fakeAdapterConfigService) UpdateAdapterConfig(_ context.Context, _ string, _ scandto.UpdateAdapterConfigInput) (scandto.AdapterConfigDTO, error) {
+	return scandto.AdapterConfigDTO{}, nil
 }
-func (f *fakeAdapterConfigService) GetEffectiveScanConfig(_ context.Context, _ string) (dto.EffectiveScanConfigDTO, error) {
-	return dto.EffectiveScanConfigDTO{}, nil
+func (f *fakeAdapterConfigService) GetEffectiveScanConfig(_ context.Context, _ string) (scandto.EffectiveScanConfigDTO, error) {
+	return scandto.EffectiveScanConfigDTO{}, nil
 }
 func (f *fakeAdapterConfigService) UpdateScanIntervalOverride(_ context.Context, _ string, _ *int) error {
 	return nil
 }
 
 // Ensure fakes implement interfaces.
-var _ company.Service = (*fakeCompanyService)(nil)
+var _ companysvc.CompanyService = (*fakeCompanyService)(nil)
 var _ scansvc.Service = (*fakeScanService)(nil)
 var _ scansvc.AdapterConfigService = (*fakeAdapterConfigService)(nil)
-var _ jobsvc.Service = (*fakeJobService)(nil)
-var _ application.Service = (*fakeAppService)(nil)
+var _ jobsvc.JobService = (*fakeJobService)(nil)
+var _ appsvc.ApplicationRepository = (*fakeAppService)(nil)
 var _ dashboard.Service = (*fakeDashboardService)(nil)
 var _ dashboardsvc.UserDashboardService = (*fakeUserDashboardService)(nil)
 var _ dashboardsvc.PipelineService = (*fakePipelineService)(nil)

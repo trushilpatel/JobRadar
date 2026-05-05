@@ -99,8 +99,8 @@ func loadJWTPipeline() *jwtPipeline {
 
 // Auth builds the authentication middleware. Selects a single verifier at
 // boot (ES256 via JWKS OR HS256 via shared secret — never both) and verifies
-// signature, iss, aud, exp (with skew), then enforces the email allowlist via
-// constant-time compare.
+// signature, iss, aud, and exp (with skew). Phase 2 removes the email
+// allowlist — open signup is now gated by RequireIdentity + RequireRole.
 func Auth(cfg config.AuthConfig, devToken string, log logger.Logger) (func(http.Handler) http.Handler, error) {
 	skew := time.Duration(cfg.ClockSkewSeconds) * time.Second
 	verifier, err := newVerifier(cfg, skew)
@@ -212,12 +212,8 @@ func authHandler(cfg config.AuthConfig, devToken string, verifier tokenVerifier,
 				return
 			}
 
-			if !emailMatches(claims.Email, cfg.AllowedEmail) {
-				log.Warn("auth: email not allowed", logger.Str(logger.FieldEmailDomain, domainOf(claims.Email)))
-				handler.RespondError(w, http.StatusForbidden, "FORBIDDEN", "access denied")
-				return
-			}
-
+			// Phase 2: email allowlist removed — RequireIdentity handles identity
+			// enrichment, provisioning, and status checks per-route.
 			ident := Identity{UserID: claims.Subject, Email: claims.Email}
 			ctx := context.WithValue(r.Context(), identityCtxKey{}, ident)
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -274,14 +270,6 @@ func emailMatches(got, allowed string) bool {
 		return false
 	}
 	return subtle.ConstantTimeCompare(g, a) == 1
-}
-
-func domainOf(email string) string {
-	at := strings.LastIndex(email, "@")
-	if at < 0 || at == len(email)-1 {
-		return ""
-	}
-	return email[at+1:]
 }
 
 // newVerifier picks ES256-via-JWKS or HS256-via-secret based on cfg. The
