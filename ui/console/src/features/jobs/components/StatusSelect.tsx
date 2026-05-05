@@ -24,6 +24,10 @@ const STATUS_CONFIG: Record<JobStatus, { label: string; classes: string }> = {
     label: 'Offer',
     classes: 'text-amber-300 bg-amber-500/10 border-amber-500/20',
   },
+  dismissed: {
+    label: 'Dismissed',
+    classes: 'text-slate-400 bg-white/[0.04] border-white/[0.08]',
+  },
   rejected: {
     label: 'Rejected',
     classes: 'text-red-300 bg-red-500/10 border-red-500/20',

@@ -105,7 +105,8 @@ export function DataTable<TData>({
     const rows = table.getRowModel().rows
     const idx = rows.findIndex((r) => getRowId(r.original) === selectedId)
     if (idx >= 0) rowRefs.current[idx]?.scrollIntoView({ block: 'nearest' })
-  }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!onRowClick) return

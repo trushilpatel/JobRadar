@@ -7,7 +7,7 @@ export interface JobsPage {
 }
 
 export interface JobFilters {
-  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected'
+  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'dismissed' | 'rejected'
   search?: string
   companies?: string[]
   remote?: boolean

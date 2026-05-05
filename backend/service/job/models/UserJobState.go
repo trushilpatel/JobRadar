@@ -6,8 +6,8 @@ import "time"
 // composite primary key (UserID, JobID) is enforced by the user_job_state
 // table; absence of a row means status="new" for that user-job pair.
 //
-// Status is constrained at the DB layer to one of StatusSaved / StatusApplied
-// / StatusDismissed — the constants below mirror that CHECK constraint.
+// Status is constrained at the DB layer to one of the six stored values below —
+// the constants mirror the user_job_state.status CHECK constraint.
 type UserJobState struct {
 	UserID string `gorm:"primaryKey;column:user_id" json:"user_id"`
 	JobID  string `gorm:"primaryKey;column:job_id"  json:"job_id"`
