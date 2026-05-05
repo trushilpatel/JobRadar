@@ -25,10 +25,13 @@ func NewValidationService(next JobService) JobService {
 // means "no row"); SetStatus rejects "new" because it isn't a writable
 // state.
 var validJobStatuses = map[string]bool{
-	jobcommon.JobStatusNew:       true,
-	jobcommon.JobStatusSaved:     true,
-	jobcommon.JobStatusApplied:   true,
-	jobcommon.JobStatusDismissed: true,
+	jobcommon.JobStatusNew:          true,
+	jobcommon.JobStatusSaved:        true,
+	jobcommon.JobStatusApplied:      true,
+	jobcommon.JobStatusDismissed:    true,
+	jobcommon.JobStatusInterviewing: true,
+	jobcommon.JobStatusOffer:        true,
+	jobcommon.JobStatusRejected:     true,
 }
 
 var validDismissalReasons = map[string]bool{
@@ -43,7 +46,7 @@ func (v *validationService) List(ctx context.Context, filter dto.JobFilter, curs
 		errs = append(errs, errors.ValidationError{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
-			Message: "status must be 'new', 'saved', 'applied', or 'dismissed'",
+			Message: "status must be one of: new, saved, applied, interviewing, offer, dismissed, rejected",
 		})
 	}
 	for _, r := range filter.ExperienceRanges {
@@ -101,7 +104,7 @@ func (v *validationService) SetStatus(ctx context.Context, id, status string) er
 		return errors.ValidationErrors{{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
-			Message: "status must be 'saved', 'applied', or 'dismissed'",
+			Message: "status must be one of: saved, applied, interviewing, offer, dismissed, rejected",
 		}}
 	}
 	return v.next.SetStatus(ctx, id, status)

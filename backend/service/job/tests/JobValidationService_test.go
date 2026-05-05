@@ -48,7 +48,10 @@ func TestValidate_List(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "valid saved status", filter: jobdto.JobFilter{Status: jobcommon.JobStatusSaved}, limit: 20},
-		{name: "invalid status", filter: jobdto.JobFilter{Status: "interviewing"}, limit: 20, wantErr: true},
+		{name: "valid interviewing status", filter: jobdto.JobFilter{Status: jobcommon.JobStatusInterviewing}, limit: 20},
+		{name: "valid offer status", filter: jobdto.JobFilter{Status: jobcommon.JobStatusOffer}, limit: 20},
+		{name: "valid rejected status", filter: jobdto.JobFilter{Status: jobcommon.JobStatusRejected}, limit: 20},
+		{name: "invalid status", filter: jobdto.JobFilter{Status: "pending"}, limit: 20, wantErr: true},
 		{name: "negative limit", filter: jobdto.JobFilter{}, limit: -1, wantErr: true},
 		{name: "limit 101", filter: jobdto.JobFilter{}, limit: 101, wantErr: true},
 		{name: "experience max <= min", filter: jobdto.JobFilter{ExperienceRanges: []jobdto.ExperienceRange{{Min: 5, Max: ptrInt(3)}}}, limit: 20, wantErr: true},
