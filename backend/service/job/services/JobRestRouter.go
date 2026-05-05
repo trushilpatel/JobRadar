@@ -20,6 +20,7 @@ func NewRestRouter(h *RestService) *RestRouter {
 func (r *RestRouter) Register(router chi.Router) {
 	router.Post("/jobs/dismiss/bulk", r.handler.bulkDismiss)
 	router.Get("/jobs", r.handler.list)
+	router.Get("/jobs/companies", r.handler.companies)
 	router.Get("/jobs/counts", r.handler.counts)
 	router.Get("/jobs/{id}", r.handler.get)
 	router.Delete("/jobs/{id}", r.handler.dismiss)

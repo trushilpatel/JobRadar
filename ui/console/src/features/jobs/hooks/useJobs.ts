@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
-import { fetchJobs, fetchJobCounts, type JobFilters } from '@/api/jobs'
+import { fetchJobs, fetchJobCounts, fetchJobCompanies, type JobFilters } from '@/api/jobs'
 import type { SortingState } from '@/components/ui/data-table'
 
 export type TabKey = 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected'
@@ -104,27 +104,12 @@ export function useJobs() {
       }
     : {}
 
-  // ── Accumulated companies ──────────────────────────────────────────────────
-  // Companies seen across all pages for the current filter context.
-  // Resets when any non-company filter changes (tab, search, location, exp, date)
-  // so the list stays relevant to the current query without a separate API call.
-  const companyAccumKey = `${tab}|${debouncedSearch}|${locationFilter}|${expFilter.join(',')}|${dateFilter}`
-  const seenCompaniesRef = useRef<{ key: string; names: Set<string> }>({
-    key: '',
-    names: new Set(),
+  const companiesQuery = useQuery({
+    queryKey: ['jobs', 'companies'],
+    queryFn: fetchJobCompanies,
+    staleTime: 5 * 60_000,
   })
-  if (seenCompaniesRef.current.key !== companyAccumKey) {
-    seenCompaniesRef.current = { key: companyAccumKey, names: new Set() }
-  }
-  jobs.forEach((j) => {
-    const name = j.company?.name ?? j.company_id
-    if (name) seenCompaniesRef.current.names.add(name as string)
-  })
-  const companies = useMemo(
-    () => Array.from(seenCompaniesRef.current.names).sort(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [jobs] // jobs changing means new companies may have arrived
-  )
+  const companies = companiesQuery.data ?? []
 
   function resetFilters() {
     setSearchQueryRaw('')

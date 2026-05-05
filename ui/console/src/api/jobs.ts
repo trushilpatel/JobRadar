@@ -79,6 +79,11 @@ export async function fetchJobCounts(): Promise<JobCounts> {
   return apiClient.get<JobCounts>('/jobs/counts')
 }
 
+// GET /jobs/companies — all distinct company names in the jobs table
+export async function fetchJobCompanies(): Promise<string[]> {
+  return apiClient.get<string[]>('/jobs/companies')
+}
+
 // DELETE /jobs/:id  (dismiss)
 export async function dismissJob(id: string, reason: string, note?: string): Promise<void> {
   await apiClient.delete<void>(`/jobs/${id}`, { reason, note: note ?? '' })

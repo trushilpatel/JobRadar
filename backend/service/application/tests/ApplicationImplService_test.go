@@ -83,6 +83,7 @@ func (f *fakeJobService) BulkDismiss(_ context.Context, _ []string, _, _ string)
 func (f *fakeJobService) GetCounts(_ context.Context) (jobdto.Counts, error) {
 	return jobdto.Counts{}, f.err
 }
+func (f *fakeJobService) GetCompanies(_ context.Context) ([]string, error) { return nil, nil }
 
 // ctxAs returns a ctx carrying a synthetic Identity for userID.
 func ctxAs(userID string) context.Context {

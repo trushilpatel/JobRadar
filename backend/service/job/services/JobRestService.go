@@ -84,6 +84,16 @@ func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
 	handler.Respond(w, http.StatusOK, page)
 }
 
+// companies serves GET /api/jobs/companies — distinct company names in the jobs table.
+func (h *RestService) companies(w http.ResponseWriter, r *http.Request) {
+	names, err := h.next.GetCompanies(r.Context())
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, names)
+}
+
 // counts serves GET /api/jobs/counts.
 func (h *RestService) counts(w http.ResponseWriter, r *http.Request) {
 	c, err := h.next.GetCounts(r.Context())

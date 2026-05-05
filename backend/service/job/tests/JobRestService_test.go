@@ -55,6 +55,7 @@ func (f *fakeRestSvc) BulkDismiss(_ context.Context, ids []string, reason, _ str
 func (f *fakeRestSvc) GetCounts(_ context.Context) (jobdto.Counts, error) {
 	return jobdto.Counts{}, nil
 }
+func (f *fakeRestSvc) GetCompanies(_ context.Context) ([]string, error) { return nil, nil }
 
 var _ jobsvc.JobService = (*fakeRestSvc)(nil)
 

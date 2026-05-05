@@ -30,6 +30,7 @@ func (noopJobService) BulkDismiss(_ context.Context, _ []string, _ string, _ str
 func (noopJobService) GetCounts(_ context.Context) (jobdto.Counts, error) {
 	return jobdto.Counts{}, nil
 }
+func (noopJobService) GetCompanies(_ context.Context) ([]string, error) { return nil, nil }
 
 var _ jobsvc.JobService = noopJobService{}
 

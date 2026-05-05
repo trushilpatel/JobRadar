@@ -233,3 +233,20 @@ func (s *jobStore) CountAll(ctx context.Context) (_ int64, err error) {
 	}
 	return n, nil
 }
+
+// GetDistinctCompanyNames returns all distinct company names that appear in
+// the jobs table, sorted alphabetically.
+func (s *jobStore) GetDistinctCompanyNames(ctx context.Context) (_ []string, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.GetDistinctCompanyNames")
+	defer tracing.End(span, &err)
+	var names []string
+	if err = s.db.WithContext(ctx).
+		Table("jobs").
+		Joins("JOIN companies ON companies.id = jobs.company_id").
+		Distinct("companies.name").
+		Order("companies.name").
+		Pluck("companies.name", &names).Error; err != nil {
+		return nil, err
+	}
+	return names, nil
+}

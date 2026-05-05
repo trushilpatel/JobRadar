@@ -346,6 +346,10 @@ func (s *implService) BulkDismiss(ctx context.Context, ids []string, reason, not
 // GetCounts returns the caller's per-user counts (saved / applied /
 // dismissed). Cached for userCountsTTL; invalidated by every mutating
 // method on this service.
+func (s *implService) GetCompanies(ctx context.Context) ([]string, error) {
+	return s.jobs.GetDistinctCompanyNames(ctx)
+}
+
 func (s *implService) GetCounts(ctx context.Context) (_ dto.Counts, err error) {
 	ctx, span := tracing.Start(ctx, "job.impl.GetCounts")
 	defer tracing.End(span, &err)

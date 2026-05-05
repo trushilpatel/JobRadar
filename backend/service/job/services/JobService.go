@@ -23,6 +23,7 @@ type JobService interface {
 	Dismiss(ctx context.Context, id string, reason, note string) error
 	BulkDismiss(ctx context.Context, ids []string, reason, note string) error
 	GetCounts(ctx context.Context) (dto.Counts, error)
+	GetCompanies(ctx context.Context) ([]string, error)
 }
 
 // BaseService auto-delegates every JobService method to the next layer.
@@ -73,6 +74,10 @@ func (b *BaseService) GetCounts(ctx context.Context) (dto.Counts, error) {
 	return b.next.GetCounts(ctx)
 }
 
+func (b *BaseService) GetCompanies(ctx context.Context) ([]string, error) {
+	return b.next.GetCompanies(ctx)
+}
+
 // -----------------------------------------------------------------------------
 // Worker- and store-facing interfaces. CLAUDE.md requires every interface
 // in a slice be declared here; the concrete implementations live in their
@@ -106,6 +111,7 @@ type JobReader interface {
 	GetJobsAddedByDay(ctx context.Context, days int) ([]dto.DailyJobCount, error)
 	GetJobPostIDs(ctx context.Context, ids []string) ([]string, error)
 	CountAll(ctx context.Context) (int64, error)
+	GetDistinctCompanyNames(ctx context.Context) ([]string, error)
 }
 
 // JobWriter is the global (non-per-user) write contract used by the

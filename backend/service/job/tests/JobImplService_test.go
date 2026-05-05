@@ -51,6 +51,9 @@ func (f *fakeJobReader) GetJobPostIDs(_ context.Context, ids []string) ([]string
 	return out, nil
 }
 func (f *fakeJobReader) CountAll(_ context.Context) (int64, error) { return int64(len(f.jobs)), nil }
+func (f *fakeJobReader) GetDistinctCompanyNames(_ context.Context) ([]string, error) {
+	return nil, nil
+}
 
 type fakeUserState struct {
 	getResult    *jobmodel.UserJobState
