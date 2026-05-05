@@ -12,7 +12,8 @@ func NewRestRouter(h *RestService) *RestRouter {
 	return &RestRouter{handler: h}
 }
 
-// Register mounts all dashboard routes onto r.
+// Register mounts all user-facing dashboard routes onto r. The pipeline
+// stats route (admin-only) is served by PipelineRestRouter under /admin.
 func (r *RestRouter) Register(router chi.Router) {
 	router.Get("/dashboard/stats", r.handler.Stats)
 	router.Get("/dashboard/activity", r.handler.Activity)
@@ -22,5 +23,4 @@ func (r *RestRouter) Register(router chi.Router) {
 	router.Get("/dashboard/interviews", r.handler.Interviews)
 	router.Get("/dashboard/velocity", r.handler.Velocity)
 	router.Get("/dashboard/tech-trends", r.handler.TechTrends)
-	router.Get("/dashboard/pipeline", r.handler.Pipeline)
 }

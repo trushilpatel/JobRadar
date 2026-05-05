@@ -79,7 +79,7 @@ func main() {
 	} else {
 		log.Warn("supabase admin client disabled — SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing")
 	}
-	mu := buildMultiUser(database, cfg, muCache, muLimiter, supabaseClient, log)
+	mu := buildMultiUser(database, cfg, muCache, muLimiter, supabaseClient, log, app.PipelineSvc(), app.InsightsHandler())
 
 	groups := append([]handler.RouteGroup(nil), app.Handlers()...)
 	groups = append(groups, mu.Handlers()...)

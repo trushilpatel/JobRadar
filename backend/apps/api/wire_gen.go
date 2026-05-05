@@ -94,7 +94,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {
 	dashboardRestService := services4.NewDashboardRestService(dashboardService, userDashboardService, pipelineService)
 	dashboardRestRouter := services4.NewRestRouter(dashboardRestService)
 
-	app := NewApp(companyHandler, scanRestRouter, adapterConfigRestRouter, jobHandler, applicationRestRouter, dashboardRestRouter, insightsRestRouter)
+	app := NewApp(companyHandler, scanRestRouter, adapterConfigRestRouter, jobHandler, applicationRestRouter, dashboardRestRouter, insightsRestRouter, pipelineService)
 	return app, nil
 }
 

@@ -63,13 +63,13 @@ func buildTestApp() *App {
 	insightsRest := insightssvc.NewRestService(insightsValidation)
 	insightsH := insightssvc.NewRestRouter(insightsRest)
 
-	return NewApp(companyH, scanH, adapterCfgH, jobH, appH, dashH, insightsH)
+	return NewApp(companyH, scanH, adapterCfgH, jobH, appH, dashH, insightsH, &fakePipelineService{})
 }
 
 func TestApp_Handlers_ReturnsExpectedCount(t *testing.T) {
 	app := buildTestApp()
-	if got := len(app.Handlers()); got != 7 {
-		t.Fatalf("expected 7 route groups, got %d", got)
+	if got := len(app.Handlers()); got != 6 {
+		t.Fatalf("expected 6 route groups, got %d", got)
 	}
 }
 
