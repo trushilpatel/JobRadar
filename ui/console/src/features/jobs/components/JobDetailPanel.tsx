@@ -8,7 +8,7 @@ import { StatusSelect } from '@/features/jobs/components/StatusSelect'
 interface JobDetailPanelProps {
   job: Job
   onClose: () => void
-  onStatusChange: (job: Job, status: JobStatus) => void
+  onStatusChange: (job: Job, status: Exclude<JobStatus, 'dismissed'>) => void
   onDismiss: (job: Job) => void
 }
 

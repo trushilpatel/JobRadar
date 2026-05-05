@@ -3,12 +3,11 @@ import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Company } from '@/types'
 import {
-  updateCompany,
-  deleteCompany,
-  triggerScan,
-  triggerScanAll,
-  setAllCompaniesActive,
-} from '@/api/companies'
+  deleteAdminCompany,
+  updateAdminCompanyScanSettings,
+  setAllAdminCompaniesActive,
+} from '@/api/adminCompanies'
+import { triggerScan, triggerScanAll } from '@/api/companies'
 
 export function useCompanyActions() {
   const qc = useQueryClient()
@@ -17,13 +16,13 @@ export function useCompanyActions() {
   const [runningAll, setRunningAll] = useState(false)
 
   function invalidate() {
-    qc.invalidateQueries({ queryKey: ['companies'] })
+    qc.invalidateQueries({ queryKey: ['admin-companies'] })
   }
 
   async function toggleActive(company: Company) {
     const next = !company.active
     try {
-      await updateCompany(company.id, { active: next })
+      await updateAdminCompanyScanSettings(company.id, { active: next })
       invalidate()
     } catch {
       toast.error('Failed to update company')
@@ -32,7 +31,7 @@ export function useCompanyActions() {
 
   async function remove(id: string) {
     try {
-      await deleteCompany(id)
+      await deleteAdminCompany(id)
       toast.success('Company deleted')
       invalidate()
     } catch {
@@ -74,7 +73,7 @@ export function useCompanyActions() {
     const next = !currentAllActive
     setBulkToggling(true)
     try {
-      await setAllCompaniesActive(next)
+      await setAllAdminCompaniesActive(next)
       toast.success(next ? 'All companies activated' : 'All companies deactivated')
       invalidate()
     } catch {

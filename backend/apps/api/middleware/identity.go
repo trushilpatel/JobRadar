@@ -1,19 +1,19 @@
 // Package middleware — identity.go
 //
-// RequireIdentity is the next-generation auth gate that replaces the email
-// allowlist with a DB-backed user + role model. It does not break the existing
-// Auth middleware: routes that haven't been migrated yet keep using Auth and
-// keep behaving exactly as before. New routes (starting with /api/me) wrap
-// themselves in RequireIdentity.
+// RequireIdentity is the auth gate that backs every /api/* route with a
+// DB-driven user + role model.
 //
 // Pipeline per request:
 //  1. VerifyJWT (signature + claims) — produces (sub, email).
 //  2. Cache lookup at user:{sub} — fast-path identity bundle.
 //  3. On miss: load user via UserService.Get, auto-provision on not-found,
-//     grant 'admin' role on first sight if email is in ADMIN_EMAILS, then
 //     ListForUser to enumerate roles.
 //  4. Reject status='suspended' with 403.
 //  5. Attach Identity to ctx and continue.
+//
+// Admin roles are managed exclusively in the DB (user_roles table). There is
+// no email-based auto-promotion — use a migration or admin tooling to grant
+// the admin role.
 //
 // The middleware is unauthenticated-callers-blocking but role-agnostic —
 // downstream RequireRole middleware enforces admin scoping.
@@ -23,7 +23,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/trushilpatel/jobradar/apps/api/handler"
@@ -51,12 +50,8 @@ type roleService interface {
 }
 
 // RequireIdentity returns a middleware that authenticates the JWT, resolves
-// the caller's full Identity (with role lookup + lazy provisioning + admin
-// promotion), caches it, attaches it to ctx, and rejects suspended accounts.
-//
-// adminEmails is the set of emails that should be auto-granted the 'admin'
-// role on first observation. Comparison is case-insensitive and trims
-// whitespace on both sides. An empty list disables admin promotion entirely.
+// the caller's full Identity (with role lookup + lazy provisioning), caches it,
+// attaches it to ctx, and rejects suspended accounts.
 //
 // ttl is the cache TTL for the resolved Identity; 60s in production, smaller
 // in tests. A zero ttl disables the cache write but still consults the cache
@@ -66,7 +61,6 @@ func RequireIdentity(
 	rolesvc roleService,
 	c cache.Cache,
 	ttl time.Duration,
-	adminEmails []string,
 	log logger.Logger,
 ) func(http.Handler) http.Handler {
 	if usersvc == nil {
@@ -78,7 +72,6 @@ func RequireIdentity(
 	if log == nil {
 		log = logger.NewNoop()
 	}
-	admins := normaliseAdmins(adminEmails)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +89,7 @@ func RequireIdentity(
 			}
 
 			ctx := r.Context()
-			ident, err := resolveIdentity(ctx, sub, email, usersvc, rolesvc, c, ttl, admins, log)
+			ident, err := resolveIdentity(ctx, sub, email, usersvc, rolesvc, c, ttl, log)
 			if err != nil {
 				if errors.Is(err, errSuspended) {
 					handler.RespondError(w, http.StatusForbidden, "FORBIDDEN", "account suspended")
@@ -126,7 +119,6 @@ func resolveIdentity(
 	rolesvc roleService,
 	c cache.Cache,
 	ttl time.Duration,
-	admins map[string]struct{},
 	log logger.Logger,
 ) (identity.Identity, error) {
 	cacheKey := userCacheKey(sub)
@@ -157,16 +149,6 @@ func resolveIdentity(
 		user, err = usersvc.Provision(ctx, sub, email)
 		if err != nil {
 			return identity.Identity{}, err
-		}
-	}
-
-	// Admin promotion. Idempotent: if the role is already granted, the role
-	// service is responsible for treating Grant as a no-op.
-	if _, isAdminEmail := admins[strings.ToLower(strings.TrimSpace(email))]; isAdminEmail {
-		if err := rolesvc.Grant(ctx, sub, rolemodel.RoleAdmin, nil); err != nil {
-			// Don't fail the request — the user is signed in and provisioned;
-			// admin promotion can be retried on the next request.
-			log.Warn("identity: admin grant failed", logger.Err(err), logger.Str(logger.FieldUserID, sub))
 		}
 	}
 
@@ -212,20 +194,6 @@ func resolveIdentity(
 // userCacheKey is the canonical cache key for a user's identity bundle.
 // Centralised so cache invalidation in services targets the same string.
 func userCacheKey(sub string) string { return "user:" + sub }
-
-// normaliseAdmins lowercases + trims emails and stores them in a set so the
-// hot path is an O(1) map lookup. Empty entries are dropped.
-func normaliseAdmins(emails []string) map[string]struct{} {
-	out := make(map[string]struct{}, len(emails))
-	for _, e := range emails {
-		e = strings.ToLower(strings.TrimSpace(e))
-		if e == "" {
-			continue
-		}
-		out[e] = struct{}{}
-	}
-	return out
-}
 
 func containsRole(roles []string, want string) bool {
 	for _, r := range roles {

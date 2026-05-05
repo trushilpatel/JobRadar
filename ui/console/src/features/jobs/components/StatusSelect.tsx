@@ -34,11 +34,13 @@ const STATUS_CONFIG: Record<JobStatus, { label: string; classes: string }> = {
   },
 }
 
-const ALL_STATUSES: JobStatus[] = ['new', 'saved', 'applied', 'interviewing', 'offer', 'rejected']
+type SettableStatus = Exclude<JobStatus, 'dismissed'>
+
+const ALL_STATUSES: SettableStatus[] = ['new', 'saved', 'applied', 'interviewing', 'offer', 'rejected']
 
 interface StatusSelectProps {
   status: JobStatus
-  onChange: (status: JobStatus) => void
+  onChange: (status: SettableStatus) => void
   disabled?: boolean
 }
 
@@ -46,7 +48,7 @@ export function StatusSelect({ status, onChange, disabled }: StatusSelectProps) 
   const current = STATUS_CONFIG[status]
 
   return (
-    <Select.Root value={status} onValueChange={(v) => onChange(v as JobStatus)} disabled={disabled}>
+    <Select.Root value={status} onValueChange={(v) => onChange(v as SettableStatus)} disabled={disabled}>
       <Select.Trigger
         className={cn(
           'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors outline-none cursor-pointer',

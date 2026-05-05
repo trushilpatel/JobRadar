@@ -71,7 +71,7 @@ func buildMultiUser(
 
 	// ── User admin decorator chain ──────────────────────────────────────────
 	userAdminRepo := usersvc.NewAdminRepositoryService(db)
-	userAdminImpl := usersvc.NewAdminImplService(userAdminRepo, supabase)
+	userAdminImpl := usersvc.NewAdminImplService(userAdminRepo, supabase, c)
 	userAdminValid := usersvc.NewAdminValidationService(userAdminImpl)
 	userAdminRest := usersvc.NewAdminRestService(userAdminValid)
 	userAdminRouter := usersvc.NewAdminRestRouter(userAdminRest)
@@ -90,7 +90,6 @@ func buildMultiUser(
 		roleValid,
 		c,
 		time.Duration(cfg.MultiUser.CacheTTLUserSeconds)*time.Second,
-		cfg.MultiUser.AdminEmails,
 		log,
 	)
 	rateLimitMW := middleware.RateLimit(limiter, log)

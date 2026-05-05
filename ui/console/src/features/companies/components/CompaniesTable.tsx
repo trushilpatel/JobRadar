@@ -35,7 +35,7 @@ export function CompaniesTable({
   )
 
   return (
-    <div className="flex-1 overflow-auto min-w-0 px-6 py-3">
+    <div className="flex-1 overflow-auto min-w-0 px-6">
       <DataTable
         columns={columns}
         data={companies}

@@ -16,7 +16,7 @@ job_listing_crawler       ← fetches careers pages via ATS adapters
 job_listing_relevance_filter  ← LLM batch-scores job titles
         ↓  (Kafka: job_listings.filtered)
 job_post_analyzer         ← fetches full page, LLM enriches, eligibility check
-        ↓  (Supabase: job_feed)
+        ↓  (Supabase: jobs)
 REST API + React UI
 ```
 
@@ -318,7 +318,7 @@ Phase 1 of the multi-user rollout has shipped — see [`Designs/multi-user-rollo
 - Endpoints: `GET /api/me`, `PATCH /api/me` (display_name only), `DELETE /api/me` (Supabase admin DELETE → DB cascade)
 - RBAC0 — `roles` + `user_roles` only; no `permissions` table yet (deferred to RBAC1)
 
-Phase 2 (per-user data model, `/api` vs `/admin` route split, companies public/operational split, `job_feed`→`jobs` rename) and Phase 3 (frontend admin UI, `/me` integration, role-gated nav) are **planned and not yet shipped** — no code exists for them.
+Phase 2 (per-user data model, `/api` vs `/admin` route split, companies public/operational split, `job_feed`→`jobs` rename) and Phase 3 (frontend admin UI, `/me` integration, role-gated nav) are **shipped**.
 
 ---
 

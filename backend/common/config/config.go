@@ -26,12 +26,10 @@ type Config struct {
 	MultiUser     MultiUserConfig
 }
 
-// MultiUserConfig holds Phase 1 multi-user knobs: admin promotion list,
-// Supabase admin client credentials, per-scope rate limits, and identity
-// cache TTL. All values have sensible defaults so a stock dev environment
-// boots without needing to set them.
+// MultiUserConfig holds multi-user knobs: Supabase admin client credentials,
+// per-scope rate limits, and identity cache TTL. All values have sensible
+// defaults so a stock dev environment boots without needing to set them.
 type MultiUserConfig struct {
-	AdminEmails            []string
 	SupabaseURL            string
 	SupabaseServiceRoleKey string
 	RateLimitReadRPM       int
@@ -47,14 +45,12 @@ type AuthConfig struct {
 	SupabaseProjectURL  string
 	SupabaseJWKSURL     string
 	SupabaseJWTSecret   string
-	AllowedEmail        string
 	ClockSkewSeconds    int
 	JWKSCacheTTLSeconds int
 }
 
 // Validate enforces boot-time auth invariants. Refuses to start if both JWT
-// secret and JWKS URL are set, or if neither is set. AllowedEmail is no
-// longer required — Phase 2 uses open signup gated by RequireIdentity.
+// secret and JWKS URL are set, or if neither is set.
 func (c AuthConfig) Validate() error {
 	hasSecret := c.SupabaseJWTSecret != ""
 	hasJWKS := c.SupabaseJWKSURL != ""
@@ -301,7 +297,6 @@ func Load() *Config {
 			SupabaseProjectURL:  getEnv("SUPABASE_PROJECT_URL", ""),
 			SupabaseJWKSURL:     deriveJWKSURL(getEnv("SUPABASE_PROJECT_URL", ""), getEnv("SUPABASE_JWKS_URL", ""), getEnv("SUPABASE_JWT_SECRET", "")),
 			SupabaseJWTSecret:   getEnv("SUPABASE_JWT_SECRET", ""),
-			AllowedEmail:        getEnv("ALLOWED_EMAIL", ""),
 			ClockSkewSeconds:    getEnvInt("JWT_CLOCK_SKEW_SECONDS", 60),
 			JWKSCacheTTLSeconds: getEnvInt("JWKS_CACHE_TTL_SECONDS", 600),
 		},
@@ -310,7 +305,6 @@ func Load() *Config {
 			DevToken:     os.Getenv("DEV_TOKEN"),
 		},
 		MultiUser: MultiUserConfig{
-			AdminEmails:            splitCSV(getEnv("ADMIN_EMAILS", "")),
 			SupabaseURL:            getEnv("SUPABASE_URL", ""),
 			SupabaseServiceRoleKey: getEnv("SUPABASE_SERVICE_ROLE_KEY", ""),
 			RateLimitReadRPM:       getEnvInt("RATE_LIMIT_READ_RPM", 30),

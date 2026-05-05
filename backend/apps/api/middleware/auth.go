@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -69,7 +68,6 @@ var ErrJWKSUnavailable = errJWKSUnavailable
 type jwtPipeline struct {
 	verifier         tokenVerifier
 	devToken         string
-	allowedDevEmail  string
 	expectedIssuer   string
 	expectedAudience string
 	skew             time.Duration
@@ -99,8 +97,8 @@ func loadJWTPipeline() *jwtPipeline {
 
 // Auth builds the authentication middleware. Selects a single verifier at
 // boot (ES256 via JWKS OR HS256 via shared secret — never both) and verifies
-// signature, iss, aud, and exp (with skew). Phase 2 removes the email
-// allowlist — open signup is now gated by RequireIdentity + RequireRole.
+// signature, iss, aud, and exp (with skew). Open signup is gated by
+// RequireIdentity + RequireRole — no email allowlist.
 func Auth(cfg config.AuthConfig, devToken string, log logger.Logger) (func(http.Handler) http.Handler, error) {
 	skew := time.Duration(cfg.ClockSkewSeconds) * time.Second
 	verifier, err := newVerifier(cfg, skew)
@@ -110,7 +108,6 @@ func Auth(cfg config.AuthConfig, devToken string, log logger.Logger) (func(http.
 	pipeline := &jwtPipeline{
 		verifier:         verifier,
 		devToken:         devToken,
-		allowedDevEmail:  cfg.AllowedEmail,
 		expectedIssuer:   strings.TrimRight(cfg.SupabaseProjectURL, "/") + "/auth/v1",
 		expectedAudience: "authenticated",
 		skew:             skew,
@@ -125,13 +122,12 @@ var errJWTPipelineNotInitialised = errors.New("auth: VerifyJWT called before Aut
 
 // VerifyJWT runs the same JWT verification the Auth middleware does — bearer
 // extraction, signature, iss, aud, exp (with skew) — and returns the JWT
-// `sub` and `email` claims. It does NOT enforce the email allowlist; callers
-// that want allowlist semantics should use the Auth middleware directly.
+// `sub` and `email` claims.
 //
 // The dev-token bypass mirrors Auth: a request carrying a matching X-Dev-Token
-// header short-circuits to (subject="dev-bypass", email=AllowedEmail) without
-// touching the verifier. This keeps the new RequireIdentity middleware
-// usable in dev environments without a real Supabase session.
+// header short-circuits to (subject="dev-bypass", email="") without touching
+// the verifier. This keeps RequireIdentity usable in dev environments without
+// a real Supabase session.
 //
 // Auth must have been called once before VerifyJWT — typically at process
 // boot. Calling VerifyJWT in a process that never built Auth returns
@@ -144,7 +140,7 @@ func VerifyJWT(r *http.Request) (subject, email string, err error) {
 
 	// Dev bypass — only active when DEV_TOKEN is configured for this process.
 	if p.devToken != "" && r.Header.Get("X-Dev-Token") == p.devToken {
-		return "dev-bypass", p.allowedDevEmail, nil
+		return "dev-bypass", "", nil
 	}
 
 	raw, ok := extractBearer(r.Header.Get("Authorization"))
@@ -175,7 +171,7 @@ func authHandler(cfg config.AuthConfig, devToken string, verifier tokenVerifier,
 			if devToken != "" && r.Header.Get("X-Dev-Token") == devToken {
 				ctx := context.WithValue(r.Context(), identityCtxKey{}, Identity{
 					UserID: "dev-bypass",
-					Email:  cfg.AllowedEmail,
+					Email:  "",
 				})
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
@@ -254,22 +250,6 @@ func validateStandardClaims(c *authClaims, issuer, audience string, skew time.Du
 
 func audienceContains(aud jwt.ClaimStrings, want string) bool {
 	return slices.Contains(aud, want)
-}
-
-// emailMatches performs a constant-time compare of two emails after lowering.
-// Returns false if either side is empty. Length mismatch short-circuits to a
-// dummy compare so the timing profile stays flat regardless of input length.
-func emailMatches(got, allowed string) bool {
-	if got == "" || allowed == "" {
-		return false
-	}
-	g := []byte(strings.ToLower(got))
-	a := []byte(strings.ToLower(allowed))
-	if len(g) != len(a) {
-		_ = subtle.ConstantTimeCompare(a, a)
-		return false
-	}
-	return subtle.ConstantTimeCompare(g, a) == 1
 }
 
 // newVerifier picks ES256-via-JWKS or HS256-via-secret based on cfg. The

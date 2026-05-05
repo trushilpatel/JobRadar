@@ -4,7 +4,7 @@ import { X, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ADAPTER_TYPES } from '@/types'
 import type { Company } from '@/types'
-import { createCompany, updateCompany } from '@/api/companies'
+import { createAdminCompany, updateAdminCompany, updateAdminCompanyScanSettings } from '@/api/adminCompanies'
 import { ApiValidationError } from '@/lib/api-error'
 
 interface Props {
@@ -119,16 +119,20 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
     setLoading(true)
     try {
       if (isEdit && initialData) {
-        await updateCompany(initialData.id, {
-          name:         form.name,
-          url:          form.url,
+        await updateAdminCompany(initialData.id, { name: form.name, url: form.url })
+        await updateAdminCompanyScanSettings(initialData.id, {
           adapter_type: form.adapter_type,
           active:       form.active,
         })
         onUpdated?.({ ...initialData, ...form })
       } else {
-        const company = await createCompany(form)
-        onCreated?.(company)
+        const adminCompany = await createAdminCompany({
+          id:   form.id,
+          name: form.name,
+          url:  form.url,
+          scan_settings: { adapter_type: form.adapter_type, active: form.active },
+        })
+        onCreated?.({ ...adminCompany, adapter_type: form.adapter_type, active: form.active, last_scan_at: null, last_scan_status: null })
       }
       handleClose()
     } catch (err: unknown) {

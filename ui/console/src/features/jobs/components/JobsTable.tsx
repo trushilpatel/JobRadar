@@ -31,6 +31,7 @@ const EMPTY_MESSAGES: Record<TabKey, string> = {
   applied: 'No applied jobs yet',
   interviewing: 'No jobs in interviewing stage',
   offer: 'No jobs with offers',
+  rejected: 'No rejected jobs yet',
 }
 
 const LIMIT_OPTIONS = [20, 50, 100]

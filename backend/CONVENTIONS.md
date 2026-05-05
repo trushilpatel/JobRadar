@@ -71,7 +71,7 @@ All models have an explicit `TableName()` method. Never rely on GORM auto-naming
 | `Company` | `companies` |
 | `JobSeenLedger` | `job_pipeline_ledger` |
 | `CompanyScanLog` | `company_scan_log` |
-| `Job` | `job_feed` |
+| `Job` | `jobs` |
 | `JobSnapshot` | `job_analytics` |
 | `JobApplication` | `job_application_tracker` |
 | `Discarded` | `job_dismissal_log` |

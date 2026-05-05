@@ -122,7 +122,6 @@ func (f *fakeRoleService) hasRole(userID, role string) bool {
 func initIdentityTestPipeline(t *testing.T, devToken string) {
 	t.Helper()
 	cfg := config.AuthConfig{
-		AllowedEmail:      "ignored@example.com",
 		SupabaseJWTSecret: "test-secret",
 	}
 	if _, err := Auth(cfg, devToken, logger.NewNoop()); err != nil {
@@ -131,7 +130,7 @@ func initIdentityTestPipeline(t *testing.T, devToken string) {
 }
 
 // requestWithDevToken returns a request that the dev-bypass branch of
-// VerifyJWT will accept — sub=dev-bypass, email=cfg.AllowedEmail.
+// VerifyJWT will accept — sub=dev-bypass, email="".
 func requestWithDevToken(token string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, "/api/me", nil)
 	r.Header.Set("X-Dev-Token", token)
@@ -173,7 +172,7 @@ func TestRequireIdentity_FirstLogin_ProvisionsUser(t *testing.T) {
 	usr := newFakeUserService()
 	rls := newFakeRoleService()
 
-	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), 60*time.Second, nil, logger.NewNoop())
+	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), 60*time.Second, logger.NewNoop())
 	var got identity.Identity
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = identity.MustFromContext(r.Context())
@@ -196,54 +195,6 @@ func TestRequireIdentity_FirstLogin_ProvisionsUser(t *testing.T) {
 	}
 }
 
-func TestRequireIdentity_AdminEmail_GrantsAdmin(t *testing.T) {
-	initIdentityTestPipelineHS(t)
-	usr := newFakeUserService()
-	rls := newFakeRoleService()
-
-	mw := RequireIdentity(usr, rls,
-		cache.NewMemoryCache(), 60*time.Second,
-		[]string{"  Admin@Example.com  ", "other@x.com"},
-		logger.NewNoop(),
-	)
-	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, signedRequest(t, "u-admin", "admin@example.com"))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("got %d want 200", rr.Code)
-	}
-	if !rls.hasRole("u-admin", rolemodel.RoleAdmin) {
-		t.Fatal("admin email should be granted admin role")
-	}
-}
-
-func TestRequireIdentity_NonAdminEmail_DoesNotGrantAdmin(t *testing.T) {
-	initIdentityTestPipelineHS(t)
-	usr := newFakeUserService()
-	rls := newFakeRoleService()
-
-	mw := RequireIdentity(usr, rls,
-		cache.NewMemoryCache(), 60*time.Second,
-		[]string{"admin@example.com"},
-		logger.NewNoop(),
-	)
-	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, signedRequest(t, "u-norm", "user@example.com"))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("got %d want 200", rr.Code)
-	}
-	if rls.hasRole("u-norm", rolemodel.RoleAdmin) {
-		t.Fatal("non-admin email must not be granted admin")
-	}
-}
-
 func TestRequireIdentity_SuspendedUser_403(t *testing.T) {
 	initIdentityTestPipelineHS(t)
 	usr := newFakeUserService()
@@ -251,7 +202,7 @@ func TestRequireIdentity_SuspendedUser_403(t *testing.T) {
 	rls := newFakeRoleService()
 	rls.seed("u-bad", rolemodel.RoleUser)
 
-	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), 60*time.Second, nil, logger.NewNoop())
+	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), 60*time.Second, logger.NewNoop())
 	called := false
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called = true
@@ -276,7 +227,7 @@ func TestRequireIdentity_CacheHit_AvoidsDBCall(t *testing.T) {
 	rls.seed("u-cached", rolemodel.RoleUser)
 
 	c := cache.NewMemoryCache()
-	mw := RequireIdentity(usr, rls, c, 60*time.Second, nil, logger.NewNoop())
+	mw := RequireIdentity(usr, rls, c, 60*time.Second, logger.NewNoop())
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -309,7 +260,7 @@ func TestRequireIdentity_BadJWT_401(t *testing.T) {
 	initIdentityTestPipelineHS(t)
 	usr := newFakeUserService()
 	rls := newFakeRoleService()
-	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), 60*time.Second, nil, logger.NewNoop())
+	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), 60*time.Second, logger.NewNoop())
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -327,7 +278,7 @@ func TestRequireIdentity_DevTokenBypassWorks(t *testing.T) {
 	initIdentityTestPipeline(t, devToken)
 	usr := newFakeUserService()
 	rls := newFakeRoleService()
-	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), 60*time.Second, nil, logger.NewNoop())
+	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), 60*time.Second, logger.NewNoop())
 	var got identity.Identity
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = identity.MustFromContext(r.Context())
@@ -350,7 +301,7 @@ func TestRequireIdentity_BackfillsUserRole(t *testing.T) {
 	usr.seed("u-no-role", "x@example.com", usermodel.StatusActive, nil)
 	rls := newFakeRoleService() // no roles seeded → backfill path
 
-	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), 60*time.Second, nil, logger.NewNoop())
+	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), 60*time.Second, logger.NewNoop())
 	var got identity.Identity
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = identity.MustFromContext(r.Context())
@@ -386,7 +337,7 @@ func TestRequireIdentity_NilDeps(t *testing.T) {
 					t.Fatal("expected panic")
 				}
 			}()
-			RequireIdentity(tc.u, tc.r, cache.NewMemoryCache(), time.Second, nil, logger.NewNoop())
+			RequireIdentity(tc.u, tc.r, cache.NewMemoryCache(), time.Second, logger.NewNoop())
 		})
 	}
 }
@@ -409,7 +360,7 @@ func TestRequireIdentity_GetError_500(t *testing.T) {
 	initIdentityTestPipelineHS(t)
 	usr := &erroringUserService{err: errors.New("db boom")}
 	rls := newFakeRoleService()
-	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), time.Second, nil, logger.NewNoop())
+	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), time.Second, logger.NewNoop())
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))

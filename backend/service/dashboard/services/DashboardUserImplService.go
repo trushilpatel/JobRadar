@@ -57,7 +57,7 @@ func (s *userDashboardImplService) GetHeatmap(ctx context.Context) (_ []dto.Week
 func (s *userDashboardImplService) GetInterviews(ctx context.Context) (_ []dto.InterviewRow, err error) {
 	_, span := tracing.Start(ctx, "dashboard.userdashboard.GetInterviews")
 	defer tracing.End(span, &err)
-	apps, err := s.appStore.ListActive()
+	apps, err := s.appStore.ListActive(ctx)
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch interviews")
 	}

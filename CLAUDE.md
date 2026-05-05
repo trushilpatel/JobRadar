@@ -106,7 +106,7 @@ All three phases shipped. See [`Designs/multi-user-rollout-plan.md`](Designs/mul
 - Decorator chain: `Rest → Validation → Cache → Impl → Repo`; CacheService optional per slice
 - Source of truth for role membership is Postgres (`user_roles`) — never JWT custom claims
 
-Env vars: `ADMIN_EMAILS`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_READ_RPM`, `RATE_LIMIT_WRITE_RPM`, `RATE_LIMIT_ADMIN_RPM`, `CACHE_TTL_USER_SECONDS`.
+Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_READ_RPM`, `RATE_LIMIT_WRITE_RPM`, `RATE_LIMIT_ADMIN_RPM`, `CACHE_TTL_USER_SECONDS`.
 
 ## Dashboard endpoints
 

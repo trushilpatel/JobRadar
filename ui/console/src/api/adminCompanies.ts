@@ -43,7 +43,9 @@ export interface AdminCompanyFilters {
   search?: string
   has_settings?: boolean
   active?: boolean
-  adapter_type?: string
+  adapterTypes?: string[]
+  sortBy?: string
+  sortDir?: 'asc' | 'desc'
 }
 
 export type AdapterTypeValue = (typeof ADAPTER_TYPES)[number]
@@ -59,8 +61,30 @@ export async function fetchAdminCompanies(
   if (filters.search) p.set('search', filters.search)
   if (filters.has_settings !== undefined) p.set('has_settings', String(filters.has_settings))
   if (filters.active !== undefined) p.set('active', String(filters.active))
-  if (filters.adapter_type) p.set('adapter_type', filters.adapter_type)
+  filters.adapterTypes?.forEach((t) => p.append('adapter_types', t))
+  if (filters.sortBy) p.set('sort_by', filters.sortBy)
+  if (filters.sortDir) p.set('sort_dir', filters.sortDir)
   return apiClient.get<AdminCompanyListResult>(`/admin/companies?${p}`)
+}
+
+export async function createAdminCompany(data: {
+  id: string
+  name: string
+  url: string
+  scan_settings?: { adapter_type: string; active: boolean }
+}): Promise<AdminCompany> {
+  return apiClient.post<AdminCompany>('/admin/companies', data)
+}
+
+export async function updateAdminCompany(
+  id: string,
+  fields: Partial<Pick<AdminCompany, 'name' | 'url'>>
+): Promise<void> {
+  await apiClient.patch<void>(`/admin/companies/${encodeURIComponent(id)}`, fields)
+}
+
+export async function deleteAdminCompany(id: string): Promise<void> {
+  await apiClient.delete<void>(`/admin/companies/${encodeURIComponent(id)}`)
 }
 
 export async function updateAdminCompanyScanSettings(

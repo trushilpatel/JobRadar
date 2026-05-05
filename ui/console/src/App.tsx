@@ -13,8 +13,6 @@ import { SettingsPage } from '@/pages/SettingsPage'
 import { AccountPage } from '@/pages/AccountPage'
 import { AdminUsersPage } from '@/pages/admin/AdminUsersPage'
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage'
-import { AdminPipelinePage } from '@/pages/admin/AdminPipelinePage'
-import { AdminCompaniesPage } from '@/pages/admin/AdminCompaniesPage'
 import { RequireAdmin } from '@/features/auth/RequireAdmin'
 
 function AuthBootstrap({ children }: { children: React.ReactNode }) {
@@ -39,16 +37,14 @@ function ProtectedLayout() {
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/companies" element={<CompaniesPage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/account" element={<AccountPage />} />
           {/* Admin routes — server also enforces 403 for non-admins */}
           <Route element={<RequireAdmin />}>
-            <Route path="/admin/pipeline" element={<AdminPipelinePage />} />
+            <Route path="/admin/companies" element={<CompaniesPage />} />
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/audit" element={<AdminAuditPage />} />
-            <Route path="/admin/companies" element={<AdminCompaniesPage />} />
             <Route path="/insights" element={<InsightsPage />} />
           </Route>
         </Routes>

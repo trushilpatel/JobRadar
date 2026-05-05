@@ -141,15 +141,14 @@ func provideJobApplicationWriter(db *gorm.DB) jobsvc.ApplicationWriter {
 	return application.NewApplicationWriter(db)
 }
 
-// applicationListReaderAdapter adapts ApplicationService (ctx-aware) to the
-// ApplicationListReader interface (no ctx) used by UserDashboardService.
+// applicationListReaderAdapter adapts ApplicationService to ApplicationListReader.
 type applicationListReaderAdapter struct{ svc services3.ApplicationService }
 
 func (a *applicationListReaderAdapter) ListAll(page, limit int) ([]services3.ApplicationWithJob, int, error) {
 	return a.svc.ListAll(context.Background(), page, limit)
 }
-func (a *applicationListReaderAdapter) ListActive() ([]services3.ApplicationWithJob, error) {
-	return a.svc.ListActive(context.Background())
+func (a *applicationListReaderAdapter) ListActive(ctx context.Context) ([]services3.ApplicationWithJob, error) {
+	return a.svc.ListActive(ctx)
 }
 
 // provideApplicationListReader wraps ApplicationService in an adapter that

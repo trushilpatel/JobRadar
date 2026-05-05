@@ -39,7 +39,7 @@ These 11 attributes are the non-negotiable qualities every feature must uphold, 
 |---|---|
 | Backend | Worker loops never exit on a single job failure — catch, route, continue |
 | Backend | Whole-batch LLM failures route each job individually through the retry ladder |
-| Backend | `job_analytics` snapshot failure is non-fatal — `job_feed` write already succeeded |
+| Backend | `job_analytics` snapshot failure is non-fatal — `jobs` write already succeeded |
 | Frontend | TanStack Query `retry: 1` — transient failures get one automatic retry |
 | Frontend | `ApiValidationError` shows field-level errors inline — never crash screens |
 

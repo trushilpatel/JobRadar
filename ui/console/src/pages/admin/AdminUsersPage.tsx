@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Shield, ShieldOff, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/features/auth/store'
 import {
   fetchAdminUsers,
   setUserRoles,
@@ -95,9 +96,10 @@ function DeleteDialog({
   )
 }
 
-function UserRow({ user }: { user: AdminUser }) {
+function UserRow({ user, selfId }: { user: AdminUser; selfId: string | undefined }) {
   const qc = useQueryClient()
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const isSelf = selfId !== undefined && user.id === selfId
 
   const { mutate: toggleAdmin, isPending: togglingAdmin } = useMutation({
     mutationFn: () => {
@@ -108,6 +110,7 @@ function UserRow({ user }: { user: AdminUser }) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
+      toast.success(user.roles.includes('admin') ? `Admin revoked for ${user.email}` : `Admin granted to ${user.email}`)
     },
     onError: () => toast.error('Failed to update roles'),
   })
@@ -117,17 +120,24 @@ function UserRow({ user }: { user: AdminUser }) {
       setUserStatus(user.id, user.status === 'active' ? 'suspended' : 'active'),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
+      toast.success(user.status === 'active' ? `${user.email} suspended` : `${user.email} reinstated`)
     },
     onError: () => toast.error('Failed to update status'),
   })
 
   const isAdmin = user.roles.includes('admin')
+  const selfTitle = 'Cannot modify your own account'
 
   return (
     <>
       <tr className="border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors">
         <td className="px-4 py-3">
-          <div className="text-sm text-white">{user.email}</div>
+          <div className="flex items-center gap-2">
+            <div className="text-sm text-white">{user.email}</div>
+            {isSelf && (
+              <span className="text-xs text-slate-500 bg-white/[0.05] px-1.5 py-0.5 rounded">you</span>
+            )}
+          </div>
           {user.display_name && (
             <div className="text-xs text-slate-500 mt-0.5">{user.display_name}</div>
           )}
@@ -149,46 +159,57 @@ function UserRow({ user }: { user: AdminUser }) {
           <div className="flex items-center gap-1">
             <button
               onClick={() => toggleAdmin()}
-              disabled={togglingAdmin}
-              title={isAdmin ? 'Revoke admin' : 'Grant admin'}
+              disabled={togglingAdmin || isSelf}
+              title={isSelf ? selfTitle : isAdmin ? 'Revoke admin' : 'Grant admin'}
               className={cn(
                 'p-1.5 rounded-md transition-colors',
-                isAdmin
-                  ? 'text-violet-400 hover:bg-violet-900/30'
-                  : 'text-slate-500 hover:text-violet-400 hover:bg-white/[0.05]'
+                isSelf
+                  ? 'text-slate-700 cursor-not-allowed'
+                  : isAdmin
+                    ? 'text-violet-400 hover:bg-violet-900/30'
+                    : 'text-slate-500 hover:text-violet-400 hover:bg-white/[0.05]'
               )}
             >
               <Shield size={14} />
             </button>
             <button
               onClick={() => toggleStatus()}
-              disabled={togglingStatus}
-              title={user.status === 'active' ? 'Suspend' : 'Reinstate'}
+              disabled={togglingStatus || isSelf}
+              title={isSelf ? selfTitle : user.status === 'active' ? 'Suspend' : 'Reinstate'}
               className={cn(
                 'p-1.5 rounded-md transition-colors',
-                user.status === 'suspended'
-                  ? 'text-amber-400 hover:bg-amber-900/30'
-                  : 'text-slate-500 hover:text-amber-400 hover:bg-white/[0.05]'
+                isSelf
+                  ? 'text-slate-700 cursor-not-allowed'
+                  : user.status === 'suspended'
+                    ? 'text-amber-400 hover:bg-amber-900/30'
+                    : 'text-slate-500 hover:text-amber-400 hover:bg-white/[0.05]'
               )}
             >
               <ShieldOff size={14} />
             </button>
             <button
-              onClick={() => setDeleteOpen(true)}
-              title="Delete user"
-              className="p-1.5 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors"
+              onClick={() => !isSelf && setDeleteOpen(true)}
+              disabled={isSelf}
+              title={isSelf ? selfTitle : 'Delete user'}
+              className={cn(
+                'p-1.5 rounded-md transition-colors',
+                isSelf
+                  ? 'text-slate-700 cursor-not-allowed'
+                  : 'text-slate-500 hover:text-red-400 hover:bg-red-900/20'
+              )}
             >
               <Trash2 size={14} />
             </button>
           </div>
         </td>
       </tr>
-      <DeleteDialog user={user} open={deleteOpen} onOpenChange={setDeleteOpen} />
+      {!isSelf && <DeleteDialog user={user} open={deleteOpen} onOpenChange={setDeleteOpen} />}
     </>
   )
 }
 
 export function AdminUsersPage() {
+  const selfId = useAuthStore((s) => s.identity?.user_id)
   const [filter, setFilter] = useState<AdminUserFilter>({})
   const [emailInput, setEmailInput] = useState('')
   const [page, setPage] = useState(1)
@@ -263,7 +284,7 @@ export function AdminUsersPage() {
             </thead>
             <tbody>
               {users.map((u) => (
-                <UserRow key={u.id} user={u} />
+                <UserRow key={u.id} user={u} selfId={selfId} />
               ))}
             </tbody>
           </table>

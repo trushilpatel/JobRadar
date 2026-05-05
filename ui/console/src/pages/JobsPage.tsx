@@ -21,7 +21,7 @@ export function JobsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [panelWidth, setPanelWidth] = useState(440)
 
-  function handleStatusChange(job: Job, status: JobStatus) {
+  function handleStatusChange(job: Job, status: Exclude<JobStatus, 'dismissed'>) {
     actions.setStatus.mutate({ id: job.id, status })
     if (activeJob?.id === job.id) setActiveJob(null)
   }

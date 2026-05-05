@@ -10,7 +10,7 @@ import (
 // ApplicationListReader is the narrow read interface the dashboard needs from the application domain.
 type ApplicationListReader interface {
 	ListAll(page, limit int) ([]appsvc.ApplicationWithJob, int, error)
-	ListActive() ([]appsvc.ApplicationWithJob, error)
+	ListActive(ctx context.Context) ([]appsvc.ApplicationWithJob, error)
 }
 
 // UserDashboardService aggregates all user-facing dashboard panel data.

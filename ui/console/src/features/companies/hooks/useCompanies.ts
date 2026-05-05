@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchCompanies, fetchQueue, type CompanyFilters } from '@/api/companies'
+import { fetchAdminCompanies } from '@/api/adminCompanies'
+import { fetchQueue } from '@/api/companies'
 import type { SortingState } from '@/components/ui/data-table'
 import { QUEUE_STATUS, SCAN_STATUS, STATUS_FILTER, ACTIVE_FILTER } from '@/features/companies/constants'
+import { normalizeAdminCompany } from './normalizeAdminCompany'
 
 export type ActiveFilter = 'all' | 'active' | 'inactive'
 export type StatusFilter = 'none' | 'error' | 'running' | 'queued'
@@ -28,9 +30,14 @@ export function useCompanies() {
   const sortBy = sorting[0]?.id
   const sortDir = sorting[0] ? (sorting[0].desc ? 'desc' : 'asc') : undefined
 
-  // Server-side filters. 'error' is server-side; 'running'/'queued' require the
-  // queue table and remain client-side refinements below.
-  const serverFilters = useMemo<CompanyFilters>(
+  // 'error' filter is client-side (admin API has no last_scan_status param);
+  // 'running'/'queued' require the queue table — all three fetch the full set.
+  const needsClientFilter =
+    statusFilter === STATUS_FILTER.RUNNING ||
+    statusFilter === STATUS_FILTER.QUEUED ||
+    statusFilter === STATUS_FILTER.ERROR
+
+  const serverFilters = useMemo(
     () => ({
       search: debouncedSearch || undefined,
       adapterTypes: adapters.length > 0 ? adapters : undefined,
@@ -40,11 +47,10 @@ export function useCompanies() {
           : activeFilter === ACTIVE_FILTER.INACTIVE
             ? false
             : undefined,
-      lastScanStatus: statusFilter === STATUS_FILTER.ERROR ? SCAN_STATUS.ERROR : undefined,
       sortBy,
       sortDir,
     }),
-    [debouncedSearch, adapters, activeFilter, statusFilter, sortBy, sortDir]
+    [debouncedSearch, adapters, activeFilter, sortBy, sortDir]
   )
 
   useEffect(() => {
@@ -52,14 +58,11 @@ export function useCompanies() {
     setPage(1)
   }, [serverFilters, statusFilter])
 
-  // running/queued are client-side filters that need the full dataset — fetch all
-  // so the filter is not limited to the current page.
-  const effectiveLimit =
-    statusFilter === STATUS_FILTER.RUNNING || statusFilter === STATUS_FILTER.QUEUED ? 9999 : limit
+  const effectiveLimit = needsClientFilter ? 9999 : limit
 
   const companiesQuery = useQuery({
-    queryKey: ['companies', serverFilters, page, effectiveLimit],
-    queryFn: () => fetchCompanies(serverFilters, page, effectiveLimit),
+    queryKey: ['admin-companies', serverFilters, page, effectiveLimit],
+    queryFn: () => fetchAdminCompanies(serverFilters, page, effectiveLimit),
     refetchInterval: 30_000,
   })
 
@@ -75,11 +78,13 @@ export function useCompanies() {
     return m
   }, [queueQuery.data])
 
-  const rawCompanies = companiesQuery.data?.data ?? []
+  const rawCompanies = useMemo(
+    () => (companiesQuery.data?.data ?? []).map(normalizeAdminCompany),
+    [companiesQuery.data]
+  )
   const total = companiesQuery.data?.total ?? 0
   const totalActive = companiesQuery.data?.total_active ?? 0
 
-  // Client-side refinement for running/queued only — these require queue data.
   const companies = useMemo(() => {
     if (statusFilter === STATUS_FILTER.RUNNING) {
       return rawCompanies.filter((c) => queueMap.get(c.id) === QUEUE_STATUS.RUNNING)
@@ -87,10 +92,12 @@ export function useCompanies() {
     if (statusFilter === STATUS_FILTER.QUEUED) {
       return rawCompanies.filter((c) => queueMap.get(c.id) === QUEUE_STATUS.QUEUED)
     }
+    if (statusFilter === STATUS_FILTER.ERROR) {
+      return rawCompanies.filter((c) => c.last_scan_status === SCAN_STATUS.ERROR)
+    }
     return rawCompanies
   }, [rawCompanies, statusFilter, queueMap])
 
-  // Counts for filter bar / KPI strip.
   const counts = useMemo(() => {
     const errors = rawCompanies.filter((c) => c.last_scan_status === SCAN_STATUS.ERROR).length
     const running = rawCompanies.filter((c) => queueMap.get(c.id) === QUEUE_STATUS.RUNNING).length
@@ -121,8 +128,7 @@ export function useCompanies() {
     queueMap,
     loading:
       companiesQuery.isLoading ||
-      ((statusFilter === STATUS_FILTER.RUNNING || statusFilter === STATUS_FILTER.QUEUED) &&
-        queueQuery.isLoading),
+      (needsClientFilter && queueQuery.isLoading),
     refetch: async () => {
       await Promise.all([companiesQuery.refetch(), queueQuery.refetch()])
     },

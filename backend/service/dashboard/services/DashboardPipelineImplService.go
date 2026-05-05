@@ -26,7 +26,7 @@ func (s *PipelineImplService) GetPipelineStats(ctx context.Context) (*dto.Pipeli
 	}
 
 	// Use DB-based count as primary source for awaiting_filter: jobs that have been
-	// crawled (reason='fetch') but are not yet in job_feed. This is more reliable
+	// crawled (reason='fetch') but are not yet in `jobs`. This is more reliable
 	// than Kafka consumer-group lag which returns 0 when workers haven't committed offsets.
 	awaitingFilter := dbStats.PipelinePending
 

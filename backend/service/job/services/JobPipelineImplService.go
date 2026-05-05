@@ -37,7 +37,7 @@ func NewPipelineService(jobs JobWriter, ledger pipelineLedgerSink, snapshot Snap
 	return &pipelineService{jobs: jobs, ledger: ledger, snapshot: snapshot, techTags: techTags}
 }
 
-// SaveEnrichedJob builds the job row, inserts it into job_feed, writes the analytics
+// SaveEnrichedJob builds the job row, inserts it into `jobs`, writes the analytics
 // snapshot (non-fatal on failure), and marks the pipeline ledger as seen.
 func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.EnrichedJobInput) (err error) {
 	ctx, span := tracing.Start(ctx, "job.pipeline.SaveEnrichedJob")

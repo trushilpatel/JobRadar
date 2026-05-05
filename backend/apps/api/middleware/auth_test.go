@@ -173,7 +173,6 @@ func baseESConfig(jwksURL string) config.AuthConfig {
 	return config.AuthConfig{
 		SupabaseProjectURL:  testProjectURL,
 		SupabaseJWKSURL:     jwksURL,
-		AllowedEmail:        testAllowedEml,
 		ClockSkewSeconds:    60,
 		JWKSCacheTTLSeconds: 600,
 	}
@@ -183,7 +182,6 @@ func baseHSConfig() config.AuthConfig {
 	return config.AuthConfig{
 		SupabaseProjectURL:  testProjectURL,
 		SupabaseJWTSecret:   testHMACSecret,
-		AllowedEmail:        testAllowedEml,
 		ClockSkewSeconds:    60,
 		JWKSCacheTTLSeconds: 600,
 	}
@@ -466,34 +464,10 @@ func TestFromContext_NoIdentity(t *testing.T) {
 	}
 }
 
-// TestEmailMatches_ConstantTime directly exercises the allowlist compare to
-// confirm length mismatch, case folding, and empty inputs behave correctly.
-func TestEmailMatches_ConstantTime(t *testing.T) {
-	cases := []struct {
-		got, allowed string
-		want         bool
-	}{
-		{"owner@example.com", "owner@example.com", true},
-		{"OWNER@example.com", "owner@example.com", true},
-		{"owner@example.com", "OWNER@example.com", true},
-		{"intruder@example.com", "owner@example.com", false},
-		{"", "owner@example.com", false},
-		{"owner@example.com", "", false},
-		{"different-length@example.com", "owner@example.com", false},
-	}
-	for _, tc := range cases {
-		if got := emailMatches(tc.got, tc.allowed); got != tc.want {
-			t.Errorf("emailMatches(%q, %q) = %v, want %v", tc.got, tc.allowed, got, tc.want)
-		}
-	}
-}
-
 func TestDevBypass(t *testing.T) {
 	const devToken = "test-dev-token-abc123"
-	const allowedEmail = "dev@example.com"
 
 	cfg := config.AuthConfig{
-		AllowedEmail:      allowedEmail,
 		SupabaseJWTSecret: "dummy-secret-for-test-only",
 	}
 
@@ -528,8 +502,8 @@ func TestDevBypass(t *testing.T) {
 		if gotIdent.UserID != "dev-bypass" {
 			t.Fatalf("expected UserID dev-bypass, got %q", gotIdent.UserID)
 		}
-		if gotIdent.Email != allowedEmail {
-			t.Fatalf("expected Email %q, got %q", allowedEmail, gotIdent.Email)
+		if gotIdent.Email != "" {
+			t.Fatalf("expected empty Email, got %q", gotIdent.Email)
 		}
 	})
 
@@ -563,7 +537,6 @@ func TestDevBypass(t *testing.T) {
 
 func TestDevBypassDisabledWhenTokenEmpty(t *testing.T) {
 	cfg := config.AuthConfig{
-		AllowedEmail:      "dev@example.com",
 		SupabaseJWTSecret: "dummy-secret-for-test-only",
 	}
 	log := logger.NewNoop()
@@ -658,9 +631,7 @@ func TestVerifyJWT_DirectCall(t *testing.T) {
 
 	t.Run("dev token bypass", func(t *testing.T) {
 		const devToken = "dev-test-token-verify"
-		cfg2 := baseHSConfig()
-		cfg2.AllowedEmail = "dev@example.com"
-		if _, err := Auth(cfg2, devToken, logger.NewNoop()); err != nil {
+		if _, err := Auth(baseHSConfig(), devToken, logger.NewNoop()); err != nil {
 			t.Fatalf("Auth init: %v", err)
 		}
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -669,7 +640,7 @@ func TestVerifyJWT_DirectCall(t *testing.T) {
 		if err != nil {
 			t.Fatalf("VerifyJWT: %v", err)
 		}
-		if sub != "dev-bypass" || email != "dev@example.com" {
+		if sub != "dev-bypass" || email != "" {
 			t.Fatalf("sub=%q email=%q", sub, email)
 		}
 	})
