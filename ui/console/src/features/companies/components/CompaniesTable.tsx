@@ -32,7 +32,7 @@ export function CompaniesTable({
   const columns = useMemo(
     () => buildCompanyColumns(actions),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [actions.scanning, actions.queueMap],
+    [actions.scanning],
   )
 
   return (

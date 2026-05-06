@@ -61,6 +61,9 @@ func (h *AdminRestService) list(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("sort_dir"); v != "" {
 		filter.SortDir = v
 	}
+	if v := q.Get("scan_status"); v != "" {
+		filter.ScanStatus = v
+	}
 
 	result, err := h.next.List(r.Context(), filter, p.Page, p.Limit)
 	if err != nil {

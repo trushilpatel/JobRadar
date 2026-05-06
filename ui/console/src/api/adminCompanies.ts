@@ -22,6 +22,8 @@ export interface AdminCompany {
   website: string
   created_at: string
   scan_settings: ScanSettingsView | null
+  queue_status?: string
+  scan_history?: boolean[]
 }
 
 export interface AdminCompanyListResult {
@@ -46,6 +48,7 @@ export interface AdminCompanyFilters {
   adapterTypes?: string[]
   sortBy?: string
   sortDir?: 'asc' | 'desc'
+  scanStatus?: string
 }
 
 export type AdapterTypeValue = (typeof ADAPTER_TYPES)[number]
@@ -64,6 +67,7 @@ export async function fetchAdminCompanies(
   filters.adapterTypes?.forEach((t) => p.append('adapter_types', t))
   if (filters.sortBy) p.set('sort_by', filters.sortBy)
   if (filters.sortDir) p.set('sort_dir', filters.sortDir)
+  if (filters.scanStatus) p.set('scan_status', filters.scanStatus)
   return apiClient.get<AdminCompanyListResult>(`/admin/companies?${p}`)
 }
 

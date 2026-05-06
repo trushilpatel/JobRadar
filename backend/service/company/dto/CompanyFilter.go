@@ -10,4 +10,5 @@ type CompanyFilter struct {
 	HasSettings  *bool    // admin-only: filter by presence/absence of scan_settings row
 	SortBy       string   // "name" — defaults to "name"
 	SortDir      string   // "asc" | "desc" — defaults to "asc"
+	ScanStatus   string   // "ok" | "error" | "queued" | "running"; empty = all
 }

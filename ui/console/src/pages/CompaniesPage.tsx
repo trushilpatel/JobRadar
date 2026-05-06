@@ -26,19 +26,9 @@ export function CompaniesPage() {
 
   const bulkAllActive = c.companies.length > 0 && c.companies.every((co) => co.active)
 
-  const hasActiveFilters =
-    c.search !== '' ||
-    c.adapters.length > 0 ||
-    c.activeFilter !== 'all' ||
-    c.statusFilter !== 'none'
-
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <CompaniesHeader
-        errorCount={c.counts.errors}
-        errorFilterActive={c.statusFilter === 'error'}
-        onErrorToggle={() => c.setStatusFilter(c.statusFilter === 'error' ? 'none' : 'error')}
-      />
+      <CompaniesHeader />
 
       <CompaniesFilterBar
         search={c.search}
@@ -51,23 +41,23 @@ export function CompaniesPage() {
         }}
         activeFilter={c.activeFilter}
         onActiveFilterChange={c.setActiveFilter}
-        statusFilter={c.statusFilter}
-        onStatusFilterChange={c.setStatusFilter}
+        scanStatus={c.scanStatus}
+        onScanStatusChange={c.setScanStatus}
         bulkToggling={actions.bulkToggling}
         bulkAllActive={bulkAllActive}
         onBulkToggle={() => actions.bulkToggleActive(bulkAllActive)}
         runningAll={actions.runningAll}
         onRunAll={actions.scanAll}
         onReset={c.resetFilters}
-        hasActiveFilters={hasActiveFilters}
+        hasActiveFilters={c.hasActiveFilters}
         onAddClick={() => setAddOpen(true)}
       />
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <CompaniesTable
           companies={c.companies}
-          total={['running', 'queued', 'error'].includes(c.statusFilter) ? c.companies.length : c.total}
-          loading={c.loading}
+          total={c.total}
+          loading={c.isLoading}
           page={c.page}
           limit={c.limit}
           onPageChange={c.setPage}
@@ -76,11 +66,9 @@ export function CompaniesPage() {
             c.setPage(1)
           }}
           emptyMessage={
-            c.statusFilter !== 'none'
-              ? `No ${c.statusFilter} companies on this page — try a different page or reset filters`
-              : c.search
-                ? 'No companies match your search'
-                : 'No companies match the current filters'
+            c.hasActiveFilters
+              ? 'No companies match the current filters'
+              : 'No companies found'
           }
           activeCompanyId={drawerCompany?.id}
           onRowClick={setDrawerCompany}
@@ -92,7 +80,6 @@ export function CompaniesPage() {
             onDelete: actions.remove,
             onToggleActive: actions.toggleActive,
             scanning: actions.scanning,
-            queueMap: c.queueMap,
           }}
         />
 

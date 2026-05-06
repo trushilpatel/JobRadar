@@ -15,6 +15,8 @@ import (
 type CompanyAdminView struct {
 	companymodel.Company
 	ScanSettings *CompanyScanSettingsView `json:"scan_settings,omitempty"`
+	QueueStatus  *string                  `json:"queue_status,omitempty"`
+	ScanHistory  []bool                   `json:"scan_history,omitempty"`
 }
 
 // CompanyScanSettingsView mirrors CompanyScanSettings but is the boundary

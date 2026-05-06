@@ -18,7 +18,6 @@ export interface CompanyColumnActions {
   onDelete: (id: string) => void
   onToggleActive: (c: Company) => void
   scanning: Set<string>
-  queueMap: Map<string, 'queued' | 'running'>
 }
 
 export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Company, unknown>[] {
@@ -63,11 +62,10 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
       header: () => <span className="text-slate-400">Status</span>,
       cell: ({ row }) => {
         const c = row.original
-        const q = actions.queueMap.get(c.id)
         const kind: StatusKind =
-          q === QUEUE_STATUS.RUNNING
+          c.last_scan_status === QUEUE_STATUS.RUNNING
             ? 'running'
-            : q === QUEUE_STATUS.QUEUED
+            : c.last_scan_status === QUEUE_STATUS.QUEUED
               ? 'queued'
               : c.last_scan_status === SCAN_STATUS.OK
                 ? 'ok'
@@ -102,7 +100,6 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
       ),
       cell: ({ row }) => {
         const c = row.original
-        const q = actions.queueMap.get(c.id)
 
         // Real history from scan_history field (oldest → newest).
         const history: HistoryPoint[] = (c.scan_history ?? []).map((ok) => (ok ? 'ok' : 'err'))
@@ -113,7 +110,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
           .concat(history)
 
         // Override the rightmost slot if currently running.
-        if (q === QUEUE_STATUS.RUNNING && padded.length > 0) {
+        if (c.last_scan_status === QUEUE_STATUS.RUNNING && padded.length > 0) {
           padded[padded.length - 1] = 'run'
         }
 
@@ -221,4 +218,3 @@ function relativeTime(d: Date) {
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`
   return `${Math.floor(s / 86400)}d ago`
 }
-

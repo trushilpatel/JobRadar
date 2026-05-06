@@ -13,15 +13,20 @@ export const SCAN_STATUS = {
 
 export type ScanStatus = (typeof SCAN_STATUS)[keyof typeof SCAN_STATUS]
 
-export const STATUS_FILTER = {
-  NONE: 'none',
+export const SCAN_STATUS_FILTER = {
+  ALL: 'all',
+  OK: 'ok',
   ERROR: 'error',
   RUNNING: 'running',
   QUEUED: 'queued',
 } as const
+
+export type ScanStatusFilter = (typeof SCAN_STATUS_FILTER)[keyof typeof SCAN_STATUS_FILTER]
 
 export const ACTIVE_FILTER = {
   ALL: 'all',
   ACTIVE: 'active',
   INACTIVE: 'inactive',
 } as const
+
+export type ActiveFilter = (typeof ACTIVE_FILTER)[keyof typeof ACTIVE_FILTER]

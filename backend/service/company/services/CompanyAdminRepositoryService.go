@@ -15,12 +15,13 @@ import (
 // the resulting IDs) — equivalent to a LEFT JOIN at the result level but
 // far simpler to scan into typed structs without per-column GORM tags.
 type adminRepositoryService struct {
-	db *gorm.DB
+	db                *gorm.DB
+	scanHistoryReader companydto.ScanHistoryReader
 }
 
 // NewAdminRepositoryService constructs the terminal CompanyAdminService.
-func NewAdminRepositoryService(db *gorm.DB) CompanyAdminService {
-	return &adminRepositoryService{db: db}
+func NewAdminRepositoryService(db *gorm.DB, scanHistoryReader companydto.ScanHistoryReader) CompanyAdminService {
+	return &adminRepositoryService{db: db, scanHistoryReader: scanHistoryReader}
 }
 
 // List returns admin views joined with scan_settings. Honours every filter
@@ -46,10 +47,31 @@ func (r *adminRepositoryService) List(ctx context.Context, filter companydto.Com
 	}
 
 	views := make([]companydto.CompanyAdminView, 0, len(companies))
+	ids := make([]string, 0, len(companies))
+	for _, c := range companies {
+		ids = append(ids, c.ID)
+	}
+
+	queueStatusByID, err := r.fetchQueueStatusForCompanies(ctx, companies)
+	if err != nil {
+		return companydto.CompanyAdminListResult{}, err
+	}
+
+	historiesByID, err := r.scanHistoryReader.GetScanHistories(ctx, ids)
+	if err != nil {
+		return companydto.CompanyAdminListResult{}, err
+	}
+
 	for _, c := range companies {
 		view := companydto.CompanyAdminView{Company: c}
 		if s, ok := settingsByID[c.ID]; ok {
 			view.ScanSettings = companydto.ScanSettingsViewFromModel(s)
+		}
+		if qs, ok := queueStatusByID[c.ID]; ok {
+			view.QueueStatus = &qs
+		}
+		if h, ok := historiesByID[c.ID]; ok {
+			view.ScanHistory = h
 		}
 		views = append(views, view)
 	}
@@ -297,6 +319,16 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 			q = q.Where("s.company_id IS NULL")
 		}
 	}
+	switch filter.ScanStatus {
+	case "queued":
+		q = q.Where("EXISTS (SELECT 1 FROM company_scan_queue csq WHERE csq.company_id = c.id AND csq.status = 'queued')")
+	case "running":
+		q = q.Where("EXISTS (SELECT 1 FROM company_scan_queue csq WHERE csq.company_id = c.id AND csq.status = 'running')")
+	case "error":
+		q = q.Where("s.consecutive_errors > 0")
+	case "ok":
+		q = q.Where("s.consecutive_errors = 0 AND s.last_scan_at IS NOT NULL")
+	}
 
 	var total int64
 	if err := q.Distinct("c.id").Count(&total).Error; err != nil {
@@ -304,10 +336,7 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 	}
 
 	col, dir := adminSortClause(filter.SortBy, filter.SortDir)
-	offset := (page - 1) * limit
-	if offset < 0 {
-		offset = 0
-	}
+	offset := max((page-1)*limit, 0)
 
 	var rows []companymodel.Company
 	q2 := q.Select("c.*").Order(col + " " + dir + " NULLS LAST")
@@ -341,6 +370,33 @@ func (r *adminRepositoryService) fetchSettingsForCompanies(ctx context.Context, 
 	for i := range settings {
 		s := settings[i]
 		out[s.CompanyID] = &s
+	}
+	return out, nil
+}
+
+// fetchQueueStatusForCompanies returns a {company_id → status} map for
+// companies that currently have a queued or running row in company_scan_queue.
+// Companies not in the queue are omitted from the map.
+func (r *adminRepositoryService) fetchQueueStatusForCompanies(ctx context.Context, companies []companymodel.Company) (map[string]string, error) {
+	out := map[string]string{}
+	if len(companies) == 0 {
+		return out, nil
+	}
+	ids := make([]string, 0, len(companies))
+	for _, c := range companies {
+		ids = append(ids, c.ID)
+	}
+	var rows []struct {
+		CompanyID string `gorm:"column:company_id"`
+		Status    string `gorm:"column:status"`
+	}
+	if err := r.db.WithContext(ctx).
+		Raw(`SELECT company_id, status FROM company_scan_queue WHERE company_id IN ? AND status IN ('queued','running')`, ids).
+		Scan(&rows).Error; err != nil {
+		return nil, apperr.ErrInternal.WithMessage("failed to fetch queue status")
+	}
+	for _, row := range rows {
+		out[row.CompanyID] = row.Status
 	}
 	return out, nil
 }

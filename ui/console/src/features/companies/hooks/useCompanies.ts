@@ -1,24 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchAdminCompanies } from '@/api/adminCompanies'
-import { fetchQueue } from '@/api/companies'
 import type { SortingState } from '@/components/ui/data-table'
-import { QUEUE_STATUS, SCAN_STATUS, STATUS_FILTER, ACTIVE_FILTER } from '@/features/companies/constants'
+import { SCAN_STATUS_FILTER, ACTIVE_FILTER } from '@/features/companies/constants'
+import type { ScanStatusFilter, ActiveFilter } from '@/features/companies/constants'
 import { normalizeAdminCompany } from './normalizeAdminCompany'
 
-export type ActiveFilter = 'all' | 'active' | 'inactive'
-export type StatusFilter = 'none' | 'error' | 'running' | 'queued'
+export type { ActiveFilter, ScanStatusFilter }
 
 export function useCompanies() {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [adapters, setAdapters] = useState<string[]>([])
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>(ACTIVE_FILTER.ALL)
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(STATUS_FILTER.NONE)
+  const [scanStatus, setScanStatus] = useState<ScanStatusFilter>(SCAN_STATUS_FILTER.ALL)
   const [sorting, setSorting] = useState<SortingState>([])
-
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
+  const [autoRefresh, setAutoRefresh] = useState(
+    () => localStorage.getItem('companies-auto-refresh') === 'true'
+  )
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   function handleSearchChange(v: string) {
@@ -28,16 +29,11 @@ export function useCompanies() {
   }
 
   const sortBy = sorting[0]?.id
-  const sortDir: 'asc' | 'desc' | undefined = sorting[0] ? (sorting[0].desc ? 'desc' : 'asc') : undefined
+  const sortDir: 'asc' | 'desc' | undefined = sorting[0]
+    ? sorting[0].desc ? 'desc' : 'asc'
+    : undefined
 
-  // 'error' filter is client-side (admin API has no last_scan_status param);
-  // 'running'/'queued' require the queue table — all three fetch the full set.
-  const needsClientFilter =
-    statusFilter === STATUS_FILTER.RUNNING ||
-    statusFilter === STATUS_FILTER.QUEUED ||
-    statusFilter === STATUS_FILTER.ERROR
-
-  const serverFilters = useMemo(
+  const filters = useMemo(
     () => ({
       search: debouncedSearch || undefined,
       adapterTypes: adapters.length > 0 ? adapters : undefined,
@@ -47,63 +43,37 @@ export function useCompanies() {
           : activeFilter === ACTIVE_FILTER.INACTIVE
             ? false
             : undefined,
+      scanStatus: scanStatus === SCAN_STATUS_FILTER.ALL ? undefined : scanStatus,
       sortBy,
       sortDir,
     }),
-    [debouncedSearch, adapters, activeFilter, sortBy, sortDir]
+    [debouncedSearch, adapters, activeFilter, scanStatus, sortBy, sortDir]
   )
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1)
-  }, [serverFilters, statusFilter])
+  }, [filters])
 
-  const effectiveLimit = needsClientFilter ? 9999 : limit
-
-  const companiesQuery = useQuery({
-    queryKey: ['admin-companies', serverFilters, page, effectiveLimit],
-    queryFn: () => fetchAdminCompanies(serverFilters, page, effectiveLimit),
-    refetchInterval: 30_000,
+  const { data, isLoading, isFetching, refetch } = useQuery({
+    queryKey: ['admin-companies', filters, page, limit],
+    queryFn: () => fetchAdminCompanies(filters, page, limit),
+    staleTime: 30_000,
+    refetchInterval: autoRefresh ? 30_000 : false,
   })
 
-  const queueQuery = useQuery({
-    queryKey: ['scan-queue'],
-    queryFn: fetchQueue,
-    refetchInterval: 15_000,
-  })
-
-  const queueMap = useMemo(() => {
-    const m = new Map<string, 'queued' | 'running'>()
-    for (const e of queueQuery.data ?? []) m.set(e.company_id, e.status)
-    return m
-  }, [queueQuery.data])
-
-  const rawCompanies = useMemo(
-    () => (companiesQuery.data?.data ?? []).map(normalizeAdminCompany),
-    [companiesQuery.data]
+  const companies = useMemo(
+    () => (data?.data ?? []).map(normalizeAdminCompany),
+    [data?.data]
   )
-  const total = companiesQuery.data?.total ?? 0
-  const totalActive = companiesQuery.data?.total_active ?? 0
+  const total = data?.total ?? 0
+  const totalActive = data?.total_active ?? 0
 
-  const companies = useMemo(() => {
-    if (statusFilter === STATUS_FILTER.RUNNING) {
-      return rawCompanies.filter((c) => queueMap.get(c.id) === QUEUE_STATUS.RUNNING)
-    }
-    if (statusFilter === STATUS_FILTER.QUEUED) {
-      return rawCompanies.filter((c) => queueMap.get(c.id) === QUEUE_STATUS.QUEUED)
-    }
-    if (statusFilter === STATUS_FILTER.ERROR) {
-      return rawCompanies.filter((c) => c.last_scan_status === SCAN_STATUS.ERROR)
-    }
-    return rawCompanies
-  }, [rawCompanies, statusFilter, queueMap])
-
-  const counts = useMemo(() => {
-    const errors = rawCompanies.filter((c) => c.last_scan_status === SCAN_STATUS.ERROR).length
-    const running = rawCompanies.filter((c) => queueMap.get(c.id) === QUEUE_STATUS.RUNNING).length
-    const queued = rawCompanies.filter((c) => queueMap.get(c.id) === QUEUE_STATUS.QUEUED).length
-    return { errors, running, queued }
-  }, [rawCompanies, queueMap])
+  const hasActiveFilters =
+    search !== '' ||
+    adapters.length > 0 ||
+    activeFilter !== ACTIVE_FILTER.ALL ||
+    scanStatus !== SCAN_STATUS_FILTER.ALL
 
   function handleSortingChange(newSorting: SortingState) {
     setSorting(newSorting)
@@ -115,23 +85,26 @@ export function useCompanies() {
     setDebouncedSearch('')
     setAdapters([])
     setActiveFilter(ACTIVE_FILTER.ALL)
-    setStatusFilter(STATUS_FILTER.NONE)
+    setScanStatus(SCAN_STATUS_FILTER.ALL)
     setSorting([])
     setPage(1)
+  }
+
+  function toggleAutoRefresh() {
+    setAutoRefresh((prev) => {
+      const next = !prev
+      localStorage.setItem('companies-auto-refresh', String(next))
+      return next
+    })
   }
 
   return {
     companies,
     total,
     totalActive,
-    counts,
-    queueMap,
-    loading:
-      companiesQuery.isLoading ||
-      (needsClientFilter && queueQuery.isLoading),
-    refetch: async () => {
-      await Promise.all([companiesQuery.refetch(), queueQuery.refetch()])
-    },
+    isLoading,
+    isFetching,
+    refetch,
 
     search,
     handleSearchChange,
@@ -139,8 +112,8 @@ export function useCompanies() {
     setAdapters,
     activeFilter,
     setActiveFilter,
-    statusFilter,
-    setStatusFilter,
+    scanStatus,
+    setScanStatus,
 
     sorting,
     handleSortingChange,
@@ -150,6 +123,10 @@ export function useCompanies() {
     limit,
     setLimit,
 
+    hasActiveFilters,
     resetFilters,
+
+    autoRefresh,
+    toggleAutoRefresh,
   }
 }

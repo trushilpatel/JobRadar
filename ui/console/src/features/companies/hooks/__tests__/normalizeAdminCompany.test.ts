@@ -68,7 +68,26 @@ describe('normalizeAdminCompany', () => {
     expect(result.last_scan_status).toBeNull()
   })
 
-  it('leaves scan_history undefined', () => {
+  it('derives running from queue_status=running regardless of consecutive_errors', () => {
+    const company: AdminCompany = {
+      ...BASE_COMPANY,
+      queue_status: 'running',
+      scan_settings: { ...BASE_SETTINGS, consecutive_errors: 3 },
+    }
+    expect(normalizeAdminCompany(company).last_scan_status).toBe('running')
+  })
+
+  it('derives queued from queue_status=queued', () => {
+    const company: AdminCompany = { ...BASE_COMPANY, queue_status: 'queued' }
+    expect(normalizeAdminCompany(company).last_scan_status).toBe('queued')
+  })
+
+  it('passes through scan_history', () => {
+    const company: AdminCompany = { ...BASE_COMPANY, scan_history: [true, false, true] }
+    expect(normalizeAdminCompany(company).scan_history).toEqual([true, false, true])
+  })
+
+  it('passes undefined scan_history when absent', () => {
     expect(normalizeAdminCompany(BASE_COMPANY).scan_history).toBeUndefined()
   })
 })

@@ -6,4 +6,4 @@ export { CompaniesFilterBar } from '@/features/companies/components/CompaniesFil
 export { CompaniesTable } from '@/features/companies/components/CompaniesTable'
 export { CompanyDetailDrawer } from '@/features/companies/components/CompanyDetailDrawer'
 export { AddCompanyModal } from '@/features/companies/components/AddCompanyModal'
-export type { ActiveFilter, StatusFilter } from '@/features/companies/hooks/useCompanies'
+export type { ActiveFilter, ScanStatusFilter } from '@/features/companies/hooks/useCompanies'

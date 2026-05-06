@@ -7,17 +7,7 @@ import { PipelineStrip } from './PipelineStrip'
 const AUTO_REFRESH_KEY = 'companies-auto-refresh'
 const AUTO_REFRESH_INTERVAL_MS = 30_000
 
-interface CompaniesHeaderProps {
-  errorCount: number
-  errorFilterActive: boolean
-  onErrorToggle: () => void
-}
-
-export function CompaniesHeader({
-  errorCount,
-  errorFilterActive,
-  onErrorToggle,
-}: CompaniesHeaderProps) {
+export function CompaniesHeader() {
   const queryClient = useQueryClient()
   const [autoRefresh, setAutoRefresh] = useState(
     () => localStorage.getItem(AUTO_REFRESH_KEY) === 'true'
@@ -25,7 +15,6 @@ export function CompaniesHeader({
 
   const refresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['admin-companies'] })
-    queryClient.invalidateQueries({ queryKey: ['scan-queue'] })
     queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] })
   }, [queryClient])
 
@@ -52,21 +41,6 @@ export function CompaniesHeader({
       </div>
 
       <div className="flex items-center gap-1.5 shrink-0">
-        {errorCount > 0 && (
-          <button
-            type="button"
-            onClick={onErrorToggle}
-            className={cn(
-              'text-[11px] font-medium rounded-full px-2.5 py-1 whitespace-nowrap border transition-colors',
-              errorFilterActive
-                ? 'text-red-300 bg-red-500/20 border-red-500/40'
-                : 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20'
-            )}
-          >
-            ⚠ {errorCount} {errorCount === 1 ? 'scan error' : 'scan errors'}
-          </button>
-        )}
-
         <button
           type="button"
           onClick={toggleAutoRefresh}

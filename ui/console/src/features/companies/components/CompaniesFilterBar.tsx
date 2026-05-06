@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import { Search, Filter, Power, Loader2, X, Plus, Play, XCircle, RefreshCw, Clock, FilterX } from 'lucide-react'
+import {
+  Search, Filter, Power, Loader2, X, Plus, Play,
+  XCircle, RefreshCw, Clock, FilterX, CheckCircle2,
+} from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { cn } from '@/lib/utils'
 import { SegmentedSwitch } from '@/components/ui/segmented-switch'
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
-import type { ActiveFilter, StatusFilter } from '@/features/companies/hooks/useCompanies'
-import { STATUS_FILTER, ACTIVE_FILTER } from '@/features/companies/constants'
+import type { ActiveFilter, ScanStatusFilter } from '@/features/companies/constants'
+import { SCAN_STATUS_FILTER, ACTIVE_FILTER } from '@/features/companies/constants'
 
 interface CompaniesFilterBarProps {
   search: string
@@ -19,19 +22,43 @@ interface CompaniesFilterBarProps {
   activeFilter: ActiveFilter
   onActiveFilterChange: (v: ActiveFilter) => void
 
-  statusFilter: StatusFilter
-  onStatusFilterChange: (v: StatusFilter) => void
+  scanStatus: ScanStatusFilter
+  onScanStatusChange: (v: ScanStatusFilter) => void
 
   bulkToggling: boolean
   bulkAllActive: boolean
   onBulkToggle: () => void
   runningAll: boolean
   onRunAll: () => void
-  onReset: () => void
+
   hasActiveFilters: boolean
+  onReset: () => void
 
   onAddClick: () => void
 }
+
+const SCAN_STATUS_OPTIONS: { value: ScanStatusFilter; label: React.ReactNode; activeClass: string }[] = [
+  {
+    value: SCAN_STATUS_FILTER.OK,
+    label: <span className="flex items-center gap-1"><CheckCircle2 size={11} />OK</span>,
+    activeClass: 'text-emerald-300 bg-emerald-500/20 border-emerald-500/40',
+  },
+  {
+    value: SCAN_STATUS_FILTER.ERROR,
+    label: <span className="flex items-center gap-1"><XCircle size={11} />Errors</span>,
+    activeClass: 'text-red-300 bg-red-500/20 border-red-500/40',
+  },
+  {
+    value: SCAN_STATUS_FILTER.RUNNING,
+    label: <span className="flex items-center gap-1"><RefreshCw size={11} />Running</span>,
+    activeClass: 'text-blue-300 bg-blue-500/20 border-blue-500/40',
+  },
+  {
+    value: SCAN_STATUS_FILTER.QUEUED,
+    label: <span className="flex items-center gap-1"><Clock size={11} />Queued</span>,
+    activeClass: 'text-amber-300 bg-amber-500/20 border-amber-500/40',
+  },
+]
 
 function Divider() {
   return <div className="w-px h-[22px] bg-white/[0.08] mx-1 shrink-0" />
@@ -45,13 +72,14 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
     <div className="px-6 py-3 border-b border-white/[0.07] flex items-center gap-2">
       {/* Left: filters */}
       <div className="flex items-center gap-2 flex-wrap">
+        {/* Search */}
         <div className="relative">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             value={p.search}
             onChange={(e) => p.onSearchChange(e.target.value)}
             placeholder="Search companies…"
-            className="pl-7 pr-7 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg placeholder-slate-500 focus:outline-none focus:border-violet-500 w-56 text-white"
+            className="pl-7 pr-7 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg placeholder-slate-500 focus:outline-none focus:border-violet-500 w-52 text-white"
           />
           {p.search && (
             <button
@@ -64,6 +92,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
           )}
         </div>
 
+        {/* Adapter multi-select */}
         <MultiSelectDropdown
           aria-label="Filter by adapter"
           options={p.adapterOptions}
@@ -80,6 +109,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
 
         <Divider />
 
+        {/* Active filter */}
         <SegmentedSwitch
           aria-label="Active state"
           value={p.activeFilter}
@@ -93,17 +123,31 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
 
         <Divider />
 
-        <SegmentedSwitch
-          aria-label="Status filter"
-          value={p.statusFilter}
-          onChange={(v) => p.onStatusFilterChange(p.statusFilter === v ? 'none' : v)}
-          options={[
-            { value: STATUS_FILTER.ERROR, label: <span className="flex items-center gap-1"><XCircle size={11} />Errors</span>, accent: 'red' },
-            { value: STATUS_FILTER.RUNNING, label: <span className="flex items-center gap-1"><RefreshCw size={11} />Running</span>, accent: 'blue' },
-            { value: STATUS_FILTER.QUEUED, label: <span className="flex items-center gap-1"><Clock size={11} />Queued</span>, accent: 'amber' },
-          ]}
-        />
+        {/* Scan status filter pills — single select, click again to deselect */}
+        <div className="flex items-center gap-1">
+          {SCAN_STATUS_OPTIONS.map((opt) => {
+            const isActive = p.scanStatus === opt.value
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() =>
+                  p.onScanStatusChange(isActive ? SCAN_STATUS_FILTER.ALL : opt.value)
+                }
+                className={cn(
+                  'flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-full border transition-colors',
+                  isActive
+                    ? opt.activeClass
+                    : 'text-slate-400 bg-white/5 border-white/10 hover:border-white/20 hover:text-slate-300'
+                )}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
 
+        {/* Reset */}
         <button
           type="button"
           onClick={p.onReset}
@@ -150,6 +194,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         Add Company
       </button>
 
+      {/* Deactivate all confirm */}
       <Dialog.Root open={deactivateConfirmOpen} onOpenChange={setDeactivateConfirmOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
@@ -172,6 +217,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         </Dialog.Portal>
       </Dialog.Root>
 
+      {/* Run all confirm */}
       <Dialog.Root open={runAllConfirmOpen} onOpenChange={setRunAllConfirmOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/60 z-50" />

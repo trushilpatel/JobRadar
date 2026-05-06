@@ -12,12 +12,13 @@ import (
 	"github.com/trushilpatel/jobradar/common/kafka"
 	"github.com/trushilpatel/jobradar/service/application"
 	services3 "github.com/trushilpatel/jobradar/service/application/services"
+	services "github.com/trushilpatel/jobradar/service/company/services"
+	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	"github.com/trushilpatel/jobradar/service/dashboard"
 	services4 "github.com/trushilpatel/jobradar/service/dashboard/services"
 	services5 "github.com/trushilpatel/jobradar/service/insights/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	services2 "github.com/trushilpatel/jobradar/service/scan/services"
-	services "github.com/trushilpatel/jobradar/service/company/services"
 	"gorm.io/gorm"
 )
 
@@ -33,7 +34,9 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {
 
 	// ── Company (admin chain — needed by scan service + /admin/companies) ──────
 	scanSettingsRepository := services.NewScanSettingsRepositoryService(db)
-	companyAdminRepositoryService := services.NewAdminRepositoryService(db)
+	scanLogStoreForCompany := services2.NewLogStore(db)
+	scanHistoryReader := provideScanHistoryReader(scanLogStoreForCompany)
+	companyAdminRepositoryService := services.NewAdminRepositoryService(db, scanHistoryReader)
 	// nil cache: cache invalidation is a no-op in this wiring context; the
 	// multi-user setup in multiuser_setup.go passes a real cache to its own
 	// admin chain instance.
@@ -118,6 +121,12 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {
 
 func provideKafkaConfig(cfg *config.Config) config.KafkaConfig {
 	return cfg.Kafka
+}
+
+// provideScanHistoryReader binds ScanLogStore to the ScanHistoryReader interface
+// needed by company.AdminRepositoryService.
+func provideScanHistoryReader(s services2.ScanLogStore) companydto.ScanHistoryReader {
+	return s
 }
 
 func provideScanConfig(cfg *config.Config) services2.Config {
