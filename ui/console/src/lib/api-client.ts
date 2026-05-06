@@ -69,6 +69,12 @@ async function unwrap<T>(res: Response): Promise<T> {
   return body as T
 }
 
+// REQUEST_TIMEOUT_MS is how long rawFetch waits before aborting a stalled
+// request. 15 seconds covers slow API starts without causing false positives
+// on normal traffic. The spinner would otherwise hang indefinitely if the
+// backend drops the TCP connection mid-response (e.g., pod crash, DB lock).
+const REQUEST_TIMEOUT_MS = 15_000
+
 async function rawFetch(method: HttpMethod, path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers)
   const auth = await authHeader()
@@ -76,7 +82,29 @@ async function rawFetch(method: HttpMethod, path: string, init?: RequestInit): P
   if (init?.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
-  return fetch(buildUrl(path), { ...init, method, headers })
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  // Honour a caller-supplied signal by aborting on either trigger.
+  if (init?.signal) {
+    init.signal.addEventListener('abort', () => controller.abort())
+  }
+
+  try {
+    return await fetch(buildUrl(path), {
+      ...init,
+      method,
+      headers,
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('Request timed out')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 async function request<T>(method: HttpMethod, path: string, init?: RequestInit): Promise<T> {
