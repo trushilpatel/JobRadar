@@ -34,18 +34,21 @@ func (r *repositoryService) Append(ctx context.Context, entry auditmodel.Entry) 
 
 // List returns audit rows ordered by created_at desc with the given filters.
 // Total is the unfiltered-by-pagination count so the caller can render a
-// page indicator.
+// page indicator. ActorEmail is populated via a LEFT JOIN on the users table
+// so callers receive a human-readable identifier without a second round-trip.
 func (r *repositoryService) List(ctx context.Context, filter ListFilter) ([]auditmodel.Entry, int64, error) {
-	q := r.db.WithContext(ctx).Model(&auditmodel.Entry{})
+	// Build the reusable base query so conditions are applied identically
+	// to both the COUNT and the data fetch.
+	base := r.db.WithContext(ctx).Table("admin_audit_log")
 	if filter.ActorUserID != nil {
-		q = q.Where("actor_user_id = ?", *filter.ActorUserID)
+		base = base.Where("actor_user_id = ?", *filter.ActorUserID)
 	}
 	if filter.Action != nil {
-		q = q.Where("action = ?", *filter.Action)
+		base = base.Where("action = ?", *filter.Action)
 	}
 
 	var total int64
-	if err := q.Count(&total).Error; err != nil {
+	if err := base.Count(&total).Error; err != nil {
 		return nil, 0, domainerrs.ErrInternal.WithMessage("audit repo: count: " + err.Error())
 	}
 
@@ -59,7 +62,13 @@ func (r *repositoryService) List(ctx context.Context, filter ListFilter) ([]audi
 	}
 
 	var rows []auditmodel.Entry
-	if err := q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
+	err := base.
+		Select("admin_audit_log.*, u.email AS actor_email").
+		Joins("LEFT JOIN users u ON u.id = admin_audit_log.actor_user_id").
+		Order("admin_audit_log.created_at DESC").
+		Limit(limit).Offset(offset).
+		Scan(&rows).Error
+	if err != nil {
 		return nil, 0, domainerrs.ErrInternal.WithMessage("audit repo: list: " + err.Error())
 	}
 	return rows, total, nil

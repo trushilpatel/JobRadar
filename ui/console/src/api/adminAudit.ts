@@ -3,6 +3,7 @@ import { apiClient } from '@/lib/api-client'
 export interface AuditEntry {
   id: string
   actor_user_id: string | null
+  actor_email: string | null
   action: string
   target_type: string | null
   target_id: string | null

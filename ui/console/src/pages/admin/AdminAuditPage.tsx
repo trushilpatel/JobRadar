@@ -38,7 +38,7 @@ export function AdminAuditPage() {
       <div className="px-6 py-3 border-b border-white/[0.07] flex items-center gap-3 shrink-0 flex-wrap">
         <input
           type="text"
-          placeholder="Actor user ID…"
+          placeholder="Actor user ID or email…"
           value={actorInput}
           onChange={(e) => setActorInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
@@ -90,13 +90,15 @@ export function AdminAuditPage() {
                   <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">
                     {new Date(e.created_at).toLocaleString()}
                   </td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-slate-400 truncate max-w-[180px]">
-                    {e.actor_user_id ?? '—'}
+                  <td className="px-4 py-2.5 text-xs text-slate-400 truncate max-w-[200px]" title={e.actor_user_id ?? undefined}>
+                    {e.actor_email ?? e.actor_user_id ?? '—'}
                   </td>
                   <td className="px-4 py-2.5 text-xs text-violet-300 font-medium">{e.action}</td>
-                  <td className="px-4 py-2.5 text-xs text-slate-500">
-                    {e.target_type && e.target_id
-                      ? `${e.target_type}:${e.target_id}`
+                  <td className="px-4 py-2.5 text-xs text-slate-500" title={e.target_id ?? undefined}>
+                    {e.target_type
+                      ? e.target_id
+                        ? `${e.target_type} · ${e.target_id.slice(0, 8)}…`
+                        : e.target_type
                       : '—'}
                   </td>
                 </tr>
