@@ -13,6 +13,7 @@ interface JobsTableProps {
   limit: number
   total: number
   hasNextPage: boolean
+  hasActiveFilters?: boolean
   selectedIds: Set<string>
   activeJobId: string | null
   onRowClick: (job: Job) => void
@@ -43,6 +44,7 @@ export function JobsTable({
   limit,
   total,
   hasNextPage,
+  hasActiveFilters = false,
   selectedIds,
   activeJobId,
   onRowClick,
@@ -89,7 +91,11 @@ export function JobsTable({
           columns={columns}
           data={jobs}
           loading={loading}
-          emptyMessage={EMPTY_MESSAGES[tab]}
+          emptyMessage={
+            hasActiveFilters
+              ? 'No results match your current filters'
+              : EMPTY_MESSAGES[tab]
+          }
           getRowId={(j) => j.id}
           onRowClick={onRowClick}
           getRowClassName={(job) => {

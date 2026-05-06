@@ -134,6 +134,7 @@ export function JobsPage() {
           limit={jobs.limit}
           total={jobs.counts[jobs.tab] ?? 0}
           hasNextPage={jobs.hasNextPage}
+          hasActiveFilters={activeFilterCount > 0}
           selectedIds={selectedIds}
           activeJobId={activeJob?.id ?? null}
           onRowClick={setActiveJob}
