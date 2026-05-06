@@ -57,7 +57,7 @@ export function CompaniesPage() {
         <CompaniesTable
           companies={c.companies}
           total={c.total}
-          loading={c.isLoading}
+          loading={c.isLoading || c.isFetching}
           page={c.page}
           limit={c.limit}
           onPageChange={c.setPage}
