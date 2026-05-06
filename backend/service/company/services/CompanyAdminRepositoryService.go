@@ -307,7 +307,16 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 		q = q.Where("c.name ILIKE ?", "%"+filter.Search+"%")
 	}
 	if filter.Active != nil {
-		q = q.Where("s.active = ?", *filter.Active)
+		if *filter.Active {
+			// Only companies with an explicit active=true scan_settings row.
+			q = q.Where("s.active = true")
+		} else {
+			// Inactive = explicit active=false OR no scan_settings row at all
+			// (LEFT JOIN produces s.active = NULL for companies without a row;
+			// NULL = false evaluates to NULL in SQL, not true, so without the
+			// IS NULL arm those companies would be silently excluded).
+			q = q.Where("(s.active = false OR s.active IS NULL)")
+		}
 	}
 	if len(filter.AdapterTypes) > 0 {
 		q = q.Where("s.adapter_type IN ?", filter.AdapterTypes)
@@ -330,8 +339,13 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 		q = q.Where("s.consecutive_errors = 0 AND s.last_scan_at IS NOT NULL")
 	}
 
+	// Session({}) clones the statement so Distinct("c.id") only applies to
+	// the count query and does not mutate q. Without this, GORM carries the
+	// DISTINCT marker into the subsequent data query, generating
+	// SELECT DISTINCT c.* ... ORDER BY s.last_scan_at which PostgreSQL
+	// rejects when the ORDER BY column is not in the SELECT list.
 	var total int64
-	if err := q.Distinct("c.id").Count(&total).Error; err != nil {
+	if err := q.Session(&gorm.Session{}).Distinct("c.id").Count(&total).Error; err != nil {
 		return nil, 0, apperr.ErrInternal.WithMessage("failed to count companies")
 	}
 
