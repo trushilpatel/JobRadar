@@ -16,7 +16,9 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/common/identity"
 	"github.com/trushilpatel/jobradar/common/logger"
 	auditmodel "github.com/trushilpatel/jobradar/service/audit/models"
@@ -57,9 +59,16 @@ func AuditAdminMutation(svc auditService, log logger.Logger) func(http.Handler) 
 				actor := actor // capture
 				actorPtr = &actor
 			}
+			targetType := inferTargetType(r.URL.Path)
+			var targetID *string
+			if id := chi.URLParamFromCtx(r.Context(), "id"); id != "" {
+				targetID = &id
+			}
 			entry := auditmodel.Entry{
 				ActorUserID: actorPtr,
 				Action:      r.Method + " " + r.URL.Path,
+				TargetType:  targetType,
+				TargetID:    targetID,
 			}
 			if err := svc.Append(r.Context(), entry); err != nil {
 				log.Warn("audit: append failed",
@@ -82,4 +91,28 @@ func isMutatingMethod(method string) bool {
 	default:
 		return false
 	}
+}
+
+// inferTargetType extracts a human-readable entity type from an admin route
+// path. Admin paths follow the pattern /admin/{entity}/{id}/... so we split
+// and return the entity segment as the target type.
+//
+// Recognised entities: "companies" → "company", "users" → "user".
+// Returns nil for any path that does not match a known entity.
+func inferTargetType(path string) *string {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	// Expect at least /admin/{entity}
+	if len(parts) < 2 || parts[0] != "admin" {
+		return nil
+	}
+	var t string
+	switch parts[1] {
+	case "companies":
+		t = "company"
+	case "users":
+		t = "user"
+	default:
+		return nil
+	}
+	return &t
 }
