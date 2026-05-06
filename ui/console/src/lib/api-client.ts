@@ -25,31 +25,20 @@ async function refreshOnce(): Promise<boolean> {
   return pendingRefresh
 }
 
-async function signOutAndRedirect(): Promise<void> {
-  try {
-    await supabase.auth.signOut({ scope: 'global' })
-  } catch {
-    // ignore — we're redirecting anyway
-  }
+function signOutAndRedirect(): void {
+  // Fire-and-forget — don't await signOut so the redirect is never blocked by a slow/hanging network call
+  supabase.auth.signOut({ scope: 'global' }).catch(() => {})
   if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
     window.location.assign('/login')
   }
 }
 
 async function authHeader(): Promise<Record<string, string>> {
+  // Don't call refreshSession() here — Supabase's autoRefreshToken handles proactive scheduling.
+  // Calling it manually races with the internal timer and can burn the refresh token.
   const { data } = await supabase.auth.getSession()
-  const session = data.session
-  if (!session) return {}
-
-  const expiresAt = session.expires_at ?? 0
-  if (expiresAt > 0 && expiresAt - Math.floor(Date.now() / 1000) < 60) {
-    await refreshOnce()
-    const { data: fresh } = await supabase.auth.getSession()
-    const token = fresh.session?.access_token
-    return token ? { Authorization: `Bearer ${token}` } : {}
-  }
-
-  return { Authorization: `Bearer ${session.access_token}` }
+  const token = data.session?.access_token
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 function buildUrl(path: string): string {
@@ -101,7 +90,7 @@ async function request<T>(method: HttpMethod, path: string, init?: RequestInit):
   if (res.status === 401) {
     const refreshed = await refreshOnce()
     if (!refreshed) {
-      await signOutAndRedirect()
+      signOutAndRedirect()
       throw new Error('Unauthorized')
     }
     try {
@@ -110,7 +99,7 @@ async function request<T>(method: HttpMethod, path: string, init?: RequestInit):
       throw err instanceof Error ? err : new Error('Network error')
     }
     if (res.status === 401) {
-      await signOutAndRedirect()
+      signOutAndRedirect()
       throw new Error('Unauthorized')
     }
   }

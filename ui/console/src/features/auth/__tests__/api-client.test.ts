@@ -175,33 +175,11 @@ describe('apiClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  // ── Fix 2: proactive token refresh ─────────────────────────────────────────
-
-  it('refreshes proactively when token expires within 60 seconds', async () => {
-    const now = Math.floor(Date.now() / 1000)
-    getSession
-      .mockResolvedValueOnce({ data: { session: { access_token: 'expiring-token', expires_at: now + 30 } } })
-      .mockResolvedValueOnce({ data: { session: { access_token: 'fresh-token', expires_at: now + 3600 } } })
-    refreshSession.mockResolvedValue({ data: { session: { access_token: 'fresh-token' } }, error: null })
-
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { ok: true } }))
-    globalThis.fetch = fetchMock as unknown as typeof fetch
-
-    const { apiClient, __testing } = await import('@/lib/api-client')
-    __testing.resetPendingRefresh()
-    await apiClient.get('/secure')
-
-    // Proactive refresh — no 401 round-trip, only one fetch call
-    expect(refreshSession).toHaveBeenCalledTimes(1)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    const init = fetchMock.mock.calls[0][1] as RequestInit
-    expect((init.headers as Headers).get('Authorization')).toBe('Bearer fresh-token')
-  })
-
-  it('does not proactively refresh when token has ample time remaining', async () => {
-    const now = Math.floor(Date.now() / 1000)
+  it('never calls refreshSession from authHeader — relies on Supabase autoRefreshToken', async () => {
+    // authHeader() must not manually call refreshSession(); Supabase's autoRefreshToken handles
+    // proactive scheduling. A manual call races with the internal timer and burns the refresh token.
     getSession.mockResolvedValue({
-      data: { session: { access_token: 'valid-token', expires_at: now + 3600 } },
+      data: { session: { access_token: 'valid-token' } },
     })
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { ok: true } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
@@ -212,6 +190,8 @@ describe('apiClient', () => {
 
     expect(refreshSession).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(1)
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+    expect((init.headers as Headers).get('Authorization')).toBe('Bearer valid-token')
   })
 
   it('shows a warning toast on 429 with Retry-After header', async () => {
