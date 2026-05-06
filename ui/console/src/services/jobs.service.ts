@@ -19,11 +19,29 @@ export function avatarColor(name: string): string {
 
 // ── Salary formatting ─────────────────────────────────────────────────────────
 
+// Maps ISO 4217 currency codes → display symbols. Unknown codes fall back to
+// the raw code so we never silently swallow the currency information.
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$',
+  CAD: 'CA$',
+  GBP: '£',
+  EUR: '€',
+  AUD: 'A$',
+  NZD: 'NZ$',
+  INR: '₹',
+  JPY: '¥',
+  CNY: '¥',
+  SGD: 'S$',
+  CHF: 'CHF',
+}
+
 export function formatSalary(salary: SalaryRange | null | undefined): string | null {
   if (!salary) return null
-  const currency = salary.currency ?? '$'
+  // Resolve ISO code → symbol so we never render "USD137k" or "$ USD126k".
+  const rawCurrency = (salary.currency ?? '').toUpperCase()
+  const symbol = CURRENCY_SYMBOLS[rawCurrency] ?? (salary.currency || '$')
   const fmt = (n: number) =>
-    n >= 1000 ? `${currency}${Math.round(n / 1000)}k` : `${currency}${n}`
+    n >= 1000 ? `${symbol}${Math.round(n / 1000)}k` : `${symbol}${n}`
   if (salary.min && salary.max) return `${fmt(salary.min)} – ${fmt(salary.max)}`
   if (salary.min) return `${fmt(salary.min)}+`
   if (salary.max) return `up to ${fmt(salary.max)}`

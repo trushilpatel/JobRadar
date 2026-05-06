@@ -1,4 +1,4 @@
-import { X, ExternalLink, Wifi, Briefcase, DollarSign, Trash2, MapPin, ShieldAlert, Globe, BadgeCheck } from 'lucide-react'
+import { X, ExternalLink, Wifi, Briefcase, Trash2, MapPin, ShieldAlert, Globe, BadgeCheck } from 'lucide-react'
 import type { Job, JobStatus } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
 import { formatSalary } from '@/services/jobs.service'
@@ -64,8 +64,8 @@ export function JobDetailPanel({ job, onClose, onStatusChange, onDismiss }: JobD
             </span>
           ) : null}
           {salary && (
-            <span className="flex items-center gap-1 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">
-              <DollarSign size={11} /> {salary}
+            <span className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">
+              {salary}
             </span>
           )}
           {job.employ_type && (
