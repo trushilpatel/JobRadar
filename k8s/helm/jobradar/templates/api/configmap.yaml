@@ -13,6 +13,11 @@ data:
   JAEGER_ENDPOINT: {{ .Values.api.jaegerEndpoint | quote }}
   DB_SSLMODE: {{ .Values.api.dbSslmode | quote }}
   DB_PORT: {{ .Values.api.dbPort | quote }}
+  REDIS_ADDR: {{ .Values.api.redisAddr | quote }}
+  REDIS_DB: {{ .Values.api.redisDb | quote }}
+  RATE_LIMIT_READ_RPM: {{ .Values.api.rateLimitReadRpm | quote }}
+  RATE_LIMIT_WRITE_RPM: {{ .Values.api.rateLimitWriteRpm | quote }}
+  RATE_LIMIT_ADMIN_RPM: {{ .Values.api.rateLimitAdminRpm | quote }}
   SUPABASE_PROJECT_URL: {{ .Values.api.supabaseProjectUrl | quote }}
   JWT_CLOCK_SKEW_SECONDS: {{ .Values.api.jwtClockSkewSeconds | quote }}
   JWKS_CACHE_TTL_SECONDS: {{ .Values.api.jwksCacheTtlSeconds | quote }}

@@ -32,6 +32,11 @@ api:
   jaegerEndpoint: ""
   dbSslmode: require
   dbPort: "6543"
+  redisAddr: "redis:6379"
+  redisDb: "0"
+  rateLimitReadRpm: "300"
+  rateLimitWriteRpm: "60"
+  rateLimitAdminRpm: "300"
   # Set in values.local.yaml — do not commit real values here
   supabaseProjectUrl: ""
   jwtClockSkewSeconds: "60"
