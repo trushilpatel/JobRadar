@@ -59,7 +59,7 @@ func (r *adminRepositoryService) List(ctx context.Context, filter companydto.Com
 
 	historiesByID, err := r.scanHistoryReader.GetScanHistories(ctx, ids)
 	if err != nil {
-		return companydto.CompanyAdminListResult{}, err
+		return companydto.CompanyAdminListResult{}, apperr.ErrInternal.WithMessage("failed to fetch scan histories")
 	}
 
 	for _, c := range companies {

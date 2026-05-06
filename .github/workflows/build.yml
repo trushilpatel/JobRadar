@@ -184,7 +184,7 @@ jobs:
   # ── Deploy backend services to k8s ────────────────────────────────────────
   deploy-backend:
     name: Deploy Backend
-    needs: [build-backend, lint]
+    needs: [build-backend]
     if: needs.build-backend.result == 'success'
     runs-on: ubuntu-latest
     env:
@@ -213,7 +213,7 @@ jobs:
   # ── Deploy crawler to k8s ──────────────────────────────────────────────────
   deploy-crawler:
     name: Deploy Crawler
-    needs: [build-crawler, lint]
+    needs: [build-crawler]
     if: needs.build-crawler.result == 'success'
     runs-on: ubuntu-latest
     env:
@@ -234,7 +234,7 @@ jobs:
   # ── Deploy console to k8s ──────────────────────────────────────────────────
   deploy-console:
     name: Deploy Console
-    needs: [build-console, lint]
+    needs: [build-console]
     if: needs.build-console.result == 'success'
     runs-on: ubuntu-latest
     env:

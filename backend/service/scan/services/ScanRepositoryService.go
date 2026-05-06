@@ -472,7 +472,7 @@ func (s *scanLogStore) GetScanHistories(ctx context.Context, companyIDs []string
 			SELECT company_id, error,
 			       ROW_NUMBER() OVER (PARTITION BY company_id ORDER BY scanned_at DESC) AS rn
 			FROM company_scan_log
-			WHERE company_id IN (?)
+			WHERE company_id IN ?
 		) ranked
 		WHERE rn <= 10
 		ORDER BY company_id, rn DESC

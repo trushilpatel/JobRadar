@@ -110,13 +110,6 @@ func (f *fakeRoleService) Grant(_ context.Context, userID, roleID string, _ *str
 	return nil
 }
 
-func (f *fakeRoleService) hasRole(userID, role string) bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	_, ok := f.roles[userID][role]
-	return ok
-}
-
 // initIdentityTestPipeline boots the JWT pipeline with HS256 dev-token bypass
 // so identity tests can authenticate without crafting JWTs.
 func initIdentityTestPipeline(t *testing.T, devToken string) {
