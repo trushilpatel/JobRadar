@@ -145,8 +145,12 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, cursor str
 		query = query.Where("jobs.added_at >= NOW() - ? * INTERVAL '1 day'", *filter.DaysAdded)
 	}
 
+	// Build ORDER BY. The tiebreaker (jobs.added_at DESC, jobs.id DESC) is
+	// always appended so cursor-based pagination remains stable across pages
+	// when a custom primary sort is in use. The cursor encodes (added_at, id),
+	// so the secondary sort on added_at preserves page boundaries.
 	var jobs []jobmodel.Job
-	if err = query.Order("jobs.added_at DESC, jobs.id DESC").Limit(limit + 1).Find(&jobs).Error; err != nil {
+	if err = query.Order(sortOrderClause(filter.SortBy, filter.SortDir)).Limit(limit + 1).Find(&jobs).Error; err != nil {
 		return nil, "", err
 	}
 
@@ -157,6 +161,28 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, cursor str
 		jobs = jobs[:limit]
 	}
 	return jobs, next, nil
+}
+
+// sortOrderClause returns a safe ORDER BY clause from the caller-supplied sort
+// fields. Only whitelisted column names are accepted; unknown values fall back
+// to the default (added_at DESC). The tiebreaker is always appended so keyset
+// cursors encoded as (added_at, id) continue to bound subsequent pages.
+func sortOrderClause(sortBy, sortDir string) string {
+	dir := "DESC"
+	if sortDir == "asc" {
+		dir = "ASC"
+	}
+	switch sortBy {
+	case "title":
+		return "jobs.title " + dir + ", jobs.added_at DESC, jobs.id DESC"
+	case "company":
+		return "companies.name " + dir + ", jobs.added_at DESC, jobs.id DESC"
+	case "experience_years":
+		return "jobs.experience_years " + dir + " NULLS LAST, jobs.added_at DESC, jobs.id DESC"
+	default:
+		// added_at or unrecognised — default ordering
+		return "jobs.added_at " + dir + ", jobs.id DESC"
+	}
 }
 
 // GetJobByID returns the global job row plus its company; per-user state

@@ -75,6 +75,13 @@ func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
 			filter.DaysAdded = &n
 		}
 	}
+	// Whitelist sort_by values to prevent raw column injection.
+	if v := q.Get("sort_by"); v == "title" || v == "company" || v == "added_at" || v == "experience_years" {
+		filter.SortBy = v
+	}
+	if v := q.Get("sort_dir"); v == "asc" || v == "desc" {
+		filter.SortDir = v
+	}
 
 	page, err := h.next.List(r.Context(), filter, q.Get("cursor"), limit)
 	if err != nil {
