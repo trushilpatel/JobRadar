@@ -134,10 +134,11 @@ type JobStore interface {
 type UserJobStateRepository interface {
 	Get(ctx context.Context, userID, jobID string) (*jobmodel.UserJobState, error)
 	GetMany(ctx context.Context, userID string, jobIDs []string) (map[string]*jobmodel.UserJobState, error)
-	// GetJobsByStatus returns up to limit jobs for userID filtered by status,
-	// ordered by (jobs.added_at DESC, jobs.id DESC). Cursor format matches GetJobs.
+	// GetJobsByStatus returns up to limit jobs for userID with the given status
+	// and any additional filter criteria (search, companies, date range, etc.).
+	// Ordered by (jobs.added_at DESC, jobs.id DESC). Cursor format matches GetJobs.
 	// Drives from user_job_state so every page is a full limit-sized result set.
-	GetJobsByStatus(ctx context.Context, userID, status, cursor string, limit int) ([]jobmodel.Job, string, error)
+	GetJobsByStatus(ctx context.Context, userID string, filter dto.JobFilter, cursor string, limit int) ([]jobmodel.Job, string, error)
 	Upsert(ctx context.Context, userID, jobID string, state dto.UpsertState) error
 	UpsertBulkDismiss(ctx context.Context, userID string, jobIDs []string, reason, note string) error
 	Delete(ctx context.Context, userID, jobID string) error

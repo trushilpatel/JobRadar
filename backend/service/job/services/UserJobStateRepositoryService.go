@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
@@ -230,11 +231,11 @@ func (r *userJobStateRepository) CountsByUser(ctx context.Context, userID string
 	return out, nil
 }
 
-// GetJobsByStatus returns up to limit jobs for userID filtered by status,
-// ordered by (jobs.added_at DESC, jobs.id DESC) — same as the global feed.
-// Drives from user_job_state so every page is a full limit-sized result set.
-// Cursor format is identical to GetJobs (base64-encoded added_at|id).
-func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID, status, cursor string, limit int) (_ []jobmodel.Job, _ string, err error) {
+// GetJobsByStatus returns up to limit jobs for userID with the requested status,
+// honouring all additional filter criteria in filter (search, companies, date,
+// experience range, remote/on-site). Drives from user_job_state so every page
+// is a full limit-sized result set. Cursor format matches GetJobs.
+func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID string, filter dto.JobFilter, cursor string, limit int) (_ []jobmodel.Job, _ string, err error) {
 	ctx, span := tracing.Start(ctx, "job.userstate.GetJobsByStatus")
 	defer tracing.End(span, &err)
 
@@ -250,14 +251,69 @@ func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID, st
 	query := r.db.WithContext(ctx).
 		Model(&jobmodel.Job{}).
 		Joins("Company").
-		Joins("INNER JOIN user_job_state ujs ON ujs.job_id = jobs.id AND ujs.user_id = ? AND ujs.status = ?", userID, status)
+		Joins("INNER JOIN user_job_state ujs ON ujs.job_id = jobs.id AND ujs.user_id = ? AND ujs.status = ?", userID, filter.Status)
 
 	if !cursorAt.IsZero() {
 		query = query.Where("(jobs.added_at, jobs.id) < (?, ?)", cursorAt, cursorID)
 	}
 
+	// Apply the same filter predicates as GetJobs so search/companies/date/etc.
+	// work consistently across all status tabs, not just the "new" tab.
+	if filter.Search != "" {
+		term := "%" + filter.Search + "%"
+		query = query.Where(
+			"(jobs.title ILIKE ? OR jobs.location ILIKE ? OR companies.name ILIKE ?)",
+			term, term, term,
+		)
+	}
+	if len(filter.Companies) > 0 {
+		query = query.Where("companies.name IN ?", filter.Companies)
+	}
+	if filter.Remote != nil {
+		query = query.Where("jobs.remote = ?", *filter.Remote)
+	}
+	if filter.OnSite {
+		query = query.Where("jobs.remote = ?", false)
+	}
+	if len(filter.EmployTypes) > 0 {
+		query = query.Where("jobs.employ_type IN ?", filter.EmployTypes)
+	}
+	if filter.Sponsorship != nil {
+		query = query.Where("jobs.sponsorship = ?", *filter.Sponsorship)
+	}
+	if filter.NoRequirements {
+		query = query.Where("jobs.requires_citizen = ? AND jobs.security_clearance = ?", false, false)
+	}
+	if filter.RequiresCitizen != nil {
+		query = query.Where("jobs.requires_citizen = ?", *filter.RequiresCitizen)
+	}
+	if len(filter.ExperienceRanges) > 0 {
+		var clauses []string
+		var args []any
+		for _, rng := range filter.ExperienceRanges {
+			if rng.Max != nil {
+				if rng.Min == 0 {
+					clauses = append(clauses, "(jobs.experience_years <= ? OR jobs.experience_years IS NULL)")
+					args = append(args, *rng.Max)
+				} else {
+					clauses = append(clauses, "(jobs.experience_years > ? AND jobs.experience_years <= ?)")
+					args = append(args, rng.Min, *rng.Max)
+				}
+			} else {
+				clauses = append(clauses, "jobs.experience_years > ?")
+				args = append(args, rng.Min)
+			}
+		}
+		if len(clauses) > 0 {
+			query = query.Where("("+strings.Join(clauses, " OR ")+")", args...)
+		}
+	}
+	if filter.DaysAdded != nil {
+		query = query.Where("jobs.added_at >= NOW() - ? * INTERVAL '1 day'", *filter.DaysAdded)
+	}
+
 	var jobs []jobmodel.Job
-	if err = query.Order("jobs.added_at DESC, jobs.id DESC").Limit(limit + 1).Find(&jobs).Error; err != nil {
+	if err = query.Order(sortOrderClause(filter.SortBy, filter.SortDir)).Limit(limit + 1).Find(&jobs).Error; err != nil {
 		return nil, "", err
 	}
 

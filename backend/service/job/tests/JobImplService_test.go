@@ -125,12 +125,12 @@ func (f *fakeUserState) CountsByUser(_ context.Context, userID string) (jobdto.C
 	return f.countsResult, f.countsErr
 }
 
-func (f *fakeUserState) GetJobsByStatus(_ context.Context, userID, status, _ string, _ int) ([]jobmodel.Job, string, error) {
+func (f *fakeUserState) GetJobsByStatus(_ context.Context, userID string, filter jobdto.JobFilter, _ string, _ int) ([]jobmodel.Job, string, error) {
 	if userID == "" {
 		return nil, "", apperr.ErrInternal.WithMessage("user id required")
 	}
 	f.statusCalls++
-	f.lastStatusStatus = status
+	f.lastStatusStatus = filter.Status
 	return f.statusJobs, f.statusNext, f.statusErr
 }
 

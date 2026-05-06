@@ -180,7 +180,9 @@ func (s *implService) listByUserStatus(ctx context.Context, filter dto.JobFilter
 	defer tracing.End(span, &err)
 
 	userID := identity.UserIDFrom(ctx)
-	jobs, next, err := s.userState.GetJobsByStatus(ctx, userID, filter.Status, cursor, limit)
+	// Pass the full filter so search/companies/date/experience filters apply
+	// on status tabs, not just the "new" tab.
+	jobs, next, err := s.userState.GetJobsByStatus(ctx, userID, filter, cursor, limit)
 	if err != nil {
 		return dto.PageResult{}, apperr.ErrInternal.WithMessage("failed to fetch jobs by status")
 	}
