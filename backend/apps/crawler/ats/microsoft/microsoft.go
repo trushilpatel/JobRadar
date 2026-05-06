@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -249,7 +250,7 @@ func positionToItem(p position) types.FetchJobsItem {
 
 	return types.FetchJobsItem{
 		ID:             fmt.Sprintf("%s-%s", companycommon.AdapterMicrosoft, p.DisplayJobID),
-		Title:          p.Name,
+		Title:          stripReqID(p.Name),
 		URL:            internalURL, // Store internal URL for ID extraction
 		Location:       loc,
 		EmploymentType: jobcommon.EmployFullTime, // Default — detailed type comes from FetchJobContent
@@ -275,7 +276,7 @@ func detailToContent(p positionDetail) types.FetchJobContentResponse {
 
 	return types.FetchJobContentResponse{
 		ID:             fmt.Sprintf("%s-%s", companycommon.AdapterMicrosoft, p.DisplayJobID),
-		Title:          p.Name,
+		Title:          stripReqID(p.Name),
 		Location:       loc,
 		URL:            jobURL,
 		Description:    types.StripHTML(p.JobDescription),
@@ -287,6 +288,19 @@ func detailToContent(p positionDetail) types.FetchJobContentResponse {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+// msReqIDSuffix matches Microsoft internal req-ID suffixes appended to job
+// titles (e.g. "Software Engineer - 17248K", "Principal Engineer - MS-12345").
+// Pattern: optional whitespace, a dash separator, then an alphanumeric token
+// that contains at least one digit, at the very end of the string.
+var msReqIDSuffix = regexp.MustCompile(`\s+-\s+[A-Z0-9-]*\d[A-Z0-9-]*\s*$`)
+
+// stripReqID removes Microsoft req-ID suffixes from job title strings.
+// "Software Engineer - 17248K" → "Software Engineer"
+// Titles without a recognisable suffix are returned unchanged.
+func stripReqID(title string) string {
+	return strings.TrimSpace(msReqIDSuffix.ReplaceAllString(title, ""))
+}
 
 // extractPositionID extracts the int64 position ID from a URL like
 // "https://apply.careers.microsoft.com/careers/job/1812345678"
