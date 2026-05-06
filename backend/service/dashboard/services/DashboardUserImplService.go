@@ -112,12 +112,21 @@ func (s *userDashboardImplService) GetVelocity(ctx context.Context, limit int) (
 }
 
 // classifyVelocity computes a multiplier and velocity tag from 4-week counts.
+// When the prior three weeks are all zero (new company, or first data in the
+// window) and the current week has postings, we treat it as a spike rather
+// than normal — a multiplier of 1.0 (the old fallback) was always below the
+// 1.3 rising threshold, causing every new company to render "—" in the UI.
 func classifyVelocity(current, w1, w2, w3 int) (float64, string) {
 	avgPrior := float64(w1+w2+w3) / 3.0
 	var multiplier float64
-	if avgPrior == 0 {
-		multiplier = 1.0
-	} else {
+	switch {
+	case avgPrior == 0 && current > 0:
+		// No baseline yet but jobs posted this week — classify as spike.
+		multiplier = 3.0
+	case avgPrior == 0:
+		// No baseline and no current week postings — truly inactive.
+		multiplier = 0
+	default:
 		multiplier = float64(current) / avgPrior
 	}
 	multiplier = math.Round(multiplier*10) / 10

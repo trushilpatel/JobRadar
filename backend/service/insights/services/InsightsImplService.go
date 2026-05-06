@@ -36,12 +36,21 @@ func (s *implService) Velocity(ctx context.Context) (_ any, err error) {
 	return rows, nil
 }
 
+// classifyVelocity computes a multiplier and velocity tag from 4-week counts.
+// When the prior three weeks are all zero and the current week has postings,
+// we classify as spike rather than normal — a multiplier of 1.0 (old fallback)
+// is always below the 1.3 rising threshold, causing new companies to show "—".
 func classifyVelocity(current, w1, w2, w3 int) (float64, string) {
 	avgPrior := float64(w1+w2+w3) / 3.0
 	var multiplier float64
-	if avgPrior == 0 {
-		multiplier = 1.0
-	} else {
+	switch {
+	case avgPrior == 0 && current > 0:
+		// No baseline yet but jobs posted this week — classify as spike.
+		multiplier = 3.0
+	case avgPrior == 0:
+		// No baseline and no current week postings — truly inactive.
+		multiplier = 0
+	default:
 		multiplier = float64(current) / avgPrior
 	}
 	multiplier = math.Round(multiplier*10) / 10
