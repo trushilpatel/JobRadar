@@ -49,10 +49,14 @@ function HeatRow({
   slice,
   max,
   offset,
+  prevLastLabelMonth = '',
 }: {
   slice: Array<{ weekStart: string; count: number }>
   max: number
   offset: number
+  // When provided, suppress the col-0 label if it duplicates the last
+  // labeled month from the previous row (prevents "Sep … Sep" split).
+  prevLastLabelMonth?: string
 }) {
   return (
     <div className="space-y-1">
@@ -61,15 +65,21 @@ function HeatRow({
         className="grid"
         style={{ gridTemplateColumns: `repeat(${HALF}, 1fr)`, gap: '3px' }}
       >
-        {slice.map((w, col) => (
-          <div
-            key={col}
-            className="text-[10px] text-slate-600 text-center leading-none"
-            style={{ minWidth: 0 }}
-          >
-            {col % 4 === 0 ? monthLabel(w.weekStart) : ''}
-          </div>
-        ))}
+        {slice.map((w, col) => {
+          const label =
+            col % 4 === 0 && !(col === 0 && monthLabel(w.weekStart) === prevLastLabelMonth)
+              ? monthLabel(w.weekStart)
+              : ''
+          return (
+            <div
+              key={col}
+              className="text-[10px] text-slate-600 text-center leading-none"
+              style={{ minWidth: 0 }}
+            >
+              {label}
+            </div>
+          )
+        })}
       </div>
 
       {/* Cells */}
@@ -121,6 +131,12 @@ export function HeatmapPanel() {
   const firstHalf = weeks.slice(0, HALF)
   const secondHalf = weeks.slice(HALF)
 
+  // The last labeled column in firstHalf is at col 24 (largest multiple of 4
+  // within [0, HALF-1]=25). Compare it with secondHalf[0] to suppress the
+  // duplicate month label that appears when both rows start in the same month.
+  const lastLabelMonthInFirst =
+    firstHalf.length >= 25 ? monthLabel(firstHalf[24].weekStart) : ''
+
   return (
     <TooltipPrimitive.Provider delayDuration={120}>
       <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-5">
@@ -137,7 +153,12 @@ export function HeatmapPanel() {
         ) : (
           <div className="space-y-3">
             <HeatRow slice={firstHalf} max={max} offset={0} />
-            <HeatRow slice={secondHalf} max={max} offset={HALF} />
+            <HeatRow
+              slice={secondHalf}
+              max={max}
+              offset={HALF}
+              prevLastLabelMonth={lastLabelMonthInFirst}
+            />
 
             {/* Legend */}
             <div className="flex items-center justify-end gap-1.5">
