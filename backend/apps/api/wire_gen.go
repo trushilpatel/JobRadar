@@ -108,7 +108,11 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	pipelineService := services4.NewPipelineService(pipelineStore, lagReader)
+	retryDrainer, err := provideRetryDrainer(cfg)
+	if err != nil {
+		return nil, err
+	}
+	pipelineService := services4.NewPipelineService(pipelineStore, lagReader, retryDrainer)
 	dashboardRestService := services4.NewDashboardRestService(dashboardService, userDashboardService, pipelineService)
 	dashboardRestRouter := services4.NewRestRouter(dashboardRestService)
 
@@ -169,6 +173,11 @@ func provideApplicationListReader(s services3.ApplicationService) services4.Appl
 // provideLagReader creates a Kafka LagReader from the config.
 func provideLagReader(cfg *config.Config) (kafka.LagReader, error) {
 	return kafka.NewLagReader(cfg.Kafka)
+}
+
+// provideRetryDrainer creates a Kafka RetryDrainer from the config.
+func provideRetryDrainer(cfg *config.Config) (kafka.RetryDrainer, error) {
+	return kafka.NewRetryDrainer(cfg.Kafka)
 }
 
 // zeroJobCountReader is a placeholder JobCountReader that returns zeros.

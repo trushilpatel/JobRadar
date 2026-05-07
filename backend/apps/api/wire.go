@@ -84,6 +84,11 @@ func provideLagReader(cfg *config.Config) (kafka.LagReader, error) {
 	return kafka.NewLagReader(cfg.Kafka)
 }
 
+// provideRetryDrainer creates a Kafka RetryDrainer from the config.
+func provideRetryDrainer(cfg *config.Config) (kafka.RetryDrainer, error) {
+	return kafka.NewRetryDrainer(cfg.Kafka)
+}
+
 func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {
 	wire.Build(
 		provideCompanyConfig,

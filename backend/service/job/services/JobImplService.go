@@ -391,7 +391,20 @@ func (s *implService) GetCounts(ctx context.Context) (_ dto.Counts, err error) {
 	}
 
 	loader := func(ctx context.Context) (dto.Counts, error) {
-		return s.userState.CountsByUser(ctx, userID)
+		counts, err := s.userState.CountsByUser(ctx, userID)
+		if err != nil {
+			return dto.Counts{}, err
+		}
+		// Derive the "new" count: total jobs minus the sum of all explicit
+		// per-user statuses. Non-fatal — if CountAll fails, New stays 0.
+		if total, terr := s.jobs.CountAll(ctx); terr == nil {
+			sumNonNew := counts.Saved + counts.Applied + counts.Dismissed +
+				counts.Interviewing + counts.Offer + counts.Rejected
+			if total > sumNonNew {
+				counts.New = total - sumNonNew
+			}
+		}
+		return counts, nil
 	}
 	if s.cache == nil {
 		return loader(ctx)

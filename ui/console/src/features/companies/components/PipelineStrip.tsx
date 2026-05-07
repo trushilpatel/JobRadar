@@ -1,6 +1,7 @@
 import { AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePipelineStats } from '../hooks/usePipelineStats'
+import { RetryStage } from './RetryStage'
 
 function Stage({
   label,
@@ -40,10 +41,10 @@ function Arrow() {
 function Skeleton() {
   return (
     <div className="flex items-center gap-2 animate-pulse">
-      {[...Array(7)].map((_, i) => (
+      {[...Array(9)].map((_, i) => (
         <div key={i} className="flex items-center gap-1">
           <div className="w-14 h-8 bg-white/[0.04] rounded" />
-          {i < 6 && <div className="w-4 h-3 bg-white/[0.02] rounded" />}
+          {i < 8 && <div className="w-4 h-3 bg-white/[0.02] rounded" />}
         </div>
       ))}
     </div>
@@ -79,11 +80,15 @@ export function PipelineStrip() {
       <Arrow />
       <Stage label="Awaiting Filter" value={data.awaiting_filter} valueClass="text-violet-400" />
       <Arrow />
+      <RetryStage label="Filter Retrying" worker="filter" counts={data.filter_retries} />
+      <Arrow />
       <Stage
         label="Awaiting Enrichment"
         value={data.awaiting_enrichment}
         valueClass="text-violet-400"
       />
+      <Arrow />
+      <RetryStage label="Enricher Retrying" worker="enricher" counts={data.enricher_retries} />
       <Arrow />
       <Stage label="New Jobs (24h)" value={data.new_jobs_24h} valueClass="text-emerald-400" />
     </div>

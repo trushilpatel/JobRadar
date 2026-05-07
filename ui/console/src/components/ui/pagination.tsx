@@ -9,6 +9,7 @@ interface PaginationProps {
   onLimitChange?: (limit: number) => void
   limitOptions?: number[]
   className?: string
+  loading?: boolean
 }
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100]
@@ -21,6 +22,7 @@ export function Pagination({
   onLimitChange,
   limitOptions = PAGE_SIZE_OPTIONS,
   className,
+  loading,
 }: PaginationProps) {
   const pageCount = Math.max(1, Math.ceil(total / limit))
   const from = total === 0 ? 0 : (page - 1) * limit + 1
@@ -43,7 +45,7 @@ export function Pagination({
     <div className={cn('flex items-center justify-end gap-3 px-4 py-2.5', className)}>
       {/* Showing label */}
       <p className="text-xs text-slate-500 shrink-0 mr-1">
-        {total === 0 ? 'No results' : `Showing ${from}–${to} of ${total}`}
+        {loading ? null : total === 0 ? 'No results' : `Showing ${from}–${to} of ${total}`}
       </p>
 
       {/* Page controls */}

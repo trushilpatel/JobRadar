@@ -54,7 +54,8 @@ export interface JobCounts {
 export async function fetchJobs(
   filters: JobFilters,
   cursor = '',
-  limit = 20
+  limit = 20,
+  signal?: AbortSignal
 ): Promise<JobsPage> {
   const p = new URLSearchParams()
   p.set('status', filters.status)
@@ -70,7 +71,7 @@ export async function fetchJobs(
   if (filters.sortBy) p.set('sort_by', filters.sortBy)
   if (filters.sortDir) p.set('sort_dir', filters.sortDir)
 
-  const page = await apiClient.get<JobsPage>(`/jobs?${p}`)
+  const page = await apiClient.get<JobsPage>(`/jobs?${p}`, signal ? { signal } : undefined)
   return { ...page, items: page.items.map(normalizeJob) }
 }
 

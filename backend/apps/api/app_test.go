@@ -279,6 +279,10 @@ func (f *fakePipelineService) GetPipelineStats(_ context.Context) (*dashboarddto
 	return nil, nil
 }
 
+func (f *fakePipelineService) TriggerRetry(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
+}
+
 type fakeInsightsService struct{}
 
 func (f *fakeInsightsService) TechStack(_ context.Context) (any, error) { return nil, nil }

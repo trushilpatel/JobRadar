@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/trushil/Projects/JobRadar/backend/**)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(grep -n \"ScorerInput\\\\|ScoreBatch\\\\|Enrich\" /Users/trushil/Projects/JobRadar/backend/internal/llm/*.go)",
+      "Bash(make test:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}

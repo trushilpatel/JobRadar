@@ -1,10 +1,9 @@
 package dto
 
 // Counts holds the per-user count of jobs in each user_job_state status
-// bucket. "New" is computed elsewhere (it is the absence of a row), so it
-// is not a stored count — callers wanting "new" derive it from total jobs
-// minus the sum of these stored statuses.
+// bucket. New is derived: total jobs minus the sum of all non-new statuses.
 type Counts struct {
+	New          int64 `json:"new"`
 	Saved        int64 `json:"saved"`
 	Applied      int64 `json:"applied"`
 	Dismissed    int64 `json:"dismissed"`

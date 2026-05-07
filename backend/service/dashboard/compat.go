@@ -46,8 +46,8 @@ func NewPipelineStore(db *gorm.DB) services.PipelineStore {
 }
 
 // NewPipelineService constructs a PipelineService.
-func NewPipelineService(store services.PipelineStore, lag kafka.LagReader) services.PipelineService {
-	return services.NewPipelineService(store, lag)
+func NewPipelineService(store services.PipelineStore, lag kafka.LagReader, drainer kafka.RetryDrainer) services.PipelineService {
+	return services.NewPipelineService(store, lag, drainer)
 }
 
 // PipelineRestRouter is a compatibility alias for services.PipelineRestRouter.

@@ -6,9 +6,11 @@ import (
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 )
 
-// PipelineService assembles DB stats and Kafka lag into PipelineStats.
+// PipelineService assembles DB stats and Kafka lag into PipelineStats and
+// handles force-retry drain requests.
 type PipelineService interface {
 	GetPipelineStats(ctx context.Context) (*dto.PipelineStats, error)
+	TriggerRetry(ctx context.Context, worker, tier string) (int64, error)
 }
 
 // PipelineBaseService delegates all PipelineService methods to next.
@@ -24,4 +26,8 @@ func NewPipelineBaseService(next PipelineService) PipelineBaseService {
 
 func (b *PipelineBaseService) GetPipelineStats(ctx context.Context) (*dto.PipelineStats, error) {
 	return b.next.GetPipelineStats(ctx)
+}
+
+func (b *PipelineBaseService) TriggerRetry(ctx context.Context, worker, tier string) (int64, error) {
+	return b.next.TriggerRetry(ctx, worker, tier)
 }

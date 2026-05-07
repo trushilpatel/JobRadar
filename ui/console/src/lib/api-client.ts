@@ -84,9 +84,18 @@ async function rawFetch(method: HttpMethod, path: string, init?: RequestInit): P
   }
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  let timedOut = false
+  const timeoutId = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, REQUEST_TIMEOUT_MS)
+
   // Honour a caller-supplied signal by aborting on either trigger.
   if (init?.signal) {
+    if (init.signal.aborted) {
+      clearTimeout(timeoutId)
+      throw new DOMException('Aborted', 'AbortError')
+    }
     init.signal.addEventListener('abort', () => controller.abort())
   }
 
@@ -99,7 +108,11 @@ async function rawFetch(method: HttpMethod, path: string, init?: RequestInit): P
     })
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error('Request timed out')
+      // Only surface a user-visible timeout message when our timer fired.
+      // Aborts triggered by the caller's signal (e.g. TanStack Query
+      // cancellation) are re-thrown as-is so they propagate correctly.
+      if (timedOut) throw new Error('Request timed out')
+      throw err
     }
     throw err
   } finally {

@@ -3,11 +3,11 @@ package services
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
+	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
@@ -26,39 +26,149 @@ func NewJobStore(db *gorm.DB) JobStore {
 	return &jobStore{db: db}
 }
 
-// encodeCursor packs (added_at, id) into an opaque base64 string. Callers
-// treat the cursor as opaque; only this file knows the layout.
-func encodeCursor(t time.Time, id string) string {
-	raw := fmt.Sprintf("%d|%s", t.UnixNano(), id)
-	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+// cursorPayload is the sort-aware keyset cursor state serialised between
+// pages. All fields are exported for JSON round-tripping; callers treat the
+// base64-encoded string as opaque.
+type cursorPayload struct {
+	SortBy  string `json:"s"` // "added_at" | "title" | "company" | "experience_years"
+	SortDir string `json:"d"` // "asc" | "desc"
+	PrimVal string `json:"v"` // primary sort column value as string; "" means NULL / added_at sort
+	AddedAt int64  `json:"a"` // added_at.UnixNano() for tiebreaking
+	ID      string `json:"i"` // job ID for final tiebreaking
 }
 
-// decodeCursor unpacks an opaque cursor back into (added_at, id). An empty
-// cursor returns the zero values, signalling "first page".
-func decodeCursor(cursor string) (time.Time, string, error) {
+// encodeCursor packs the sort field, direction, primary sort value and the
+// (added_at, id) tiebreakers into an opaque base64-encoded JSON cursor.
+func encodeCursor(sortBy, sortDir, primVal string, addedAt time.Time, id string) string {
+	p := cursorPayload{
+		SortBy:  sortBy,
+		SortDir: sortDir,
+		PrimVal: primVal,
+		AddedAt: addedAt.UnixNano(),
+		ID:      id,
+	}
+	b, _ := json.Marshal(p)
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// decodeCursor unpacks an opaque cursor. An empty cursor returns nil (first
+// page). Unrecognised or corrupt formats also return nil so stale client-side
+// cursors gracefully restart from page 1 instead of surfacing a 400 error.
+func decodeCursor(cursor string) (*cursorPayload, error) {
 	if cursor == "" {
-		return time.Time{}, "", nil
+		return nil, nil
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {
-		return time.Time{}, "", errors.ErrBadRequest.WithMessage("invalid cursor")
+		return nil, nil // undecodable → first page
 	}
-	parts := strings.SplitN(string(raw), "|", 2)
-	if len(parts) != 2 {
-		return time.Time{}, "", errors.ErrBadRequest.WithMessage("invalid cursor")
+	var p cursorPayload
+	if err = json.Unmarshal(raw, &p); err != nil || p.ID == "" {
+		return nil, nil // old format or corrupted → first page
 	}
-	var nano int64
-	if _, err := fmt.Sscanf(parts[0], "%d", &nano); err != nil {
-		return time.Time{}, "", errors.ErrBadRequest.WithMessage("invalid cursor")
-	}
-	return time.Unix(0, nano), parts[1], nil
+	return &p, nil
 }
 
-// GetJobs returns up to limit+1 rows ordered by (added_at DESC, id DESC).
-// The +1 row, if present, becomes the next cursor. The returned slice
-// always contains <= limit rows. Filters apply only to the global jobs
-// table — per-user state filtering (saved/applied/dismissed) happens in
-// the impl service AFTER cache + overlay.
+// buildCursor constructs the correct opaque cursor for the last row on the
+// current page given the active sort column and direction.
+func buildCursor(sortBy, sortDir string, job jobmodel.Job) string {
+	var primVal string
+	switch sortBy {
+	case "title":
+		primVal = job.Title
+	case "company":
+		primVal = job.Company.Name
+	case "experience_years":
+		if job.ExperienceYears != nil {
+			primVal = strconv.Itoa(*job.ExperienceYears)
+		} // nil ExperienceYears → primVal stays "" (signals NULL)
+	// "added_at" and unrecognised: primVal stays ""; tiebreakers carry the position
+	}
+	return encodeCursor(sortBy, sortDir, primVal, job.AddedAt, job.ID)
+}
+
+// applyCursorPredicate adds the keyset WHERE predicate that bounds the next
+// page based on the active sort column. p == nil means first page (no WHERE
+// applied). The predicate mirrors the ORDER BY produced by sortOrderClause.
+func applyCursorPredicate(query *gorm.DB, p *cursorPayload) *gorm.DB {
+	if p == nil {
+		return query
+	}
+	addedAt := time.Unix(0, p.AddedAt)
+
+	switch p.SortBy {
+	case "title":
+		// ORDER: jobs.title {dir}, jobs.added_at DESC, jobs.id DESC
+		if p.SortDir == "asc" {
+			return query.Where(
+				"jobs.title > ? OR (jobs.title = ? AND (jobs.added_at, jobs.id) < (?, ?))",
+				p.PrimVal, p.PrimVal, addedAt, p.ID,
+			)
+		}
+		return query.Where(
+			"jobs.title < ? OR (jobs.title = ? AND (jobs.added_at, jobs.id) < (?, ?))",
+			p.PrimVal, p.PrimVal, addedAt, p.ID,
+		)
+
+	case "company":
+		// ORDER: companies.name {dir}, jobs.added_at DESC, jobs.id DESC
+		if p.SortDir == "asc" {
+			return query.Where(
+				"companies.name > ? OR (companies.name = ? AND (jobs.added_at, jobs.id) < (?, ?))",
+				p.PrimVal, p.PrimVal, addedAt, p.ID,
+			)
+		}
+		return query.Where(
+			"companies.name < ? OR (companies.name = ? AND (jobs.added_at, jobs.id) < (?, ?))",
+			p.PrimVal, p.PrimVal, addedAt, p.ID,
+		)
+
+	case "experience_years":
+		return applyExperienceCursorPredicate(query, p, addedAt)
+
+	default: // "added_at" and unrecognised
+		// ORDER: jobs.added_at {dir}, jobs.id DESC
+		if p.SortDir == "asc" {
+			// Next-page rows have a newer added_at, or same added_at with a smaller id.
+			return query.Where(
+				"jobs.added_at > ? OR (jobs.added_at = ? AND jobs.id < ?)",
+				addedAt, addedAt, p.ID,
+			)
+		}
+		// Default (desc): rows strictly older than the cursor.
+		return query.Where("(jobs.added_at, jobs.id) < (?, ?)", addedAt, p.ID)
+	}
+}
+
+// applyExperienceCursorPredicate handles the nullable experience_years column
+// with NULLS LAST semantics (matches sortOrderClause).
+func applyExperienceCursorPredicate(query *gorm.DB, p *cursorPayload, addedAt time.Time) *gorm.DB {
+	const tiebreak = "(jobs.added_at, jobs.id) < (?, ?)"
+
+	if p.PrimVal == "" {
+		// Cursor sits on a NULL row: next page is more NULL rows, tiebroken.
+		return query.Where("jobs.experience_years IS NULL AND "+tiebreak, addedAt, p.ID)
+	}
+
+	expYears, _ := strconv.Atoi(p.PrimVal)
+
+	if p.SortDir == "asc" {
+		// ASC NULLS LAST: 0, 1, 2, ..., NULL
+		return query.Where(
+			"(jobs.experience_years > ?) OR (jobs.experience_years = ? AND "+tiebreak+") OR jobs.experience_years IS NULL",
+			expYears, expYears, addedAt, p.ID,
+		)
+	}
+	// DESC NULLS LAST: MAX, ..., 1, 0, NULL
+	return query.Where(
+		"(jobs.experience_years < ?) OR (jobs.experience_years = ? AND "+tiebreak+") OR jobs.experience_years IS NULL",
+		expYears, expYears, addedAt, p.ID,
+	)
+}
+
+// GetJobs returns up to limit+1 rows ordered by sortOrderClause.
+// The +1 probe row drives next-cursor generation. Filters apply only to the
+// global jobs table; per-user state filtering happens in the impl service.
 func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, cursor string, limit int) (_ []jobmodel.Job, _ string, err error) {
 	ctx, span := tracing.Start(ctx, "job.store.GetJobs")
 	defer tracing.End(span, &err)
@@ -70,20 +180,13 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, cursor str
 		limit = 100
 	}
 
-	cursorAt, cursorID, err := decodeCursor(cursor)
+	p, err := decodeCursor(cursor)
 	if err != nil {
 		return nil, "", err
 	}
 
 	query := s.db.WithContext(ctx).Model(&jobmodel.Job{}).Joins("Company")
-
-	// Keyset window: rows strictly older than the cursor (added_at, id).
-	if !cursorAt.IsZero() {
-		query = query.Where(
-			"(jobs.added_at, jobs.id) < (?, ?)",
-			cursorAt, cursorID,
-		)
-	}
+	query = applyCursorPredicate(query, p)
 
 	if filter.Search != "" {
 		term := "%" + filter.Search + "%"
@@ -145,10 +248,6 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, cursor str
 		query = query.Where("jobs.added_at >= NOW() - ? * INTERVAL '1 day'", *filter.DaysAdded)
 	}
 
-	// Build ORDER BY. The tiebreaker (jobs.added_at DESC, jobs.id DESC) is
-	// always appended so cursor-based pagination remains stable across pages
-	// when a custom primary sort is in use. The cursor encodes (added_at, id),
-	// so the secondary sort on added_at preserves page boundaries.
 	var jobs []jobmodel.Job
 	if err = query.Order(sortOrderClause(filter.SortBy, filter.SortDir)).Limit(limit + 1).Find(&jobs).Error; err != nil {
 		return nil, "", err
@@ -156,8 +255,7 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, cursor str
 
 	var next string
 	if len(jobs) > limit {
-		last := jobs[limit-1]
-		next = encodeCursor(last.AddedAt, last.ID)
+		next = buildCursor(filter.SortBy, filter.SortDir, jobs[limit-1])
 		jobs = jobs[:limit]
 	}
 	return jobs, next, nil
@@ -165,8 +263,9 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, cursor str
 
 // sortOrderClause returns a safe ORDER BY clause from the caller-supplied sort
 // fields. Only whitelisted column names are accepted; unknown values fall back
-// to the default (added_at DESC). The tiebreaker is always appended so keyset
-// cursors encoded as (added_at, id) continue to bound subsequent pages.
+// to the default (added_at DESC). The tiebreaker (added_at DESC, id DESC) is
+// always appended so keyset cursors encoded as (sortVal, added_at, id) continue
+// to bound subsequent pages correctly.
 func sortOrderClause(sortBy, sortDir string) string {
 	dir := "DESC"
 	if sortDir == "asc" {
@@ -248,8 +347,7 @@ func (s *jobStore) GetJobsAddedByDay(ctx context.Context, days int) (results []d
 	return results, err
 }
 
-// CountAll returns the total number of rows in the jobs table. Used to
-// derive the per-user "new" count (total − sum(per-user statuses)).
+// CountAll returns the total number of rows in the jobs table.
 func (s *jobStore) CountAll(ctx context.Context) (_ int64, err error) {
 	ctx, span := tracing.Start(ctx, "job.store.CountAll")
 	defer tracing.End(span, &err)

@@ -243,7 +243,7 @@ func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID str
 		return nil, "", errNoUser()
 	}
 
-	cursorAt, cursorID, err := decodeCursor(cursor)
+	p, err := decodeCursor(cursor)
 	if err != nil {
 		return nil, "", err
 	}
@@ -253,9 +253,7 @@ func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID str
 		Joins("Company").
 		Joins("INNER JOIN user_job_state ujs ON ujs.job_id = jobs.id AND ujs.user_id = ? AND ujs.status = ?", userID, filter.Status)
 
-	if !cursorAt.IsZero() {
-		query = query.Where("(jobs.added_at, jobs.id) < (?, ?)", cursorAt, cursorID)
-	}
+	query = applyCursorPredicate(query, p)
 
 	// Apply the same filter predicates as GetJobs so search/companies/date/etc.
 	// work consistently across all status tabs, not just the "new" tab.
@@ -319,8 +317,7 @@ func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID str
 
 	var next string
 	if len(jobs) > limit {
-		last := jobs[limit-1]
-		next = encodeCursor(last.AddedAt, last.ID)
+		next = buildCursor(filter.SortBy, filter.SortDir, jobs[limit-1])
 		jobs = jobs[:limit]
 	}
 	return jobs, next, nil

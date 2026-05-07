@@ -115,6 +115,7 @@ export function JobsTable({
           limit={limit}
           onPageChange={handlePageChange}
           onLimitChange={(l) => { onLimitChange(l); onPageChange(1) }}
+          loading={loading}
         />
       </div>
     </div>

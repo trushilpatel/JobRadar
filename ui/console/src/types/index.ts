@@ -234,13 +234,22 @@ export interface TechTrends {
   new_entrants: TechTrendRow[]
 }
 
+export interface RetryTierCounts {
+  '1m': number
+  '10m': number
+  '1h': number
+  dlq: number
+}
+
 export interface PipelineStats {
   total_companies: number
   active_companies: number
   queued: number
   crawling: number
   awaiting_filter: number
+  filter_retries: RetryTierCounts
   awaiting_enrichment: number
+  enricher_retries: RetryTierCounts
   new_jobs_24h: number
   errors_24h: number
 }

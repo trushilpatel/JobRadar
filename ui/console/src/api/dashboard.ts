@@ -8,6 +8,7 @@ import type {
   CompanyVelocityRow,
   TechTrends,
   PipelineStats,
+  RetryTierCounts,
 } from '@/types'
 import { apiClient } from '@/lib/api-client'
 
@@ -97,16 +98,26 @@ export async function fetchTechTrends(): Promise<TechTrends> {
 export async function fetchPipelineStats(): Promise<PipelineStats> {
   // Phase 2: pipeline moved to /admin/dashboard/pipeline (admin-only)
   const data = await apiClient.get<Partial<PipelineStats> | null>('/admin/dashboard/pipeline')
+  const emptyRetries: RetryTierCounts = { '1m': 0, '10m': 0, '1h': 0, dlq: 0 }
   return {
     total_companies: data?.total_companies ?? 0,
     active_companies: data?.active_companies ?? 0,
     queued: data?.queued ?? 0,
     crawling: data?.crawling ?? 0,
     awaiting_filter: data?.awaiting_filter ?? 0,
+    filter_retries: data?.filter_retries ?? emptyRetries,
     awaiting_enrichment: data?.awaiting_enrichment ?? 0,
+    enricher_retries: data?.enricher_retries ?? emptyRetries,
     new_jobs_24h: data?.new_jobs_24h ?? 0,
     errors_24h: data?.errors_24h ?? 0,
   }
+}
+
+export async function triggerRetry(
+  worker: 'filter' | 'enricher',
+  tier: '1m' | '10m' | '1h' | 'dlq'
+): Promise<{ drained: number }> {
+  return apiClient.post<{ drained: number }>('/admin/dashboard/pipeline/retry', { worker, tier })
 }
 
 export async function updateApplicationStage(id: number, stage: string): Promise<void> {

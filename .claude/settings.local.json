@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "WebFetch(domain:docs.getbifrost.ai)"
+    ]
+  }
+}

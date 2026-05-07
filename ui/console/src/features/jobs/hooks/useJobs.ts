@@ -82,7 +82,7 @@ export function useJobs() {
 
   const query = useQuery({
     queryKey: ['jobs', filters, currentCursor, limit],
-    queryFn: () => fetchJobs(filters, currentCursor, limit),
+    queryFn: ({ signal }) => fetchJobs(filters, currentCursor, limit, signal),
     staleTime: 30_000,
   })
 

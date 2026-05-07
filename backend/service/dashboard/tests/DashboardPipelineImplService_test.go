@@ -23,6 +23,16 @@ func (f *fakeLagReader) GetLag(_ context.Context, groupID, _ string) (int64, err
 	return f.lags[groupID], f.err
 }
 
+// fakeDrainer is a test double for kafka.RetryDrainer.
+type fakeDrainer struct {
+	drained int64
+	err     error
+}
+
+func (f *fakeDrainer) Drain(_ context.Context, _, _, _ string) (int64, error) {
+	return f.drained, f.err
+}
+
 // fakePipelineStore is a test double for PipelineStore.
 type fakePipelineStore struct {
 	stats dto.PipelineDBStats
@@ -45,8 +55,16 @@ func TestPipelineService_GetPipelineStats_OK(t *testing.T) {
 			PipelinePending: 12,
 		}},
 		&fakeLagReader{lags: map[string]int64{
-			"job-post-analyzer": 3,
+			"job-post-analyzer":                      3,
+			"job-listing-relevance-filter-retry-1m":  4,
+			"job-listing-relevance-filter-retry-10m": 5,
+			"job-listing-relevance-filter-retry-1h":  6,
+			"jobradar-dlq-observer":                  1,
+			"job-post-analyzer-retry-1m":             2,
+			"job-post-analyzer-retry-10m":            3,
+			"job-post-analyzer-retry-1h":             1,
 		}},
+		&fakeDrainer{},
 	)
 
 	stats, err := svc.GetPipelineStats(context.Background())
@@ -63,6 +81,21 @@ func TestPipelineService_GetPipelineStats_OK(t *testing.T) {
 	if stats.AwaitingEnrichment != 3 {
 		t.Errorf("AwaitingEnrichment = %d, want 3 (job-post-analyzer lag)", stats.AwaitingEnrichment)
 	}
+	if stats.FilterRetries.Tier1m != 4 {
+		t.Errorf("FilterRetries.Tier1m = %d, want 4", stats.FilterRetries.Tier1m)
+	}
+	if stats.FilterRetries.Tier10m != 5 {
+		t.Errorf("FilterRetries.Tier10m = %d, want 5", stats.FilterRetries.Tier10m)
+	}
+	if stats.FilterRetries.Tier1h != 6 {
+		t.Errorf("FilterRetries.Tier1h = %d, want 6", stats.FilterRetries.Tier1h)
+	}
+	if stats.FilterRetries.DLQ != 1 {
+		t.Errorf("FilterRetries.DLQ = %d, want 1", stats.FilterRetries.DLQ)
+	}
+	if stats.EnricherRetries.Tier1m != 2 {
+		t.Errorf("EnricherRetries.Tier1m = %d, want 2", stats.EnricherRetries.Tier1m)
+	}
 	if stats.NewJobs24h != 5 {
 		t.Errorf("NewJobs24h = %d, want 5", stats.NewJobs24h)
 	}
@@ -72,17 +105,18 @@ func TestPipelineService_GetPipelineStats_KafkaError(t *testing.T) {
 	svc := services.NewPipelineService(
 		&fakePipelineStore{stats: dto.PipelineDBStats{TotalCompanies: 5}},
 		&fakeLagReader{lags: nil, err: errors.New("kafka unavailable")},
+		&fakeDrainer{},
 	)
 
 	stats, err := svc.GetPipelineStats(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if stats.AwaitingFilter != 0 {
-		t.Errorf("AwaitingFilter = %d, want 0 on kafka error", stats.AwaitingFilter)
-	}
 	if stats.AwaitingEnrichment != 0 {
 		t.Errorf("AwaitingEnrichment = %d, want 0 on kafka error", stats.AwaitingEnrichment)
+	}
+	if stats.FilterRetries.Tier1m != 0 {
+		t.Errorf("FilterRetries.Tier1m = %d, want 0 on kafka error", stats.FilterRetries.Tier1m)
 	}
 }
 
@@ -90,10 +124,58 @@ func TestPipelineService_GetPipelineStats_StoreError(t *testing.T) {
 	svc := services.NewPipelineService(
 		&fakePipelineStore{err: errors.New("db down")},
 		&fakeLagReader{},
+		&fakeDrainer{},
 	)
 
 	_, err := svc.GetPipelineStats(context.Background())
 	if err == nil {
 		t.Fatal("expected error from store failure, got nil")
+	}
+}
+
+func TestPipelineService_TriggerRetry_OK(t *testing.T) {
+	svc := services.NewPipelineService(
+		&fakePipelineStore{},
+		&fakeLagReader{},
+		&fakeDrainer{drained: 42},
+	)
+
+	n, err := svc.TriggerRetry(context.Background(), "filter", "1m")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 42 {
+		t.Errorf("drained = %d, want 42", n)
+	}
+}
+
+func TestPipelineService_TriggerRetry_UnknownWorker(t *testing.T) {
+	svc := services.NewPipelineService(&fakePipelineStore{}, &fakeLagReader{}, &fakeDrainer{})
+
+	_, err := svc.TriggerRetry(context.Background(), "unknown", "1m")
+	if err == nil {
+		t.Fatal("expected error for unknown worker, got nil")
+	}
+}
+
+func TestPipelineService_TriggerRetry_UnknownTier(t *testing.T) {
+	svc := services.NewPipelineService(&fakePipelineStore{}, &fakeLagReader{}, &fakeDrainer{})
+
+	_, err := svc.TriggerRetry(context.Background(), "filter", "99m")
+	if err == nil {
+		t.Fatal("expected error for unknown tier, got nil")
+	}
+}
+
+func TestPipelineService_TriggerRetry_DrainerError(t *testing.T) {
+	svc := services.NewPipelineService(
+		&fakePipelineStore{},
+		&fakeLagReader{},
+		&fakeDrainer{err: errors.New("kafka unavailable")},
+	)
+
+	_, err := svc.TriggerRetry(context.Background(), "enricher", "10m")
+	if err == nil {
+		t.Fatal("expected error from drainer failure, got nil")
 	}
 }

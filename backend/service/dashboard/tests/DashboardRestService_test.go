@@ -122,6 +122,10 @@ func (f *fakePipelineService) GetPipelineStats(_ context.Context) (*dto.Pipeline
 	return f.stats, f.err
 }
 
+func (f *fakePipelineService) TriggerRetry(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
+}
+
 // Phase 2: /dashboard/pipeline moved to /admin/dashboard/pipeline (PipelineRestRouter).
 // The following tests use PipelineRestService + PipelineRestRouter directly.
 
