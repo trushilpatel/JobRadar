@@ -4,7 +4,8 @@
       "Bash",
       "Skill(update-config)",
       "Skill(update-config:*)",
-      "WebFetch(domain:docs.getbifrost.ai)"
+      "WebFetch(domain:docs.getbifrost.ai)",
+      "Bash(git add *)"
     ]
   }
 }
