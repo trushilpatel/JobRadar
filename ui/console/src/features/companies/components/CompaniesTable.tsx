@@ -53,6 +53,7 @@ export function CompaniesTable({
 
       <div className="border-t border-white/[0.07] shrink-0">
         <Pagination
+          mode="offset"
           page={page}
           total={total}
           limit={limit}

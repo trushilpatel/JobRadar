@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useMemo } from 'react'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
 import { fetchJobs, fetchJobCounts, fetchJobCompanies, type JobFilters } from '@/api/jobs'
 import type { SortingState } from '@/components/ui/data-table'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 
 export type TabKey = 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected'
 export type DateFilter = 'all' | '24h' | '7d' | '30d'
@@ -19,40 +20,25 @@ export function useJobs() {
   // Filter state
   const initialCompanies = (location.state as { companies?: string[] } | null)?.companies ?? []
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>(initialCompanies)
-  // Single 3-way location filter — replaces the old pair of independent booleans
   const [locationFilter, setLocationFilter] = useState<LocationFilter>('any')
   const [expFilter, setExpFilter] = useState<string[]>([])
   const [dateFilter, setDateFilter] = useState<DateFilter>(initialDateFilter)
 
-  // Search: raw value drives the input; debouncedSearch drives the API query
-  const [searchQuery, setSearchQueryRaw] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function setSearchQuery(value: string) {
-    setSearchQueryRaw(value)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => setDebouncedSearch(value), 300)
-  }
-
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-    }
-  }, [])
+  // Search: raw value drives the input; debounced value drives the API query
+  const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearch = useDebouncedValue(searchQuery, 300)
 
   // Sorting
   const [sorting, setSorting] = useState<SortingState>([])
 
-  // Cursor-based pagination: cursors[0]="" (first page), cursors[n] = next_cursor from page n-1
-  const [cursors, setCursors] = useState<string[]>([''])
+  // Cursor-based pagination via useInfiniteQuery: pages are walked one at a time;
+  // pageIndex is the currently displayed page within the fetched pages array.
+  const [pageIndex, setPageIndex] = useState(0)
   const [limit, setLimit] = useState(20)
-  const page = cursors.length // 1-indexed page number for display
 
   const sortBy = sorting[0]?.id
   const sortDir = sorting[0] ? (sorting[0].desc ? 'desc' : 'asc') : undefined
 
-  // Stable filter object — debouncedSearch prevents a query per keystroke
   const filters = useMemo<JobFilters>(
     () => ({
       status: tab,
@@ -69,22 +55,31 @@ export function useJobs() {
     [tab, debouncedSearch, selectedCompanies, locationFilter, expFilter, dateFilter, sortBy, sortDir]
   )
 
-  // Reset cursor to page 1 when filters change. Adjusting state during render
-  // (storing previous value + comparing) is the React-recommended alternative to
-  // useEffect for derived state resets — avoids a second render pass from the effect.
-  const [prevFilters, setPrevFilters] = useState(filters)
-  if (prevFilters !== filters) {
-    setPrevFilters(filters)
-    setCursors([''])
+  // Reset pageIndex when filters/limit change. Adjusting state during render
+  // (storing previous value + comparing) is the React-recommended alternative
+  // to useEffect for derived state resets.
+  const [prevKey, setPrevKey] = useState({ filters, limit })
+  if (prevKey.filters !== filters || prevKey.limit !== limit) {
+    setPrevKey({ filters, limit })
+    setPageIndex(0)
   }
 
-  const currentCursor = cursors[cursors.length - 1]
-
-  const query = useQuery({
-    queryKey: ['jobs', filters, currentCursor, limit],
-    queryFn: ({ signal }) => fetchJobs(filters, currentCursor, limit, signal),
+  const query = useInfiniteQuery({
+    queryKey: ['jobs', filters, limit],
+    queryFn: ({ pageParam, signal }) => fetchJobs(filters, pageParam, limit, signal),
+    initialPageParam: '',
+    getNextPageParam: (last) => (last.next_cursor ? last.next_cursor : undefined),
     staleTime: 30_000,
   })
+
+  const fetchedPages = query.data?.pages ?? []
+  const currentPage = fetchedPages[pageIndex]
+  const jobs = useMemo(() => currentPage?.items ?? [], [currentPage])
+  const itemsOnPage = jobs.length
+
+  const hasPrevPage = pageIndex > 0
+  const hasNextPage =
+    pageIndex < fetchedPages.length - 1 || (query.hasNextPage ?? false)
 
   const countsQuery = useQuery({
     queryKey: ['jobs', 'counts'],
@@ -92,11 +87,6 @@ export function useJobs() {
     staleTime: 30_000,
   })
 
-  // Stable reference — avoids companies useMemo invalidating on every render
-  // when query.data?.items is undefined (the `?? []` fallback creates a new array each time).
-  const jobs = useMemo(() => query.data?.items ?? [], [query.data])
-  const nextCursor = query.data?.next_cursor ?? ''
-  const hasNextPage = nextCursor !== ''
   const counts: Partial<Record<TabKey, number>> = countsQuery.data
     ? {
         new: countsQuery.data.new,
@@ -116,42 +106,51 @@ export function useJobs() {
   const companies = companiesQuery.data ?? []
 
   function resetFilters() {
-    setSearchQueryRaw('')
-    setDebouncedSearch('')
-    if (debounceRef.current) clearTimeout(debounceRef.current)
+    setSearchQuery('')
     setSelectedCompanies([])
     setLocationFilter('any')
     setExpFilter([])
     setDateFilter('all')
     setSorting([])
-    setCursors([''])
+    setPageIndex(0)
   }
 
   function handleSortingChange(newSorting: SortingState) {
     setSorting(newSorting)
-    setCursors([''])
+    setPageIndex(0)
   }
 
   function goToNextPage() {
-    if (hasNextPage) setCursors((prev) => [...prev, nextCursor])
+    if (pageIndex < fetchedPages.length - 1) {
+      setPageIndex((i) => i + 1)
+    } else if (query.hasNextPage && !query.isFetchingNextPage) {
+      void query.fetchNextPage().then((res) => {
+        // Advance only if the fetch added a new page
+        if ((res.data?.pages.length ?? 0) > fetchedPages.length) {
+          setPageIndex((i) => i + 1)
+        }
+      })
+    }
   }
 
   function goToPrevPage() {
-    if (cursors.length > 1) setCursors((prev) => prev.slice(0, -1))
+    if (pageIndex > 0) setPageIndex((i) => i - 1)
   }
 
   function goToFirstPage() {
-    setCursors([''])
+    setPageIndex(0)
   }
 
   return {
     // Query state
     jobs,
     hasNextPage,
-    hasPrevPage: cursors.length > 1,
-    page,
+    hasPrevPage,
+    page: pageIndex + 1, // 1-indexed for display
+    itemsOnPage,
     companies,
     isLoading: query.isLoading,
+    isFetchingNextPage: query.isFetchingNextPage,
     refetch: query.refetch,
     counts,
 
@@ -159,7 +158,7 @@ export function useJobs() {
     tab,
     setTab,
 
-    // Search — searchQuery is the raw input value; debouncedSearch drives the API
+    // Search
     searchQuery,
     setSearchQuery,
 

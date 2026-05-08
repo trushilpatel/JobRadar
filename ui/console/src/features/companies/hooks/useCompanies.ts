@@ -1,16 +1,17 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchAdminCompanies } from '@/api/adminCompanies'
 import type { SortingState } from '@/components/ui/data-table'
 import { SCAN_STATUS_FILTER, ACTIVE_FILTER } from '@/features/companies/constants'
 import type { ScanStatusFilter, ActiveFilter } from '@/features/companies/constants'
 import { normalizeAdminCompany } from './normalizeAdminCompany'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 
 export type { ActiveFilter, ScanStatusFilter }
 
 export function useCompanies() {
   const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search, 300)
   const [adapters, setAdapters] = useState<string[]>([])
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>(ACTIVE_FILTER.ALL)
   const [scanStatus, setScanStatus] = useState<ScanStatusFilter>(SCAN_STATUS_FILTER.ALL)
@@ -20,13 +21,6 @@ export function useCompanies() {
   const [autoRefresh, setAutoRefresh] = useState(
     () => localStorage.getItem('companies-auto-refresh') === 'true'
   )
-
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  function handleSearchChange(v: string) {
-    setSearch(v)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => setDebouncedSearch(v), 300)
-  }
 
   const sortBy = sorting[0]?.id
   const sortDir: 'asc' | 'desc' | undefined = sorting[0]
@@ -84,7 +78,6 @@ export function useCompanies() {
 
   function resetFilters() {
     setSearch('')
-    setDebouncedSearch('')
     setAdapters([])
     setActiveFilter(ACTIVE_FILTER.ALL)
     setScanStatus(SCAN_STATUS_FILTER.ALL)
@@ -109,7 +102,7 @@ export function useCompanies() {
     refetch,
 
     search,
-    handleSearchChange,
+    handleSearchChange: setSearch,
     adapters,
     setAdapters,
     activeFilter,

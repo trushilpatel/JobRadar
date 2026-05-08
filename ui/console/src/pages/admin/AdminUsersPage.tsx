@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Shield, ShieldOff, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Shield, ShieldOff, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { Pagination } from '@/components/ui/pagination'
 import { useAuthStore } from '@/features/auth/store'
 import {
   fetchAdminUsers,
@@ -210,25 +212,35 @@ function UserRow({ user, selfId }: { user: AdminUser; selfId: string | undefined
 
 export function AdminUsersPage() {
   const selfId = useAuthStore((s) => s.identity?.user_id)
-  const [filter, setFilter] = useState<AdminUserFilter>({})
   const [emailInput, setEmailInput] = useState('')
+  const debouncedEmail = useDebouncedValue(emailInput, 300)
+  const [statusFilter, setStatusFilter] = useState<AdminUserFilter['status']>(undefined)
   const [page, setPage] = useState(1)
-  const limit = 25
+  const [limit, setLimit] = useState(20)
+
+  const filter = useMemo<AdminUserFilter>(
+    () => ({
+      email: debouncedEmail.trim() || undefined,
+      status: statusFilter,
+    }),
+    [debouncedEmail, statusFilter]
+  )
+
+  // Reset page on filter or limit change (in-render derived-state pattern).
+  const [prevKey, setPrevKey] = useState({ filter, limit })
+  if (prevKey.filter !== filter || prevKey.limit !== limit) {
+    setPrevKey({ filter, limit })
+    setPage(1)
+  }
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-users', filter, page],
+    queryKey: ['admin-users', filter, page, limit],
     queryFn: () => fetchAdminUsers(filter, page, limit),
     staleTime: 30_000,
   })
 
-  function applyEmail() {
-    setFilter((f) => ({ ...f, email: emailInput.trim() || undefined }))
-    setPage(1)
-  }
-
   const users = data?.data ?? []
   const total = data?.total ?? 0
-  const totalPages = Math.ceil(total / limit)
 
   return (
     <div className="flex flex-col h-full bg-[#0d0d14] overflow-y-auto">
@@ -243,22 +255,22 @@ export function AdminUsersPage() {
           placeholder="Filter by email…"
           value={emailInput}
           onChange={(e) => setEmailInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && applyEmail()}
           className="w-56 rounded-md bg-white/[0.04] border border-white/[0.1] px-3 py-1.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-500"
         />
         <select
-          value={filter.status ?? ''}
-          onChange={(e) => {
-            setFilter((f) => ({ ...f, status: (e.target.value as AdminUserFilter['status']) || undefined }))
-            setPage(1)
-          }}
+          value={statusFilter ?? ''}
+          onChange={(e) =>
+            setStatusFilter((e.target.value as AdminUserFilter['status']) || undefined)
+          }
           className="rounded-md bg-white/[0.04] border border-white/[0.1] px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-violet-500"
         >
           <option value="">All statuses</option>
           <option value="active">Active</option>
           <option value="suspended">Suspended</option>
         </select>
-        <span className="text-xs text-slate-500 ml-auto">{total} user{total !== 1 ? 's' : ''}</span>
+        <span className="text-xs text-slate-500 ml-auto">
+          {total} user{total !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {/* Table */}
@@ -291,28 +303,17 @@ export function AdminUsersPage() {
         )}
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="border-t border-white/[0.07] px-6 py-3 flex items-center justify-between shrink-0">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs text-slate-400 hover:text-white hover:bg-white/[0.05] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronLeft size={13} /> Prev
-          </button>
-          <span className="text-xs text-slate-500">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs text-slate-400 hover:text-white hover:bg-white/[0.05] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            Next <ChevronRight size={13} />
-          </button>
-        </div>
-      )}
+      <div className="border-t border-white/[0.07] shrink-0">
+        <Pagination
+          mode="offset"
+          page={page}
+          total={total}
+          limit={limit}
+          onPageChange={setPage}
+          onLimitChange={setLimit}
+          loading={isLoading}
+        />
+      </div>
     </div>
   )
 }

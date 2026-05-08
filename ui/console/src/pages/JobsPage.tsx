@@ -70,7 +70,6 @@ export function JobsPage() {
         tab={jobs.tab}
         onChange={(t) => {
           jobs.setTab(t)
-          jobs.resetFilters()
           setActiveJob(null)
           setSelectedIds(new Set())
         }}
@@ -132,8 +131,10 @@ export function JobsPage() {
           tab={jobs.tab}
           page={jobs.page}
           limit={jobs.limit}
-          total={activeFilterCount > 0 ? 0 : (jobs.counts[jobs.tab] ?? 0)}
+          itemsOnPage={jobs.itemsOnPage}
           hasNextPage={jobs.hasNextPage}
+          hasPrevPage={jobs.hasPrevPage}
+          knownTotal={activeFilterCount === 0 ? jobs.counts[jobs.tab] : undefined}
           hasActiveFilters={activeFilterCount > 0}
           selectedIds={selectedIds}
           activeJobId={activeJob?.id ?? null}
@@ -142,10 +143,7 @@ export function JobsPage() {
           onSelectAll={handleSelectAll}
           onNextPage={jobs.goToNextPage}
           onPrevPage={jobs.goToPrevPage}
-          onLimitChange={(l) => {
-            jobs.setLimit(l)
-            jobs.goToFirstPage()
-          }}
+          onLimitChange={jobs.setLimit}
           sorting={jobs.sorting}
           onSortingChange={jobs.handleSortingChange}
         />

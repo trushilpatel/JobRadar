@@ -11,8 +11,10 @@ interface JobsTableProps {
   tab: TabKey
   page: number
   limit: number
-  total: number
+  itemsOnPage: number
   hasNextPage: boolean
+  hasPrevPage: boolean
+  knownTotal?: number
   hasActiveFilters?: boolean
   selectedIds: Set<string>
   activeJobId: string | null
@@ -41,8 +43,10 @@ export function JobsTable({
   tab,
   page,
   limit,
-  total,
+  itemsOnPage,
   hasNextPage,
+  hasPrevPage,
+  knownTotal,
   hasActiveFilters = false,
   selectedIds,
   activeJobId,
@@ -65,22 +69,6 @@ export function JobsTable({
       }),
     [selectedIds, jobs, onToggleSelect, onSelectAll]
   )
-
-  // Cursor-based pagination: translate to page-number-style for Pagination component.
-  // Page jumps are not supported (cursor chain must be walked), so onPageChange
-  // only handles prev (page-1) and next (page+1) from the Pagination buttons.
-  function handlePageChange(newPage: number) {
-    if (newPage < page) onPrevPage()
-    else if (newPage > page) onNextPage()
-  }
-
-  // Derive a synthetic total that makes "Showing X–Y of N" correct when the
-  // count is known, and gracefully caps when we're on the last page.
-  const syntheticTotal = total > 0
-    ? total
-    : hasNextPage
-      ? page * limit + 1   // unknown total, more pages exist — show at least one more
-      : (page - 1) * limit + jobs.length
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden min-w-0">
@@ -108,10 +96,15 @@ export function JobsTable({
 
       <div className="border-t border-white/[0.07] shrink-0">
         <Pagination
+          mode="cursor"
           page={page}
-          total={syntheticTotal}
           limit={limit}
-          onPageChange={handlePageChange}
+          itemsOnPage={itemsOnPage}
+          hasNext={hasNextPage}
+          hasPrev={hasPrevPage}
+          knownTotal={knownTotal}
+          onNext={onNextPage}
+          onPrev={onPrevPage}
           onLimitChange={onLimitChange}
           loading={loading}
         />
