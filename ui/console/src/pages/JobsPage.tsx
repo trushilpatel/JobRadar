@@ -70,7 +70,7 @@ export function JobsPage() {
         tab={jobs.tab}
         onChange={(t) => {
           jobs.setTab(t)
-          jobs.goToFirstPage()
+          jobs.resetFilters()
           setActiveJob(null)
           setSelectedIds(new Set())
         }}
@@ -132,7 +132,7 @@ export function JobsPage() {
           tab={jobs.tab}
           page={jobs.page}
           limit={jobs.limit}
-          total={jobs.counts[jobs.tab] ?? 0}
+          total={activeFilterCount > 0 ? 0 : (jobs.counts[jobs.tab] ?? 0)}
           hasNextPage={jobs.hasNextPage}
           hasActiveFilters={activeFilterCount > 0}
           selectedIds={selectedIds}
@@ -142,7 +142,6 @@ export function JobsPage() {
           onSelectAll={handleSelectAll}
           onNextPage={jobs.goToNextPage}
           onPrevPage={jobs.goToPrevPage}
-          onPageChange={jobs.goToFirstPage}
           onLimitChange={(l) => {
             jobs.setLimit(l)
             jobs.goToFirstPage()

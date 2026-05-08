@@ -42,7 +42,7 @@ export function Pagination({
   }
 
   return (
-    <div className={cn('flex items-center justify-end gap-3 px-4 py-2.5', className)}>
+    <div className={cn('flex items-center justify-center gap-3 px-4 py-2.5', className)}>
       {/* Showing label */}
       <p className="text-xs text-slate-500 shrink-0 mr-1">
         {loading ? null : total === 0 ? 'No results' : `Showing ${from}–${to} of ${total}`}

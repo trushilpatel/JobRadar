@@ -21,7 +21,6 @@ interface JobsTableProps {
   onSelectAll: (checked: boolean) => void
   onNextPage: () => void
   onPrevPage: () => void
-  onPageChange: (page: number) => void
   onLimitChange: (limit: number) => void
   sorting: SortingState
   onSortingChange: (sorting: SortingState) => void
@@ -52,7 +51,6 @@ export function JobsTable({
   onSelectAll,
   onNextPage,
   onPrevPage,
-  onPageChange,
   onLimitChange,
   sorting,
   onSortingChange,
@@ -114,7 +112,7 @@ export function JobsTable({
           total={syntheticTotal}
           limit={limit}
           onPageChange={handlePageChange}
-          onLimitChange={(l) => { onLimitChange(l); onPageChange(1) }}
+          onLimitChange={onLimitChange}
           loading={loading}
         />
       </div>

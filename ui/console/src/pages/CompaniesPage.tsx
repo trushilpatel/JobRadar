@@ -61,10 +61,7 @@ export function CompaniesPage() {
           page={c.page}
           limit={c.limit}
           onPageChange={c.setPage}
-          onLimitChange={(l) => {
-            c.setLimit(l)
-            c.setPage(1)
-          }}
+          onLimitChange={c.setLimit}
           emptyMessage={
             c.hasActiveFilters
               ? 'No companies match the current filters'

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchAdminCompanies } from '@/api/adminCompanies'
 import type { SortingState } from '@/components/ui/data-table'
@@ -50,17 +50,17 @@ export function useCompanies() {
     [debouncedSearch, adapters, activeFilter, scanStatus, sortBy, sortDir]
   )
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  const [prevFilters, setPrevFilters] = useState(filters)
+  if (prevFilters !== filters) {
+    setPrevFilters(filters)
     setPage(1)
-  }, [filters])
+  }
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['admin-companies', filters, page, limit],
     queryFn: () => fetchAdminCompanies(filters, page, limit),
     staleTime: 10_000,
-    refetchInterval: autoRefresh ? 10_000 : 10_000,
-    refetchOnWindowFocus: true,
+    refetchInterval: autoRefresh ? 10_000 : false,
   })
 
   const companies = useMemo(
@@ -74,7 +74,8 @@ export function useCompanies() {
     search !== '' ||
     adapters.length > 0 ||
     activeFilter !== ACTIVE_FILTER.ALL ||
-    scanStatus !== SCAN_STATUS_FILTER.ALL
+    scanStatus !== SCAN_STATUS_FILTER.ALL ||
+    sorting.length > 0
 
   function handleSortingChange(newSorting: SortingState) {
     setSorting(newSorting)

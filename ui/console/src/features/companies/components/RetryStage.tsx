@@ -35,11 +35,13 @@ export function RetryStage({ label, worker, counts }: RetryStageProps) {
             </span>
             <span
               className={cn(
-                'text-[10px] uppercase tracking-[0.08em] mt-0.5 text-center whitespace-nowrap',
+                'text-[10px] uppercase tracking-[0.08em] mt-0.5 text-center',
                 total === 0 ? 'text-slate-700' : 'text-slate-500'
               )}
             >
-              {label}
+              {label.split(' ').map((word, i) => (
+                <span key={i} className="block">{word}</span>
+              ))}
             </span>
           </div>
         </Tooltip.Trigger>

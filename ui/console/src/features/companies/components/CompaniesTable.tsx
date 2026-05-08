@@ -58,6 +58,7 @@ export function CompaniesTable({
           limit={limit}
           onPageChange={onPageChange}
           onLimitChange={onLimitChange}
+          loading={loading}
         />
       </div>
     </div>
