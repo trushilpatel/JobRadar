@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { sessionRef } from '@/lib/session-ref'
 import { fetchMe } from '@/api/me'
 import type { Identity } from '@/types'
 
@@ -44,6 +45,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const session = data.session
 
     // Unblock rendering immediately — identity loads in background
+    sessionRef.set(session)
     set({ session, loading: false })
 
     if (session) {
@@ -53,6 +55,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      sessionRef.set(newSession)
       if (event === 'TOKEN_REFRESHED') {
         set({ session: newSession })
         return
@@ -79,6 +82,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut({ scope: 'global' })
+    sessionRef.set(null)
     set({ session: null, identity: null, isAdmin: false })
   },
 

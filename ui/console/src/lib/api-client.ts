@@ -1,5 +1,6 @@
 import { toast } from 'sonner'
 import { supabase } from './supabase'
+import { sessionRef } from './session-ref'
 import { parseApiError } from './api-error'
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
@@ -33,11 +34,11 @@ function signOutAndRedirect(): void {
   }
 }
 
-async function authHeader(): Promise<Record<string, string>> {
-  // Don't call refreshSession() here — Supabase's autoRefreshToken handles proactive scheduling.
-  // Calling it manually races with the internal timer and can burn the refresh token.
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
+function authHeader(): Record<string, string> {
+  // Read from sessionRef (written by the auth store's onAuthStateChange) rather than
+  // calling supabase.auth.getSession(), which acquires an internal lock and can hang
+  // indefinitely if autoRefreshToken holds that lock during a background refresh.
+  const token = sessionRef.get()?.access_token
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
@@ -77,7 +78,7 @@ const REQUEST_TIMEOUT_MS = 15_000
 
 async function rawFetch(method: HttpMethod, path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers)
-  const auth = await authHeader()
+  const auth = authHeader()
   for (const [k, v] of Object.entries(auth)) headers.set(k, v)
   if (init?.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
