@@ -43,7 +43,15 @@ export function MultiSelectDropdown({
     if (!open) { setSearch(''); setNewVal('') }
   }, [open])
 
-  const visible = options.filter(o => o.toLowerCase().includes(search.toLowerCase()))
+  const visible = options
+    .filter(o => o.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const aOn = selected.includes(a)
+      const bOn = selected.includes(b)
+      if (aOn && !bOn) return -1
+      if (!aOn && bOn) return 1
+      return 0
+    })
   const label = selected.length === 0
     ? placeholder
     : selected.length === 1 ? selected[0] : singularLabel(selected.length)

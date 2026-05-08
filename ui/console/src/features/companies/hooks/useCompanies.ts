@@ -58,8 +58,9 @@ export function useCompanies() {
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['admin-companies', filters, page, limit],
     queryFn: () => fetchAdminCompanies(filters, page, limit),
-    staleTime: 30_000,
-    refetchInterval: autoRefresh ? 30_000 : false,
+    staleTime: 10_000,
+    refetchInterval: autoRefresh ? 10_000 : 10_000,
+    refetchOnWindowFocus: true,
   })
 
   const companies = useMemo(
