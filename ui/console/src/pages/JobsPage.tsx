@@ -1,10 +1,13 @@
 import { useState, useCallback } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Keyboard } from 'lucide-react'
 import type { Job, JobStatus } from '@/types'
 import { ResizeHandle } from '@/components/ui/resize-handle'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   useJobs,
   useJobActions,
+  useJobShortcuts,
+  JOB_SHORTCUTS,
   JobStatusTabs,
   JobFilters,
   JobsTable,
@@ -49,6 +52,13 @@ export function JobsPage() {
     })
   }, [])
 
+  useJobShortcuts({
+    activeJob,
+    onSetStatus: (job, status) => handleStatusChange(job, status),
+    onDismiss: (job) => setDismissTarget(job),
+    enabled: !dismissTarget,
+  })
+
   const handleSelectAll = useCallback(
     (checked: boolean) => {
       setSelectedIds(checked ? new Set(jobs.jobs.map((j) => j.id)) : new Set())
@@ -85,6 +95,39 @@ export function JobsPage() {
               )}
             </span>
           </div>
+        }
+        rightSlot={
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Keyboard shortcuts"
+                  className="flex items-center justify-center h-7 w-7 rounded-md text-slate-400 hover:text-white hover:bg-white/[0.05] transition-colors"
+                >
+                  <Keyboard size={16} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="end">
+                <div className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-500">
+                  Shortcuts
+                </div>
+                <div className="text-[11px] text-slate-500 mb-2">
+                  Click a row first, then press a key
+                </div>
+                <ul className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+                  {JOB_SHORTCUTS.map((s) => (
+                    <li key={s.key} className="contents">
+                      <kbd className="justify-self-start rounded border border-white/[0.08] bg-white/[0.05] px-1.5 py-0.5 font-mono text-[10px] text-slate-200">
+                        {s.key}
+                      </kbd>
+                      <span className="text-xs text-slate-300">{s.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         }
       />
 
@@ -132,6 +175,7 @@ export function JobsPage() {
           page={jobs.page}
           limit={jobs.limit}
           itemsOnPage={jobs.itemsOnPage}
+          itemsBeforePage={jobs.itemsBeforePage}
           hasNextPage={jobs.hasNextPage}
           hasPrevPage={jobs.hasPrevPage}
           knownTotal={activeFilterCount === 0 ? jobs.counts[jobs.tab] : undefined}

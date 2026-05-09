@@ -15,9 +15,10 @@ interface JobStatusTabsProps {
   onChange: (tab: TabKey) => void
   counts: Partial<Record<TabKey, number>>
   leftSlot?: React.ReactNode
+  rightSlot?: React.ReactNode
 }
 
-export function JobStatusTabs({ tab, onChange, counts, leftSlot }: JobStatusTabsProps) {
+export function JobStatusTabs({ tab, onChange, counts, leftSlot, rightSlot }: JobStatusTabsProps) {
   return (
     <div className="flex items-end gap-0.5 px-6 border-b border-white/[0.07]">
       {leftSlot && <div className="flex items-center pb-2 mr-4 shrink-0">{leftSlot}</div>}
@@ -47,6 +48,7 @@ export function JobStatusTabs({ tab, onChange, counts, leftSlot }: JobStatusTabs
           )}
         </button>
       ))}
+      {rightSlot && <div className="flex items-center pb-2 ml-auto shrink-0">{rightSlot}</div>}
     </div>
   )
 }

@@ -98,6 +98,7 @@ export function DataTable<TData>({
 
   // Refs for each rendered row — used to scroll the active row into view.
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([])
+  const containerRef = useRef<HTMLDivElement | null>(null)
 
   // Scroll the active row into view whenever selectedId changes (keyboard nav).
   useEffect(() => {
@@ -129,6 +130,13 @@ export function DataTable<TData>({
     }
   }
 
+  // Bring focus to the table container after clicking a row so subsequent
+  // arrow-key presses are received by the keydown handler.
+  function handleRowClick(row: TData) {
+    onRowClick?.(row)
+    containerRef.current?.focus()
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
@@ -143,6 +151,7 @@ export function DataTable<TData>({
 
   return (
     <div
+      ref={containerRef}
       className="flex flex-col outline-none"
       tabIndex={onRowClick ? 0 : undefined}
       onKeyDown={handleKeyDown}
@@ -178,7 +187,7 @@ export function DataTable<TData>({
                 ref={(el) => {
                   rowRefs.current[index] = el
                 }}
-                onClick={() => onRowClick?.(row.original)}
+                onClick={() => handleRowClick(row.original)}
                 className={cn(onRowClick && 'cursor-pointer', rowBg)}
               >
                 {row.getVisibleCells().map((cell) => (

@@ -1,5 +1,6 @@
 export { useJobs }        from '@/features/jobs/hooks/useJobs'
 export { useJobActions }  from '@/features/jobs/hooks/useJobActions'
+export { useJobShortcuts, JOB_SHORTCUTS } from '@/features/jobs/hooks/useJobShortcuts'
 export { JobsTable }      from '@/features/jobs/components/JobsTable'
 export { JobDetailPanel } from '@/features/jobs/components/JobDetailPanel'
 export { JobFilters }     from '@/features/jobs/components/JobFilters'

@@ -72,10 +72,19 @@ export function useJobs() {
     staleTime: 30_000,
   })
 
-  const fetchedPages = query.data?.pages ?? []
+  const fetchedPages = useMemo(() => query.data?.pages ?? [], [query.data])
   const currentPage = fetchedPages[pageIndex]
   const jobs = useMemo(() => currentPage?.items ?? [], [currentPage])
   const itemsOnPage = jobs.length
+
+  // Cumulative number of items in pages BEFORE the current page. Drives the
+  // pagination "Showing X–Y" display. Pages on the "new" tab are sparse
+  // (per-user overlay filters items out after cursor pagination), so the
+  // theoretical (page-1)*limit math under-counts. This is exact.
+  const itemsBeforePage = useMemo(
+    () => fetchedPages.slice(0, pageIndex).reduce((sum, p) => sum + (p.items?.length ?? 0), 0),
+    [fetchedPages, pageIndex]
+  )
 
   const hasPrevPage = pageIndex > 0
   const hasNextPage =
@@ -121,15 +130,20 @@ export function useJobs() {
   }
 
   function goToNextPage() {
+    // Pre-fetched next page — advance immediately
     if (pageIndex < fetchedPages.length - 1) {
       setPageIndex((i) => i + 1)
-    } else if (query.hasNextPage && !query.isFetchingNextPage) {
-      void query.fetchNextPage().then((res) => {
-        // Advance only if the fetch added a new page
-        if ((res.data?.pages.length ?? 0) > fetchedPages.length) {
-          setPageIndex((i) => i + 1)
-        }
-      })
+      return
+    }
+    // At the boundary — initiate fetch and advance eagerly. The new page lands
+    // at fetchedPages[pageIndex+1] when the fetch resolves; until then the
+    // table renders the loading state (currentPage is undefined).
+    // Eager advance avoids a stale-closure race when filters change while a
+    // fetch is in flight: the resolved fetch lands in the OLD query's cache
+    // while the NEW query's pageIndex was already reset to 0 by prevKey.
+    if (query.hasNextPage && !query.isFetchingNextPage) {
+      void query.fetchNextPage()
+      setPageIndex((i) => i + 1)
     }
   }
 
@@ -148,6 +162,7 @@ export function useJobs() {
     hasPrevPage,
     page: pageIndex + 1, // 1-indexed for display
     itemsOnPage,
+    itemsBeforePage,
     companies,
     isLoading: query.isLoading,
     isFetchingNextPage: query.isFetchingNextPage,

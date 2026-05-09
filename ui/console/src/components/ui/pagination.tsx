@@ -24,6 +24,9 @@ interface CursorProps extends CommonProps {
   hasNext: boolean
   hasPrev: boolean
   itemsOnPage: number
+  // Cumulative items in pages before this one. Drives the "Showing X–Y" display
+  // accurately even when pages are sparse (fewer than `limit` items per page).
+  itemsBeforePage: number
   onNext: () => void
   onPrev: () => void
   // Optional: when known (e.g. unfiltered tab counts), enables "of N" display
@@ -113,6 +116,7 @@ function CursorPagination({
   page,
   limit,
   itemsOnPage,
+  itemsBeforePage,
   hasNext,
   hasPrev,
   knownTotal,
@@ -123,11 +127,12 @@ function CursorPagination({
   className,
   loading,
 }: CursorProps) {
-  const from = itemsOnPage === 0 ? 0 : (page - 1) * limit + 1
-  const to = (page - 1) * limit + itemsOnPage
+  const from = itemsOnPage === 0 ? 0 : itemsBeforePage + 1
+  const to = itemsBeforePage + itemsOnPage
 
   let text: string
   if (itemsOnPage === 0 && !hasPrev) text = 'No results'
+  else if (itemsOnPage === 0) text = 'Loading…'
   else if (knownTotal != null)
     text = `Showing ${from}–${to} of ${knownTotal.toLocaleString()}`
   else text = `Showing ${from}–${to}`

@@ -12,6 +12,7 @@ interface JobsTableProps {
   page: number
   limit: number
   itemsOnPage: number
+  itemsBeforePage: number
   hasNextPage: boolean
   hasPrevPage: boolean
   knownTotal?: number
@@ -44,6 +45,7 @@ export function JobsTable({
   page,
   limit,
   itemsOnPage,
+  itemsBeforePage,
   hasNextPage,
   hasPrevPage,
   knownTotal,
@@ -83,6 +85,7 @@ export function JobsTable({
               : EMPTY_MESSAGES[tab]
           }
           getRowId={(j) => j.id}
+          selectedId={activeJobId ?? undefined}
           onRowClick={onRowClick}
           getRowClassName={(job) => {
             if (selectedIds.has(job.id)) return 'bg-violet-500/[0.06]'
@@ -100,6 +103,7 @@ export function JobsTable({
           page={page}
           limit={limit}
           itemsOnPage={itemsOnPage}
+          itemsBeforePage={itemsBeforePage}
           hasNext={hasNextPage}
           hasPrev={hasPrevPage}
           knownTotal={knownTotal}
