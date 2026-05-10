@@ -333,6 +333,13 @@ Phase 2 (per-user data model, `/api` vs `/admin` route split, companies public/o
 
 ---
 
+## Git workflow
+
+- **Never commit to `main` directly.** `.husky/pre-commit` blocks it — branch off (`git checkout -b <feature>`) before you start.
+- **Never bypass the pre-commit hook with `git commit --no-verify`** (or any equivalent: `--no-gpg-sign`, custom `core.hooksPath`, etc.). This applies to every commit, including doc-only changes and hotfixes.
+- If the hook fails, fix the failing check (formatter, lint, tests) and recommit. Bypassing is not an option.
+- Server-side branch protection on `main` is the real gate — the local hook just catches mistakes earlier.
+
 ## Useful commands
 
 ```bash
