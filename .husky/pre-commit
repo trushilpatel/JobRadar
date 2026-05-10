@@ -11,6 +11,14 @@ info() { printf "${YELLOW}→${NC} %s\n" "$1"; }
 
 FAILED=0
 
+# ── Block direct commits to main ─────────────────────────────────────────────
+CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+if [ "$CURRENT_BRANCH" = "main" ]; then
+  fail "Direct commits to 'main' are not allowed."
+  printf "${YELLOW}→${NC} Create a feature branch: ${YELLOW}git checkout -b <branch-name>${NC}\n"
+  exit 1
+fi
+
 # ── Format staged files (gofmt + prettier) ───────────────────────────────────
 info "Formatting staged files..."
 if ./node_modules/.bin/lint-staged; then

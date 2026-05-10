@@ -5,7 +5,13 @@
       "Skill(update-config)",
       "Skill(update-config:*)",
       "WebFetch(domain:docs.getbifrost.ai)",
-      "Bash(git add *)"
-    ]
+      "Bash(git add *)",
+      "Bash(git stash *)",
+      "Bash(git checkout *)",
+      "Bash(git commit *)",
+      "Bash(git reset *)",
+      "Bash(rm -f .git/test_main_block_marker)"
+    ],
+    "additionalDirectories": ["/tmp"]
   }
 }
