@@ -40,7 +40,7 @@ jobs:
         with:
           version: v2.11.4
           working-directory: backend
-          args: --config ../.github/.golangci.yml --new-from-rev=origin/main --timeout 2m --path-mode=abs
+          args: --config ../.github/.golangci.yml --new-from-rev=origin/main --timeout 5m --path-mode=abs
 
       - name: Run tests
         run: go test ./...
