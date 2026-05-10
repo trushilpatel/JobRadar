@@ -25,6 +25,7 @@ REST API + React UI
 ## Features
 
 ### Job Feed
+
 - Auto-populated from monitored company careers pages
 - LLM-filtered by title relevance against your target roles and experience level
 - Each job enriched with: tech stack, salary range, remote status, location, sponsorship flag, experience requirement, role category, responsibilities
@@ -32,59 +33,65 @@ REST API + React UI
 - Notes per job
 
 ### Eligibility Filtering
+
 Jobs are automatically discarded if the posting:
+
 - Explicitly denies H-1B / visa sponsorship
 - Requires US Citizenship or Green Card
 - Requires or asks candidate to obtain any security clearance
 - Requires more experience than your configured `DISCARD_JOB_WITH_EXP_GT` limit
 
 ### Applications Tracker
+
 - Track every job through pipeline stages
 - Stages: Phone Screen → Technical Interview → Final Round → Offer → Rejected
 
 ### Company Management
+
 - Add companies to monitor by careers URL
 - Manual scan trigger per company
 - Automatic scan scheduling via `SCAN_INTERVAL_MINUTES` (default: 24h)
 
 ### Dashboard
+
 Live stats: jobs scanned today, new/saved/applied counts, pipeline pending, pipeline errors.
 
 ### Insights
+
 Analytics over all enriched jobs: funnel, role categories, company hiring velocity, location breakdown, sponsorship trend, tech stack trends.
 
 ---
 
 ## Supported ATS Platforms
 
-| Platform | Adapter |
-|---|---|
-| Greenhouse | `backend/apps/crawler/ats/greenhouse` |
-| Lever | `backend/apps/crawler/ats/lever` |
-| Ashby | `backend/apps/crawler/ats/ashby` |
-| Apple | `backend/apps/crawler/ats/apple` |
-| Meta | `backend/apps/crawler/ats/meta` |
-| Microsoft | `backend/apps/crawler/ats/microsoft` |
-| Google | `backend/apps/crawler/ats/google` (pure HTTP + RE2 — no browser) |
-| Netflix | `backend/apps/crawler/ats/netflix` |
-| Rippling | `backend/apps/crawler/ats/rippling` |
-| Uber | `backend/apps/crawler/ats/uber` |
+| Platform   | Adapter                                                          |
+| ---------- | ---------------------------------------------------------------- |
+| Greenhouse | `backend/apps/crawler/ats/greenhouse`                            |
+| Lever      | `backend/apps/crawler/ats/lever`                                 |
+| Ashby      | `backend/apps/crawler/ats/ashby`                                 |
+| Apple      | `backend/apps/crawler/ats/apple`                                 |
+| Meta       | `backend/apps/crawler/ats/meta`                                  |
+| Microsoft  | `backend/apps/crawler/ats/microsoft`                             |
+| Google     | `backend/apps/crawler/ats/google` (pure HTTP + RE2 — no browser) |
+| Netflix    | `backend/apps/crawler/ats/netflix`                               |
+| Rippling   | `backend/apps/crawler/ats/rippling`                              |
+| Uber       | `backend/apps/crawler/ats/uber`                                  |
 
 ---
 
 ## Stack
 
-| Layer | Technology |
-|---|---|
-| Backend | Go |
-| Frontend | React + TypeScript + Tailwind |
-| Database | Supabase (PostgreSQL) |
-| Message queue | Kafka |
-| LLM | Gemini (via Google Generative AI SDK) |
-| Auth | Supabase (magic link / email OTP) |
-| Migrations | goose |
-| Container orchestration | Kubernetes (k3d local) via Helm |
-| Reverse proxy | Caddy (prod) |
+| Layer                   | Technology                            |
+| ----------------------- | ------------------------------------- |
+| Backend                 | Go                                    |
+| Frontend                | React + TypeScript + Tailwind         |
+| Database                | Supabase (PostgreSQL)                 |
+| Message queue           | Kafka                                 |
+| LLM                     | Gemini (via Google Generative AI SDK) |
+| Auth                    | Supabase (magic link / email OTP)     |
+| Migrations              | goose                                 |
+| Container orchestration | Kubernetes (k3d local) via Helm       |
+| Reverse proxy           | Caddy (prod)                          |
 
 ---
 
@@ -124,6 +131,7 @@ done
 ```
 
 For the observability audit sync (optional — ships Supabase auth logs to Loki):
+
 ```bash
 kubectl create secret generic supabase-audit-sync-secret \
   --from-literal=SUPABASE_DB_URL="postgres://postgres:PASSWORD@HOST.supabase.co:5432/postgres" \
@@ -137,6 +145,7 @@ make k8s-build          # builds backend + crawler + console images and imports 
 ```
 
 For the Supabase audit sync image:
+
 ```bash
 docker build -t jobradar-supabase-audit-sync:local ./infra/observability/supabase-audit-sync/
 k3d image import jobradar-supabase-audit-sync:local -c jobradar
@@ -156,13 +165,13 @@ make k8s-obs-up         # helm install obs chart (Prometheus + Grafana + Loki + 
 
 ### Access
 
-| Service | URL | Notes |
-|---|---|---|
-| Console (UI) | http://localhost:30300 | Direct via NodePort |
-| API | http://localhost:30080 | Direct via NodePort |
-| Grafana | http://localhost:30001 | Login: `admin` / `admin` — change on first use |
-| Jaeger (tracing) | http://localhost:30686 | Direct via NodePort |
-| Prometheus | http://localhost:30090 | Direct via NodePort |
+| Service          | URL                    | Notes                                          |
+| ---------------- | ---------------------- | ---------------------------------------------- |
+| Console (UI)     | http://localhost:30300 | Direct via NodePort                            |
+| API              | http://localhost:30080 | Direct via NodePort                            |
+| Grafana          | http://localhost:30001 | Login: `admin` / `admin` — change on first use |
+| Jaeger (tracing) | http://localhost:30686 | Direct via NodePort                            |
+| Prometheus       | http://localhost:30090 | Direct via NodePort                            |
 
 > If the cluster was created **without** the `--port` flags above, use `make k8s-forward` and `make k8s-obs-forward` instead.
 
@@ -221,6 +230,7 @@ Two env files:
 - **`backend/.env`** — backend service config (DB, Kafka, Redis, LLM, Auth)
 
 Copy from examples:
+
 ```bash
 cp .env.example .env
 cp backend/.env.example backend/.env
@@ -228,23 +238,23 @@ cp backend/.env.example backend/.env
 
 ### Key variables (`backend/.env`)
 
-| Variable | Description |
-|---|---|
-| `DB_HOST` | Supabase pooler host |
-| `DB_USER` | Supabase pooler user (`postgres.<project-ref>`) |
-| `DB_PASSWORD` | Supabase DB password |
-| `DB_SSLMODE` | Always `require` |
-| `SUPABASE_PROJECT_URL` | `https://<project-ref>.supabase.co` |
-| `ALLOWED_EMAIL` | Legacy single-email allowlist for routes still gated by `RequireAuth`. New per-user routes use `RequireIdentity` + `ADMIN_EMAILS` instead. |
-| `ADMIN_EMAILS` | Comma-separated emails granted the `admin` role on first login (Phase 1). |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Used by `backend/platform/supabaseadmin` for `DELETE /api/me` (Phase 1). |
-| `RATE_LIMIT_READ_RPM` / `RATE_LIMIT_WRITE_RPM` / `RATE_LIMIT_ADMIN_RPM` | Per-user token-bucket rate limits (defaults: 30 / 20 / 120). |
-| `CACHE_TTL_USER_SECONDS` | TTL for the user-cache decorator (default 60). |
-| `TARGET_ROLES` | Comma-separated target role titles |
-| `YEARS_EXP` | Your years of experience |
-| `DISCARD_JOB_WITH_EXP_GT` | Drop jobs requiring more than N years (0 = disabled) |
-| `LLM_SLOTS_CONFIG` | Path to `llm-slots.yaml` |
-| `SCAN_INTERVAL_MINUTES` | How often each company is re-scanned |
+| Variable                                                                | Description                                                                                                                                |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DB_HOST`                                                               | Supabase pooler host                                                                                                                       |
+| `DB_USER`                                                               | Supabase pooler user (`postgres.<project-ref>`)                                                                                            |
+| `DB_PASSWORD`                                                           | Supabase DB password                                                                                                                       |
+| `DB_SSLMODE`                                                            | Always `require`                                                                                                                           |
+| `SUPABASE_PROJECT_URL`                                                  | `https://<project-ref>.supabase.co`                                                                                                        |
+| `ALLOWED_EMAIL`                                                         | Legacy single-email allowlist for routes still gated by `RequireAuth`. New per-user routes use `RequireIdentity` + `ADMIN_EMAILS` instead. |
+| `ADMIN_EMAILS`                                                          | Comma-separated emails granted the `admin` role on first login (Phase 1).                                                                  |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`                            | Used by `backend/platform/supabaseadmin` for `DELETE /api/me` (Phase 1).                                                                   |
+| `RATE_LIMIT_READ_RPM` / `RATE_LIMIT_WRITE_RPM` / `RATE_LIMIT_ADMIN_RPM` | Per-user token-bucket rate limits (defaults: 30 / 20 / 120).                                                                               |
+| `CACHE_TTL_USER_SECONDS`                                                | TTL for the user-cache decorator (default 60).                                                                                             |
+| `TARGET_ROLES`                                                          | Comma-separated target role titles                                                                                                         |
+| `YEARS_EXP`                                                             | Your years of experience                                                                                                                   |
+| `DISCARD_JOB_WITH_EXP_GT`                                               | Drop jobs requiring more than N years (0 = disabled)                                                                                       |
+| `LLM_SLOTS_CONFIG`                                                      | Path to `llm-slots.yaml`                                                                                                                   |
+| `SCAN_INTERVAL_MINUTES`                                                 | How often each company is re-scanned                                                                                                       |
 
 ### LLM slots (`backend/common/config/llm-slots.yaml`)
 
@@ -288,10 +298,10 @@ k8s/helm/
 
 Helm releases in namespace `jobradar-local`:
 
-| Release | Chart | Manages |
-|---|---|---|
-| `jobradar` | `k8s/helm/jobradar` | api, console, scheduler, crawler, filter, enricher, kafka, redis, migrate |
-| `obs` | `k8s/helm/observability` | Grafana, Prometheus, Loki, Promtail, Jaeger, supabase-audit-sync |
+| Release    | Chart                    | Manages                                                                   |
+| ---------- | ------------------------ | ------------------------------------------------------------------------- |
+| `jobradar` | `k8s/helm/jobradar`      | api, console, scheduler, crawler, filter, enricher, kafka, redis, migrate |
+| `obs`      | `k8s/helm/observability` | Grafana, Prometheus, Loki, Promtail, Jaeger, supabase-audit-sync          |
 
 ---
 
@@ -300,6 +310,7 @@ Helm releases in namespace `jobradar-local`:
 Login uses **Supabase magic link (email OTP)**. No password required.
 
 Add allowed redirect URLs in Supabase → Authentication → URL Configuration:
+
 - Local k8s: `http://localhost:30300/auth/callback`
 - Local dev (Vite): `http://localhost:5173/auth/callback`
 - Production: `https://<your-domain>/auth/callback`
