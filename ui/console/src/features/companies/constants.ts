@@ -1,3 +1,14 @@
+export const STORAGE_KEYS = {
+  AUTO_REFRESH: 'companies-auto-refresh',
+} as const
+
+export const EMPTY_MESSAGES = {
+  WITH_FILTERS: 'No companies match the current filters',
+  WITHOUT_FILTERS: 'No companies found',
+} as const
+
+export const AUTO_REFRESH_INTERVAL_MS = 30_000
+
 export const QUEUE_STATUS = {
   QUEUED: 'queued',
   RUNNING: 'running',

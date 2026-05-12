@@ -1,14 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X, Trash2, RefreshCw, Pencil, ChevronDown, ChevronUp } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartTooltip, ResponsiveContainer } from 'recharts'
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip as RechartTooltip,
+  ResponsiveContainer,
+} from 'recharts'
 import type { Company, ScanStats, CompanyAnalytics } from '@/types'
 import { fetchScanStats, fetchCompanyAnalytics } from '@/api/companies'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
 import { cn, formatRelativeTime } from '@/lib/utils'
+import { companyQueryKeys } from '@/features/companies/queryKeys'
+import { ROUTES } from '@/constants/routes'
 
 interface CompanyDetailDrawerProps {
   company: Company
@@ -25,15 +34,18 @@ export function CompanyDetailDrawer({
   onEdit,
   onDelete,
 }: CompanyDetailDrawerProps) {
-  const [stats, setStats] = useState<ScanStats | null>(null)
-  const [loading, setLoading] = useState(false)
   const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set())
   const [logsOpen, setLogsOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const navigate = useNavigate()
 
+  const { data: stats, isLoading } = useQuery<ScanStats>({
+    queryKey: companyQueryKeys.companyScanStats(company.id),
+    queryFn: () => fetchScanStats(company.id),
+  })
+
   const { data: analytics } = useQuery<CompanyAnalytics>({
-    queryKey: ['company-analytics', company.id],
+    queryKey: companyQueryKeys.companyAnalytics(company.id),
     queryFn: () => fetchCompanyAnalytics(company.id),
   })
 
@@ -45,24 +57,6 @@ export function CompanyDetailDrawer({
       return next
     })
   }
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setStats(null)
-    setLoading(true)
-    fetchScanStats(company.id)
-      .then(setStats)
-      .catch(() => setStats(null))
-      .finally(() => setLoading(false))
-  }, [company.id])
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
 
   const history: HistoryPoint[] = (() => {
     const runs = (stats?.recent_runs ?? [])
@@ -128,7 +122,8 @@ export function CompanyDetailDrawer({
               >
                 {safeHost(company.url)}
               </a>
-              {' · '}{company.adapter_type}
+              {' · '}
+              {company.adapter_type}
             </p>
           </div>
         </div>
@@ -139,12 +134,14 @@ export function CompanyDetailDrawer({
         <Section title="Recent scans">
           <div className="flex gap-2">
             <div className="flex-1 border border-white/[0.07] rounded-lg px-3 py-2.5 flex flex-col justify-between gap-2">
-              {loading ? (
+              {isLoading ? (
                 <div className="h-4 bg-white/5 rounded animate-pulse" />
               ) : (
                 <>
                   <ScanHistoryBar history={history} className="w-full justify-between" />
-                  <span className="text-[10px] uppercase tracking-wider text-slate-500">{successRate}% success</span>
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                    {successRate}% success
+                  </span>
                 </>
               )}
             </div>
@@ -156,7 +153,11 @@ export function CompanyDetailDrawer({
             </div>
             <div className="border border-white/[0.07] rounded-lg px-3 py-2.5 flex flex-col justify-between shrink-0 w-20">
               <div className="text-sm font-semibold text-white">
-                {loading ? '—' : stats?.avg_duration_ms != null ? formatMs(stats.avg_duration_ms) : '—'}
+                {isLoading
+                  ? '—'
+                  : stats?.avg_duration_ms != null
+                    ? formatMs(stats.avg_duration_ms)
+                    : '—'}
               </div>
               <div className="text-[10px] uppercase tracking-wider text-slate-500">Avg time</div>
             </div>
@@ -169,8 +170,8 @@ export function CompanyDetailDrawer({
             <span>Logs</span>
             {logsOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </button>
-          {logsOpen && (
-            loading ? (
+          {logsOpen &&
+            (isLoading ? (
               <div className="mt-2 space-y-1">
                 <div className="h-4 bg-white/5 rounded animate-pulse" />
                 <div className="h-4 bg-white/5 rounded animate-pulse" />
@@ -194,11 +195,20 @@ export function CompanyDetailDrawer({
                           <span className="text-slate-600">{formatMs(r.duration_ms)}</span>
                         )}
                       </span>
-                      <span className={cn('flex items-center gap-1', r.error ? 'text-red-400' : 'text-emerald-400')}>
+                      <span
+                        className={cn(
+                          'flex items-center gap-1',
+                          r.error ? 'text-red-400' : 'text-emerald-400'
+                        )}
+                      >
                         {r.error ? (
                           <>
                             Error
-                            {expandedErrors.has(r.id) ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                            {expandedErrors.has(r.id) ? (
+                              <ChevronUp size={10} />
+                            ) : (
+                              <ChevronDown size={10} />
+                            )}
                           </>
                         ) : (
                           `OK · ${r.jobs_fetched} fetched${r.jobs_new ? ` · ${r.jobs_new} new` : ''}`
@@ -215,8 +225,7 @@ export function CompanyDetailDrawer({
                   </div>
                 ))}
               </div>
-            )
-          )}
+            ))}
         </Section>
 
         <Section title="New jobs">
@@ -228,7 +237,7 @@ export function CompanyDetailDrawer({
           {stats && stats.total_new > 0 && (
             <button
               type="button"
-              onClick={() => navigate('/jobs', { state: { companies: [company.name] } })}
+              onClick={() => navigate(ROUTES.JOBS, { state: { companies: [company.name] } })}
               className="mt-2 w-full flex items-center justify-between px-3 py-2 border border-white/[0.07] rounded-lg text-xs text-slate-300 hover:text-white hover:border-white/20 transition-colors"
             >
               <span>View {stats.total_new} new jobs</span>
@@ -239,7 +248,11 @@ export function CompanyDetailDrawer({
 
         <Section
           title="Hiring Activity"
-          aside={analytics ? velocityLabel(analytics.velocity.this_week, analytics.velocity.last_week) : undefined}
+          aside={
+            analytics
+              ? velocityLabel(analytics.velocity.this_week, analytics.velocity.last_week)
+              : undefined
+          }
         >
           {!analytics ? (
             <div className="h-28 bg-white/5 rounded animate-pulse" />
@@ -248,7 +261,10 @@ export function CompanyDetailDrawer({
           ) : (
             <div className="h-28">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={analytics.monthly} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <AreaChart
+                  data={analytics.monthly}
+                  margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
+                >
                   <defs>
                     <linearGradient id="gradNew" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
@@ -267,7 +283,10 @@ export function CompanyDetailDrawer({
                     interval={1}
                   />
                   <YAxis hide />
-                  <RechartTooltip content={<HiringTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.08)', strokeWidth: 1 }} />
+                  <RechartTooltip
+                    content={<HiringTooltip />}
+                    cursor={{ stroke: 'rgba(255,255,255,0.08)', strokeWidth: 1 }}
+                  />
                   <Area
                     type="monotone"
                     dataKey="new"
@@ -294,16 +313,18 @@ export function CompanyDetailDrawer({
             </div>
           )}
         </Section>
-
       </div>
 
       <Dialog.Root open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
           <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-[#13131a] border border-white/10 rounded-xl shadow-2xl p-6">
-            <Dialog.Title className="text-base font-semibold text-white mb-2">Delete company?</Dialog.Title>
+            <Dialog.Title className="text-base font-semibold text-white mb-2">
+              Delete company?
+            </Dialog.Title>
             <Dialog.Description className="text-sm text-slate-400 mb-5">
-              This will permanently delete {company.name} and all its scan history. This cannot be undone.
+              This will permanently delete {company.name} and all its scan history. This cannot be
+              undone.
             </Dialog.Description>
             <div className="flex gap-3">
               <button
@@ -315,7 +336,10 @@ export function CompanyDetailDrawer({
               </button>
               <button
                 type="button"
-                onClick={() => { setDeleteConfirmOpen(false); onDelete(company.id) }}
+                onClick={() => {
+                  setDeleteConfirmOpen(false)
+                  onDelete(company.id)
+                }}
                 className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition-colors"
               >
                 Delete
@@ -324,7 +348,6 @@ export function CompanyDetailDrawer({
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-
     </div>
   )
 }
@@ -368,13 +391,20 @@ function safeHost(url: string) {
   }
 }
 
-
 function formatMs(ms: number) {
   if (ms < 1000) return `${Math.round(ms)}ms`
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-function HiringTooltip({ active, payload, label }: { active?: boolean; payload?: {value: number; name: string}[]; label?: string }) {
+function HiringTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean
+  payload?: { value: number; name: string }[]
+  label?: string
+}) {
   if (!active || !payload?.length) return null
   const newCount = payload.find((p) => p.name === 'New')?.value ?? 0
   const removed = payload.find((p) => p.name === 'Removed')?.value ?? 0
@@ -386,7 +416,8 @@ function HiringTooltip({ active, payload, label }: { active?: boolean; payload?:
         <span className="text-emerald-400">+{newCount} new</span>
         {removed > 0 && <span className="text-red-400">−{removed} removed</span>}
         <span className={cn('font-semibold mt-0.5', net >= 0 ? 'text-white' : 'text-red-300')}>
-          net {net >= 0 ? '+' : ''}{net}
+          net {net >= 0 ? '+' : ''}
+          {net}
         </span>
       </div>
     </div>

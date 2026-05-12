@@ -8,6 +8,7 @@ import {
   setAllAdminCompaniesActive,
 } from '@/api/adminCompanies'
 import { triggerScan, triggerScanAll } from '@/api/companies'
+import { companyQueryKeys } from '@/features/companies/queryKeys'
 
 export function useCompanyActions() {
   const qc = useQueryClient()
@@ -16,7 +17,7 @@ export function useCompanyActions() {
   const [runningAll, setRunningAll] = useState(false)
 
   function invalidate() {
-    qc.invalidateQueries({ queryKey: ['admin-companies'] })
+    qc.invalidateQueries({ queryKey: companyQueryKeys.adminCompaniesBase() })
   }
 
   async function toggleActive(company: Company) {
@@ -44,7 +45,7 @@ export function useCompanyActions() {
     try {
       await triggerScan(company.id)
       toast.success(`Scan queued for ${company.name}`)
-      qc.invalidateQueries({ queryKey: ['scan-queue'] })
+      qc.invalidateQueries({ queryKey: companyQueryKeys.scanQueue() })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to queue scan')
     } finally {
@@ -61,7 +62,7 @@ export function useCompanyActions() {
     try {
       const { queued } = await triggerScanAll()
       toast.success(`${queued} ${queued === 1 ? 'company' : 'companies'} queued for scan`)
-      qc.invalidateQueries({ queryKey: ['scan-queue'] })
+      qc.invalidateQueries({ queryKey: companyQueryKeys.scanQueue() })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to queue scans')
     } finally {
@@ -83,6 +84,26 @@ export function useCompanyActions() {
     }
   }
 
+  async function handleCompanyAdded(company: Company) {
+    invalidate()
+    if (company.active) {
+      try {
+        await triggerScan(company.id)
+        toast.success(`${company.name} added and scan queued`)
+        invalidate()
+      } catch {
+        toast.success(`${company.name} added — click Scan to start scanning`)
+      }
+    } else {
+      toast.success(`${company.name} added`)
+    }
+  }
+
+  function handleCompanyUpdated(company: Company) {
+    invalidate()
+    toast.success(`${company.name} updated`)
+  }
+
   return {
     scanning,
     bulkToggling,
@@ -92,5 +113,7 @@ export function useCompanyActions() {
     scan,
     scanAll,
     bulkToggleActive,
+    handleCompanyAdded,
+    handleCompanyUpdated,
   }
 }

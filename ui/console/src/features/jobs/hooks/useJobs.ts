@@ -4,8 +4,9 @@ import { useLocation } from 'react-router-dom'
 import { fetchJobs, fetchJobCounts, fetchJobCompanies, type JobFilters } from '@/api/jobs'
 import type { SortingState } from '@/components/ui/data-table'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { JOB_STATUS, type TabKey } from '@/constants/jobStatus'
 
-export type TabKey = 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected'
+export type { TabKey } from '@/constants/jobStatus'
 export type DateFilter = 'all' | '24h' | '7d' | '30d'
 export type LocationFilter = 'any' | 'remote' | 'onsite'
 
@@ -15,7 +16,7 @@ export function useJobs() {
     (location.state as { dateFilter?: DateFilter } | null)?.dateFilter ?? 'all'
 
   // Tab
-  const [tab, setTab] = useState<TabKey>('new')
+  const [tab, setTab] = useState<TabKey>(JOB_STATUS.NEW)
 
   // Filter state
   const initialCompanies = (location.state as { companies?: string[] } | null)?.companies ?? []
@@ -52,7 +53,16 @@ export function useJobs() {
       sortBy,
       sortDir,
     }),
-    [tab, debouncedSearch, selectedCompanies, locationFilter, expFilter, dateFilter, sortBy, sortDir]
+    [
+      tab,
+      debouncedSearch,
+      selectedCompanies,
+      locationFilter,
+      expFilter,
+      dateFilter,
+      sortBy,
+      sortDir,
+    ]
   )
 
   // Reset pageIndex when filters/limit change. Adjusting state during render
@@ -87,8 +97,7 @@ export function useJobs() {
   )
 
   const hasPrevPage = pageIndex > 0
-  const hasNextPage =
-    pageIndex < fetchedPages.length - 1 || (query.hasNextPage ?? false)
+  const hasNextPage = pageIndex < fetchedPages.length - 1 || (query.hasNextPage ?? false)
 
   const countsQuery = useQuery({
     queryKey: ['jobs', 'counts'],
@@ -165,6 +174,7 @@ export function useJobs() {
     itemsBeforePage,
     companies,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     isFetchingNextPage: query.isFetchingNextPage,
     refetch: query.refetch,
     counts,

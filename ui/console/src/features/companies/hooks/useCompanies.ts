@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchAdminCompanies } from '@/api/adminCompanies'
 import type { SortingState } from '@/components/ui/data-table'
-import { SCAN_STATUS_FILTER, ACTIVE_FILTER } from '@/features/companies/constants'
+import { SCAN_STATUS_FILTER, ACTIVE_FILTER, STORAGE_KEYS } from '@/features/companies/constants'
 import type { ScanStatusFilter, ActiveFilter } from '@/features/companies/constants'
+import { companyQueryKeys } from '@/features/companies/queryKeys'
 import { normalizeAdminCompany } from './normalizeAdminCompany'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 
@@ -19,12 +20,14 @@ export function useCompanies() {
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
   const [autoRefresh, setAutoRefresh] = useState(
-    () => localStorage.getItem('companies-auto-refresh') === 'true'
+    () => localStorage.getItem(STORAGE_KEYS.AUTO_REFRESH) === 'true'
   )
 
   const sortBy = sorting[0]?.id
   const sortDir: 'asc' | 'desc' | undefined = sorting[0]
-    ? sorting[0].desc ? 'desc' : 'asc'
+    ? sorting[0].desc
+      ? 'desc'
+      : 'asc'
     : undefined
 
   const filters = useMemo(
@@ -51,16 +54,13 @@ export function useCompanies() {
   }
 
   const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: ['admin-companies', filters, page, limit],
+    queryKey: companyQueryKeys.adminCompanies(filters, page, limit),
     queryFn: () => fetchAdminCompanies(filters, page, limit),
     staleTime: 10_000,
     refetchInterval: autoRefresh ? 10_000 : false,
   })
 
-  const companies = useMemo(
-    () => (data?.data ?? []).map(normalizeAdminCompany),
-    [data?.data]
-  )
+  const companies = useMemo(() => (data?.data ?? []).map(normalizeAdminCompany), [data?.data])
   const total = data?.total ?? 0
   const totalActive = data?.total_active ?? 0
 
@@ -88,7 +88,7 @@ export function useCompanies() {
   function toggleAutoRefresh() {
     setAutoRefresh((prev) => {
       const next = !prev
-      localStorage.setItem('companies-auto-refresh', String(next))
+      localStorage.setItem(STORAGE_KEYS.AUTO_REFRESH, String(next))
       return next
     })
   }

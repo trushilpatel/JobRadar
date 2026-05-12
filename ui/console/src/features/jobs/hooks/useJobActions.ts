@@ -1,16 +1,22 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { setJobStatus, dismissJob, bulkDismissJobs } from '@/api/jobs'
+import { setJobStatus, setJobSaved, dismissJob, bulkDismissJobs } from '@/api/jobs'
 import type { JobStatus } from '@/types'
+import { JOB_STATUS } from '@/constants/jobStatus'
 
 export function useJobActions() {
   const queryClient = useQueryClient()
   const invalidateJobs = () => queryClient.invalidateQueries({ queryKey: ['jobs'] })
 
   const setStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: Exclude<JobStatus, 'dismissed'> }) => setJobStatus(id, status),
+    mutationFn: ({ id, status }: { id: string; status: Exclude<JobStatus, 'dismissed'> }) => {
+      // 'new' is synthetic — no row in user_job_state. Moving back to 'new'
+      // requires deleting the row via setJobSaved(false), not setting status='new'.
+      if (status === JOB_STATUS.NEW) return setJobSaved(id, false)
+      return setJobStatus(id, status)
+    },
     onSuccess: (_, { status }) => {
-      toast.success(`Moved to ${status}`)
+      toast.success(status === JOB_STATUS.NEW ? 'Moved back to New' : `Moved to ${status}`)
       invalidateJobs()
     },
     onError: () => toast.error('Failed to update status'),

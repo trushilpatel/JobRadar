@@ -1,6 +1,14 @@
 # Companies Page — Full Production Rewrite
 
 **Date:** 2026-05-05
+**Superseded (partially) by:** [`2026-05-11-companies-page-production-grade.md`](2026-05-11-companies-page-production-grade.md)
+
+> The implementation described below was shipped on 2026-05-05. On 2026-05-11 the following details were superseded:
+>
+> - **Query key format** — The explicit array `['admin-companies', debouncedSearch, ...]` is now encapsulated behind `companyQueryKeys.adminCompanies(filters, page, limit)` from `features/companies/queryKeys.ts`. The string `'admin-companies'` is no longer used directly anywhere.
+> - **`CompaniesHeader` auto-refresh** — The header no longer owns its own `setInterval`/localStorage state. `useCompanies` is the single source of truth; the header receives `autoRefresh` and `onToggleAutoRefresh` as props. The query `refetchInterval` is 10 s (unchanged); the header's duplicate 30 s interval is removed.
+> - **`CompanyDetailDrawer` scan stats** — The raw `useEffect`/`setState` fetch was replaced with a `useQuery` call using `companyQueryKeys.companyScanStats(id)`.
+> - **New constants** — `STORAGE_KEYS`, `EMPTY_MESSAGES` added to `features/companies/constants.ts`; `ROUTES` added to `constants/routes.ts`.
 
 ## Problem
 
@@ -26,12 +34,12 @@ Offset-based pagination is kept. Companies is an admin page with a small, bounde
 
 ### Files changed
 
-| File | Change |
-|------|--------|
-| `backend/service/company/models/CompanyAdminFilter.go` | Add `ScanStatus string` field |
-| `backend/service/company/models/CompanyAdminView.go` | Add `QueueStatus *string`, `ScanHistory []bool` |
-| `backend/service/company/CompanyAdminRepositoryService.go` | Update `queryCompanies`, update `List` |
-| `backend/service/company/CompanyAdminRestService.go` | Parse `scan_status` query param |
+| File                                                       | Change                                          |
+| ---------------------------------------------------------- | ----------------------------------------------- |
+| `backend/service/company/models/CompanyAdminFilter.go`     | Add `ScanStatus string` field                   |
+| `backend/service/company/models/CompanyAdminView.go`       | Add `QueueStatus *string`, `ScanHistory []bool` |
+| `backend/service/company/CompanyAdminRepositoryService.go` | Update `queryCompanies`, update `List`          |
+| `backend/service/company/CompanyAdminRestService.go`       | Parse `scan_status` query param                 |
 
 ### `CompanyAdminFilter`
 
@@ -56,13 +64,13 @@ Add a `LEFT JOIN company_scan_queue q ON q.company_id = c.id AND q.status IN ('q
 
 `scan_status` WHERE clause (mutually exclusive, single-value):
 
-| Value | Clause |
-|-------|--------|
-| `queued` | `q.status = 'queued'` |
-| `running` | `q.status = 'running'` |
-| `error` | `s.consecutive_errors > 0` |
-| `ok` | `s.consecutive_errors = 0 AND s.last_scan_at IS NOT NULL` |
-| empty/`all` | no additional clause |
+| Value       | Clause                                                    |
+| ----------- | --------------------------------------------------------- |
+| `queued`    | `q.status = 'queued'`                                     |
+| `running`   | `q.status = 'running'`                                    |
+| `error`     | `s.consecutive_errors > 0`                                |
+| `ok`        | `s.consecutive_errors = 0 AND s.last_scan_at IS NOT NULL` |
+| empty/`all` | no additional clause                                      |
 
 Populate `QueueStatus` on each returned row from the joined `queue_status` column.
 
@@ -80,15 +88,15 @@ Parse `scan_status` from query string and pass into `CompanyAdminFilter.ScanStat
 
 ### Files changed
 
-| File | Change |
-|------|--------|
-| `ui/console/src/types/index.ts` | Add `queue_status?: string` to `Company` type |
-| `ui/console/src/api/adminCompanies.ts` | Add `scanStatus` to `AdminCompanyFilters`, wire to query param |
-| `ui/console/src/features/companies/hooks/useCompanies.ts` | Full rewrite — remove all client-side filter logic |
-| `ui/console/src/features/companies/hooks/normalizeAdminCompany.ts` | Use `queue_status` from backend; derive status from `consecutive_errors` |
-| `ui/console/src/features/companies/components/CompaniesFilterBar.tsx` | Rewrite to match `JobFilters` pattern |
-| `ui/console/src/features/companies/components/CompaniesHeader.tsx` | Remove queue polling trigger; keep auto-refresh toggle |
-| `ui/console/src/features/companies/constants.ts` | Add `SCAN_STATUS_FILTER` enum matching backend values |
+| File                                                                  | Change                                                                   |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `ui/console/src/types/index.ts`                                       | Add `queue_status?: string` to `Company` type                            |
+| `ui/console/src/api/adminCompanies.ts`                                | Add `scanStatus` to `AdminCompanyFilters`, wire to query param           |
+| `ui/console/src/features/companies/hooks/useCompanies.ts`             | Full rewrite — remove all client-side filter logic                       |
+| `ui/console/src/features/companies/hooks/normalizeAdminCompany.ts`    | Use `queue_status` from backend; derive status from `consecutive_errors` |
+| `ui/console/src/features/companies/components/CompaniesFilterBar.tsx` | Rewrite to match `JobFilters` pattern                                    |
+| `ui/console/src/features/companies/components/CompaniesHeader.tsx`    | Remove queue polling trigger; keep auto-refresh toggle                   |
+| `ui/console/src/features/companies/constants.ts`                      | Add `SCAN_STATUS_FILTER` enum matching backend values                    |
 
 ### `useCompanies` — rewritten state
 
