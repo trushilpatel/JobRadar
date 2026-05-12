@@ -210,7 +210,27 @@ After implementation, write a brief spec-style doc:
 
 - File-level references only (which file does what) — no code snippets
 - Concise — no padding or filler prose
-- Saved to `docs/superpowers/specs/` with date prefix
+- Saved to `docs/superpowers/specs/` with date prefix: `YYYY-MM-DD-<slug>.md`
+
+## Documentation maintenance
+
+Documentation is code. Stale docs are bugs. Full rules live in `.claude/rules/documentation.md` — the short version:
+
+- **Any change that touches a documented area must update that area in the same response** — never as a follow-up
+- Update `CLAUDE.md` when: adding a service slice, DB table, route group, binary, env var, or ATS adapter
+- Update `docs/ARCHITECTURE.md` when: adding a service, worker, or changing the system topology
+- Update the service's own `CLAUDE.md` when: changing its contract (interface methods, route paths, table ownership)
+- Write a spec in `docs/superpowers/specs/` after every non-trivial feature or fix
+
+### Architectural suggestions
+
+When completing any task, scan for systemic issues and surface short **"Architectural note:"** bullets at the bottom of the response. One sentence each. Do not implement — flag for the team:
+
+- Patterns repeated in 2+ places with no shared abstraction
+- Nil/zero-value assumptions that will cause the same class of bug elsewhere
+- Interface boundaries wider than their callers need
+- Components with more than one clear reason to change
+- Code paths exercised in prod with no test coverage
 
 ## Kubernetes local deployment
 

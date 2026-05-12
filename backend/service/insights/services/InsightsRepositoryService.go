@@ -22,7 +22,7 @@ func NewRepositoryService(db *gorm.DB) InsightsService {
 func (s *repositoryService) TechStack(ctx context.Context) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.TechStack")
 	defer tracing.End(span, &err)
-	var results []dto.TechCount
+	results := make([]dto.TechCount, 0)
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT tech, COUNT(*) AS count
 		FROM jobs, jsonb_array_elements_text(tech_stack) AS tech
@@ -40,7 +40,7 @@ func (s *repositoryService) TechStack(ctx context.Context) (_ any, err error) {
 func (s *repositoryService) CompanyActivity(ctx context.Context) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.CompanyActivity")
 	defer tracing.End(span, &err)
-	var results []dto.CompanyActivityItem
+	results := make([]dto.CompanyActivityItem, 0)
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT
 			c.name AS company_name,
@@ -94,7 +94,7 @@ func (s *repositoryService) Funnel(ctx context.Context) (_ any, err error) {
 func (s *repositoryService) Location(ctx context.Context) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.Location")
 	defer tracing.End(span, &err)
-	var countries []dto.LocationCount
+	countries := make([]dto.LocationCount, 0)
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT COALESCE(country, 'Unknown') AS country, COUNT(*) AS count
 		FROM job_analytics
@@ -106,7 +106,7 @@ func (s *repositoryService) Location(ctx context.Context) (_ any, err error) {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch location breakdown")
 	}
 
-	var states []dto.StateCount
+	states := make([]dto.StateCount, 0)
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT COALESCE(state, 'Unknown') AS state, COUNT(*) AS count
 		FROM job_analytics
@@ -132,7 +132,7 @@ func (s *repositoryService) Sponsorship(ctx context.Context, filter dto.Insights
 	if days <= 0 {
 		days = 30
 	}
-	var results []dto.SponsorshipDay
+	results := make([]dto.SponsorshipDay, 0)
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT
 			TO_CHAR(snapshotted_at, 'YYYY-MM-DD') AS date,
@@ -152,7 +152,7 @@ func (s *repositoryService) Sponsorship(ctx context.Context, filter dto.Insights
 func (s *repositoryService) Velocity(ctx context.Context) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.Velocity")
 	defer tracing.End(span, &err)
-	var results []dto.CompanyVelocity
+	results := make([]dto.CompanyVelocity, 0)
 	err = s.db.WithContext(ctx).Raw(`
 		WITH v AS (
 			SELECT
@@ -192,7 +192,7 @@ func (s *repositoryService) Velocity(ctx context.Context) (_ any, err error) {
 func (s *repositoryService) RoleCategories(ctx context.Context) (_ any, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.RoleCategories")
 	defer tracing.End(span, &err)
-	var results []dto.RoleCategoryCount
+	results := make([]dto.RoleCategoryCount, 0)
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT COALESCE(role_category, 'other') AS category, COUNT(*) AS count
 		FROM job_analytics

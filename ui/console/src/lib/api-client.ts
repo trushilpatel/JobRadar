@@ -64,7 +64,9 @@ async function unwrap<T>(res: Response): Promise<T> {
       return body as T
     }
     if ('data' in obj) {
-      return obj.data as T
+      // Go nil slices serialize to JSON null; treat null the same as absent so
+      // TanStack Query destructuring defaults (e.g. `data = []`) take effect.
+      return (obj.data === null ? undefined : obj.data) as T
     }
   }
   return body as T
