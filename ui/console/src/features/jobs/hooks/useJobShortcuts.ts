@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { Job, JobStatus } from '@/types'
+import { JOB_STATUS } from '@/constants/jobStatus'
 
 type SettableStatus = Exclude<JobStatus, 'dismissed'>
 
@@ -21,11 +22,11 @@ export const JOB_SHORTCUTS: ReadonlyArray<{ key: string; label: string }> = [
 ]
 
 const KEY_TO_STATUS: Record<string, SettableStatus> = {
-  s: 'saved',
-  a: 'applied',
-  i: 'interviewing',
-  o: 'offer',
-  r: 'rejected',
+  s: JOB_STATUS.SAVED,
+  a: JOB_STATUS.APPLIED,
+  i: JOB_STATUS.INTERVIEWING,
+  o: JOB_STATUS.OFFER,
+  r: JOB_STATUS.REJECTED,
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -36,7 +37,12 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return false
 }
 
-export function useJobShortcuts({ activeJob, onSetStatus, onDismiss, enabled = true }: UseJobShortcutsArgs) {
+export function useJobShortcuts({
+  activeJob,
+  onSetStatus,
+  onDismiss,
+  enabled = true,
+}: UseJobShortcutsArgs) {
   useEffect(() => {
     if (!enabled) return
 

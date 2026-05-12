@@ -1,36 +1,22 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, Timer } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { companyQueryKeys } from '@/features/companies/queryKeys'
 import { PipelineStrip } from './PipelineStrip'
 
-const AUTO_REFRESH_KEY = 'companies-auto-refresh'
-const AUTO_REFRESH_INTERVAL_MS = 30_000
+interface CompaniesHeaderProps {
+  autoRefresh: boolean
+  onToggleAutoRefresh: () => void
+}
 
-export function CompaniesHeader() {
+export function CompaniesHeader({ autoRefresh, onToggleAutoRefresh }: CompaniesHeaderProps) {
   const queryClient = useQueryClient()
-  const [autoRefresh, setAutoRefresh] = useState(
-    () => localStorage.getItem(AUTO_REFRESH_KEY) === 'true'
-  )
 
   const refresh = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['admin-companies'] })
-    queryClient.invalidateQueries({ queryKey: ['pipeline-stats'] })
+    queryClient.invalidateQueries({ queryKey: companyQueryKeys.adminCompaniesBase() })
+    queryClient.invalidateQueries({ queryKey: companyQueryKeys.pipelineStats() })
   }, [queryClient])
-
-  useEffect(() => {
-    if (!autoRefresh) return
-    const id = setInterval(refresh, AUTO_REFRESH_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [autoRefresh, refresh])
-
-  function toggleAutoRefresh() {
-    setAutoRefresh((prev) => {
-      const next = !prev
-      localStorage.setItem(AUTO_REFRESH_KEY, String(next))
-      return next
-    })
-  }
 
   return (
     <div className="flex items-center px-6 py-3 border-b border-white/[0.07] gap-6">
@@ -43,12 +29,12 @@ export function CompaniesHeader() {
       <div className="flex items-center gap-1.5 shrink-0">
         <button
           type="button"
-          onClick={toggleAutoRefresh}
+          onClick={onToggleAutoRefresh}
           aria-label={autoRefresh ? 'Auto-refresh: on' : 'Auto-refresh: off'}
           title={
             autoRefresh
               ? 'Auto-refresh on — click to disable'
-              : 'Auto-refresh off — click to enable (30s)'
+              : 'Auto-refresh off — click to enable (10s)'
           }
           className={cn(
             'flex items-center gap-1 px-2 py-1.5 rounded-lg border text-xs font-medium transition-colors',

@@ -1,5 +1,6 @@
 import type { Job, JobApplication, UserJobState } from '@/types'
 import { apiClient } from '@/lib/api-client'
+import { JOB_STATUS, type JobStatus, type PatchableStatus } from '@/constants/jobStatus'
 
 // The backend returns per-user state nested under user_state. Flatten the
 // frequently-accessed fields (status, notes, saved) to the top level so
@@ -8,11 +9,11 @@ function normalizeJob(raw: Job & { user_state?: Partial<UserJobState> }): Job {
   const us = raw.user_state
   return {
     ...raw,
-    status: us?.status ?? 'new',
+    status: us?.status ?? JOB_STATUS.NEW,
     notes: us?.notes ?? null,
     saved: us?.saved_at != null,
     user_state: {
-      status: us?.status ?? 'new',
+      status: us?.status ?? JOB_STATUS.NEW,
       notes: us?.notes ?? null,
       saved_at: us?.saved_at ?? null,
       applied_at: us?.applied_at ?? null,
@@ -29,7 +30,7 @@ export interface JobsPage {
 }
 
 export interface JobFilters {
-  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'dismissed' | 'rejected'
+  status: JobStatus
   search?: string
   companies?: string[]
   remote?: boolean
@@ -86,10 +87,7 @@ export async function setJobSaved(id: string, saved: boolean): Promise<void> {
 }
 
 // PATCH /jobs/:id/status
-export async function setJobStatus(
-  id: string,
-  status: 'new' | 'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected'
-): Promise<void> {
+export async function setJobStatus(id: string, status: PatchableStatus): Promise<void> {
   await apiClient.patch<void>(`/jobs/${id}/status`, { status })
 }
 

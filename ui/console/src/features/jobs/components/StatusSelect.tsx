@@ -1,6 +1,7 @@
 import * as Select from '@radix-ui/react-select'
 import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SELECT_STATUSES, type SelectStatus } from '@/constants/jobStatus'
 import type { JobStatus } from '@/types'
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; classes: string }> = {
@@ -34,9 +35,9 @@ const STATUS_CONFIG: Record<JobStatus, { label: string; classes: string }> = {
   },
 }
 
-type SettableStatus = Exclude<JobStatus, 'dismissed'>
+type SettableStatus = SelectStatus
 
-const ALL_STATUSES: SettableStatus[] = ['new', 'saved', 'applied', 'interviewing', 'offer', 'rejected']
+const ALL_STATUSES: SettableStatus[] = [...SELECT_STATUSES]
 
 interface StatusSelectProps {
   status: JobStatus
@@ -48,7 +49,11 @@ export function StatusSelect({ status, onChange, disabled }: StatusSelectProps) 
   const current = STATUS_CONFIG[status]
 
   return (
-    <Select.Root value={status} onValueChange={(v) => onChange(v as SettableStatus)} disabled={disabled}>
+    <Select.Root
+      value={status}
+      onValueChange={(v) => onChange(v as SettableStatus)}
+      disabled={disabled}
+    >
       <Select.Trigger
         className={cn(
           'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors outline-none cursor-pointer',

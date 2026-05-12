@@ -1,14 +1,20 @@
 import { cn } from '@/lib/utils'
 import type { TabKey } from '@/features/jobs/hooks/useJobs'
+import { JOB_STATUS, TAB_KEYS } from '@/constants/jobStatus'
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'new', label: 'New' },
-  { key: 'saved', label: 'Saved' },
-  { key: 'applied', label: 'Applied' },
-  { key: 'interviewing', label: 'Interviewing' },
-  { key: 'offer', label: 'Offer' },
-  { key: 'rejected', label: 'Rejected' },
-]
+const TAB_LABELS: Record<(typeof TAB_KEYS)[number], string> = {
+  [JOB_STATUS.NEW]: 'New',
+  [JOB_STATUS.SAVED]: 'Saved',
+  [JOB_STATUS.APPLIED]: 'Applied',
+  [JOB_STATUS.INTERVIEWING]: 'Interviewing',
+  [JOB_STATUS.OFFER]: 'Offer',
+  [JOB_STATUS.REJECTED]: 'Rejected',
+}
+
+const TABS: { key: TabKey; label: string }[] = TAB_KEYS.map((key) => ({
+  key,
+  label: TAB_LABELS[key],
+}))
 
 interface JobStatusTabsProps {
   tab: TabKey

@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { toast } from 'sonner'
 import type { Company } from '@/types'
-import { triggerScan } from '@/api/companies'
 import { ADAPTER_TYPES } from '@/types'
+import { EMPTY_MESSAGES } from '@/features/companies/constants'
 import { ResizeHandle } from '@/components/ui/resize-handle'
 import {
   useCompanies,
@@ -28,7 +27,7 @@ export function CompaniesPage() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <CompaniesHeader />
+      <CompaniesHeader autoRefresh={c.autoRefresh} onToggleAutoRefresh={c.toggleAutoRefresh} />
 
       <CompaniesFilterBar
         search={c.search}
@@ -63,9 +62,7 @@ export function CompaniesPage() {
           onPageChange={c.setPage}
           onLimitChange={c.setLimit}
           emptyMessage={
-            c.hasActiveFilters
-              ? 'No companies match the current filters'
-              : 'No companies found'
+            c.hasActiveFilters ? EMPTY_MESSAGES.WITH_FILTERS : EMPTY_MESSAGES.WITHOUT_FILTERS
           }
           activeCompanyId={drawerCompany?.id}
           onRowClick={setDrawerCompany}
@@ -105,19 +102,9 @@ export function CompaniesPage() {
       <AddCompanyModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onCreated={async (company) => {
-          c.refetch()
-          if (company.active) {
-            try {
-              await triggerScan(company.id)
-              toast.success(`${company.name} added and scan queued`)
-              c.refetch()
-            } catch {
-              toast.success(`${company.name} added — click Scan to start scanning`)
-            }
-          } else {
-            toast.success(`${company.name} added`)
-          }
+        onCreated={(company) => {
+          setAddOpen(false)
+          actions.handleCompanyAdded(company)
         }}
       />
 
@@ -126,8 +113,8 @@ export function CompaniesPage() {
         initialData={editCompany ?? undefined}
         onClose={() => setEditCompany(null)}
         onUpdated={(updated) => {
-          c.refetch()
-          toast.success(`${updated.name} updated`)
+          setEditCompany(null)
+          actions.handleCompanyUpdated(updated)
         }}
       />
     </div>
