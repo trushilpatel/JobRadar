@@ -88,3 +88,148 @@ func TestValidate_BulkDismiss_Empty(t *testing.T) {
 		t.Fatal("empty ids must be rejected")
 	}
 }
+
+// TestValidate_List_Boundaries exercises the limit and search-length
+// boundaries explicitly. limit=0 is allowed (the store clamps to 20); 100 is
+// the documented cap; 101+ rejected. search exactly 200 chars is allowed;
+// 201 rejected.
+func TestValidate_List_Boundaries(t *testing.T) {
+	v := newValidator()
+	tests := []struct {
+		name    string
+		filter  jobdto.JobFilter
+		limit   int
+		wantErr bool
+	}{
+		{name: "limit 0", limit: 0},
+		{name: "limit 100", limit: 100},
+		{name: "limit 101", limit: 101, wantErr: true},
+		{name: "search 200 chars", filter: jobdto.JobFilter{Search: strings.Repeat("a", 200)}, limit: 20},
+		{name: "search 201 chars", filter: jobdto.JobFilter{Search: strings.Repeat("a", 201)}, limit: 20, wantErr: true},
+		{name: "empty status allowed for list filter", filter: jobdto.JobFilter{Status: ""}, limit: 20},
+		{name: "new status allowed as list filter", filter: jobdto.JobFilter{Status: jobcommon.JobStatusNew}, limit: 20},
+		{name: "dismissed allowed as list filter", filter: jobdto.JobFilter{Status: jobcommon.JobStatusDismissed}, limit: 20},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := v.List(context.Background(), tc.filter, "", tc.limit)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("err = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestValidate_List_ExperienceRanges covers all the ExperienceRange invariants
+// at the boundary so the store never sees a degenerate range.
+func TestValidate_List_ExperienceRanges(t *testing.T) {
+	v := newValidator()
+	tests := []struct {
+		name    string
+		ranges  []jobdto.ExperienceRange
+		wantErr bool
+	}{
+		{name: "0+ open ended", ranges: []jobdto.ExperienceRange{{Min: 0, Max: nil}}},
+		{name: "5+ open ended", ranges: []jobdto.ExperienceRange{{Min: 5, Max: nil}}},
+		{name: "0-2 closed", ranges: []jobdto.ExperienceRange{{Min: 0, Max: ptrInt(2)}}},
+		{name: "negative min rejected", ranges: []jobdto.ExperienceRange{{Min: -1, Max: nil}}, wantErr: true},
+		{name: "max equals min rejected", ranges: []jobdto.ExperienceRange{{Min: 5, Max: ptrInt(5)}}, wantErr: true},
+		{name: "two valid bands", ranges: []jobdto.ExperienceRange{{Min: 0, Max: ptrInt(2)}, {Min: 5, Max: nil}}},
+		{name: "one valid one invalid → reject", ranges: []jobdto.ExperienceRange{{Min: 0, Max: ptrInt(2)}, {Min: 5, Max: ptrInt(3)}}, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := v.List(context.Background(), jobdto.JobFilter{ExperienceRanges: tc.ranges}, "", 20)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("err = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestValidate_SetStatus_AllValidStatuses asserts every writable status
+// passes. Catches a regression where adding a new constant doesn't make it
+// into the validator whitelist.
+func TestValidate_SetStatus_AllValidStatuses(t *testing.T) {
+	v := newValidator()
+	allowed := []string{
+		jobcommon.JobStatusSaved,
+		jobcommon.JobStatusApplied,
+		jobcommon.JobStatusDismissed,
+		jobcommon.JobStatusInterviewing,
+		jobcommon.JobStatusOffer,
+		jobcommon.JobStatusRejected,
+	}
+	for _, s := range allowed {
+		t.Run(s, func(t *testing.T) {
+			if err := v.SetStatus(context.Background(), "j1", s); err != nil {
+				t.Errorf("status=%q: %v", s, err)
+			}
+		})
+	}
+	rejected := []string{"", "garbage", "NEW", "Saved"}
+	for _, s := range rejected {
+		t.Run("reject "+s, func(t *testing.T) {
+			if err := v.SetStatus(context.Background(), "j1", s); err == nil {
+				t.Errorf("status=%q must be rejected", s)
+			}
+		})
+	}
+}
+
+// TestValidate_Dismiss_Reasons covers the dismissal-reason whitelist.
+func TestValidate_Dismiss_Reasons(t *testing.T) {
+	v := newValidator()
+	allowed := []string{jobcommon.DismissalReasonUserDismissed, jobcommon.DismissalReasonNotRelevant}
+	for _, r := range allowed {
+		t.Run("allow "+r, func(t *testing.T) {
+			if err := v.Dismiss(context.Background(), "j1", r, ""); err != nil {
+				t.Errorf("reason=%q: %v", r, err)
+			}
+		})
+	}
+	rejected := []string{"", "spam", "irrelevant", "USER_DISMISSED"}
+	for _, r := range rejected {
+		t.Run("reject "+r, func(t *testing.T) {
+			if err := v.Dismiss(context.Background(), "j1", r, ""); err == nil {
+				t.Errorf("reason=%q must be rejected", r)
+			}
+		})
+	}
+}
+
+// TestValidate_BulkDismiss_Boundaries covers the IDs slice size invariants
+// and reason-empty-allowed semantics. Empty reason is OK at the validator
+// (the handler defaults it before this layer); 100 entries OK; 101 rejected.
+func TestValidate_BulkDismiss_Boundaries(t *testing.T) {
+	v := newValidator()
+	idsN := func(n int) []string {
+		out := make([]string, n)
+		for i := range n {
+			out[i] = "j"
+		}
+		return out
+	}
+
+	tests := []struct {
+		name    string
+		ids     []string
+		reason  string
+		wantErr bool
+	}{
+		{name: "1 id, valid reason", ids: idsN(1), reason: jobcommon.DismissalReasonUserDismissed},
+		{name: "100 ids OK (boundary)", ids: idsN(100), reason: jobcommon.DismissalReasonNotRelevant},
+		{name: "101 ids rejected", ids: idsN(101), reason: jobcommon.DismissalReasonNotRelevant, wantErr: true},
+		{name: "empty reason allowed", ids: idsN(1), reason: ""},
+		{name: "garbage reason rejected", ids: idsN(1), reason: "garbage", wantErr: true},
+		{name: "0 ids rejected", ids: idsN(0), reason: jobcommon.DismissalReasonNotRelevant, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := v.BulkDismiss(context.Background(), tc.ids, tc.reason, "")
+			if (err != nil) != tc.wantErr {
+				t.Errorf("err = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
+	}
+}

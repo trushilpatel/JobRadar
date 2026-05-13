@@ -82,7 +82,7 @@ func buildCursor(sortBy, sortDir string, job jobmodel.Job) string {
 		if job.ExperienceYears != nil {
 			primVal = strconv.Itoa(*job.ExperienceYears)
 		} // nil ExperienceYears → primVal stays "" (signals NULL)
-	// "added_at" and unrecognised: primVal stays ""; tiebreakers carry the position
+		// "added_at" and unrecognised: primVal stays ""; tiebreakers carry the position
 	}
 	return encodeCursor(sortBy, sortDir, primVal, job.AddedAt, job.ID)
 }
@@ -111,15 +111,18 @@ func applyCursorPredicate(query *gorm.DB, p *cursorPayload) *gorm.DB {
 		)
 
 	case "company":
-		// ORDER: companies.name {dir}, jobs.added_at DESC, jobs.id DESC
+		// ORDER: "Company".name {dir}, jobs.added_at DESC, jobs.id DESC.
+		// GORM's Joins("Company") aliases the companies table as "Company";
+		// references to the unaliased name fail with "missing FROM-clause
+		// entry for table \"companies\"" in Postgres.
 		if p.SortDir == "asc" {
 			return query.Where(
-				"companies.name > ? OR (companies.name = ? AND (jobs.added_at, jobs.id) < (?, ?))",
+				`"Company".name > ? OR ("Company".name = ? AND (jobs.added_at, jobs.id) < (?, ?))`,
 				p.PrimVal, p.PrimVal, addedAt, p.ID,
 			)
 		}
 		return query.Where(
-			"companies.name < ? OR (companies.name = ? AND (jobs.added_at, jobs.id) < (?, ?))",
+			`"Company".name < ? OR ("Company".name = ? AND (jobs.added_at, jobs.id) < (?, ?))`,
 			p.PrimVal, p.PrimVal, addedAt, p.ID,
 		)
 
@@ -190,14 +193,16 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, cursor str
 
 	if filter.Search != "" {
 		term := "%" + filter.Search + "%"
+		// "Company".name — GORM's Joins("Company") aliases the joined table
+		// as "Company"; the original "companies" name is out of scope.
 		query = query.Where(
-			"(jobs.title ILIKE ? OR jobs.location ILIKE ? OR companies.name ILIKE ?)",
+			`(jobs.title ILIKE ? OR jobs.location ILIKE ? OR "Company".name ILIKE ?)`,
 			term, term, term,
 		)
 	}
 
 	if len(filter.Companies) > 0 {
-		query = query.Where("companies.name IN ?", filter.Companies)
+		query = query.Where(`"Company".name IN ?`, filter.Companies)
 	}
 
 	if filter.Remote != nil {
@@ -275,7 +280,9 @@ func sortOrderClause(sortBy, sortDir string) string {
 	case "title":
 		return "jobs.title " + dir + ", jobs.added_at DESC, jobs.id DESC"
 	case "company":
-		return "companies.name " + dir + ", jobs.added_at DESC, jobs.id DESC"
+		// "Company".name — alias produced by Joins("Company"). Using the
+		// unaliased "companies.name" errors with "missing FROM-clause entry".
+		return `"Company".name ` + dir + ", jobs.added_at DESC, jobs.id DESC"
 	case "experience_years":
 		return "jobs.experience_years " + dir + " NULLS LAST, jobs.added_at DESC, jobs.id DESC"
 	default:

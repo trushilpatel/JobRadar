@@ -259,13 +259,15 @@ func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID str
 	// work consistently across all status tabs, not just the "new" tab.
 	if filter.Search != "" {
 		term := "%" + filter.Search + "%"
+		// "Company".name — GORM's Joins("Company") aliases the joined table
+		// as "Company"; the original "companies" name is out of scope.
 		query = query.Where(
-			"(jobs.title ILIKE ? OR jobs.location ILIKE ? OR companies.name ILIKE ?)",
+			`(jobs.title ILIKE ? OR jobs.location ILIKE ? OR "Company".name ILIKE ?)`,
 			term, term, term,
 		)
 	}
 	if len(filter.Companies) > 0 {
-		query = query.Where("companies.name IN ?", filter.Companies)
+		query = query.Where(`"Company".name IN ?`, filter.Companies)
 	}
 	if filter.Remote != nil {
 		query = query.Where("jobs.remote = ?", *filter.Remote)
