@@ -2,6 +2,7 @@ package google
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -403,10 +404,119 @@ func (s *GoogleAdapter) sleep(ctx context.Context, minMs, maxMs int) error {
 	}
 }
 
+// ── ContentFetcher implementation ──────────────────────────────────────────
+//
+// Google careers detail pages are server-rendered HTML (~1.2 MB) that embeds
+// job data inside `AF_initDataCallback({key:'ds:N', hash:'…', data:[…]});`
+// script blocks. The focal job lives in `ds:0`; `ds:1` carries ~20 sibling
+// jobs from the same search. Inside the data array, description prose appears
+// as JSON-quoted strings with HTML angle brackets unicode-escaped (`<` →
+// `<`).
+//
+// The analyzer's generic HTTP fallback caps reads at 50 KB and runs StripHTML
+// on the truncated body — well before reaching the description region. By
+// implementing ContentFetcher, the Google adapter owns its own detail fetch
+// and extraction, returning clean plain text the LLM enricher can consume.
+
+// FetchJobContent fetches a single Google job's detail page and returns the
+// plain-text Description extracted from the focal job's `ds:0` callback.
+func (s *GoogleAdapter) FetchJobContent(ctx context.Context, job types.RawJob) (types.FetchJobContentResponse, error) {
+	if job.URL == "" {
+		return types.FetchJobContentResponse{}, fmt.Errorf("google: empty RawJob.URL for job %q", job.ID)
+	}
+	html, err := s.fetch(ctx, job.URL)
+	if err != nil {
+		return types.FetchJobContentResponse{}, fmt.Errorf("google: fetch detail: %w", err)
+	}
+	return types.FetchJobContentResponse{
+		ID:          job.ID,
+		Title:       job.Title,
+		Location:    job.Location,
+		URL:         job.URL,
+		Description: extractDescription(html),
+	}, nil
+}
+
+// extractDescription pulls the focal job's description out of the `ds:0`
+// AF_initDataCallback block. It walks ds:0 with a JSON-string state machine,
+// collects every quoted string that contains an encoded `<` (`<`),
+// JSON-decodes it, strips HTML to plain text, dedupes by exact content, and
+// joins the remaining parts on blank lines.
+//
+// Sibling jobs in `ds:1` are excluded by design — only ds:0 is scanned.
+func extractDescription(html string) string {
+	const ds0Marker = "AF_initDataCallback({key: 'ds:0'"
+	const cbMarker = "AF_initDataCallback"
+	// escapedLT is the literal six-byte sequence `<` (the JSON-escape form
+	// of `<`) as it appears verbatim in Google's embedded data strings — NOT
+	// the rendered `<` rune. Built as two halves so neither raw nor
+	// interpreted string literals can collapse the backslash-u into a real `<`.
+	const escapedLT = `\` + `u003c`
+
+	start := strings.Index(html, ds0Marker)
+	if start < 0 {
+		return ""
+	}
+	end := len(html)
+	if next := strings.Index(html[start+len(ds0Marker):], cbMarker); next >= 0 {
+		end = start + len(ds0Marker) + next
+	}
+	block := html[start:end]
+
+	var parts []string
+	seen := make(map[string]struct{})
+
+	var (
+		inString bool
+		escaped  bool
+		qStart   int
+	)
+	for i := 0; i < len(block); i++ {
+		c := block[i]
+		if !inString {
+			if c == '"' {
+				inString = true
+				escaped = false
+				qStart = i
+			}
+			continue
+		}
+		if escaped {
+			escaped = false
+			continue
+		}
+		switch c {
+		case '\\':
+			escaped = true
+		case '"':
+			quoted := block[qStart : i+1]
+			inString = false
+			if !strings.Contains(quoted, escapedLT) {
+				continue
+			}
+			var decoded string
+			if err := json.Unmarshal([]byte(quoted), &decoded); err != nil {
+				continue
+			}
+			plain := types.StripHTML(decoded)
+			if plain == "" {
+				continue
+			}
+			if _, dup := seen[plain]; dup {
+				continue
+			}
+			seen[plain] = struct{}{}
+			parts = append(parts, plain)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 // Compile-time interface checks.
 var (
 	_ types.Adapter         = (*GoogleAdapter)(nil)
 	_ types.URLProvider     = (*GoogleAdapter)(nil)
 	_ types.StreamPublisher = (*GoogleAdapter)(nil)
 	_ types.SeenChecker     = (*GoogleAdapter)(nil)
+	_ types.ContentFetcher  = (*GoogleAdapter)(nil)
 )

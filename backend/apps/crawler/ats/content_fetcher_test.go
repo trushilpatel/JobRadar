@@ -14,8 +14,12 @@ import (
 // ── Registry — ContentFetcher interface assertions ────────────────────────────
 
 func TestRegistry_ContentFetcherImplementations(t *testing.T) {
-	// These adapters must implement ContentFetcher
-	shouldImplement := []string{"greenhouse", "lever", "ashby"}
+	// These adapters must implement ContentFetcher. Google joins the list
+	// because the analyzer's 50KB HTTP fallback cannot reach Google's
+	// description region (embedded as escaped HTML inside an
+	// AF_initDataCallback block past byte 1,000,000 of the detail page) —
+	// the adapter must own its own detail extraction.
+	shouldImplement := []string{"greenhouse", "lever", "ashby", "google"}
 	for _, name := range shouldImplement {
 		t.Run(name, func(t *testing.T) {
 			adp, err := ats.Registry(name)
@@ -24,20 +28,6 @@ func TestRegistry_ContentFetcherImplementations(t *testing.T) {
 			}
 			if _, ok := adp.(ats.ContentFetcher); !ok {
 				t.Errorf("%s does not implement ContentFetcher", name)
-			}
-		})
-	}
-
-	// These adapters must NOT (they rely on HTML scrape fallback or full-detail pattern)
-	shouldNotImplement := []string{"google"}
-	for _, name := range shouldNotImplement {
-		t.Run(name+"_no_content_fetcher", func(t *testing.T) {
-			adp, err := ats.Registry(name)
-			if err != nil {
-				t.Fatalf("Registry(%q) error: %v", name, err)
-			}
-			if _, ok := adp.(ats.ContentFetcher); ok {
-				t.Errorf("%s implements ContentFetcher but should not yet", name)
 			}
 		})
 	}
