@@ -51,6 +51,10 @@ type GoogleAdapter struct {
 	client        *http.Client
 	streamPublish func([]types.FetchJobsItem)
 	seenChecker   func(ctx context.Context, ids []string) (map[string]bool, error)
+	// listingURLOverride replaces the production listing URL used by FetchJobs.
+	// Production code leaves this empty. Tests set this to an httptest server
+	// URL so FetchJobs can be exercised without hitting Google's live page.
+	listingURLOverride string
 }
 
 // NewGoogleAdapter constructs a GoogleAdapter with the given config.
@@ -159,7 +163,11 @@ scanLoop:
 			break
 		}
 
-		listingURL := fmt.Sprintf("%s&page=%d", careersURL, pageNum)
+		base := careersURL
+		if s.listingURLOverride != "" {
+			base = s.listingURLOverride
+		}
+		listingURL := fmt.Sprintf("%s&page=%d", base, pageNum)
 		s.log.Info("google/http: scanning listing page", logger.Int("page", pageNum))
 
 		html, err := s.fetch(ctx, listingURL)

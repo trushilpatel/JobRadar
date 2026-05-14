@@ -1,0 +1,58 @@
+name: Integration Tests
+
+# Runs the integration-tagged suite against real Postgres, Kafka, and Redis
+# via testcontainers. Triggered nightly and on demand; not gated on PRs since
+# it requires Docker-in-Docker and takes minutes, not seconds.
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC daily
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/migrations/**"
+      - "backend/common/db/**"
+      - "backend/common/kafka/**"
+      - "backend/common/redis/**"
+      - "backend/platform/cache/**"
+      - "backend/platform/ratelimit/**"
+      - ".github/workflows/integration.yml"
+
+jobs:
+  integration:
+    name: Integration (Postgres + Kafka + Redis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      # testcontainers-go talks to the local Docker daemon. GitHub-hosted
+      # ubuntu-latest runners have Docker available out of the box.
+      - name: Verify Docker daemon
+        run: docker version
+
+      - name: Run integration tests
+        run: |
+          go test -tags=integration -race -count=1 -timeout 20m \
+            -coverpkg=./... -coverprofile=/tmp/integration-coverage.out \
+            ./...
+        working-directory: backend
+        env:
+          # testcontainers picks up these on Linux to talk to the host docker
+          TESTCONTAINERS_RYUK_DISABLED: "false"
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-coverage
+          path: /tmp/integration-coverage.out
+          if-no-files-found: ignore

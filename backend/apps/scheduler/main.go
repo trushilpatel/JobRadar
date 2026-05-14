@@ -49,7 +49,7 @@ func main() {
 	svc := scansvc.NewSchedulerService(scansvc.NewQueueStore(database))
 	checkInterval := time.Duration(cfg.Scheduler.CheckIntervalSeconds) * time.Second
 	stuckTimeout := time.Duration(cfg.Scheduler.StuckTimeoutMinutes) * time.Minute
-	jitter := time.Duration(rand.Int63n(int64(checkInterval) / 10))
+	jitter := computeJitter(checkInterval, rand.New(rand.NewSource(time.Now().UnixNano())))
 
 	log.Info("started",
 		logger.Int("scan_interval_minutes", cfg.Scheduler.ScanIntervalMinutes),
@@ -58,69 +58,5 @@ func main() {
 		logger.Dur("jitter", jitter),
 	)
 
-	// Run immediately on startup so the first tick doesn't wait a full interval.
-	runCycle(ctx, log, svc, cfg.Scheduler.ScanIntervalMinutes, stuckTimeout)
-
-	ticker := time.NewTicker(checkInterval + jitter)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			runCycle(ctx, log, svc, cfg.Scheduler.ScanIntervalMinutes, stuckTimeout)
-		case <-ctx.Done():
-			log.Info("shutting down")
-			return
-		}
-	}
-}
-
-// runCycle performs one full scheduler pass:
-//  1. Resets any processing rows whose crawler has gone silent (stuck detection).
-//  2. Removes queued rows for companies that have since been deactivated.
-//  3. Enqueues all companies currently due for a scan in a single query.
-func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerService, intervalMinutes int, stuckTimeout time.Duration) {
-	start := time.Now()
-
-	if err := svc.ResetStuck(ctx, stuckTimeout); err != nil {
-		metrics.SchedulerErrorsTotal.WithLabelValues("reset_stuck").Inc()
-		log.Error("reset stuck failed", err)
-	} else {
-		metrics.SchedulerStuckChecksTotal.Inc()
-	}
-
-	if purged, err := svc.PurgeInactive(ctx); err != nil {
-		metrics.SchedulerErrorsTotal.WithLabelValues("purge_inactive").Inc()
-		log.Error("purge inactive failed", err)
-	} else if purged > 0 {
-		log.Info("purged inactive company queue entries", logger.Int("purged", purged))
-	}
-
-	res, err := svc.EnqueueDue(ctx, intervalMinutes)
-	if err != nil {
-		metrics.SchedulerErrorsTotal.WithLabelValues("enqueue_due").Inc()
-		log.Error("enqueue due failed", err)
-	} else {
-		metrics.SchedulerCompaniesEnqueuedTotal.Add(float64(res.Enqueued))
-	}
-
-	// Phase 2: surface companies skipped because they have no scan_settings
-	// row yet. Logged at INFO once per tick so admins can see the count even
-	// when no companies were enqueued (e.g. immediately after migration when
-	// the queue is idle but every company still needs onboarding).
-	if res.SkippedNoSettings > 0 {
-		log.Info("companies skipped — no scan_settings configured",
-			logger.Int("skipped_no_settings", res.SkippedNoSettings),
-		)
-	}
-
-	metrics.SchedulerRunDuration.Observe(time.Since(start).Seconds())
-	if res.Enqueued > 0 {
-		log.Info("cycle complete",
-			logger.Int(logger.FieldEnqueued, res.Enqueued),
-			logger.Dur(logger.FieldDuration, time.Since(start)),
-		)
-	} else {
-		log.Debug("cycle complete", logger.Dur(logger.FieldDuration, time.Since(start)))
-	}
+	Run(ctx, log, svc, cfg.Scheduler.ScanIntervalMinutes, checkInterval+jitter, stuckTimeout)
 }

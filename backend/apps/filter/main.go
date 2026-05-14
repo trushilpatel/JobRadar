@@ -187,41 +187,49 @@ func buildWorker(ctx context.Context, cfg *config.Config, database *gorm.DB, con
 func runRetryConsumer(ctx context.Context, consumer *kafka.Consumer, producer kafka.Publisher, inputTopic string, log logger.Logger) error {
 	log.Info("retry consumer started", logger.Str("topic", inputTopic))
 	return consumer.Poll(ctx, func(_ string, value []byte, headers []kgo.RecordHeader) error {
-		nextAt := kafka.NextAttemptAtFromHeaders(headers)
-		if !nextAt.IsZero() {
-			wait := time.Until(nextAt)
-			if wait > maxRetrySleep {
-				wait = maxRetrySleep
-			}
-			if wait > 0 {
-				select {
-				case <-time.After(wait):
-				case <-ctx.Done():
-					return ctx.Err()
-				}
-			}
-		}
-
-		retryCount := kafka.RetryCountFromHeaders(headers)
-		// Preserve retry_count; next_attempt_at is irrelevant on the main topic but
-		// harmless. We re-use BuildRetryHeaders so both stay attached.
-		outHeaders := kafka.BuildRetryHeaders(retryCount, nextAt)
-
-		// Guard against a malformed payload — shouldn't happen, but if it does,
-		// skip rather than loop forever. Parsing is cheap.
-		var probe json.RawMessage
-		if err := json.Unmarshal(value, &probe); err != nil {
-			log.Warn("retry consumer: malformed payload, dropping",
-				logger.Str("topic", inputTopic), logger.Err(err))
-			return nil
-		}
-
-		if err := producer.PublishWithHeaders(ctx, kafka.TopicJobListingsRaw, value, outHeaders); err != nil {
-			log.Error("retry consumer: republish failed", err,
-				logger.Str("topic", inputTopic),
-				logger.Int("retry_count", retryCount))
-			return err
-		}
-		return nil
+		return handleRetryRecord(ctx, producer, inputTopic, log, value, headers)
 	})
+}
+
+// handleRetryRecord is the per-record body of runRetryConsumer extracted for
+// unit testing. It waits until next_attempt_at (capped at maxRetrySleep),
+// drops malformed payloads, and republishes onto the main raw topic preserving
+// the retry headers.
+func handleRetryRecord(ctx context.Context, producer kafka.Publisher, inputTopic string, log logger.Logger, value []byte, headers []kgo.RecordHeader) error {
+	nextAt := kafka.NextAttemptAtFromHeaders(headers)
+	if !nextAt.IsZero() {
+		wait := time.Until(nextAt)
+		if wait > maxRetrySleep {
+			wait = maxRetrySleep
+		}
+		if wait > 0 {
+			select {
+			case <-time.After(wait):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+
+	retryCount := kafka.RetryCountFromHeaders(headers)
+	// Preserve retry_count; next_attempt_at is irrelevant on the main topic but
+	// harmless. We re-use BuildRetryHeaders so both stay attached.
+	outHeaders := kafka.BuildRetryHeaders(retryCount, nextAt)
+
+	// Guard against a malformed payload — shouldn't happen, but if it does,
+	// skip rather than loop forever. Parsing is cheap.
+	var probe json.RawMessage
+	if err := json.Unmarshal(value, &probe); err != nil {
+		log.Warn("retry consumer: malformed payload, dropping",
+			logger.Str("topic", inputTopic), logger.Err(err))
+		return nil
+	}
+
+	if err := producer.PublishWithHeaders(ctx, kafka.TopicJobListingsRaw, value, outHeaders); err != nil {
+		log.Error("retry consumer: republish failed", err,
+			logger.Str("topic", inputTopic),
+			logger.Int("retry_count", retryCount))
+		return err
+	}
+	return nil
 }

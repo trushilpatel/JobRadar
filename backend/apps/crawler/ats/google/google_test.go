@@ -3,8 +3,10 @@ package google
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -469,5 +471,278 @@ func TestFetchJobContent_ReturnsErrorOnEmptyURL(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error when RawJob.URL is empty")
+	}
+}
+
+// ── FetchJobs — end-to-end against a fake listing server ───────────────────
+
+// makeListingPage builds a single listing-page HTML body with the supplied
+// jobs and "Showing X to Y of N" total — synthesises the exact card shape
+// the live Google page emits so parseListing returns a non-empty slice.
+func makeListingPage(total int, jobs ...parsedJob) string {
+	var sb strings.Builder
+	sb.WriteString(`<!doctype html><html><body>`)
+	sb.WriteString(`<div class="header">Showing 1 to 20 of `)
+	sb.WriteString(strconv.Itoa(total))
+	sb.WriteString(` rows</div><ul class="search-results">`)
+	for _, j := range jobs {
+		id := strings.TrimPrefix(j.ID, "google-")
+		sb.WriteString(`<li class="card"><h3>` + j.Title + `</h3>`)
+		sb.WriteString(`<i class="google-material-icons">corporate_fare</i>`)
+		sb.WriteString(`<span><span>` + j.Org + `</span></span>`)
+		sb.WriteString(`<i class="google-material-icons">place</i>`)
+		sb.WriteString(`<span><span>` + j.Location + `</span></span>`)
+		sb.WriteString(`<button>Save</button>`)
+		sb.WriteString(`<a class="link" href="jobs/results/` + id + `-test-slug?q=us" aria-label="Learn more about ` + j.Title + `"></a>`)
+		sb.WriteString(`</li>`)
+	}
+	sb.WriteString(`</ul></body></html>`)
+	return sb.String()
+}
+
+// TestFetchJobs_HappyPath_SinglePage verifies FetchJobs walks a synthetic
+// listing page, parses cards, and returns FetchJobsItem values via the
+// streaming callback. Sets MaxPages=1 and zero delays to keep the test fast.
+func TestFetchJobs_HappyPath_SinglePage(t *testing.T) {
+	page := makeListingPage(2,
+		parsedJob{ID: "google-100", Title: "SWE A", Org: "Search", Location: "Mountain View"},
+		parsedJob{ID: "google-200", Title: "SWE B", Org: "Cloud", Location: "Kirkland"},
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	cfg := Config{MinDelayMs: 1, MaxDelayMs: 2, TimeoutMs: 5000, MaxPages: 1}
+	g := NewGoogleAdapter(cfg, logger.NewNoop())
+	g.listingURLOverride = srv.URL + "?"
+
+	var streamed []types.FetchJobsItem
+	g.SetStreamPublish(func(items []types.FetchJobsItem) {
+		streamed = append(streamed, items...)
+	})
+
+	resp, err := g.FetchJobs(context.Background(), "google")
+	if err != nil {
+		t.Fatalf("FetchJobs: %v", err)
+	}
+	if len(resp.Jobs) != 2 {
+		t.Errorf("FetchJobs returned %d jobs, want 2", len(resp.Jobs))
+	}
+	if len(streamed) != 2 {
+		t.Errorf("stream callback fired %d times, want 2", len(streamed))
+	}
+}
+
+// TestFetchJobs_StopsAtMaxPages verifies the engine honours cfg.MaxPages —
+// without this guard, a misconfigured scan could walk every page forever.
+func TestFetchJobs_StopsAtMaxPages(t *testing.T) {
+	page := makeListingPage(1000,
+		parsedJob{ID: "google-1", Title: "SWE", Org: "Co", Location: "MV"},
+	)
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		_, _ = w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	cfg := Config{MinDelayMs: 1, MaxDelayMs: 2, TimeoutMs: 5000, MaxPages: 1}
+	g := NewGoogleAdapter(cfg, logger.NewNoop())
+	g.listingURLOverride = srv.URL + "?"
+	g.SetStreamPublish(func(_ []types.FetchJobsItem) {})
+
+	if _, err := g.FetchJobs(context.Background(), "google"); err != nil {
+		t.Fatalf("FetchJobs: %v", err)
+	}
+	if hits != 1 {
+		t.Errorf("expected 1 page fetch (MaxPages=1), got %d", hits)
+	}
+}
+
+// TestFetchJobs_SeenCheckerSkipsKnownJobs verifies the seen-check filters
+// previously-known cards before publishing — a regression here would re-spam
+// Kafka with already-tracked jobs on every scan.
+func TestFetchJobs_SeenCheckerSkipsKnownJobs(t *testing.T) {
+	page := makeListingPage(2,
+		parsedJob{ID: "google-100", Title: "SWE A", Org: "X", Location: "MV"},
+		parsedJob{ID: "google-200", Title: "SWE B", Org: "Y", Location: "KL"},
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	cfg := Config{MinDelayMs: 1, MaxDelayMs: 2, TimeoutMs: 5000, MaxPages: 1}
+	g := NewGoogleAdapter(cfg, logger.NewNoop())
+	g.listingURLOverride = srv.URL + "?"
+
+	var streamed []types.FetchJobsItem
+	g.SetStreamPublish(func(items []types.FetchJobsItem) {
+		streamed = append(streamed, items...)
+	})
+	g.SetSeenChecker(func(_ context.Context, ids []string) (map[string]bool, error) {
+		out := map[string]bool{}
+		for _, id := range ids {
+			// pretend google-100 is already in the ledger
+			if id == "google-100" {
+				out[id] = true
+			}
+		}
+		return out, nil
+	})
+
+	resp, err := g.FetchJobs(context.Background(), "google")
+	if err != nil {
+		t.Fatalf("FetchJobs: %v", err)
+	}
+	if len(resp.Jobs) != 1 || resp.Jobs[0].ID != "google-200" {
+		t.Errorf("expected only google-200 published, got %+v", resp.Jobs)
+	}
+	if len(streamed) != 1 {
+		t.Errorf("streamed: got %d, want 1", len(streamed))
+	}
+}
+
+// TestFetchJobs_SeenCheckerErrorContinuesPagination verifies a flapping
+// seen-check causes FetchJobs to skip enrichment for that page and advance —
+// without this the scan loop would either stall or re-publish duplicates.
+func TestFetchJobs_SeenCheckerErrorContinuesPagination(t *testing.T) {
+	page := makeListingPage(2,
+		parsedJob{ID: "google-100", Title: "SWE A", Org: "X", Location: "MV"},
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	cfg := Config{MinDelayMs: 1, MaxDelayMs: 2, TimeoutMs: 5000, MaxPages: 1}
+	g := NewGoogleAdapter(cfg, logger.NewNoop())
+	g.listingURLOverride = srv.URL + "?"
+	g.SetStreamPublish(func(_ []types.FetchJobsItem) {})
+	g.SetSeenChecker(func(_ context.Context, _ []string) (map[string]bool, error) {
+		return nil, errSeenCheckFail
+	})
+
+	// Should not return an error — failure to check is treated as
+	// "everything seen" so we don't blast Kafka.
+	resp, err := g.FetchJobs(context.Background(), "google")
+	if err != nil {
+		t.Fatalf("FetchJobs returned error on seen-check failure: %v", err)
+	}
+	if len(resp.Jobs) != 0 {
+		t.Errorf("expected 0 jobs on seen-check failure (defensive skip), got %d", len(resp.Jobs))
+	}
+}
+
+var errSeenCheckFail = errors.New("seen-check transient error")
+
+// TestFetchJobs_ListingFetchErrorStopsScan verifies an HTTP fetch failure on
+// the first page terminates the loop cleanly — no panic, returns whatever
+// was published so far (zero items).
+func TestFetchJobs_ListingFetchErrorStopsScan(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	cfg := Config{MinDelayMs: 1, MaxDelayMs: 2, TimeoutMs: 5000, MaxPages: 1}
+	g := NewGoogleAdapter(cfg, logger.NewNoop())
+	g.listingURLOverride = srv.URL + "?"
+
+	resp, err := g.FetchJobs(context.Background(), "google")
+	if err != nil {
+		t.Fatalf("FetchJobs should swallow HTTP errors (logged + break), got %v", err)
+	}
+	if len(resp.Jobs) != 0 {
+		t.Errorf("expected 0 jobs after fetch error, got %d", len(resp.Jobs))
+	}
+}
+
+// TestFetchJobs_TotalCoveredStopsLoop verifies the engine stops paginating
+// once pageNum*pageSize >= total. The pageSize constant is 20.
+func TestFetchJobs_TotalCoveredStopsLoop(t *testing.T) {
+	// total=2 means after page 1 (page 1 * 20 = 20 >= 2) the loop should stop.
+	page := makeListingPage(2,
+		parsedJob{ID: "google-100", Title: "SWE A", Org: "X", Location: "MV"},
+	)
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		_, _ = w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	cfg := Config{MinDelayMs: 1, MaxDelayMs: 2, TimeoutMs: 5000, MaxPages: 0}
+	g := NewGoogleAdapter(cfg, logger.NewNoop())
+	g.listingURLOverride = srv.URL + "?"
+	g.SetStreamPublish(func(_ []types.FetchJobsItem) {})
+
+	if _, err := g.FetchJobs(context.Background(), "google"); err != nil {
+		t.Fatalf("FetchJobs: %v", err)
+	}
+	if hits != 1 {
+		t.Errorf("expected 1 page fetch (total=2 < 20), got %d", hits)
+	}
+}
+
+// TestFetchJobs_ContextCancelledTerminatesEarly verifies a cancelled context
+// stops the scan loop without panicking or returning a stale error.
+func TestFetchJobs_ContextCancelledTerminatesEarly(t *testing.T) {
+	page := makeListingPage(1000,
+		parsedJob{ID: "google-1", Title: "SWE", Org: "X", Location: "MV"},
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	cfg := Config{MinDelayMs: 1, MaxDelayMs: 2, TimeoutMs: 5000, MaxPages: 0}
+	g := NewGoogleAdapter(cfg, logger.NewNoop())
+	g.listingURLOverride = srv.URL + "?"
+	g.SetStreamPublish(func(_ []types.FetchJobsItem) {})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel before invoking
+	_, err := g.FetchJobs(ctx, "google")
+	// FetchJobs swallows context errors and returns whatever was committed.
+	if err != nil {
+		t.Errorf("FetchJobs should not return error on context cancel; got %v", err)
+	}
+}
+
+// TestSetStreamPublish_StoresCallback verifies SetStreamPublish wires the
+// callback into the adapter so streaming publishes route through the engine.
+func TestSetStreamPublish_StoresCallback(t *testing.T) {
+	g := NewGoogleAdapterDefault()
+	called := false
+	g.SetStreamPublish(func(_ []types.FetchJobsItem) { called = true })
+	g.streamPublish([]types.FetchJobsItem{{ID: "x"}})
+	if !called {
+		t.Error("SetStreamPublish did not store the callback")
+	}
+}
+
+// TestSleep_ContextCancellationReturnsErr verifies the inter-page pacing
+// helper returns ctx.Err() promptly when cancelled, instead of blocking
+// for the full random interval — required so a SIGTERM during a long
+// 20-40 s pause does not stall shutdown.
+func TestSleep_ContextCancellationReturnsErr(t *testing.T) {
+	g := NewGoogleAdapter(Config{MinDelayMs: 10000, MaxDelayMs: 20000}, logger.NewNoop())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := g.sleep(ctx, 10000, 20000); err == nil {
+		t.Error("expected ctx.Err on cancelled context")
+	}
+}
+
+// TestSleep_MinEqualsMaxStillTerminates verifies the off-by-one guard:
+// when minMs == maxMs, the helper bumps maxMs to minMs+1 so rand.Intn does
+// not panic on zero. A direct equal-bounds call must still return cleanly.
+func TestSleep_MinEqualsMaxStillTerminates(t *testing.T) {
+	g := NewGoogleAdapter(Config{}, logger.NewNoop())
+	if err := g.sleep(context.Background(), 1, 1); err != nil {
+		t.Errorf("sleep with min==max: %v", err)
 	}
 }

@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,32 +13,62 @@ import (
 )
 
 // fakeSchedulerService is a test double for scansvc.SchedulerService.
+//
+// It records the inputs each call received and exposes counters via
+// atomic.Int64 so concurrent ticks under -race never tear during reads
+// from Run's goroutine.
 type fakeSchedulerService struct {
-	enqueueCount   int
-	skippedCount   int
-	enqueueErr     error
-	resetErr       error
-	resetCalled    bool
-	purgeErr       error
-	purgeCalled    bool
+	mu sync.Mutex
+
+	enqueueCount  int
+	skippedCount  int
+	purgeCount    int
+	enqueueErr    error
+	resetErr      error
+	purgeErr      error
+	resetStuckArg time.Duration
+
+	resetCalls   atomic.Int64
+	purgeCalls   atomic.Int64
+	enqueueCalls atomic.Int64
+
 	enqueueDueArgs int
 }
 
 func (f *fakeSchedulerService) EnqueueDue(_ context.Context, intervalMinutes int) (scansvc.SchedulerCycleResult, error) {
+	f.mu.Lock()
 	f.enqueueDueArgs = intervalMinutes
-	return scansvc.SchedulerCycleResult{
+	res := scansvc.SchedulerCycleResult{
 		Enqueued:          f.enqueueCount,
 		SkippedNoSettings: f.skippedCount,
-	}, f.enqueueErr
+	}
+	err := f.enqueueErr
+	f.mu.Unlock()
+	f.enqueueCalls.Add(1)
+	return res, err
 }
-func (f *fakeSchedulerService) ResetStuck(_ context.Context, _ time.Duration) error {
-	f.resetCalled = true
-	return f.resetErr
+func (f *fakeSchedulerService) ResetStuck(_ context.Context, d time.Duration) error {
+	f.mu.Lock()
+	f.resetStuckArg = d
+	err := f.resetErr
+	f.mu.Unlock()
+	f.resetCalls.Add(1)
+	return err
 }
 func (f *fakeSchedulerService) PurgeInactive(_ context.Context) (int, error) {
-	f.purgeCalled = true
-	return 0, f.purgeErr
+	f.mu.Lock()
+	n := f.purgeCount
+	err := f.purgeErr
+	f.mu.Unlock()
+	f.purgeCalls.Add(1)
+	return n, err
 }
+
+// resetCalled reports whether ResetStuck has been invoked at least once.
+func (f *fakeSchedulerService) resetCalled() bool { return f.resetCalls.Load() > 0 }
+
+// purgeCalled reports whether PurgeInactive has been invoked at least once.
+func (f *fakeSchedulerService) purgeCalled() bool { return f.purgeCalls.Load() > 0 }
 
 var _ scansvc.SchedulerService = (*fakeSchedulerService)(nil)
 
@@ -46,7 +78,7 @@ func TestRunCycle_EnqueuesAndResetsStuck(t *testing.T) {
 	svc := &fakeSchedulerService{enqueueCount: 3}
 	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
 
-	if !svc.resetCalled {
+	if !svc.resetCalled() {
 		t.Error("expected ResetStuck to be called")
 	}
 }

@@ -860,3 +860,23 @@ func assertEqual(t *testing.T, field, got, want string) {
 		t.Errorf("%s: got %q, want %q", field, got, want)
 	}
 }
+
+// ── Resolver fallback ───────────────────────────────────────────────────────
+
+// TestResolveBaseURL_ZeroValueFallsBackToDefault verifies a zero-value Apple
+// struct still produces a usable host via the default constant. Otherwise a
+// dropped-in default initialisation would emit "/en-us/search…" with no host.
+func TestResolveBaseURL_ZeroValueFallsBackToDefault(t *testing.T) {
+	a := &Apple{}
+	if got := a.resolveBaseURL(); got != defaultBaseURL {
+		t.Errorf("zero-value resolveBaseURL: got %q, want %q", got, defaultBaseURL)
+	}
+}
+
+// TestResolveBaseURL_OverrideHonoured verifies the non-empty branch.
+func TestResolveBaseURL_OverrideHonoured(t *testing.T) {
+	a := &Apple{baseURL: "https://override.example"}
+	if got := a.resolveBaseURL(); got != "https://override.example" {
+		t.Errorf("resolveBaseURL: got %q, want override", got)
+	}
+}

@@ -19,12 +19,15 @@ import (
 // --- Test doubles ---
 
 type fakeJobReader struct {
-	jobs       []jobmodel.Job
-	next       string
-	job        *jobmodel.Job
-	err        error
-	getByIDErr error
-	calls      int // counts GetJobs invocations to assert cache hit/miss
+	jobs          []jobmodel.Job
+	next          string
+	job           *jobmodel.Job
+	err           error
+	getByIDErr    error
+	calls         int // counts GetJobs invocations to assert cache hit/miss
+	distinctNames []string
+	countAllErr   error
+	jobPostIDsErr error
 }
 
 func (f *fakeJobReader) GetJobs(_ context.Context, _ jobdto.JobFilter, _ string, _ int) ([]jobmodel.Job, string, error) {
@@ -44,27 +47,37 @@ func (f *fakeJobReader) GetJobsAddedByDay(_ context.Context, _ int) ([]jobdto.Da
 	return nil, nil
 }
 func (f *fakeJobReader) GetJobPostIDs(_ context.Context, ids []string) ([]string, error) {
+	if f.jobPostIDsErr != nil {
+		return nil, f.jobPostIDsErr
+	}
 	out := make([]string, 0, len(ids))
 	for _, id := range ids {
 		out = append(out, "post-"+id)
 	}
 	return out, nil
 }
-func (f *fakeJobReader) CountAll(_ context.Context) (int64, error) { return int64(len(f.jobs)), nil }
+func (f *fakeJobReader) CountAll(_ context.Context) (int64, error) {
+	if f.countAllErr != nil {
+		return 0, f.countAllErr
+	}
+	return int64(len(f.jobs)), nil
+}
 func (f *fakeJobReader) GetDistinctCompanyNames(_ context.Context) ([]string, error) {
-	return nil, nil
+	return f.distinctNames, nil
 }
 
 type fakeUserState struct {
 	getResult    *jobmodel.UserJobState
 	getErr       error
 	manyResult   map[string]*jobmodel.UserJobState
+	manyErr      error
 	upsertCalls  int
 	lastUpsertID string
 	upsertState  jobdto.UpsertState
 	bulkCalls    int
 	bulkIDs      []string
 	deleteCalls  int
+	deleteErr    error
 	countsResult jobdto.Counts
 	countsErr    error
 	upsertErr    error
@@ -88,6 +101,9 @@ func (f *fakeUserState) Get(_ context.Context, userID, jobID string) (*jobmodel.
 func (f *fakeUserState) GetMany(_ context.Context, userID string, _ []string) (map[string]*jobmodel.UserJobState, error) {
 	if userID == "" {
 		return nil, apperr.ErrInternal.WithMessage("user id required")
+	}
+	if f.manyErr != nil {
+		return nil, f.manyErr
 	}
 	if f.manyResult == nil {
 		return map[string]*jobmodel.UserJobState{}, nil
@@ -116,7 +132,7 @@ func (f *fakeUserState) Delete(_ context.Context, userID, _ string) error {
 		return apperr.ErrInternal.WithMessage("user id required")
 	}
 	f.deleteCalls++
-	return nil
+	return f.deleteErr
 }
 func (f *fakeUserState) CountsByUser(_ context.Context, userID string) (jobdto.Counts, error) {
 	if userID == "" {
@@ -149,7 +165,10 @@ func (f *fakeAppWriter) InsertAppliedApplication(_ context.Context, _ string) er
 	return nil
 }
 
-type fakeLedgerWriter struct{ calls int }
+type fakeLedgerWriter struct {
+	calls      int
+	batchCalls int
+}
 
 func (f *fakeLedgerWriter) MarkSeen(_ context.Context, _, _, _ string) error { return nil }
 func (f *fakeLedgerWriter) MarkSeenBatch(_ context.Context, _ []string, _, _ string) error {
@@ -160,6 +179,7 @@ func (f *fakeLedgerWriter) UpdateSeenReason(_ context.Context, _, _ string) erro
 	return nil
 }
 func (f *fakeLedgerWriter) UpdateSeenReasonBatch(_ context.Context, _ []string, _ string) error {
+	f.batchCalls++
 	return nil
 }
 func (f *fakeLedgerWriter) UpdateRetryBatch(_ context.Context, _ []jobsvc.RetryLedgerEntry) error {

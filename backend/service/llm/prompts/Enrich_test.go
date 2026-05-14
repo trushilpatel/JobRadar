@@ -60,3 +60,89 @@ func TestBuildEnrich_CitizenshipDefaultsFalse(t *testing.T) {
 		t.Error("requires_citizen must default to false when not mentioned in the posting")
 	}
 }
+
+func TestBuildEnrich_RolesJoinedWithComma(t *testing.T) {
+	prompt := prompts.BuildEnrichBatch(
+		[]string{"Backend Engineer", "Software Engineer"},
+		[]dto.JobPostEnrichInput{{ID: "j1", RawText: "x"}},
+	)
+	if !strings.Contains(prompt, "Backend Engineer, Software Engineer") {
+		t.Fatal("expected target roles joined with ', '")
+	}
+}
+
+func TestBuildEnrich_MultipleJobsSeparatedByDelimiter(t *testing.T) {
+	inputs := []dto.JobPostEnrichInput{
+		{ID: "a", RawText: "TEXT_A"},
+		{ID: "b", RawText: "TEXT_B"},
+		{ID: "c", RawText: "TEXT_C"},
+	}
+	prompt := prompts.BuildEnrichBatch([]string{"Software Engineer"}, inputs)
+
+	if strings.Count(prompt, "\n---\n") != 2 {
+		t.Fatalf("expected 2 inter-job delimiters for 3 jobs, got prompt:\n%s", prompt)
+	}
+
+	// Each job's ID and raw text must appear once, in order.
+	idxA := strings.Index(prompt, "Job ID: a")
+	idxB := strings.Index(prompt, "Job ID: b")
+	idxC := strings.Index(prompt, "Job ID: c")
+	if idxA == -1 || idxB == -1 || idxC == -1 {
+		t.Fatal("each job ID must appear in the prompt")
+	}
+	if idxA >= idxB || idxB >= idxC {
+		t.Fatal("job order must be preserved in the prompt")
+	}
+	for _, raw := range []string{"TEXT_A", "TEXT_B", "TEXT_C"} {
+		if !strings.Contains(prompt, raw) {
+			t.Fatalf("expected raw text %q to appear in prompt", raw)
+		}
+	}
+}
+
+func TestBuildEnrich_SingleJobHasNoDelimiter(t *testing.T) {
+	prompt := prompts.BuildEnrichBatch(
+		[]string{"Software Engineer"},
+		[]dto.JobPostEnrichInput{{ID: "solo", RawText: "alpha"}},
+	)
+	if strings.Contains(prompt, "\n---\n") {
+		t.Fatal("single-job prompt must not contain the inter-job delimiter")
+	}
+	if !strings.Contains(prompt, "Job ID: solo") || !strings.Contains(prompt, "alpha") {
+		t.Fatal("single-job prompt must still include ID + raw text")
+	}
+}
+
+func TestBuildEnrich_EmptyInputsProducesNoJobsBlock(t *testing.T) {
+	prompt := prompts.BuildEnrichBatch([]string{"Software Engineer"}, nil)
+	// The header should still be present, but no Job ID lines.
+	if strings.Contains(prompt, "Job ID:") {
+		t.Fatal("empty inputs must not produce any Job ID lines")
+	}
+	if !strings.Contains(prompt, "Return ONLY raw JSON") {
+		t.Fatal("template header should still be emitted for empty inputs")
+	}
+}
+
+func TestBuildEnrich_RoleCategoryAndRoleMatchSchema(t *testing.T) {
+	prompt := prompts.BuildEnrichBatch([]string{"Software Engineer"}, []dto.JobPostEnrichInput{{ID: "j1", RawText: "x"}})
+
+	// Schema: role_category enum is a load-bearing contract. The prompt must
+	// continue to list the exact six allowed categories + "other".
+	for _, cat := range []string{"backend", "frontend", "fullstack", "devops", "ml", "data", "other"} {
+		if !strings.Contains(prompt, cat) {
+			t.Fatalf("role_category enum must mention %q", cat)
+		}
+	}
+	if !strings.Contains(prompt, "role_match: true if this job is a genuine match for the target roles") {
+		t.Fatal("role_match instruction text must be present")
+	}
+}
+
+func TestBuildEnrich_DeterministicForSameInput(t *testing.T) {
+	a := prompts.BuildEnrichBatch([]string{"X"}, []dto.JobPostEnrichInput{{ID: "1", RawText: "t"}})
+	b := prompts.BuildEnrichBatch([]string{"X"}, []dto.JobPostEnrichInput{{ID: "1", RawText: "t"}})
+	if a != b {
+		t.Fatal("BuildEnrichBatch must be deterministic for identical inputs")
+	}
+}

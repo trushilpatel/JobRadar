@@ -612,3 +612,156 @@ func TestRest_Get_ServiceErrorPreservesCode(t *testing.T) {
 		t.Errorf("status = %d, want 400 (from ServiceError.Status)", w.Code)
 	}
 }
+
+// -------- /jobs/companies and /jobs/counts --------
+
+// fakeRestSvcReturning is a tiny extension to fakeRestSvc that overrides
+// counts + companies returns. Used to exercise the success paths of the
+// /jobs/companies and /jobs/counts handlers.
+type fakeRestSvcReturning struct {
+	fakeRestSvc
+	countsRes  jobdto.Counts
+	countsErr  error
+	companies  []string
+	companyErr error
+	getCounts  int
+	getCompany int
+}
+
+func (f *fakeRestSvcReturning) GetCounts(_ context.Context) (jobdto.Counts, error) {
+	f.getCounts++
+	return f.countsRes, f.countsErr
+}
+func (f *fakeRestSvcReturning) GetCompanies(_ context.Context) ([]string, error) {
+	f.getCompany++
+	return f.companies, f.companyErr
+}
+
+func TestRest_Companies_HappyPath(t *testing.T) {
+	fake := &fakeRestSvcReturning{companies: []string{"Acme", "Globex"}}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodGet, "/jobs/companies", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	if fake.getCompany != 1 {
+		t.Errorf("GetCompanies calls = %d, want 1", fake.getCompany)
+	}
+	if !strings.Contains(w.Body.String(), "Acme") || !strings.Contains(w.Body.String(), "Globex") {
+		t.Errorf("body missing companies: %s", w.Body.String())
+	}
+}
+
+func TestRest_Companies_ServiceErrorMapsTo500(t *testing.T) {
+	fake := &fakeRestSvcReturning{companyErr: apperr.ErrInternal.WithMessage("db down")}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodGet, "/jobs/companies", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}
+
+func TestRest_Counts_HappyPath(t *testing.T) {
+	fake := &fakeRestSvcReturning{countsRes: jobdto.Counts{Saved: 3, Applied: 1}}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodGet, "/jobs/counts", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	if fake.getCounts != 1 {
+		t.Errorf("GetCounts calls = %d, want 1", fake.getCounts)
+	}
+	if !strings.Contains(w.Body.String(), `"saved":3`) {
+		t.Errorf("body missing saved count: %s", w.Body.String())
+	}
+}
+
+func TestRest_Counts_ServiceErrorMapsTo500(t *testing.T) {
+	fake := &fakeRestSvcReturning{countsErr: apperr.ErrInternal.WithMessage("counts down")}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodGet, "/jobs/counts", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}
+
+// TestRest_Get_ServiceErrorMapsTo500 covers the get handler's HandleError
+// branch with an INTERNAL error (the existing test only covers NOT_FOUND).
+func TestRest_Get_ServiceErrorMapsTo500(t *testing.T) {
+	r := newRouter(&fakeRestSvc{getErr: apperr.ErrInternal.WithMessage("db")})
+	req := httptest.NewRequest(http.MethodGet, "/jobs/any", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}
+
+// TestRest_SetSaved_ServiceErrorMapsToStatus — error returned from the
+// service is passed to HandleError, mapping the ServiceError.Status correctly.
+func TestRest_SetSaved_ServiceErrorMapsToStatus(t *testing.T) {
+	fake := &fakeRestSvc{setSavedErr: apperr.ErrInternal.WithMessage("boom")}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/save", strings.NewReader(`{"saved":true}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}
+
+// TestRest_SetStatus_ServiceErrorMapsToStatus
+func TestRest_SetStatus_ServiceErrorMapsToStatus(t *testing.T) {
+	fake := &fakeRestSvc{setStatusErr: apperr.ErrBadRequest.WithMessage("bad")}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/status", strings.NewReader(`{"status":"saved"}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+// TestRest_SetNotes_ServiceErrorMapsToStatus
+func TestRest_SetNotes_ServiceErrorMapsToStatus(t *testing.T) {
+	fake := &fakeRestSvc{setNotesErr: apperr.ErrInternal.WithMessage("db")}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/notes", strings.NewReader(`{"notes":"hi"}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}
+
+// TestRest_Dismiss_ServiceErrorMapsToStatus
+func TestRest_Dismiss_ServiceErrorMapsToStatus(t *testing.T) {
+	fake := &fakeRestSvc{dismissErr: apperr.ErrNotFound.WithMessage("missing")}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodDelete, "/jobs/j1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+// TestRest_BulkDismiss_ServiceErrorMapsToStatus
+func TestRest_BulkDismiss_ServiceErrorMapsToStatus(t *testing.T) {
+	fake := &fakeRestSvc{bulkErr: apperr.ErrInternal.WithMessage("boom")}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodPost, "/jobs/dismiss/bulk", strings.NewReader(`{"ids":["j1"]}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}

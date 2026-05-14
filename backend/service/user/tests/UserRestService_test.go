@@ -3,12 +3,14 @@ package tests
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/identity"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
@@ -162,4 +164,85 @@ func TestDeleteMeReturns204(t *testing.T) {
 	if svc.deletedID != "u1" {
 		t.Errorf("delete id = %q, want u1", svc.deletedID)
 	}
+}
+
+// DELETE /api/me must surface the service error to the caller via the
+// standard HandleError path — a typed *ServiceError becomes its mapped
+// HTTP status, not a silent 204.
+func TestDeleteMeServiceError(t *testing.T) {
+	t.Parallel()
+	svc := &stubService{deletedErr: errBadRequest("nope")}
+	ident := identity.Identity{UserID: "u1"}
+	srv := httptest.NewServer(newTestRouter(svc, ident))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/me/", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// PATCH /api/me must surface the service error via HandleError — e.g.
+// validation errors → 400.
+func TestPatchMeServiceError(t *testing.T) {
+	t.Parallel()
+	svc := &stubService{updatedErr: errBadRequest("nope")}
+	ident := identity.Identity{UserID: "u1"}
+	srv := httptest.NewServer(newTestRouter(svc, ident))
+	defer srv.Close()
+
+	body := strings.NewReader(`{"display_name":"Alice"}`)
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/me/", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// GET /api/me must serialise an empty roles slice as `[]`, not `null`, so
+// the frontend can rely on roles being iterable. The same handler also
+// covers the case where Identity.Roles starts as nil — make sure that
+// branch is exercised.
+func TestGetMeNilRolesBecomesEmptyArray(t *testing.T) {
+	t.Parallel()
+	ident := identity.Identity{UserID: "u1", Roles: nil}
+	srv := httptest.NewServer(newTestRouter(&stubService{}, ident))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/me/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Data struct {
+			Roles []string `json:"roles"`
+		} `json:"data"`
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	if err := json.NewDecoder(strings.NewReader(string(raw))).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Data.Roles == nil {
+		t.Errorf("roles is nil, want empty array; raw=%s", raw)
+	}
+	if !strings.Contains(string(raw), `"roles":[]`) {
+		t.Errorf("body lacks 'roles:[]': %s", raw)
+	}
+}
+
+// errBadRequest wraps the sentinel BAD_REQUEST so RestService tests can
+// surface a typed ServiceError without spelling out the package name at every
+// call site.
+func errBadRequest(msg string) error {
+	return domainerrs.ErrBadRequest.WithMessage(msg)
 }

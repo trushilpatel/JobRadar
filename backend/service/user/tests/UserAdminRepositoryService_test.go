@@ -1,0 +1,490 @@
+package tests
+
+import (
+	"context"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	rolemodel "github.com/trushilpatel/jobradar/service/role/models"
+	usermodel "github.com/trushilpatel/jobradar/service/user/models"
+	usersvc "github.com/trushilpatel/jobradar/service/user/services"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
+)
+
+// adminSQLCapture is a GORM logger that records every emitted SQL statement,
+// used for asserting the shape of queries that cannot execute on sqlite
+// (notably the ILIKE branch of List filter.Email).
+type adminSQLCapture struct {
+	gormlogger.Interface
+	mu  sync.Mutex
+	sql []string
+}
+
+func (c *adminSQLCapture) Trace(_ context.Context, _ time.Time, fc func() (string, int64), _ error) {
+	sql, _ := fc()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.sql = append(c.sql, sql)
+}
+
+func (c *adminSQLCapture) LogMode(gormlogger.LogLevel) gormlogger.Interface { return c }
+func (c *adminSQLCapture) Info(context.Context, string, ...any)             {}
+func (c *adminSQLCapture) Warn(context.Context, string, ...any)             {}
+func (c *adminSQLCapture) Error(context.Context, string, ...any)            {}
+func (c *adminSQLCapture) statements() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, len(c.sql))
+	copy(out, c.sql)
+	return out
+}
+
+func newAdminDryRunDB(t *testing.T) (*gorm.DB, *adminSQLCapture) {
+	t.Helper()
+	cap := &adminSQLCapture{}
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{DryRun: true, Logger: cap})
+	if err != nil {
+		t.Fatalf("open dryrun: %v", err)
+	}
+	return db, cap
+}
+
+// ---------- List ----------
+
+func TestAdminRepo_List_HappyPath(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	now := time.Now().UTC()
+	seed := []usermodel.User{
+		{ID: "u1", Email: "alpha@example.com", Status: usermodel.StatusActive, CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour)},
+		{ID: "u2", Email: "beta@example.com", Status: usermodel.StatusActive, CreatedAt: now.Add(-1 * time.Hour), UpdatedAt: now.Add(-1 * time.Hour)},
+		{ID: "u3", Email: "gamma@example.com", Status: usermodel.StatusSuspended, CreatedAt: now, UpdatedAt: now},
+	}
+	if err := db.Create(&seed).Error; err != nil {
+		t.Fatalf("seed users: %v", err)
+	}
+	// Grant u2 the admin role, u1 the user role. u3 has no role row.
+	if err := db.Create(&[]rolemodel.UserRole{
+		{UserID: "u1", RoleID: rolemodel.RoleUser, GrantedAt: now},
+		{UserID: "u2", RoleID: rolemodel.RoleAdmin, GrantedAt: now},
+		{UserID: "u2", RoleID: rolemodel.RoleUser, GrantedAt: now},
+	}).Error; err != nil {
+		t.Fatalf("seed roles: %v", err)
+	}
+
+	repo := usersvc.NewAdminRepositoryService(db)
+	res, err := repo.List(context.Background(), usersvc.AdminUserFilter{}, 1, 10)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if res.Total != 3 {
+		t.Errorf("total = %d, want 3", res.Total)
+	}
+	if len(res.Items) != 3 {
+		t.Fatalf("items = %d, want 3", len(res.Items))
+	}
+	// Order is created_at DESC → u3, u2, u1.
+	if res.Items[0].ID != "u3" || res.Items[1].ID != "u2" || res.Items[2].ID != "u1" {
+		t.Errorf("order = [%s,%s,%s], want [u3,u2,u1]",
+			res.Items[0].ID, res.Items[1].ID, res.Items[2].ID)
+	}
+	// u3 has no roles → must be an empty slice (never nil) so JSON encodes []
+	// rather than null.
+	if res.Items[0].Roles == nil {
+		t.Error("u3.Roles is nil; want empty slice for JSON [] output")
+	}
+	if len(res.Items[0].Roles) != 0 {
+		t.Errorf("u3.Roles = %v, want empty", res.Items[0].Roles)
+	}
+	// u2 has both admin and user.
+	roleSet := map[string]bool{}
+	for _, r := range res.Items[1].Roles {
+		roleSet[r] = true
+	}
+	if !roleSet[rolemodel.RoleAdmin] || !roleSet[rolemodel.RoleUser] {
+		t.Errorf("u2.Roles = %v, want admin+user", res.Items[1].Roles)
+	}
+}
+
+func TestAdminRepo_List_StatusFilter(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	now := time.Now().UTC()
+	if err := db.Create(&[]usermodel.User{
+		{ID: "u1", Email: "a@b.com", Status: usermodel.StatusActive, CreatedAt: now, UpdatedAt: now},
+		{ID: "u2", Email: "c@b.com", Status: usermodel.StatusSuspended, CreatedAt: now, UpdatedAt: now},
+	}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	repo := usersvc.NewAdminRepositoryService(db)
+	suspended := usermodel.StatusSuspended
+	res, err := repo.List(context.Background(), usersvc.AdminUserFilter{Status: &suspended}, 1, 10)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if res.Total != 1 || len(res.Items) != 1 {
+		t.Fatalf("total/len = %d/%d, want 1/1", res.Total, len(res.Items))
+	}
+	if res.Items[0].ID != "u2" {
+		t.Errorf("got id %q, want u2", res.Items[0].ID)
+	}
+}
+
+// The Email branch of List uses ILIKE — Postgres-only. Drive the code path
+// in DryRun mode and confirm the captured SQL has the ILIKE clause with the
+// trimmed search term wrapped in % wildcards.
+func TestAdminRepo_List_EmailFilter_EmitsILIKE(t *testing.T) {
+	t.Parallel()
+	db, cap := newAdminDryRunDB(t)
+	repo := usersvc.NewAdminRepositoryService(db)
+	_, _ = repo.List(context.Background(), usersvc.AdminUserFilter{Email: "  alice  "}, 1, 10)
+
+	captured := cap.statements()
+	if len(captured) == 0 {
+		t.Fatal("no SQL captured")
+	}
+	foundILIKE := false
+	for _, s := range captured {
+		if strings.Contains(s, "ILIKE") && strings.Contains(s, "%alice%") {
+			foundILIKE = true
+			break
+		}
+	}
+	if !foundILIKE {
+		t.Errorf("expected ILIKE with trimmed %%alice%% in captured SQL; got %v", captured)
+	}
+}
+
+func TestAdminRepo_List_PaginationDefaultsAndClamps(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	repo := usersvc.NewAdminRepositoryService(db)
+	now := time.Now().UTC()
+	users := make([]usermodel.User, 25)
+	for i := 0; i < 25; i++ {
+		users[i] = usermodel.User{
+			ID:        "u" + string(rune('a'+i)),
+			Email:     string(rune('a'+i)) + "@b.com",
+			Status:    usermodel.StatusActive,
+			CreatedAt: now.Add(time.Duration(i) * time.Second),
+			UpdatedAt: now.Add(time.Duration(i) * time.Second),
+		}
+	}
+	if err := db.Create(&users).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// limit <= 0 → defaults to 20.
+	res, err := repo.List(context.Background(), usersvc.AdminUserFilter{}, 0, 0)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(res.Items) != 20 {
+		t.Errorf("default limit yielded %d items, want 20", len(res.Items))
+	}
+	// page < 1 → defaults to 1.
+	if res.Total != 25 {
+		t.Errorf("total = %d, want 25", res.Total)
+	}
+	// limit > 100 → clamped to 100 (cannot exceed 25 here, but exercises the
+	// branch by setting limit=200 and expecting the test seed cap of 25).
+	res2, err := repo.List(context.Background(), usersvc.AdminUserFilter{}, 1, 200)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(res2.Items) != 25 {
+		t.Errorf("clamped limit yielded %d items, want 25", len(res2.Items))
+	}
+}
+
+func TestAdminRepo_List_EmptyResultEmptySlice(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	repo := usersvc.NewAdminRepositoryService(db)
+	res, err := repo.List(context.Background(), usersvc.AdminUserFilter{}, 1, 10)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if res.Total != 0 {
+		t.Errorf("total = %d, want 0", res.Total)
+	}
+	if res.Items == nil {
+		t.Error("items is nil; want empty slice for JSON [] output")
+	}
+	if len(res.Items) != 0 {
+		t.Errorf("items = %d, want 0", len(res.Items))
+	}
+}
+
+func TestAdminRepo_List_DBError(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	sqlDB, _ := db.DB()
+	_ = sqlDB.Close()
+	repo := usersvc.NewAdminRepositoryService(db)
+	_, err := repo.List(context.Background(), usersvc.AdminUserFilter{}, 1, 10)
+	if err == nil {
+		t.Fatal("expected DB error")
+	}
+	if se := asUserSvcErr(t, err); se.Code != domainerrs.ErrInternal.Code {
+		t.Errorf("code = %q, want INTERNAL", se.Code)
+	}
+}
+
+// ---------- GetWithRoles ----------
+
+func TestAdminRepo_GetWithRoles_HappyPath(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	now := time.Now().UTC()
+	if err := db.Create(&usermodel.User{ID: "u1", Email: "a@b.com", Status: usermodel.StatusActive, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	if err := db.Create(&[]rolemodel.UserRole{
+		{UserID: "u1", RoleID: rolemodel.RoleUser, GrantedAt: now},
+		{UserID: "u1", RoleID: rolemodel.RoleAdmin, GrantedAt: now},
+	}).Error; err != nil {
+		t.Fatalf("seed roles: %v", err)
+	}
+
+	repo := usersvc.NewAdminRepositoryService(db)
+	view, err := repo.GetWithRoles(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("GetWithRoles: %v", err)
+	}
+	if view.ID != "u1" {
+		t.Errorf("id = %q, want u1", view.ID)
+	}
+	if len(view.Roles) != 2 {
+		t.Fatalf("roles = %v, want 2", view.Roles)
+	}
+}
+
+func TestAdminRepo_GetWithRoles_NotFound(t *testing.T) {
+	t.Parallel()
+	repo := usersvc.NewAdminRepositoryService(newUserTestDB(t))
+	_, err := repo.GetWithRoles(context.Background(), "missing")
+	if err == nil {
+		t.Fatal("expected NOT_FOUND")
+	}
+	if se := asUserSvcErr(t, err); se.Code != domainerrs.ErrNotFound.Code {
+		t.Errorf("code = %q, want NOT_FOUND", se.Code)
+	}
+}
+
+func TestAdminRepo_GetWithRoles_NoRolesReturnsEmptySlice(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	now := time.Now().UTC()
+	if err := db.Create(&usermodel.User{ID: "u1", Email: "a@b.com", Status: usermodel.StatusActive, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	repo := usersvc.NewAdminRepositoryService(db)
+	view, err := repo.GetWithRoles(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("GetWithRoles: %v", err)
+	}
+	if view.Roles == nil {
+		t.Error("roles is nil; want non-nil empty slice")
+	}
+	if len(view.Roles) != 0 {
+		t.Errorf("roles = %v, want empty", view.Roles)
+	}
+}
+
+func TestAdminRepo_GetWithRoles_DBError(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	sqlDB, _ := db.DB()
+	_ = sqlDB.Close()
+	repo := usersvc.NewAdminRepositoryService(db)
+	_, err := repo.GetWithRoles(context.Background(), "u1")
+	if err == nil {
+		t.Fatal("expected DB error")
+	}
+	if se := asUserSvcErr(t, err); se.Code != domainerrs.ErrInternal.Code {
+		t.Errorf("code = %q, want INTERNAL", se.Code)
+	}
+}
+
+// ---------- SetRoles ----------
+
+func TestAdminRepo_SetRoles_ReplacesExisting(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	now := time.Now().UTC()
+	if err := db.Create(&usermodel.User{ID: "u1", Email: "a@b.com", Status: usermodel.StatusActive, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	if err := db.Create(&[]rolemodel.UserRole{
+		{UserID: "u1", RoleID: rolemodel.RoleUser, GrantedAt: now},
+	}).Error; err != nil {
+		t.Fatalf("seed initial roles: %v", err)
+	}
+	repo := usersvc.NewAdminRepositoryService(db)
+
+	if err := repo.SetRoles(context.Background(), "u1", []string{rolemodel.RoleAdmin}, "actor"); err != nil {
+		t.Fatalf("SetRoles: %v", err)
+	}
+
+	var got []rolemodel.UserRole
+	if err := db.Where("user_id = ?", "u1").Find(&got).Error; err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if len(got) != 1 || got[0].RoleID != rolemodel.RoleAdmin {
+		t.Fatalf("rows = %v, want only [admin]", got)
+	}
+	if got[0].GrantedBy == nil || *got[0].GrantedBy != "actor" {
+		t.Errorf("granted_by = %v, want actor", got[0].GrantedBy)
+	}
+}
+
+// SetRoles with an empty slice must delete all existing role rows and leave
+// the table empty for that user — used to demote an admin to no roles.
+func TestAdminRepo_SetRoles_EmptySliceClears(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	now := time.Now().UTC()
+	if err := db.Create(&usermodel.User{ID: "u1", Email: "a@b.com", Status: usermodel.StatusActive, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := db.Create(&[]rolemodel.UserRole{
+		{UserID: "u1", RoleID: rolemodel.RoleAdmin, GrantedAt: now},
+	}).Error; err != nil {
+		t.Fatalf("seed roles: %v", err)
+	}
+	repo := usersvc.NewAdminRepositoryService(db)
+
+	if err := repo.SetRoles(context.Background(), "u1", nil, "actor"); err != nil {
+		t.Fatalf("SetRoles nil: %v", err)
+	}
+	var count int64
+	if err := db.Model(&rolemodel.UserRole{}).Where("user_id = ?", "u1").Count(&count).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("row count = %d, want 0", count)
+	}
+}
+
+// SetRoles wraps the writes in db.Transaction. When the transaction itself
+// fails to begin (closed DB), GORM returns the raw transport error before the
+// callback runs. Pin this behaviour: a non-nil error surfaces, even if it is
+// not the *ServiceError that the inner callback would have produced.
+func TestAdminRepo_SetRoles_DBError(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	sqlDB, _ := db.DB()
+	_ = sqlDB.Close()
+	repo := usersvc.NewAdminRepositoryService(db)
+	err := repo.SetRoles(context.Background(), "u1", []string{rolemodel.RoleUser}, "actor")
+	if err == nil {
+		t.Fatal("expected DB error")
+	}
+}
+
+// ---------- SetStatus ----------
+
+func TestAdminRepo_SetStatus_HappyPath(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	now := time.Now().UTC()
+	if err := db.Create(&usermodel.User{ID: "u1", Email: "a@b.com", Status: usermodel.StatusActive, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	repo := usersvc.NewAdminRepositoryService(db)
+
+	if err := repo.SetStatus(context.Background(), "u1", usermodel.StatusSuspended); err != nil {
+		t.Fatalf("SetStatus: %v", err)
+	}
+	var u usermodel.User
+	if err := db.First(&u, "id = ?", "u1").Error; err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if u.Status != usermodel.StatusSuspended {
+		t.Errorf("status = %q, want suspended", u.Status)
+	}
+}
+
+func TestAdminRepo_SetStatus_NotFound(t *testing.T) {
+	t.Parallel()
+	repo := usersvc.NewAdminRepositoryService(newUserTestDB(t))
+	err := repo.SetStatus(context.Background(), "ghost", usermodel.StatusSuspended)
+	if err == nil {
+		t.Fatal("expected NOT_FOUND")
+	}
+	if se := asUserSvcErr(t, err); se.Code != domainerrs.ErrNotFound.Code {
+		t.Errorf("code = %q, want NOT_FOUND", se.Code)
+	}
+}
+
+func TestAdminRepo_SetStatus_DBError(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	sqlDB, _ := db.DB()
+	_ = sqlDB.Close()
+	repo := usersvc.NewAdminRepositoryService(db)
+	err := repo.SetStatus(context.Background(), "u1", usermodel.StatusSuspended)
+	if err == nil {
+		t.Fatal("expected DB error")
+	}
+	if se := asUserSvcErr(t, err); se.Code != domainerrs.ErrInternal.Code {
+		t.Errorf("code = %q, want INTERNAL", se.Code)
+	}
+}
+
+// ---------- AdminDelete ----------
+
+func TestAdminRepo_AdminDelete_HappyPath(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	now := time.Now().UTC()
+	if err := db.Create(&usermodel.User{ID: "u1", Email: "a@b.com", Status: usermodel.StatusActive, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	repo := usersvc.NewAdminRepositoryService(db)
+
+	if err := repo.AdminDelete(context.Background(), "u1"); err != nil {
+		t.Fatalf("AdminDelete: %v", err)
+	}
+	var count int64
+	if err := db.Model(&usermodel.User{}).Where("id = ?", "u1").Count(&count).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("row count = %d, want 0", count)
+	}
+}
+
+func TestAdminRepo_AdminDelete_NotFound(t *testing.T) {
+	t.Parallel()
+	repo := usersvc.NewAdminRepositoryService(newUserTestDB(t))
+	err := repo.AdminDelete(context.Background(), "ghost")
+	if err == nil {
+		t.Fatal("expected NOT_FOUND")
+	}
+	if se := asUserSvcErr(t, err); se.Code != domainerrs.ErrNotFound.Code {
+		t.Errorf("code = %q, want NOT_FOUND", se.Code)
+	}
+}
+
+func TestAdminRepo_AdminDelete_DBError(t *testing.T) {
+	t.Parallel()
+	db := newUserTestDB(t)
+	sqlDB, _ := db.DB()
+	_ = sqlDB.Close()
+	repo := usersvc.NewAdminRepositoryService(db)
+	err := repo.AdminDelete(context.Background(), "u1")
+	if err == nil {
+		t.Fatal("expected DB error")
+	}
+	if se := asUserSvcErr(t, err); se.Code != domainerrs.ErrInternal.Code {
+		t.Errorf("code = %q, want INTERNAL", se.Code)
+	}
+}

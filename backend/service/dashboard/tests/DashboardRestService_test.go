@@ -1,7 +1,9 @@
 package dashboard_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -116,14 +118,21 @@ func TestDashboardHandlerActivity_ServiceError(t *testing.T) {
 type fakePipelineService struct {
 	stats *dto.PipelineStats
 	err   error
+
+	triggerWorker string
+	triggerTier   string
+	triggerN      int64
+	triggerErr    error
 }
 
 func (f *fakePipelineService) GetPipelineStats(_ context.Context) (*dto.PipelineStats, error) {
 	return f.stats, f.err
 }
 
-func (f *fakePipelineService) TriggerRetry(_ context.Context, _, _ string) (int64, error) {
-	return 0, nil
+func (f *fakePipelineService) TriggerRetry(_ context.Context, worker, tier string) (int64, error) {
+	f.triggerWorker = worker
+	f.triggerTier = tier
+	return f.triggerN, f.triggerErr
 }
 
 // Phase 2: /dashboard/pipeline moved to /admin/dashboard/pipeline (PipelineRestRouter).
@@ -168,6 +177,346 @@ func TestDashboardHandlerPipeline_ServiceError(t *testing.T) {
 	}
 }
 
+// fakeUserDashboardSvc is a test double for the UserDashboardService interface
+// — only sufficient detail for handler-layer tests. The impl-layer logic is
+// covered separately in DashboardUserImplService_test.go.
+type fakeUserDashboardSvc struct {
+	progress     *dto.ProgressStats
+	market       *dto.MarketStats
+	heatmap      []dto.WeeklyCount
+	interviews   []dto.InterviewRow
+	velocity     []dto.CompanyVelocityRow
+	techTrends   *dto.TechTrends
+	velocityArg  int
+	progressErr  error
+	marketErr    error
+	heatmapErr   error
+	interviewErr error
+	velocityErr  error
+	trendsErr    error
+}
+
+func (f *fakeUserDashboardSvc) GetProgressStats(_ context.Context) (*dto.ProgressStats, error) {
+	return f.progress, f.progressErr
+}
+func (f *fakeUserDashboardSvc) GetMarketStats(_ context.Context) (*dto.MarketStats, error) {
+	return f.market, f.marketErr
+}
+func (f *fakeUserDashboardSvc) GetHeatmap(_ context.Context) ([]dto.WeeklyCount, error) {
+	return f.heatmap, f.heatmapErr
+}
+func (f *fakeUserDashboardSvc) GetInterviews(_ context.Context) ([]dto.InterviewRow, error) {
+	return f.interviews, f.interviewErr
+}
+func (f *fakeUserDashboardSvc) GetVelocity(_ context.Context, limit int) ([]dto.CompanyVelocityRow, error) {
+	f.velocityArg = limit
+	return f.velocity, f.velocityErr
+}
+func (f *fakeUserDashboardSvc) GetTechTrends(_ context.Context) (*dto.TechTrends, error) {
+	return f.techTrends, f.trendsErr
+}
+
+// progressUserRouter mounts the user-facing dashboard router with the supplied
+// fake UserDashboardService and a no-op DashboardService.
+func newUserDashboardRouter(u *fakeUserDashboardSvc) *chi.Mux {
+	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{}, u, nil)
+	return newDashboardTestRouter(h)
+}
+
+// ---------- Progress ----------
+
+func TestDashboardHandlerProgress_OK(t *testing.T) {
+	r := newUserDashboardRouter(&fakeUserDashboardSvc{progress: &dto.ProgressStats{AppliedCount: 3}})
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/progress", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"applied_count":3`) {
+		t.Errorf("body missing applied_count: %s", w.Body.String())
+	}
+}
+
+func TestDashboardHandlerProgress_ServiceError(t *testing.T) {
+	r := newUserDashboardRouter(&fakeUserDashboardSvc{progressErr: errors.ErrInternal.WithMessage("db down")})
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/progress", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}
+
+// ---------- Market ----------
+
+func TestDashboardHandlerMarket_OK(t *testing.T) {
+	r := newUserDashboardRouter(&fakeUserDashboardSvc{market: &dto.MarketStats{TotalOpen: 42}})
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/market", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"total_open":42`) {
+		t.Errorf("body missing total_open: %s", w.Body.String())
+	}
+}
+
+func TestDashboardHandlerMarket_ServiceError(t *testing.T) {
+	r := newUserDashboardRouter(&fakeUserDashboardSvc{marketErr: errors.ErrInternal.WithMessage("db down")})
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/market", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}
+
+// ---------- Heatmap ----------
+
+func TestDashboardHandlerHeatmap_OK(t *testing.T) {
+	r := newUserDashboardRouter(&fakeUserDashboardSvc{heatmap: []dto.WeeklyCount{{WeekStart: "2026-04-06", JobCount: 9}}})
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/heatmap", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"job_count":9`) {
+		t.Errorf("body missing job_count: %s", w.Body.String())
+	}
+}
+
+func TestDashboardHandlerHeatmap_ServiceError(t *testing.T) {
+	r := newUserDashboardRouter(&fakeUserDashboardSvc{heatmapErr: errors.ErrInternal.WithMessage("db down")})
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/heatmap", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}
+
+// ---------- Interviews ----------
+
+func TestDashboardHandlerInterviews_OK(t *testing.T) {
+	r := newUserDashboardRouter(&fakeUserDashboardSvc{interviews: []dto.InterviewRow{{ApplicationID: 1, JobTitle: "SWE"}}})
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/interviews", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"job_title":"SWE"`) {
+		t.Errorf("body missing job_title: %s", w.Body.String())
+	}
+}
+
+func TestDashboardHandlerInterviews_ServiceError(t *testing.T) {
+	r := newUserDashboardRouter(&fakeUserDashboardSvc{interviewErr: errors.ErrInternal.WithMessage("db down")})
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/interviews", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}
+
+// ---------- Velocity ----------
+
+// Default limit (no query string) must be 10 — pin the documented contract.
+func TestDashboardHandlerVelocity_DefaultLimit(t *testing.T) {
+	svc := &fakeUserDashboardSvc{velocity: []dto.CompanyVelocityRow{{CompanyName: "Acme"}}}
+	r := newUserDashboardRouter(svc)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/velocity", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	if svc.velocityArg != 10 {
+		t.Errorf("default limit passed = %d, want 10", svc.velocityArg)
+	}
+}
+
+// limit=25 in query string must be parsed and propagated.
+func TestDashboardHandlerVelocity_CustomLimit(t *testing.T) {
+	svc := &fakeUserDashboardSvc{velocity: []dto.CompanyVelocityRow{}}
+	r := newUserDashboardRouter(svc)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/velocity?limit=25", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if svc.velocityArg != 25 {
+		t.Errorf("limit = %d, want 25", svc.velocityArg)
+	}
+}
+
+// limit=invalid must NOT crash — it falls back to the default. The handler
+// only honours a positive integer; otherwise the default 10 stands.
+func TestDashboardHandlerVelocity_InvalidLimit_FallsBackToDefault(t *testing.T) {
+	svc := &fakeUserDashboardSvc{velocity: []dto.CompanyVelocityRow{}}
+	r := newUserDashboardRouter(svc)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/velocity?limit=abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200 (silent fallback)", w.Code)
+	}
+	if svc.velocityArg != 10 {
+		t.Errorf("limit = %d, want 10 (default)", svc.velocityArg)
+	}
+}
+
+// limit=0 must NOT be propagated as zero — the handler only honours `>0`
+// otherwise the default 10 stands. Guards against a callable returning all rows.
+func TestDashboardHandlerVelocity_ZeroLimit_FallsBackToDefault(t *testing.T) {
+	svc := &fakeUserDashboardSvc{velocity: []dto.CompanyVelocityRow{}}
+	r := newUserDashboardRouter(svc)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/velocity?limit=0", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if svc.velocityArg != 10 {
+		t.Errorf("limit = %d, want 10 (zero rejected)", svc.velocityArg)
+	}
+}
+
+func TestDashboardHandlerVelocity_ServiceError(t *testing.T) {
+	r := newUserDashboardRouter(&fakeUserDashboardSvc{velocityErr: errors.ErrInternal.WithMessage("db down")})
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/velocity", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}
+
+// ---------- TechTrends ----------
+
+func TestDashboardHandlerTechTrends_OK(t *testing.T) {
+	r := newUserDashboardRouter(&fakeUserDashboardSvc{techTrends: &dto.TechTrends{TotalJobs: 50}})
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/tech-trends", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"total_jobs":50`) {
+		t.Errorf("body missing total_jobs: %s", w.Body.String())
+	}
+}
+
+func TestDashboardHandlerTechTrends_ServiceError(t *testing.T) {
+	r := newUserDashboardRouter(&fakeUserDashboardSvc{trendsErr: errors.ErrInternal.WithMessage("db down")})
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/tech-trends", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}
+
+// ---------- Pipeline TriggerRetry ----------
+
+// Happy path — well-formed body, drainer returns a positive count.
+func TestPipelineHandlerTriggerRetry_OK(t *testing.T) {
+	svc := &fakePipelineService{triggerN: 17}
+	r := newPipelineTestRouter(svc)
+
+	body := []byte(`{"worker":"filter","tier":"10m"}`)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/pipeline/retry", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	if svc.triggerWorker != "filter" || svc.triggerTier != "10m" {
+		t.Errorf("worker/tier captured = %q/%q, want filter/10m", svc.triggerWorker, svc.triggerTier)
+	}
+
+	var resp struct {
+		Data dto.TriggerRetryResponse `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
+	if resp.Data.Drained != 17 {
+		t.Errorf("drained = %d, want 17", resp.Data.Drained)
+	}
+}
+
+// Malformed JSON body must surface as 400 BAD_REQUEST — not 500.
+func TestPipelineHandlerTriggerRetry_MalformedBody(t *testing.T) {
+	r := newPipelineTestRouter(&fakePipelineService{})
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/pipeline/retry", strings.NewReader("not-json"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+// Underlying service error must propagate the service status code (in this
+// case 400 from "unknown worker", surfaced via TriggerRetry's BAD_REQUEST).
+func TestPipelineHandlerTriggerRetry_ServiceError(t *testing.T) {
+	r := newPipelineTestRouter(&fakePipelineService{triggerErr: errors.ErrBadRequest.WithMessage("unknown worker")})
+	body := []byte(`{"worker":"unknown","tier":"1m"}`)
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/pipeline/retry", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+// NewPipelineRestService must panic when next is nil — guards against a
+// misconfigured wire setup silently producing a half-built handler.
+func TestPipelineRestService_NilNextPanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic for nil next")
+		}
+	}()
+	dashboardsvc.NewPipelineRestService(nil)
+}
+
+// RestService.Pipeline is the legacy admin endpoint kept on RestService for
+// callers wired before the dedicated PipelineRestRouter shipped. Routing
+// for /dashboard/pipeline has moved to PipelineRestRouter under /admin, but
+// the method is still exercised by tests so it does not silently rot.
+func TestDashboardHandlerPipeline_DirectInvocation_OK(t *testing.T) {
+	h := dashboardsvc.NewDashboardRestService(
+		&fakeDashboardService{},
+		nil,
+		&fakePipelineService{stats: &dto.PipelineStats{TotalCompanies: 7}},
+	)
+	req := httptest.NewRequest(http.MethodGet, "/anything", nil)
+	w := httptest.NewRecorder()
+	h.Pipeline(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), `"total_companies":7`) {
+		t.Errorf("body missing total_companies: %s", w.Body.String())
+	}
+}
+
+func TestDashboardHandlerPipeline_DirectInvocation_ServiceError(t *testing.T) {
+	h := dashboardsvc.NewDashboardRestService(
+		&fakeDashboardService{},
+		nil,
+		&fakePipelineService{err: errors.ErrInternal.WithMessage("kafka down")},
+	)
+	req := httptest.NewRequest(http.MethodGet, "/anything", nil)
+	w := httptest.NewRecorder()
+	h.Pipeline(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", w.Code)
+	}
+}
+
 // Ensure test doubles implement interfaces.
 var _ dashboardsvc.DashboardService = (*fakeDashboardService)(nil)
 var _ dashboardsvc.PipelineService = (*fakePipelineService)(nil)
+var _ dashboardsvc.UserDashboardService = (*fakeUserDashboardSvc)(nil)
