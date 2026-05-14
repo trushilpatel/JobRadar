@@ -36,6 +36,10 @@ type Engine struct {
 	publisher kafka.Publisher
 	googleCfg google.Config
 	log       logger.Logger
+	// adapterFactory resolves an adapter implementation for a given adapter type.
+	// Defaults to ats.RegistryWithGoogleConfig — overridden in tests to inject
+	// a stub adapter without going through the real registry.
+	adapterFactory func(adapterType string, cfg google.Config, log logger.Logger) (ats.Adapter, error)
 }
 
 func NewEngine(
@@ -47,12 +51,13 @@ func NewEngine(
 	log logger.Logger,
 ) *Engine {
 	return &Engine{
-		settings:  settings,
-		ledger:    ledger,
-		recorder:  recorder,
-		publisher: publisher,
-		googleCfg: googleCfg,
-		log:       log,
+		settings:       settings,
+		ledger:         ledger,
+		recorder:       recorder,
+		publisher:      publisher,
+		googleCfg:      googleCfg,
+		log:            log,
+		adapterFactory: ats.RegistryWithGoogleConfig,
 	}
 }
 
@@ -146,7 +151,7 @@ func (e *Engine) scanCompany(ctx context.Context, companyID string, settings *co
 }
 
 func (e *Engine) fetchJobs(ctx context.Context, companyID, adapterType string, knownIDs []string, log logger.Logger) (ats.FetchJobsResponse, bool, error) {
-	adp, err := ats.RegistryWithGoogleConfig(adapterType, e.googleCfg, log)
+	adp, err := e.adapterFactory(adapterType, e.googleCfg, log)
 	if err != nil {
 		return ats.FetchJobsResponse{}, false, fmt.Errorf("no adapter for type %q: %w", adapterType, err)
 	}

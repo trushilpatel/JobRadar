@@ -42,8 +42,8 @@ if git diff --cached --name-only | grep -q '^backend/'; then
     info "golangci-lint not found — skipping (install via: brew install golangci-lint)"
   fi
 
-  info "Backend changed — running Go unit tests..."
-  if (cd backend && go test -short ./...); then
+  info "Backend changed — running Go unit tests (race detector)..."
+  if (cd backend && go test -race -short -count=1 ./...); then
     pass "Go unit tests"
   else
     fail "Go unit tests failed"

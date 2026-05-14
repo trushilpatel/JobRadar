@@ -1,0 +1,117 @@
+package main
+
+import (
+	"context"
+	"math/rand"
+	"time"
+
+	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
+	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
+)
+
+// computeJitter returns a duration uniformly distributed in
+// `[0, checkInterval/10)` using the supplied random source.
+//
+// Jitter spreads scheduler ticks across replicas so they do not all hammer
+// the database at the same second. Returns 0 when checkInterval/10 == 0 to
+// avoid `rand.Int63n` panicking on a non-positive bound — that case only
+// occurs in tests with sub-10ns intervals but the guard keeps the helper
+// safe to call from any caller.
+func computeJitter(checkInterval time.Duration, src *rand.Rand) time.Duration {
+	bound := int64(checkInterval) / 10
+	if bound <= 0 {
+		return 0
+	}
+	if src == nil {
+		return time.Duration(rand.Int63n(bound))
+	}
+	return time.Duration(src.Int63n(bound))
+}
+
+// Run executes one immediate scheduler cycle and then loops on a ticker
+// driven by `tickInterval`, invoking runCycle on each tick. It returns
+// when `ctx` is cancelled.
+//
+// All dependencies are injected so the loop is testable without spinning
+// up the real Postgres-backed scheduler service.
+func Run(
+	ctx context.Context,
+	log logger.Logger,
+	svc scansvc.SchedulerService,
+	scanIntervalMinutes int,
+	tickInterval time.Duration,
+	stuckTimeout time.Duration,
+) {
+	// Run immediately on startup so the first tick doesn't wait a full interval.
+	runCycle(ctx, log, svc, scanIntervalMinutes, stuckTimeout)
+
+	if tickInterval <= 0 {
+		// Defensive: a non-positive ticker bound would panic time.NewTicker.
+		// Treat as "single cycle then exit" so callers never crash.
+		return
+	}
+
+	ticker := time.NewTicker(tickInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			runCycle(ctx, log, svc, scanIntervalMinutes, stuckTimeout)
+		case <-ctx.Done():
+			log.Info("shutting down")
+			return
+		}
+	}
+}
+
+// runCycle performs one full scheduler pass:
+//  1. Resets any processing rows whose crawler has gone silent (stuck detection).
+//  2. Removes queued rows for companies that have since been deactivated.
+//  3. Enqueues all companies currently due for a scan in a single query.
+func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerService, intervalMinutes int, stuckTimeout time.Duration) {
+	start := time.Now()
+
+	if err := svc.ResetStuck(ctx, stuckTimeout); err != nil {
+		metrics.SchedulerErrorsTotal.WithLabelValues("reset_stuck").Inc()
+		log.Error("reset stuck failed", err)
+	} else {
+		metrics.SchedulerStuckChecksTotal.Inc()
+	}
+
+	if purged, err := svc.PurgeInactive(ctx); err != nil {
+		metrics.SchedulerErrorsTotal.WithLabelValues("purge_inactive").Inc()
+		log.Error("purge inactive failed", err)
+	} else if purged > 0 {
+		log.Info("purged inactive company queue entries", logger.Int("purged", purged))
+	}
+
+	res, err := svc.EnqueueDue(ctx, intervalMinutes)
+	if err != nil {
+		metrics.SchedulerErrorsTotal.WithLabelValues("enqueue_due").Inc()
+		log.Error("enqueue due failed", err)
+	} else {
+		metrics.SchedulerCompaniesEnqueuedTotal.Add(float64(res.Enqueued))
+	}
+
+	// Phase 2: surface companies skipped because they have no scan_settings
+	// row yet. Logged at INFO once per tick so admins can see the count even
+	// when no companies were enqueued (e.g. immediately after migration when
+	// the queue is idle but every company still needs onboarding).
+	if res.SkippedNoSettings > 0 {
+		log.Info("companies skipped — no scan_settings configured",
+			logger.Int("skipped_no_settings", res.SkippedNoSettings),
+		)
+	}
+
+	metrics.SchedulerRunDuration.Observe(time.Since(start).Seconds())
+	if res.Enqueued > 0 {
+		log.Info("cycle complete",
+			logger.Int(logger.FieldEnqueued, res.Enqueued),
+			logger.Dur(logger.FieldDuration, time.Since(start)),
+		)
+	} else {
+		log.Debug("cycle complete", logger.Dur(logger.FieldDuration, time.Since(start)))
+	}
+}

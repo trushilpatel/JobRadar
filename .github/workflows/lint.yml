@@ -42,9 +42,24 @@ jobs:
           working-directory: backend
           args: --config ../.github/.golangci.yml --new-from-rev=origin/main --timeout 5m --path-mode=abs
 
-      - name: Run tests
-        run: go test ./...
+      - name: Run unit tests (race + coverage)
+        run: |
+          go test -race -count=1 -short \
+            -coverpkg=./... -coverprofile=/tmp/coverage.out \
+            ./...
         working-directory: backend
+
+      - name: Enforce per-package coverage threshold
+        run: ../scripts/check-coverage.sh /tmp/coverage.out 80
+        working-directory: backend
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: /tmp/coverage.out
+          if-no-files-found: ignore
 
   # ── Frontend lint ─────────────────────────────────────────────────────────
   lint-console:

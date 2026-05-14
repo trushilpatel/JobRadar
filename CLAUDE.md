@@ -204,7 +204,25 @@ Every feature delivery must include:
 - All tests passing before marking work complete
 - Frontend linting passing: `cd ui/console && npm run lint`
 - Backend linting passing: `cd backend && golangci-lint run --config ../.github/.golangci.yml --timeout 5m`
-- Do not mark a task complete if any test or lint check fails — fix the failure first
+- Backend coverage gate: every package ≥80% statement coverage via `scripts/check-coverage.sh /tmp/cov.out 80` — enforced in pre-commit and PR CI
+- Race detector clean: backend pre-commit runs `go test -race -short ./...`; PR CI runs the same with `-count=1`
+- Do not mark a task complete if any test, lint, race, or coverage check fails — fix the failure first
+
+### Per-service test workflow
+
+When adding a feature or backfilling tests for an existing package, follow the **3-phase per-package workflow** defined in `.claude/agents/service-test-lead.md`:
+
+1. **Phase 1 — Edge-case discovery** (read-only): catalog the public surface, invariants, and edge cases.
+2. **Phase 2 — Test-plan synthesis** (read-only): translate the catalog into a numbered test plan.
+3. **Phase 3 — Implementation + QA**: write tests, run them, verify coverage and assertion strength.
+
+For backfill across multiple packages, dispatch one agent per package in parallel via the Agent tool with `subagent_type=general-purpose`, prompting each to read `.claude/agents/service-test-lead.md` and target its assigned `PACKAGE_PATH`. See git history on the `test/comprehensive-coverage-workflow` branch for an example.
+
+### Coverage gate details
+
+- Statement-weighted: `covered_statements / total_statements` per package (empty function bodies don't drag the average).
+- Excluded from the unit-tier gate: `main.go`, `wire.go`, `wire_*.go` helpers, `wire_gen.go`, `/compat/` shims, `/dto/`, `/models/`, `/testutil/`, and the broker/Postgres-coupled infrastructure packages (`common/db`, `common/kafka`).
+- Integration tier (`.github/workflows/integration.yml`) runs nightly + on infrastructure-touching PRs against real Postgres / Kafka / Redis via testcontainers. Build with `//go:build integration` to gate integration-only tests.
 
 After implementation, write a brief spec-style doc:
 

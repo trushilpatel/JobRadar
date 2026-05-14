@@ -49,12 +49,15 @@ func TestRoleValidation_RejectsUnknownRole(t *testing.T) {
 
 func TestRoleValidation_AcceptsKnownRoles(t *testing.T) {
 	t.Parallel()
-	repo := &fakeRoleRepo{}
-	s := rolesvc.NewValidationService(repo)
 	for _, role := range []string{rolemodel.RoleUser, rolemodel.RoleAdmin} {
 		role := role
 		t.Run(role, func(t *testing.T) {
 			t.Parallel()
+			// Fresh fake per subtest so parallel runs do not race on
+			// fakeRoleRepo.grantCalled (the previous shared instance was
+			// flaky under -race).
+			repo := &fakeRoleRepo{}
+			s := rolesvc.NewValidationService(repo)
 			if err := s.Grant(context.Background(), "u1", role, nil); err != nil {
 				t.Errorf("expected success for %q, got %v", role, err)
 			}

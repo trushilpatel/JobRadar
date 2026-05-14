@@ -772,3 +772,21 @@ func assertEqual(t *testing.T, field, got, want string) {
 		t.Errorf("%s: got %q, want %q", field, got, want)
 	}
 }
+
+// ── Resolver fallback ───────────────────────────────────────────────────────
+
+// TestResolveBaseURL_ZeroValueFallsBackToDefault — empty branch coverage.
+func TestResolveBaseURL_ZeroValueFallsBackToDefault(t *testing.T) {
+	n := &Netflix{}
+	if got := n.resolveBaseURL(); got != defaultBaseURL {
+		t.Errorf("zero-value resolveBaseURL: got %q, want %q", got, defaultBaseURL)
+	}
+}
+
+// TestResolveDomain_ZeroValueFallsBackToDefault — empty branch coverage.
+func TestResolveDomain_ZeroValueFallsBackToDefault(t *testing.T) {
+	n := &Netflix{}
+	if got := n.resolveDomain(); got != defaultDomain {
+		t.Errorf("zero-value resolveDomain: got %q, want %q", got, defaultDomain)
+	}
+}

@@ -137,6 +137,139 @@ func TestGetActivity_OK(t *testing.T) {
 	}
 }
 
+// GetStats must fail with ErrInternal when the job count reader fails
+// independently of the scan log and insights services. The errgroup wraps
+// every concurrent failure into one — the first error reaches the caller.
+func TestGetStats_JobCountError(t *testing.T) {
+	svc := services.NewDashboardImplService(
+		&fakeScanLogReader{scannedToday: 10},
+		&fakeInsightsService{},
+		&fakeJobCountReader{err: errors.New("boom")},
+	)
+
+	_, err := svc.GetStats(context.Background())
+	if err == nil {
+		t.Fatal("expected error from job count reader failure")
+	}
+	var sErr *apperr.ServiceError
+	if !errors.As(err, &sErr) || sErr.Status != 500 {
+		t.Errorf("expected 500 ServiceError, got %v", err)
+	}
+}
+
+// GetStats must fail with ErrInternal when the insights service fails.
+func TestGetStats_InsightsError(t *testing.T) {
+	svc := services.NewDashboardImplService(
+		&fakeScanLogReader{scannedToday: 10},
+		&fakeInsightsService{err: errors.New("insights down")},
+		&fakeJobCountReader{newCount: 1},
+	)
+
+	_, err := svc.GetStats(context.Background())
+	if err == nil {
+		t.Fatal("expected error from insights failure")
+	}
+	var sErr *apperr.ServiceError
+	if !errors.As(err, &sErr) || sErr.Status != 500 {
+		t.Errorf("expected 500 ServiceError, got %v", err)
+	}
+}
+
+// GetStats with all zero counts must produce a stats view with zero values
+// across the board and a Funnel.Relevant of zero (new+saved+applied).
+func TestGetStats_AllZero(t *testing.T) {
+	svc := services.NewDashboardImplService(
+		&fakeScanLogReader{},
+		&fakeInsightsService{},
+		&fakeJobCountReader{},
+	)
+
+	stats, err := svc.GetStats(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stats.Funnel.Relevant != 0 {
+		t.Errorf("relevant = %d, want 0", stats.Funnel.Relevant)
+	}
+	if stats.JobsScannedToday != 0 || stats.JobsNew != 0 || stats.JobsSaved != 0 || stats.JobsApplied != 0 {
+		t.Errorf("unexpected non-zero counts in zero-input stats: %+v", stats)
+	}
+	if stats.PipelinePending != 0 || stats.PipelineErrors != 0 {
+		t.Errorf("unexpected non-zero pipeline counts: pending=%d errors=%d", stats.PipelinePending, stats.PipelineErrors)
+	}
+	if stats.Funnel.Scanned != 0 || stats.Funnel.Saved != 0 || stats.Funnel.Applied != 0 {
+		t.Errorf("unexpected non-zero funnel fields: %+v", stats.Funnel)
+	}
+}
+
+// GetActivity must surface DB errors as ErrInternal — the underlying error
+// from the scan log reader is wrapped so handlers can map it to HTTP 500.
+func TestGetActivity_Error(t *testing.T) {
+	svc := services.NewDashboardImplService(
+		&fakeScanLogReader{err: errors.New("scan log down")},
+		&fakeInsightsService{},
+		&fakeJobCountReader{},
+	)
+
+	_, err := svc.GetActivity(context.Background(), 7)
+	if err == nil {
+		t.Fatal("expected error from scan log failure")
+	}
+	var sErr *apperr.ServiceError
+	if !errors.As(err, &sErr) || sErr.Status != 500 {
+		t.Errorf("expected 500 ServiceError, got %v", err)
+	}
+}
+
+// GetActivity with an empty result set must return a non-nil empty slice (not
+// nil) so the API envelope `{data:[]}` is consistent and serializes as a JSON
+// array, never null.
+func TestGetActivity_EmptyResult(t *testing.T) {
+	svc := services.NewDashboardImplService(
+		&fakeScanLogReader{scansByDay: []dto.DailyScanCount{}},
+		&fakeInsightsService{},
+		&fakeJobCountReader{},
+	)
+
+	activity, err := svc.GetActivity(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if activity == nil {
+		t.Fatal("activity is nil; expected non-nil empty slice")
+	}
+	if len(activity) != 0 {
+		t.Errorf("len = %d, want 0", len(activity))
+	}
+}
+
+// GetActivity must map every scan row 1:1 — verifies the loop body for
+// multiple-day output, not just the single-row happy path.
+func TestGetActivity_MultipleDays(t *testing.T) {
+	svc := services.NewDashboardImplService(
+		&fakeScanLogReader{
+			scansByDay: []dto.DailyScanCount{
+				{Date: "2026-04-11", Scanned: 1, NewJobs: 0},
+				{Date: "2026-04-12", Scanned: 5, NewJobs: 2},
+				{Date: "2026-04-13", Scanned: 9, NewJobs: 4},
+			},
+		},
+		&fakeInsightsService{},
+		&fakeJobCountReader{},
+	)
+
+	activity, err := svc.GetActivity(context.Background(), 3)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(activity) != 3 {
+		t.Fatalf("len = %d, want 3", len(activity))
+	}
+	if activity[2].Date != "2026-04-13" || activity[2].Scanned != 9 || activity[2].NewJobs != 4 {
+		t.Errorf("row[2] = %+v, want {2026-04-13,9,4}", activity[2])
+	}
+}
+
 // Ensure test doubles implement interfaces.
 var _ scansvc.ScanLogReader = (*fakeScanLogReader)(nil)
 var _ insightssvc.InsightsService = (*fakeInsightsService)(nil)

@@ -187,6 +187,222 @@ func TestImpl_CrossUserIsolation(t *testing.T) {
 	}
 }
 
+// TestImpl_Create_RepoError_WrappedAsInternal — the impl service must NOT
+// surface raw repo errors to callers; any failure after the job-exists check
+// is mapped to ErrInternal.WithMessage("failed to create application") so
+// handlers see a stable typed error.
+func TestImpl_Create_RepoError_WrappedAsInternal(t *testing.T) {
+	repo := &fakeRepo{err: errors.New("boom")}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{view: &jobdto.JobView{}})
+
+	_, err := service.Create(ctxAs(testUserID), "j1", dto.CreateApplicationInput{Stage: appcommon.StageApplied})
+	if err == nil {
+		t.Fatal("expected error from repo")
+	}
+	var sErr *apperr.ServiceError
+	if !errors.As(err, &sErr) {
+		t.Fatalf("expected *ServiceError, got %T (%v)", err, err)
+	}
+	if sErr.Code != "INTERNAL" {
+		t.Errorf("expected INTERNAL code, got %q", sErr.Code)
+	}
+	if repo.calls != 1 {
+		t.Errorf("expected repo.Create to be called once, got %d", repo.calls)
+	}
+}
+
+func TestImpl_ListAll_NoIdentity(t *testing.T) {
+	repo := &fakeRepo{}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	_, _, err := service.ListAll(context.Background(), 1, 20)
+	if err == nil {
+		t.Fatal("expected error for missing identity")
+	}
+	if repo.calls != 0 {
+		t.Errorf("repo must not be called without identity, calls=%d", repo.calls)
+	}
+}
+
+func TestImpl_ListByJob_OK(t *testing.T) {
+	repo := &fakeRepo{apps: []appmodel.JobApplication{{UserID: testUserID, JobResultID: "j1"}}}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	got, err := service.ListByJob(ctxAs(testUserID), "j1")
+	if err != nil {
+		t.Fatalf("ListByJob() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(got))
+	}
+	if repo.gotUserID != testUserID {
+		t.Errorf("expected repo to receive userID %q, got %q", testUserID, repo.gotUserID)
+	}
+}
+
+func TestImpl_ListByJob_RepoError(t *testing.T) {
+	repo := &fakeRepo{err: errors.New("db down")}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	_, err := service.ListByJob(ctxAs(testUserID), "j1")
+	if err == nil {
+		t.Fatal("expected error from repo")
+	}
+}
+
+func TestImpl_ListActive_OK(t *testing.T) {
+	repo := &fakeRepo{appsWithJob: []svc.ApplicationWithJob{{JobTitle: "BE"}}}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	got, err := service.ListActive(ctxAs(testUserID))
+	if err != nil {
+		t.Fatalf("ListActive() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(got))
+	}
+	if repo.gotUserID != testUserID {
+		t.Errorf("expected userID %q, got %q", testUserID, repo.gotUserID)
+	}
+}
+
+func TestImpl_ListActive_NoIdentity(t *testing.T) {
+	repo := &fakeRepo{}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	_, err := service.ListActive(context.Background())
+	if err == nil {
+		t.Fatal("expected error for missing identity")
+	}
+	if repo.calls != 0 {
+		t.Errorf("repo must not be called without identity, calls=%d", repo.calls)
+	}
+}
+
+func TestImpl_UpdateStage_OK(t *testing.T) {
+	repo := &fakeRepo{}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	if err := service.UpdateStage(ctxAs(testUserID), "j1", "1", dto.UpdateStageInput{Stage: appcommon.StageOffer}); err != nil {
+		t.Fatalf("UpdateStage() error = %v", err)
+	}
+	if repo.gotUserID != testUserID {
+		t.Errorf("expected userID %q, got %q", testUserID, repo.gotUserID)
+	}
+	if repo.calls != 1 {
+		t.Errorf("expected repo.UpdateStage to be called once, got %d", repo.calls)
+	}
+}
+
+func TestImpl_UpdateStage_NoIdentity(t *testing.T) {
+	repo := &fakeRepo{}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	err := service.UpdateStage(context.Background(), "j1", "1", dto.UpdateStageInput{Stage: appcommon.StageOffer})
+	if err == nil {
+		t.Fatal("expected error for missing identity")
+	}
+	if repo.calls != 0 {
+		t.Errorf("repo must not be called without identity, calls=%d", repo.calls)
+	}
+}
+
+func TestImpl_UpdateStage_RepoError(t *testing.T) {
+	repo := &fakeRepo{err: errors.New("db")}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	if err := service.UpdateStage(ctxAs(testUserID), "j1", "1", dto.UpdateStageInput{Stage: appcommon.StageOffer}); err == nil {
+		t.Fatal("expected repo error to propagate")
+	}
+}
+
+func TestImpl_UpdateStageByID_OK(t *testing.T) {
+	repo := &fakeRepo{}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	if err := service.UpdateStageByID(ctxAs(testUserID), "42", dto.UpdateStageInput{Stage: appcommon.StageOffer}); err != nil {
+		t.Fatalf("UpdateStageByID() error = %v", err)
+	}
+	if repo.gotUserID != testUserID {
+		t.Errorf("expected userID %q, got %q", testUserID, repo.gotUserID)
+	}
+	if repo.calls != 1 {
+		t.Errorf("expected repo.UpdateStage to be called once via UpdateStageByID, got %d", repo.calls)
+	}
+}
+
+func TestImpl_UpdateStageByID_NoIdentity(t *testing.T) {
+	repo := &fakeRepo{}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	err := service.UpdateStageByID(context.Background(), "42", dto.UpdateStageInput{Stage: appcommon.StageOffer})
+	if err == nil {
+		t.Fatal("expected error for missing identity")
+	}
+	if repo.calls != 0 {
+		t.Errorf("repo must not be called without identity, calls=%d", repo.calls)
+	}
+}
+
+func TestImpl_UpdateNote_OK(t *testing.T) {
+	repo := &fakeRepo{}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	if err := service.UpdateNote(ctxAs(testUserID), "j1", "1", dto.UpdateNoteInput{Note: "hello"}); err != nil {
+		t.Fatalf("UpdateNote() error = %v", err)
+	}
+	if repo.gotUserID != testUserID {
+		t.Errorf("expected userID %q, got %q", testUserID, repo.gotUserID)
+	}
+	if repo.calls != 1 {
+		t.Errorf("expected repo.UpdateNote to be called once, got %d", repo.calls)
+	}
+}
+
+func TestImpl_UpdateNote_NoIdentity(t *testing.T) {
+	repo := &fakeRepo{}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	err := service.UpdateNote(context.Background(), "j1", "1", dto.UpdateNoteInput{Note: "x"})
+	if err == nil {
+		t.Fatal("expected error for missing identity")
+	}
+	if repo.calls != 0 {
+		t.Errorf("repo must not be called without identity, calls=%d", repo.calls)
+	}
+}
+
+func TestImpl_UpdateNote_RepoError(t *testing.T) {
+	repo := &fakeRepo{err: errors.New("db")}
+	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+
+	if err := service.UpdateNote(ctxAs(testUserID), "j1", "1", dto.UpdateNoteInput{Note: "x"}); err == nil {
+		t.Fatal("expected repo error to propagate")
+	}
+}
+
+// TestImpl_Constructor_PanicsOnNilRepo guards the wire setup — a nil repo
+// is always a wiring error and must fail loudly at startup, never at the
+// first request.
+func TestImpl_Constructor_PanicsOnNilRepo(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic for nil repo")
+		}
+	}()
+	_ = svc.NewApplicationImplService(nil, &fakeJobService{})
+}
+
+// TestImpl_Constructor_PanicsOnNilJobSvc — same as above for the job service.
+func TestImpl_Constructor_PanicsOnNilJobSvc(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic for nil jobSvc")
+		}
+	}()
+	_ = svc.NewApplicationImplService(&fakeRepo{}, nil)
+}
+
 // Ensure test doubles implement the production interfaces.
 var _ svc.ApplicationRepository = (*fakeRepo)(nil)
 var _ jobsvc.JobService = (*fakeJobService)(nil)

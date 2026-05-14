@@ -44,6 +44,104 @@ func TestNew_DefaultSettings(t *testing.T) {
 	}
 }
 
+// ── Resolvers fallback to defaults when fields are zero ─────────────────────
+
+// TestResolveBaseURL_ZeroValueFallsBackToDefault verifies the empty-baseURL
+// branch — a zero-value adapter (no constructor) must still produce a usable
+// URL via the default constant. Otherwise searchURL would emit "/api/...".
+func TestResolveBaseURL_ZeroValueFallsBackToDefault(t *testing.T) {
+	m := &Microsoft{}
+	if got := m.resolveBaseURL(); got != defaultBaseURL {
+		t.Errorf("zero-value resolveBaseURL: got %q, want %q", got, defaultBaseURL)
+	}
+}
+
+// TestResolveBaseURL_OverrideHonoured verifies the non-empty branch.
+func TestResolveBaseURL_OverrideHonoured(t *testing.T) {
+	m := &Microsoft{baseURL: "https://override.example"}
+	if got := m.resolveBaseURL(); got != "https://override.example" {
+		t.Errorf("resolveBaseURL: got %q, want override", got)
+	}
+}
+
+// TestResolveDomain_ZeroValueFallsBackToDefault verifies the empty-domain
+// fallback path.
+func TestResolveDomain_ZeroValueFallsBackToDefault(t *testing.T) {
+	m := &Microsoft{}
+	if got := m.resolveDomain(); got != defaultDomain {
+		t.Errorf("zero-value resolveDomain: got %q, want %q", got, defaultDomain)
+	}
+}
+
+// TestResolvePageSize_ZeroValueFallsBackToDefault verifies zero pageSize is
+// treated as "unset" — needed because a literal 0 page size would request
+// no jobs at all.
+func TestResolvePageSize_ZeroValueFallsBackToDefault(t *testing.T) {
+	m := &Microsoft{}
+	if got := m.resolvePageSize(); got != defaultPageSize {
+		t.Errorf("zero-value resolvePageSize: got %d, want %d", got, defaultPageSize)
+	}
+}
+
+// TestUnixToRFC3339_Zero returns empty (no published_date claim).
+func TestUnixToRFC3339_Zero(t *testing.T) {
+	if got := unixToRFC3339(0); got != "" {
+		t.Errorf("unixToRFC3339(0): got %q, want empty", got)
+	}
+}
+
+// TestUnixToRFC3339_NonZeroFormat verifies a non-zero timestamp produces an
+// RFC 3339 string (UTC, with Z suffix).
+func TestUnixToRFC3339_NonZeroFormat(t *testing.T) {
+	got := unixToRFC3339(1_700_000_000) // 2023-11-14T22:13:20Z
+	if !strings.HasSuffix(got, "Z") {
+		t.Errorf("unixToRFC3339: expected UTC Z-suffix, got %q", got)
+	}
+	if !strings.HasPrefix(got, "2023-11-14T") {
+		t.Errorf("unixToRFC3339: unexpected day prefix in %q", got)
+	}
+}
+
+// TestDetailToContent_RelativePositionURLIsMadeAbsolute verifies the relative
+// path branch in detailToContent — the Microsoft API returns paths like
+// "/careers/job/123", which the engine cannot publish as-is.
+func TestDetailToContent_RelativePositionURLIsMadeAbsolute(t *testing.T) {
+	det := positionDetail{
+		DisplayJobID: "1234",
+		Name:         "SWE",
+		Location:     "Redmond, WA",
+		PositionURL:  "/careers/job/1234",
+	}
+	got := detailToContent(det)
+	if !strings.HasPrefix(got.URL, "https://apply.careers.microsoft.com/") {
+		t.Errorf("relative URL must be made absolute; got %q", got.URL)
+	}
+}
+
+// TestDetailToContent_EmptyPositionURLFallsBackToCanonical verifies the
+// last-resort URL constructed when the detail response carries no URL.
+func TestDetailToContent_EmptyPositionURLFallsBackToCanonical(t *testing.T) {
+	det := positionDetail{DisplayJobID: "1234", Name: "SWE"}
+	got := detailToContent(det)
+	if !strings.Contains(got.URL, "1234") {
+		t.Errorf("fallback URL missing displayJobID; got %q", got.URL)
+	}
+}
+
+// TestDetailToContent_LocationsFallbackWhenSingleEmpty verifies the engine
+// joins Locations with "; " when the single Location field is empty.
+func TestDetailToContent_LocationsFallbackWhenSingleEmpty(t *testing.T) {
+	det := positionDetail{
+		DisplayJobID: "1",
+		Location:     "",
+		Locations:    []string{"Redmond", "Bellevue"},
+	}
+	got := detailToContent(det)
+	if got.Location != "Redmond; Bellevue" {
+		t.Errorf("Location: got %q, want %q", got.Location, "Redmond; Bellevue")
+	}
+}
+
 // ── CareersURL ──────────────────────────────────────────────────────────────
 
 func TestCareersURL(t *testing.T) {

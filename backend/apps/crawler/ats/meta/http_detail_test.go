@@ -458,3 +458,17 @@ func TestJobPosting_RoundTripsThroughJSON(t *testing.T) {
 		t.Errorf("round-trip mismatch: %+v", out)
 	}
 }
+
+// TestFlexString_StringMethod verifies the String() pass-through used by
+// fmt.Stringer-aware callers (logger fields, error messages).
+func TestFlexString_StringMethod(t *testing.T) {
+	f := flexString("hello")
+	if got := f.String(); got != "hello" {
+		t.Errorf("flexString.String(): got %q, want %q", got, "hello")
+	}
+	// Zero value renders as empty string — required for omitempty-aware logging.
+	var zero flexString
+	if got := zero.String(); got != "" {
+		t.Errorf("zero flexString.String(): got %q, want empty", got)
+	}
+}

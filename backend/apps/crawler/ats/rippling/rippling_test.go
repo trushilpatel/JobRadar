@@ -612,3 +612,21 @@ func assertEqual(t *testing.T, field, got, want string) {
 		t.Errorf("%s: got %q, want %q", field, got, want)
 	}
 }
+
+// ── Resolver fallback ───────────────────────────────────────────────────────
+
+// TestResolveCareersBaseURL_ZeroValueFallsBackToDefault — empty branch.
+func TestResolveCareersBaseURL_ZeroValueFallsBackToDefault(t *testing.T) {
+	r := &Rippling{}
+	if got := r.resolveCareersBaseURL(); got != defaultCareersBaseURL {
+		t.Errorf("zero-value resolveCareersBaseURL: got %q, want %q", got, defaultCareersBaseURL)
+	}
+}
+
+// TestResolveATSBaseURL_ZeroValueFallsBackToDefault — empty branch.
+func TestResolveATSBaseURL_ZeroValueFallsBackToDefault(t *testing.T) {
+	r := &Rippling{}
+	if got := r.resolveATSBaseURL(); got != defaultATSBaseURL {
+		t.Errorf("zero-value resolveATSBaseURL: got %q, want %q", got, defaultATSBaseURL)
+	}
+}

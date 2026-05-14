@@ -2,9 +2,11 @@ package application
 
 import (
 	"context"
+	stderrors "errors"
 	"strings"
 	"testing"
 
+	apperr "github.com/trushilpatel/jobradar/common/errors"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
@@ -145,6 +147,111 @@ func TestValidateListByJob(t *testing.T) {
 	if _, err := v.ListByJob(ctx, "not-a-uuid"); err == nil {
 		t.Error("expected error for non-UUID jobID")
 	}
+}
+
+// TestValidateListByJob_EmptyID — empty jobID is not a valid UUID and must
+// be rejected before the impl/repo layer is invoked.
+func TestValidateListByJob_EmptyID(t *testing.T) {
+	v := newValidation()
+	if _, err := v.ListByJob(context.Background(), ""); err == nil {
+		t.Error("expected error for empty jobID")
+	}
+}
+
+// TestValidateCreate_ValidationErrorShape — validation failures must surface
+// as apperr.ValidationErrors so HandleError can render the 400 list response.
+func TestValidateCreate_ValidationErrorShape(t *testing.T) {
+	v := newValidation()
+	_, err := v.Create(context.Background(), "not-a-uuid", dto.CreateApplicationInput{Stage: "bogus"})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	var verrs apperr.ValidationErrors
+	if !errorsAs(err, &verrs) {
+		t.Fatalf("expected apperr.ValidationErrors, got %T (%v)", err, err)
+	}
+	// Should report BOTH the bad jobID and the bad stage.
+	if len(verrs) < 2 {
+		t.Errorf("expected at least 2 validation errors, got %d (%v)", len(verrs), verrs)
+	}
+}
+
+// TestValidateUpdateNote_AggregatesErrors — bad jobID + empty note must both
+// be reported. An empty note is "REQUIRED", not "INVALID_VALUE".
+func TestValidateUpdateNote_AggregatesErrors(t *testing.T) {
+	v := newValidation()
+	err := v.UpdateNote(context.Background(), "not-a-uuid", "1", dto.UpdateNoteInput{Note: ""})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	var verrs apperr.ValidationErrors
+	if !errorsAs(err, &verrs) {
+		t.Fatalf("expected apperr.ValidationErrors, got %T", err)
+	}
+	if len(verrs) < 2 {
+		t.Fatalf("expected at least 2 validation errors, got %d", len(verrs))
+	}
+	foundRequired := false
+	for _, ve := range verrs {
+		if ve.Field == "note" && ve.Code == "REQUIRED" {
+			foundRequired = true
+		}
+	}
+	if !foundRequired {
+		t.Errorf("expected note=REQUIRED error in %v", verrs)
+	}
+}
+
+// TestValidateListAll_NegativeAndOverLimit ensures the validator catches
+// both halves of the limit range and the page lower bound.
+func TestValidateListAll_NegativeAndOverLimit(t *testing.T) {
+	v := newValidation()
+	if _, _, err := v.ListAll(context.Background(), -1, 20); err == nil {
+		t.Error("expected error for negative page")
+	}
+	if _, _, err := v.ListAll(context.Background(), 1, -5); err == nil {
+		t.Error("expected error for negative limit")
+	}
+	if _, _, err := v.ListAll(context.Background(), 1, 100); err != nil {
+		t.Errorf("limit=100 must be allowed (inclusive upper bound), got %v", err)
+	}
+}
+
+// TestValidateListActive_Passthrough — ListActive has no validation rules,
+// so BaseService delegation must forward the call through unchanged.
+func TestValidateListActive_Passthrough(t *testing.T) {
+	v := newValidation()
+	if _, err := v.ListActive(context.Background()); err != nil {
+		t.Errorf("ListActive must pass through; got %v", err)
+	}
+}
+
+// TestValidateCreate_NoteAtMaxLength — note of exactly 4000 chars is allowed.
+func TestValidateCreate_NoteAtMaxLength(t *testing.T) {
+	v := newValidation()
+	noteAtMax := strings.Repeat("y", 4000)
+	if _, err := v.Create(context.Background(), validJobUUID, dto.CreateApplicationInput{Stage: appcommon.StageApplied, Note: noteAtMax}); err != nil {
+		t.Errorf("note at exactly 4000 chars must be allowed, got %v", err)
+	}
+}
+
+// TestValidateUpdateStageByID_AllStages — every constant stage is accepted.
+func TestValidateUpdateStageByID_AllStages(t *testing.T) {
+	v := newValidation()
+	for _, stage := range []string{
+		appcommon.StageApplied, appcommon.StagePhoneScreen, appcommon.StageTechnical,
+		appcommon.StageFinalRound, appcommon.StageOffer, appcommon.StageRejected,
+	} {
+		if err := v.UpdateStageByID(context.Background(), "1", dto.UpdateStageInput{Stage: stage}); err != nil {
+			t.Errorf("stage %q: unexpected error %v", stage, err)
+		}
+	}
+}
+
+// errorsAs is a tiny helper so the test file does not need a fresh
+// errors import block.
+func errorsAs(err error, target interface{}) bool {
+	return stderrors.As(err, target)
 }
 
 // Ensure noopService implements the interface.

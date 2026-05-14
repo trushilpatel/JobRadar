@@ -9,7 +9,67 @@ import (
 	"testing"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
+
+// ── Registry — every known adapter type returns a non-nil Adapter ────────────
+
+// TestRegistry_ReturnsAdapterForEveryKnownType walks every adapter string
+// supported in production and verifies Registry produces a non-nil Adapter.
+// Catches accidental case-statement drops in registry.go.
+func TestRegistry_ReturnsAdapterForEveryKnownType(t *testing.T) {
+	knownTypes := []string{
+		"greenhouse", "lever", "ashby", "google", "netflix",
+		"uber", "microsoft", "rippling", "apple", "meta",
+	}
+	for _, name := range knownTypes {
+		t.Run(name, func(t *testing.T) {
+			adp, err := ats.Registry(name)
+			if err != nil {
+				t.Fatalf("Registry(%q): %v", name, err)
+			}
+			if adp == nil {
+				t.Fatalf("Registry(%q) returned nil adapter", name)
+			}
+		})
+	}
+}
+
+// TestRegistry_UnknownAdapterTypeReturnsError verifies the default branch.
+func TestRegistry_UnknownAdapterTypeReturnsError(t *testing.T) {
+	_, err := ats.Registry("workday-not-yet-supported")
+	if err == nil {
+		t.Fatal("expected error for unknown adapter type")
+	}
+}
+
+// TestRegistryWithGoogleConfig_NonZeroCfgPath verifies the non-default
+// Google config path constructs an adapter with the supplied config.
+func TestRegistryWithGoogleConfig_NonZeroCfgPath(t *testing.T) {
+	cfg := google.Config{MinDelayMs: 100, MaxDelayMs: 200, TimeoutMs: 1000, MaxPages: 1}
+	adp, err := ats.RegistryWithGoogleConfig("google", cfg, logger.NewNoop())
+	if err != nil {
+		t.Fatalf("RegistryWithGoogleConfig: %v", err)
+	}
+	if adp == nil {
+		t.Fatal("nil adapter")
+	}
+}
+
+// ── StripHTML re-export — call the package-level helper ──────────────────────
+
+// TestStripHTML_ReExportMatchesTypesPackage verifies the convenience re-export
+// in ats.StripHTML produces the same output as the underlying helper. A
+// regression in the re-export would silently break every caller that imports
+// only the ats package.
+func TestStripHTML_ReExportMatchesTypesPackage(t *testing.T) {
+	in := `<p>hello <b>world</b></p>`
+	got := ats.StripHTML(in)
+	if got != "hello world" {
+		t.Errorf("ats.StripHTML: got %q, want %q", got, "hello world")
+	}
+}
 
 // ── Registry — ContentFetcher interface assertions ────────────────────────────
 

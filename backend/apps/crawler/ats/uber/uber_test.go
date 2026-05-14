@@ -1005,3 +1005,13 @@ func assertEqual(t *testing.T, field, got, want string) {
 		t.Errorf("%s: got %q, want %q", field, got, want)
 	}
 }
+
+// ── Resolver fallback ───────────────────────────────────────────────────────
+
+// TestResolveBaseURL_ZeroValueFallsBackToDefault — empty branch coverage.
+func TestResolveBaseURL_ZeroValueFallsBackToDefault(t *testing.T) {
+	u := &Uber{}
+	if got := u.resolveBaseURL(); got != defaultBaseURL {
+		t.Errorf("zero-value resolveBaseURL: got %q, want %q", got, defaultBaseURL)
+	}
+}
