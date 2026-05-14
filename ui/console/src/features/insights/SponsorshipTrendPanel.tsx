@@ -1,8 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts'
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ResponsiveContainer,
+} from 'recharts'
 import { fetchSponsorshipTrend } from '@/api/insights'
 import type { SponsorshipDay } from '@/types'
-import { InsightCard, InsightEmpty, InsightSkeleton } from './InsightCard'
+import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
 import { tooltipStyle } from './insightStyles'
 
 function SponsorshipContent({ data }: { data: SponsorshipDay[] }) {
@@ -17,28 +25,63 @@ function SponsorshipContent({ data }: { data: SponsorshipDay[] }) {
     <ResponsiveContainer width="100%" height={180}>
       <LineChart data={chartData} margin={{ left: 0, right: 16, top: 4, bottom: 4 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
-        <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 11 }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fill: '#64748b', fontSize: 11 }} tickLine={false} axisLine={false} width={30} />
+        <XAxis
+          dataKey="date"
+          tick={{ fill: '#64748b', fontSize: 11 }}
+          tickLine={false}
+          axisLine={false}
+        />
+        <YAxis
+          tick={{ fill: '#64748b', fontSize: 11 }}
+          tickLine={false}
+          axisLine={false}
+          width={30}
+        />
         <Tooltip contentStyle={tooltipStyle} formatter={(v) => [v, '']} />
-        <Line type="monotone" dataKey="total" stroke="#64748b" dot={false} strokeWidth={1.5} name="Total" />
-        <Line type="monotone" dataKey="sponsored" stroke="#7c3aed" dot={false} strokeWidth={2} name="Sponsored" />
+        <Line
+          type="monotone"
+          dataKey="total"
+          stroke="#64748b"
+          dot={false}
+          strokeWidth={1.5}
+          name="Total"
+        />
+        <Line
+          type="monotone"
+          dataKey="sponsored"
+          stroke="#7c3aed"
+          dot={false}
+          strokeWidth={2}
+          name="Sponsored"
+        />
       </LineChart>
     </ResponsiveContainer>
   )
 }
 
 export function SponsorshipTrendPanel() {
-  const { data = [], isLoading } = useQuery({
+  const {
+    data = [],
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['insights-sponsorship'],
     queryFn: () => fetchSponsorshipTrend(30),
     staleTime: 30_000,
+    select: (d: SponsorshipDay[] | null) => d ?? [],
   })
   return (
     <InsightCard
       title="Sponsorship Availability"
       subtitle="Daily: total enriched vs sponsorship-offering jobs (last 30 days)"
     >
-      {isLoading ? <InsightSkeleton height="h-48" /> : <SponsorshipContent data={data} />}
+      {isLoading ? (
+        <InsightSkeleton height="h-48" />
+      ) : isError ? (
+        <InsightError />
+      ) : (
+        <SponsorshipContent data={data} />
+      )}
     </InsightCard>
   )
 }

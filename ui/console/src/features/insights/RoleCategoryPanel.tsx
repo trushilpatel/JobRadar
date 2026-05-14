@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchRoleCategories } from '@/api/insights'
 import type { RoleCategoryCount } from '@/types'
-import { InsightCard, InsightEmpty, InsightSkeleton } from './InsightCard'
+import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
 
 const ROLE_COLORS: Record<string, string> = {
   backend: '#7c3aed',
@@ -38,14 +38,19 @@ function RoleContent({ data }: { data: RoleCategoryCount[] }) {
 }
 
 export function RoleCategoryPanel() {
-  const { data = [], isLoading } = useQuery({
+  const {
+    data = [],
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['insights-role-categories'],
     queryFn: fetchRoleCategories,
     staleTime: 30_000,
+    select: (d: RoleCategoryCount[] | null) => d ?? [],
   })
   return (
     <InsightCard title="Role Categories" subtitle="Distribution of enriched job types">
-      {isLoading ? <InsightSkeleton /> : <RoleContent data={data} />}
+      {isLoading ? <InsightSkeleton /> : isError ? <InsightError /> : <RoleContent data={data} />}
     </InsightCard>
   )
 }

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchVelocity } from '@/api/insights'
 import type { CompanyVelocityInsight } from '@/types'
 import { cn } from '@/lib/utils'
-import { InsightCard, InsightEmpty, InsightSkeleton } from './InsightCard'
+import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
 
 const BADGE: Record<string, string> = {
   spike: 'bg-amber-500/15 text-amber-400',
@@ -80,17 +80,28 @@ function VelocityContent({ data }: { data: CompanyVelocityInsight[] }) {
 }
 
 export function CompanyVelocityPanel() {
-  const { data = [], isLoading } = useQuery({
+  const {
+    data = [],
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['insights-velocity'],
     queryFn: () => fetchVelocity(20),
     staleTime: 30_000,
+    select: (d: CompanyVelocityInsight[] | null) => d ?? [],
   })
   return (
     <InsightCard
       title="Company Hiring Velocity"
       subtitle="Top companies by this week's activity — spike/rising shows multiplier vs 3-week avg"
     >
-      {isLoading ? <InsightSkeleton height="h-48" /> : <VelocityContent data={data} />}
+      {isLoading ? (
+        <InsightSkeleton height="h-48" />
+      ) : isError ? (
+        <InsightError />
+      ) : (
+        <VelocityContent data={data} />
+      )}
     </InsightCard>
   )
 }

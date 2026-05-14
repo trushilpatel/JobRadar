@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchCompanyActivity } from '@/api/insights'
 import type { CompanyWeekCount } from '@/types'
-import { InsightCard, InsightEmpty, InsightSkeleton } from './InsightCard'
+import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
 
 function ActivityContent({ data }: { data: CompanyWeekCount[] }) {
   const stats = useMemo(() => {
@@ -21,9 +21,14 @@ function ActivityContent({ data }: { data: CompanyWeekCount[] }) {
     <div className="space-y-2">
       {stats.map(({ company_name, total }) => (
         <div key={company_name} className="flex items-center gap-3">
-          <p className="w-40 shrink-0 text-sm text-slate-300 truncate" title={company_name}>{company_name}</p>
+          <p className="w-40 shrink-0 text-sm text-slate-300 truncate" title={company_name}>
+            {company_name}
+          </p>
           <div className="flex-1 bg-white/[0.04] rounded-full h-2 overflow-hidden">
-            <div className="h-full bg-violet-600 rounded-full transition-all" style={{ width: `${(total / max) * 100}%` }} />
+            <div
+              className="h-full bg-violet-600 rounded-full transition-all"
+              style={{ width: `${(total / max) * 100}%` }}
+            />
           </div>
           <span className="w-8 text-right text-xs text-slate-400 shrink-0">{total}</span>
         </div>
@@ -33,14 +38,25 @@ function ActivityContent({ data }: { data: CompanyWeekCount[] }) {
 }
 
 export function CompanyActivityPanel() {
-  const { data = [], isLoading } = useQuery({
+  const {
+    data = [],
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['insights-company-activity'],
     queryFn: fetchCompanyActivity,
     staleTime: 30_000,
+    select: (d: CompanyWeekCount[] | null) => d ?? [],
   })
   return (
     <InsightCard title="Company Activity" subtitle="Total jobs enriched per company (all time)">
-      {isLoading ? <InsightSkeleton /> : <ActivityContent data={data} />}
+      {isLoading ? (
+        <InsightSkeleton />
+      ) : isError ? (
+        <InsightError />
+      ) : (
+        <ActivityContent data={data} />
+      )}
     </InsightCard>
   )
 }
