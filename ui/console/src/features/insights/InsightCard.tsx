@@ -26,7 +26,12 @@ export function InsightEmpty() {
   )
 }
 
+export function InsightError({ message = 'Failed to load data' }: { message?: string }) {
+  return (
+    <div className="flex items-center justify-center h-32 text-red-400/70 text-sm">{message}</div>
+  )
+}
+
 export function InsightSkeleton({ height = 'h-32' }: { height?: string }) {
   return <div className={`${height} bg-white/[0.03] rounded-lg animate-pulse`} />
 }
-

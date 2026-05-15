@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchLocation } from '@/api/insights'
 import type { LocationData } from '@/types'
-import { InsightCard, InsightEmpty, InsightSkeleton } from './InsightCard'
+import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
+import { insightQueryKeys } from './queryKeys'
 
 function LocationContent({ data }: { data: LocationData }) {
-  const countries = data?.countries ?? []
-  const states = data?.states ?? []
+  const countries = data.countries
+  const states = data.states
   if (countries.length === 0 && states.length === 0) return <InsightEmpty />
   const maxC = countries[0]?.count ?? 1
   const maxS = states[0]?.count ?? 1
@@ -18,7 +19,10 @@ function LocationContent({ data }: { data: LocationData }) {
             <div key={country} className="flex items-center gap-3">
               <span className="w-20 shrink-0 text-xs text-slate-300 truncate">{country}</span>
               <div className="flex-1 bg-white/[0.04] rounded-full h-1.5 overflow-hidden">
-                <div className="h-full bg-violet-500 rounded-full" style={{ width: `${(count / maxC) * 100}%` }} />
+                <div
+                  className="h-full bg-violet-500 rounded-full"
+                  style={{ width: `${(count / maxC) * 100}%` }}
+                />
               </div>
               <span className="w-8 text-right text-xs text-slate-400 shrink-0">{count}</span>
             </div>
@@ -35,7 +39,10 @@ function LocationContent({ data }: { data: LocationData }) {
               <div key={state} className="flex items-center gap-3">
                 <span className="w-12 shrink-0 text-xs text-slate-300">{state}</span>
                 <div className="flex-1 bg-white/[0.04] rounded-full h-1.5 overflow-hidden">
-                  <div className="h-full bg-sky-500 rounded-full" style={{ width: `${(count / maxS) * 100}%` }} />
+                  <div
+                    className="h-full bg-sky-500 rounded-full"
+                    style={{ width: `${(count / maxS) * 100}%` }}
+                  />
                 </div>
                 <span className="w-8 text-right text-xs text-slate-400 shrink-0">{count}</span>
               </div>
@@ -48,8 +55,8 @@ function LocationContent({ data }: { data: LocationData }) {
 }
 
 export function LocationPanel() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['insights-location'],
+  const { data, isLoading, isError } = useQuery({
+    queryKey: insightQueryKeys.location(),
     queryFn: fetchLocation,
     staleTime: 30_000,
   })
@@ -58,7 +65,13 @@ export function LocationPanel() {
       title="Location Breakdown"
       subtitle="Where jobs are located (structured, extracted by LLM)"
     >
-      {isLoading ? <InsightSkeleton /> : <LocationContent data={data ?? { countries: [], states: [] }} />}
+      {isLoading ? (
+        <InsightSkeleton />
+      ) : isError || !data ? (
+        <InsightError />
+      ) : (
+        <LocationContent data={data} />
+      )}
     </InsightCard>
   )
 }

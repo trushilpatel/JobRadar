@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchProgress } from '@/api/dashboard'
 import { cn } from '@/lib/utils'
+import { dashboardQueryKeys } from './queryKeys'
 
 function StatCol({
   label,
@@ -28,7 +29,7 @@ function StatCol({
 
 export function ProgressPanel() {
   const { data, isLoading } = useQuery({
-    queryKey: ['dashboard-progress'],
+    queryKey: dashboardQueryKeys.progress(),
     queryFn: fetchProgress,
     refetchInterval: 60_000,
   })

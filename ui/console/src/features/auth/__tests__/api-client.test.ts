@@ -63,7 +63,9 @@ afterEach(() => {
 
 describe('apiClient', () => {
   it('attaches bearer header when session present', async () => {
-    getSession.mockResolvedValue({ data: { session: { access_token: 'tok-123' } } })
+    const { sessionRef } = await import('@/lib/session-ref')
+    sessionRef.set({ access_token: 'tok-123' } as never)
+
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { hello: 'world' } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
@@ -81,7 +83,10 @@ describe('apiClient', () => {
     getSession
       .mockResolvedValueOnce({ data: { session: { access_token: 'old-token' } } })
       .mockResolvedValueOnce({ data: { session: { access_token: 'new-token' } } })
-    refreshSession.mockResolvedValue({ data: { session: { access_token: 'new-token' } }, error: null })
+    refreshSession.mockResolvedValue({
+      data: { session: { access_token: 'new-token' } },
+      error: null,
+    })
 
     const fetchMock = vi
       .fn()
@@ -98,20 +103,18 @@ describe('apiClient', () => {
   })
 
   it('dedupes concurrent refresh calls', async () => {
-    // First 3 calls (before refresh) return stale token; subsequent calls return fresh.
-    let getSessionCount = 0
-    getSession.mockImplementation(() => {
-      getSessionCount += 1
-      const token = getSessionCount <= 3 ? 'stale' : 'fresh'
-      return Promise.resolve({ data: { session: { access_token: token } } })
-    })
+    const { sessionRef } = await import('@/lib/session-ref')
+    sessionRef.set({ access_token: 'stale' } as never)
 
     const refreshHandle: { resolve: (() => void) | null } = { resolve: null }
     refreshSession.mockImplementation(
       () =>
         new Promise((resolve) => {
-          refreshHandle.resolve = () =>
+          refreshHandle.resolve = () => {
+            // Simulate what onAuthStateChange does after a token refresh
+            sessionRef.set({ access_token: 'fresh' } as never)
             resolve({ data: { session: { access_token: 'fresh' } }, error: null })
+          }
         })
     )
 
@@ -151,7 +154,9 @@ describe('apiClient', () => {
     refreshSession.mockResolvedValue({ data: { session: null }, error: { message: 'nope' } })
     signOut.mockResolvedValue({ error: null })
 
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(401, { error: { message: 'expired' } }))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(401, { error: { message: 'expired' } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const { apiClient, __testing } = await import('@/lib/api-client')
@@ -164,7 +169,9 @@ describe('apiClient', () => {
 
   it('does NOT trigger refresh on 403', async () => {
     getSession.mockResolvedValue({ data: { session: { access_token: 't' } } })
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(403, { error: { message: 'forbidden' } }))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(403, { error: { message: 'forbidden' } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const { apiClient, __testing } = await import('@/lib/api-client')
@@ -176,11 +183,12 @@ describe('apiClient', () => {
   })
 
   it('never calls refreshSession from authHeader — relies on Supabase autoRefreshToken', async () => {
-    // authHeader() must not manually call refreshSession(); Supabase's autoRefreshToken handles
-    // proactive scheduling. A manual call races with the internal timer and burns the refresh token.
-    getSession.mockResolvedValue({
-      data: { session: { access_token: 'valid-token' } },
-    })
+    // authHeader() reads from sessionRef (written by onAuthStateChange), not getSession().
+    // Calling getSession() from authHeader() races with Supabase's internal autoRefreshToken timer
+    // and can burn the refresh token. sessionRef avoids acquiring the Supabase internal lock.
+    const { sessionRef } = await import('@/lib/session-ref')
+    sessionRef.set({ access_token: 'valid-token' } as never)
+
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { ok: true } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
@@ -196,10 +204,13 @@ describe('apiClient', () => {
 
   it('shows a warning toast on 429 with Retry-After header', async () => {
     getSession.mockResolvedValue({ data: { session: { access_token: 't' } } })
-    const res = new Response(JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'slow down' } }), {
-      status: 429,
-      headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
-    })
+    const res = new Response(
+      JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'slow down' } }),
+      {
+        status: 429,
+        headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
+      }
+    )
     const fetchMock = vi.fn().mockResolvedValue(res)
     globalThis.fetch = fetchMock as unknown as typeof fetch
 

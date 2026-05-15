@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { fetchMarket } from '@/api/dashboard'
 import { cn } from '@/lib/utils'
+import { dashboardQueryKeys } from './queryKeys'
 
 function StatCol({
   label,
@@ -51,7 +52,7 @@ function StatCol({
 export function MarketPanel() {
   const navigate = useNavigate()
   const { data, isLoading } = useQuery({
-    queryKey: ['dashboard-market'],
+    queryKey: dashboardQueryKeys.market(),
     queryFn: fetchMarket,
     refetchInterval: 60_000,
   })
