@@ -4,7 +4,11 @@ import { X, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ADAPTER_TYPES } from '@/types'
 import type { Company } from '@/types'
-import { createAdminCompany, updateAdminCompany, updateAdminCompanyScanSettings } from '@/api/adminCompanies'
+import {
+  createAdminCompany,
+  updateAdminCompany,
+  updateAdminCompanyScanSettings,
+} from '@/api/adminCompanies'
 import { ApiValidationError } from '@/lib/api-error'
 
 interface Props {
@@ -18,20 +22,22 @@ interface Props {
 
 // URL templates for adapters that have a known API pattern.
 const URL_TEMPLATES: Partial<Record<string, (id: string) => string>> = {
-  greenhouse: id => `https://boards-api.greenhouse.io/v1/boards/${id}/jobs`,
-  lever:      id => `https://jobs.lever.co/${id}`,
-  ashby:      id => `https://jobs.ashbyhq.com/${id}`,
+  greenhouse: (id) => `https://boards-api.greenhouse.io/v1/boards/${id}/jobs`,
+  lever: (id) => `https://jobs.lever.co/${id}`,
+  ashby: (id) => `https://jobs.ashbyhq.com/${id}`,
+  gem: (id) => `https://jobs.gem.com/${id}`,
 }
 
 const ADAPTER_HINTS: Partial<Record<string, string>> = {
   greenhouse: 'URL auto-filled from company ID',
-  lever:      'URL auto-filled from company ID',
-  ashby:      'URL auto-filled from company ID',
-  google:     'No URL required — uses built-in Google Careers scraper',
-  apple:      'No URL required — uses built-in Apple Jobs scraper',
-  meta:       'No URL required — uses built-in Meta Careers scraper',
-  microsoft:  'No URL required — uses built-in Microsoft Careers scraper',
-  rippling:   'No URL required — uses built-in Rippling Jobs scraper',
+  lever: 'URL auto-filled from company ID',
+  ashby: 'URL auto-filled from company ID',
+  gem: 'URL auto-filled from company ID',
+  google: 'No URL required — uses built-in Google Careers scraper',
+  apple: 'No URL required — uses built-in Apple Jobs scraper',
+  meta: 'No URL required — uses built-in Meta Careers scraper',
+  microsoft: 'No URL required — uses built-in Microsoft Careers scraper',
+  rippling: 'No URL required — uses built-in Rippling Jobs scraper',
 }
 
 function buildUrl(adapter: string, id: string): string {
@@ -39,7 +45,15 @@ function buildUrl(adapter: string, id: string): string {
   return tmpl && id ? tmpl(id) : ''
 }
 
-const FIXED_URL_ADAPTERS = new Set(['google', 'netflix', 'uber', 'apple', 'meta', 'microsoft', 'rippling'])
+const FIXED_URL_ADAPTERS = new Set([
+  'google',
+  'netflix',
+  'uber',
+  'apple',
+  'meta',
+  'microsoft',
+  'rippling',
+])
 
 const EMPTY_FORM = { id: '', name: '', website: '', adapter_type: 'greenhouse', active: true }
 
@@ -56,11 +70,11 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
   useEffect(() => {
     if (open && initialData) {
       setForm({
-        id:           initialData.id,
-        name:         initialData.name,
-        website:      initialData.url,
+        id: initialData.id,
+        name: initialData.name,
+        website: initialData.url,
         adapter_type: initialData.adapter_type,
-        active:       initialData.active,
+        active: initialData.active,
       })
       setUrlManuallyEdited(true) // treat existing URL as manual — don't auto-overwrite
     } else if (open && !initialData) {
@@ -72,7 +86,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
   }, [open, initialData])
 
   function handleAdapterChange(adapter: string) {
-    setForm(f => ({
+    setForm((f) => ({
       ...f,
       adapter_type: adapter,
       website: !urlManuallyEdited ? buildUrl(adapter, f.id) : f.website,
@@ -82,7 +96,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
   }
 
   function handleIdChange(id: string) {
-    setForm(f => ({
+    setForm((f) => ({
       ...f,
       id,
       website: !urlManuallyEdited ? buildUrl(f.adapter_type, id) : f.website,
@@ -93,7 +107,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
 
   function handleUrlChange(url: string) {
     setUrlManuallyEdited(true)
-    setForm(f => ({ ...f, website: url }))
+    setForm((f) => ({ ...f, website: url }))
     setFieldErrors({})
     setGlobalError('')
   }
@@ -122,24 +136,33 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
         await updateAdminCompany(initialData.id, { name: form.name, website: form.website })
         await updateAdminCompanyScanSettings(initialData.id, {
           adapter_type: form.adapter_type,
-          active:       form.active,
+          active: form.active,
         })
         onUpdated?.({ ...initialData, ...form })
       } else {
         const adminCompany = await createAdminCompany({
-          id:      form.id,
-          name:    form.name,
+          id: form.id,
+          name: form.name,
           website: form.website,
           scan_settings: { adapter_type: form.adapter_type, active: form.active },
         })
-        onCreated?.({ ...adminCompany, url: adminCompany.website, adapter_type: form.adapter_type, active: form.active, last_scan_at: null, last_scan_status: null })
+        onCreated?.({
+          ...adminCompany,
+          url: adminCompany.website,
+          adapter_type: form.adapter_type,
+          active: form.active,
+          last_scan_at: null,
+          last_scan_status: null,
+        })
       }
       handleClose()
     } catch (err: unknown) {
       if (err instanceof ApiValidationError) {
         setFieldErrors(err.fieldErrors())
       } else {
-        setGlobalError(err instanceof Error ? err.message : `Failed to ${isEdit ? 'update' : 'create'} company`)
+        setGlobalError(
+          err instanceof Error ? err.message : `Failed to ${isEdit ? 'update' : 'create'} company`
+        )
       }
     } finally {
       setLoading(false)
@@ -150,7 +173,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
   const hasTemplate = !!URL_TEMPLATES[form.adapter_type]
 
   return (
-    <Dialog.Root open={open} onOpenChange={v => !v && handleClose()}>
+    <Dialog.Root open={open} onOpenChange={(v) => !v && handleClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />
         <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-[#13131a] border border-white/10 rounded-xl shadow-2xl p-6">
@@ -158,7 +181,10 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
             <Dialog.Title className="text-lg font-semibold text-white">
               {isEdit ? 'Edit Company' : 'Add Company'}
             </Dialog.Title>
-            <button onClick={handleClose} className="text-slate-400 hover:text-white transition-colors">
+            <button
+              onClick={handleClose}
+              className="text-slate-400 hover:text-white transition-colors"
+            >
               <X size={18} />
             </button>
           </div>
@@ -168,20 +194,29 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
             <Field label="Adapter">
               <select
                 value={form.adapter_type}
-                onChange={e => handleAdapterChange(e.target.value)}
+                onChange={(e) => handleAdapterChange(e.target.value)}
                 className={inputClass}
               >
-                {ADAPTER_TYPES.map(a => (
-                  <option key={a} value={a}>{a}</option>
+                {ADAPTER_TYPES.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
                 ))}
               </select>
-              {fieldErrors.adapter_type && <p className="text-xs text-red-400 mt-1">{fieldErrors.adapter_type}</p>}
+              {fieldErrors.adapter_type && (
+                <p className="text-xs text-red-400 mt-1">{fieldErrors.adapter_type}</p>
+              )}
             </Field>
 
-            <Field label="Identifier (slug)" hint={isEdit ? 'Cannot be changed' : 'Unique slug, e.g. stripe'}>
+            <Field
+              label="Identifier (slug)"
+              hint={isEdit ? 'Cannot be changed' : 'Unique slug, e.g. stripe'}
+            >
               <input
                 value={form.id}
-                onChange={e => !isEdit && handleIdChange(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                onChange={(e) =>
+                  !isEdit && handleIdChange(e.target.value.toLowerCase().replace(/\s+/g, '-'))
+                }
                 placeholder="stripe"
                 disabled={isEdit}
                 className={cn(inputClass, isEdit && 'opacity-50 cursor-not-allowed')}
@@ -192,7 +227,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
             <Field label="Name">
               <input
                 value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="Stripe"
                 className={inputClass}
               />
@@ -203,8 +238,10 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
               <div className="relative">
                 <input
                   value={form.website}
-                  onChange={e => handleUrlChange(e.target.value)}
-                  placeholder={hasTemplate && !isEdit ? 'Auto-filled — enter Company ID above' : 'https://...'}
+                  onChange={(e) => handleUrlChange(e.target.value)}
+                  placeholder={
+                    hasTemplate && !isEdit ? 'Auto-filled — enter Company ID above' : 'https://...'
+                  }
                   className={cn(
                     inputClass,
                     'pr-9',
@@ -217,7 +254,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                       type="button"
                       onClick={() => {
                         setUrlManuallyEdited(false)
-                        setForm(f => ({ ...f, website: buildUrl(f.adapter_type, f.id) }))
+                        setForm((f) => ({ ...f, website: buildUrl(f.adapter_type, f.id) }))
                       }}
                       className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
                     >
@@ -232,7 +269,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                       tabIndex={-1}
                       title="Open URL"
                       className="text-slate-500 hover:text-violet-400 transition-colors"
-                      onClick={e => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <ExternalLink size={13} />
                     </a>
@@ -242,7 +279,9 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
               {hasTemplate && !urlManuallyEdited && form.website && !isEdit && (
                 <p className="text-[11px] text-violet-400/70 mt-1">✓ Auto-filled from identifier</p>
               )}
-              {fieldErrors.website && <p className="text-xs text-red-400 mt-1">{fieldErrors.website}</p>}
+              {fieldErrors.website && (
+                <p className="text-xs text-red-400 mt-1">{fieldErrors.website}</p>
+              )}
             </Field>
 
             <div className="flex items-center justify-between">
@@ -251,16 +290,18 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                 type="button"
                 role="switch"
                 aria-checked={form.active}
-                onClick={() => setForm(f => ({ ...f, active: !f.active }))}
+                onClick={() => setForm((f) => ({ ...f, active: !f.active }))}
                 className={cn(
                   'relative inline-flex w-10 h-6 rounded-full transition-colors duration-200 focus:outline-none shrink-0',
                   form.active ? 'bg-violet-600' : 'bg-white/15'
                 )}
               >
-                <span className={cn(
-                  'absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200',
-                  form.active ? 'translate-x-5' : 'translate-x-1'
-                )} />
+                <span
+                  className={cn(
+                    'absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200',
+                    form.active ? 'translate-x-5' : 'translate-x-1'
+                  )}
+                />
               </button>
             </div>
 
@@ -277,9 +318,18 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
               <button
                 type="submit"
                 disabled={loading}
-                className={cn(btnBase, 'flex-1 bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50')}
+                className={cn(
+                  btnBase,
+                  'flex-1 bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50'
+                )}
               >
-                {loading ? (isEdit ? 'Saving…' : 'Adding…') : (isEdit ? 'Save Changes' : 'Add Company')}
+                {loading
+                  ? isEdit
+                    ? 'Saving…'
+                    : 'Adding…'
+                  : isEdit
+                    ? 'Save Changes'
+                    : 'Add Company'}
               </button>
             </div>
           </form>
@@ -289,7 +339,15 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
   )
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string
+  hint?: string
+  children: React.ReactNode
+}) {
   return (
     <div className="space-y-1">
       <label className="text-sm font-medium text-slate-300">
@@ -301,5 +359,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-const inputClass = 'w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-colors'
-const btnBase = 'px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:cursor-not-allowed'
+const inputClass =
+  'w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-colors'
+const btnBase =
+  'px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:cursor-not-allowed'
