@@ -137,7 +137,10 @@ describe('adminCompanies API', () => {
         scan_settings: { adapter_type: 'greenhouse', active: true },
       }
       await createAdminCompany(input)
-      expect(apiClient.post).toHaveBeenCalledWith('/admin/companies', input)
+      expect(apiClient.post).toHaveBeenCalledWith('/admin/companies', {
+        ...input,
+        slug: 'stripe',
+      })
     })
 
     it('returns the created company', async () => {
@@ -155,7 +158,34 @@ describe('adminCompanies API', () => {
       vi.mocked(apiClient.post).mockResolvedValue(mockAdminCompany)
       const input = { id: 'acme', name: 'Acme', website: 'https://acme.com' }
       await createAdminCompany(input)
-      expect(apiClient.post).toHaveBeenCalledWith('/admin/companies', input)
+      expect(apiClient.post).toHaveBeenCalledWith('/admin/companies', {
+        ...input,
+        slug: 'acme',
+      })
+    })
+
+    it('derives slug from id so backend CompanyPublicInput validation passes', async () => {
+      vi.mocked(apiClient.post).mockResolvedValue(mockAdminCompany)
+      await createAdminCompany({
+        id: 'inception',
+        name: 'Inception',
+        website: 'https://jobs.gem.com/inception',
+        scan_settings: { adapter_type: 'gem', active: true },
+      })
+      const [, body] = vi.mocked(apiClient.post).mock.calls[0]
+      expect(body).toMatchObject({ id: 'inception', slug: 'inception' })
+    })
+
+    it('handles slugs that include hyphens (gem vanity boards like lumalabs-ai)', async () => {
+      vi.mocked(apiClient.post).mockResolvedValue(mockAdminCompany)
+      await createAdminCompany({
+        id: 'lumalabs-ai',
+        name: 'Luma AI',
+        website: 'https://jobs.gem.com/lumalabs-ai',
+        scan_settings: { adapter_type: 'gem', active: true },
+      })
+      const [, body] = vi.mocked(apiClient.post).mock.calls[0]
+      expect(body).toMatchObject({ id: 'lumalabs-ai', slug: 'lumalabs-ai' })
     })
   })
 

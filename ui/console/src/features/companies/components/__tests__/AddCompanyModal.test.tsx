@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as adminApi from '@/api/adminCompanies'
+import { ApiValidationError } from '@/lib/api-error'
 import { AddCompanyModal } from '../AddCompanyModal'
 import type { Company } from '@/types'
 
@@ -235,5 +236,97 @@ describe('AddCompanyModal', () => {
     await waitFor(() => {
       expect(screen.getByText(/internal server error/i)).toBeInTheDocument()
     })
+  })
+
+  // ── ApiValidationError on a field that isn't in the form ────────────────────
+  // Regression: when the backend rejected `slug` (a field the modal doesn't
+  // expose), the submit failed silently and the modal looked frozen. The
+  // handler should now lift unmapped field errors into the global banner.
+
+  it('surfaces backend ApiValidationError on an unmapped field as the global error', async () => {
+    const user = userEvent.setup()
+    vi.mocked(adminApi.createAdminCompany).mockRejectedValue(
+      new ApiValidationError([{ field: 'slug', code: 'REQUIRED', message: 'slug is required' }])
+    )
+
+    render(<AddCompanyModal {...baseProps} />)
+    await user.type(screen.getByPlaceholderText('stripe'), 'acme')
+    await user.type(screen.getByPlaceholderText('Stripe'), 'Acme Corp')
+    await user.click(screen.getByRole('button', { name: /add company/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/slug.*required/i)).toBeInTheDocument()
+    })
+  })
+
+  it('keeps field-level errors on mapped fields without duplicating into the global banner', async () => {
+    const user = userEvent.setup()
+    vi.mocked(adminApi.createAdminCompany).mockRejectedValue(
+      new ApiValidationError([{ field: 'name', code: 'REQUIRED', message: 'name is required' }])
+    )
+
+    render(<AddCompanyModal {...baseProps} />)
+    await user.type(screen.getByPlaceholderText('stripe'), 'acme')
+    await user.type(screen.getByPlaceholderText('Stripe'), 'Acme Corp')
+    await user.click(screen.getByRole('button', { name: /add company/i }))
+
+    await waitFor(() => {
+      expect(adminApi.createAdminCompany).toHaveBeenCalled()
+    })
+    // The inline field error shows; the global banner stays empty.
+    expect(screen.getByText('name is required')).toBeInTheDocument()
+  })
+
+  // ── gem adapter URL template + payload ──────────────────────────────────────
+
+  it('auto-fills the careers URL for the gem adapter (jobs.gem.com/{slug})', async () => {
+    const user = userEvent.setup()
+    render(<AddCompanyModal {...baseProps} />)
+
+    // Switch adapter to gem
+    const adapterSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement
+    fireEvent.change(adapterSelect, { target: { value: 'gem' } })
+
+    // Typing the slug should auto-fill the URL via the gem template.
+    await user.type(screen.getByPlaceholderText('stripe'), 'inception')
+
+    const urlInput = screen.getByPlaceholderText(/auto-filled|https/i) as HTMLInputElement
+    expect(urlInput.value).toBe('https://jobs.gem.com/inception')
+  })
+
+  it('submits the gem adapter create payload correctly', async () => {
+    const user = userEvent.setup()
+    const onCreated = vi.fn()
+    vi.mocked(adminApi.createAdminCompany).mockResolvedValue({
+      id: 'inception',
+      name: 'Inception',
+      website: 'https://jobs.gem.com/inception',
+      created_at: '2026-05-14T00:00:00Z',
+      scan_settings: null,
+    })
+
+    render(<AddCompanyModal {...baseProps} onCreated={onCreated} />)
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'gem' } })
+    await user.type(screen.getByPlaceholderText('stripe'), 'inception')
+    await user.type(screen.getByPlaceholderText('Stripe'), 'Inception')
+    await user.click(screen.getByRole('button', { name: /add company/i }))
+
+    await waitFor(() => {
+      expect(adminApi.createAdminCompany).toHaveBeenCalledWith({
+        id: 'inception',
+        name: 'Inception',
+        website: 'https://jobs.gem.com/inception',
+        scan_settings: { adapter_type: 'gem', active: true },
+      })
+    })
+  })
+
+  // ── Dialog a11y description (Radix warning fix) ─────────────────────────────
+
+  it('renders a Dialog.Description for screen readers', () => {
+    render(<AddCompanyModal {...baseProps} />)
+    const dialog = screen.getByRole('dialog')
+    // Radix wires aria-describedby on DialogContent to the Description id.
+    expect(dialog).toHaveAttribute('aria-describedby')
   })
 })

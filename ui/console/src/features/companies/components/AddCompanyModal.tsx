@@ -158,7 +158,18 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
       handleClose()
     } catch (err: unknown) {
       if (err instanceof ApiValidationError) {
-        setFieldErrors(err.fieldErrors())
+        const fields = err.fieldErrors()
+        setFieldErrors(fields)
+        // Surface backend errors that don't map to a visible form field
+        // (e.g. `slug`) as a global message so the modal isn't silently stuck.
+        const visibleFields = new Set(['id', 'name', 'website', 'adapter_type'])
+        const unmapped = Object.entries(fields).find(([f]) => !visibleFields.has(f))
+        if (unmapped) {
+          const [field, message] = unmapped
+          setGlobalError(`${field}: ${message}`)
+        } else if (Object.keys(fields).length === 0) {
+          setGlobalError(err.message || `Failed to ${isEdit ? 'update' : 'create'} company`)
+        }
       } else {
         setGlobalError(
           err instanceof Error ? err.message : `Failed to ${isEdit ? 'update' : 'create'} company`
@@ -188,6 +199,11 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
               <X size={18} />
             </button>
           </div>
+          <Dialog.Description className="sr-only">
+            {isEdit
+              ? 'Edit an existing company in the JobRadar admin catalog.'
+              : 'Add a new company to the JobRadar admin catalog, choosing an adapter and configuring scan settings.'}
+          </Dialog.Description>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Adapter first — drives URL template */}
