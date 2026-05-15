@@ -17,4 +17,5 @@ const (
 	AdapterRippling   = "rippling"
 	AdapterMicrosoft  = "microsoft"
 	AdapterApple      = "apple"
+	AdapterGem        = "gem"
 )

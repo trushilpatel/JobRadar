@@ -19,6 +19,7 @@ const ADAPTER_COLORS: Record<string, string> = {
   apple: 'bg-slate-400',
   microsoft: 'bg-sky-400',
   rippling: 'bg-orange-400',
+  gem: 'bg-indigo-400',
 }
 
 interface PendingChange {
@@ -142,9 +143,7 @@ export function AdapterConfigsTable() {
                     min={1}
                     max={10080}
                     unit="min"
-                    onSave={(v) =>
-                      handleSave(cfg.adapter_type, 'scan_interval_minutes', v, cfg)
-                    }
+                    onSave={(v) => handleSave(cfg.adapter_type, 'scan_interval_minutes', v, cfg)}
                   />
                 </td>
                 <td className="px-4 py-3">
@@ -153,9 +152,7 @@ export function AdapterConfigsTable() {
                     min={0}
                     max={3600}
                     unit="s"
-                    onSave={(v) =>
-                      handleSave(cfg.adapter_type, 'inter_company_delay_s', v, cfg)
-                    }
+                    onSave={(v) => handleSave(cfg.adapter_type, 'inter_company_delay_s', v, cfg)}
                   />
                 </td>
                 <td className="px-4 py-3 text-white/50">
@@ -190,8 +187,7 @@ export function AdapterConfigsTable() {
             <Dialog.Description className="text-sm text-white/70 mb-5">
               {pending && (
                 <>
-                  Changing{' '}
-                  <span className="text-white font-medium">{pending.adapterType}</span>{' '}
+                  Changing <span className="text-white font-medium">{pending.adapterType}</span>{' '}
                   {pending.field === 'scan_interval_minutes'
                     ? 'scan interval'
                     : 'inter-company delay'}{' '}

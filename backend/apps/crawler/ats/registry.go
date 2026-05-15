@@ -5,6 +5,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/apple"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/ashby"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/gem"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/greenhouse"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/lever"
@@ -56,6 +57,8 @@ func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config, log l
 		return apple.New(), nil
 	case companycommon.AdapterMeta:
 		return meta.New(meta.Config{TimeoutMs: 600000}, log), nil
+	case companycommon.AdapterGem:
+		return gem.New(), nil
 	default:
 		return nil, fmt.Errorf("unknown adapter type: %s", adapterType)
 	}
