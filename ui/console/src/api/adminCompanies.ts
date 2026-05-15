@@ -77,7 +77,12 @@ export async function createAdminCompany(data: {
   website: string
   scan_settings?: { adapter_type: string; active: boolean }
 }): Promise<AdminCompany> {
-  return apiClient.post<AdminCompany>('/admin/companies', data)
+  // Backend requires slug on create; id and slug are 1:1 for admin-created
+  // companies (the id IS the slug in `companies`), so default it from id
+  // unless an explicit slug was supplied via .slug — keeps the modal payload
+  // contract minimal while satisfying CompanyPublicInput validation.
+  const payload = { slug: data.id, ...data }
+  return apiClient.post<AdminCompany>('/admin/companies', payload)
 }
 
 export async function updateAdminCompany(

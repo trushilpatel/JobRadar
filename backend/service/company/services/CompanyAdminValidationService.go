@@ -22,6 +22,8 @@ var validAdapters = map[string]bool{
 	companycommon.AdapterMeta:       true,
 	companycommon.AdapterMicrosoft:  true,
 	companycommon.AdapterRippling:   true,
+	companycommon.AdapterGem:        true,
+	companycommon.AdapterDeel:       true,
 }
 
 type adminValidationService struct {
