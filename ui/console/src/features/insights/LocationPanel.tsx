@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchLocation } from '@/api/insights'
 import type { LocationData } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
+import { insightQueryKeys } from './queryKeys'
 
 function LocationContent({ data }: { data: LocationData }) {
-  const countries = data?.countries ?? []
-  const states = data?.states ?? []
+  const countries = data.countries
+  const states = data.states
   if (countries.length === 0 && states.length === 0) return <InsightEmpty />
   const maxC = countries[0]?.count ?? 1
   const maxS = states[0]?.count ?? 1
@@ -55,7 +56,7 @@ function LocationContent({ data }: { data: LocationData }) {
 
 export function LocationPanel() {
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['insights-location'],
+    queryKey: insightQueryKeys.location(),
     queryFn: fetchLocation,
     staleTime: 30_000,
   })
@@ -66,10 +67,10 @@ export function LocationPanel() {
     >
       {isLoading ? (
         <InsightSkeleton />
-      ) : isError ? (
+      ) : isError || !data ? (
         <InsightError />
       ) : (
-        <LocationContent data={data ?? { countries: [], states: [] }} />
+        <LocationContent data={data} />
       )}
     </InsightCard>
   )

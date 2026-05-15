@@ -55,13 +55,12 @@ describe('TechStackPanel', () => {
     await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
   })
 
-  // Primary regression test: null response must not crash — select: (d) => d ?? [] handles it
-  it('does not crash and shows InsightEmpty when response is null', async () => {
+  it('shows error state when response is null', async () => {
     vi.mocked(insightsApi.fetchTechStack).mockResolvedValue(
       null as unknown as Awaited<ReturnType<typeof insightsApi.fetchTechStack>>
     )
     render(<TechStackPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Failed to load data')).toBeInTheDocument())
   })
 
   it('shows InsightError when query rejects', async () => {
@@ -104,13 +103,12 @@ describe('CompanyVelocityPanel', () => {
     await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
   })
 
-  // Primary regression test: null response must not crash — select: (d) => d ?? [] handles it
-  it('does not crash and shows InsightEmpty when response is null', async () => {
+  it('shows error state when response is null', async () => {
     vi.mocked(insightsApi.fetchVelocity).mockResolvedValue(
       null as unknown as Awaited<ReturnType<typeof insightsApi.fetchVelocity>>
     )
     render(<CompanyVelocityPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Failed to load data')).toBeInTheDocument())
   })
 
   it('shows InsightError when query rejects', async () => {
@@ -151,13 +149,12 @@ describe('PipelineFunnelPanel', () => {
     await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
   })
 
-  // Primary regression test: null response must not crash — select: (d) => d ?? [] handles it
-  it('does not crash and shows InsightEmpty when response is null', async () => {
+  it('shows error state when response is null', async () => {
     vi.mocked(insightsApi.fetchFunnel).mockResolvedValue(
       null as unknown as Awaited<ReturnType<typeof insightsApi.fetchFunnel>>
     )
     render(<PipelineFunnelPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Failed to load data')).toBeInTheDocument())
   })
 
   it('shows InsightError when query rejects', async () => {
@@ -194,13 +191,12 @@ describe('RoleCategoryPanel', () => {
     await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
   })
 
-  // Primary regression test: null response must not crash — select: (d) => d ?? [] handles it
-  it('does not crash and shows InsightEmpty when response is null', async () => {
+  it('shows error state when response is null', async () => {
     vi.mocked(insightsApi.fetchRoleCategories).mockResolvedValue(
       null as unknown as Awaited<ReturnType<typeof insightsApi.fetchRoleCategories>>
     )
     render(<RoleCategoryPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Failed to load data')).toBeInTheDocument())
   })
 
   it('shows InsightError when query rejects', async () => {
@@ -234,13 +230,12 @@ describe('SponsorshipTrendPanel', () => {
     await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
   })
 
-  // Primary regression test: null response must not crash — select: (d) => d ?? [] handles it
-  it('does not crash and shows InsightEmpty when response is null', async () => {
+  it('shows error state when response is null', async () => {
     vi.mocked(insightsApi.fetchSponsorshipTrend).mockResolvedValue(
       null as unknown as Awaited<ReturnType<typeof insightsApi.fetchSponsorshipTrend>>
     )
     render(<SponsorshipTrendPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Failed to load data')).toBeInTheDocument())
   })
 
   it('shows InsightError when query rejects', async () => {
@@ -281,13 +276,12 @@ describe('CompanyActivityPanel', () => {
     await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
   })
 
-  // Primary regression test: null response must not crash — select: (d) => d ?? [] handles it
-  it('does not crash and shows InsightEmpty when response is null', async () => {
+  it('shows error state when response is null', async () => {
     vi.mocked(insightsApi.fetchCompanyActivity).mockResolvedValue(
       null as unknown as Awaited<ReturnType<typeof insightsApi.fetchCompanyActivity>>
     )
     render(<CompanyActivityPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Failed to load data')).toBeInTheDocument())
   })
 
   it('shows InsightError when query rejects', async () => {
@@ -324,15 +318,12 @@ describe('LocationPanel', () => {
     await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
   })
 
-  // Primary regression test: null response must not crash.
-  // LocationPanel uses `data ?? { countries: [], states: [] }` and LocationContent
-  // uses optional chaining (data?.countries) so null is safe without select.
-  it('does not crash and shows InsightEmpty when response is null', async () => {
+  it('shows error state when response is null', async () => {
     vi.mocked(insightsApi.fetchLocation).mockResolvedValue(
       null as unknown as Awaited<ReturnType<typeof insightsApi.fetchLocation>>
     )
     render(<LocationPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Failed to load data')).toBeInTheDocument())
   })
 
   it('shows InsightError when query rejects', async () => {

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchVelocity } from '@/api/dashboard'
 import type { CompanyVelocityRow } from '@/types'
 import { cn } from '@/lib/utils'
+import { dashboardQueryKeys } from './queryKeys'
 
 const BADGE: Record<string, string> = {
   spike: 'bg-amber-500/15 text-amber-400',
@@ -34,8 +35,8 @@ function Sparkline({ row }: { row: CompanyVelocityRow }) {
 }
 
 export function VelocityPanel() {
-  const { data: rows = [], isLoading } = useQuery({
-    queryKey: ['dashboard-velocity'],
+  const { data: rows, isLoading } = useQuery({
+    queryKey: dashboardQueryKeys.velocity(),
     queryFn: () => fetchVelocity(10),
     refetchInterval: 120_000,
   })
@@ -57,7 +58,7 @@ export function VelocityPanel() {
         <span className="text-right">new</span>
       </div>
 
-      {isLoading ? (
+      {isLoading || !rows ? (
         <div className="space-y-3 mt-2 animate-pulse">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="h-8 bg-white/[0.04] rounded-lg" />

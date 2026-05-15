@@ -12,6 +12,7 @@ import { fetchSponsorshipTrend } from '@/api/insights'
 import type { SponsorshipDay } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
 import { tooltipStyle } from './insightStyles'
+import { insightQueryKeys } from './queryKeys'
 
 function SponsorshipContent({ data }: { data: SponsorshipDay[] }) {
   if (data.length === 0) return <InsightEmpty />
@@ -60,15 +61,10 @@ function SponsorshipContent({ data }: { data: SponsorshipDay[] }) {
 }
 
 export function SponsorshipTrendPanel() {
-  const {
-    data = [],
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ['insights-sponsorship'],
+  const { data, isLoading, isError } = useQuery({
+    queryKey: insightQueryKeys.sponsorshipTrend(30),
     queryFn: () => fetchSponsorshipTrend(30),
     staleTime: 30_000,
-    select: (d: SponsorshipDay[] | null) => d ?? [],
   })
   return (
     <InsightCard
@@ -77,7 +73,7 @@ export function SponsorshipTrendPanel() {
     >
       {isLoading ? (
         <InsightSkeleton height="h-48" />
-      ) : isError ? (
+      ) : isError || !data ? (
         <InsightError />
       ) : (
         <SponsorshipContent data={data} />

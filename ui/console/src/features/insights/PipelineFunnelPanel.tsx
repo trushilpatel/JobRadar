@@ -3,6 +3,7 @@ import { fetchFunnel } from '@/api/insights'
 import type { FunnelStep } from '@/types'
 import { cn } from '@/lib/utils'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
+import { insightQueryKeys } from './queryKeys'
 
 const COLORS: Record<string, string> = {
   enriched: 'bg-slate-500',
@@ -50,19 +51,20 @@ function FunnelContent({ data }: { data: FunnelStep[] }) {
 }
 
 export function PipelineFunnelPanel() {
-  const {
-    data = [],
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ['insights-funnel'],
+  const { data, isLoading, isError } = useQuery({
+    queryKey: insightQueryKeys.funnel(),
     queryFn: fetchFunnel,
     staleTime: 30_000,
-    select: (d: FunnelStep[] | null) => d ?? [],
   })
   return (
     <InsightCard title="Pipeline Funnel" subtitle="Enriched → saved → applied (all time)">
-      {isLoading ? <InsightSkeleton /> : isError ? <InsightError /> : <FunnelContent data={data} />}
+      {isLoading ? (
+        <InsightSkeleton />
+      ) : isError || !data ? (
+        <InsightError />
+      ) : (
+        <FunnelContent data={data} />
+      )}
     </InsightCard>
   )
 }

@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react'
 import { fetchInterviews, updateApplicationStage } from '@/api/dashboard'
 import type { InterviewRow } from '@/types'
 import { cn } from '@/lib/utils'
+import { dashboardQueryKeys } from './queryKeys'
 
 // Stage options shown in the dropdown
 const STAGES: { key: string; label: string; dotColor: string; pillClass: string }[] = [
@@ -125,8 +126,8 @@ function StageDropdown({
 export function InterviewingPanel() {
   const queryClient = useQueryClient()
 
-  const { data: rows = [], isLoading } = useQuery({
-    queryKey: ['dashboard-interviews'],
+  const { data: rows, isLoading } = useQuery({
+    queryKey: dashboardQueryKeys.interviews(),
     queryFn: fetchInterviews,
     refetchInterval: 30_000,
   })
@@ -134,7 +135,7 @@ export function InterviewingPanel() {
   const mutation = useMutation({
     mutationFn: ({ id, stage }: { id: number; stage: string }) => updateApplicationStage(id, stage),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard-interviews'] })
+      queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.interviews() })
     },
   })
 
@@ -144,7 +145,7 @@ export function InterviewingPanel() {
         interviewing
       </p>
 
-      {isLoading ? (
+      {isLoading || !rows ? (
         <div className="space-y-3 animate-pulse">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="h-10 bg-white/[0.04] rounded-lg" />

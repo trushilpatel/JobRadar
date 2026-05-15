@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchTechTrends } from '@/api/dashboard'
 import type { TechTrendRow } from '@/types'
+import { dashboardQueryKeys } from './queryKeys'
 
 // Sparkline for a tech row — 4 quarter bars
 function TechSparkline({
@@ -82,7 +83,7 @@ function ColHeader({ deltaHeading }: { deltaHeading: string }) {
 
 export function TechTrendsPanel() {
   const { data, isLoading } = useQuery({
-    queryKey: ['dashboard-tech-trends'],
+    queryKey: dashboardQueryKeys.techTrends(),
     queryFn: fetchTechTrends,
     refetchInterval: 300_000,
   })

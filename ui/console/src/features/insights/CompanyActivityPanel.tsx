@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchCompanyActivity } from '@/api/insights'
 import type { CompanyWeekCount } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
+import { insightQueryKeys } from './queryKeys'
 
 function ActivityContent({ data }: { data: CompanyWeekCount[] }) {
   const stats = useMemo(() => {
@@ -38,21 +39,16 @@ function ActivityContent({ data }: { data: CompanyWeekCount[] }) {
 }
 
 export function CompanyActivityPanel() {
-  const {
-    data = [],
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ['insights-company-activity'],
+  const { data, isLoading, isError } = useQuery({
+    queryKey: insightQueryKeys.companyActivity(),
     queryFn: fetchCompanyActivity,
     staleTime: 30_000,
-    select: (d: CompanyWeekCount[] | null) => d ?? [],
   })
   return (
     <InsightCard title="Company Activity" subtitle="Total jobs enriched per company (all time)">
       {isLoading ? (
         <InsightSkeleton />
-      ) : isError ? (
+      ) : isError || !data ? (
         <InsightError />
       ) : (
         <ActivityContent data={data} />

@@ -4,6 +4,7 @@ import { fetchTechStack } from '@/api/insights'
 import type { TechCount } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
 import { tooltipStyle } from './insightStyles'
+import { insightQueryKeys } from './queryKeys'
 
 function TechContent({ data }: { data: TechCount[] }) {
   if (data.length === 0) return <InsightEmpty />
@@ -42,21 +43,16 @@ function TechContent({ data }: { data: TechCount[] }) {
 }
 
 export function TechStackPanel() {
-  const {
-    data = [],
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ['insights-tech-stack'],
+  const { data, isLoading, isError } = useQuery({
+    queryKey: insightQueryKeys.techStack(15),
     queryFn: () => fetchTechStack(15),
     staleTime: 30_000,
-    select: (d: TechCount[] | null) => d ?? [],
   })
   return (
     <InsightCard title="Tech Stack Trends" subtitle="Top 15 technologies across all enriched jobs">
       {isLoading ? (
         <InsightSkeleton height="h-48" />
-      ) : isError ? (
+      ) : isError || !data ? (
         <InsightError />
       ) : (
         <TechContent data={data} />

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import { fetchHeatmap } from '@/api/dashboard'
 import type { WeeklyCount } from '@/types'
+import { dashboardQueryKeys } from './queryKeys'
 
 const HEAT_COLORS = ['#1c1c1e', '#085041', '#0f6e56', '#1d9e75', '#5dcaa5']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -61,10 +62,7 @@ function HeatRow({
   return (
     <div className="space-y-1">
       {/* Month labels */}
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: `repeat(${HALF}, 1fr)`, gap: '3px' }}
-      >
+      <div className="grid" style={{ gridTemplateColumns: `repeat(${HALF}, 1fr)`, gap: '3px' }}>
         {slice.map((w, col) => {
           const label =
             col % 4 === 0 && !(col === 0 && monthLabel(w.weekStart) === prevLastLabelMonth)
@@ -83,10 +81,7 @@ function HeatRow({
       </div>
 
       {/* Cells */}
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: `repeat(${HALF}, 1fr)`, gap: '3px' }}
-      >
+      <div className="grid" style={{ gridTemplateColumns: `repeat(${HALF}, 1fr)`, gap: '3px' }}>
         {slice.map((w, col) => {
           const ci = colorIndex(w.count, max)
           return (
@@ -121,7 +116,7 @@ export function HeatmapPanel() {
     isLoading,
     isError,
   } = useQuery({
-    queryKey: ['dashboard-heatmap'],
+    queryKey: dashboardQueryKeys.heatmap(),
     queryFn: fetchHeatmap,
     refetchInterval: 300_000,
   })
@@ -134,8 +129,7 @@ export function HeatmapPanel() {
   // The last labeled column in firstHalf is at col 24 (largest multiple of 4
   // within [0, HALF-1]=25). Compare it with secondHalf[0] to suppress the
   // duplicate month label that appears when both rows start in the same month.
-  const lastLabelMonthInFirst =
-    firstHalf.length >= 25 ? monthLabel(firstHalf[24].weekStart) : ''
+  const lastLabelMonthInFirst = firstHalf.length >= 25 ? monthLabel(firstHalf[24].weekStart) : ''
 
   return (
     <TooltipPrimitive.Provider delayDuration={120}>
