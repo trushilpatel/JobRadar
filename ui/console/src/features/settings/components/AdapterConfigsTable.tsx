@@ -20,6 +20,7 @@ const ADAPTER_COLORS: Record<string, string> = {
   microsoft: 'bg-sky-400',
   rippling: 'bg-orange-400',
   gem: 'bg-indigo-400',
+  deel: 'bg-amber-400',
 }
 
 interface PendingChange {

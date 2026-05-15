@@ -60,6 +60,7 @@ export const ADAPTER_TYPES = [
   'microsoft',
   'rippling',
   'gem',
+  'deel',
 ] as const
 
 export type AdapterType = (typeof ADAPTER_TYPES)[number]

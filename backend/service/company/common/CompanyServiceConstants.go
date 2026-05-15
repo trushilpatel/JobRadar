@@ -18,4 +18,5 @@ const (
 	AdapterMicrosoft  = "microsoft"
 	AdapterApple      = "apple"
 	AdapterGem        = "gem"
+	AdapterDeel       = "deel"
 )

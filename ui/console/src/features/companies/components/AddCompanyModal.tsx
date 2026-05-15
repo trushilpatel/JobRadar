@@ -26,6 +26,7 @@ const URL_TEMPLATES: Partial<Record<string, (id: string) => string>> = {
   lever: (id) => `https://jobs.lever.co/${id}`,
   ashby: (id) => `https://jobs.ashbyhq.com/${id}`,
   gem: (id) => `https://jobs.gem.com/${id}`,
+  deel: (id) => `https://jobs.deel.com/${id}`,
 }
 
 const ADAPTER_HINTS: Partial<Record<string, string>> = {
@@ -33,6 +34,7 @@ const ADAPTER_HINTS: Partial<Record<string, string>> = {
   lever: 'URL auto-filled from company ID',
   ashby: 'URL auto-filled from company ID',
   gem: 'URL auto-filled from company ID',
+  deel: 'URL auto-filled from company ID',
   google: 'No URL required — uses built-in Google Careers scraper',
   apple: 'No URL required — uses built-in Apple Jobs scraper',
   meta: 'No URL required — uses built-in Meta Careers scraper',
