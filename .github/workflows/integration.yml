@@ -24,6 +24,11 @@ jobs:
     name: Integration (Postgres + Kafka + Redis)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      # Forbid auto-toolchain downloads — the installed Go must satisfy go.mod.
+      # Prevents the `compile`/`go` version skew that arises when setup-go
+      # installs one version and a `toolchain` directive fetches another.
+      GOTOOLCHAIN: local
 
     steps:
       - uses: actions/checkout@v4
