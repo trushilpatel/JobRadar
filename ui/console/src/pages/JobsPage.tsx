@@ -1,47 +1,80 @@
-import { useState, useCallback } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Trash2, Keyboard } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import type { Job, JobStatus } from '@/types'
 import { ResizeHandle } from '@/components/ui/resize-handle'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import type { TabKey } from '@/constants/jobStatus'
 import {
   useJobs,
   useJobActions,
-  useJobShortcuts,
-  JOB_SHORTCUTS,
+  useJobKeyboard,
+  useFocusedJob,
   JobStatusTabs,
   JobFilters,
   JobsTable,
   JobDetailPanel,
   DismissModal,
+  JobCommandPalette,
+  JobShortcutSheet,
+  MobileFilterDrawer,
 } from '@/features/jobs'
+import { useIsMobile } from '@/lib/use-media-query'
+
+type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new'>
 
 export function JobsPage() {
   const jobs = useJobs()
   const actions = useJobActions()
+  const navigate = useNavigate()
+  const isMobile = useIsMobile()
 
-  const [activeJob, setActiveJob] = useState<Job | null>(null)
+  // Local UI state — selection, focused row, layout widths, overlay flags.
+  // None of these survive a refresh by design.
   const [dismissTarget, setDismissTarget] = useState<Job | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [panelWidth, setPanelWidth] = useState(440)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+  // Anchor for shift-range selection (last toggled row id).
+  const [lastAnchorId, setLastAnchorId] = useState<string | null>(null)
 
-  function handleStatusChange(job: Job, status: Exclude<JobStatus, 'dismissed'>) {
-    actions.setStatus.mutate({ id: job.id, status })
-    if (activeJob?.id === job.id) setActiveJob(null)
-  }
+  // Focused-row index — separate from the URL-driven open preview.
+  const focus = useFocusedJob(jobs.jobs)
 
-  function handleDismissConfirm(reason: string) {
-    if (!dismissTarget) return
-    actions.dismiss.mutate({ id: dismissTarget.id, reason })
-    if (activeJob?.id === dismissTarget.id) setActiveJob(null)
-    setDismissTarget(null)
-  }
+  // The preview job is URL-driven. Look it up against the current page.
+  const openJob = useMemo(
+    () => jobs.jobs.find((j) => j.id === jobs.openJobId) ?? null,
+    [jobs.jobs, jobs.openJobId]
+  )
 
-  function handleBulkDismiss() {
+  // ── Action handlers ───────────────────────────────────────────────────────
+  const handleStatusChange = useCallback(
+    (job: Job, status: Exclude<JobStatus, 'dismissed'>) => {
+      actions.setStatus.mutate({ id: job.id, status })
+      if (jobs.openJobId === job.id) jobs.setOpenJobId(null)
+    },
+    [actions.setStatus, jobs]
+  )
+
+  const handleDismissConfirm = useCallback(
+    (reason: string) => {
+      if (!dismissTarget) return
+      actions.dismiss.mutate({ id: dismissTarget.id, reason })
+      if (jobs.openJobId === dismissTarget.id) jobs.setOpenJobId(null)
+      setDismissTarget(null)
+    },
+    [actions.dismiss, dismissTarget, jobs]
+  )
+
+  const handleBulkDismiss = useCallback(() => {
     const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
     actions.bulkDismiss.mutate(ids)
-    if (activeJob && selectedIds.has(activeJob.id)) setActiveJob(null)
+    if (jobs.openJobId && selectedIds.has(jobs.openJobId)) jobs.setOpenJobId(null)
     setSelectedIds(new Set())
-  }
+  }, [actions.bulkDismiss, selectedIds, jobs])
 
   const handleToggleSelect = useCallback((id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -50,14 +83,8 @@ export function JobsPage() {
       else n.delete(id)
       return n
     })
+    setLastAnchorId(id)
   }, [])
-
-  useJobShortcuts({
-    activeJob,
-    onSetStatus: (job, status) => handleStatusChange(job, status),
-    onDismiss: (job) => setDismissTarget(job),
-    enabled: !dismissTarget,
-  })
 
   const handleSelectAll = useCallback(
     (checked: boolean) => {
@@ -65,6 +92,134 @@ export function JobsPage() {
     },
     [jobs.jobs]
   )
+
+  const handleOpenFocused = useCallback(() => {
+    const job = focus.focusedJob
+    if (!job) return
+    if (isMobile) {
+      navigate(`/jobs/${job.id}`)
+    } else {
+      jobs.setOpenJobId(job.id)
+    }
+  }, [focus.focusedJob, isMobile, navigate, jobs])
+
+  const handleOpenUrlFocused = useCallback(() => {
+    const job = focus.focusedJob
+    if (!job?.url) return
+    window.open(job.url, '_blank', 'noreferrer')
+  }, [focus.focusedJob])
+
+  const handleEscape = useCallback(() => {
+    if (jobs.openJobId) {
+      jobs.setOpenJobId(null)
+      return
+    }
+    if (selectedIds.size > 0) {
+      setSelectedIds(new Set())
+    }
+  }, [jobs, selectedIds])
+
+  const handleGoToTab = useCallback(
+    (tab: TabKey) => {
+      jobs.setTab(tab)
+      setSelectedIds(new Set())
+    },
+    [jobs]
+  )
+
+  const handleKeyboardSetStatus = useCallback(
+    (status: SettableStatus) => {
+      if (!focus.focusedJob) return
+      handleStatusChange(focus.focusedJob, status)
+    },
+    [focus.focusedJob, handleStatusChange]
+  )
+
+  const handleKeyboardDismiss = useCallback(() => {
+    if (!focus.focusedJob) return
+    setDismissTarget(focus.focusedJob)
+  }, [focus.focusedJob])
+
+  const handleToggleSelectFocused = useCallback(() => {
+    const job = focus.focusedJob
+    if (!job) return
+    const checked = !selectedIds.has(job.id)
+    handleToggleSelect(job.id, checked)
+  }, [focus.focusedJob, selectedIds, handleToggleSelect])
+
+  const handleRangeSelect = useCallback(() => {
+    const target = focus.focusedJob
+    if (!target || !lastAnchorId) return
+    const anchorIdx = jobs.jobs.findIndex((j) => j.id === lastAnchorId)
+    const targetIdx = jobs.jobs.findIndex((j) => j.id === target.id)
+    if (anchorIdx === -1 || targetIdx === -1) return
+    const [lo, hi] = anchorIdx <= targetIdx ? [anchorIdx, targetIdx] : [targetIdx, anchorIdx]
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      for (let i = lo; i <= hi; i++) next.add(jobs.jobs[i].id)
+      return next
+    })
+  }, [focus.focusedJob, lastAnchorId, jobs.jobs])
+
+  const handleSelectAllOnPage = useCallback(() => {
+    setSelectedIds(new Set(jobs.jobs.map((j) => j.id)))
+  }, [jobs.jobs])
+
+  const handleBulkSave = useCallback(() => {
+    if (selectedIds.size === 0) return
+    actions.bulkSave.mutate(Array.from(selectedIds))
+  }, [actions.bulkSave, selectedIds])
+
+  const handleBulkApplied = useCallback(() => {
+    if (selectedIds.size === 0) return
+    actions.bulkApplied.mutate(Array.from(selectedIds))
+  }, [actions.bulkApplied, selectedIds])
+
+  // The search input lives inside JobFilters — focusing it from the `/`
+  // shortcut goes through a DOM lookup. Wave 2 may wire a ref through; for
+  // now we look up by the existing input markup.
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const handleFocusSearch = useCallback(() => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus()
+      return
+    }
+    const el = document.querySelector<HTMLInputElement>(
+      'input[type="search"], input[placeholder*="Search" i]'
+    )
+    el?.focus()
+  }, [])
+
+  // ── Keyboard wiring ───────────────────────────────────────────────────────
+  // Disable shortcuts when a modal/sheet/palette is open so their own keys
+  // (esc to close, etc.) take over.
+  const keyboardEnabled = !dismissTarget && !paletteOpen && !helpOpen && !mobileFilterOpen
+  useJobKeyboard({
+    enabled: keyboardEnabled,
+    onFocusNext: focus.focusNext,
+    onFocusPrev: focus.focusPrev,
+    onFocusFirst: focus.focusFirst,
+    onFocusLast: focus.focusLast,
+    onOpenPreview: handleOpenFocused,
+    onOpenUrl: handleOpenUrlFocused,
+    onEscape: handleEscape,
+    onPrevPage: jobs.goToPrevPage,
+    onNextPage: jobs.goToNextPage,
+    onGoToTab: handleGoToTab,
+    onSetStatus: handleKeyboardSetStatus,
+    onDismiss: handleKeyboardDismiss,
+    onUndo: actions.undoLast,
+    onToggleSelect: handleToggleSelectFocused,
+    onRangeSelect: handleRangeSelect,
+    onSelectAll: handleSelectAllOnPage,
+    onBulkSave: handleBulkSave,
+    onBulkApplied: handleBulkApplied,
+    onBulkDismiss: handleBulkDismiss,
+    onFocusSearch: handleFocusSearch,
+    onOpenPalette: () => setPaletteOpen(true),
+    onResetFilters: jobs.resetFilters,
+    onOpenHelp: () => setHelpOpen(true),
+  })
 
   const activeFilterCount = [
     jobs.searchQuery.length > 0,
@@ -80,7 +235,6 @@ export function JobsPage() {
         tab={jobs.tab}
         onChange={(t) => {
           jobs.setTab(t)
-          setActiveJob(null)
           setSelectedIds(new Set())
         }}
         counts={jobs.counts}
@@ -103,28 +257,16 @@ export function JobsPage() {
                 <button
                   type="button"
                   aria-label="Keyboard shortcuts"
+                  onClick={() => setHelpOpen(true)}
                   className="flex items-center justify-center h-7 w-7 rounded-md text-slate-400 hover:text-white hover:bg-white/[0.05] transition-colors"
                 >
                   <Keyboard size={16} />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="end">
-                <div className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-500">
-                  Shortcuts
+                <div className="text-[11px] text-slate-300">
+                  Press <span className="font-mono">?</span> for shortcuts
                 </div>
-                <div className="text-[11px] text-slate-500 mb-2">
-                  Click a row first, then press a key
-                </div>
-                <ul className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
-                  {JOB_SHORTCUTS.map((s) => (
-                    <li key={s.key} className="contents">
-                      <kbd className="justify-self-start rounded border border-white/[0.08] bg-white/[0.05] px-1.5 py-0.5 font-mono text-[10px] text-slate-200">
-                        {s.key}
-                      </kbd>
-                      <span className="text-xs text-slate-300">{s.label}</span>
-                    </li>
-                  ))}
-                </ul>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -178,11 +320,18 @@ export function JobsPage() {
           itemsBeforePage={jobs.itemsBeforePage}
           hasNextPage={jobs.hasNextPage}
           hasPrevPage={jobs.hasPrevPage}
-          knownTotal={activeFilterCount === 0 ? jobs.counts[jobs.tab] : undefined}
+          knownTotal={activeFilterCount === 0 ? jobs.counts[jobs.tab as TabKey] : undefined}
           hasActiveFilters={activeFilterCount > 0}
           selectedIds={selectedIds}
-          activeJobId={activeJob?.id ?? null}
-          onRowClick={setActiveJob}
+          activeJobId={jobs.openJobId ?? null}
+          focusedIndex={focus.focusedIndex}
+          onRowClick={(job) => {
+            if (isMobile) {
+              navigate(`/jobs/${job.id}`)
+            } else {
+              jobs.setOpenJobId(job.id)
+            }
+          }}
           onToggleSelect={handleToggleSelect}
           onSelectAll={handleSelectAll}
           onNextPage={jobs.goToNextPage}
@@ -192,7 +341,7 @@ export function JobsPage() {
           onSortingChange={jobs.handleSortingChange}
         />
 
-        {activeJob && (
+        {!isMobile && openJob && (
           <>
             <ResizeHandle width={panelWidth} onChange={setPanelWidth} min={300} max={720} />
             <div
@@ -200,8 +349,8 @@ export function JobsPage() {
               className="shrink-0 flex flex-col min-h-0 border-l border-white/[0.07] overflow-hidden"
             >
               <JobDetailPanel
-                job={activeJob}
-                onClose={() => setActiveJob(null)}
+                job={openJob}
+                onClose={() => jobs.setOpenJobId(null)}
                 onStatusChange={handleStatusChange}
                 onDismiss={(job) => setDismissTarget(job)}
               />
@@ -217,6 +366,11 @@ export function JobsPage() {
         onConfirm={handleDismissConfirm}
         onCancel={() => setDismissTarget(null)}
       />
+
+      {/* Wave 2 mount points — placeholders return null until those agents land. */}
+      <JobCommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <JobShortcutSheet open={helpOpen} onOpenChange={setHelpOpen} />
+      <MobileFilterDrawer open={mobileFilterOpen} onOpenChange={setMobileFilterOpen} />
     </div>
   )
 }

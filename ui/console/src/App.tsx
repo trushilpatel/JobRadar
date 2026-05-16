@@ -8,6 +8,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { CompaniesPage } from '@/pages/CompaniesPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { JobsPage } from '@/pages/JobsPage'
+import { MobileJobDetailRoute } from '@/features/jobs'
 import { InsightsPage } from '@/pages/InsightsPage'
 import { LoginPage, AuthCallback, RequireAuth, useAuthStore } from '@/features/auth'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -39,6 +40,7 @@ function ProtectedLayout() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/jobs" element={<JobsPage />} />
+          <Route path="/jobs/:id" element={<MobileJobDetailRoute />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/account" element={<AccountPage />} />
           {/* Admin routes — server also enforces 403 for non-admins */}
