@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
+import { NuqsAdapter } from 'nuqs/adapters/react-router/v7'
 import { Toaster } from 'sonner'
 import { queryClient } from '@/lib/queryClient'
 import { Sidebar } from '@/components/Sidebar'
@@ -57,16 +58,18 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AuthBootstrap>
-          <Toaster position="bottom-center" theme="dark" richColors />
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/auth/callback" element={<AuthCallback />} />
-            <Route element={<RequireAuth />}>
-              <Route path="/*" element={<ProtectedLayout />} />
-            </Route>
-          </Routes>
-        </AuthBootstrap>
+        <NuqsAdapter>
+          <AuthBootstrap>
+            <Toaster position="bottom-center" theme="dark" richColors />
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route element={<RequireAuth />}>
+                <Route path="/*" element={<ProtectedLayout />} />
+              </Route>
+            </Routes>
+          </AuthBootstrap>
+        </NuqsAdapter>
       </BrowserRouter>
     </QueryClientProvider>
   )
