@@ -41,5 +41,31 @@ export function useJobActions() {
     onError: () => toast.error('Failed to dismiss jobs'),
   })
 
-  return { setStatus, dismiss, bulkDismiss }
+  // ── Wave 2 stubs ─────────────────────────────────────────────────────────
+  // The following are placeholders so JobsPage's keyboard handler can wire
+  // up the bulk-save / bulk-applied / undo callbacks today. Wave 2 Agent G
+  // replaces these with real mutations (bulk save -> PATCH per id or a new
+  // /api/jobs/bulk-status endpoint; undo -> revert the most recent status
+  // change with the prior status persisted in a local action history).
+  //
+  // TODO(Wave 2 Agent G): swap these stubs for real mutations.
+  const bulkSave = {
+    mutate: (ids: string[]) => {
+      console.warn('bulkSave stub — Wave 2 Agent G', ids.length, 'jobs')
+    },
+    isPending: false,
+  }
+
+  const bulkApplied = {
+    mutate: (ids: string[]) => {
+      console.warn('bulkApplied stub — Wave 2 Agent G', ids.length, 'jobs')
+    },
+    isPending: false,
+  }
+
+  const undoLast = () => {
+    console.warn('undoLast stub — Wave 2 Agent G')
+  }
+
+  return { setStatus, dismiss, bulkDismiss, bulkSave, bulkApplied, undoLast }
 }
