@@ -1,47 +1,148 @@
 import { useCallback, useState } from 'react'
 import type { Job } from '@/types'
 
+export interface UseFocusedJobOptions {
+  /**
+   * Stable key that, when changed, resets focus to the first item.
+   * Use for deliberate context changes (tab change, page change,
+   * filter change). When omitted, focus is preserved as long as the
+   * focused job's id is still in the list.
+   */
+  resetKey?: string
+}
+
+export interface UseFocusedJobReturn {
+  focusedJobId: string | null
+  focusedIndex: number
+  focusedJob: Job | null
+  focusNext: () => void
+  focusPrev: () => void
+  focusFirst: () => void
+  focusLast: () => void
+  setFocusedJobId: (id: string | null) => void
+  setFocusedIndex: (idx: number) => void
+}
+
 /**
- * Tracks the index of the currently focused row in a job list. Distinct from
- * the "open preview" job (which lives in URL state via useJobUrlState.job).
+ * Keyboard-focused row tracker for the jobs page.
  *
- * Focus moves with j/k/arrow shortcuts and is what status keys act on.
- * Pressing Enter promotes the focused row to the open preview.
+ * Focus is tracked by job id, not array index. A TanStack Query refetch
+ * (which returns a new array reference) does NOT bounce the cursor back to
+ * row 0 — the same job stays focused as long as its id is still in the list.
+ * When the focused job is removed (dismissed, filtered out), focus clamps to
+ * the same index position so the cursor naturally lands on the next row.
  *
- * Focus resets to 0 whenever the underlying job list reference changes
- * (filter/tab/page change). We compare the previous reference during render
- * — the React-recommended alternative to a `setState` in `useEffect` for
- * derived state — so the cursor never points at a stale row.
+ * Pass `resetKey` to opt in to a hard reset on deliberate context changes
+ * (tab / page / filter). When the key changes, focus jumps to the first item.
  */
-export function useFocusedJob(jobs: Job[]) {
-  const [focusedIndex, setFocusedIndex] = useState(0)
-  const [prevJobs, setPrevJobs] = useState(jobs)
-  if (prevJobs !== jobs) {
-    setPrevJobs(jobs)
-    setFocusedIndex(0)
+export function useFocusedJob(jobs: Job[], options?: UseFocusedJobOptions): UseFocusedJobReturn {
+  const resetKey = options?.resetKey
+
+  const [focusedJobId, setFocusedJobId] = useState<string | null>(() => jobs[0]?.id ?? null)
+
+  // Hard reset on deliberate resetKey change.
+  const [prevResetKey, setPrevResetKey] = useState<string | undefined>(resetKey)
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey)
+    setFocusedJobId(jobs[0]?.id ?? null)
   }
 
+  // Auto-adopt the first item ONLY on empty→populated transition. We do not
+  // adopt on every render where focus happens to be null (that would override
+  // the user's explicit setFocusedJobId(null)).
+  const [prevHadJobs, setPrevHadJobs] = useState(jobs.length > 0)
+  const currentlyHasJobs = jobs.length > 0
+  if (prevHadJobs !== currentlyHasJobs) {
+    setPrevHadJobs(currentlyHasJobs)
+    if (currentlyHasJobs && focusedJobId === null) {
+      setFocusedJobId(jobs[0].id)
+    } else if (!currentlyHasJobs && focusedJobId !== null) {
+      setFocusedJobId(null)
+    }
+  }
+
+  // Track previous index so that when the focused job disappears we can
+  // clamp to the same position instead of bouncing to 0. Stored as state
+  // (not a ref) because the React Compiler lint rule disallows ref reads
+  // during render — and the prior-state-during-render pattern is what the
+  // React docs prescribe for derived state.
+  const [priorIndex, setPriorIndex] = useState(0)
+
+  let focusedIndex = focusedJobId ? jobs.findIndex((j) => j.id === focusedJobId) : -1
+
+  if (focusedIndex !== -1) {
+    if (priorIndex !== focusedIndex) setPriorIndex(focusedIndex)
+  } else if (focusedJobId !== null && jobs.length > 0) {
+    // Focused job is gone but list is non-empty — clamp.
+    const clampedIdx = Math.min(priorIndex, jobs.length - 1)
+    const replacement = jobs[clampedIdx]?.id ?? null
+    if (replacement !== focusedJobId) {
+      setFocusedJobId(replacement)
+    }
+    focusedIndex = clampedIdx
+  }
+
+  const focusedJob: Job | null = focusedIndex >= 0 ? (jobs[focusedIndex] ?? null) : null
+
+  // Use functional setState so a batch of focusNext/focusPrev calls within a
+  // single render tick still walk the cursor correctly.
   const focusNext = useCallback(() => {
-    setFocusedIndex((i) => Math.min(i + 1, Math.max(jobs.length - 1, 0)))
-  }, [jobs.length])
+    if (jobs.length === 0) return
+    setFocusedJobId((prev) => {
+      const curIdx = prev ? jobs.findIndex((j) => j.id === prev) : -1
+      const nextIdx = Math.min(curIdx + 1, jobs.length - 1)
+      return jobs[nextIdx].id
+    })
+  }, [jobs])
 
   const focusPrev = useCallback(() => {
-    setFocusedIndex((i) => Math.max(i - 1, 0))
-  }, [])
+    if (jobs.length === 0) return
+    setFocusedJobId((prev) => {
+      const curIdx = prev ? jobs.findIndex((j) => j.id === prev) : 0
+      const prevIdx = Math.max(curIdx - 1, 0)
+      return jobs[prevIdx].id
+    })
+  }, [jobs])
 
-  const focusFirst = useCallback(() => setFocusedIndex(0), [])
+  const focusFirst = useCallback(() => {
+    if (jobs.length === 0) return
+    setFocusedJobId(jobs[0].id)
+  }, [jobs])
 
-  const focusLast = useCallback(() => setFocusedIndex(Math.max(jobs.length - 1, 0)), [jobs.length])
+  const focusLast = useCallback(() => {
+    if (jobs.length === 0) return
+    setFocusedJobId(jobs[jobs.length - 1].id)
+  }, [jobs])
 
-  const focusedJob: Job | null = jobs[focusedIndex] ?? null
+  const setFocusedJobIdSafe = useCallback(
+    (id: string | null) => {
+      if (id === null) {
+        setFocusedJobId(null)
+        return
+      }
+      const exists = jobs.some((j) => j.id === id)
+      setFocusedJobId(exists ? id : null)
+    },
+    [jobs]
+  )
+
+  const setFocusedIndex = useCallback(
+    (idx: number) => {
+      const target = jobs[idx]
+      setFocusedJobId(target?.id ?? null)
+    },
+    [jobs]
+  )
 
   return {
+    focusedJobId,
     focusedIndex,
     focusedJob,
     focusNext,
     focusPrev,
     focusFirst,
     focusLast,
+    setFocusedJobId: setFocusedJobIdSafe,
     setFocusedIndex,
   }
 }

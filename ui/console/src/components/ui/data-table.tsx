@@ -34,6 +34,12 @@ interface DataTableProps<TData> {
   columns: ColumnDef<TData, unknown>[]
   data: TData[]
   loading?: boolean
+  /** Render error UI (with optional retry button) instead of the table body. */
+  isError?: boolean
+  /** When provided alongside isError, the error UI shows a Retry button. */
+  onRetry?: () => void
+  /** Custom error message; defaults to "Couldn't load results". */
+  errorMessage?: string
   emptyMessage?: string
   /** Called when a row body is clicked */
   onRowClick?: (row: TData) => void
@@ -42,6 +48,12 @@ interface DataTableProps<TData> {
   selectedId?: string
   /** Override per-row background/hover className (replaces selectedId highlight when provided) */
   getRowClassName?: (row: TData) => string
+  /**
+   * Per-row HTML attribute injection. Use for a11y (tabIndex, role, aria-label,
+   * onKeyDown) — the table primitive stays generic; the caller knows what
+   * a job/contact/company row should announce.
+   */
+  getRowProps?: (row: TData) => React.HTMLAttributes<HTMLTableRowElement>
   /** When provided, renders server-side pagination controls below the table */
   serverPagination?: ServerPagination
   /**
@@ -56,15 +68,21 @@ interface DataTableProps<TData> {
   onSortingChange?: (sorting: SortingState) => void
 }
 
+const SKELETON_ROWS = 8
+
 export function DataTable<TData>({
   columns,
   data,
   loading,
+  isError,
+  onRetry,
+  errorMessage = "Couldn't load results",
   emptyMessage = 'No results.',
   onRowClick,
   getRowId,
   selectedId,
   getRowClassName,
+  getRowProps,
   serverPagination,
   sorting: controlledSorting,
   onSortingChange,
@@ -115,9 +133,7 @@ export function DataTable<TData>({
     if (rows.length === 0) return
 
     const currentIdx =
-      selectedId && getRowId
-        ? rows.findIndex((r) => getRowId(r.original) === selectedId)
-        : -1
+      selectedId && getRowId ? rows.findIndex((r) => getRowId(r.original) === selectedId) : -1
 
     if (e.key === 'ArrowDown') {
       e.preventDefault()
@@ -137,15 +153,63 @@ export function DataTable<TData>({
     containerRef.current?.focus()
   }
 
-  if (loading) {
+  if (isError) {
     return (
-      <div className="flex items-center justify-center h-48">
-        <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+      <div
+        role="alert"
+        className="flex flex-col items-center justify-center gap-3 py-16 text-center"
+      >
+        <p className="text-sm text-slate-300">{errorMessage}</p>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+          >
+            Try again
+          </button>
+        )}
       </div>
     )
   }
 
-  if (!loading && data.length === 0) {
+  if (loading) {
+    return (
+      <div className="flex flex-col" aria-busy="true" aria-live="polite">
+        <Table>
+          <TableHeader>
+            {table.getHeaderGroups().map((hg) => (
+              <tr key={hg.id} className="border-b border-white/[0.07]">
+                {hg.headers.map((header) => (
+                  <TableHead
+                    key={header.id}
+                    style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                  </TableHead>
+                ))}
+              </tr>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {Array.from({ length: SKELETON_ROWS }).map((_, rowIdx) => (
+              <TableRow key={`skeleton-${rowIdx}`} aria-hidden="true">
+                {table.getAllColumns().map((col) => (
+                  <TableCell key={col.id}>
+                    <div className="h-3 w-3/4 animate-pulse rounded bg-white/[0.06]" />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    )
+  }
+
+  if (data.length === 0) {
     return <div className="text-center py-20 text-slate-500">{emptyMessage}</div>
   }
 
@@ -160,16 +224,27 @@ export function DataTable<TData>({
         <TableHeader>
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id} className="border-b border-white/[0.07]">
-              {hg.headers.map((header) => (
-                <TableHead
-                  key={header.id}
-                  style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                </TableHead>
-              ))}
+              {hg.headers.map((header) => {
+                const sorted = header.column.getCanSort() ? header.column.getIsSorted() : false
+                const ariaSort: React.AriaAttributes['aria-sort'] = !header.column.getCanSort()
+                  ? undefined
+                  : sorted === 'asc'
+                    ? 'ascending'
+                    : sorted === 'desc'
+                      ? 'descending'
+                      : 'none'
+                return (
+                  <TableHead
+                    key={header.id}
+                    aria-sort={ariaSort}
+                    style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                  </TableHead>
+                )
+              })}
             </tr>
           ))}
         </TableHeader>
@@ -181,6 +256,7 @@ export function DataTable<TData>({
               : isSelected
                 ? 'bg-violet-500/[0.08]'
                 : 'hover:bg-white/[0.02]'
+            const extraProps = getRowProps?.(row.original) ?? {}
             return (
               <TableRow
                 key={row.id}
@@ -189,6 +265,7 @@ export function DataTable<TData>({
                 }}
                 onClick={() => handleRowClick(row.original)}
                 className={cn(onRowClick && 'cursor-pointer', rowBg)}
+                {...extraProps}
               >
                 {row.getVisibleCells().map((cell) => (
                   <TableCell key={cell.id}>
@@ -237,12 +314,14 @@ export function DataTableColumnHeader<TData, TValue>({
   }
 
   const sorted = column.getIsSorted()
+  const direction = sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : 'not sorted'
 
   return (
     <button
       onClick={column.getToggleSortingHandler()}
+      aria-label={`Sort by ${title}, currently ${direction}`}
       className={cn(
-        'inline-flex items-center gap-1 text-slate-400 hover:text-white transition-colors select-none',
+        'inline-flex items-center gap-1 text-slate-400 hover:text-white transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:rounded',
         className
       )}
     >

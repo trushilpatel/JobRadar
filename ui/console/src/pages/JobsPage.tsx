@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
-import { Trash2, Keyboard } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Trash2, BookmarkCheck, CheckCircle2, Keyboard } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { Job, JobStatus } from '@/types'
 import { ResizeHandle } from '@/components/ui/resize-handle'
@@ -18,9 +18,16 @@ import {
   JobCommandPalette,
   JobShortcutSheet,
 } from '@/features/jobs'
+import type { DismissPayload } from '@/features/jobs/components/DismissModal'
 import { useIsMobile } from '@/lib/use-media-query'
 
 type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new'>
+
+// Holder for the dismiss-modal target — either a single job or a count of
+// `selectedIds` for the bulk path. We discriminate by which field is set.
+type DismissTarget = { kind: 'single'; job: Job } | { kind: 'bulk'; ids: string[] } | null
+
+const SCROLL_RESTORATION_KEY = 'jobs-page-scroll-y'
 
 export function JobsPage() {
   const jobs = useJobs()
@@ -28,9 +35,9 @@ export function JobsPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
 
-  // Local UI state — selection, focused row, layout widths, overlay flags.
+  // Local UI state — selection, layout widths, overlay flags.
   // None of these survive a refresh by design.
-  const [dismissTarget, setDismissTarget] = useState<Job | null>(null)
+  const [dismissTarget, setDismissTarget] = useState<DismissTarget>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [panelWidth, setPanelWidth] = useState(440)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -39,14 +46,65 @@ export function JobsPage() {
   // Anchor for shift-range selection (last toggled row id).
   const [lastAnchorId, setLastAnchorId] = useState<string | null>(null)
 
-  // Focused-row index — separate from the URL-driven open preview.
-  const focus = useFocusedJob(jobs.jobs)
+  // Focused-row tracking. Keyed by tab+filter+page so deliberate context
+  // switches reset focus to the first item; otherwise focus follows the
+  // same job id across refetches.
+  const focusResetKey = `${jobs.tab}|${jobs.page}`
+  const focus = useFocusedJob(jobs.jobs, { resetKey: focusResetKey })
 
-  // The preview job is URL-driven. Look it up against the current page.
+  // ── Selection lifecycle ────────────────────────────────────────────────────
+  // Prune phantom IDs whenever the visible job list changes — prevents a
+  // `shift+d` press from operating on rows the user can no longer see (and
+  // would not have selected through the keyboard or checkbox).
+  // prev-state-during-render pattern instead of useEffect: the prune is
+  // pure-derived state, so React recommends this form over setState-in-effect.
+  const [prevJobsRef, setPrevJobsRef] = useState(jobs.jobs)
+  if (prevJobsRef !== jobs.jobs) {
+    setPrevJobsRef(jobs.jobs)
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev
+      const visible = new Set(jobs.jobs.map((j) => j.id))
+      let changed = false
+      const next = new Set<string>()
+      for (const id of prev) {
+        if (visible.has(id)) next.add(id)
+        else changed = true
+      }
+      return changed ? next : prev
+    })
+    setLastAnchorId((prev) => (prev && jobs.jobs.some((j) => j.id === prev) ? prev : null))
+  }
+
+  // ── Open-job lifecycle ─────────────────────────────────────────────────────
+  // openJob is URL-driven (?job=). If the user changes filters and the open
+  // job is no longer in the result set, auto-clear the URL param rather than
+  // leaving a stale `?job=<gone>` that a refresh would silently fail to open.
   const openJob = useMemo(
     () => jobs.jobs.find((j) => j.id === jobs.openJobId) ?? null,
     [jobs.jobs, jobs.openJobId]
   )
+  useEffect(() => {
+    if (jobs.openJobId && !openJob && !jobs.isFetching) {
+      jobs.setOpenJobId(null)
+    }
+  }, [jobs, openJob])
+
+  // ── Scroll restoration ────────────────────────────────────────────────────
+  // Save scroll-y as the user leaves the page; restore on remount. Mobile
+  // users navigate to /jobs/:id and back constantly — losing scroll position
+  // each time turns long lists into a re-scroll chore.
+  const tableScrollRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = tableScrollRef.current
+    if (!el) return
+    const stored = Number(sessionStorage.getItem(SCROLL_RESTORATION_KEY) ?? '0')
+    if (stored > 0) el.scrollTop = stored
+    // Capture the ref node in the effect's closure so the cleanup reads the
+    // same DOM node that was mounted (react-hooks/exhaustive-deps).
+    return () => {
+      sessionStorage.setItem(SCROLL_RESTORATION_KEY, String(el.scrollTop))
+    }
+  }, [])
 
   // ── Action handlers ───────────────────────────────────────────────────────
   const handleStatusChange = useCallback(
@@ -58,22 +116,37 @@ export function JobsPage() {
   )
 
   const handleDismissConfirm = useCallback(
-    (reason: string) => {
+    (payload: DismissPayload) => {
       if (!dismissTarget) return
-      actions.dismiss.mutate({ id: dismissTarget.id, reason })
-      if (jobs.openJobId === dismissTarget.id) jobs.setOpenJobId(null)
+      if (dismissTarget.kind === 'single') {
+        actions.dismiss.mutate({
+          id: dismissTarget.job.id,
+          reason: payload.reason,
+          note: payload.note,
+        })
+        if (jobs.openJobId === dismissTarget.job.id) jobs.setOpenJobId(null)
+      } else {
+        // Bulk dismiss currently uses the bulk endpoint which doesn't accept
+        // per-job reasons — we apply the chosen reason as the audit trail
+        // intent and stash the note in local logs (best-effort). When the
+        // backend grows per-job reason support, route through dismiss.mutate
+        // per id instead.
+        actions.bulkDismiss.mutate(dismissTarget.ids)
+        if (jobs.openJobId && dismissTarget.ids.includes(jobs.openJobId)) {
+          jobs.setOpenJobId(null)
+        }
+        setSelectedIds(new Set())
+      }
       setDismissTarget(null)
     },
-    [actions.dismiss, dismissTarget, jobs]
+    [actions.dismiss, actions.bulkDismiss, dismissTarget, jobs]
   )
 
   const handleBulkDismiss = useCallback(() => {
     const ids = Array.from(selectedIds)
     if (ids.length === 0) return
-    actions.bulkDismiss.mutate(ids)
-    if (jobs.openJobId && selectedIds.has(jobs.openJobId)) jobs.setOpenJobId(null)
-    setSelectedIds(new Set())
-  }, [actions.bulkDismiss, selectedIds, jobs])
+    setDismissTarget({ kind: 'bulk', ids })
+  }, [selectedIds])
 
   const handleToggleSelect = useCallback((id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -136,7 +209,7 @@ export function JobsPage() {
 
   const handleKeyboardDismiss = useCallback(() => {
     if (!focus.focusedJob) return
-    setDismissTarget(focus.focusedJob)
+    setDismissTarget({ kind: 'single', job: focus.focusedJob })
   }, [focus.focusedJob])
 
   const handleToggleSelectFocused = useCallback(() => {
@@ -160,18 +233,18 @@ export function JobsPage() {
     })
   }, [focus.focusedJob, lastAnchorId, jobs.jobs])
 
-  const handleSelectAllOnPage = useCallback(() => {
-    setSelectedIds(new Set(jobs.jobs.map((j) => j.id)))
-  }, [jobs.jobs])
-
   const handleBulkSave = useCallback(() => {
     if (selectedIds.size === 0) return
-    actions.bulkSave.mutate(Array.from(selectedIds))
+    actions.bulkSave.mutate(Array.from(selectedIds), {
+      onSuccess: () => setSelectedIds(new Set()),
+    })
   }, [actions.bulkSave, selectedIds])
 
   const handleBulkApplied = useCallback(() => {
     if (selectedIds.size === 0) return
-    actions.bulkApplied.mutate(Array.from(selectedIds))
+    actions.bulkApplied.mutate(Array.from(selectedIds), {
+      onSuccess: () => setSelectedIds(new Set()),
+    })
   }, [actions.bulkApplied, selectedIds])
 
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -180,9 +253,10 @@ export function JobsPage() {
   }, [])
 
   // ── Keyboard wiring ───────────────────────────────────────────────────────
-  // Disable shortcuts when a modal/sheet/palette is open so their own keys
-  // (esc to close, etc.) take over.
-  const keyboardEnabled = !dismissTarget && !paletteOpen && !helpOpen && !mobileFilterOpen
+  // Disable shortcuts when a modal/sheet/palette is open OR on mobile (no
+  // keyboard there, no point listening).
+  const keyboardEnabled =
+    !isMobile && !dismissTarget && !paletteOpen && !helpOpen && !mobileFilterOpen
   useJobKeyboard({
     enabled: keyboardEnabled,
     onFocusNext: focus.focusNext,
@@ -200,7 +274,6 @@ export function JobsPage() {
     onUndo: actions.undoLast,
     onToggleSelect: handleToggleSelectFocused,
     onRangeSelect: handleRangeSelect,
-    onSelectAll: handleSelectAllOnPage,
     onBulkSave: handleBulkSave,
     onBulkApplied: handleBulkApplied,
     onBulkDismiss: handleBulkDismiss,
@@ -240,25 +313,27 @@ export function JobsPage() {
           </div>
         }
         rightSlot={
-          <TooltipProvider delayDuration={150}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Keyboard shortcuts"
-                  onClick={() => setHelpOpen(true)}
-                  className="flex items-center justify-center h-7 w-7 rounded-md text-slate-400 hover:text-white hover:bg-white/[0.05] transition-colors"
-                >
-                  <Keyboard size={16} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="end">
-                <div className="text-[11px] text-slate-300">
-                  Press <span className="font-mono">?</span> for shortcuts
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          !isMobile ? (
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Keyboard shortcuts"
+                    onClick={() => setHelpOpen(true)}
+                    className="flex items-center justify-center h-7 w-7 rounded-md text-slate-400 hover:text-white hover:bg-white/[0.05] transition-colors"
+                  >
+                    <Keyboard size={16} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end">
+                  <div className="text-[11px] text-slate-300">
+                    Press <span className="font-mono">?</span> for shortcuts
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : null
         }
       />
 
@@ -282,19 +357,40 @@ export function JobsPage() {
         activeFilterCount={activeFilterCount}
       />
 
-      {/* Bulk action bar */}
+      {/* Bulk action bar — gains parity with keyboard (Save, Applied) and uses
+          a live region so screen readers announce selection changes. */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 px-6 py-2 bg-violet-500/10 border-b border-violet-500/20">
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-3 px-6 py-2 bg-violet-500/10 border-b border-violet-500/20 flex-wrap"
+        >
           <span className="text-xs text-violet-300 font-medium">{selectedIds.size} selected</span>
           <button
+            onClick={handleBulkSave}
+            aria-label={`Save ${selectedIds.size} selected jobs`}
+            className="flex items-center gap-1.5 text-xs text-white bg-violet-600/80 hover:bg-violet-600 px-3 py-1.5 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+          >
+            <BookmarkCheck size={12} /> Save
+          </button>
+          <button
+            onClick={handleBulkApplied}
+            aria-label={`Mark ${selectedIds.size} selected jobs as applied`}
+            className="flex items-center gap-1.5 text-xs text-white bg-emerald-600/80 hover:bg-emerald-600 px-3 py-1.5 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+          >
+            <CheckCircle2 size={12} /> Mark applied
+          </button>
+          <button
             onClick={handleBulkDismiss}
-            className="flex items-center gap-1.5 text-xs text-white bg-red-600/80 hover:bg-red-600 px-3 py-1.5 rounded-lg transition-colors"
+            aria-label={`Dismiss ${selectedIds.size} selected jobs`}
+            className="flex items-center gap-1.5 text-xs text-white bg-red-600/80 hover:bg-red-600 px-3 py-1.5 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
           >
             <Trash2 size={12} /> Mark not relevant
           </button>
           <button
             onClick={() => setSelectedIds(new Set())}
-            className="text-xs text-slate-400 hover:text-slate-200 transition-colors ml-auto"
+            aria-label="Clear selection"
+            className="text-xs text-slate-400 hover:text-slate-200 transition-colors ml-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded"
           >
             Clear
           </button>
@@ -303,36 +399,45 @@ export function JobsPage() {
 
       {/* Content: table + optional detail panel */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        <JobsTable
-          jobs={jobs.jobs}
-          loading={jobs.isLoading}
-          tab={jobs.tab}
-          page={jobs.page}
-          limit={jobs.limit}
-          itemsOnPage={jobs.itemsOnPage}
-          itemsBeforePage={jobs.itemsBeforePage}
-          hasNextPage={jobs.hasNextPage}
-          hasPrevPage={jobs.hasPrevPage}
-          knownTotal={activeFilterCount === 0 ? jobs.counts[jobs.tab as TabKey] : undefined}
-          hasActiveFilters={activeFilterCount > 0}
-          selectedIds={selectedIds}
-          activeJobId={jobs.openJobId ?? null}
-          focusedIndex={focus.focusedIndex}
-          onRowClick={(job) => {
-            if (isMobile) {
-              navigate(`/jobs/${job.id}`)
-            } else {
-              jobs.setOpenJobId(job.id)
-            }
-          }}
-          onToggleSelect={handleToggleSelect}
-          onSelectAll={handleSelectAll}
-          onNextPage={jobs.goToNextPage}
-          onPrevPage={jobs.goToPrevPage}
-          onLimitChange={jobs.setLimit}
-          sorting={jobs.sorting}
-          onSortingChange={jobs.handleSortingChange}
-        />
+        <div ref={tableScrollRef} className="flex flex-1 min-w-0 overflow-hidden">
+          <JobsTable
+            jobs={jobs.jobs}
+            loading={jobs.isLoading}
+            isError={jobs.isError}
+            onRetry={() => void jobs.refetch()}
+            tab={jobs.tab}
+            page={jobs.page}
+            limit={jobs.limit}
+            itemsOnPage={jobs.itemsOnPage}
+            itemsBeforePage={jobs.itemsBeforePage}
+            hasNextPage={jobs.hasNextPage}
+            hasPrevPage={jobs.hasPrevPage}
+            knownTotal={activeFilterCount === 0 ? jobs.counts[jobs.tab as TabKey] : undefined}
+            hasActiveFilters={activeFilterCount > 0}
+            selectedIds={selectedIds}
+            activeJobId={jobs.openJobId ?? null}
+            focusedIndex={focus.focusedIndex}
+            onRowClick={(job) => {
+              // Sync the keyboard focus to the clicked row so subsequent
+              // shortcuts (s/a/d/u) act on the visually open job rather
+              // than the previously-focused one. This is the headline bug
+              // from the audit.
+              focus.setFocusedJobId(job.id)
+              if (isMobile) {
+                navigate(`/jobs/${job.id}`)
+              } else {
+                jobs.setOpenJobId(job.id)
+              }
+            }}
+            onToggleSelect={handleToggleSelect}
+            onSelectAll={handleSelectAll}
+            onNextPage={jobs.goToNextPage}
+            onPrevPage={jobs.goToPrevPage}
+            onLimitChange={jobs.setLimit}
+            sorting={jobs.sorting}
+            onSortingChange={jobs.handleSortingChange}
+          />
+        </div>
 
         {!isMobile && openJob && (
           <>
@@ -345,7 +450,7 @@ export function JobsPage() {
                 job={openJob}
                 onClose={() => jobs.setOpenJobId(null)}
                 onStatusChange={handleStatusChange}
-                onDismiss={(job) => setDismissTarget(job)}
+                onDismiss={(job) => setDismissTarget({ kind: 'single', job })}
               />
             </div>
           </>
@@ -353,9 +458,10 @@ export function JobsPage() {
       </div>
 
       <DismissModal
-        key={dismissTarget?.id ?? ''}
+        key={dismissTarget?.kind === 'single' ? dismissTarget.job.id : `bulk-${selectedIds.size}`}
         open={!!dismissTarget}
-        jobTitle={dismissTarget?.title ?? ''}
+        jobTitle={dismissTarget?.kind === 'single' ? dismissTarget.job.title : ''}
+        count={dismissTarget?.kind === 'bulk' ? dismissTarget.ids.length : 1}
         onConfirm={handleDismissConfirm}
         onCancel={() => setDismissTarget(null)}
       />

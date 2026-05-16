@@ -19,10 +19,12 @@ function IndeterminateCheckbox({
   checked,
   indeterminate,
   onChange,
+  ariaLabel,
 }: {
   checked: boolean
   indeterminate: boolean
   onChange: (checked: boolean) => void
+  ariaLabel: string
 }) {
   const ref = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -34,6 +36,7 @@ function IndeterminateCheckbox({
       type="checkbox"
       checked={checked}
       onChange={(e) => onChange(e.target.checked)}
+      aria-label={ariaLabel}
       className="accent-violet-500 cursor-pointer"
     />
   )
@@ -54,18 +57,25 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
           checked={allSelected}
           indeterminate={someSelected && !allSelected}
           onChange={onSelectAll}
+          ariaLabel="Select all jobs on this page"
         />
       ),
-      cell: ({ row }) => (
-        <div onClick={(e) => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            checked={selectedIds.has(row.original.id)}
-            onChange={(e) => onToggleSelect(row.original.id, e.target.checked)}
-            className="accent-violet-500 cursor-pointer"
-          />
-        </div>
-      ),
+      cell: ({ row }) => {
+        const job = row.original
+        const company = job.company?.name ?? job.company_id ?? ''
+        const label = `Select ${job.title}${company ? ` at ${company}` : ''}`
+        return (
+          <div onClick={(e) => e.stopPropagation()} className="min-h-[24px] min-w-[24px]">
+            <input
+              type="checkbox"
+              checked={selectedIds.has(job.id)}
+              onChange={(e) => onToggleSelect(job.id, e.target.checked)}
+              aria-label={label}
+              className="accent-violet-500 cursor-pointer"
+            />
+          </div>
+        )
+      },
     },
     {
       id: 'company',

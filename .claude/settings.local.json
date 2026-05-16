@@ -15,7 +15,9 @@
       "WebFetch(domain:jobs.deel.com)",
       "WebFetch(domain:www.deel.com)",
       "Skill(superpowers:dispatching-parallel-agents)",
-      "Skill(superpowers:dispatching-parallel-agents:*)"
+      "Skill(superpowers:dispatching-parallel-agents:*)",
+      "Skill(superpowers:systematic-debugging)",
+      "Skill(superpowers:systematic-debugging:*)"
     ],
     "additionalDirectories": ["/tmp"]
   }
