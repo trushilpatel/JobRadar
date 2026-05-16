@@ -10,6 +10,11 @@ jobs:
   lint-go:
     name: Lint Go
     runs-on: ubuntu-latest
+    env:
+      # Forbid auto-toolchain downloads — the installed Go must satisfy go.mod.
+      # Prevents the `compile`/`go` version skew that arises when setup-go
+      # installs one version and a `toolchain` directive fetches another.
+      GOTOOLCHAIN: local
 
     steps:
       # fetch-depth: 1 = shallow clone (only latest commit, not full git history)

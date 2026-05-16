@@ -10,7 +10,10 @@
       "Bash(git checkout *)",
       "Bash(git commit *)",
       "Bash(git reset *)",
-      "Bash(rm -f .git/test_main_block_marker)"
+      "Bash(rm -f .git/test_main_block_marker)",
+      "WebSearch",
+      "WebFetch(domain:jobs.deel.com)",
+      "WebFetch(domain:www.deel.com)"
     ],
     "additionalDirectories": ["/tmp"]
   }
