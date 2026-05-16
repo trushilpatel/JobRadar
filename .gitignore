@@ -40,6 +40,9 @@ backend/internal/ats_fetcher/google/scraper/logs.json
 # Git Worktrees (isolated agent workspaces)
 .worktrees/
 
+# Superpowers brainstorming session artifacts (local only)
+.superpowers/
+
 # Runtime secrets (Docker secrets files — never commit real values)
 secrets/
 
