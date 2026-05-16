@@ -19,4 +19,6 @@ const (
 	AdapterApple      = "apple"
 	AdapterGem        = "gem"
 	AdapterDeel       = "deel"
+	AdapterWorkday    = "workday"
+	AdapterEightfold  = "eightfold"
 )

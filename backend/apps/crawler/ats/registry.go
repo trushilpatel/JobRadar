@@ -6,6 +6,7 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/apple"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/ashby"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/deel"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/eightfold"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/gem"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/greenhouse"
@@ -15,6 +16,7 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/netflix"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/rippling"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/uber"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/workday"
 	"github.com/trushilpatel/jobradar/common/logger"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 )
@@ -62,6 +64,10 @@ func RegistryWithGoogleConfig(adapterType string, googleCfg google.Config, log l
 		return gem.New(), nil
 	case companycommon.AdapterDeel:
 		return deel.New(), nil
+	case companycommon.AdapterWorkday:
+		return workday.New(), nil
+	case companycommon.AdapterEightfold:
+		return eightfold.New(), nil
 	default:
 		return nil, fmt.Errorf("unknown adapter type: %s", adapterType)
 	}

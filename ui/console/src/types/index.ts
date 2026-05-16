@@ -61,6 +61,8 @@ export const ADAPTER_TYPES = [
   'rippling',
   'gem',
   'deel',
+  'workday',
+  'eightfold',
 ] as const
 
 export type AdapterType = (typeof ADAPTER_TYPES)[number]

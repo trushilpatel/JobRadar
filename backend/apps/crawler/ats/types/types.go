@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"encoding/json"
 	"html"
 	"regexp"
 	"strings"
@@ -114,6 +115,21 @@ type SeenChecker interface {
 // HTTP GET on RawJob.URL in the job_post_analyzer.
 type ContentFetcher interface {
 	FetchJobContent(ctx context.Context, job RawJob) (FetchJobContentResponse, error)
+}
+
+// ConfigurableAdapter is an optional interface for adapters that need per-company
+// configuration beyond the companyID slug — e.g. Workday, where each tenant has
+// its own host + site path that cannot be derived from the slug alone.
+//
+// The engine type-asserts to this interface before calling FetchJobs. When
+// implemented and the company has a non-empty company_scan_settings.adapter_config,
+// the engine calls FetchJobsWithConfig with the raw JSON bytes; the adapter is
+// responsible for unmarshalling its own schema.
+//
+// Adapters that do not need per-company config (Greenhouse, Lever, Ashby, Gem,
+// Deel, …) should NOT implement this — the engine falls back to plain FetchJobs.
+type ConfigurableAdapter interface {
+	FetchJobsWithConfig(ctx context.Context, companyID string, config json.RawMessage) (FetchJobsResponse, error)
 }
 
 // ── HTML helpers ──────────────────────────────────────────────────────────────

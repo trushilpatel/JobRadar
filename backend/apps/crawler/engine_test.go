@@ -604,7 +604,7 @@ func TestFetchJobs_UnknownAdapterReturnsError(t *testing.T) {
 	e.adapterFactory = func(t string, _ google.Config, _ logger.Logger) (ats.Adapter, error) {
 		return nil, errors.New("unknown adapter type: " + t)
 	}
-	_, _, err := e.fetchJobs(context.Background(), "co", "unknown_type", nil, logger.NewNoop())
+	_, _, err := e.fetchJobs(context.Background(), "co", "unknown_type", nil, nil, logger.NewNoop())
 	if err == nil {
 		t.Fatal("expected error for unknown adapter type")
 	}
@@ -618,7 +618,7 @@ func TestFetchJobs_PropagatesAdapterFetchError(t *testing.T) {
 	e.adapterFactory = func(_ string, _ google.Config, _ logger.Logger) (ats.Adapter, error) {
 		return stub, nil
 	}
-	_, _, err := e.fetchJobs(context.Background(), "co", "stub", nil, logger.NewNoop())
+	_, _, err := e.fetchJobs(context.Background(), "co", "stub", nil, nil, logger.NewNoop())
 	if err == nil {
 		t.Fatal("expected wrapped adapter error")
 	}
@@ -637,7 +637,7 @@ func TestFetchJobs_StreamPublisherWiring(t *testing.T) {
 	e.adapterFactory = func(_ string, _ google.Config, _ logger.Logger) (ats.Adapter, error) {
 		return stub, nil
 	}
-	_, streamed, err := e.fetchJobs(context.Background(), "co", "stub", nil, logger.NewNoop())
+	_, streamed, err := e.fetchJobs(context.Background(), "co", "stub", nil, nil, logger.NewNoop())
 	if err != nil {
 		t.Fatalf("fetchJobs: %v", err)
 	}
@@ -658,7 +658,7 @@ func TestFetchJobs_KnownJobsInjection(t *testing.T) {
 	e.adapterFactory = func(_ string, _ google.Config, _ logger.Logger) (ats.Adapter, error) {
 		return stub, nil
 	}
-	_, _, err := e.fetchJobs(context.Background(), "co", "stub", []string{"g-1", "g-2"}, logger.NewNoop())
+	_, _, err := e.fetchJobs(context.Background(), "co", "stub", nil, []string{"g-1", "g-2"}, logger.NewNoop())
 	if err != nil {
 		t.Fatalf("fetchJobs: %v", err)
 	}
@@ -678,7 +678,7 @@ func TestFetchJobs_SeenCheckerInjection(t *testing.T) {
 	e.adapterFactory = func(_ string, _ google.Config, _ logger.Logger) (ats.Adapter, error) {
 		return stub, nil
 	}
-	_, _, err := e.fetchJobs(context.Background(), "co", "stub", nil, logger.NewNoop())
+	_, _, err := e.fetchJobs(context.Background(), "co", "stub", nil, nil, logger.NewNoop())
 	if err != nil {
 		t.Fatalf("fetchJobs: %v", err)
 	}
@@ -687,6 +687,81 @@ func TestFetchJobs_SeenCheckerInjection(t *testing.T) {
 	if ledger.hasSeenBatchCalls < 1 {
 		t.Errorf("expected seenChecker to have been wired; ledger.hasSeenBatchCalls=%d", ledger.hasSeenBatchCalls)
 	}
+}
+
+// TestFetchJobs_ConfigurableAdapter_UsesFetchJobsWithConfig verifies that when
+// an adapter implements ConfigurableAdapter AND scan_settings carries a
+// non-empty adapter_config, the engine calls FetchJobsWithConfig with the raw
+// config bytes — NOT plain FetchJobs.
+func TestFetchJobs_ConfigurableAdapter_UsesFetchJobsWithConfig(t *testing.T) {
+	stub := &configurableStubAdapter{
+		jobs: []ats.FetchJobsItem{{ID: "wd-1"}},
+	}
+	e := newTestEngine(&fakeSettingsReader{}, &fakeLedger{}, &fakeRecorder{}, &fakePublisher{})
+	e.adapterFactory = func(_ string, _ google.Config, _ logger.Logger) (ats.Adapter, error) {
+		return stub, nil
+	}
+
+	cfg := json.RawMessage(`{"host":"nvidia.wd5.myworkdayjobs.com","site":"NVIDIA"}`)
+	_, _, err := e.fetchJobs(context.Background(), "co", "workday", cfg, nil, logger.NewNoop())
+	if err != nil {
+		t.Fatalf("fetchJobs: %v", err)
+	}
+	if !stub.configCalled {
+		t.Error("expected FetchJobsWithConfig to be invoked")
+	}
+	if stub.plainCalled {
+		t.Error("plain FetchJobs must NOT be invoked when ConfigurableAdapter applies")
+	}
+	if string(stub.gotConfig) != string(cfg) {
+		t.Errorf("config passed = %q, want %q", stub.gotConfig, cfg)
+	}
+}
+
+// TestFetchJobs_ConfigurableAdapter_FallsBackWhenConfigEmpty verifies that
+// ConfigurableAdapter is NOT used when adapter_config is empty/nil — the
+// engine falls back to plain FetchJobs, preserving compatibility with adapters
+// that may opt-in to ConfigurableAdapter but be invoked from a company that
+// doesn't carry config.
+func TestFetchJobs_ConfigurableAdapter_FallsBackWhenConfigEmpty(t *testing.T) {
+	stub := &configurableStubAdapter{
+		jobs: []ats.FetchJobsItem{{ID: "wd-1"}},
+	}
+	e := newTestEngine(&fakeSettingsReader{}, &fakeLedger{}, &fakeRecorder{}, &fakePublisher{})
+	e.adapterFactory = func(_ string, _ google.Config, _ logger.Logger) (ats.Adapter, error) {
+		return stub, nil
+	}
+
+	_, _, err := e.fetchJobs(context.Background(), "co", "workday", nil, nil, logger.NewNoop())
+	if err != nil {
+		t.Fatalf("fetchJobs: %v", err)
+	}
+	if stub.configCalled {
+		t.Error("FetchJobsWithConfig must NOT be invoked when config is empty")
+	}
+	if !stub.plainCalled {
+		t.Error("expected plain FetchJobs fallback when config is empty")
+	}
+}
+
+// configurableStubAdapter is a test double that records which entry point the
+// engine chose. It implements both Adapter and ConfigurableAdapter.
+type configurableStubAdapter struct {
+	jobs         []ats.FetchJobsItem
+	gotConfig    json.RawMessage
+	configCalled bool
+	plainCalled  bool
+}
+
+func (c *configurableStubAdapter) FetchJobs(_ context.Context, _ string) (ats.FetchJobsResponse, error) {
+	c.plainCalled = true
+	return ats.FetchJobsResponse{Jobs: c.jobs}, nil
+}
+
+func (c *configurableStubAdapter) FetchJobsWithConfig(_ context.Context, _ string, cfg json.RawMessage) (ats.FetchJobsResponse, error) {
+	c.configCalled = true
+	c.gotConfig = cfg
+	return ats.FetchJobsResponse{Jobs: c.jobs}, nil
 }
 
 // ── scanCompany — full happy path through the engine ─────────────────────────

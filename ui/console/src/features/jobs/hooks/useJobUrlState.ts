@@ -20,8 +20,8 @@ const DEFAULT_TAB: TabKey = JOB_STATUS.NEW
 const DEFAULT_LIMIT = 20
 
 // Parser map — single source of truth for URL state shape.
-// `clearOnDefault` (nuqs default = true) means we don't pollute the URL with
-// default values; the URL stays clean when no filters are active.
+// `clearOnDefault` (nuqs default = true) keeps default values out of the URL,
+// so an unconfigured jobs page renders as `/jobs` with no query string.
 const PARSERS = {
   tab: parseAsStringLiteral(TAB_KEYS).withDefault(DEFAULT_TAB),
   job: parseAsString,
@@ -32,9 +32,22 @@ const PARSERS = {
   since: parseAsStringLiteral(DATE_VALUES).withDefault('all'),
   sort: parseAsString.withDefault(''),
   dir: parseAsStringLiteral(DIR_VALUES).withDefault('asc'),
-  cursor: parseAsString.withDefault(''),
+  /**
+   * Zero-based page index. Lives in the URL so refresh and share-links land
+   * on the same page within the result set. Replaces the prior local
+   * `useState` and the dead `cursor` param.
+   */
+  page: parseAsInteger.withDefault(0),
   limit: parseAsInteger.withDefault(DEFAULT_LIMIT),
 }
+
+// History-mode policy:
+// - PUSH on big context shifts the user expects back-button to undo
+//   (tab change, filter change, sort change, page-size change).
+// - REPLACE on rapid / transient state (search typing, pagination clicks,
+//   opening the preview pane) — those would otherwise flood browser history.
+const PUSH = { history: 'push' as const }
+const REPLACE = { history: 'replace' as const }
 
 /**
  * URL-backed state for the jobs page.
@@ -45,107 +58,72 @@ const PARSERS = {
  *
  * The hook only owns URL state — it does not fetch. Consumers compose with
  * useJobs() to drive the actual query.
+ *
+ * `resetFilters` clears every filter param while preserving the active tab
+ * and open preview job. That's deliberate — wiping the tab on "reset" would
+ * surprise the user who only wanted to clear search/filters.
  */
 export function useJobUrlState() {
-  const [state, setState] = useQueryStates(PARSERS, {
-    history: 'replace',
-  })
+  const [state, setState] = useQueryStates(PARSERS, { history: 'replace' })
 
-  // Atomic setter for the tab — clears the preview job and pagination cursor
-  // since those values are scoped to the previous tab's listing.
+  // Tab change is a big context shift — push to browser history.
   const setTab = useCallback(
-    (tab: TabKey) => {
-      return setState({ tab, job: null, cursor: '' })
-    },
+    (tab: TabKey) => setState({ tab, job: null, page: 0 }, PUSH),
     [setState]
   )
 
+  // Opening/closing the preview should NOT spam history with one entry per
+  // click — keep replace.
   const setOpenJobId = useCallback(
-    (id: string | null) => {
-      return setState({ job: id })
-    },
+    (id: string | null) => setState({ job: id }, REPLACE),
     [setState]
   )
 
-  const setQ = useCallback(
-    (q: string) => {
-      // Reset the cursor when search changes — the previous cursor no longer
-      // maps to a meaningful position in the new result set.
-      return setState({ q, cursor: '' })
-    },
-    [setState]
-  )
+  // Search updates 300ms after the last keystroke — replace, never push.
+  const setQ = useCallback((q: string) => setState({ q, page: 0 }, REPLACE), [setState])
 
   const setCompanies = useCallback(
-    (companies: string[]) => {
-      return setState({ companies, cursor: '' })
-    },
+    (companies: string[]) => setState({ companies, page: 0 }, PUSH),
     [setState]
   )
 
-  const setLoc = useCallback(
-    (loc: LocationFilter) => {
-      return setState({ loc, cursor: '' })
-    },
-    [setState]
-  )
+  const setLoc = useCallback((loc: LocationFilter) => setState({ loc, page: 0 }, PUSH), [setState])
 
-  const setExp = useCallback(
-    (exp: string[]) => {
-      return setState({ exp, cursor: '' })
-    },
-    [setState]
-  )
+  const setExp = useCallback((exp: string[]) => setState({ exp, page: 0 }, PUSH), [setState])
 
   const setSince = useCallback(
-    (since: DateFilter) => {
-      return setState({ since, cursor: '' })
-    },
+    (since: DateFilter) => setState({ since, page: 0 }, PUSH),
     [setState]
   )
 
-  const setSort = useCallback(
-    (sort: string) => {
-      return setState({ sort, cursor: '' })
-    },
+  const setSort = useCallback((sort: string) => setState({ sort, page: 0 }, PUSH), [setState])
+
+  const setDir = useCallback((dir: SortDir) => setState({ dir, page: 0 }, PUSH), [setState])
+
+  const setPage = useCallback(
+    (page: number) => setState({ page: Math.max(0, page) }, REPLACE),
     [setState]
   )
 
-  const setDir = useCallback(
-    (dir: SortDir) => {
-      return setState({ dir, cursor: '' })
-    },
-    [setState]
-  )
+  const setLimit = useCallback((limit: number) => setState({ limit, page: 0 }, PUSH), [setState])
 
-  const setCursor = useCallback(
-    (cursor: string) => {
-      return setState({ cursor })
-    },
-    [setState]
-  )
-
-  const setLimit = useCallback(
-    (limit: number) => {
-      return setState({ limit, cursor: '' })
-    },
-    [setState]
-  )
-
-  // Atomic reset — wipes every filter param while preserving the active tab and
-  // open preview job. Pagination cursor also resets so the new (empty) filter
+  // Atomic reset — wipes filter params while preserving the active tab and
+  // open preview job. Page resets to 0 so the new (potentially empty) filter
   // shows from the top.
   const resetFilters = useCallback(() => {
-    void setState({
-      q: '',
-      companies: [],
-      loc: 'any',
-      exp: [],
-      since: 'all',
-      sort: '',
-      dir: 'asc',
-      cursor: '',
-    })
+    void setState(
+      {
+        q: '',
+        companies: [],
+        loc: 'any',
+        exp: [],
+        since: 'all',
+        sort: '',
+        dir: 'asc',
+        page: 0,
+      },
+      PUSH
+    )
   }, [setState])
 
   return useMemo(
@@ -168,8 +146,8 @@ export function useJobUrlState() {
       setSort,
       dir: state.dir,
       setDir,
-      cursor: state.cursor,
-      setCursor,
+      page: state.page,
+      setPage,
       limit: state.limit,
       setLimit,
       resetFilters,
@@ -184,7 +162,7 @@ export function useJobUrlState() {
       state.since,
       state.sort,
       state.dir,
-      state.cursor,
+      state.page,
       state.limit,
       setTab,
       setOpenJobId,
@@ -195,7 +173,7 @@ export function useJobUrlState() {
       setSince,
       setSort,
       setDir,
-      setCursor,
+      setPage,
       setLimit,
       resetFilters,
     ]

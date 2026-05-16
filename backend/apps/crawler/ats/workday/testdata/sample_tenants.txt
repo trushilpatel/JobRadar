@@ -1,0 +1,19 @@
+# Curated sample of seeded Workday tenants used by TestSeededTenants_AllReachable
+# (gated by TEST_REAL=1). Each line: id|host|site|name. Must match migration 055.
+#
+# Sample is intentionally small (~12) — Workday rate-limits aggressively at the
+# CloudFront layer. To re-add a tenant, copy its row from migration 055.
+# A pure tech bias is preferred so the sample mirrors what JobRadar users care
+# about; non-tech Fortune-500 tenants are seeded but excluded from this gate.
+
+nvidia|nvidia.wd5.myworkdayjobs.com|NVIDIAExternalCareerSite|NVIDIA
+adobe|adobe.wd5.myworkdayjobs.com|external_experienced|Adobe
+cisco|cisco.wd5.myworkdayjobs.com|Cisco_Careers|Cisco
+salesforce|salesforce.wd12.myworkdayjobs.com|External_Career_Site|Salesforce
+workday|workday.wd5.myworkdayjobs.com|Workday|Workday
+zoom|zoom.wd5.myworkdayjobs.com|Zoom|Zoom
+zendesk|zendesk.wd1.myworkdayjobs.com|zendesk|Zendesk
+crowdstrike|crowdstrike.wd5.myworkdayjobs.com|crowdstrikecareers|CrowdStrike
+redhat|redhat.wd5.myworkdayjobs.com|Jobs|Red Hat
+broadcom|broadcom.wd1.myworkdayjobs.com|External_Career|Broadcom
+marvell|marvell.wd1.myworkdayjobs.com|MarvellCareers|Marvell

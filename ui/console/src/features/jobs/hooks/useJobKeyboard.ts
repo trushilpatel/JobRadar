@@ -23,6 +23,10 @@ export interface UseJobKeyboardArgs {
   onGoToTab: (tab: TabKey) => void
 
   // ── Status / dismiss / undo ────────────────────────────────────────────────
+  /**
+   * Note: plain `r` maps to status=rejected; this is intentional Vim-style
+   * mnemonic alongside s/a/i/o. To reset filters, use Cmd/Ctrl+Shift+R.
+   */
   onSetStatus: (status: SettableStatus) => void
   onDismiss: () => void
   onUndo: () => void
@@ -30,7 +34,14 @@ export interface UseJobKeyboardArgs {
   // ── Selection / bulk ───────────────────────────────────────────────────────
   onToggleSelect: () => void
   onRangeSelect: () => void
-  onSelectAll: () => void
+  /**
+   * Optional — no keyboard binding fires this. It was previously bound to
+   * Cmd/Ctrl+A but that hijacked the browser's native "select all text",
+   * making it impossible to copy text from the detail panel. Callers that
+   * still want a "select all rows" affordance should wire it to a button
+   * (the header checkbox already does).
+   */
+  onSelectAll?: () => void
   onBulkSave: () => void
   onBulkApplied: () => void
   onBulkDismiss: () => void
@@ -53,18 +64,46 @@ const BASE_OPTS = {
 } as const
 
 /**
+ * Returns true when the active element is inside a Radix-style popover
+ * (Select listbox, Menu, Combobox, Dialog) or a contenteditable region. We
+ * suppress global navigation shortcuts (ArrowLeft / ArrowRight for page nav)
+ * in those contexts so the popover's own keyboard navigation isn't hijacked.
+ *
+ * `enableOnFormTags: false` only filters `<input>` / `<textarea>` / `<select>`,
+ * which doesn't cover Radix's `<button>` triggers — hence this extra guard.
+ */
+function isInPopover(): boolean {
+  const el = document.activeElement
+  if (!el || el === document.body) return false
+  const sel =
+    '[role="listbox"], [role="menu"], [role="combobox"], [role="dialog"], [contenteditable], [data-radix-popper-content-wrapper]'
+  return !!(el as Element).closest?.(sel)
+}
+
+/**
  * Centralised keyboard map for the jobs page.
  *
  * Callbacks are injected so this hook doesn't reach into URL state, the
  * focused-job hook, or mutations. The page owns the wiring; this hook just
  * binds keys.
  *
- * Disable the entire hook via `enabled: false` when a modal/palette is open
- * so shortcuts don't conflict with the overlay's own keys.
+ * Notes on a few less-obvious decisions:
+ * - There's no `Cmd/Ctrl+A` binding any more — the old one prevented the
+ *   browser's text select-all everywhere on the page, making it impossible
+ *   to copy text from the detail panel. Use `x` + `shift+x` for keyboard
+ *   selection.
+ * - `/` won't refocus the search input if the user is already typing in it
+ *   (`enableOnFormTags: false`). To re-arm the shortcut, press Escape first
+ *   to leave the input.
+ * - `?` and `shift+/` both open help — both forms exist because `?` on
+ *   AZERTY / Windows layouts often requires AltGr; `shift+/` always
+ *   produces the same physical key.
  */
 export function useJobKeyboard(args: UseJobKeyboardArgs) {
   const enabled = args.enabled ?? true
   const opts = { ...BASE_OPTS, enabled }
+  // For bindings that must additionally skip when focus is inside a popover.
+  const safeOpts = { ...BASE_OPTS, enabled: () => enabled && !isInPopover() }
 
   // ── Navigation ───────────────────────────────────────────────────────────
   useHotkeys('j, down', () => args.onFocusNext(), opts, [args.onFocusNext])
@@ -72,8 +111,10 @@ export function useJobKeyboard(args: UseJobKeyboardArgs) {
   useHotkeys('enter', () => args.onOpenPreview(), opts, [args.onOpenPreview])
   useHotkeys('meta+enter, ctrl+enter', () => args.onOpenUrl(), opts, [args.onOpenUrl])
   useHotkeys('escape', () => args.onEscape(), opts, [args.onEscape])
-  useHotkeys('left', () => args.onPrevPage(), opts, [args.onPrevPage])
-  useHotkeys('right', () => args.onNextPage(), opts, [args.onNextPage])
+  // Page nav is scoped via safeOpts so pressing ← / → inside a Radix Select
+  // (status dropdown) does NOT close the popover + advance the page.
+  useHotkeys('left', () => args.onPrevPage(), safeOpts, [args.onPrevPage])
+  useHotkeys('right', () => args.onNextPage(), safeOpts, [args.onNextPage])
 
   // ── Chord navigation ─────────────────────────────────────────────────────
   // `g g` jump-to-top, `shift+g` (G) jump-to-bottom.
@@ -98,20 +139,21 @@ export function useJobKeyboard(args: UseJobKeyboardArgs) {
   useHotkeys('u', () => args.onUndo(), opts, [args.onUndo])
 
   // ── Selection / bulk ─────────────────────────────────────────────────────
+  // Note: no `meta+a, ctrl+a` binding — see hook JSDoc.
   useHotkeys('x', () => args.onToggleSelect(), opts, [args.onToggleSelect])
   useHotkeys('shift+x', () => args.onRangeSelect(), opts, [args.onRangeSelect])
-  useHotkeys('meta+a, ctrl+a', () => args.onSelectAll(), opts, [args.onSelectAll])
   useHotkeys('shift+s', () => args.onBulkSave(), opts, [args.onBulkSave])
   useHotkeys('shift+a', () => args.onBulkApplied(), opts, [args.onBulkApplied])
   useHotkeys('shift+d', () => args.onBulkDismiss(), opts, [args.onBulkDismiss])
 
   // ── Search / palette / help ──────────────────────────────────────────────
   // `/` and `?` rely on `useKey: true` so react-hotkeys-hook matches `e.key`
-  // directly instead of `e.code` (which for both is "Slash"). This also keeps
-  // the help-key binding distinct from the search-focus binding regardless of
-  // shift state.
+  // directly instead of `e.code` (which for both is "Slash").
   useHotkeys('/', () => args.onFocusSearch(), { ...opts, useKey: true }, [args.onFocusSearch])
   useHotkeys('meta+k, ctrl+k', () => args.onOpenPalette(), opts, [args.onOpenPalette])
   useHotkeys('meta+shift+r, ctrl+shift+r', () => args.onResetFilters(), opts, [args.onResetFilters])
   useHotkeys('?', () => args.onOpenHelp(), { ...opts, useKey: true }, [args.onOpenHelp])
+  // Cross-layout fallback — physical Slash + Shift always reaches the help
+  // sheet even on layouts where `?` would require AltGr.
+  useHotkeys('shift+slash', () => args.onOpenHelp(), opts, [args.onOpenHelp])
 }

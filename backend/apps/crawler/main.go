@@ -13,6 +13,7 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/apple"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/ashby"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/deel"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/eightfold"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/gem"
 	atsgoogle "github.com/trushilpatel/jobradar/apps/crawler/ats/google"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/greenhouse"
@@ -22,6 +23,7 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/netflix"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/rippling"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/uber"
+	"github.com/trushilpatel/jobradar/apps/crawler/ats/workday"
 	"github.com/trushilpatel/jobradar/apps/crawler/workers"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/db"
@@ -97,12 +99,14 @@ func main() {
 	adapterRegistry.Register(apple.NewCrawlerService(queue, engine, log))
 	adapterRegistry.Register(gem.NewCrawlerService(queue, engine, log))
 	adapterRegistry.Register(deel.NewCrawlerService(queue, engine, log))
+	adapterRegistry.Register(eightfold.NewCrawlerService(queue, engine, log))
+	adapterRegistry.Register(workday.NewCrawlerService(queue, engine, log))
 
 	// HTTP-scrape adapters (regex / JSON-LD over plain HTTP).
 	adapterRegistry.Register(atsgoogle.NewCrawlerService(queue, engine, googleCfg, log))
 	adapterRegistry.Register(atsmeta.NewCrawlerService(queue, engine, log))
 
-	log.Info("starting multi-lane crawler", logger.Int("adapters", 12))
+	log.Info("starting multi-lane crawler", logger.Int("adapters", 14))
 
 	var wg sync.WaitGroup
 	adapterRegistry.StartAll(ctx, &wg)
