@@ -188,4 +188,11 @@ describe('JobsTable', () => {
     expect(screen.getByTestId('row-j1')).toBeInTheDocument()
     expect(screen.getByTestId('row-j2')).toBeInTheDocument()
   })
+
+  it('accepts a focusedIndex prop without crashing', () => {
+    const job2: Job = { ...mockJob, id: 'j2', title: 'Product Manager' }
+    expect(() =>
+      render(<JobsTable {...defaultProps} jobs={[mockJob, job2]} focusedIndex={1} />)
+    ).not.toThrow()
+  })
 })
