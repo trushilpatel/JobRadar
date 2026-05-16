@@ -2,8 +2,6 @@ module github.com/trushilpatel/jobradar
 
 go 1.25.9
 
-toolchain go1.25.9
-
 require (
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/go-chi/chi/v5 v5.2.5
