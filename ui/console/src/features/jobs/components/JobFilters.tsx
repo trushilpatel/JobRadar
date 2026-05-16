@@ -1,9 +1,10 @@
-import { Search } from 'lucide-react'
+import { forwardRef } from 'react'
+import { Search, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useIsMobile } from '@/lib/use-media-query'
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
+import { MobileFilterDrawer } from '@/features/jobs/components/MobileFilterDrawer'
 import type { DateFilter, LocationFilter } from '@/features/jobs/hooks/useJobs'
-
-// ── FilterPill ─────────────────────────────────────────────────────────────────
 
 function FilterPill({
   active,
@@ -36,8 +37,6 @@ function Divider() {
   return <div className="w-px h-4 bg-white/[0.08] mx-0.5" />
 }
 
-// ── JobFilters ─────────────────────────────────────────────────────────────────
-
 interface JobFiltersProps {
   searchQuery: string
   onSearchChange: (q: string) => void
@@ -52,51 +51,108 @@ interface JobFiltersProps {
   onDateChange: (v: DateFilter) => void
   onReset: () => void
   hasActiveFilters: boolean
+  mobileOpen?: boolean
+  onMobileOpenChange?: (open: boolean) => void
+  activeFilterCount?: number
 }
 
 const EXP_OPTIONS = ['0-2', '2-5', '5+'] as const
 
-// Date options without "Any" — 24h/7d/30d all inactive = any date.
-// Clicking an active date pill deselects it (resets to all).
 const DATE_OPTIONS: { value: Exclude<DateFilter, 'all'>; label: string }[] = [
   { value: '24h', label: '24h' },
   { value: '7d', label: '7d' },
   { value: '30d', label: '30d' },
 ]
 
-// Location options as a mutually-exclusive 3-way toggle
 const LOCATION_OPTIONS: { value: LocationFilter; label: string; color: 'violet' | 'emerald' }[] = [
   { value: 'remote', label: 'Remote', color: 'emerald' },
   { value: 'onsite', label: 'On-site', color: 'violet' },
 ]
 
-export function JobFilters({
-  searchQuery,
-  onSearchChange,
-  companies,
-  selectedCompanies,
-  onCompaniesChange,
-  locationFilter,
-  onLocationChange,
-  expFilter,
-  onExpChange,
-  dateFilter,
-  onDateChange,
-  onReset,
-  hasActiveFilters,
-}: JobFiltersProps) {
+export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function JobFilters(
+  {
+    searchQuery,
+    onSearchChange,
+    companies,
+    selectedCompanies,
+    onCompaniesChange,
+    locationFilter,
+    onLocationChange,
+    expFilter,
+    onExpChange,
+    dateFilter,
+    onDateChange,
+    onReset,
+    hasActiveFilters,
+    mobileOpen = false,
+    onMobileOpenChange,
+    activeFilterCount = 0,
+  },
+  searchRef
+) {
+  const isMobile = useIsMobile()
+
   function toggleExp(opt: string) {
     onExpChange(expFilter.includes(opt) ? expFilter.filter((v) => v !== opt) : [...expFilter, opt])
   }
 
   function toggleDate(value: Exclude<DateFilter, 'all'>) {
-    // Clicking the active date pill deselects it (resets to all)
     onDateChange(dateFilter === value ? 'all' : value)
   }
 
   function toggleLocation(value: LocationFilter) {
-    // Clicking the active location option resets to any
     onLocationChange(locationFilter === value ? 'any' : value)
+  }
+
+  if (isMobile) {
+    return (
+      <>
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-white/[0.07]">
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+              size={13}
+            />
+            <input
+              ref={searchRef}
+              type="search"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search…"
+              className="w-full min-h-[44px] pl-7 pr-3 py-1.5 text-sm bg-white/5 border border-white/10 rounded-lg placeholder-slate-500 focus:outline-none focus:border-violet-500 text-slate-200"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => onMobileOpenChange?.(true)}
+            aria-label="Open filters"
+            className={cn(
+              'flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-lg border px-3 transition-colors',
+              hasActiveFilters
+                ? 'border-violet-500/30 bg-violet-500/15 text-violet-300'
+                : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/[0.08]'
+            )}
+          >
+            <SlidersHorizontal size={16} />
+            {activeFilterCount > 0 && <span className="text-xs">{activeFilterCount}</span>}
+          </button>
+        </div>
+        <MobileFilterDrawer
+          open={mobileOpen}
+          onOpenChange={onMobileOpenChange ?? (() => {})}
+          companies={companies}
+          selectedCompanies={selectedCompanies}
+          onCompaniesChange={onCompaniesChange}
+          locationFilter={locationFilter}
+          onLocationChange={onLocationChange}
+          expFilter={expFilter}
+          onExpChange={onExpChange}
+          dateFilter={dateFilter}
+          onDateChange={onDateChange}
+          onReset={onReset}
+        />
+      </>
+    )
   }
 
   return (
@@ -107,6 +163,8 @@ export function JobFilters({
           size={13}
         />
         <input
+          ref={searchRef}
+          type="search"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search…"
@@ -160,11 +218,14 @@ export function JobFilters({
       {hasActiveFilters && (
         <>
           <Divider />
-          <button onClick={onReset} className="text-[11px] text-slate-500 hover:text-slate-300 px-2">
+          <button
+            onClick={onReset}
+            className="text-[11px] text-slate-500 hover:text-slate-300 px-2"
+          >
             Reset
           </button>
         </>
       )}
     </div>
   )
-}
+})

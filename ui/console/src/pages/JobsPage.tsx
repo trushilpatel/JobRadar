@@ -17,7 +17,6 @@ import {
   DismissModal,
   JobCommandPalette,
   JobShortcutSheet,
-  MobileFilterDrawer,
 } from '@/features/jobs'
 import { useIsMobile } from '@/lib/use-media-query'
 
@@ -175,19 +174,9 @@ export function JobsPage() {
     actions.bulkApplied.mutate(Array.from(selectedIds))
   }, [actions.bulkApplied, selectedIds])
 
-  // The search input lives inside JobFilters — focusing it from the `/`
-  // shortcut goes through a DOM lookup. Wave 2 may wire a ref through; for
-  // now we look up by the existing input markup.
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const handleFocusSearch = useCallback(() => {
-    if (searchInputRef.current) {
-      searchInputRef.current.focus()
-      return
-    }
-    const el = document.querySelector<HTMLInputElement>(
-      'input[type="search"], input[placeholder*="Search" i]'
-    )
-    el?.focus()
+    searchInputRef.current?.focus()
   }, [])
 
   // ── Keyboard wiring ───────────────────────────────────────────────────────
@@ -274,6 +263,7 @@ export function JobsPage() {
       />
 
       <JobFilters
+        ref={searchInputRef}
         searchQuery={jobs.searchQuery}
         onSearchChange={jobs.setSearchQuery}
         companies={jobs.companies}
@@ -287,6 +277,9 @@ export function JobsPage() {
         onDateChange={jobs.setDateFilter}
         onReset={jobs.resetFilters}
         hasActiveFilters={activeFilterCount > 0}
+        mobileOpen={mobileFilterOpen}
+        onMobileOpenChange={setMobileFilterOpen}
+        activeFilterCount={activeFilterCount}
       />
 
       {/* Bulk action bar */}
@@ -367,10 +360,19 @@ export function JobsPage() {
         onCancel={() => setDismissTarget(null)}
       />
 
-      {/* Wave 2 mount points — placeholders return null until those agents land. */}
-      <JobCommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <JobCommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        recentJobs={jobs.jobs}
+        onGoToTab={handleGoToTab}
+        onSelectJob={(job) => {
+          if (isMobile) navigate(`/jobs/${job.id}`)
+          else jobs.setOpenJobId(job.id)
+        }}
+        onResetFilters={jobs.resetFilters}
+        onOpenHelp={() => setHelpOpen(true)}
+      />
       <JobShortcutSheet open={helpOpen} onOpenChange={setHelpOpen} />
-      <MobileFilterDrawer open={mobileFilterOpen} onOpenChange={setMobileFilterOpen} />
     </div>
   )
 }
