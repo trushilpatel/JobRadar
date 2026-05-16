@@ -23,7 +23,7 @@ describe('useJobUrlState', () => {
     expect(result.current.since).toBe('all')
     expect(result.current.sort).toBe('')
     expect(result.current.dir).toBe('asc')
-    expect(result.current.cursor).toBe('')
+    expect(result.current.page).toBe(0)
     expect(result.current.limit).toBe(20)
   })
 
@@ -42,7 +42,9 @@ describe('useJobUrlState', () => {
     expect(result.current.since).toBe('7d')
     expect(result.current.sort).toBe('title')
     expect(result.current.dir).toBe('desc')
-    expect(result.current.cursor).toBe('cur1')
+    // The old `cursor` URL param has been replaced by `page` (integer).
+    // The hydration test no longer passes a page query param explicitly.
+    expect(result.current.page).toBe(0)
     expect(result.current.limit).toBe(50)
   })
 
@@ -57,7 +59,7 @@ describe('useJobUrlState', () => {
     await waitFor(() => expect(onUrlUpdate).toHaveBeenCalled())
     await waitFor(() => expect(result.current.tab).toBe('saved'))
     expect(result.current.openJobId).toBeNull()
-    expect(result.current.cursor).toBe('')
+    expect(result.current.page).toBe(0)
   })
 
   it('setOpenJobId writes the id and clearing it removes the param', async () => {
@@ -102,21 +104,36 @@ describe('useJobUrlState', () => {
     expect(result.current.since).toBe('all')
     expect(result.current.sort).toBe('')
     expect(result.current.dir).toBe('asc')
-    expect(result.current.cursor).toBe('')
+    expect(result.current.page).toBe(0)
     // Preserved:
     expect(result.current.tab).toBe('applied')
     expect(result.current.openJobId).toBe('keep-me')
   })
 
-  it('setting limit clears the cursor (page must restart at 1)', async () => {
+  it('setting limit resets page back to 0', async () => {
     const { result } = renderHook(() => useJobUrlState(), {
-      wrapper: makeWrapper('?cursor=abc'),
+      wrapper: makeWrapper('?page=3'),
     })
-    expect(result.current.cursor).toBe('abc')
+    expect(result.current.page).toBe(3)
     act(() => {
       result.current.setLimit(50)
     })
     await waitFor(() => expect(result.current.limit).toBe(50))
-    expect(result.current.cursor).toBe('')
+    expect(result.current.page).toBe(0)
+  })
+
+  it('page survives a refresh-style hydration from the URL', () => {
+    const { result } = renderHook(() => useJobUrlState(), {
+      wrapper: makeWrapper('?page=5'),
+    })
+    expect(result.current.page).toBe(5)
+  })
+
+  it('setPage clamps negative values to 0', async () => {
+    const { result } = renderHook(() => useJobUrlState(), { wrapper: makeWrapper() })
+    await act(async () => {
+      await result.current.setPage(-3)
+    })
+    expect(result.current.page).toBe(0)
   })
 })

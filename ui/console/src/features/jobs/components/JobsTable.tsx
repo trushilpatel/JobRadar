@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 interface JobsTableProps {
   jobs: Job[]
   loading: boolean
+  isError?: boolean
+  onRetry?: () => void
   tab: TabKey
   page: number
   limit: number
@@ -44,6 +46,8 @@ const EMPTY_MESSAGES: Record<TabKey, string> = {
 export function JobsTable({
   jobs,
   loading,
+  isError,
+  onRetry,
   tab,
   page,
   limit,
@@ -77,10 +81,6 @@ export function JobsTable({
   )
 
   // Scroll the focused row into view whenever the focused index changes.
-  // We can't add a data-attribute to DataTable rows without modifying that
-  // shared primitive, so target rows by position (tbody tr:nth-child) — the
-  // table renders rows in index order. Safe today; the day we virtualise,
-  // we'll add a typed prop to DataTable.
   const containerRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (focusedIndex === undefined || focusedIndex < 0) return
@@ -90,6 +90,12 @@ export function JobsTable({
     el?.scrollIntoView({ block: 'nearest' })
   }, [focusedIndex])
 
+  // Compose a screen-reader-friendly row label.
+  function rowLabel(job: Job): string {
+    const company = job.company?.name ?? job.company_id ?? ''
+    return `${job.title}${company ? ` at ${company}` : ''}, status ${job.status}`
+  }
+
   return (
     <div ref={containerRef} className="flex flex-col flex-1 overflow-hidden min-w-0">
       <div className="flex-1 overflow-auto">
@@ -97,6 +103,9 @@ export function JobsTable({
           columns={columns}
           data={jobs}
           loading={loading}
+          isError={isError}
+          onRetry={onRetry}
+          errorMessage="Couldn't load jobs"
           emptyMessage={
             hasActiveFilters ? 'No results match your current filters' : EMPTY_MESSAGES[tab]
           }
@@ -109,10 +118,9 @@ export function JobsTable({
             const isSelected = selectedIds.has(job.id)
             const isActive = activeJobId === job.id
             return cn(
-              // Focus indicator: a violet left-border bar distinct from the
-              // selected/active row backgrounds. Pre-emptively reserve the
-              // left ring slot so non-focused rows stay aligned.
-              isFocused && 'shadow-[inset_3px_0_0_0_rgb(167,139,250)]',
+              // Focused row: solid violet inset ring — strong and unmistakable
+              // even when the row is also `isActive`.
+              isFocused && 'ring-2 ring-violet-400 ring-inset',
               isSelected
                 ? 'bg-violet-500/[0.06]'
                 : isActive
@@ -120,6 +128,20 @@ export function JobsTable({
                   : 'hover:bg-white/[0.03]'
             )
           }}
+          getRowProps={(job) => ({
+            tabIndex: 0,
+            role: 'button',
+            'aria-label': rowLabel(job),
+            'aria-selected': activeJobId === job.id ? true : undefined,
+            onKeyDown: (e: React.KeyboardEvent<HTMLTableRowElement>) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onRowClick(job)
+              }
+            },
+            className:
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-inset',
+          })}
           sorting={sorting}
           onSortingChange={onSortingChange}
         />

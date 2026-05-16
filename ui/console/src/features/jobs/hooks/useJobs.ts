@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { fetchJobs, fetchJobCounts, fetchJobCompanies, type JobFilters } from '@/api/jobs'
 import type { SortingState } from '@/components/ui/data-table'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { jobQueryKeys } from '@/features/jobs/queryKeys'
 import { type TabKey } from '@/constants/jobStatus'
 import {
   useJobUrlState,
@@ -51,8 +52,10 @@ export function useJobs() {
 
   // Cursor-based pagination via useInfiniteQuery: pages are walked one at a
   // time; pageIndex is the currently displayed page within the fetched pages
-  // array.
-  const [pageIndex, setPageIndex] = useState(0)
+  // array. Sourced from the URL so refresh and share-links land on the same
+  // page.
+  const pageIndex = urlState.page
+  const setPageIndex = urlState.setPage
 
   const sortBy = urlState.sort || undefined
   const sortDir: 'asc' | 'desc' | undefined = urlState.sort ? urlState.dir : undefined
@@ -88,17 +91,11 @@ export function useJobs() {
     ]
   )
 
-  // Reset pageIndex when filters/limit change. Adjusting state during render
-  // (storing previous value + comparing) is the React-recommended alternative
-  // to useEffect for derived state resets.
-  const [prevKey, setPrevKey] = useState({ filters, limit: urlState.limit })
-  if (prevKey.filters !== filters || prevKey.limit !== urlState.limit) {
-    setPrevKey({ filters, limit: urlState.limit })
-    setPageIndex(0)
-  }
+  // Filters/limit changing is the URL setters' responsibility now (they each
+  // reset `page` to 0). No local-state catch-up needed.
 
   const query = useInfiniteQuery({
-    queryKey: ['jobs', filters, urlState.limit],
+    queryKey: jobQueryKeys.list(filters, urlState.limit),
     queryFn: ({ pageParam, signal }) => fetchJobs(filters, pageParam, urlState.limit, signal),
     initialPageParam: '',
     getNextPageParam: (last) => (last.next_cursor ? last.next_cursor : undefined),
@@ -109,6 +106,20 @@ export function useJobs() {
   const currentPage = fetchedPages[pageIndex]
   const jobs = useMemo(() => currentPage?.items ?? [], [currentPage])
   const itemsOnPage = jobs.length
+
+  // Auto-snap: if a refetch returns fewer pages than the cursor (e.g. the
+  // last item was dismissed off the current page), bounce the user to the
+  // last available page rather than leaving them on a phantom empty page.
+  useEffect(() => {
+    if (query.isFetching) return
+    if (fetchedPages.length === 0) {
+      if (pageIndex !== 0) void setPageIndex(0)
+      return
+    }
+    if (pageIndex > fetchedPages.length - 1) {
+      void setPageIndex(Math.max(0, fetchedPages.length - 1))
+    }
+  }, [fetchedPages.length, pageIndex, query.isFetching, setPageIndex])
 
   // Cumulative number of items in pages BEFORE the current page. Drives the
   // pagination "Showing X–Y" display. Pages on the "new" tab are sparse
@@ -156,39 +167,36 @@ export function useJobs() {
       void urlState.setSort(next.id)
       void urlState.setDir(dir)
     }
-    setPageIndex(0)
+    // urlState setters already reset page to 0.
   }
 
   function goToNextPage() {
-    // Pre-fetched next page — advance immediately
+    // Pre-fetched next page — advance immediately.
     if (pageIndex < fetchedPages.length - 1) {
-      setPageIndex((i) => i + 1)
+      void setPageIndex(pageIndex + 1)
       return
     }
     // At the boundary — initiate fetch and advance eagerly. The new page lands
     // at fetchedPages[pageIndex+1] when the fetch resolves; until then the
     // table renders the loading state (currentPage is undefined).
-    // Eager advance avoids a stale-closure race when filters change while a
-    // fetch is in flight: the resolved fetch lands in the OLD query's cache
-    // while the NEW query's pageIndex was already reset to 0 by prevKey.
     if (query.hasNextPage && !query.isFetchingNextPage) {
       void query.fetchNextPage()
-      setPageIndex((i) => i + 1)
+      void setPageIndex(pageIndex + 1)
     }
   }
 
   function goToPrevPage() {
-    if (pageIndex > 0) setPageIndex((i) => i - 1)
+    if (pageIndex > 0) void setPageIndex(pageIndex - 1)
   }
 
   function goToFirstPage() {
-    setPageIndex(0)
+    void setPageIndex(0)
   }
 
   function resetFilters() {
     urlState.resetFilters()
     setSearchInput('')
-    setPageIndex(0)
+    // urlState.resetFilters already writes page: 0
   }
 
   // Wrappers that proxy URL-state setters but keep the existing useJobs
@@ -222,6 +230,7 @@ export function useJobs() {
     itemsBeforePage,
     companies,
     isLoading: query.isLoading,
+    isError: query.isError,
     isFetching: query.isFetching,
     isFetchingNextPage: query.isFetchingNextPage,
     refetch: query.refetch,
