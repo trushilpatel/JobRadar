@@ -13,7 +13,9 @@
       "Bash(rm -f .git/test_main_block_marker)",
       "WebSearch",
       "WebFetch(domain:jobs.deel.com)",
-      "WebFetch(domain:www.deel.com)"
+      "WebFetch(domain:www.deel.com)",
+      "Skill(superpowers:dispatching-parallel-agents)",
+      "Skill(superpowers:dispatching-parallel-agents:*)"
     ],
     "additionalDirectories": ["/tmp"]
   }
