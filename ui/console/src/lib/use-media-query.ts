@@ -1,33 +1,39 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
+
+const noop = () => () => {}
 
 /**
  * Subscribes to a `window.matchMedia` query and returns the current match
- * state. Updates whenever the media query's match state changes.
+ * state. Built on `useSyncExternalStore` so the value is always coherent
+ * with the browser's media query state, including across React concurrent
+ * tearing and SSR hydration.
  *
- * Safe under SSR — returns `false` when `window` is undefined and only
- * subscribes inside `useEffect`.
+ * Safe under SSR — `getServerSnapshot` returns `false` and no subscription
+ * is established until hydration.
  */
 export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState<boolean>(() => {
+  const subscribe = useCallback(
+    (notify: () => void) => {
+      if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+        return noop()
+      }
+      const mql = window.matchMedia(query)
+      mql.addEventListener('change', notify)
+      return () => mql.removeEventListener('change', notify)
+    },
+    [query]
+  )
+
+  const getSnapshot = useCallback(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return false
     }
     return window.matchMedia(query).matches
-  })
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return
-    }
-    const mq = window.matchMedia(query)
-    const handler = (event: MediaQueryListEvent) => setMatches(event.matches)
-    // Sync state in case the query changed between render and effect.
-    setMatches(mq.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
   }, [query])
 
-  return matches
+  const getServerSnapshot = useCallback(() => false, [])
+
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }
 
 // Convenience breakpoint hooks matching Tailwind defaults used in the design spec.

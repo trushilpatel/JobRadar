@@ -35,7 +35,7 @@ describe('useUndoToast', () => {
       action: { label: 'Undo' },
     })
     // Trigger the action callback and ensure it wires through to the supplied undo fn.
-    const action = (options as { action: { onClick: () => void } }).action
+    const action = (options as unknown as { action: { onClick: () => void } }).action
     action.onClick()
     expect(undo).toHaveBeenCalledTimes(1)
   })
