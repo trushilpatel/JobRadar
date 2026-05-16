@@ -3,6 +3,7 @@ import { renderHook, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
+import { NuqsTestingAdapter } from 'nuqs/adapters/testing'
 import * as jobsApi from '@/api/jobs'
 import { useJobs } from '../useJobs'
 import { JOB_STATUS } from '@/constants/jobStatus'
@@ -72,12 +73,24 @@ const mockCounts: jobsApi.JobCounts = {
 
 // ── Wrapper ─────────────────────────────────────────────────────────────────
 
-function makeWrapper() {
+function makeWrapper(initialSearch = '') {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: 0, gcTime: 0 } },
   })
   return ({ children }: { children: React.ReactNode }) =>
-    createElement(MemoryRouter, {}, createElement(QueryClientProvider, { client: qc }, children))
+    createElement(
+      MemoryRouter,
+      {},
+      createElement(
+        QueryClientProvider,
+        { client: qc },
+        createElement(
+          NuqsTestingAdapter,
+          { searchParams: initialSearch, hasMemory: true },
+          children
+        )
+      )
+    )
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

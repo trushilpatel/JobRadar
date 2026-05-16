@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
+import { NuqsTestingAdapter } from 'nuqs/adapters/testing'
 
 // ── Mock all API modules so no real fetch calls are made ─────────────────────
 vi.mock('@/api/dashboard')
@@ -59,7 +60,9 @@ function makeWrapper(initialEntries = ['/']) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <MemoryRouter initialEntries={initialEntries}>
-        <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+        <QueryClientProvider client={qc}>
+          <NuqsTestingAdapter hasMemory>{children}</NuqsTestingAdapter>
+        </QueryClientProvider>
       </MemoryRouter>
     )
   }

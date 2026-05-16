@@ -1,65 +1,88 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { useLocation } from 'react-router-dom'
 import { fetchJobs, fetchJobCounts, fetchJobCompanies, type JobFilters } from '@/api/jobs'
 import type { SortingState } from '@/components/ui/data-table'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
-import { JOB_STATUS, type TabKey } from '@/constants/jobStatus'
+import { type TabKey } from '@/constants/jobStatus'
+import {
+  useJobUrlState,
+  type DateFilter,
+  type LocationFilter,
+  type SortDir,
+} from '@/features/jobs/hooks/useJobUrlState'
 
 export type { TabKey } from '@/constants/jobStatus'
-export type DateFilter = 'all' | '24h' | '7d' | '30d'
-export type LocationFilter = 'any' | 'remote' | 'onsite'
+export type { DateFilter, LocationFilter } from '@/features/jobs/hooks/useJobUrlState'
 
 export function useJobs() {
-  const location = useLocation()
-  const initialDateFilter: DateFilter =
-    (location.state as { dateFilter?: DateFilter } | null)?.dateFilter ?? 'all'
+  const urlState = useJobUrlState()
 
-  // Tab
-  const [tab, setTab] = useState<TabKey>(JOB_STATUS.NEW)
+  // Search: raw input value is local so we don't write the URL on every
+  // keystroke. The debounced value is mirrored into the URL, which then
+  // drives the API query.
+  const [searchInput, setSearchInput] = useState(urlState.q)
+  const debouncedSearch = useDebouncedValue(searchInput, 300)
 
-  // Filter state
-  const initialCompanies = (location.state as { companies?: string[] } | null)?.companies ?? []
-  const [selectedCompanies, setSelectedCompanies] = useState<string[]>(initialCompanies)
-  const [locationFilter, setLocationFilter] = useState<LocationFilter>('any')
-  const [expFilter, setExpFilter] = useState<string[]>([])
-  const [dateFilter, setDateFilter] = useState<DateFilter>(initialDateFilter)
+  // Sync the input to the URL state when it lands at rest (debounced) and
+  // sync FROM the URL when an external change happens (e.g. nav, reset).
+  useEffect(() => {
+    if (debouncedSearch !== urlState.q) {
+      void urlState.setQ(debouncedSearch)
+    }
+    // We only want to react to local input changes (debounced); reading
+    // urlState.q here would create a feedback loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch])
 
-  // Search: raw value drives the input; debounced value drives the API query
-  const [searchQuery, setSearchQuery] = useState('')
-  const debouncedSearch = useDebouncedValue(searchQuery, 300)
+  useEffect(() => {
+    // External resets (resetFilters) propagate URL -> input. Only sync when
+    // the URL changes to a value different from the current input rest state.
+    if (urlState.q !== debouncedSearch && urlState.q !== searchInput) {
+      setSearchInput(urlState.q)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlState.q])
 
-  // Sorting
-  const [sorting, setSorting] = useState<SortingState>([])
+  // Sorting bridge between TanStack Table's SortingState and the URL.
+  const sorting: SortingState = useMemo(
+    () => (urlState.sort ? [{ id: urlState.sort, desc: urlState.dir === 'desc' }] : []),
+    [urlState.sort, urlState.dir]
+  )
 
-  // Cursor-based pagination via useInfiniteQuery: pages are walked one at a time;
-  // pageIndex is the currently displayed page within the fetched pages array.
+  // Cursor-based pagination via useInfiniteQuery: pages are walked one at a
+  // time; pageIndex is the currently displayed page within the fetched pages
+  // array.
   const [pageIndex, setPageIndex] = useState(0)
-  const [limit, setLimit] = useState(20)
 
-  const sortBy = sorting[0]?.id
-  const sortDir = sorting[0] ? (sorting[0].desc ? 'desc' : 'asc') : undefined
+  const sortBy = urlState.sort || undefined
+  const sortDir: 'asc' | 'desc' | undefined = urlState.sort ? urlState.dir : undefined
 
   const filters = useMemo<JobFilters>(
     () => ({
-      status: tab,
-      search: debouncedSearch || undefined,
-      companies: selectedCompanies.length > 0 ? selectedCompanies : undefined,
-      remote: locationFilter === 'remote' || undefined,
-      onSite: locationFilter === 'onsite' || undefined,
-      experienceRanges: expFilter.length > 0 ? expFilter : undefined,
+      status: urlState.tab,
+      search: urlState.q || undefined,
+      companies: urlState.companies.length > 0 ? urlState.companies : undefined,
+      remote: urlState.loc === 'remote' || undefined,
+      onSite: urlState.loc === 'onsite' || undefined,
+      experienceRanges: urlState.exp.length > 0 ? urlState.exp : undefined,
       daysAdded:
-        dateFilter === '24h' ? 1 : dateFilter === '7d' ? 7 : dateFilter === '30d' ? 30 : undefined,
+        urlState.since === '24h'
+          ? 1
+          : urlState.since === '7d'
+            ? 7
+            : urlState.since === '30d'
+              ? 30
+              : undefined,
       sortBy,
       sortDir,
     }),
     [
-      tab,
-      debouncedSearch,
-      selectedCompanies,
-      locationFilter,
-      expFilter,
-      dateFilter,
+      urlState.tab,
+      urlState.q,
+      urlState.companies,
+      urlState.loc,
+      urlState.exp,
+      urlState.since,
       sortBy,
       sortDir,
     ]
@@ -68,15 +91,15 @@ export function useJobs() {
   // Reset pageIndex when filters/limit change. Adjusting state during render
   // (storing previous value + comparing) is the React-recommended alternative
   // to useEffect for derived state resets.
-  const [prevKey, setPrevKey] = useState({ filters, limit })
-  if (prevKey.filters !== filters || prevKey.limit !== limit) {
-    setPrevKey({ filters, limit })
+  const [prevKey, setPrevKey] = useState({ filters, limit: urlState.limit })
+  if (prevKey.filters !== filters || prevKey.limit !== urlState.limit) {
+    setPrevKey({ filters, limit: urlState.limit })
     setPageIndex(0)
   }
 
   const query = useInfiniteQuery({
-    queryKey: ['jobs', filters, limit],
-    queryFn: ({ pageParam, signal }) => fetchJobs(filters, pageParam, limit, signal),
+    queryKey: ['jobs', filters, urlState.limit],
+    queryFn: ({ pageParam, signal }) => fetchJobs(filters, pageParam, urlState.limit, signal),
     initialPageParam: '',
     getNextPageParam: (last) => (last.next_cursor ? last.next_cursor : undefined),
     staleTime: 30_000,
@@ -123,18 +146,16 @@ export function useJobs() {
   })
   const companies = companiesQuery.data ?? []
 
-  function resetFilters() {
-    setSearchQuery('')
-    setSelectedCompanies([])
-    setLocationFilter('any')
-    setExpFilter([])
-    setDateFilter('all')
-    setSorting([])
-    setPageIndex(0)
-  }
-
   function handleSortingChange(newSorting: SortingState) {
-    setSorting(newSorting)
+    const next = newSorting[0]
+    if (!next) {
+      void urlState.setSort('')
+      void urlState.setDir('asc')
+    } else {
+      const dir: SortDir = next.desc ? 'desc' : 'asc'
+      void urlState.setSort(next.id)
+      void urlState.setDir(dir)
+    }
     setPageIndex(0)
   }
 
@@ -164,6 +185,33 @@ export function useJobs() {
     setPageIndex(0)
   }
 
+  function resetFilters() {
+    urlState.resetFilters()
+    setSearchInput('')
+    setPageIndex(0)
+  }
+
+  // Wrappers that proxy URL-state setters but keep the existing useJobs
+  // public surface so consumers (JobsPage, JobFilters) don't change shape.
+  function setTab(tab: TabKey) {
+    void urlState.setTab(tab)
+  }
+  function setSelectedCompanies(companies: string[]) {
+    void urlState.setCompanies(companies)
+  }
+  function setLocationFilter(loc: LocationFilter) {
+    void urlState.setLoc(loc)
+  }
+  function setExpFilter(exp: string[]) {
+    void urlState.setExp(exp)
+  }
+  function setDateFilter(since: DateFilter) {
+    void urlState.setSince(since)
+  }
+  function setLimit(limit: number) {
+    void urlState.setLimit(limit)
+  }
+
   return {
     // Query state
     jobs,
@@ -180,21 +228,25 @@ export function useJobs() {
     counts,
 
     // Tab
-    tab,
+    tab: urlState.tab,
     setTab,
 
-    // Search
-    searchQuery,
-    setSearchQuery,
+    // Open job preview (URL-driven)
+    openJobId: urlState.openJobId,
+    setOpenJobId: urlState.setOpenJobId,
+
+    // Search — raw input value is local; URL holds the debounced value
+    searchQuery: searchInput,
+    setSearchQuery: setSearchInput,
 
     // Filters
-    selectedCompanies,
+    selectedCompanies: urlState.companies,
     setSelectedCompanies,
-    locationFilter,
+    locationFilter: urlState.loc,
     setLocationFilter,
-    expFilter,
+    expFilter: urlState.exp,
     setExpFilter,
-    dateFilter,
+    dateFilter: urlState.since,
     setDateFilter,
     resetFilters,
 
@@ -206,7 +258,7 @@ export function useJobs() {
     goToNextPage,
     goToPrevPage,
     goToFirstPage,
-    limit,
+    limit: urlState.limit,
     setLimit,
   }
 }
