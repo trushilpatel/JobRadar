@@ -40,12 +40,20 @@ const ADAPTER_HINTS: Partial<Record<string, string>> = {
   meta: 'No URL required — uses built-in Meta Careers scraper',
   microsoft: 'No URL required — uses built-in Microsoft Careers scraper',
   rippling: 'No URL required — uses built-in Rippling Jobs scraper',
+  workday: 'URL auto-filled from Workday host + site',
 }
 
 function buildUrl(adapter: string, id: string): string {
   const tmpl = URL_TEMPLATES[adapter]
   return tmpl && id ? tmpl(id) : ''
 }
+
+// Eightfold requires per-company host+domain config that this modal does not
+// yet collect. Hide it from the selectable list — admins must seed via
+// migration until a config form is added. Filter on the Companies page
+// remains driven by ADAPTER_TYPES so existing eightfold companies stay
+// searchable.
+const MODAL_ADAPTER_TYPES = ADAPTER_TYPES.filter((a) => a !== 'eightfold')
 
 const FIXED_URL_ADAPTERS = new Set([
   'google',
@@ -57,16 +65,51 @@ const FIXED_URL_ADAPTERS = new Set([
   'rippling',
 ])
 
+const ADAPTER_WORKDAY = 'workday'
+const WORKDAY_HOST_REGEX = /^[a-z0-9-]+\.wd[0-9]+\.myworkdayjobs\.com$/
+
+function buildWorkdayUrl(host: string, site: string): string {
+  return host && site ? `https://${host}/${site}` : ''
+}
+
+function validateWorkdayHost(host: string): string {
+  if (!host) return 'Workday host is required'
+  if (!WORKDAY_HOST_REGEX.test(host)) {
+    return 'Host must match <tenant>.wd<N>.myworkdayjobs.com (lowercase)'
+  }
+  return ''
+}
+
+function validateWorkdaySite(site: string): string {
+  if (!site) return 'Site path is required'
+  if (/\s/.test(site)) return 'Site path must not contain whitespace'
+  if (site.includes('/')) return 'Site path must not contain "/"'
+  return ''
+}
+
 const EMPTY_FORM = { id: '', name: '', website: '', adapter_type: 'greenhouse', active: true }
+const EMPTY_WORKDAY = { host: '', site: '' }
+
+// Payload shape we send to createAdminCompany / updateAdminCompanyScanSettings.
+// adapter_config is part of the backend contract but not declared on
+// createAdminCompany's parameter type, so we widen at the call site only here.
+type CreateScanSettings = {
+  adapter_type: string
+  active: boolean
+  adapter_config?: Record<string, unknown>
+}
 
 export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdated }: Props) {
   const isEdit = !!initialData
 
   const [form, setForm] = useState(EMPTY_FORM)
+  const [workday, setWorkday] = useState(EMPTY_WORKDAY)
   const [urlManuallyEdited, setUrlManuallyEdited] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [globalError, setGlobalError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const isWorkday = form.adapter_type === ADAPTER_WORKDAY
 
   // Sync form when modal opens in edit mode
   useEffect(() => {
@@ -78,9 +121,11 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
         adapter_type: initialData.adapter_type,
         active: initialData.active,
       })
+      setWorkday(EMPTY_WORKDAY)
       setUrlManuallyEdited(true) // treat existing URL as manual — don't auto-overwrite
     } else if (open && !initialData) {
       setForm(EMPTY_FORM)
+      setWorkday(EMPTY_WORKDAY)
       setUrlManuallyEdited(false)
     }
     setFieldErrors({})
@@ -88,11 +133,21 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
   }, [open, initialData])
 
   function handleAdapterChange(adapter: string) {
-    setForm((f) => ({
-      ...f,
-      adapter_type: adapter,
-      website: !urlManuallyEdited ? buildUrl(adapter, f.id) : f.website,
-    }))
+    setForm((f) => {
+      if (adapter === ADAPTER_WORKDAY) {
+        // Workday derives the URL from host + site rather than the slug.
+        return {
+          ...f,
+          adapter_type: adapter,
+          website: buildWorkdayUrl(workday.host, workday.site),
+        }
+      }
+      return {
+        ...f,
+        adapter_type: adapter,
+        website: !urlManuallyEdited ? buildUrl(adapter, f.id) : f.website,
+      }
+    })
     setFieldErrors({})
     setGlobalError('')
   }
@@ -101,7 +156,12 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
     setForm((f) => ({
       ...f,
       id,
-      website: !urlManuallyEdited ? buildUrl(f.adapter_type, id) : f.website,
+      website:
+        f.adapter_type === ADAPTER_WORKDAY
+          ? f.website
+          : !urlManuallyEdited
+            ? buildUrl(f.adapter_type, id)
+            : f.website,
     }))
     setFieldErrors({})
     setGlobalError('')
@@ -114,8 +174,39 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
     setGlobalError('')
   }
 
+  function handleWorkdayHostChange(host: string) {
+    const normalized = host.trim()
+    const next = { ...workday, host: normalized }
+    setWorkday(next)
+    setForm((f) => ({ ...f, website: buildWorkdayUrl(next.host, next.site) }))
+    setFieldErrors((errs) => {
+      const updated = { ...errs }
+      const msg = validateWorkdayHost(normalized)
+      if (msg) updated.workday_host = msg
+      else delete updated.workday_host
+      return updated
+    })
+    setGlobalError('')
+  }
+
+  function handleWorkdaySiteChange(site: string) {
+    const normalized = site.trim()
+    const next = { ...workday, site: normalized }
+    setWorkday(next)
+    setForm((f) => ({ ...f, website: buildWorkdayUrl(next.host, next.site) }))
+    setFieldErrors((errs) => {
+      const updated = { ...errs }
+      const msg = validateWorkdaySite(normalized)
+      if (msg) updated.workday_site = msg
+      else delete updated.workday_site
+      return updated
+    })
+    setGlobalError('')
+  }
+
   function handleClose() {
     setForm(EMPTY_FORM)
+    setWorkday(EMPTY_WORKDAY)
     setUrlManuallyEdited(false)
     setFieldErrors({})
     setGlobalError('')
@@ -124,7 +215,24 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.id || !form.name || (!FIXED_URL_ADAPTERS.has(form.adapter_type) && !form.website)) {
+    if (isWorkday) {
+      const hostErr = validateWorkdayHost(workday.host)
+      const siteErr = validateWorkdaySite(workday.site)
+      if (hostErr || siteErr || !form.id || !form.name) {
+        const errs: Record<string, string> = {}
+        if (hostErr) errs.workday_host = hostErr
+        if (siteErr) errs.workday_site = siteErr
+        setFieldErrors(errs)
+        if (!form.id || !form.name) {
+          setGlobalError('Identifier and name are required')
+        }
+        return
+      }
+    } else if (
+      !form.id ||
+      !form.name ||
+      (!FIXED_URL_ADAPTERS.has(form.adapter_type) && !form.website)
+    ) {
       setGlobalError(
         FIXED_URL_ADAPTERS.has(form.adapter_type)
           ? 'Identifier and name are required'
@@ -134,11 +242,19 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
     }
     setLoading(true)
     try {
+      const scanSettings: CreateScanSettings = {
+        adapter_type: form.adapter_type,
+        active: form.active,
+      }
+      if (isWorkday) {
+        scanSettings.adapter_config = { host: workday.host, site: workday.site }
+      }
       if (isEdit && initialData) {
         await updateAdminCompany(initialData.id, { name: form.name, website: form.website })
         await updateAdminCompanyScanSettings(initialData.id, {
-          adapter_type: form.adapter_type,
-          active: form.active,
+          adapter_type: scanSettings.adapter_type,
+          active: scanSettings.active,
+          ...(scanSettings.adapter_config ? { adapter_config: scanSettings.adapter_config } : {}),
         })
         onUpdated?.({ ...initialData, ...form })
       } else {
@@ -146,7 +262,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
           id: form.id,
           name: form.name,
           website: form.website,
-          scan_settings: { adapter_type: form.adapter_type, active: form.active },
+          scan_settings: scanSettings,
         })
         onCreated?.({
           ...adminCompany,
@@ -164,7 +280,14 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
         setFieldErrors(fields)
         // Surface backend errors that don't map to a visible form field
         // (e.g. `slug`) as a global message so the modal isn't silently stuck.
-        const visibleFields = new Set(['id', 'name', 'website', 'adapter_type'])
+        const visibleFields = new Set([
+          'id',
+          'name',
+          'website',
+          'adapter_type',
+          'workday_host',
+          'workday_site',
+        ])
         const unmapped = Object.entries(fields).find(([f]) => !visibleFields.has(f))
         if (unmapped) {
           const [field, message] = unmapped
@@ -215,7 +338,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                 onChange={(e) => handleAdapterChange(e.target.value)}
                 className={inputClass}
               >
-                {ADAPTER_TYPES.map((a) => (
+                {MODAL_ADAPTER_TYPES.map((a) => (
                   <option key={a} value={a}>
                     {a}
                   </option>
@@ -252,18 +375,54 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
               {fieldErrors.name && <p className="text-xs text-red-400 mt-1">{fieldErrors.name}</p>}
             </Field>
 
+            {isWorkday && (
+              <>
+                <Field label="Workday host" hint="e.g. nvidia.wd5.myworkdayjobs.com">
+                  <input
+                    value={workday.host}
+                    onChange={(e) => handleWorkdayHostChange(e.target.value)}
+                    placeholder="nvidia.wd5.myworkdayjobs.com"
+                    aria-label="Workday host"
+                    className={inputClass}
+                  />
+                  {fieldErrors.workday_host && (
+                    <p className="text-xs text-red-400 mt-1">{fieldErrors.workday_host}</p>
+                  )}
+                </Field>
+
+                <Field label="Site path" hint="e.g. NVIDIAExternalCareerSite">
+                  <input
+                    value={workday.site}
+                    onChange={(e) => handleWorkdaySiteChange(e.target.value)}
+                    placeholder="NVIDIAExternalCareerSite"
+                    aria-label="Workday site path"
+                    className={inputClass}
+                  />
+                  {fieldErrors.workday_site && (
+                    <p className="text-xs text-red-400 mt-1">{fieldErrors.workday_site}</p>
+                  )}
+                </Field>
+              </>
+            )}
+
             <Field label="Careers URL" hint={isEdit ? undefined : urlHint}>
               <div className="relative">
                 <input
                   value={form.website}
                   onChange={(e) => handleUrlChange(e.target.value)}
+                  readOnly={isWorkday}
                   placeholder={
-                    hasTemplate && !isEdit ? 'Auto-filled — enter Company ID above' : 'https://...'
+                    isWorkday
+                      ? 'Auto-filled — enter host + site above'
+                      : hasTemplate && !isEdit
+                        ? 'Auto-filled — enter Company ID above'
+                        : 'https://...'
                   }
                   className={cn(
                     inputClass,
                     'pr-9',
-                    hasTemplate && !urlManuallyEdited && form.website && 'text-slate-400'
+                    hasTemplate && !urlManuallyEdited && form.website && 'text-slate-400',
+                    isWorkday && 'text-slate-400 cursor-not-allowed'
                   )}
                 />
                 <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
@@ -296,6 +455,11 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
               </div>
               {hasTemplate && !urlManuallyEdited && form.website && !isEdit && (
                 <p className="text-[11px] text-violet-400/70 mt-1">✓ Auto-filled from identifier</p>
+              )}
+              {isWorkday && form.website && (
+                <p className="text-[11px] text-violet-400/70 mt-1">
+                  ✓ Auto-filled from host + site
+                </p>
               )}
               {fieldErrors.website && (
                 <p className="text-xs text-red-400 mt-1">{fieldErrors.website}</p>

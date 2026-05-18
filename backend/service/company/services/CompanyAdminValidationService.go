@@ -24,6 +24,12 @@ var validAdapters = map[string]bool{
 	companycommon.AdapterRippling:   true,
 	companycommon.AdapterGem:        true,
 	companycommon.AdapterDeel:       true,
+	companycommon.AdapterWorkday:    true,
+	// NOTE: eightfold is registered in adapter_configs (migration 056) and
+	// wired into the crawler, but intentionally NOT exposed via the admin
+	// validation surface — the AddCompany modal does not yet collect the
+	// host+domain adapter_config that the eightfold adapter requires.
+	// Re-enable here when the modal gains an eightfold config form.
 }
 
 type adminValidationService struct {

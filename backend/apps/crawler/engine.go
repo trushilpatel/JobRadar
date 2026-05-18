@@ -117,7 +117,7 @@ func (e *Engine) scanCompany(ctx context.Context, companyID string, settings *co
 		knownIDs = nil
 	}
 
-	result, streamed, err := e.fetchJobs(ctx, companyID, settings.AdapterType, knownIDs, log)
+	result, streamed, err := e.fetchJobs(ctx, companyID, settings.AdapterType, json.RawMessage(settings.AdapterConfig), knownIDs, log)
 	if err != nil {
 		log.Error("scan failed", err)
 		errMsg := err.Error()
@@ -150,7 +150,7 @@ func (e *Engine) scanCompany(ctx context.Context, companyID string, settings *co
 	e.recordResult(ctx, companyID, len(result.Jobs), newCount, elapsed, nil)
 }
 
-func (e *Engine) fetchJobs(ctx context.Context, companyID, adapterType string, knownIDs []string, log logger.Logger) (ats.FetchJobsResponse, bool, error) {
+func (e *Engine) fetchJobs(ctx context.Context, companyID, adapterType string, adapterConfig json.RawMessage, knownIDs []string, log logger.Logger) (ats.FetchJobsResponse, bool, error) {
 	adp, err := e.adapterFactory(adapterType, e.googleCfg, log)
 	if err != nil {
 		return ats.FetchJobsResponse{}, false, fmt.Errorf("no adapter for type %q: %w", adapterType, err)
@@ -188,7 +188,21 @@ func (e *Engine) fetchJobs(ctx context.Context, companyID, adapterType string, k
 		log.Debug("streaming publish enabled for adapter")
 	}
 
-	result, err := adp.FetchJobs(ctx, companyID)
+	// If the adapter supports per-company configuration AND scan_settings carries
+	// a non-empty adapter_config blob, use the configurable entry point. Otherwise
+	// fall back to plain FetchJobs — preserves compatibility with every existing
+	// adapter (Greenhouse, Lever, Ashby, Gem, Deel, …) that derives everything
+	// from companyID alone.
+	var (
+		result ats.FetchJobsResponse
+	)
+	if ca, ok := adp.(ats.ConfigurableAdapter); ok && len(adapterConfig) > 0 {
+		log.Debug("adapter supports per-company config; using FetchJobsWithConfig",
+			logger.Int("config_bytes", len(adapterConfig)))
+		result, err = ca.FetchJobsWithConfig(ctx, companyID, adapterConfig)
+	} else {
+		result, err = adp.FetchJobs(ctx, companyID)
+	}
 	if err != nil {
 		return ats.FetchJobsResponse{}, false, fmt.Errorf("fetch failed: %w", err)
 	}

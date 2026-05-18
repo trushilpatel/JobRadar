@@ -15,6 +15,9 @@ type (
 	KnownJobsProvider       = types.KnownJobsProvider
 	StreamPublisher         = types.StreamPublisher
 	SeenChecker             = types.SeenChecker
+	ConfigurableAdapter     = types.ConfigurableAdapter
+	FullJobContent          = types.FullJobContent
+	URLProvider             = types.URLProvider
 )
 
 // StripHTML removes all HTML tags, decodes entities, and collapses whitespace.

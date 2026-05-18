@@ -321,6 +321,168 @@ describe('AddCompanyModal', () => {
     })
   })
 
+  // ── Workday adapter (host + site, no slug-based URL template) ───────────────
+
+  function selectAdapter(value: string) {
+    const adapterSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement
+    fireEvent.change(adapterSelect, { target: { value } })
+  }
+
+  it('shows host + site inputs and hides slug-based hint when workday is selected', () => {
+    render(<AddCompanyModal {...baseProps} />)
+
+    // slug input still exists (id is needed even for workday), but Workday host + site appear
+    selectAdapter('workday')
+
+    expect(screen.getByLabelText('Workday host')).toBeInTheDocument()
+    expect(screen.getByLabelText('Workday site path')).toBeInTheDocument()
+
+    // careers URL field becomes read-only with the Workday placeholder
+    const urlInput = screen.getByPlaceholderText(
+      /Auto-filled — enter host \+ site above/i
+    ) as HTMLInputElement
+    expect(urlInput).toBeInTheDocument()
+    expect(urlInput.readOnly).toBe(true)
+  })
+
+  it('shows inline error for invalid Workday hosts and clears it when valid', () => {
+    render(<AddCompanyModal {...baseProps} />)
+    selectAdapter('workday')
+
+    const hostInput = screen.getByLabelText('Workday host') as HTMLInputElement
+
+    // Plainly wrong domain
+    fireEvent.change(hostInput, { target: { value: 'foo.com' } })
+    expect(screen.getByText(/Host must match/i)).toBeInTheDocument()
+
+    // Missing wd<N> segment
+    fireEvent.change(hostInput, { target: { value: 'nvidia.myworkdayjobs.com' } })
+    expect(screen.getByText(/Host must match/i)).toBeInTheDocument()
+
+    // Uppercase rejected
+    fireEvent.change(hostInput, { target: { value: 'NVIDIA.wd5.myworkdayjobs.com' } })
+    expect(screen.getByText(/Host must match/i)).toBeInTheDocument()
+
+    // Valid — error clears
+    fireEvent.change(hostInput, { target: { value: 'nvidia.wd5.myworkdayjobs.com' } })
+    expect(screen.queryByText(/Host must match/i)).not.toBeInTheDocument()
+  })
+
+  it('shows inline error for empty or slash-containing site, accepts alphanumeric+underscore', () => {
+    render(<AddCompanyModal {...baseProps} />)
+    selectAdapter('workday')
+
+    const siteInput = screen.getByLabelText('Workday site path') as HTMLInputElement
+
+    // Typing then clearing should leave the empty-state error
+    fireEvent.change(siteInput, { target: { value: 'temp' } })
+    fireEvent.change(siteInput, { target: { value: '' } })
+    expect(screen.getByText(/Site path is required/i)).toBeInTheDocument()
+
+    fireEvent.change(siteInput, { target: { value: 'has/slash' } })
+    expect(screen.getByText(/must not contain "\/"/i)).toBeInTheDocument()
+
+    fireEvent.change(siteInput, { target: { value: 'NVIDIA_External_Career_Site' } })
+    expect(screen.queryByText(/Site path is required/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/must not contain "\/"/i)).not.toBeInTheDocument()
+  })
+
+  it('auto-fills careers URL as https://<host>/<site> when both Workday fields are valid', () => {
+    render(<AddCompanyModal {...baseProps} />)
+    selectAdapter('workday')
+
+    fireEvent.change(screen.getByLabelText('Workday host'), {
+      target: { value: 'nvidia.wd5.myworkdayjobs.com' },
+    })
+    fireEvent.change(screen.getByLabelText('Workday site path'), {
+      target: { value: 'NVIDIAExternalCareerSite' },
+    })
+
+    const urlInput = screen.getByPlaceholderText(
+      /Auto-filled — enter host \+ site above/i
+    ) as HTMLInputElement
+    expect(urlInput.value).toBe('https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite')
+  })
+
+  it('submits the Workday create payload with adapter_config={host, site}', async () => {
+    const user = userEvent.setup()
+    const onCreated = vi.fn()
+    vi.mocked(adminApi.createAdminCompany).mockResolvedValue({
+      id: 'nvidia',
+      name: 'NVIDIA',
+      website: 'https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite',
+      created_at: '2026-05-15T00:00:00Z',
+      scan_settings: null,
+    })
+
+    render(<AddCompanyModal {...baseProps} onCreated={onCreated} />)
+    selectAdapter('workday')
+
+    await user.type(screen.getByPlaceholderText('stripe'), 'nvidia')
+    await user.type(screen.getByPlaceholderText('Stripe'), 'NVIDIA')
+    fireEvent.change(screen.getByLabelText('Workday host'), {
+      target: { value: 'nvidia.wd5.myworkdayjobs.com' },
+    })
+    fireEvent.change(screen.getByLabelText('Workday site path'), {
+      target: { value: 'NVIDIAExternalCareerSite' },
+    })
+
+    await user.click(screen.getByRole('button', { name: /add company/i }))
+
+    await waitFor(() => {
+      expect(adminApi.createAdminCompany).toHaveBeenCalledWith({
+        id: 'nvidia',
+        name: 'NVIDIA',
+        website: 'https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite',
+        scan_settings: {
+          adapter_type: 'workday',
+          active: true,
+          adapter_config: {
+            host: 'nvidia.wd5.myworkdayjobs.com',
+            site: 'NVIDIAExternalCareerSite',
+          },
+        },
+      })
+    })
+  })
+
+  it('switching adapter back to greenhouse hides workday fields and restores slug auto-fill', async () => {
+    const user = userEvent.setup()
+    render(<AddCompanyModal {...baseProps} />)
+
+    selectAdapter('workday')
+    expect(screen.getByLabelText('Workday host')).toBeInTheDocument()
+
+    selectAdapter('greenhouse')
+    expect(screen.queryByLabelText('Workday host')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Workday site path')).not.toBeInTheDocument()
+
+    // Slug auto-fill works again
+    await user.type(screen.getByPlaceholderText('stripe'), 'acme')
+    const urlInput = screen.getByPlaceholderText(/auto-filled|https/i) as HTMLInputElement
+    expect(urlInput.value).toContain('acme')
+    expect(urlInput.value).toContain('greenhouse')
+  })
+
+  it('blocks Workday submit when host or site is invalid', async () => {
+    const user = userEvent.setup()
+    render(<AddCompanyModal {...baseProps} />)
+    selectAdapter('workday')
+
+    await user.type(screen.getByPlaceholderText('stripe'), 'nvidia')
+    await user.type(screen.getByPlaceholderText('Stripe'), 'NVIDIA')
+    fireEvent.change(screen.getByLabelText('Workday host'), {
+      target: { value: 'invalid-host' },
+    })
+    // site left empty
+
+    await user.click(screen.getByRole('button', { name: /add company/i }))
+
+    expect(screen.getByText(/Host must match/i)).toBeInTheDocument()
+    expect(screen.getByText(/Site path is required/i)).toBeInTheDocument()
+    expect(adminApi.createAdminCompany).not.toHaveBeenCalled()
+  })
+
   // ── Dialog a11y description (Radix warning fix) ─────────────────────────────
 
   it('renders a Dialog.Description for screen readers', () => {
