@@ -20,6 +20,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
+	"github.com/trushilpatel/jobradar/service/job/location"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
@@ -311,16 +312,45 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 
 	start := w.clock.Now()
 
-	// Partition: jobs without a title can't be scored — the LLM has no signal to
-	// evaluate relevance and will default to "EXCLUDE". Pass them through directly
-	// to the enricher which will fetch full content and do role_match there.
+	// Partition the chunk before the LLM call:
+	//
+	//   1. nonUSA   — location classifier flagged the job as clearly non-USA.
+	//                 These never reach the LLM; ledger reason='non_usa_location'.
+	//   2. passThrough — no title, so the LLM has no signal. Forwarded to the
+	//                    enricher which will fetch full content and re-evaluate.
+	//   3. scorable — everything else; goes to ScoreBatch.
+	//
+	// nonUSA is checked before the title check on purpose: a job with no title
+	// but a clearly non-USA location should still be rejected here rather than
+	// passed through to the enricher (where it would consume a full HTTP fetch
+	// budget on a job we already know we don't want).
 	var scorable, passThrough []chunkItem
+	var nonUSAIDs []string
 	for _, item := range chunk {
+		if location.IsNonUSA(item.job.job.Location) {
+			nonUSAIDs = append(nonUSAIDs, item.job.job.ID)
+			continue
+		}
 		if item.job.job.Title == "" {
 			passThrough = append(passThrough, item)
 		} else {
 			scorable = append(scorable, item)
 		}
+	}
+
+	if len(nonUSAIDs) > 0 {
+		if err := w.ledger.UpdateSeenReasonBatch(ctx, nonUSAIDs, jobcommon.SeenReasonNonUSA); err != nil {
+			w.log.Error("mark non_usa_location batch failed", err,
+				logger.Str(logger.FieldFetchID, fetchID),
+				logger.Int(logger.FieldChunkIndex, chunkIndex),
+			)
+		}
+		metrics.FilterJobsTotal.WithLabelValues("non_usa").Add(float64(len(nonUSAIDs)))
+		w.log.Info("chunk non-USA rejected",
+			logger.Str(logger.FieldFetchID, fetchID),
+			logger.Int(logger.FieldChunkIndex, chunkIndex),
+			logger.Int("non_usa_count", len(nonUSAIDs)),
+		)
 	}
 
 	for _, item := range passThrough {
