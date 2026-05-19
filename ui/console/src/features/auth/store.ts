@@ -9,6 +9,7 @@ interface AuthState {
   session: Session | null
   identity: Identity | null
   loading: boolean
+  identityLoading: boolean
   initialized: boolean
   isAdmin: boolean
   bootstrap: () => Promise<() => void>
@@ -33,6 +34,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   identity: null,
   loading: true,
+  identityLoading: false,
   initialized: false,
   isAdmin: false,
 
@@ -44,13 +46,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { data } = await supabase.auth.getSession()
     const session = data.session
 
-    // Unblock rendering immediately — identity loads in background
+    // Unblock rendering immediately — identity loads in background.
+    // identityLoading guards role-gated routes from redirecting before identity arrives.
     sessionRef.set(session)
-    set({ session, loading: false })
+    set({ session, loading: false, identityLoading: !!session })
 
     if (session) {
       loadIdentity().then((identity) => {
-        if (get().session) set({ identity, isAdmin: isAdminIdentity(identity) })
+        if (get().session) {
+          set({ identity, isAdmin: isAdminIdentity(identity), identityLoading: false })
+        } else {
+          set({ identityLoading: false })
+        }
       })
     }
 
@@ -60,11 +67,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ session: newSession })
         return
       }
+      set({ identityLoading: !!newSession })
       let newIdentity: Identity | null = null
       if (newSession) {
         newIdentity = await loadIdentity()
       }
-      set({ session: newSession, identity: newIdentity, loading: false, isAdmin: isAdminIdentity(newIdentity) })
+      set({
+        session: newSession,
+        identity: newIdentity,
+        loading: false,
+        identityLoading: false,
+        isAdmin: isAdminIdentity(newIdentity),
+      })
     })
     return () => {
       sub.subscription.unsubscribe()
@@ -83,11 +97,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     await supabase.auth.signOut({ scope: 'global' })
     sessionRef.set(null)
-    set({ session: null, identity: null, isAdmin: false })
+    set({ session: null, identity: null, isAdmin: false, identityLoading: false })
   },
 
   refreshIdentity: async () => {
+    set({ identityLoading: true })
     const identity = await loadIdentity()
-    set({ identity, isAdmin: isAdminIdentity(identity) })
+    set({ identity, isAdmin: isAdminIdentity(identity), identityLoading: false })
   },
 }))
