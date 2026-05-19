@@ -193,7 +193,7 @@ services:
       REDIS_ADDR: redis:6379
       LLM_SLOTS_CONFIG: /app/config/llm-slots.yaml
     volumes:
-      - ./backend/common/config:/app/config:ro
+      - ./k8s/helm/jobradar/files:/app/config:ro
     ports:
       - "127.0.0.1:9103:9103"
     command: ["/app/filter"]
@@ -218,7 +218,7 @@ services:
       REDIS_ADDR: redis:6379
       LLM_SLOTS_CONFIG: /app/config/llm-slots.yaml
     volumes:
-      - ./backend/common/config:/app/config:ro
+      - ./k8s/helm/jobradar/files:/app/config:ro
     ports:
       - "127.0.0.1:9104:9104"
     command: ["/app/enricher"]
