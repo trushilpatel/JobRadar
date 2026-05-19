@@ -58,6 +58,7 @@ beforeEach(() => {
     session: null,
     identity: null,
     loading: true,
+    identityLoading: false,
     initialized: false,
     isAdmin: false,
   })
@@ -115,6 +116,34 @@ describe('bootstrap', () => {
 
     expect(fetchMeMock).not.toHaveBeenCalled()
     expect(useAuthStore.getState().loading).toBe(false)
+    expect(useAuthStore.getState().identityLoading).toBe(false)
+  })
+
+  it('keeps identityLoading=true until identity fetch resolves', async () => {
+    getSession.mockResolvedValue({ data: { session: fakeSession() } })
+
+    let resolveIdentity!: (v: unknown) => void
+    fetchMeMock.mockReturnValue(
+      new Promise((res) => {
+        resolveIdentity = res
+      })
+    )
+
+    useAuthStore.getState().bootstrap()
+
+    await vi.waitFor(() => {
+      expect(useAuthStore.getState().loading).toBe(false)
+    })
+    // Session is resolved but identity is not — identityLoading must stay true so
+    // role-gated routes don't redirect prematurely on refresh.
+    expect(useAuthStore.getState().identityLoading).toBe(true)
+
+    resolveIdentity(fakeIdentity())
+
+    await vi.waitFor(() => {
+      expect(useAuthStore.getState().identityLoading).toBe(false)
+    })
+    expect(useAuthStore.getState().identity).toEqual(fakeIdentity())
   })
 })
 

@@ -31,33 +31,53 @@ function Harness({ initialPath }: { initialPath: string }) {
 }
 
 beforeEach(() => {
-  useAuthStore.setState({ isAdmin: false, loading: false, initialized: true })
+  useAuthStore.setState({
+    isAdmin: false,
+    loading: false,
+    identityLoading: false,
+    initialized: true,
+  })
 })
 
 describe('RequireAdmin', () => {
   it('renders children when user is admin', () => {
-    useAuthStore.setState({ isAdmin: true, loading: false })
+    useAuthStore.setState({ isAdmin: true, loading: false, identityLoading: false })
     render(<Harness initialPath="/admin" />)
     expect(screen.getByText('ADMIN CONTENT')).toBeInTheDocument()
   })
 
   it('redirects to /dashboard when user is not admin', () => {
-    useAuthStore.setState({ isAdmin: false, loading: false })
+    useAuthStore.setState({ isAdmin: false, loading: false, identityLoading: false })
     render(<Harness initialPath="/admin" />)
     expect(screen.getByText('DASHBOARD')).toBeInTheDocument()
     expect(screen.queryByText('ADMIN CONTENT')).not.toBeInTheDocument()
   })
 
   it('renders nothing while loading', () => {
-    useAuthStore.setState({ isAdmin: false, loading: true })
+    useAuthStore.setState({ isAdmin: false, loading: true, identityLoading: false })
     const { container } = render(<Harness initialPath="/admin" />)
     expect(container.textContent).toBe('')
+  })
+
+  it('renders nothing (does not redirect) while identity is still loading', () => {
+    // Regression: refresh on /admin/* used to bounce to /dashboard during the
+    // brief window between session resolution and identity fetch completing.
+    useAuthStore.setState({
+      isAdmin: false,
+      loading: false,
+      identityLoading: true,
+      session: { access_token: 'tok', user: { id: 'u1' } } as unknown as never,
+    })
+    const { container } = render(<Harness initialPath="/admin" />)
+    expect(container.textContent).toBe('')
+    expect(screen.queryByText('DASHBOARD')).not.toBeInTheDocument()
   })
 
   it('does not render admin content for non-admin user even if session exists', () => {
     useAuthStore.setState({
       isAdmin: false,
       loading: false,
+      identityLoading: false,
       session: { access_token: 'tok', user: { id: 'u1' } } as unknown as never,
     })
     render(<Harness initialPath="/admin" />)

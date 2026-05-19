@@ -8,8 +8,12 @@ import { useAuthStore } from './store'
 export function RequireAdmin() {
   const isAdmin = useAuthStore((s) => s.isAdmin)
   const loading = useAuthStore((s) => s.loading)
+  const identityLoading = useAuthStore((s) => s.identityLoading)
 
-  if (loading) return null
+  // Wait for identity before deciding — otherwise a refresh on /admin/* or /insights
+  // redirects to /dashboard during the brief window where session is set but
+  // isAdmin hasn't been resolved yet.
+  if (loading || identityLoading) return null
   if (!isAdmin) return <Navigate to="/dashboard" replace />
   return <Outlet />
 }
