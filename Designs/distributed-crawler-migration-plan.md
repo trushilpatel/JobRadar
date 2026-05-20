@@ -98,13 +98,27 @@ Ordered by cutover risk. Each phase ships independently, each rollback is a conf
 - Decommission self-hosted Prometheus, Loki, Grafana from Helm.
 - Quotas comfortable: <2 GB/mo logs vs. 50 GB free.
 
-### Phase 3 — Redis: in-cluster → Upstash · **ON HOLD**
+### Phase 3 — Redis: in-cluster → Upstash (Pay-as-you-go)
 
-Deferred. Current Redis usage projections need confirmation against Upstash quotas before committing.
+**Cutover style:** Connection-string swap · **Downtime:** none (cache rewarms) · **Rollback:** keep in-cluster Redis idle for 1 week
 
-- In-cluster Redis remains in place; `platform/cache/` and `platform/ratelimit/` use it unchanged.
-- When resumed: connection-string swap to `rediss://...upstash.io`; cache rewarms naturally; old Redis idle for 1 week.
-- Open call when resumed: Upstash free (500K commands/mo) vs Pay-as-you-go ($0.20 / 100K commands).
+**Plan locked: Upstash Pay-as-you-go from day one.** Free-tier cap (500 K commands/mo) is at ~150% of projected use at 10 K API requests/day; PAYG costs <$1/mo at our scale and removes the quota cliff.
+
+- Create Upstash database (protocol mode, TLS).
+- Swap connection string to `rediss://default:<pwd>@<host>:<port>` — go-redis v9 handles `rediss://` natively.
+- Tune `PoolSize` down to ~20 (Upstash recommends low concurrent connection counts).
+- Verify token-bucket Lua script (`backend/platform/ratelimit/redis.go`) runs against Upstash protocol mode — it should; no code change expected.
+- Cache rewarms on first traffic; rate-limit buckets refill within seconds.
+- **Add Grafana Cloud alert at 80% of monthly command budget** (rolling 30 d) — early warning, not a hard cap.
+- Decommission in-cluster Redis from Helm after 1 week of clean operation.
+
+**Sizing (10 K API requests/day):**
+- Commands: ~25 K/day → ~750 K/month → PAYG ~$0.50/mo
+- Storage: <2 MB steady-state vs 256 MB cap (100× headroom)
+
+**Reconsider when traffic reaches ~50 K req/day** — that's when cache TTLs may need tightening and storage starts mattering.
+
+**New env:** `UPSTASH_REDIS_URL` (single `rediss://` URL containing host, port, password).
 
 ### Phase 4 — Streaming: Kafka → NATS JetStream (Synadia Cloud)
 
@@ -183,17 +197,17 @@ T+7d   Decommission Supabase data tables (auth schema stays).
 ### Order rationale
 1. Honeycomb — pure exporter, no data, fastest rollback.
 2. Grafana — destination change for agents; observability data is non-critical.
-3. ~~Upstash Redis~~ — deferred.
+3. Upstash Redis — connection-string swap; cache rewarms naturally; alerting from Phase 2 is in place to watch command budget.
 4. NATS — dual-bus = zero-downtime; one new abstraction at a time.
 5. Neon — only phase requiring a maintenance window; do last when everything else is settled.
 
 ### Secrets
-Six new secrets accumulated. One per provider, rotated independently:
+Seven new secrets accumulated. One per provider, rotated independently:
 - `HONEYCOMB_API_KEY`
 - `GRAFANA_CLOUD_PROM_TOKEN`, `GRAFANA_CLOUD_LOKI_TOKEN`
+- `UPSTASH_REDIS_URL`
 - `NATS_CREDS_FILE`
 - `NEON_DATABASE_URL_POOLED`, `NEON_DATABASE_URL_DIRECT`
-- *(Upstash creds added in Phase 3 when resumed)*
 
 ### Universal rollback recipe
 Every phase ships with the old infra still running for 7 days post-cutover. To roll back any phase: flip env/Secret to the old endpoint, redeploy. No code rollback needed — config flip only. Old infra is torn down only after the new one has run clean for a full week.
@@ -204,10 +218,9 @@ Every phase ships with the old infra still running for 7 days post-cutover. To r
 
 | # | Question | Decision needed before |
 |---|---|---|
-| 1 | Phase 3 (Redis): Upstash free vs. PAYG, or stay in-cluster? | Phase 3 resumes |
-| 2 | Synadia free-tier specific quotas (connections, GB/month) | Phase 4 Day 0 |
-| 3 | gRPC transport: HTTP/JSON fallback or gRPC-only? | Architecture cut |
-| 4 | mTLS CA management: internal Go-generated CA vs cert-manager vs Smallstep | Architecture cut |
+| 1 | Synadia free-tier specific quotas (connections, GB/month) | Phase 4 Day 0 |
+| 2 | gRPC transport: HTTP/JSON fallback or gRPC-only? | Architecture cut |
+| 3 | mTLS CA management: internal Go-generated CA vs cert-manager vs Smallstep | Architecture cut |
 
 ---
 
