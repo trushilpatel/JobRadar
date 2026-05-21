@@ -5,7 +5,7 @@ paths:
 
 # Backend Architecture — Service-Oriented Access
 
-All data access must go through the service layer. No component should query the database directly.
+All data access goes through the service layer. No component queries the database directly.
 
 ## Layering rules
 
