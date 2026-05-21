@@ -31,7 +31,15 @@ spec:
                   name: supabase-audit-sync-secret
                   key: SUPABASE_DB_URL
             - name: LOKI_URL
-              value: {{ .Values.supabaseAuditSync.lokiUrl | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-cloud-credentials
+                  key: GRAFANA_CLOUD_LOKI_URL
+            - name: LOKI_AUTH_HEADER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-cloud-credentials
+                  key: GRAFANA_CLOUD_LOKI_AUTH
             - name: AUDIT_SYNC_INTERVAL_SECONDS
               value: {{ .Values.supabaseAuditSync.intervalSeconds | quote }}
             - name: AUDIT_SYNC_STATE_FILE

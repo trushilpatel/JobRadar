@@ -29,11 +29,9 @@ api:
   devToken: ""          # Set locally to enable dev auth bypass. Leave empty in production.
   logLevel: info
   logFormat: json
-  jaegerEndpoint: ""
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
-  redisAddr: "redis:6379"
-  redisDb: "0"
   rateLimitReadRpm: "300"
   rateLimitWriteRpm: "60"
   rateLimitAdminRpm: "300"
@@ -53,7 +51,7 @@ scheduler:
   logLevel: info
   logFormat: json
   metricsAddr: ":9101"
-  jaegerEndpoint: ""
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
 
@@ -69,14 +67,12 @@ crawler:
   logLevel: info
   logFormat: json
   metricsAddr: ":9101"
-  jaegerEndpoint: ""
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
 
 filter:
   kafkaBrokers: "kafka:9092"
-  redisAddr: "redis:6379"
-  redisDb: "0"
   batchSize: "50"
   flushTimeoutSeconds: "30"
   llmCallIntervalSeconds: "5"
@@ -87,14 +83,12 @@ filter:
   logLevel: info
   logFormat: json
   metricsAddr: ":9101"
-  jaegerEndpoint: ""
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
 
 enricher:
   kafkaBrokers: "kafka:9092"
-  redisAddr: "redis:6379"
-  redisDb: "0"
   fetchConcurrency: "15"
   llmBatchSize: "5"
   flushTimeoutSeconds: "120"
@@ -110,30 +104,12 @@ enricher:
   logLevel: info
   logFormat: json
   metricsAddr: ":9101"
-  jaegerEndpoint: ""
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
-
-llmSlots:
-  filterKeyId: enricher_slots_2
-  filterKeyIdJp: enricher_slots_2_jp
-  filterModel: gemini-3.1-flash-lite-preview
-  filterRpm: 15
-  filterRpd: 200
-  filterTpmIn: 250000
-  enricherKeyId: enricher_slots_1
-  enricherKeyIdJp: enricher_slots_1_jp
-  enricherModel: gemma-4-31b-it
-  enricherRpm: 15
-  enricherRpd: 1500
-  enricherTpmIn: 1000000
 
 kafka:
   storage: 5Gi
   storageClass: local-path
   retentionMs: "604800000"   # 7 days in ms
   memory: "400M"             # Redpanda heap; explicit cap keeps RSS ~100Mi at idle
-
-redis:
-  storage: 1Gi
-  storageClass: local-path

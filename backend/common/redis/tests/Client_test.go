@@ -10,13 +10,40 @@ import (
 	commonredis "github.com/trushilpatel/jobradar/common/redis"
 )
 
+// urlFor builds a non-TLS redis URL pointing at the miniredis instance with
+// the given db index. miniredis speaks plain RESP, so we use redis:// (not
+// rediss://) — TLS behaviour is exercised against real Redis in integration
+// tests, not here.
+func urlFor(addr string, db int) string {
+	if db == 0 {
+		return "redis://" + addr + "/0"
+	}
+	return "redis://" + addr + "/" + itoa(db)
+}
+
+func itoa(n int) string {
+	// small ints only — db is 0..15
+	if n == 0 {
+		return "0"
+	}
+	const digits = "0123456789"
+	buf := [4]byte{}
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = digits[n%10]
+		n /= 10
+	}
+	return string(buf[i:])
+}
+
 // TestNew_HappyPath verifies that New connects, pings, and returns a usable
 // client when pointed at a reachable Redis server. miniredis stands in for the
 // real broker — same RESP wire protocol, same Ping semantics.
 func TestNew_HappyPath(t *testing.T) {
 	mr := miniredis.RunT(t)
 
-	client, err := commonredis.New(context.Background(), mr.Addr(), 0)
+	client, err := commonredis.New(context.Background(), urlFor(mr.Addr(), 0))
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -34,12 +61,12 @@ func TestNew_HappyPath(t *testing.T) {
 	}
 }
 
-// TestNew_SelectsDB confirms the db parameter is honoured — values written via
-// New(addr, 3) must land in db 3 and not be visible from db 0.
+// TestNew_SelectsDB confirms the db component of the URL is honoured — values
+// written via a URL ending in /3 must land in db 3 and not be visible from db 0.
 func TestNew_SelectsDB(t *testing.T) {
 	mr := miniredis.RunT(t)
 
-	client, err := commonredis.New(context.Background(), mr.Addr(), 3)
+	client, err := commonredis.New(context.Background(), urlFor(mr.Addr(), 3))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -60,7 +87,7 @@ func TestNew_SelectsDB(t *testing.T) {
 // TestNew_ZeroDB exercises the default db=0 selector.
 func TestNew_ZeroDB(t *testing.T) {
 	mr := miniredis.RunT(t)
-	client, err := commonredis.New(context.Background(), mr.Addr(), 0)
+	client, err := commonredis.New(context.Background(), urlFor(mr.Addr(), 0))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -84,7 +111,7 @@ func TestNew_UnreachableAddr(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := commonredis.New(ctx, addr, 0)
+	client, err := commonredis.New(ctx, urlFor(addr, 0))
 	if err == nil {
 		_ = client.Close()
 		t.Fatal("expected error for unreachable addr, got nil")
@@ -108,7 +135,7 @@ func TestNew_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	client, err := commonredis.New(ctx, mr.Addr(), 0)
+	client, err := commonredis.New(ctx, urlFor(mr.Addr(), 0))
 	if err == nil {
 		_ = client.Close()
 		t.Fatal("expected error for cancelled ctx, got nil")
@@ -118,12 +145,29 @@ func TestNew_ContextCancelled(t *testing.T) {
 	}
 }
 
+// TestNew_InvalidURL verifies that a syntactically broken URL is rejected
+// up-front by ParseURL, with a wrapped error that names the failure mode.
+// Guards the parse path from regressing into a panic or a half-built client.
+func TestNew_InvalidURL(t *testing.T) {
+	client, err := commonredis.New(context.Background(), "not-a-url")
+	if err == nil {
+		_ = client.Close()
+		t.Fatal("expected error for invalid url, got nil")
+	}
+	if client != nil {
+		t.Fatal("expected nil client on parse error")
+	}
+	if !strings.Contains(err.Error(), "redis: parse url") {
+		t.Errorf("error %q missing 'redis: parse url' prefix", err.Error())
+	}
+}
+
 // TestClientTypeAlias guards against accidental rename — every caller imports
 // commonredis.Client as a *goredis.Client. If this fails the package contract
 // has changed.
 func TestClientTypeAlias(t *testing.T) {
 	mr := miniredis.RunT(t)
-	client, err := commonredis.New(context.Background(), mr.Addr(), 0)
+	client, err := commonredis.New(context.Background(), urlFor(mr.Addr(), 0))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

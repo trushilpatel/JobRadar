@@ -3,9 +3,9 @@ paths:
   - 'backend/**/*.go'
 ---
 
-# Backend — SOLID Principles (pragmatic, not strict)
+# Backend — SOLID (pragmatic, not strict)
 
-Apply these principles to keep the backend maintainable and scalable. Use good judgement — don't over-engineer simple cases, but don't ignore them when they matter.
+Apply these to keep the backend maintainable. Use judgement — don't over-engineer simple cases, don't ignore them when they matter.
 
 ## Single Responsibility
 

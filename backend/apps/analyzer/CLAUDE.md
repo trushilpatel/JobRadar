@@ -1,6 +1,6 @@
 # apps/analyzer/ — Job post analyzer (enricher)
 
-Consumes `job_listings.filtered` (Kafka), fetches full job page content with per-adapter rate limiting, runs LLM enrichment in batches, writes final rows to `jobs` and `job_analytics`.
+Consumes `job_listings.filtered` (Kafka), fetches full job content (with per-adapter rate limiting), runs LLM enrichment in batches, writes final rows to `jobs` and `job_analytics`.
 
 ## Two-stage flow per Kafka fetch
 
@@ -18,42 +18,42 @@ Stage 2 — serial: group successful (job, content) into chunks of ENRICHER_LLM_
    - per-job: drop check → save or markIrrelevant / markError
    - whole batch fails  → routeBatchFailure → each job through retry ladder
    - CommitRecords after each successful group (per-partition max-offset semantics)
-   - if processGroup returns routed=false (ctx cancelled mid-batch) → skip commit, return
+   - processGroup returns routed=false (ctx cancelled mid-batch) → skip commit, return
 ```
 
 ## dropJob — eligibility rules (Go, not LLM)
 
-| Condition | Drop if |
-|---|---|
-| No sponsorship | `Sponsorship == false` |
-| Citizenship required | `RequiresCitizen == true` |
-| Security clearance | `SecurityClearance == true` |
+| Condition             | Drop if                                                    |
+| --------------------- | ---------------------------------------------------------- |
+| No sponsorship        | `Sponsorship == false`                                     |
+| Citizenship required  | `RequiresCitizen == true`                                  |
+| Security clearance    | `SecurityClearance == true`                                |
 | Over experience limit | `ExperienceYears > DISCARD_JOB_WITH_EXP_GT` (0 = disabled) |
 
 ## Ledger retry state
 
 - Only **Stage 2** (`EnrichBatch`) failures write `reason='retry'` to `job_pipeline_ledger`
-- Stage 1 (HTTP fetch) failures route to retry-tier topics but do NOT touch the ledger
+- Stage 1 (HTTP fetch) failures route to retry-tier topics but **do NOT** touch the ledger
 - Keeps `reason='retry'` semantically consistent: LLM-layer failure only
 - Transitions: `retry → llm_irrelevant | retry | error`
 
 ## Configuration
 
-| Env var | Default | Notes |
-|---|---|---|
-| `ENRICHER_FETCH_CONCURRENCY` | `15` | Parallel HTTP fetches (Stage 1) |
-| `ENRICHER_LLM_BATCH_SIZE` | `5` | Jobs per EnrichBatch call (Stage 2) |
-| `ENRICHER_FLUSH_TIMEOUT_SECONDS` | `120` | Kafka FetchMaxWait |
-| `ENRICHER_DEFAULT_RPS` | `2` | Per-adapter token bucket rate |
-| `ENRICHER_DEFAULT_BURST` | `3` | Per-adapter burst capacity |
-| `ENRICHER_JITTER_MS` | `200` | Random ±jitter after rate-limit grant |
-| `DISCARD_JOB_WITH_EXP_GT` | `0` | Drop jobs over N years exp; 0 = disabled |
+| Env var                          | Default | Notes                                    |
+| -------------------------------- | ------- | ---------------------------------------- |
+| `ENRICHER_FETCH_CONCURRENCY`     | `15`    | Parallel HTTP fetches (Stage 1)          |
+| `ENRICHER_LLM_BATCH_SIZE`        | `5`     | Jobs per EnrichBatch call (Stage 2)      |
+| `ENRICHER_FLUSH_TIMEOUT_SECONDS` | `120`   | Kafka FetchMaxWait                       |
+| `ENRICHER_DEFAULT_RPS`           | `2`     | Per-adapter token-bucket rate            |
+| `ENRICHER_DEFAULT_BURST`         | `3`     | Per-adapter burst capacity               |
+| `ENRICHER_JITTER_MS`             | `200`   | Random ±jitter after rate-limit grant    |
+| `DISCARD_JOB_WITH_EXP_GT`        | `0`     | Drop jobs over N years exp; 0 = disabled |
 
 ## Rules
 
 - Errors are per-job — one bad job never stops the worker
 - Stage 1 failures do NOT write retry ledger; Stage 2 does
 - Whole-batch LLM failure routes each job through its own retry tier
-- Snapshot write (`job_analytics`) is non-fatal — job row is already saved if it fails
+- Snapshot write (`job_analytics`) is non-fatal — the job row is already saved if it fails
 - Depends on `service/llm/services.JobPostEnricher` — never on `*geminiScorer` directly
 - Rate limiter is per-adapter — Greenhouse, Lever, Ashby each get their own bucket

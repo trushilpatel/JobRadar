@@ -1,0 +1,41 @@
+filter:
+  slots:
+    - key_id: enricher_slots_2
+      api_key: ${GEMINI_KEY}
+      model: gemini-3.1-flash-lite-preview
+      rpm: 15
+      rpd: 200
+      tpm_in: 250000
+    - key_id: enricher_slots_2_jp
+      api_key: ${GEMINI_KEY_JP}
+      model: gemini-3.1-flash-lite-preview
+      rpm: 15
+      rpd: 200
+      tpm_in: 250000
+
+enricher:
+  slots:
+    - key_id: enricher_slots_1
+      api_key: ${GEMINI_KEY}
+      model: gemma-4-31b-it
+      rpm: 15
+      rpd: 1500
+      tpm_in: 1000000
+    - key_id: enricher_slots_1_jp
+      api_key: ${GEMINI_KEY_JP}
+      model: gemma-4-31b-it
+      rpm: 15
+      rpd: 1500
+      tpm_in: 1000000
+    - key_id: enricher_slots_3
+      api_key: ${GEMINI_KEY}
+      model: gemma-4-26b-a4b-it
+      rpm: 15
+      rpd: 1500
+      tpm_in: 1000000
+    - key_id: enricher_slots_3_jp
+      api_key: ${GEMINI_KEY_JP}
+      model: gemma-4-26b-a4b-it
+      rpm: 15
+      rpd: 1500
+      tpm_in: 1000000

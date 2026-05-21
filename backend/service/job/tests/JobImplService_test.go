@@ -787,6 +787,67 @@ func TestImpl_SetNotes_MissingRowDefaultsToSaved(t *testing.T) {
 	}
 }
 
+// TestImpl_SetNotes_FirstNote_InvalidatesCountsCache pins the behaviour that
+// the implicit "new" → "saved" transition triggered by the first note on a
+// job clears the per-user counts cache. Without the invalidation, "new"
+// would over-count and "saved" would under-count until the TTL elapsed.
+func TestImpl_SetNotes_FirstNote_InvalidatesCountsCache(t *testing.T) {
+	state := &fakeUserState{
+		getErr:       apperr.ErrNotFound.WithMessage("not found"),
+		countsResult: jobdto.Counts{Saved: 1},
+	}
+	c := cache.NewMemoryCache()
+	svc := newSvc(&fakeJobReader{}, state, &fakeAppWriter{}, &fakeLedgerWriter{}, c)
+	ctx := ctxAs("u1")
+
+	if _, err := svc.GetCounts(ctx); err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+	state.countsResult = jobdto.Counts{Saved: 99}
+	if err := svc.SetNotes(ctx, "j1", "first note"); err != nil {
+		t.Fatalf("SetNotes: %v", err)
+	}
+	got, err := svc.GetCounts(ctx)
+	if err != nil {
+		t.Fatalf("post-mutate GetCounts: %v", err)
+	}
+	if got.Saved != 99 {
+		t.Errorf("got.Saved = %d, want 99 (cache should be invalidated when a new saved row is created)", got.Saved)
+	}
+}
+
+// TestImpl_SetNotes_ExistingRow_DoesNotInvalidateCountsCache locks in the
+// inverse: editing the note on a row that already exists does not shift any
+// status counter, so the saved/applied/dismissed totals are unchanged and
+// we should not pay a wasted DELETE on every keystroke.
+func TestImpl_SetNotes_ExistingRow_DoesNotInvalidateCountsCache(t *testing.T) {
+	state := &fakeUserState{
+		getResult:    &jobmodel.UserJobState{Status: jobmodel.StatusApplied},
+		countsResult: jobdto.Counts{Applied: 1},
+	}
+	c := cache.NewMemoryCache()
+	svc := newSvc(&fakeJobReader{}, state, &fakeAppWriter{}, &fakeLedgerWriter{}, c)
+	ctx := ctxAs("u1")
+
+	if _, err := svc.GetCounts(ctx); err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+	// Shift the underlying state. If SetNotes invalidates, the next read
+	// would see 99; if it doesn't, it returns the cached 1 — which is what
+	// we want, because the user's actual count didn't change.
+	state.countsResult = jobdto.Counts{Applied: 99}
+	if err := svc.SetNotes(ctx, "j1", "more thoughts"); err != nil {
+		t.Fatalf("SetNotes: %v", err)
+	}
+	got, err := svc.GetCounts(ctx)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	if got.Applied != 1 {
+		t.Errorf("got.Applied = %d, want 1 (re-edit must not invalidate)", got.Applied)
+	}
+}
+
 // -------- GetCounts derivation --------
 
 // TestImpl_GetCounts_DerivesNew confirms New = CountAll - sum(others).

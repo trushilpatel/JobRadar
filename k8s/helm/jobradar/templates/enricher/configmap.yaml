@@ -8,8 +8,6 @@ metadata:
     component: enricher
 data:
   KAFKA_BROKERS: {{ .Values.enricher.kafkaBrokers | quote }}
-  REDIS_ADDR: {{ .Values.enricher.redisAddr | quote }}
-  REDIS_DB: {{ .Values.enricher.redisDb | quote }}
   ENRICHER_FETCH_CONCURRENCY: {{ .Values.enricher.fetchConcurrency | quote }}
   ENRICHER_LLM_BATCH_SIZE: {{ .Values.enricher.llmBatchSize | quote }}
   ENRICHER_FLUSH_TIMEOUT_SECONDS: {{ .Values.enricher.flushTimeoutSeconds | quote }}

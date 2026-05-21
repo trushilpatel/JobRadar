@@ -211,72 +211,36 @@ make dev          # Kafka + Redis in Docker; API on host :8080, Vite dev server 
 
 ---
 
-## Running — Docker Compose (legacy)
-
-Docker Compose is kept for reference but Kubernetes is preferred.
-
-```bash
-make local        # full stack — API :8080, console :3000, Grafana :3001
-make local-down   # stop
-```
-
----
-
 ## Configuration
 
-Two env files:
-
-- **`.env`** (repo root) — Docker Compose + infra vars; also symlinked as `ui/console/.env` for the Vite dev server
-- **`backend/.env`** — backend service config (DB, Kafka, Redis, LLM, Auth)
-
-Copy from examples:
+One env file at the repo root covers everything — backend services, Vite dev server, Docker Compose, and infra:
 
 ```bash
 cp .env.example .env
-cp backend/.env.example backend/.env
+# edit .env with your Supabase project ref, API keys, etc.
 ```
 
-### Key variables (`backend/.env`)
+### Key variables
 
-| Variable                                                                | Description                                                                                                                                |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DB_HOST`                                                               | Supabase pooler host                                                                                                                       |
-| `DB_USER`                                                               | Supabase pooler user (`postgres.<project-ref>`)                                                                                            |
-| `DB_PASSWORD`                                                           | Supabase DB password                                                                                                                       |
-| `DB_SSLMODE`                                                            | Always `require`                                                                                                                           |
-| `SUPABASE_PROJECT_URL`                                                  | `https://<project-ref>.supabase.co`                                                                                                        |
-| `ALLOWED_EMAIL`                                                         | Legacy single-email allowlist for routes still gated by `RequireAuth`. New per-user routes use `RequireIdentity` + `ADMIN_EMAILS` instead. |
-| `ADMIN_EMAILS`                                                          | Comma-separated emails granted the `admin` role on first login (Phase 1).                                                                  |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`                            | Used by `backend/platform/supabaseadmin` for `DELETE /api/me` (Phase 1).                                                                   |
-| `RATE_LIMIT_READ_RPM` / `RATE_LIMIT_WRITE_RPM` / `RATE_LIMIT_ADMIN_RPM` | Per-user token-bucket rate limits (defaults: 30 / 20 / 120).                                                                               |
-| `CACHE_TTL_USER_SECONDS`                                                | TTL for the user-cache decorator (default 60).                                                                                             |
-| `TARGET_ROLES`                                                          | Comma-separated target role titles                                                                                                         |
-| `YEARS_EXP`                                                             | Your years of experience                                                                                                                   |
-| `DISCARD_JOB_WITH_EXP_GT`                                               | Drop jobs requiring more than N years (0 = disabled)                                                                                       |
-| `LLM_SLOTS_CONFIG`                                                      | Path to `llm-slots.yaml`                                                                                                                   |
-| `SCAN_INTERVAL_MINUTES`                                                 | How often each company is re-scanned                                                                                                       |
+| Variable                                                                | Description                                                    |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `DB_HOST`                                                               | Supabase pooler host                                           |
+| `DB_USER`                                                               | Supabase pooler user (`postgres.<project-ref>`)                |
+| `DB_PASSWORD`                                                           | Supabase DB password                                           |
+| `DB_SSLMODE`                                                            | Always `require`                                               |
+| `SUPABASE_PROJECT_URL`                                                  | `https://<project-ref>.supabase.co`                            |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`                            | Used by `backend/platform/supabaseadmin` for `DELETE /api/me`. |
+| `RATE_LIMIT_READ_RPM` / `RATE_LIMIT_WRITE_RPM` / `RATE_LIMIT_ADMIN_RPM` | Per-user token-bucket rate limits (defaults: 30 / 20 / 120).   |
+| `CACHE_TTL_USER_SECONDS`                                                | TTL for the user-cache decorator (default 60).                 |
+| `TARGET_ROLES`                                                          | Comma-separated target role titles                             |
+| `YEARS_EXP`                                                             | Your years of experience                                       |
+| `DISCARD_JOB_WITH_EXP_GT`                                               | Drop jobs requiring more than N years (0 = disabled)           |
+| `LLM_SLOTS_CONFIG`                                                      | Path to `llm-slots.yaml`                                       |
+| `SCAN_INTERVAL_MINUTES`                                                 | How often each company is re-scanned                           |
 
-### LLM slots (`backend/common/config/llm-slots.yaml`)
+### LLM slots (`k8s/helm/jobradar/files/llm-slots.yaml`)
 
-```yaml
-filter:
-  slots:
-    - key_id: filter_1
-      api_key: ${GEMINI_KEY}
-      model: gemini-2.0-flash-lite
-      rpm: 12
-      rpd: 300
-      tpm_in: 1000000
-
-enricher:
-  slots:
-    - key_id: enricher_1
-      api_key: ${GEMINI_KEY}
-      model: gemini-2.0-flash
-      rpm: 12
-      rpd: 1500
-      tpm_in: 1000000
-```
+Single source of truth — Helm renders this file directly into the `jobradar-llm-slots` ConfigMap via `.Files.Get`. Each slot entry is `{key_id, api_key (env-ref), model, rpm, rpd, tpm_in}`. Slots are grouped by worker (`filter:` / `enricher:`). To add a slot, edit the file; no values.yaml changes needed.
 
 ---
 
@@ -315,21 +279,17 @@ Add allowed redirect URLs in Supabase → Authentication → URL Configuration:
 - Local dev (Vite): `http://localhost:5173/auth/callback`
 - Production: `https://<your-domain>/auth/callback`
 
-### Multi-user (Phase 1)
+### Multi-user
 
-Phase 1 of the multi-user rollout has shipped — see [`Designs/multi-user-rollout-plan.md`](Designs/multi-user-rollout-plan.md) and locked contracts in [`Designs/phase1-contracts.md`](Designs/phase1-contracts.md):
+All three phases of the multi-user rollout have shipped — see [`Designs/multi-user-rollout-plan.md`](Designs/multi-user-rollout-plan.md).
 
-- New tables: `users`, `roles`, `user_roles`, `admin_audit_log` (migration `043_phase1_users_roles_audit.sql`)
-- New platform packages: `backend/common/identity/`, `backend/platform/cache/`, `backend/platform/ratelimit/`, `backend/platform/supabaseadmin/`
-- New service slices (decorator chain): `backend/service/user/` (with cache decorator), `backend/service/role/` (no REST surface in Phase 1), `backend/service/audit/`
-- New middleware in `backend/apps/api/middleware/`: `RequireIdentity` (DB-backed enrichment, cache-aside, lazy provisioning, status check, ADMIN_EMAILS auto-grant), `RequireRole(role)`, `RateLimit(limiter)` (per-user, method-derived scope, fail-open on Redis outage, 429 + `Retry-After`), `AuditAdminMutation(svc)` (appends to `admin_audit_log` on 2xx mutating responses); legacy `RequireAuth` (and the `ALLOWED_EMAIL` allowlist it enforces) is unchanged for routes that haven't been migrated yet
-- `auth.go` exports a `VerifyJWT(r) (sub, email, error)` helper consumed by `RequireIdentity` so JWT verification logic stays in one place
-- On first login, the user is provisioned in `users` and granted `user`. If their email is in `ADMIN_EMAILS`, they also get `admin`. Source of truth for role membership is Postgres (`user_roles`) — never JWT custom claims.
-- Identity flows via `context.Context` — middleware enriches every request with the caller's `Identity`; services pull `userID` via `identity.FromContext` / `UserIDFrom` / `IsAdmin`
-- Endpoints: `GET /api/me`, `PATCH /api/me` (display_name only), `DELETE /api/me` (Supabase admin DELETE → DB cascade)
-- RBAC0 — `roles` + `user_roles` only; no `permissions` table yet (deferred to RBAC1)
-
-Phase 2 (per-user data model, `/api` vs `/admin` route split, companies public/operational split, `job_feed`→`jobs` rename) and Phase 3 (frontend admin UI, `/me` integration, role-gated nav) are **shipped**.
+- Tables: `users`, `roles`, `user_roles`, `admin_audit_log`. RBAC0 — roles `user` and `admin` seeded by migration `043`; no permissions table.
+- Middleware (`backend/apps/api/middleware/`): `RequireIdentity` (JWT verify + DB-backed enrichment, cache-aside, lazy provisioning, suspended-user check), `RequireRole(role)`, `RateLimit(limiter)` (per-user token bucket, fail-open on Redis outage, 429 + `Retry-After`), `AuditAdminMutation(svc)` (appends 2xx admin mutations to `admin_audit_log`).
+- Route split: `/api/*` for authenticated users, `/admin/*` for admins only.
+- Identity flows via `context.Context`; services pull `userID` via `identity.FromContext` / `UserIDFrom` / `IsAdmin`. Postgres `user_roles` is the source of truth — never JWT custom claims.
+- Per-user overlay (`user_job_state`) for status, notes, dismissals; the global `jobs` feed joins per-user state on every request.
+- Self-service endpoints: `GET /api/me`, `PATCH /api/me` (display_name only), `DELETE /api/me` (Supabase admin REST → DB cascade).
+- Frontend: identity-aware Zustand auth store, role-gated admin nav, 429 toast handling.
 
 ---
 

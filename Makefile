@@ -229,8 +229,6 @@ k8s-build-console: ## Build console image (bakes VITE_ vars from root .env) and 
 		docker build \
 			--build-arg VITE_SUPABASE_URL="$$VITE_SUPABASE_URL" \
 			--build-arg VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY" \
-			--build-arg VITE_APP_DOMAIN="$$VITE_APP_DOMAIN" \
-			--build-arg VITE_ALLOWED_EMAIL="$$VITE_ALLOWED_EMAIL" \
 			--build-arg GIT_SHA=$(GIT_SHA) \
 			-t jobradar-console:local \
 			-f ui/console/Dockerfile ./ui/console && \
@@ -256,18 +254,17 @@ k8s-preflight: ## Verify kubectl context is k3d-jobradar before any deploy
 		echo "WARN: secret jobradar-$$svc-secret missing — pods will fail with CreateContainerConfigError"; \
 	done
 
-k8s-up: k8s-preflight ## Deploy app chart via Helm — reads DEV_TOKEN from backend/.env and values.local.yaml if present
+k8s-up: k8s-preflight ## Deploy app chart via Helm — reads DEV_TOKEN from .env and values.local.yaml if present
 	helm dependency update k8s/helm/jobradar 2>/dev/null || true
-	@DEV_TOKEN=$$(grep -E '^DEV_TOKEN=' backend/.env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]'); \
+	@DEV_TOKEN=$$(grep -E '^DEV_TOKEN=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]'); \
 	LOCAL_VALUES=$$([ -f k8s/helm/jobradar/values.local.yaml ] && echo "-f k8s/helm/jobradar/values.local.yaml" || echo ""); \
 	if [ -n "$$DEV_TOKEN" ]; then \
-		echo "DEV_TOKEN loaded from backend/.env"; \
+		echo "DEV_TOKEN loaded from .env"; \
 		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace $$LOCAL_VALUES --set api.devToken="$$DEV_TOKEN"; \
 	else \
 		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace $$LOCAL_VALUES; \
 	fi
 	kubectl rollout status statefulset/kafka -n $(K8S_NS) --timeout=180s
-	kubectl rollout status statefulset/redis -n $(K8S_NS) --timeout=60s
 	kubectl get pods -n $(K8S_NS)
 
 k8s-nuke: ## Fully wipe namespace + PVCs — use when storage class or StatefulSet spec changed
@@ -279,9 +276,15 @@ k8s-nuke: ## Fully wipe namespace + PVCs — use when storage class or StatefulS
 k8s-down: ## Uninstall app Helm release (secrets and PVCs preserved)
 	helm uninstall jobradar -n $(K8S_NS) --ignore-not-found
 
-k8s-obs-up: ## Deploy observability chart (Prometheus + Grafana + Loki + Jaeger + audit-sync)
+k8s-obs-up: ## Deploy observability chart (Grafana Alloy + audit-sync, ships to Grafana Cloud)
 	helm dependency update k8s/helm/observability
-	helm upgrade --install obs k8s/helm/observability -n $(K8S_NS) --create-namespace
+	@LOCAL_VALUES=$$([ -f k8s/helm/observability/values.local.yaml ] && echo "-f k8s/helm/observability/values.local.yaml" || echo ""); \
+	if [ -z "$$LOCAL_VALUES" ]; then \
+		echo "ERROR: k8s/helm/observability/values.local.yaml not found"; \
+		echo "Copy k8s/helm/observability/values.local.yaml.example and fill in Grafana Cloud credentials"; \
+		exit 1; \
+	fi; \
+	helm upgrade --install obs k8s/helm/observability -n $(K8S_NS) --create-namespace $$LOCAL_VALUES
 
 k8s-obs-down: ## Uninstall observability Helm release
 	helm uninstall obs -n $(K8S_NS) --ignore-not-found

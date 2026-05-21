@@ -129,7 +129,7 @@ func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gor
 		return nil, nil, nil, nil, err
 	}
 
-	rdb, err := redispkg.New(ctx, cfg.Redis.Addr, cfg.Redis.DB)
+	rdb, err := redispkg.New(ctx, cfg.Redis.URL)
 	if err != nil {
 		log.Error("redis connect failed", err)
 		return nil, nil, nil, nil, err

@@ -1,12 +1,6 @@
 dependencies:
-- name: kube-prometheus-stack
-  repository: https://prometheus-community.github.io/helm-charts
-  version: 84.0.1
-- name: loki-stack
+- name: alloy
   repository: https://grafana.github.io/helm-charts
-  version: 2.10.3
-- name: jaeger
-  repository: https://jaegertracing.github.io/helm-charts
-  version: 4.7.0
-digest: sha256:f444093531a7d7b1b6e7f470329603ee6009b2709997ba1ccfa796d0cae47a2c
-generated: "2026-04-24T09:17:56.641385-07:00"
+  version: 0.10.1
+digest: sha256:6e2f2f838531ac5f232d133cce53d73b02f8abbd327e149ae76e2c704a069813
+generated: "2026-05-20T22:11:52.184079-07:00"
