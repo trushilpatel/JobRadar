@@ -1,8 +1,8 @@
 # Distributed Crawler & Infra Migration Plan
 
-**Status:** Scope approved · implementation pending
+**Status:** Phase 1+2 complete · Phase 3 next
 **Branch:** `claude/design-distributed-crawler-srGHO`
-**Last updated:** 2026-05-20
+**Last updated:** 2026-05-21
 
 ---
 
@@ -78,25 +78,24 @@ service Crawler {
 
 Ordered by cutover risk. Each phase ships independently, each rollback is a config flip + redeploy. Old infra stays running for one week post-cutover before decommission.
 
-### Phase 1 — Tracing: Jaeger → Honeycomb
-
-**Cutover style:** Exporter swap · **Downtime:** none · **Rollback:** flip env, restart
-
-- Deploy OTel Collector (one Deployment) with dual exporter (Jaeger + Honeycomb) for one day.
-- Tail-based sampling at the collector: keep 100% of errors + 1–5% of successes.
-- Cut Jaeger exporter from collector config; remove Jaeger from Helm.
-- Code: `backend/common/tracing/` reads `OTEL_EXPORTER_OTLP_ENDPOINT` (env-driven; no code change expected).
-- New env: `HONEYCOMB_API_KEY`, `OTEL_TRACES_SAMPLER`.
-
-### Phase 2 — Observability: self-hosted Prom/Loki/Grafana → Grafana Cloud
+### Phase 1+2 — Observability: self-hosted stack → Grafana Cloud (all three pillars) ✅ DONE
 
 **Cutover style:** Agent swap · **Downtime:** none · **Rollback:** keep self-hosted stack idle for 1 week
 
-- Create Grafana Cloud stack; generate Alloy access token.
-- Deploy Grafana Alloy DaemonSet (scrapes `/metrics`, tails container logs).
-- Migrate dashboards (JSON export → import) and alert rules.
-- Decommission self-hosted Prometheus, Loki, Grafana from Helm.
-- Quotas comfortable: <2 GB/mo logs vs. 50 GB free.
+**Decision:** Single vendor for all three pillars — metrics (Mimir), logs (Loki), traces (Tempo). Honeycomb skipped; Tempo's trace UI is sufficient for our scale. Re-evaluate if p99 trace debugging becomes painful.
+
+- Create Grafana Cloud stack; generate Alloy access tokens (Prom, Loki, OTLP).
+- Deploy Grafana Alloy DaemonSet (scrapes `/metrics`, tails container logs, receives OTLP traces, forwards all three).
+- Point app OTLP exporter at in-cluster Alloy (`alloy.observability.svc:4317`) instead of Jaeger.
+- Migrate 9 custom dashboards from `k8s/helm/observability/dashboards/` (JSON export → import).
+- Migrate Prometheus alert rules from `templates/prometheus-rules.yaml` to Grafana Cloud Alerting.
+- Update `supabaseAuditSync.lokiUrl` to Grafana Cloud Loki endpoint + add basic_auth header.
+- After 1 week of clean operation: `helm uninstall observability` (removes Prometheus, Grafana, Alertmanager, Loki, Jaeger).
+- **Resources freed:** 15 Gi PVC storage, ~1.3 GB RAM.
+- Quotas comfortable: <2 GB/mo logs vs 50 GB free; ~500–800 metric series vs 10K free; <1 GB/mo traces vs 50 GB free.
+- Retention improves: 24h → 13d metrics, 24h → 14d logs, in-memory → 14d traces.
+
+**New env:** `GRAFANA_CLOUD_PROM_URL`, `GRAFANA_CLOUD_PROM_TOKEN`, `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_TOKEN`, `OTEL_EXPORTER_OTLP_ENDPOINT` (→ Alloy), `OTEL_EXPORTER_OTLP_AUTH`.
 
 ### Phase 3 — Redis: in-cluster → Upstash (Pay-as-you-go)
 
@@ -195,16 +194,14 @@ T+7d   Decommission Supabase data tables (auth schema stays).
 ## Cross-cutting
 
 ### Order rationale
-1. Honeycomb — pure exporter, no data, fastest rollback.
-2. Grafana — destination change for agents; observability data is non-critical.
-3. Upstash Redis — connection-string swap; cache rewarms naturally; alerting from Phase 2 is in place to watch command budget.
-4. NATS — dual-bus = zero-downtime; one new abstraction at a time.
-5. Neon — only phase requiring a maintenance window; do last when everything else is settled.
+1. Grafana Cloud (all three pillars) — destination change for agents; observability data is non-critical and rolls back via env flip. Establishes alerting before later, riskier phases.
+2. Upstash Redis — connection-string swap; cache rewarms naturally; Grafana Cloud alert on command budget already in place.
+3. NATS — dual-bus = zero-downtime; one new abstraction at a time.
+4. Neon — only phase requiring a maintenance window; do last when everything else is settled.
 
 ### Secrets
-Seven new secrets accumulated. One per provider, rotated independently:
-- `HONEYCOMB_API_KEY`
-- `GRAFANA_CLOUD_PROM_TOKEN`, `GRAFANA_CLOUD_LOKI_TOKEN`
+Six new secrets accumulated. One per provider, rotated independently:
+- `GRAFANA_CLOUD_PROM_TOKEN`, `GRAFANA_CLOUD_LOKI_TOKEN`, `OTEL_EXPORTER_OTLP_AUTH`
 - `UPSTASH_REDIS_URL`
 - `NATS_CREDS_FILE`
 - `NEON_DATABASE_URL_POOLED`, `NEON_DATABASE_URL_DIRECT`
