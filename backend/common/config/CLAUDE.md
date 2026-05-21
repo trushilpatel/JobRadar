@@ -1,6 +1,6 @@
 # config/ — Application configuration
 
-`config.Load()` reads `backend/.env` (via godotenv) then falls back to environment variables. Called once in each `main.go` before any other setup. Full variable reference: [`backend/.env.example`](../../backend/.env.example).
+`config.Load()` tries `.env` in the current working directory first, then `../.env` (repo root), then falls back to environment variables. Called once in each `main.go` before any other setup. All env vars live in a single root `.env`. Full variable reference: [`.env.example`](../../../.env.example).
 
 ## Non-obvious config
 

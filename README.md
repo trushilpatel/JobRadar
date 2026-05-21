@@ -224,19 +224,14 @@ make local-down   # stop
 
 ## Configuration
 
-Two env files:
-
-- **`.env`** (repo root) — Docker Compose + infra vars; also symlinked as `ui/console/.env` for the Vite dev server
-- **`backend/.env`** — backend service config (DB, Kafka, Redis, LLM, Auth)
-
-Copy from examples:
+One env file at the repo root covers everything — backend services, Vite dev server, Docker Compose, and infra:
 
 ```bash
 cp .env.example .env
-cp backend/.env.example backend/.env
+# edit .env with your Supabase project ref, API keys, etc.
 ```
 
-### Key variables (`backend/.env`)
+### Key variables
 
 | Variable                                                                | Description                                                                                                                                |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |

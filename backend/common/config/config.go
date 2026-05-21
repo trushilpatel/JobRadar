@@ -202,7 +202,14 @@ func ParseLLMSlots(raw string) ([]LLMSlotConfig, error) {
 }
 
 func Load() *Config {
-	if err := godotenv.Load(); err != nil {
+	loaded := false
+	for _, f := range []string{".env", "../.env"} {
+		if err := godotenv.Load(f); err == nil {
+			loaded = true
+			break
+		}
+	}
+	if !loaded {
 		fmt.Fprintf(os.Stderr, "config: no .env file found, falling back to environment variables\n")
 	}
 
