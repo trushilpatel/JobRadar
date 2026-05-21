@@ -37,6 +37,13 @@ type MultiUserConfig struct {
 	RateLimitAdminRPM      int
 	CacheTTLUserSeconds    int
 	CacheTTLCompanySeconds int
+	// IdentityCacheLocalTTLSeconds is the upper bound on how long the API
+	// process keeps an identity bundle (or any other key) in its in-process
+	// LRU before re-reading Redis. Set to 0 to disable the local layer.
+	IdentityCacheLocalTTLSeconds int
+	// IdentityCacheLocalMaxEntries caps the number of keys the local layer
+	// holds. Tune up if the API serves many distinct users per minute.
+	IdentityCacheLocalMaxEntries int
 }
 
 // AuthConfig holds Supabase auth verification settings. Exactly one of
@@ -310,13 +317,15 @@ func Load() *Config {
 			DevToken:     os.Getenv("DEV_TOKEN"),
 		},
 		MultiUser: MultiUserConfig{
-			SupabaseURL:            getEnv("SUPABASE_URL", ""),
-			SupabaseServiceRoleKey: getEnv("SUPABASE_SERVICE_ROLE_KEY", ""),
-			RateLimitReadRPM:       getEnvInt("RATE_LIMIT_READ_RPM", 30),
-			RateLimitWriteRPM:      getEnvInt("RATE_LIMIT_WRITE_RPM", 20),
-			RateLimitAdminRPM:      getEnvInt("RATE_LIMIT_ADMIN_RPM", 120),
-			CacheTTLUserSeconds:    getEnvInt("CACHE_TTL_USER_SECONDS", 60),
-			CacheTTLCompanySeconds: getEnvInt("CACHE_TTL_COMPANY_SECONDS", 60),
+			SupabaseURL:                  getEnv("SUPABASE_URL", ""),
+			SupabaseServiceRoleKey:       getEnv("SUPABASE_SERVICE_ROLE_KEY", ""),
+			RateLimitReadRPM:             getEnvInt("RATE_LIMIT_READ_RPM", 30),
+			RateLimitWriteRPM:            getEnvInt("RATE_LIMIT_WRITE_RPM", 20),
+			RateLimitAdminRPM:            getEnvInt("RATE_LIMIT_ADMIN_RPM", 120),
+			CacheTTLUserSeconds:          getEnvInt("CACHE_TTL_USER_SECONDS", 60),
+			CacheTTLCompanySeconds:       getEnvInt("CACHE_TTL_COMPANY_SECONDS", 60),
+			IdentityCacheLocalTTLSeconds: getEnvInt("IDENTITY_CACHE_LOCAL_TTL_SECONDS", 30),
+			IdentityCacheLocalMaxEntries: getEnvInt("IDENTITY_CACHE_LOCAL_MAX_ENTRIES", 10000),
 		},
 	}
 }

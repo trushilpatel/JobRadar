@@ -314,7 +314,9 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 	}
 	if cfg.MultiUser.RateLimitReadRPM != 30 || cfg.MultiUser.RateLimitWriteRPM != 20 ||
 		cfg.MultiUser.RateLimitAdminRPM != 120 || cfg.MultiUser.CacheTTLUserSeconds != 60 ||
-		cfg.MultiUser.CacheTTLCompanySeconds != 60 {
+		cfg.MultiUser.CacheTTLCompanySeconds != 60 ||
+		cfg.MultiUser.IdentityCacheLocalTTLSeconds != 30 ||
+		cfg.MultiUser.IdentityCacheLocalMaxEntries != 10000 {
 		t.Errorf("MultiUser defaults wrong: %+v", cfg.MultiUser)
 	}
 	if cfg.Filter.Slots != nil || cfg.Enricher.Slots != nil {
@@ -377,6 +379,8 @@ func TestLoad_OverridesApplied(t *testing.T) {
 	t.Setenv("RATE_LIMIT_ADMIN_RPM", "33")
 	t.Setenv("CACHE_TTL_USER_SECONDS", "61")
 	t.Setenv("CACHE_TTL_COMPANY_SECONDS", "62")
+	t.Setenv("IDENTITY_CACHE_LOCAL_TTL_SECONDS", "11")
+	t.Setenv("IDENTITY_CACHE_LOCAL_MAX_ENTRIES", "1234")
 
 	cfg := config.Load()
 
@@ -424,7 +428,8 @@ func TestLoad_OverridesApplied(t *testing.T) {
 		t.Errorf("API overrides wrong: %+v", cfg.API)
 	}
 	if cfg.MultiUser.RateLimitReadRPM != 31 || cfg.MultiUser.RateLimitWriteRPM != 32 ||
-		cfg.MultiUser.RateLimitAdminRPM != 33 || cfg.MultiUser.CacheTTLUserSeconds != 61 || cfg.MultiUser.CacheTTLCompanySeconds != 62 {
+		cfg.MultiUser.RateLimitAdminRPM != 33 || cfg.MultiUser.CacheTTLUserSeconds != 61 || cfg.MultiUser.CacheTTLCompanySeconds != 62 ||
+		cfg.MultiUser.IdentityCacheLocalTTLSeconds != 11 || cfg.MultiUser.IdentityCacheLocalMaxEntries != 1234 {
 		t.Errorf("MultiUser overrides wrong: %+v", cfg.MultiUser)
 	}
 }
