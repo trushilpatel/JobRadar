@@ -160,20 +160,20 @@ Latest migration: [`044_phase2_multiuser_data_model.sql`](../backend/migrations/
 
 ## Environment Variables
 
-| Var                         | Purpose                                                         |
-| --------------------------- | --------------------------------------------------------------- |
-| `DATABASE_URL`              | Postgres connection string                                      |
-| `KAFKA_BROKERS`             | Kafka broker addresses                                          |
-| `REDIS_ADDR`                | Redis address                                                   |
-| `SUPABASE_URL`              | Supabase project URL (used by `backend/platform/supabaseadmin`) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key for admin DELETE user calls           |
-| `ADMIN_EMAILS`              | Comma-separated emails auto-granted `admin` role on first login |
-| `RATE_LIMIT_READ_RPM`       | Per-user rate limit for GET/HEAD/OPTIONS (default 30)           |
-| `RATE_LIMIT_WRITE_RPM`      | Per-user rate limit for mutating methods (default 20)           |
-| `RATE_LIMIT_ADMIN_RPM`      | Per-user rate limit for admin scope (default 120)               |
-| `CACHE_TTL_USER_SECONDS`    | TTL for user identity cache decorator (default 60)              |
-| `SCAN_INTERVAL_MINUTES`     | Global scan interval in minutes (default 1440 = 24h)            |
-| `DEV_TOKEN`                 | Dev bypass token — accepted as `X-Dev-Token` for local testing  |
+| Var                         | Purpose                                                          |
+| --------------------------- | ---------------------------------------------------------------- |
+| `DATABASE_URL`              | Postgres connection string                                       |
+| `KAFKA_BROKERS`             | Kafka broker addresses                                           |
+| `REDIS_URL`                 | Redis connection URL (`rediss://user:pass@host:port/db` for TLS) |
+| `SUPABASE_URL`              | Supabase project URL (used by `backend/platform/supabaseadmin`)  |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key for admin DELETE user calls            |
+| `ADMIN_EMAILS`              | Comma-separated emails auto-granted `admin` role on first login  |
+| `RATE_LIMIT_READ_RPM`       | Per-user rate limit for GET/HEAD/OPTIONS (default 30)            |
+| `RATE_LIMIT_WRITE_RPM`      | Per-user rate limit for mutating methods (default 20)            |
+| `RATE_LIMIT_ADMIN_RPM`      | Per-user rate limit for admin scope (default 120)                |
+| `CACHE_TTL_USER_SECONDS`    | TTL for user identity cache decorator (default 60)               |
+| `SCAN_INTERVAL_MINUTES`     | Global scan interval in minutes (default 1440 = 24h)             |
+| `DEV_TOKEN`                 | Dev bypass token — accepted as `X-Dev-Token` for local testing   |
 
 ---
 

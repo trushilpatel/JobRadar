@@ -17,6 +17,7 @@ graph TB
   subgraph Cloud
     Supa[Supabase\nAuth + PostgreSQL]
     Gemini[Google Gemini\nLLM API]
+    Upstash[Upstash Redis\nManaged · TLS]
   end
 
   subgraph K8S["Kubernetes — jobradar-local namespace (Helm)"]
@@ -36,7 +37,6 @@ graph TB
 
     subgraph Infra["Infrastructure  (helm: jobradar)"]
       Kafka[Kafka\n:9092 ClusterIP]
-      Redis[Redis\n:6379 ClusterIP]
     end
 
     subgraph Obs["Observability  (helm: obs)"]
@@ -61,12 +61,12 @@ graph TB
   Crawler -->|PUBLISH raw jobs| Kafka
   Filter -->|CONSUME| Kafka
   Filter -->|score titles| Gemini
-  Filter -->|rate limit| Redis
+  Filter -->|rate limit| Upstash
   Filter -->|PUBLISH relevant| Kafka
   Filter -->|mark irrelevant| Supa
   Analyzer -->|CONSUME| Kafka
   Analyzer -->|extract structured data| Gemini
-  Analyzer -->|rate limit| Redis
+  Analyzer -->|rate limit| Upstash
   Analyzer -->|INSERT jobs + analytics| Supa
 
   Prometheus -->|datasource| Grafana
@@ -118,40 +118,40 @@ flowchart LR
 
 ## Database Tables
 
-| Table | Written by | Read by | Purpose |
-|---|---|---|---|
-| `companies` | API (admin) | Scheduler, Crawler | Tracked company catalog (operational columns dropped; scan config in `company_scan_settings`) |
-| `company_scan_settings` | API (admin) | Scheduler, Crawler | Per-company scan config; companies without a row are skipped |
-| `company_scan_queue` | Scheduler, API | Crawler | Durable work queue — one row per pending scan |
-| `company_scan_log` | Crawler | API / Dashboard | Per-run scan summary |
-| `job_pipeline_ledger` | Crawler, Filter, Analyzer | Crawler | Dedup + pipeline state tracking |
-| `jobs` | Analyzer | API | Global job rows (renamed from `job_feed`); per-user state in `user_job_state` |
-| `user_job_state` | API | API | Per-user overlay: status, notes, saved_at, applied_at, dismissal reason/note |
-| `job_analytics` | Analyzer | Insights | Append-only enriched snapshot; never deleted |
-| `job_application_tracker` | API | API | Application stage history per job; `user_id NOT NULL` |
-| `users` | API (`RequireIdentity` / `service/user`) | API | Registered users — id, email (citext), display_name, status |
-| `roles` | Migration `043` (seeded) | API | RBAC0 role catalog — `user`, `admin` |
-| `user_roles` | API (`service/role`, `RequireIdentity` lazy provisioning) | API | User↔role join (composite PK) |
-| `admin_audit_log` | `AuditAdminMutation` middleware (`service/audit`) | API | Append-only admin audit trail |
+| Table                     | Written by                                                | Read by            | Purpose                                                                                       |
+| ------------------------- | --------------------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------- |
+| `companies`               | API (admin)                                               | Scheduler, Crawler | Tracked company catalog (operational columns dropped; scan config in `company_scan_settings`) |
+| `company_scan_settings`   | API (admin)                                               | Scheduler, Crawler | Per-company scan config; companies without a row are skipped                                  |
+| `company_scan_queue`      | Scheduler, API                                            | Crawler            | Durable work queue — one row per pending scan                                                 |
+| `company_scan_log`        | Crawler                                                   | API / Dashboard    | Per-run scan summary                                                                          |
+| `job_pipeline_ledger`     | Crawler, Filter, Analyzer                                 | Crawler            | Dedup + pipeline state tracking                                                               |
+| `jobs`                    | Analyzer                                                  | API                | Global job rows (renamed from `job_feed`); per-user state in `user_job_state`                 |
+| `user_job_state`          | API                                                       | API                | Per-user overlay: status, notes, saved_at, applied_at, dismissal reason/note                  |
+| `job_analytics`           | Analyzer                                                  | Insights           | Append-only enriched snapshot; never deleted                                                  |
+| `job_application_tracker` | API                                                       | API                | Application stage history per job; `user_id NOT NULL`                                         |
+| `users`                   | API (`RequireIdentity` / `service/user`)                  | API                | Registered users — id, email (citext), display_name, status                                   |
+| `roles`                   | Migration `043` (seeded)                                  | API                | RBAC0 role catalog — `user`, `admin`                                                          |
+| `user_roles`              | API (`service/role`, `RequireIdentity` lazy provisioning) | API                | User↔role join (composite PK)                                                                 |
+| `admin_audit_log`         | `AuditAdminMutation` middleware (`service/audit`)         | API                | Append-only admin audit trail                                                                 |
 
 ---
 
 ## Component Reference
 
-| Component | Binary | Internal port | External | Helm chart | Memory |
-|---|---|---|---|---|---|
-| API Server | `/app/api` | `:8080` / `:9100` metrics | NodePort **:30080** | jobradar | 256 MB |
-| Scheduler | `/app/scheduler` | `:9101` metrics | — | jobradar | 128 MB |
-| Crawler | `/app/crawler` | `:9101` metrics | — | jobradar | 3 GB |
-| Filter | `/app/filter` | `:9101` metrics | — | jobradar | 256 MB |
-| Analyzer | `/app/enricher` | `:9101` metrics | — | jobradar | 256 MB |
-| Migration runner | `/app/migrate` | — | — | jobradar | — |
-| Frontend (Nginx) | — | `:8080` | NodePort **:30300** | jobradar | 64 MB |
-| Kafka | — | `:9092` | — | jobradar | 1 GB |
-| Redis | — | `:6379` | — | jobradar | 256 MB |
-| Grafana | — | `:3000` | NodePort **:30001** | obs | — |
-| Prometheus | — | `:9090` | port-forward | obs | — |
-| Loki | — | `:3100` | — | obs | — |
-| Jaeger | — | `:16686` | port-forward | obs | — |
-| supabase-audit-sync | — | — | — | obs | 64 MB |
-| Caddy | — | `:80/:443` | Public (prod) | — | — |
+| Component           | Binary           | Internal port             | External            | Helm chart | Memory |
+| ------------------- | ---------------- | ------------------------- | ------------------- | ---------- | ------ |
+| API Server          | `/app/api`       | `:8080` / `:9100` metrics | NodePort **:30080** | jobradar   | 256 MB |
+| Scheduler           | `/app/scheduler` | `:9101` metrics           | —                   | jobradar   | 128 MB |
+| Crawler             | `/app/crawler`   | `:9101` metrics           | —                   | jobradar   | 3 GB   |
+| Filter              | `/app/filter`    | `:9101` metrics           | —                   | jobradar   | 256 MB |
+| Analyzer            | `/app/enricher`  | `:9101` metrics           | —                   | jobradar   | 256 MB |
+| Migration runner    | `/app/migrate`   | —                         | —                   | jobradar   | —      |
+| Frontend (Nginx)    | —                | `:8080`                   | NodePort **:30300** | jobradar   | 64 MB  |
+| Kafka               | —                | `:9092`                   | —                   | jobradar   | 1 GB   |
+| Upstash Redis       | —                | `:6379` (TLS)             | Managed (external)  | —          | —      |
+| Grafana             | —                | `:3000`                   | NodePort **:30001** | obs        | —      |
+| Prometheus          | —                | `:9090`                   | port-forward        | obs        | —      |
+| Loki                | —                | `:3100`                   | —                   | obs        | —      |
+| Jaeger              | —                | `:16686`                  | port-forward        | obs        | —      |
+| supabase-audit-sync | —                | —                         | —                   | obs        | 64 MB  |
+| Caddy               | —                | `:80/:443`                | Public (prod)       | —          | —      |

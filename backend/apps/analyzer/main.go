@@ -70,7 +70,7 @@ func main() {
 	}
 	defer producer.Close()
 
-	rdb, err := redispkg.New(ctx, cfg.Redis.Addr, cfg.Redis.DB)
+	rdb, err := redispkg.New(ctx, cfg.Redis.URL)
 	if err != nil {
 		log.Error("redis connect failed", err)
 		os.Exit(1)

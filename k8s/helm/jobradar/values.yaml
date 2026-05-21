@@ -32,8 +32,6 @@ api:
   jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
-  redisAddr: "redis:6379"
-  redisDb: "0"
   rateLimitReadRpm: "300"
   rateLimitWriteRpm: "60"
   rateLimitAdminRpm: "300"
@@ -75,8 +73,6 @@ crawler:
 
 filter:
   kafkaBrokers: "kafka:9092"
-  redisAddr: "redis:6379"
-  redisDb: "0"
   batchSize: "50"
   flushTimeoutSeconds: "30"
   llmCallIntervalSeconds: "5"
@@ -93,8 +89,6 @@ filter:
 
 enricher:
   kafkaBrokers: "kafka:9092"
-  redisAddr: "redis:6379"
-  redisDb: "0"
   fetchConcurrency: "15"
   llmBatchSize: "5"
   flushTimeoutSeconds: "120"
@@ -119,7 +113,3 @@ kafka:
   storageClass: local-path
   retentionMs: "604800000"   # 7 days in ms
   memory: "400M"             # Redpanda heap; explicit cap keeps RSS ~100Mi at idle
-
-redis:
-  storage: 1Gi
-  storageClass: local-path
