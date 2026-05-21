@@ -169,8 +169,7 @@ type ObservabilityConfig struct {
 }
 
 type RedisConfig struct {
-	Addr string
-	DB   int
+	URL string
 }
 
 type CooldownConfig struct {
@@ -241,8 +240,7 @@ func Load() *Config {
 			Password: getEnv("KAFKA_PASSWORD", ""),
 		},
 		Redis: RedisConfig{
-			Addr: getEnv("REDIS_ADDR", "localhost:6379"),
-			DB:   getEnvInt("REDIS_DB", 0),
+			URL: getEnv("REDIS_URL", "redis://localhost:6379/0"),
 		},
 		Cooldown: CooldownConfig{
 			BaseSeconds: getEnvInt("LLM_COOLDOWN_BASE_SECONDS", 60),

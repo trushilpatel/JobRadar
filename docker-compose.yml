@@ -70,24 +70,6 @@ services:
       --replicas 1
     restart: "no"
 
-  redis:
-    image: redis:7-alpine
-    container_name: jobradar_redis
-    profiles: [infra]
-    user: "999:1000"
-    ports:
-      - "127.0.0.1:6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-
   # ── One-shot migration ────────────────────────────────────────────────────────
 
   migrate:
@@ -190,7 +172,6 @@ services:
     environment:
       <<: *app-env
       METRICS_ADDR: ":9103"
-      REDIS_ADDR: redis:6379
       LLM_SLOTS_CONFIG: /app/config/llm-slots.yaml
     volumes:
       - ./k8s/helm/jobradar/files:/app/config:ro
@@ -199,8 +180,6 @@ services:
     command: ["/app/filter"]
     depends_on:
       <<: *app-depends
-      redis:
-        condition: service_healthy
     restart: unless-stopped
 
   enricher:
@@ -215,7 +194,6 @@ services:
     environment:
       <<: *app-env
       METRICS_ADDR: ":9104"
-      REDIS_ADDR: redis:6379
       LLM_SLOTS_CONFIG: /app/config/llm-slots.yaml
     volumes:
       - ./k8s/helm/jobradar/files:/app/config:ro
@@ -224,8 +202,6 @@ services:
     command: ["/app/enricher"]
     depends_on:
       <<: *app-depends
-      redis:
-        condition: service_healthy
     restart: unless-stopped
 
   # ── Google Careers Scraper ─────────────────────────────────────────────────────

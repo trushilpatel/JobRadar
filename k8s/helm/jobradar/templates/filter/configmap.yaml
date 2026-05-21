@@ -8,8 +8,6 @@ metadata:
     component: filter
 data:
   KAFKA_BROKERS: {{ .Values.filter.kafkaBrokers | quote }}
-  REDIS_ADDR: {{ .Values.filter.redisAddr | quote }}
-  REDIS_DB: {{ .Values.filter.redisDb | quote }}
   FILTER_BATCH_SIZE: {{ .Values.filter.batchSize | quote }}
   FILTER_FLUSH_TIMEOUT_SECONDS: {{ .Values.filter.flushTimeoutSeconds | quote }}
   FILTER_LLM_CALL_INTERVAL_SECONDS: {{ .Values.filter.llmCallIntervalSeconds | quote }}

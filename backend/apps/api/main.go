@@ -143,7 +143,7 @@ func buildMultiUserPlatform(cfg *config.Config, log logger.Logger) (cache.Cache,
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	rdb, err := commonredis.New(ctx, cfg.Redis.Addr, cfg.Redis.DB)
+	rdb, err := commonredis.New(ctx, cfg.Redis.URL)
 	if err != nil {
 		log.Warn("redis unavailable; using in-memory cache + limiter", logger.Err(err))
 		return cache.NewMemoryCache(), ratelimit.NewMemoryLimiter(20, 0.5)

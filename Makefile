@@ -267,7 +267,6 @@ k8s-up: k8s-preflight ## Deploy app chart via Helm — reads DEV_TOKEN from back
 		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace $$LOCAL_VALUES; \
 	fi
 	kubectl rollout status statefulset/kafka -n $(K8S_NS) --timeout=180s
-	kubectl rollout status statefulset/redis -n $(K8S_NS) --timeout=60s
 	kubectl get pods -n $(K8S_NS)
 
 k8s-nuke: ## Fully wipe namespace + PVCs — use when storage class or StatefulSet spec changed

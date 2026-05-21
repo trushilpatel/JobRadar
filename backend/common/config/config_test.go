@@ -231,7 +231,7 @@ func clearConfigEnv(t *testing.T) {
 		"LLM_SLOTS_CONFIG", "FILTER_LLM_SLOTS", "ENRICHER_LLM_SLOTS",
 		"DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_SSLMODE",
 		"KAFKA_BROKERS", "KAFKA_USER", "KAFKA_PASSWORD",
-		"REDIS_ADDR", "REDIS_DB",
+		"REDIS_URL",
 		"LLM_COOLDOWN_BASE_SECONDS", "LLM_COOLDOWN_MAX_SECONDS", "LLM_COOLDOWN_JITTER",
 		"LLM_PROVIDER", "TARGET_ROLES", "YEARS_EXP",
 		"FILTER_BATCH_SIZE", "FILTER_FLUSH_TIMEOUT_SECONDS", "FILTER_LLM_CALL_INTERVAL_SECONDS",
@@ -275,7 +275,7 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 	if cfg.Kafka.Brokers != "localhost:9092" || cfg.Kafka.User != "" || cfg.Kafka.Password != "" {
 		t.Errorf("Kafka defaults wrong: %+v", cfg.Kafka)
 	}
-	if cfg.Redis.Addr != "localhost:6379" || cfg.Redis.DB != 0 {
+	if cfg.Redis.URL != "redis://localhost:6379/0" {
 		t.Errorf("Redis defaults wrong: %+v", cfg.Redis)
 	}
 	if cfg.Cooldown.BaseSeconds != 60 || cfg.Cooldown.MaxSeconds != 3600 || cfg.Cooldown.Jitter != 0.2 {
@@ -333,8 +333,7 @@ func TestLoad_OverridesApplied(t *testing.T) {
 	t.Setenv("KAFKA_BROKERS", "kafka:1")
 	t.Setenv("KAFKA_USER", "kuser")
 	t.Setenv("KAFKA_PASSWORD", "kpw")
-	t.Setenv("REDIS_ADDR", "redis:6379")
-	t.Setenv("REDIS_DB", "5")
+	t.Setenv("REDIS_URL", "rediss://default:secret@redis.example:6380/5")
 	t.Setenv("LLM_COOLDOWN_BASE_SECONDS", "10")
 	t.Setenv("LLM_COOLDOWN_MAX_SECONDS", "100")
 	t.Setenv("LLM_COOLDOWN_JITTER", "0.5")
@@ -387,8 +386,8 @@ func TestLoad_OverridesApplied(t *testing.T) {
 	if cfg.Kafka.User != "kuser" || cfg.Kafka.Password != "kpw" {
 		t.Errorf("Kafka overrides wrong: %+v", cfg.Kafka)
 	}
-	if cfg.Redis.DB != 5 {
-		t.Errorf("REDIS_DB override wrong: %d", cfg.Redis.DB)
+	if cfg.Redis.URL != "rediss://default:secret@redis.example:6380/5" {
+		t.Errorf("REDIS_URL override wrong: %q", cfg.Redis.URL)
 	}
 	if cfg.Cooldown.Jitter != 0.5 || cfg.Cooldown.BaseSeconds != 10 || cfg.Cooldown.MaxSeconds != 100 {
 		t.Errorf("Cooldown overrides wrong: %+v", cfg.Cooldown)
@@ -432,15 +431,11 @@ func TestLoad_OverridesApplied(t *testing.T) {
 
 func TestLoad_InvalidIntFallsBackToDefault(t *testing.T) {
 	clearConfigEnv(t)
-	t.Setenv("REDIS_DB", "not-an-int")
 	t.Setenv("FILTER_BATCH_SIZE", "abc")
 	t.Setenv("LLM_COOLDOWN_JITTER", "not-a-float")
 
 	cfg := config.Load()
 
-	if cfg.Redis.DB != 0 {
-		t.Errorf("invalid REDIS_DB should fall back to default 0, got %d", cfg.Redis.DB)
-	}
 	if cfg.Filter.BatchSize != 50 {
 		t.Errorf("invalid FILTER_BATCH_SIZE should fall back to default 50, got %d", cfg.Filter.BatchSize)
 	}
