@@ -12,7 +12,7 @@ company_scan_scheduler → company_scan_queue (DB) → job_listing_crawler → j
 
 | Path                              | What lives there                                                                                       |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `k8s/helm/jobradar/`              | Helm chart for all app services (api, console, workers, kafka, redis, migrate)                         |
+| `k8s/helm/jobradar/`              | Helm chart for all app services (api, console, workers, kafka, migrate). Redis is external (Upstash)   |
 | `k8s/helm/observability/`         | Helm chart for observability stack (Prometheus, Grafana, Loki, Jaeger, audit-sync)                     |
 | `backend/apps/crawler/`           | Crawler binary + engine + ATS adapters (Greenhouse, Lever, Ashby, Google, etc.)                        |
 | `backend/apps/scheduler/`         | Scheduler binary — enqueues companies due for a scan                                                   |
@@ -158,9 +158,11 @@ During implementation:
 ## Git commit policy
 
 - Never commit directly to `main` — `.husky/pre-commit` blocks it; always work on a feature branch
+- **Never push to `main` directly** — every change lands via pull request, including hotfixes, doc-only changes, and small config tweaks. Never run `git push origin <branch>:main`, `git push origin HEAD:main`, or any equivalent that fast-forwards `main` from a feature branch. The PR is the only path in
 - **Never use `git commit --no-verify`** (or any other flag that skips hooks: `--no-gpg-sign`, `core.hooksPath=/dev/null`, etc.) under any circumstances, including "small" fixes, doc-only changes, or hotfixes
 - If the pre-commit hook fails, fix the underlying issue (formatter, lint error, failing test) and recommit — bypassing is never the answer
 - The hook is the floor, not a suggestion: formatting, Go lint, Go unit tests, frontend lint, TypeScript check, and the main-branch guard must all pass before a commit is accepted
+- **No AI attribution in commits or PRs** — never add `Co-Authored-By: Claude` (or any other AI marker, `🤖 Generated with Claude Code` etc.) to commit messages or PR descriptions. The author and `Co-Authored-By` lines should only reflect the human contributors. This rule holds even when the user asks "commit this"
 
 ## Backend code standards
 
