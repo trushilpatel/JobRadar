@@ -8,12 +8,6 @@ graph TB
     U[User]
   end
 
-  subgraph GitHub
-    GHA[GitHub Actions]
-    GHCR[Container Registry\nGHCR]
-    GHA -->|push image| GHCR
-  end
-
   subgraph Cloud
     Supa[Supabase\nAuth + PostgreSQL]
     Gemini[Google Gemini\nLLM API]
@@ -73,9 +67,6 @@ graph TB
   Loki -->|datasource| Grafana
   API & Crawler & Filter & Analyzer -.->|OTel traces| Jaeger
   API & Scheduler & Crawler & Filter & Analyzer -.->|/metrics :910x| Prometheus
-
-  GHA -->|SSH + helm upgrade| K8S
-  GHCR -->|k3d image import| K8S
 ```
 
 ---
@@ -103,16 +94,14 @@ flowchart LR
 
 ---
 
-## CI/CD
+## CI
 
-```mermaid
-flowchart LR
-  A[Push to main] --> B[Lint]
-  B --> C[Build jobradar_backend image]
-  C --> D[Push GHCR :sha]
-  D --> E[SSH into VPS]
-  E --> F[helm upgrade jobradar]
-```
+GitHub Actions enforces lint, type-check, unit tests, and (nightly + on infra PRs) integration tests against the branch. Image builds and deploys are run manually from the developer machine via `make k8s-build` / `make k8s-up`.
+
+| Workflow                            | Trigger                      | Purpose                                                             |
+| ----------------------------------- | ---------------------------- | ------------------------------------------------------------------- |
+| `.github/workflows/lint.yml`        | PR to `main`                 | golangci-lint (diff against `main`), ESLint, TypeScript check       |
+| `.github/workflows/integration.yml` | Nightly + PRs touching infra | `//go:build integration` tier — Postgres/Kafka/Redis testcontainers |
 
 ---
 
