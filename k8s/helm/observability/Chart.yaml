@@ -1,15 +1,9 @@
 apiVersion: v2
 name: observability
-description: JobRadar observability stack — Prometheus, Grafana, Loki, Jaeger
+description: JobRadar observability — Grafana Alloy collector shipping to Grafana Cloud
 type: application
-version: 0.1.0
+version: 0.2.0
 dependencies:
-  - name: kube-prometheus-stack
-    version: "84.0.1"
-    repository: https://prometheus-community.github.io/helm-charts
-  - name: loki-stack
-    version: "2.10.3"
+  - name: alloy
+    version: "0.10.1"
     repository: https://grafana.github.io/helm-charts
-  - name: jaeger
-    version: "4.7.0"
-    repository: https://jaegertracing.github.io/helm-charts

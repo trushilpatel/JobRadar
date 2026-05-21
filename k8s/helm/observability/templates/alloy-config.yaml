@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-alloy-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "observability.labels" . | nindent 4 }}
+data:
+  config.alloy: |
+    // =========================================================================
+    // JobRadar Alloy pipeline — ships metrics/logs/traces to Grafana Cloud.
+    // Credentials loaded from secret `grafana-cloud-credentials` via envFrom.
+    // =========================================================================
+
+    // ---------- METRICS: scrape JobRadar /metrics → Mimir ---------------------
+
+    prometheus.scrape "jobradar" {
+      targets = [
+        { __address__ = "jobradar-api.{{ .Values.namespace }}.svc.cluster.local:9100",       job = "jobradar_api" },
+        { __address__ = "jobradar-scheduler.{{ .Values.namespace }}.svc.cluster.local:9101", job = "jobradar_scheduler" },
+        { __address__ = "jobradar-crawler.{{ .Values.namespace }}.svc.cluster.local:9101",   job = "jobradar_crawler" },
+        { __address__ = "jobradar-filter.{{ .Values.namespace }}.svc.cluster.local:9101",    job = "jobradar_filter" },
+        { __address__ = "jobradar-enricher.{{ .Values.namespace }}.svc.cluster.local:9101",  job = "jobradar_enricher" },
+      ]
+      scrape_interval = "60s"
+      forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+    }
+
+    prometheus.remote_write "grafana_cloud" {
+      endpoint {
+        url = sys.env("GRAFANA_CLOUD_PROM_URL")
+        basic_auth {
+          username = sys.env("GRAFANA_CLOUD_PROM_USER")
+          password = sys.env("GRAFANA_CLOUD_PROM_TOKEN")
+        }
+      }
+      wal {
+        max_keepalive_time = "8h"
+      }
+    }
+
+    // ---------- LOGS: tail jobradar-local namespace pods → Loki --------------
+
+    discovery.kubernetes "pods" {
+      role = "pod"
+      selectors {
+        role  = "pod"
+        field = "spec.nodeName=" + sys.env("HOSTNAME")
+      }
+    }
+
+    discovery.relabel "jobradar_pods" {
+      targets = discovery.kubernetes.pods.targets
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        regex         = "{{ .Values.namespace }}"
+        action        = "keep"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        target_label = "cluster"
+        replacement  = "k3d-jobradar"
+      }
+    }
+
+    loki.source.kubernetes "pods" {
+      targets    = discovery.relabel.jobradar_pods.output
+      forward_to = [loki.write.grafana_cloud.receiver]
+    }
+
+    loki.write "grafana_cloud" {
+      endpoint {
+        url = sys.env("GRAFANA_CLOUD_LOKI_URL")
+        basic_auth {
+          username = sys.env("GRAFANA_CLOUD_LOKI_USER")
+          password = sys.env("GRAFANA_CLOUD_LOKI_TOKEN")
+        }
+      }
+    }
+
+    // ---------- TRACES: OTLP receiver → Tempo --------------------------------
+
+    otelcol.receiver.otlp "default" {
+      grpc { endpoint = "0.0.0.0:4317" }
+      http { endpoint = "0.0.0.0:4318" }
+      output {
+        traces = [otelcol.processor.batch.default.input]
+      }
+    }
+
+    otelcol.processor.batch "default" {
+      output {
+        traces = [otelcol.exporter.otlphttp.grafana_cloud.input]
+      }
+    }
+
+    otelcol.exporter.otlphttp "grafana_cloud" {
+      client {
+        endpoint = sys.env("GRAFANA_CLOUD_TEMPO_URL")
+        auth     = otelcol.auth.basic.grafana_cloud.handler
+      }
+    }
+
+    otelcol.auth.basic "grafana_cloud" {
+      username = sys.env("GRAFANA_CLOUD_TEMPO_USER")
+      password = sys.env("GRAFANA_CLOUD_TEMPO_TOKEN")
+    }

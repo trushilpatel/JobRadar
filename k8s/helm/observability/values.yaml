@@ -1,164 +1,60 @@
 namespace: jobradar-local
 
-kube-prometheus-stack:
-  # Disable heavyweight components not needed for local dev.
-  alertmanager:
-    enabled: true
-    config:
-      global:
-        resolve_timeout: 5m
-      receivers:
-        - name: default-webhook
-          webhook_configs:
-            # Override this URL in values.local.yaml — do not send alerts to placeholder in production
-            - url: "http://alertmanager-webhook-placeholder:9000"
-              send_resolved: true
-      route:
-        group_by: ["alertname", "severity"]
-        group_wait: 30s
-        group_interval: 5m
-        repeat_interval: 12h
-        receiver: default-webhook
-  nodeExporter:
-    enabled: false
-  kubeStateMetrics:
-    enabled: false
-
-  prometheus:
-    service:
-      type: NodePort
-      nodePort: 30090
-    prometheusSpec:
-      scrapeInterval: "60s"
-      evaluationInterval: "60s"
-      retention: 24h
-      storageSpec:
-        volumeClaimTemplate:
-          spec:
-            storageClassName: local-path
-            accessModes: ["ReadWriteOnce"]
-            resources:
-              requests:
-                storage: 10Gi
-      additionalScrapeConfigs:
-        - job_name: jobradar_api
-          static_configs:
-            - targets: ['jobradar-api.jobradar-local.svc.cluster.local:9100']
-        - job_name: jobradar_scheduler
-          static_configs:
-            - targets: ['jobradar-scheduler.jobradar-local.svc.cluster.local:9101']
-        - job_name: jobradar_crawler
-          static_configs:
-            - targets: ['jobradar-crawler.jobradar-local.svc.cluster.local:9101']
-        - job_name: jobradar_filter
-          static_configs:
-            - targets: ['jobradar-filter.jobradar-local.svc.cluster.local:9101']
-        - job_name: jobradar_enricher
-          static_configs:
-            - targets: ['jobradar-enricher.jobradar-local.svc.cluster.local:9101']
-
-  grafana:
-    service:
-      type: NodePort
-      nodePort: 30001
-    adminPassword: "admin"
-    grafana.ini:
-      users:
-        allow_sign_up: false
-    # Disable both sidecars — Grafana 13 conflicts when sidecar and static provisioning overlap.
-    sidecar:
-      datasources:
-        enabled: false
-      dashboards:
-        enabled: false
-    # Static datasource provisioning — mounts directly, no sidecar needed.
-    datasources:
-      datasources.yaml:
-        apiVersion: 1
-        datasources:
-          - name: Prometheus
-            type: prometheus
-            url: http://obs-kube-prometheus-stack-prometheus:9090
-            access: proxy
-            isDefault: true
-          - name: Loki
-            type: loki
-            url: http://obs-loki:3100
-            access: proxy
-            isDefault: false
-    # Static dashboard provisioning from ConfigMap.
-    dashboardProviders:
-      dashboardproviders.yaml:
-        apiVersion: 1
-        providers:
-          - name: jobradar
-            orgId: 1
-            folder: JobRadar
-            type: file
-            disableDeletion: false
-            options:
-              path: /var/lib/grafana/dashboards/jobradar
-    dashboardsConfigMaps:
-      jobradar: jobradar-grafana-dashboards
-
-loki-stack:
+# Grafana Cloud credentials. Real values live ONLY in values.local.yaml (gitignored).
+# See values.local.yaml.example for the shape.
+grafanaCloud:
+  prom:
+    url: ""
+    user: ""
+    token: ""
   loki:
-    enabled: true
-    persistence:
-      enabled: true
-      storageClassName: local-path
-      size: 5Gi
-    config:
-      limits_config:
-        retention_period: 24h
-  promtail:
-    enabled: false
+    url: ""
+    user: ""
+    token: ""
+  tempo:
+    # OTLP endpoint, e.g. https://otlp-gateway-prod-XX.grafana.net/otlp
+    url: ""
+    user: ""
+    token: ""
 
-jaeger:
-  jaeger:
-    enabled: true
-    service:
-      type: ClusterIP
-  userconfig:
-    service:
-      extensions: [jaeger_storage, jaeger_query, healthcheckv2]
-      pipelines:
-        traces:
-          receivers: [otlp]
-          exporters: [jaeger_storage_exporter]
-      telemetry:
-        resource:
-          service.name: jaeger
-    receivers:
-      otlp:
-        protocols:
-          grpc:
-            endpoint: 0.0.0.0:4317
-          http:
-            endpoint: 0.0.0.0:4318
-    exporters:
-      jaeger_storage_exporter:
-        trace_storage: primary_store
-    extensions:
-      healthcheckv2:
-        use_v2: true
-        http:
-          endpoint: 0.0.0.0:13133
-      jaeger_query:
-        storage:
-          traces: primary_store
-      jaeger_storage:
-        backends:
-          primary_store:
-            memory:
-              max_traces: 100000
+alloy:
+  controller:
+    type: daemonset
+  alloy:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    # River config is mounted from our own ConfigMap (templates/alloy-config.yaml).
+    # We disable the default in-chart configMap and reference ours by name.
+    configMap:
+      create: false
+      name: jobradar-alloy-config
+      key: config.alloy
+    envFrom:
+      - secretRef:
+          name: grafana-cloud-credentials
+    extraPorts:
+      - name: otlp-grpc
+        port: 4317
+        targetPort: 4317
+        protocol: TCP
+      - name: otlp-http
+        port: 4318
+        targetPort: 4318
+        protocol: TCP
+    mounts:
+      varlog: true
+      dockercontainers: true
 
 supabaseAuditSync:
   image:
     repository: jobradar-supabase-audit-sync
     tag: local
     pullPolicy: IfNotPresent
-  lokiUrl: "http://obs-loki:3100/loki/api/v1/push"
   intervalSeconds: "900"
   stateFile: "/var/lib/audit-sync/state.json"
   storage: 100Mi

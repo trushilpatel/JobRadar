@@ -279,9 +279,15 @@ k8s-nuke: ## Fully wipe namespace + PVCs — use when storage class or StatefulS
 k8s-down: ## Uninstall app Helm release (secrets and PVCs preserved)
 	helm uninstall jobradar -n $(K8S_NS) --ignore-not-found
 
-k8s-obs-up: ## Deploy observability chart (Prometheus + Grafana + Loki + Jaeger + audit-sync)
+k8s-obs-up: ## Deploy observability chart (Grafana Alloy + audit-sync, ships to Grafana Cloud)
 	helm dependency update k8s/helm/observability
-	helm upgrade --install obs k8s/helm/observability -n $(K8S_NS) --create-namespace
+	@LOCAL_VALUES=$$([ -f k8s/helm/observability/values.local.yaml ] && echo "-f k8s/helm/observability/values.local.yaml" || echo ""); \
+	if [ -z "$$LOCAL_VALUES" ]; then \
+		echo "ERROR: k8s/helm/observability/values.local.yaml not found"; \
+		echo "Copy k8s/helm/observability/values.local.yaml.example and fill in Grafana Cloud credentials"; \
+		exit 1; \
+	fi; \
+	helm upgrade --install obs k8s/helm/observability -n $(K8S_NS) --create-namespace $$LOCAL_VALUES
 
 k8s-obs-down: ## Uninstall observability Helm release
 	helm uninstall obs -n $(K8S_NS) --ignore-not-found

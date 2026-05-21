@@ -25,12 +25,13 @@ import (
 )
 
 type config struct {
-	DBURL         string
-	LokiURL       string
-	Interval      time.Duration
-	StateFile     string
-	BatchSize     int
-	HTTPTimeout   time.Duration
+	DBURL       string
+	LokiURL     string
+	LokiAuth    string
+	Interval    time.Duration
+	StateFile   string
+	BatchSize   int
+	HTTPTimeout time.Duration
 }
 
 type state struct {
@@ -62,6 +63,7 @@ func loadConfig() (config, error) {
 	if c.LokiURL == "" {
 		return c, errors.New("LOKI_URL is required")
 	}
+	c.LokiAuth = os.Getenv("LOKI_AUTH_HEADER")
 	intervalSec := 900
 	if v := os.Getenv("AUDIT_SYNC_INTERVAL_SECONDS"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -144,7 +146,7 @@ func fetchRows(ctx context.Context, pool *pgxpool.Pool, after time.Time, limit i
 	return out, nil
 }
 
-func pushToLoki(ctx context.Context, client *http.Client, url string, rows []auditRow) error {
+func pushToLoki(ctx context.Context, client *http.Client, url, authHeader string, rows []auditRow) error {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -172,6 +174,9 @@ func pushToLoki(ctx context.Context, client *http.Client, url string, rows []aud
 		return fmt.Errorf("new request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if authHeader != "" {
+		req.Header.Set("Authorization", authHeader)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("push: %w", err)
@@ -197,7 +202,7 @@ func runOnce(ctx context.Context, cfg config, pool *pgxpool.Pool, httpClient *ht
 		if len(rows) == 0 {
 			return nil
 		}
-		if err := pushToLoki(ctx, httpClient, cfg.LokiURL, rows); err != nil {
+		if err := pushToLoki(ctx, httpClient, cfg.LokiURL, cfg.LokiAuth, rows); err != nil {
 			return err
 		}
 		st.LastCreatedAt = rows[len(rows)-1].CreatedAt

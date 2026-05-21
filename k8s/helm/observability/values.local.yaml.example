@@ -1,0 +1,29 @@
+# Copy to values.local.yaml (gitignored) and fill in real Grafana Cloud credentials.
+#
+# Generate at https://grafana.com/orgs/<your-org> :
+#   Connections → Add new connection → "Hosted Prometheus metrics"  → URL + instance ID + token
+#   Connections → Add new connection → "Hosted Loki logs"           → URL + instance ID + token
+#   Connections → Add new connection → "Send OTLP data" (for Tempo) → URL + instance ID + token
+#
+# instance ID is the numeric Grafana Cloud instance, e.g. "1234567".
+# token is a `glc_...` access policy token with scopes: metrics:write, logs:write, traces:write.
+#
+# Apply with:
+#   helm upgrade --install obs k8s/helm/observability \
+#     -n jobradar-local --create-namespace \
+#     -f k8s/helm/observability/values.yaml \
+#     -f k8s/helm/observability/values.local.yaml
+
+grafanaCloud:
+  prom:
+    url: "https://prometheus-prod-XX.grafana.net/api/prom/push"
+    user: "1234567"
+    token: "glc_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  loki:
+    url: "https://logs-prod-XX.grafana.net/loki/api/v1/push"
+    user: "1234567"
+    token: "glc_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  tempo:
+    url: "https://otlp-gateway-prod-XX.grafana.net/otlp"
+    user: "1234567"
+    token: "glc_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
