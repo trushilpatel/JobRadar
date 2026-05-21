@@ -29,7 +29,7 @@ api:
   devToken: ""          # Set locally to enable dev auth bypass. Leave empty in production.
   logLevel: info
   logFormat: json
-  jaegerEndpoint: ""
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
   redisAddr: "redis:6379"
@@ -53,7 +53,7 @@ scheduler:
   logLevel: info
   logFormat: json
   metricsAddr: ":9101"
-  jaegerEndpoint: ""
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
 
@@ -69,7 +69,7 @@ crawler:
   logLevel: info
   logFormat: json
   metricsAddr: ":9101"
-  jaegerEndpoint: ""
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
 
@@ -87,7 +87,7 @@ filter:
   logLevel: info
   logFormat: json
   metricsAddr: ":9101"
-  jaegerEndpoint: ""
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
 
@@ -110,7 +110,7 @@ enricher:
   logLevel: info
   logFormat: json
   metricsAddr: ":9101"
-  jaegerEndpoint: ""
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
 
