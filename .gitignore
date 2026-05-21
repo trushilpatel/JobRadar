@@ -15,8 +15,8 @@ backend/migrate
 # Go build cache
 /vendor/
 
-# Environment variables — single root .env holds all config
-/.env
+# Environment variables — never commit real .env files anywhere in the repo
+.env
 .env.*
 !.env.example
 
