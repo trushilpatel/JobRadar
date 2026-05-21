@@ -27,6 +27,11 @@ backend/migrate
 # OS
 .DS_Store
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
 # Test coverage
 *.coverprofile
 coverage.out
