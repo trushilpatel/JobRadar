@@ -13,13 +13,16 @@ const (
 	JobStatusRejected     = "rejected"
 )
 
-// SeenReason values for job_pipeline_ledger.reason
+// SeenReason values for job_pipeline_ledger.reason. Mirrors the CHECK
+// constraint installed by migration 057. Adding a new value here must be
+// paired with a new migration that widens the constraint.
 const (
 	SeenReasonFetch         = "fetch"
 	SeenReasonLLMIrrelevant = "llm_irrelevant"
 	SeenReasonRetry         = "retry"
 	SeenReasonUserDismissed = "user_dismissed"
 	SeenReasonError         = "error"
+	SeenReasonNonUSA        = "non_usa_location"
 )
 
 // DismissalReason values stored on user_job_state.dismissal_reason. The
