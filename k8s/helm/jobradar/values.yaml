@@ -114,20 +114,6 @@ enricher:
   dbSslmode: require
   dbPort: "6543"
 
-llmSlots:
-  filterKeyId: enricher_slots_2
-  filterKeyIdJp: enricher_slots_2_jp
-  filterModel: gemini-3.1-flash-lite-preview
-  filterRpm: 15
-  filterRpd: 200
-  filterTpmIn: 250000
-  enricherKeyId: enricher_slots_1
-  enricherKeyIdJp: enricher_slots_1_jp
-  enricherModel: gemma-4-31b-it
-  enricherRpm: 15
-  enricherRpd: 1500
-  enricherTpmIn: 1000000
-
 kafka:
   storage: 5Gi
   storageClass: local-path

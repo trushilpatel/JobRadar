@@ -256,27 +256,9 @@ cp backend/.env.example backend/.env
 | `LLM_SLOTS_CONFIG`                                                      | Path to `llm-slots.yaml`                                                                                                                   |
 | `SCAN_INTERVAL_MINUTES`                                                 | How often each company is re-scanned                                                                                                       |
 
-### LLM slots (`backend/common/config/llm-slots.yaml`)
+### LLM slots (`k8s/helm/jobradar/files/llm-slots.yaml`)
 
-```yaml
-filter:
-  slots:
-    - key_id: filter_1
-      api_key: ${GEMINI_KEY}
-      model: gemini-2.0-flash-lite
-      rpm: 12
-      rpd: 300
-      tpm_in: 1000000
-
-enricher:
-  slots:
-    - key_id: enricher_1
-      api_key: ${GEMINI_KEY}
-      model: gemini-2.0-flash
-      rpm: 12
-      rpd: 1500
-      tpm_in: 1000000
-```
+Single source of truth — Helm renders this file directly into the `jobradar-llm-slots` ConfigMap via `.Files.Get`. Each slot entry is `{key_id, api_key (env-ref), model, rpm, rpd, tpm_in}`. Slots are grouped by worker (`filter:` / `enricher:`). To add a slot, edit the file; no values.yaml changes needed.
 
 ---
 
