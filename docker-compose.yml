@@ -78,7 +78,7 @@ services:
     container_name: jobradar_migrate
     profiles: [app]
     env_file:
-      - ./backend/.env
+      - ./.env
     command: ["/app/migrate"]
     restart: "no"
     security_opt:
@@ -103,7 +103,7 @@ services:
     profiles: [app]
     mem_limit: 128m
     env_file:
-      - ./backend/.env
+      - ./.env
     environment:
       <<: *app-env
       # Public API bound on all interfaces INSIDE the compose network only;
@@ -126,7 +126,7 @@ services:
     mem_limit: 128m
     profiles: [workers]
     env_file:
-      - ./backend/.env
+      - ./.env
     environment:
       <<: *app-env
       METRICS_ADDR: ":9101"
@@ -149,7 +149,7 @@ services:
     mem_limit: 1g
     profiles: [workers]
     env_file:
-      - ./backend/.env
+      - ./.env
     environment:
       <<: *app-env
       METRICS_ADDR: ":9102"
@@ -168,7 +168,7 @@ services:
     mem_limit: 128m
     profiles: [workers]
     env_file:
-      - ./backend/.env
+      - ./.env
     environment:
       <<: *app-env
       METRICS_ADDR: ":9103"
@@ -190,7 +190,7 @@ services:
     mem_limit: 128m
     profiles: [workers]
     env_file:
-      - ./backend/.env
+      - ./.env
     environment:
       <<: *app-env
       METRICS_ADDR: ":9104"

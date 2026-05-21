@@ -256,12 +256,12 @@ k8s-preflight: ## Verify kubectl context is k3d-jobradar before any deploy
 		echo "WARN: secret jobradar-$$svc-secret missing — pods will fail with CreateContainerConfigError"; \
 	done
 
-k8s-up: k8s-preflight ## Deploy app chart via Helm — reads DEV_TOKEN from backend/.env and values.local.yaml if present
+k8s-up: k8s-preflight ## Deploy app chart via Helm — reads DEV_TOKEN from .env and values.local.yaml if present
 	helm dependency update k8s/helm/jobradar 2>/dev/null || true
-	@DEV_TOKEN=$$(grep -E '^DEV_TOKEN=' backend/.env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]'); \
+	@DEV_TOKEN=$$(grep -E '^DEV_TOKEN=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]'); \
 	LOCAL_VALUES=$$([ -f k8s/helm/jobradar/values.local.yaml ] && echo "-f k8s/helm/jobradar/values.local.yaml" || echo ""); \
 	if [ -n "$$DEV_TOKEN" ]; then \
-		echo "DEV_TOKEN loaded from backend/.env"; \
+		echo "DEV_TOKEN loaded from .env"; \
 		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace $$LOCAL_VALUES --set api.devToken="$$DEV_TOKEN"; \
 	else \
 		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace $$LOCAL_VALUES; \

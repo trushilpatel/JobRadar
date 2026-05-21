@@ -15,7 +15,7 @@ backend/migrate
 # Go build cache
 /vendor/
 
-# Environment variables
+# Environment variables — single root .env holds all config
 /.env
 .env.*
 !.env.example
@@ -52,7 +52,6 @@ k8s/**/secret.yaml
 # Local Helm overrides (secrets — never commit)
 values.local.yaml
 
-.env
 # k8s image build digest cache (local only — used to skip unchanged builds)
 .k8s-build-cache/
 
@@ -61,4 +60,3 @@ k8s/helm/observability/charts/*.tgz
 k8s/helm/observability/charts/jaeger/
 k8s/helm/observability/charts/kube-prometheus-stack/
 k8s/helm/observability/charts/loki-stack/
-.worktrees/
