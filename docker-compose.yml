@@ -233,8 +233,6 @@ services:
         GIT_SHA: "${GIT_SHA:-dev}"
         VITE_SUPABASE_URL: "${VITE_SUPABASE_URL}"
         VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY}"
-        VITE_APP_DOMAIN: "${VITE_APP_DOMAIN:-}"
-        VITE_ALLOWED_EMAIL: "${VITE_ALLOWED_EMAIL:-}"
     container_name: jobradar_console
     profiles: [app]
     # Loopback binding — accessible locally without Caddy; Caddy uses internal network in prod.

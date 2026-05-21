@@ -229,8 +229,6 @@ k8s-build-console: ## Build console image (bakes VITE_ vars from root .env) and 
 		docker build \
 			--build-arg VITE_SUPABASE_URL="$$VITE_SUPABASE_URL" \
 			--build-arg VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY" \
-			--build-arg VITE_APP_DOMAIN="$$VITE_APP_DOMAIN" \
-			--build-arg VITE_ALLOWED_EMAIL="$$VITE_ALLOWED_EMAIL" \
 			--build-arg GIT_SHA=$(GIT_SHA) \
 			-t jobradar-console:local \
 			-f ui/console/Dockerfile ./ui/console && \

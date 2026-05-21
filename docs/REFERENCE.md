@@ -5,9 +5,8 @@ Base URL: `http://localhost:8080`
 
 **Auth middleware:**
 
-- All routes under `/api/*` — `RequireIdentity` + `RateLimit`. `RequireIdentity` performs JWT verification, DB-backed identity enrichment, cache-aside lookup, lazy provisioning into `users`/`user_roles`, `ADMIN_EMAILS` auto-grant, and suspended-user 403.
+- All routes under `/api/*` — `RequireIdentity` + `RateLimit`. `RequireIdentity` performs JWT verification, DB-backed identity enrichment, cache-aside lookup, lazy provisioning into `users`/`user_roles`, and suspended-user 403. Admin grants are managed directly in the `user_roles` table.
 - All routes under `/admin/*` — additionally require `RequireRole("admin")` + `AuditAdminMutation`.
-- No `ALLOWED_EMAIL` single-email allowlist. No legacy `RequireAuth` middleware.
 
 Operational endpoints served on `:9090` — no auth required: `GET /health`, `GET /ready`, `GET /metrics`.
 
@@ -167,7 +166,6 @@ Latest migration: [`044_phase2_multiuser_data_model.sql`](../backend/migrations/
 | `REDIS_URL`                 | Redis connection URL (`rediss://user:pass@host:port/db` for TLS) |
 | `SUPABASE_URL`              | Supabase project URL (used by `backend/platform/supabaseadmin`)  |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key for admin DELETE user calls            |
-| `ADMIN_EMAILS`              | Comma-separated emails auto-granted `admin` role on first login  |
 | `RATE_LIMIT_READ_RPM`       | Per-user rate limit for GET/HEAD/OPTIONS (default 30)            |
 | `RATE_LIMIT_WRITE_RPM`      | Per-user rate limit for mutating methods (default 20)            |
 | `RATE_LIMIT_ADMIN_RPM`      | Per-user rate limit for admin scope (default 120)                |

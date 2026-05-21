@@ -16,7 +16,7 @@ import (
 // login, the future admin UI will need the rest.
 //
 // Grant takes an optional grantedBy so audit captures who promoted a user;
-// nil means the system performed the grant (e.g. ADMIN_EMAILS auto-promote).
+// nil means the system performed the grant.
 type Service interface {
 	ListForUser(ctx context.Context, userID string) ([]string, error)
 	Grant(ctx context.Context, userID, roleID string, grantedBy *string) error
