@@ -149,7 +149,15 @@ func buildMultiUserPlatform(cfg *config.Config, log logger.Logger) (cache.Cache,
 		return cache.NewMemoryCache(), ratelimit.NewMemoryLimiter(20, 0.5)
 	}
 
-	c := cache.NewRedisCache(rdb)
+	// Wrap Redis in a bounded in-process LRU. The same instance is fanned
+	// out to the identity middleware and every service-layer cache decorator,
+	// so any Set/Delete performed on this Cache clears the local layer as a
+	// side effect — the user service does not need to know it exists.
+	c := cache.NewLocalCache(
+		cache.NewRedisCache(rdb),
+		time.Duration(cfg.MultiUser.IdentityCacheLocalTTLSeconds)*time.Second,
+		cfg.MultiUser.IdentityCacheLocalMaxEntries,
+	)
 	// Use the write RPM as the conservative budget — read RPM is a higher
 	// limit but the limiter middleware picks the scope by HTTP method so
 	// either RPM is honoured for its scope.

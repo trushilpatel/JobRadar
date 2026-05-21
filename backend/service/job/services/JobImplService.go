@@ -20,10 +20,12 @@ import (
 
 // Cache TTLs and key prefixes for the job feed. Page entries hold the raw
 // list of jobs (no per-user state); the per-user overlay is merged AFTER
-// the cache hit. Per-user counts cache separately with a shorter TTL.
+// the cache hit. Per-user counts cache separately — every mutating method
+// invalidates the key explicitly, so the TTL is the upper bound on how
+// long a missed invalidation (e.g. a Redis hiccup) can survive.
 const (
 	feedPageCacheTTL = 30 * time.Second
-	userCountsTTL    = 10 * time.Second
+	userCountsTTL    = 60 * time.Second
 
 	feedPageCachePrefix = "feed:page:"
 	userCountsPrefix    = "user:"
@@ -301,10 +303,20 @@ func (s *implService) SetNotes(ctx context.Context, id, notes string) (err error
 		status = existing.Status
 	}
 	notesPtr := &notes
-	return s.userState.Upsert(ctx, userID, id, dto.UpsertState{
+	if err = s.userState.Upsert(ctx, userID, id, dto.UpsertState{
 		Status: status,
 		Notes:  notesPtr,
-	})
+	}); err != nil {
+		return err
+	}
+	// First note on an unseen job creates a saved row, which shifts the
+	// counts ("new" → "saved"). Re-edits of an existing note leave status
+	// alone, so the delete is wasted there — but counts are tiny and the
+	// TTL bounds staleness either way; correctness beats the saved DEL.
+	if existing == nil {
+		s.invalidateUserCounts(ctx, userID)
+	}
+	return nil
 }
 
 // Dismiss upserts the per-user row to 'dismissed' with reason+note, and

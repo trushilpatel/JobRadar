@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -14,14 +13,21 @@ import (
 //go:embed reserve.lua
 var reserveLua string
 
-var reserveScript = goredis.NewScript(reserveLua)
+//go:embed release.lua
+var releaseLua string
+
+var (
+	reserveScript = goredis.NewScript(reserveLua)
+	releaseScript = goredis.NewScript(releaseLua)
+)
 
 type redisStore struct {
 	rdb *goredis.Client
 }
 
-// NewLLMRateLimitRedisStore returns a Redis-backed rate-limit store. The
-// reservation logic is implemented as an atomic Lua script.
+// NewLLMRateLimitRedisStore returns a Redis-backed rate-limit store. Reserve
+// and Release are each a single atomic Lua script invocation — one Redis
+// round-trip per call.
 func NewLLMRateLimitRedisStore(rdb *goredis.Client) LLMRateLimitStore {
 	return &redisStore{rdb: rdb}
 }
@@ -59,33 +65,8 @@ func (s *redisStore) Reserve(ctx context.Context, r ReserveReq) (ReserveResult, 
 func (s *redisStore) Release(ctx context.Context, slotID, reqID string) error {
 	day := time.Now().UTC().Format("2006-01-02")
 	keys := s.keys(slotID, day)
-
-	pipe := s.rdb.Pipeline()
-	pipe.ZRem(ctx, keys[0], reqID)
-	tokenCmd := pipe.HGet(ctx, keys[3], reqID)
-	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, goredis.Nil) {
-		return fmt.Errorf("ratelimit redis release lookup: %w", err)
-	}
-	tokensStr, err := tokenCmd.Result()
-	if err != nil && !errors.Is(err, goredis.Nil) {
-		return fmt.Errorf("ratelimit redis release hget tokens: %w", err)
-	}
-
-	pipe = s.rdb.Pipeline()
-	pipe.ZRem(ctx, keys[2], reqID)
-	pipe.HDel(ctx, keys[3], reqID)
-	if tokensStr != "" {
-		n, parseErr := strconv.Atoi(tokensStr)
-		if parseErr != nil {
-			return fmt.Errorf("ratelimit redis release parse tokens %q: %w", tokensStr, parseErr)
-		}
-		if n > 0 {
-			pipe.DecrBy(ctx, keys[4], int64(n))
-		}
-	}
-	pipe.Decr(ctx, keys[1])
-	if _, err := pipe.Exec(ctx); err != nil {
-		return fmt.Errorf("ratelimit redis release apply: %w", err)
+	if _, err := releaseScript.Run(ctx, s.rdb, keys, reqID).Result(); err != nil && !errors.Is(err, goredis.Nil) {
+		return fmt.Errorf("ratelimit redis release: %w", err)
 	}
 	return nil
 }
