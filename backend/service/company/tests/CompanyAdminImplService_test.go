@@ -23,7 +23,7 @@ type fakeAdmin struct {
 	deleteCalls    int
 }
 
-func (f *fakeAdmin) List(_ context.Context, _ companydto.CompanyFilter, _, _ int) (companydto.CompanyAdminListResult, error) {
+func (f *fakeAdmin) List(_ context.Context, _ companydto.CompanyFilter, _ int) (companydto.CompanyAdminListResult, error) {
 	return companydto.CompanyAdminListResult{}, nil
 }
 func (f *fakeAdmin) Get(_ context.Context, _ string) (*companydto.CompanyAdminView, error) {
@@ -61,7 +61,7 @@ func TestAdminImpl_Create_PopulatesCacheKeyAfterWrite(t *testing.T) {
 	// Seed the public cache with a stale entry so we can verify it gets cleared.
 	_ = c.Set(context.Background(), companysvc.PublicCompanyKey("stripe"), companydto.CompanyPublicView{}, 0)
 
-	svc := companysvc.NewAdminImplService(fake, c)
+	svc := companysvc.NewAdminImplService(fake, c, nil)
 	if _, err := svc.Create(context.Background(), companydto.CompanyPublicInput{ID: "stripe"}, companydto.CompanyScanSettingsInput{}); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestAdminImpl_UpdatePublic_InvalidatesPublicCache(t *testing.T) {
 	c := cache.NewMemoryCache()
 	_ = c.Set(context.Background(), companysvc.PublicCompanyKey("stripe"), companydto.CompanyPublicView{}, 0)
 
-	svc := companysvc.NewAdminImplService(fake, c)
+	svc := companysvc.NewAdminImplService(fake, c, nil)
 	if err := svc.UpdatePublic(context.Background(), "stripe", companydto.CompanyPublicInput{Name: "Renamed"}); err != nil {
 		t.Fatalf("UpdatePublic: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestAdminImpl_UpdateScanSettings_DoesNotTouchPublicCache(t *testing.T) {
 	c := cache.NewMemoryCache()
 	_ = c.Set(context.Background(), companysvc.PublicCompanyKey("stripe"), companydto.CompanyPublicView{}, 0)
 
-	svc := companysvc.NewAdminImplService(fake, c)
+	svc := companysvc.NewAdminImplService(fake, c, nil)
 	if err := svc.UpdateScanSettings(context.Background(), "stripe", companydto.CompanyScanSettingsInput{Active: boolPtr(false)}); err != nil {
 		t.Fatalf("UpdateScanSettings: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestAdminImpl_Delete_InvalidatesPublicCache(t *testing.T) {
 	c := cache.NewMemoryCache()
 	_ = c.Set(context.Background(), companysvc.PublicCompanyKey("stripe"), companydto.CompanyPublicView{}, 0)
 
-	svc := companysvc.NewAdminImplService(fake, c)
+	svc := companysvc.NewAdminImplService(fake, c, nil)
 	if err := svc.Delete(context.Background(), "stripe"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestAdminImpl_Delete_InvalidatesPublicCache(t *testing.T) {
 
 func TestAdminImpl_NilCachePassesThrough(t *testing.T) {
 	fake := &fakeAdmin{}
-	svc := companysvc.NewAdminImplService(fake, nil)
+	svc := companysvc.NewAdminImplService(fake, nil, nil)
 	if err := svc.UpdatePublic(context.Background(), "x", companydto.CompanyPublicInput{Name: "Y"}); err != nil {
 		t.Fatalf("nil cache: %v", err)
 	}

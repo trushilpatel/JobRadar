@@ -24,6 +24,7 @@ export function useCompanyActions() {
     const next = !company.active
     try {
       await updateAdminCompanyScanSettings(company.id, { active: next })
+      toast.success(`${company.name} ${next ? 'activated' : 'deactivated'}`)
       invalidate()
     } catch {
       toast.error('Failed to update company')
@@ -46,6 +47,7 @@ export function useCompanyActions() {
       await triggerScan(company.id)
       toast.success(`Scan queued for ${company.name}`)
       qc.invalidateQueries({ queryKey: companyQueryKeys.scanQueue() })
+      qc.invalidateQueries({ queryKey: companyQueryKeys.adminCompaniesBase() })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to queue scan')
     } finally {
@@ -63,6 +65,7 @@ export function useCompanyActions() {
       const { queued } = await triggerScanAll()
       toast.success(`${queued} ${queued === 1 ? 'company' : 'companies'} queued for scan`)
       qc.invalidateQueries({ queryKey: companyQueryKeys.scanQueue() })
+      qc.invalidateQueries({ queryKey: companyQueryKeys.adminCompaniesBase() })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to queue scans')
     } finally {

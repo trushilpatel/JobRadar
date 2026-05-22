@@ -9,6 +9,15 @@ import (
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 )
 
+// publicListEnvelope is the JSON envelope for GET /api/companies. Carries
+// the cursor-paged result set with a next_cursor for the subsequent page.
+type publicListEnvelope struct {
+	Data       []companydto.CompanyPublicView `json:"data"`
+	Total      int64                          `json:"total"`
+	Limit      int                            `json:"limit"`
+	NextCursor *string                        `json:"next_cursor"`
+}
+
 // RestService is the HTTP adapter for the public company chain. It depends
 // only on CompanyService; validation and caching are handled by the
 // decorator chain it wraps.
@@ -21,17 +30,7 @@ func NewRestService(next CompanyService) *RestService {
 	return &RestService{next: next}
 }
 
-// publicListResponse is the envelope for GET /api/companies. It mirrors the
-// shape of handler.RespondPaged so consumers can treat it as a standard
-// paged response.
-type publicListResponse struct {
-	Data  []companydto.CompanyPublicView `json:"data"`
-	Total int64                          `json:"total"`
-	Page  int                            `json:"page"`
-	Limit int                            `json:"limit"`
-}
-
-// list handles GET /api/companies?search=...&sort_by=...&sort_dir=...
+// list handles GET /api/companies?search=...&sort_by=...&sort_dir=...&cursor=...&limit=...
 func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
 	p := request.ParsePagination(r)
 	q := r.URL.Query()
@@ -46,18 +45,21 @@ func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("sort_dir"); v != "" {
 		filter.SortDir = v
 	}
+	if v := q.Get("cursor"); v != "" {
+		filter.Cursor = v
+	}
 
-	result, err := h.next.ListPublic(r.Context(), filter, p.Page, p.Limit)
+	result, err := h.next.ListPublic(r.Context(), filter, p.Limit)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
 	}
 
-	handler.Respond(w, http.StatusOK, publicListResponse{
-		Data:  result.Items,
-		Total: result.Total,
-		Page:  p.Page,
-		Limit: p.Limit,
+	handler.Respond(w, http.StatusOK, publicListEnvelope{
+		Data:       result.Items,
+		Total:      result.Total,
+		Limit:      p.Limit,
+		NextCursor: result.NextCursor,
 	})
 }
 

@@ -4,33 +4,13 @@ import (
 	"context"
 	"errors"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	"gorm.io/gorm"
 )
-
-// ScanSettingsRepository is the single point of access for the
-// `company_scan_settings` table. It is consumed by:
-//
-//   - The admin chain (CompanyAdminImplService) — when admins create or
-//     update settings via /admin/companies/{id}/scan-settings.
-//   - Background workers (scheduler, crawler) — to read adapter_type /
-//     adapter_config / scan_interval_override / active, and to write
-//     scan-state outcomes (UpdateScanState).
-//
-// Every method rejects an empty companyID with ErrInternal.WithMessage(
-// "company id required") before touching the DB so a forgotten ctx scoping
-// can never silently broaden a query to the entire table.
-type ScanSettingsRepository interface {
-	Get(ctx context.Context, companyID string) (*companymodel.CompanyScanSettings, error)
-	GetMissing(ctx context.Context) ([]string, error)
-	Create(ctx context.Context, s companymodel.CompanyScanSettings) error
-	Update(ctx context.Context, companyID string, p companydto.CompanyScanSettingsInput) error
-	UpdateScanState(ctx context.Context, companyID string, st companydto.CompanyScanStateUpdate) error
-	Delete(ctx context.Context, companyID string) error
-}
 
 // scanSettingsRepository is the GORM-backed terminal implementation.
 type scanSettingsRepository struct {
@@ -218,9 +198,9 @@ func scanSettingsInputToFields(p companydto.CompanyScanSettingsInput) map[string
 
 // isUniqueViolation detects PostgreSQL unique-constraint failures across
 // the GORM driver landscape. Errors carry a SQLSTATE 23505 — pgx wraps
-// the code on a *pgconn.PgError, and lib/pq returns a *pq.Error; gorm's
-// generic wrapper hides both behind ErrDuplicatedKey on recent versions.
-// We check both for portability across local dev and CI.
+// the code on a *pgconn.PgError; gorm's generic wrapper hides it behind
+// ErrDuplicatedKey on recent versions. We check both for portability
+// across local dev (pgx direct) and CI.
 func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false
@@ -228,7 +208,10 @@ func isUniqueViolation(err error) bool {
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
 		return true
 	}
-	// Fallback: substring match on SQLSTATE 23505 — defensive only, the
-	// gorm.ErrDuplicatedKey path is the supported one.
-	return errors.Is(err, gorm.ErrDuplicatedKey)
+	// Fallback for pgconn errors that GORM doesn't wrap.
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	return false
 }

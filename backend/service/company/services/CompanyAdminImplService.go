@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 
+	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/platform/cache"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 )
@@ -13,15 +14,21 @@ import (
 type adminImplService struct {
 	BaseAdminService
 	cache cache.Cache
+	log   logger.Logger
 }
 
 // NewAdminImplService wraps next and uses cache to invalidate
 // company:public:{id} on mutations. A nil cache turns invalidation into a
 // no-op — useful in tests that wire admin without a public cache.
-func NewAdminImplService(next CompanyAdminService, c cache.Cache) CompanyAdminService {
+// A nil log silences all structured logging.
+func NewAdminImplService(next CompanyAdminService, c cache.Cache, log logger.Logger) CompanyAdminService {
+	if log == nil {
+		log = logger.NewNoop()
+	}
 	return &adminImplService{
 		BaseAdminService: NewBaseAdminService(next),
 		cache:            c,
+		log:              log,
 	}
 }
 
@@ -33,8 +40,13 @@ func (s *adminImplService) Create(ctx context.Context, public companydto.Company
 	if err != nil {
 		return nil, err
 	}
-	if view != nil && s.cache != nil {
-		_ = s.cache.Delete(ctx, PublicCompanyKey(view.ID))
+	if view != nil {
+		s.log.Info("company created", logger.Str(logger.FieldCompany, view.ID))
+		if s.cache != nil {
+			if delErr := s.cache.Delete(ctx, PublicCompanyKey(view.ID)); delErr != nil {
+				s.log.Warn("cache invalidation failed on Create", logger.Str(logger.FieldCompany, view.ID), logger.Err(delErr))
+			}
+		}
 	}
 	return view, nil
 }
@@ -44,13 +56,18 @@ func (s *adminImplService) Create(ctx context.Context, public companydto.Company
 // the cache with the stale row.
 func (s *adminImplService) UpdatePublic(ctx context.Context, id string, p companydto.CompanyPublicInput) error {
 	if s.cache != nil {
-		_ = s.cache.Delete(ctx, PublicCompanyKey(id))
+		if delErr := s.cache.Delete(ctx, PublicCompanyKey(id)); delErr != nil {
+			s.log.Warn("cache pre-invalidation failed on UpdatePublic", logger.Str(logger.FieldCompany, id), logger.Err(delErr))
+		}
 	}
 	if err := s.next.UpdatePublic(ctx, id, p); err != nil {
 		return err
 	}
+	s.log.Info("company public fields updated", logger.Str(logger.FieldCompany, id))
 	if s.cache != nil {
-		_ = s.cache.Delete(ctx, PublicCompanyKey(id))
+		if delErr := s.cache.Delete(ctx, PublicCompanyKey(id)); delErr != nil {
+			s.log.Warn("cache post-invalidation failed on UpdatePublic", logger.Str(logger.FieldCompany, id), logger.Err(delErr))
+		}
 	}
 	return nil
 }
@@ -62,13 +79,18 @@ func (s *adminImplService) UpdatePublic(ctx context.Context, id string, p compan
 // re-populate from the about-to-be-deleted row.
 func (s *adminImplService) Delete(ctx context.Context, id string) error {
 	if s.cache != nil {
-		_ = s.cache.Delete(ctx, PublicCompanyKey(id))
+		if delErr := s.cache.Delete(ctx, PublicCompanyKey(id)); delErr != nil {
+			s.log.Warn("cache pre-invalidation failed on Delete", logger.Str(logger.FieldCompany, id), logger.Err(delErr))
+		}
 	}
 	if err := s.next.Delete(ctx, id); err != nil {
 		return err
 	}
+	s.log.Info("company deleted", logger.Str(logger.FieldCompany, id))
 	if s.cache != nil {
-		_ = s.cache.Delete(ctx, PublicCompanyKey(id))
+		if delErr := s.cache.Delete(ctx, PublicCompanyKey(id)); delErr != nil {
+			s.log.Warn("cache post-invalidation failed on Delete", logger.Str(logger.FieldCompany, id), logger.Err(delErr))
+		}
 	}
 	return nil
 }

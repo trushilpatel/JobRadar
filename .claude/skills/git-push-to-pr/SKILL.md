@@ -114,6 +114,25 @@ git push --force-with-lease origin <branch-name>
 
 Never `--force` (no lease) — it silently overwrites remote commits.
 
+## Step 8 — Output the PR link
+
+After a successful push, derive the GitHub PR creation URL from the remote and branch name. **Never use `gh` CLI** — construct the link with plain `git` commands only.
+
+```bash
+# Get the remote URL and convert to HTTPS if SSH
+REMOTE=$(git remote get-url origin)
+# Strip git@ prefix and .git suffix, replace : with /
+HTTPS=$(echo "$REMOTE" | sed 's|git@github.com:|https://github.com/|; s|\.git$||')
+BRANCH=$(git branch --show-current)
+echo "${HTTPS}/compare/main...${BRANCH}?expand=1"
+```
+
+Output the link to the user as the final step:
+
+> **Open PR:** `https://github.com/<owner>/<repo>/compare/main...<branch>?expand=1`
+
+This URL opens GitHub's "Open a pull request" page with the base set to `main` and the compare set to the current branch, ready to submit.
+
 ## Quick reference
 
 ```bash

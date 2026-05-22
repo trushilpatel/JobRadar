@@ -20,7 +20,7 @@ func TestPublicRest_List_QueryParsing(t *testing.T) {
 	rec := &recordingPublicForRest{}
 	r := newPublicRouter(rec)
 
-	req := httptest.NewRequest(http.MethodGet, "/companies?search=stripe&sort_by=created_at&sort_dir=desc&page=3&limit=15", nil)
+	req := httptest.NewRequest(http.MethodGet, "/companies?search=stripe&sort_by=created_at&sort_dir=desc&limit=15", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -29,8 +29,8 @@ func TestPublicRest_List_QueryParsing(t *testing.T) {
 	if rec.lastFilter.Search != "stripe" || rec.lastFilter.SortBy != "created_at" || rec.lastFilter.SortDir != "desc" {
 		t.Errorf("filter not parsed: %+v", rec.lastFilter)
 	}
-	if rec.lastPage != 3 || rec.lastLimit != 15 {
-		t.Errorf("page=%d limit=%d, want 3/15", rec.lastPage, rec.lastLimit)
+	if rec.lastLimit != 15 {
+		t.Errorf("limit=%d, want 15", rec.lastLimit)
 	}
 }
 
@@ -63,15 +63,13 @@ func TestPublicRest_Get_NotFound(t *testing.T) {
 // us pin canned errors.
 type recordingPublicForRest struct {
 	lastFilter companydto.CompanyFilter
-	lastPage   int
 	lastLimit  int
 	listErr    error
 	getErr     error
 }
 
-func (r *recordingPublicForRest) ListPublic(_ context.Context, f companydto.CompanyFilter, page, limit int) (companydto.CompanyPublicListResult, error) {
+func (r *recordingPublicForRest) ListPublic(_ context.Context, f companydto.CompanyFilter, limit int) (companydto.CompanyPublicListResult, error) {
 	r.lastFilter = f
-	r.lastPage = page
 	r.lastLimit = limit
 	return companydto.CompanyPublicListResult{}, r.listErr
 }

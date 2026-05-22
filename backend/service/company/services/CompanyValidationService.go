@@ -20,22 +20,15 @@ func NewValidationService(next CompanyService) CompanyService {
 	return &publicValidationService{BasePublicService: NewBasePublicService(next)}
 }
 
-// ListPublic enforces page/limit bounds and search-length so a malicious
-// caller cannot cause a DB scan with an unbounded page or LIKE pattern.
-func (v *publicValidationService) ListPublic(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (companydto.CompanyPublicListResult, error) {
+// ListPublic enforces limit bounds and search-length so a malicious caller
+// cannot cause a DB scan with an unbounded limit or LIKE pattern.
+func (v *publicValidationService) ListPublic(ctx context.Context, filter companydto.CompanyFilter, limit int) (companydto.CompanyPublicListResult, error) {
 	var errs apperr.ValidationErrors
 	if len(filter.Search) > 100 {
 		errs = append(errs, apperr.ValidationError{
 			Field:   "search",
 			Code:    "INVALID_VALUE",
 			Message: "search must be 100 characters or fewer",
-		})
-	}
-	if page < 1 {
-		errs = append(errs, apperr.ValidationError{
-			Field:   "page",
-			Code:    "INVALID_VALUE",
-			Message: "page must be >= 1",
 		})
 	}
 	if limit < 1 || limit > 100 {
@@ -48,7 +41,7 @@ func (v *publicValidationService) ListPublic(ctx context.Context, filter company
 	if len(errs) > 0 {
 		return companydto.CompanyPublicListResult{}, errs
 	}
-	return v.next.ListPublic(ctx, filter, page, limit)
+	return v.next.ListPublic(ctx, filter, limit)
 }
 
 var _ CompanyService = (*publicValidationService)(nil)

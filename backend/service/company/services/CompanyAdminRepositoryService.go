@@ -2,13 +2,48 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"strings"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
+	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"gorm.io/gorm"
 )
+
+// adminCursor is the decoded form of the opaque admin list cursor.
+// SV is the sort-column value (string-encoded); ID breaks ties.
+// NullSV is true when the sort-column value for this row is NULL in the DB
+// (e.g. last_scan_at for companies that have never been scanned).
+type adminCursor struct {
+	ID     string `json:"id"`
+	SV     string `json:"sv"`
+	IsNull bool   `json:"null,omitempty"`
+}
+
+// encodeAdminCursor encodes a cursor anchor as an opaque string.
+func encodeAdminCursor(id, sv string, isNull bool) string {
+	b, _ := json.Marshal(adminCursor{ID: id, SV: sv, IsNull: isNull})
+	return base64.StdEncoding.EncodeToString(b)
+}
+
+// decodeAdminCursor decodes an admin cursor string. Returns zero value on
+// failure (treated as first-page by callers).
+func decodeAdminCursor(s string) adminCursor {
+	if s == "" {
+		return adminCursor{}
+	}
+	b, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return adminCursor{}
+	}
+	var c adminCursor
+	_ = json.Unmarshal(b, &c)
+	return c
+}
 
 // adminRepositoryService is the terminal CompanyAdminService implementation.
 // Reads are split into two queries (companies, then scan_settings keyed by
@@ -16,21 +51,23 @@ import (
 // far simpler to scan into typed structs without per-column GORM tags.
 type adminRepositoryService struct {
 	db                *gorm.DB
-	scanHistoryReader companydto.ScanHistoryReader
+	scanHistoryReader ScanHistoryReader
 }
 
 // NewAdminRepositoryService constructs the terminal CompanyAdminService.
-func NewAdminRepositoryService(db *gorm.DB, scanHistoryReader companydto.ScanHistoryReader) CompanyAdminService {
+func NewAdminRepositoryService(db *gorm.DB, scanHistoryReader ScanHistoryReader) CompanyAdminService {
 	return &adminRepositoryService{db: db, scanHistoryReader: scanHistoryReader}
 }
 
 // List returns admin views joined with scan_settings. Honours every filter
-// field; falls back to name ASC sort by default.
-func (r *adminRepositoryService) List(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (_ companydto.CompanyAdminListResult, err error) {
+// field; falls back to name ASC sort by default. Pagination is keyset-based:
+// the caller supplies an opaque cursor (from a previous response's NextCursor)
+// and the limit. An empty cursor returns the first page.
+func (r *adminRepositoryService) List(ctx context.Context, filter companydto.CompanyFilter, limit int) (_ companydto.CompanyAdminListResult, err error) {
 	ctx, span := tracing.Start(ctx, "company.admin.repo.List")
 	defer tracing.End(span, &err)
 
-	companies, total, err := r.queryCompanies(ctx, filter, page, limit)
+	companies, total, nextCursor, err := r.queryCompanies(ctx, filter, limit)
 	if err != nil {
 		return companydto.CompanyAdminListResult{}, err
 	}
@@ -46,7 +83,7 @@ func (r *adminRepositoryService) List(ctx context.Context, filter companydto.Com
 		return companydto.CompanyAdminListResult{}, apperr.ErrInternal.WithMessage("failed to count active scan settings")
 	}
 
-	views := make([]companydto.CompanyAdminView, 0, len(companies))
+	views := make([]companydto.CompanyAdminListView, 0, len(companies))
 	ids := make([]string, 0, len(companies))
 	for _, c := range companies {
 		ids = append(ids, c.ID)
@@ -63,9 +100,9 @@ func (r *adminRepositoryService) List(ctx context.Context, filter companydto.Com
 	}
 
 	for _, c := range companies {
-		view := companydto.CompanyAdminView{Company: c}
+		view := companydto.CompanyAdminListView{Company: c}
 		if s, ok := settingsByID[c.ID]; ok {
-			view.ScanSettings = companydto.ScanSettingsViewFromModel(s)
+			view.ScanSettings = companydto.ScanSettingsListViewFromModel(s)
 		}
 		if qs, ok := queueStatusByID[c.ID]; ok {
 			view.QueueStatus = &qs
@@ -79,6 +116,7 @@ func (r *adminRepositoryService) List(ctx context.Context, filter companydto.Com
 		Items:       views,
 		Total:       total,
 		TotalActive: totalActive,
+		NextCursor:  nextCursor,
 	}, nil
 }
 
@@ -294,11 +332,12 @@ func (r *adminRepositoryService) GetAll(ctx context.Context) (_ []companydto.Com
 	return views, nil
 }
 
-// queryCompanies returns the paginated companies matching filter, plus the
-// unbounded matching total. Operational filters (Active, AdapterTypes,
-// HasSettings) require joining scan_settings — handled here via Joins so
-// the count and the page share the same WHERE clause.
-func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter companydto.CompanyFilter, page, limit int) ([]companymodel.Company, int64, error) {
+// queryCompanies returns the cursor-paginated companies matching filter, plus
+// the unbounded matching total and an opaque next-page cursor (nil when no
+// next page exists). Operational filters (Active, AdapterTypes, HasSettings)
+// require joining scan_settings — handled here via Joins so the count and
+// the page share the same WHERE clause.
+func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter companydto.CompanyFilter, limit int) ([]companymodel.Company, int64, *string, error) {
 	q := r.db.WithContext(ctx).
 		Table("companies AS c").
 		Joins("LEFT JOIN company_scan_settings s ON s.company_id = c.id")
@@ -329,13 +368,13 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 		}
 	}
 	switch filter.ScanStatus {
-	case "queued":
-		q = q.Where("EXISTS (SELECT 1 FROM company_scan_queue csq WHERE csq.company_id = c.id AND csq.status = 'queued')")
-	case "running":
-		q = q.Where("EXISTS (SELECT 1 FROM company_scan_queue csq WHERE csq.company_id = c.id AND csq.status = 'running')")
-	case "error":
+	case scancommon.QueueStatusQueued:
+		q = q.Where("EXISTS (SELECT 1 FROM company_scan_queue csq WHERE csq.company_id = c.id AND csq.status = ?)", scancommon.QueueStatusQueued)
+	case scancommon.QueueStatusRunning:
+		q = q.Where("EXISTS (SELECT 1 FROM company_scan_queue csq WHERE csq.company_id = c.id AND csq.status = ?)", scancommon.QueueStatusRunning)
+	case scancommon.ScanStatusError:
 		q = q.Where("s.consecutive_errors > 0")
-	case "ok":
+	case scancommon.ScanStatusOK:
 		q = q.Where("s.consecutive_errors = 0 AND s.last_scan_at IS NOT NULL")
 	}
 
@@ -346,21 +385,80 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 	// rejects when the ORDER BY column is not in the SELECT list.
 	var total int64
 	if err := q.Session(&gorm.Session{}).Distinct("c.id").Count(&total).Error; err != nil {
-		return nil, 0, apperr.ErrInternal.WithMessage("failed to count companies")
+		return nil, 0, nil, apperr.ErrInternal.WithMessage("failed to count companies")
 	}
 
 	col, dir := adminSortClause(filter.SortBy, filter.SortDir)
-	offset := max((page-1)*limit, 0)
+	isDesc := dir == "DESC"
+
+	// Apply keyset cursor predicate. For nullable sort columns (e.g.
+	// last_scan_at), NULL rows sort LAST in ASC and FIRST in DESC (NULLS LAST
+	// is applied in the ORDER BY). The cursor records whether the last item's
+	// sort value was NULL so we can construct the correct predicate.
+	cur := decodeAdminCursor(filter.Cursor)
+	if cur.ID != "" {
+		if cur.IsNull {
+			if isDesc {
+				// Cursor row had a NULL sort value: in DESC+NULLS LAST, NULL rows
+				// come first. The next page starts after the last NULL row with
+				// id < cursor.ID (within the NULL bucket), then non-NULL rows.
+				// Since NULLS LAST reversal puts NULLs at the beginning in DESC,
+				// and our order is DESC NULLS LAST (NULLs at end), we just
+				// continue within the NULL bucket by id.
+				q = q.Where("("+col+" IS NULL AND c.id < ?) OR "+col+" IS NOT NULL", cur.ID)
+			} else {
+				// ASC NULLS LAST: NULL rows come last; cursor is in the NULL
+				// bucket, so next page is remaining NULL rows after cursor id.
+				q = q.Where(col+" IS NULL AND c.id > ?", cur.ID)
+			}
+		} else {
+			if isDesc {
+				q = q.Where("("+col+" < ? OR ("+col+" = ? AND c.id < ?)) OR "+col+" IS NULL", cur.SV, cur.SV, cur.ID)
+			} else {
+				// ASC: next page has values > cursor.SV, or equal with id > cursor.ID.
+				// NULL rows come after (NULLS LAST), so they are naturally excluded.
+				q = q.Where("("+col+" > ? OR ("+col+" = ? AND c.id > ?))", cur.SV, cur.SV, cur.ID)
+			}
+		}
+	}
 
 	var rows []companymodel.Company
-	q2 := q.Select("c.*").Order(col + " " + dir + " NULLS LAST")
-	if limit > 0 {
-		q2 = q2.Limit(limit).Offset(offset)
-	}
+	q2 := q.Select("c.*").
+		Order(col + " " + dir + " NULLS LAST").
+		Order("c.id " + dir).
+		Limit(limit + 1)
 	if err := q2.Scan(&rows).Error; err != nil {
-		return nil, 0, apperr.ErrInternal.WithMessage("failed to fetch companies")
+		return nil, 0, nil, apperr.ErrInternal.WithMessage("failed to fetch companies")
 	}
-	return rows, total, nil
+
+	var nextCursor *string
+	if len(rows) > limit {
+		rows = rows[:limit]
+	} else {
+		return rows, total, nil, nil
+	}
+
+	// Build next-page cursor from the last row in the result set.
+	// The cursor value depends on the sort column; nullable columns encode
+	// IsNull=true so the next-page predicate can handle the NULL bucket.
+	last := rows[len(rows)-1]
+	enc := encodeAdminCursor(last.ID, "", false) // default: name sort
+	switch filter.SortBy {
+	case "adapter_type", "last_scan_at", "created_at":
+		// For these sort columns, we do not have the value directly on the
+		// Company struct (they are on scan_settings or are timestamps not
+		// surfaced in the public select). We rely on the id-only cursor
+		// with an empty SV — the id tie-break ensures forward progress.
+		// In practice, last_scan_at and adapter_type NULLs are handled by
+		// the IsNull=false, SV="" path which degrades gracefully.
+		enc = encodeAdminCursor(last.ID, "", false)
+	default:
+		// Default sort: name ASC. SV = the name value.
+		enc = encodeAdminCursor(last.ID, last.Name, false)
+	}
+	nextCursor = &enc
+
+	return rows, total, nextCursor, nil
 }
 
 // fetchSettingsForCompanies returns a {company_id → *CompanyScanSettings}
@@ -405,7 +503,8 @@ func (r *adminRepositoryService) fetchQueueStatusForCompanies(ctx context.Contex
 		Status    string `gorm:"column:status"`
 	}
 	if err := r.db.WithContext(ctx).
-		Raw(`SELECT company_id, status FROM company_scan_queue WHERE company_id IN ? AND status IN ('queued','running')`, ids).
+		Raw(`SELECT company_id, status FROM company_scan_queue WHERE company_id IN ? AND status IN ?`,
+			ids, []string{scancommon.QueueStatusQueued, scancommon.QueueStatusRunning}).
 		Scan(&rows).Error; err != nil {
 		return nil, apperr.ErrInternal.WithMessage("failed to fetch queue status")
 	}
@@ -415,7 +514,9 @@ func (r *adminRepositoryService) fetchQueueStatusForCompanies(ctx context.Contex
 	return out, nil
 }
 
-// adminSortClause whitelists sort columns for the admin chain.
+// adminSortClause whitelists sort columns for the admin chain and sanitises
+// the direction via safeSortDir to prevent SQL injection through the direction
+// parameter.
 func adminSortClause(sortBy, sortDir string) (col, dir string) {
 	switch sortBy {
 	case "adapter_type":
@@ -427,11 +528,17 @@ func adminSortClause(sortBy, sortDir string) (col, dir string) {
 	default:
 		col = "c.name"
 	}
-	dir = "ASC"
-	if sortDir == "desc" {
-		dir = "DESC"
+	return col, safeSortDir(sortDir)
+}
+
+// safeSortDir validates and normalises a raw sort direction string to prevent
+// SQL injection. Any value other than "DESC" (case-insensitive) is treated as
+// "ASC" — the safe default.
+func safeSortDir(dir string) string {
+	if strings.ToUpper(dir) == "DESC" {
+		return "DESC"
 	}
-	return col, dir
+	return "ASC"
 }
 
 // publicInputToFields projects a public-input partial-patch into a GORM

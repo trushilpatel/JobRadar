@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { triggerRetry } from '@/api/dashboard'
+import { companyQueryKeys } from '@/features/companies/queryKeys'
 
 export function useRetryTier() {
   const qc = useQueryClient()
@@ -13,7 +14,7 @@ export function useRetryTier() {
       tier: '1m' | '10m' | '1h' | 'dlq'
     }) => triggerRetry(worker, tier),
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['pipeline-stats'] })
+      qc.invalidateQueries({ queryKey: companyQueryKeys.pipelineStats() })
       toast.success(`Retrying ${data.drained} job${data.drained === 1 ? '' : 's'}`)
     },
     onError: () => {

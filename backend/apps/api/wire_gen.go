@@ -13,7 +13,6 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/service/application"
 	services3 "github.com/trushilpatel/jobradar/service/application/services"
-	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	services "github.com/trushilpatel/jobradar/service/company/services"
 	"github.com/trushilpatel/jobradar/service/dashboard"
 	services4 "github.com/trushilpatel/jobradar/service/dashboard/services"
@@ -40,8 +39,8 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	companyAdminRepositoryService := services.NewAdminRepositoryService(db, scanHistoryReader)
 	// nil cache: cache invalidation is a no-op in this wiring context; the
 	// multi-user setup in multiuser_setup.go passes a real cache to its own
-	// admin chain instance.
-	companyAdminImplService := services.NewAdminImplService(companyAdminRepositoryService, nil)
+	// admin chain instance. nil log: no-op logger for this wiring path.
+	companyAdminImplService := services.NewAdminImplService(companyAdminRepositoryService, nil, nil)
 	companyAdminValidationService := services.NewAdminValidationService(companyAdminImplService)
 	companyAdminRestService := services.NewAdminRestService(companyAdminValidationService)
 	companyAdminRouter := services.NewAdminRestRouter(companyAdminRestService)
@@ -124,7 +123,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 
 // provideScanHistoryReader binds ScanLogStore to the ScanHistoryReader interface
 // needed by company.AdminRepositoryService.
-func provideScanHistoryReader(s services2.ScanLogStore) companydto.ScanHistoryReader {
+func provideScanHistoryReader(s services2.ScanLogStore) services.ScanHistoryReader {
 	return s
 }
 

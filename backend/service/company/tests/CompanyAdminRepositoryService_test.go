@@ -420,7 +420,7 @@ func TestAdminRepo_List_NoFilter(t *testing.T) {
 	seedScanSettings(t, db, "a", companycommon.AdapterGreenhouse, true)
 	repo := companysvc.NewAdminRepositoryService(db, hist)
 
-	res, err := repo.List(context.Background(), companydto.CompanyFilter{}, 1, 10)
+	res, err := repo.List(context.Background(), companydto.CompanyFilter{}, 10)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -444,7 +444,7 @@ func TestAdminRepo_List_ActiveFilter(t *testing.T) {
 
 	// Active=true matches only company a.
 	active := true
-	res, err := repo.List(context.Background(), companydto.CompanyFilter{Active: &active}, 1, 10)
+	res, err := repo.List(context.Background(), companydto.CompanyFilter{Active: &active}, 10)
 	if err != nil {
 		t.Fatalf("List active=true: %v", err)
 	}
@@ -454,7 +454,7 @@ func TestAdminRepo_List_ActiveFilter(t *testing.T) {
 
 	// Active=false matches b AND c (no settings row counts as inactive).
 	active = false
-	res, err = repo.List(context.Background(), companydto.CompanyFilter{Active: &active}, 1, 10)
+	res, err = repo.List(context.Background(), companydto.CompanyFilter{Active: &active}, 10)
 	if err != nil {
 		t.Fatalf("List active=false: %v", err)
 	}
@@ -471,7 +471,7 @@ func TestAdminRepo_List_HasSettingsFilter(t *testing.T) {
 	repo := companysvc.NewAdminRepositoryService(db, hist)
 
 	hs := true
-	res, err := repo.List(context.Background(), companydto.CompanyFilter{HasSettings: &hs}, 1, 10)
+	res, err := repo.List(context.Background(), companydto.CompanyFilter{HasSettings: &hs}, 10)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -480,7 +480,7 @@ func TestAdminRepo_List_HasSettingsFilter(t *testing.T) {
 	}
 
 	hs = false
-	res, err = repo.List(context.Background(), companydto.CompanyFilter{HasSettings: &hs}, 1, 10)
+	res, err = repo.List(context.Background(), companydto.CompanyFilter{HasSettings: &hs}, 10)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -498,7 +498,7 @@ func TestAdminRepo_List_AdapterTypesFilter(t *testing.T) {
 	repo := companysvc.NewAdminRepositoryService(db, hist)
 
 	res, err := repo.List(context.Background(),
-		companydto.CompanyFilter{AdapterTypes: []string{companycommon.AdapterGreenhouse}}, 1, 10)
+		companydto.CompanyFilter{AdapterTypes: []string{companycommon.AdapterGreenhouse}}, 10)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -548,7 +548,7 @@ func TestAdminRepo_List_ScanStatusBranches(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.status, func(t *testing.T) {
-			res, err := repo.List(context.Background(), companydto.CompanyFilter{ScanStatus: tc.status}, 1, 10)
+			res, err := repo.List(context.Background(), companydto.CompanyFilter{ScanStatus: tc.status}, 10)
 			if err != nil {
 				t.Fatalf("List %s: %v", tc.status, err)
 			}
@@ -581,7 +581,7 @@ func TestAdminRepo_List_SortBranches(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.sortBy+"-"+tc.sortDir, func(t *testing.T) {
-			res, err := repo.List(context.Background(), companydto.CompanyFilter{SortBy: tc.sortBy, SortDir: tc.sortDir}, 1, 10)
+			res, err := repo.List(context.Background(), companydto.CompanyFilter{SortBy: tc.sortBy, SortDir: tc.sortDir}, 10)
 			if err != nil {
 				t.Fatalf("List sort=%s/%s: %v", tc.sortBy, tc.sortDir, err)
 			}
@@ -599,7 +599,7 @@ func TestAdminRepo_List_QueueStatusPopulated(t *testing.T) {
 		t.Fatalf("seed queue: %v", err)
 	}
 	repo := companysvc.NewAdminRepositoryService(db, hist)
-	res, err := repo.List(context.Background(), companydto.CompanyFilter{}, 1, 10)
+	res, err := repo.List(context.Background(), companydto.CompanyFilter{}, 10)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -613,7 +613,7 @@ func TestAdminRepo_List_ScanHistoryPopulated(t *testing.T) {
 	seedAdminCompany(t, db, "a", "Alpha")
 	hist.out = map[string][]bool{"a": {true, false, true}}
 	repo := companysvc.NewAdminRepositoryService(db, hist)
-	res, err := repo.List(context.Background(), companydto.CompanyFilter{}, 1, 10)
+	res, err := repo.List(context.Background(), companydto.CompanyFilter{}, 10)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -627,7 +627,7 @@ func TestAdminRepo_List_ScanHistoryErrorBubbles(t *testing.T) {
 	seedAdminCompany(t, db, "a", "Alpha")
 	hist.err = errors.New("boom")
 	repo := companysvc.NewAdminRepositoryService(db, hist)
-	_, err := repo.List(context.Background(), companydto.CompanyFilter{}, 1, 10)
+	_, err := repo.List(context.Background(), companydto.CompanyFilter{}, 10)
 	if err == nil {
 		t.Fatal("expected error from scan-history reader, got nil")
 	}
@@ -637,8 +637,8 @@ func TestAdminRepo_List_ScanHistoryErrorBubbles(t *testing.T) {
 	}
 }
 
-// idsOf returns the IDs of admin views for set comparison.
-func idsOf(items []companydto.CompanyAdminView) []string {
+// idsOf returns the IDs of admin list views for set comparison.
+func idsOf(items []companydto.CompanyAdminListView) []string {
 	out := make([]string, 0, len(items))
 	for _, it := range items {
 		out = append(out, it.ID)

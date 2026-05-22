@@ -1,8 +1,18 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import type { Company } from '@/types'
 import { ADAPTER_TYPES } from '@/types'
 import { EMPTY_MESSAGES } from '@/features/companies/constants'
 import { ResizeHandle } from '@/components/ui/resize-handle'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   useCompanies,
   useCompanyActions,
@@ -20,6 +30,7 @@ export function CompaniesPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [editCompany, setEditCompany] = useState<Company | null>(null)
   const [drawerCompany, setDrawerCompany] = useState<Company | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Company | null>(null)
   const [panelWidth, setPanelWidth] = useState(480)
   const [adapterOptions, setAdapterOptions] = useState<string[]>([...ADAPTER_TYPES])
 
@@ -71,7 +82,7 @@ export function CompaniesPage() {
           actions={{
             onScan: actions.scan,
             onEdit: setEditCompany,
-            onDelete: actions.remove,
+            onDelete: (id) => setDeleteTarget(c.companies.find((co) => co.id === id) ?? null),
             onToggleActive: actions.toggleActive,
             scanning: actions.scanning,
           }}
@@ -81,8 +92,8 @@ export function CompaniesPage() {
           <>
             <ResizeHandle width={panelWidth} onChange={setPanelWidth} />
             <aside
-              style={{ width: panelWidth }}
-              className="shrink-0 min-h-0 border-l border-white/[0.07] overflow-hidden"
+              style={{ ['--panel-width' as string]: `${panelWidth}px` } as CSSProperties}
+              className="shrink-0 min-h-0 border-l border-white/[0.07] overflow-hidden [width:var(--panel-width)]"
             >
               <CompanyDetailDrawer
                 company={drawerCompany}
@@ -117,6 +128,33 @@ export function CompaniesPage() {
           actions.handleCompanyUpdated(updated)
         }}
       />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent className="bg-[#0d0d14] border-white/10">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">Delete Company</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{deleteTarget?.name}</strong> and all its scan
+              history. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-500 text-white"
+              onClick={() => {
+                if (deleteTarget) {
+                  actions.remove(deleteTarget.id)
+                  if (drawerCompany?.id === deleteTarget.id) setDrawerCompany(null)
+                  setDeleteTarget(null)
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

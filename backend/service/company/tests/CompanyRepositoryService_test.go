@@ -107,7 +107,7 @@ func TestPublicRepo_ListPublic_NoFilter(t *testing.T) {
 	}
 	repo := companysvc.NewRepositoryService(db)
 
-	res, err := repo.ListPublic(context.Background(), companydto.CompanyFilter{}, 1, 10)
+	res, err := repo.ListPublic(context.Background(), companydto.CompanyFilter{}, 10)
 	if err != nil {
 		t.Fatalf("ListPublic: %v", err)
 	}
@@ -130,8 +130,8 @@ func TestPublicRepo_ListPublic_Pagination(t *testing.T) {
 	}
 	repo := companysvc.NewRepositoryService(db)
 
-	// Page 2 limit 2 → items c, d.
-	res, err := repo.ListPublic(context.Background(), companydto.CompanyFilter{}, 2, 2)
+	// First page with limit=2: items a, b. NextCursor should be non-nil.
+	res, err := repo.ListPublic(context.Background(), companydto.CompanyFilter{}, 2)
 	if err != nil {
 		t.Fatalf("ListPublic: %v", err)
 	}
@@ -141,8 +141,23 @@ func TestPublicRepo_ListPublic_Pagination(t *testing.T) {
 	if len(res.Items) != 2 {
 		t.Fatalf("Items = %d, want 2", len(res.Items))
 	}
-	if res.Items[0].Name != "c" || res.Items[1].Name != "d" {
-		t.Errorf("page contents = [%s, %s], want [c, d]", res.Items[0].Name, res.Items[1].Name)
+	if res.Items[0].Name != "a" || res.Items[1].Name != "b" {
+		t.Errorf("first page contents = [%s, %s], want [a, b]", res.Items[0].Name, res.Items[1].Name)
+	}
+	if res.NextCursor == nil {
+		t.Fatalf("expected non-nil NextCursor for page 1 of 5 items with limit 2")
+	}
+
+	// Second page using the cursor from the first page: items c, d.
+	res2, err := repo.ListPublic(context.Background(), companydto.CompanyFilter{Cursor: *res.NextCursor}, 2)
+	if err != nil {
+		t.Fatalf("ListPublic page 2: %v", err)
+	}
+	if len(res2.Items) != 2 {
+		t.Fatalf("Items = %d, want 2 for page 2", len(res2.Items))
+	}
+	if res2.Items[0].Name != "c" || res2.Items[1].Name != "d" {
+		t.Errorf("page 2 contents = [%s, %s], want [c, d]", res2.Items[0].Name, res2.Items[1].Name)
 	}
 }
 
@@ -179,7 +194,7 @@ func TestPublicRepo_ListPublic_SortBranches(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := repo.ListPublic(context.Background(),
-				companydto.CompanyFilter{SortBy: tc.sortBy, SortDir: tc.sortDir}, 1, 10)
+				companydto.CompanyFilter{SortBy: tc.sortBy, SortDir: tc.sortDir}, 10)
 			if err != nil {
 				t.Fatalf("ListPublic: %v", err)
 			}
@@ -201,7 +216,7 @@ func TestPublicRepo_ListPublic_SortBranches(t *testing.T) {
 func TestPublicRepo_ListPublic_SearchEmitsILIKE(t *testing.T) {
 	db, cap := newDryRunDB(t)
 	repo := companysvc.NewRepositoryService(db)
-	_, _ = repo.ListPublic(context.Background(), companydto.CompanyFilter{Search: "alpha"}, 1, 10)
+	_, _ = repo.ListPublic(context.Background(), companydto.CompanyFilter{Search: "alpha"}, 10)
 
 	captured := cap.statements()
 	if len(captured) == 0 {
@@ -228,7 +243,7 @@ func TestPublicRepo_ListPublic_CountError(t *testing.T) {
 	_ = sqlDB.Close()
 	repo := companysvc.NewRepositoryService(db)
 
-	_, err := repo.ListPublic(context.Background(), companydto.CompanyFilter{}, 1, 10)
+	_, err := repo.ListPublic(context.Background(), companydto.CompanyFilter{}, 10)
 	if err == nil {
 		t.Fatal("expected error from closed DB, got nil")
 	}

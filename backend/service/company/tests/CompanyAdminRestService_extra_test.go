@@ -24,7 +24,6 @@ var _ companysvc.CompanyAdminService = (*recordingAdminForRest)(nil)
 // can verify the REST layer parses query / body / path correctly.
 type recordingAdminForRest struct {
 	listFilter      companydto.CompanyFilter
-	listPage        int
 	listLimit       int
 	listResult      companydto.CompanyAdminListResult
 	listErr         error
@@ -47,9 +46,8 @@ type recordingAdminForRest struct {
 	setAllActiveErr error
 }
 
-func (r *recordingAdminForRest) List(_ context.Context, filter companydto.CompanyFilter, page, limit int) (companydto.CompanyAdminListResult, error) {
+func (r *recordingAdminForRest) List(_ context.Context, filter companydto.CompanyFilter, limit int) (companydto.CompanyAdminListResult, error) {
 	r.listFilter = filter
-	r.listPage = page
 	r.listLimit = limit
 	return r.listResult, r.listErr
 }
@@ -92,7 +90,7 @@ func TestAdminRest_List_QueryParsing(t *testing.T) {
 	r := newAdminRouter(rec)
 
 	req := httptest.NewRequest(http.MethodGet,
-		"/companies?adapter_types=greenhouse&adapter_types=lever&active=true&has_settings=false&search=stripe&sort_by=name&sort_dir=desc&scan_status=ok&page=2&limit=50", nil)
+		"/companies?adapter_types=greenhouse&adapter_types=lever&active=true&has_settings=false&search=stripe&sort_by=name&sort_dir=desc&scan_status=ok&limit=50", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -112,25 +110,25 @@ func TestAdminRest_List_QueryParsing(t *testing.T) {
 	if rec.listFilter.Search != "stripe" || rec.listFilter.SortBy != "name" || rec.listFilter.SortDir != "desc" || rec.listFilter.ScanStatus != "ok" {
 		t.Errorf("string filter mismatch: %+v", rec.listFilter)
 	}
-	if rec.listPage != 2 || rec.listLimit != 50 {
-		t.Errorf("page=%d limit=%d, want 2/50", rec.listPage, rec.listLimit)
+	if rec.listLimit != 50 {
+		t.Errorf("limit=%d, want 50", rec.listLimit)
 	}
 
 	// Response envelope shape. handler.Respond wraps every payload in
 	// `{data: ...}`, so the admin-list envelope sits one level deeper.
 	var body struct {
 		Data struct {
-			Total       int64                         `json:"total"`
-			TotalActive int64                         `json:"total_active"`
-			Page        int                           `json:"page"`
-			Limit       int                           `json:"limit"`
-			Items       []companydto.CompanyAdminView `json:"data"`
+			Total       int64                             `json:"total"`
+			TotalActive int64                             `json:"total_active"`
+			Limit       int                               `json:"limit"`
+			NextCursor  *string                           `json:"next_cursor"`
+			Items       []companydto.CompanyAdminListView `json:"data"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if body.Data.Total != 5 || body.Data.TotalActive != 2 || body.Data.Page != 2 || body.Data.Limit != 50 {
+	if body.Data.Total != 5 || body.Data.TotalActive != 2 || body.Data.Limit != 50 {
 		t.Errorf("response envelope wrong: %+v", body)
 	}
 }

@@ -1,5 +1,7 @@
 export { useCompanies } from '@/features/companies/hooks/useCompanies'
 export { useCompanyActions } from '@/features/companies/hooks/useCompanyActions'
+export { useCompanyScanStats } from '@/features/companies/hooks/useCompanyScanStats'
+export { useCompanyAnalytics } from '@/features/companies/hooks/useCompanyAnalytics'
 export { CompaniesHeader } from '@/features/companies/components/CompaniesHeader'
 export { PipelineStrip } from '@/features/companies/components/PipelineStrip'
 export { CompaniesFilterBar } from '@/features/companies/components/CompaniesFilterBar'

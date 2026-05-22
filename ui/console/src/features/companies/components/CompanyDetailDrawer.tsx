@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X, Trash2, RefreshCw, Pencil, ChevronDown, ChevronUp } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
 import {
   AreaChart,
   Area,
@@ -11,13 +10,13 @@ import {
   Tooltip as RechartTooltip,
   ResponsiveContainer,
 } from 'recharts'
-import type { Company, ScanStats, CompanyAnalytics } from '@/types'
-import { fetchScanStats, fetchCompanyAnalytics } from '@/api/companies'
+import type { Company } from '@/types'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
 import { cn, formatRelativeTime } from '@/lib/utils'
-import { companyQueryKeys } from '@/features/companies/queryKeys'
 import { ROUTES } from '@/constants/routes'
+import { useCompanyScanStats } from '@/features/companies/hooks/useCompanyScanStats'
+import { useCompanyAnalytics } from '@/features/companies/hooks/useCompanyAnalytics'
 
 interface CompanyDetailDrawerProps {
   company: Company
@@ -39,15 +38,8 @@ export function CompanyDetailDrawer({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const navigate = useNavigate()
 
-  const { data: stats, isLoading } = useQuery<ScanStats>({
-    queryKey: companyQueryKeys.companyScanStats(company.id),
-    queryFn: () => fetchScanStats(company.id),
-  })
-
-  const { data: analytics } = useQuery<CompanyAnalytics>({
-    queryKey: companyQueryKeys.companyAnalytics(company.id),
-    queryFn: () => fetchCompanyAnalytics(company.id),
-  })
+  const { data: stats, isLoading } = useCompanyScanStats(company.id)
+  const { data: analytics, isError: analyticsError } = useCompanyAnalytics(company.id)
 
   function toggleError(id: number) {
     setExpandedErrors((prev) => {
@@ -104,6 +96,7 @@ export function CompanyDetailDrawer({
             type="button"
             onClick={onClose}
             title="Close"
+            aria-label="Close drawer"
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
           >
             <X size={14} />
@@ -254,7 +247,9 @@ export function CompanyDetailDrawer({
               : undefined
           }
         >
-          {!analytics ? (
+          {analyticsError ? (
+            <p className="text-xs text-slate-500">Failed to load hiring data</p>
+          ) : !analytics ? (
             <div className="h-28 bg-white/5 rounded animate-pulse" />
           ) : analytics.monthly.every((p) => p.new === 0 && p.removed === 0) ? (
             <p className="text-xs text-slate-500">No hiring data yet</p>

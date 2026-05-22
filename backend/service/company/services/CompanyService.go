@@ -21,14 +21,44 @@ import (
 	"context"
 
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 )
+
+// ScanHistoryReader is the narrow interface the company admin repo needs to
+// populate per-company scan history in list responses. Implemented by
+// scan.ScanLogStore. Declared here (and not in dto/) to satisfy the rule that
+// only {Domain}Service.go may declare interfaces in a domain.
+type ScanHistoryReader interface {
+	GetScanHistories(ctx context.Context, companyIDs []string) (map[string][]bool, error)
+}
+
+// ScanSettingsRepository is the single point of access for the
+// `company_scan_settings` table. It is consumed by:
+//
+//   - The admin chain (CompanyAdminImplService) — when admins create or
+//     update settings via /admin/companies/{id}/scan-settings.
+//   - Background workers (scheduler, crawler) — to read adapter_type /
+//     adapter_config / scan_interval_override / active, and to write
+//     scan-state outcomes (UpdateScanState).
+//
+// Every method rejects an empty companyID with ErrInternal.WithMessage(
+// "company id required") before touching the DB so a forgotten ctx scoping
+// can never silently broaden a query to the entire table.
+type ScanSettingsRepository interface {
+	Get(ctx context.Context, companyID string) (*companymodel.CompanyScanSettings, error)
+	GetMissing(ctx context.Context) ([]string, error)
+	Create(ctx context.Context, s companymodel.CompanyScanSettings) error
+	Update(ctx context.Context, companyID string, p companydto.CompanyScanSettingsInput) error
+	UpdateScanState(ctx context.Context, companyID string, st companydto.CompanyScanStateUpdate) error
+	Delete(ctx context.Context, companyID string) error
+}
 
 // CompanyService is the public read-only contract for the company domain.
 // Returned views never carry operational state (adapter type, scan
 // timestamps, error counters) — those live on CompanyAdminView and are
 // reachable only through CompanyAdminService.
 type CompanyService interface {
-	ListPublic(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (companydto.CompanyPublicListResult, error)
+	ListPublic(ctx context.Context, filter companydto.CompanyFilter, limit int) (companydto.CompanyPublicListResult, error)
 	GetPublic(ctx context.Context, id string) (*companydto.CompanyPublicView, error)
 }
 
@@ -47,8 +77,8 @@ func NewBasePublicService(next CompanyService) BasePublicService {
 	return BasePublicService{next: next}
 }
 
-func (b *BasePublicService) ListPublic(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (companydto.CompanyPublicListResult, error) {
-	return b.next.ListPublic(ctx, filter, page, limit)
+func (b *BasePublicService) ListPublic(ctx context.Context, filter companydto.CompanyFilter, limit int) (companydto.CompanyPublicListResult, error) {
+	return b.next.ListPublic(ctx, filter, limit)
 }
 
 func (b *BasePublicService) GetPublic(ctx context.Context, id string) (*companydto.CompanyPublicView, error) {
@@ -63,7 +93,7 @@ type CompanyAdminService interface {
 	// List returns admin views with scan_settings LEFT-JOINed in a single
 	// query. Honours the full CompanyFilter including operational fields
 	// (Active, AdapterTypes, HasSettings).
-	List(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (companydto.CompanyAdminListResult, error)
+	List(ctx context.Context, filter companydto.CompanyFilter, limit int) (companydto.CompanyAdminListResult, error)
 	Get(ctx context.Context, id string) (*companydto.CompanyAdminView, error)
 
 	// Create inserts a `companies` row plus an optional
@@ -114,8 +144,8 @@ func NewBaseAdminService(next CompanyAdminService) BaseAdminService {
 	return BaseAdminService{next: next}
 }
 
-func (b *BaseAdminService) List(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (companydto.CompanyAdminListResult, error) {
-	return b.next.List(ctx, filter, page, limit)
+func (b *BaseAdminService) List(ctx context.Context, filter companydto.CompanyFilter, limit int) (companydto.CompanyAdminListResult, error) {
+	return b.next.List(ctx, filter, limit)
 }
 
 func (b *BaseAdminService) Get(ctx context.Context, id string) (*companydto.CompanyAdminView, error) {
