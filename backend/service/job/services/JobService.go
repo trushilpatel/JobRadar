@@ -98,6 +98,7 @@ type PipelineService interface {
 	SaveEnrichedJob(ctx context.Context, input dto.EnrichedJobInput) error
 	MarkLedgerError(ctx context.Context, jobID string) error
 	MarkLedgerIrrelevant(ctx context.Context, jobID string) error
+	MarkLedgerNonUSA(ctx context.Context, jobID string) error
 	HasSeenJob(ctx context.Context, jobID string) (bool, error)
 }
 

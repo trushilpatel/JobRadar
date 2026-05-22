@@ -72,7 +72,7 @@ func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.Enriche
 		_ = p.techTags.InsertTechTags(ctx, row.ID, input.Raw.CompanyID, cleaned, time.Now())
 	}
 
-	if err := p.ledger.UpdateSeenReason(ctx, input.Raw.ID, jobcommon.SeenReasonFetch); err != nil {
+	if err := p.ledger.UpdateSeenReason(ctx, input.Raw.ID, jobcommon.SeenReasonSaved); err != nil {
 		return fmt.Errorf("mark ledger seen: %w", err)
 	}
 
@@ -91,6 +91,13 @@ func (p *pipelineService) MarkLedgerIrrelevant(ctx context.Context, jobID string
 	ctx, span := tracing.Start(ctx, "job.pipeline.MarkLedgerIrrelevant")
 	defer tracing.End(span, &err)
 	return p.ledger.UpdateSeenReason(ctx, jobID, jobcommon.SeenReasonLLMIrrelevant)
+}
+
+// MarkLedgerNonUSA marks the pipeline ledger entry for jobID with reason='non_usa_location'.
+func (p *pipelineService) MarkLedgerNonUSA(ctx context.Context, jobID string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.pipeline.MarkLedgerNonUSA")
+	defer tracing.End(span, &err)
+	return p.ledger.UpdateSeenReason(ctx, jobID, jobcommon.SeenReasonNonUSA)
 }
 
 // HasSeenJob returns true if the job has already been processed.

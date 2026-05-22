@@ -111,3 +111,33 @@ func TestSaveEnrichedJob_TechTagsCalled(t *testing.T) {
 		t.Errorf("InsertTechTags calls = %d, want 1", tt.calls)
 	}
 }
+
+// TestMarkLedgerNonUSA_HappyPath asserts the non-USA pathway writes
+// SeenReasonNonUSA. This routes Indian/foreign jobs out of the active
+// enrichment pipeline without counting them as errors.
+func TestMarkLedgerNonUSA_HappyPath(t *testing.T) {
+	jobs := &pipelineJobWriter{}
+	ledger := &pipelineLedgerStore{}
+	snapshot := &pipelineSnapshotWriter{}
+
+	svc := jobsvc.NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
+	if err := svc.MarkLedgerNonUSA(context.Background(), "job-india-1"); err != nil {
+		t.Fatalf("MarkLedgerNonUSA err = %v", err)
+	}
+	if ledger.updateReasonJobID != "job-india-1" {
+		t.Errorf("ledger job ID = %q, want %q", ledger.updateReasonJobID, "job-india-1")
+	}
+	if ledger.updateReasonVal != jobcommon.SeenReasonNonUSA {
+		t.Errorf("ledger reason = %q, want %q", ledger.updateReasonVal, jobcommon.SeenReasonNonUSA)
+	}
+}
+
+// TestMarkLedgerNonUSA_PropagatesLedgerError — when the ledger update fails,
+// the error bubbles up so the worker can handle it.
+func TestMarkLedgerNonUSA_PropagatesLedgerError(t *testing.T) {
+	ledger := &pipelineLedgerStore{updateReasonErr: errors.New("ledger down")}
+	svc := jobsvc.NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{})
+	if err := svc.MarkLedgerNonUSA(context.Background(), "job-1"); err == nil {
+		t.Fatal("expected error when ledger update fails")
+	}
+}

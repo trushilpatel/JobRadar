@@ -13,6 +13,7 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	atstypes "github.com/trushilpatel/jobradar/apps/crawler/ats/types"
 	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
 )
 
 func newFullContentRawJob(adapter, id, title, url, description string) ats.RawJob {
@@ -244,6 +245,125 @@ func TestFetchContent_HTTPFallbackError(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error on 502 fallback")
 	}
+}
+
+// TestFetchOne_NonUSALocationRejectedAfterBackfill — when a thin adapter job
+// has an empty Location at publish time but the detail page reveals a non-USA
+// location, fetchOne must reject the job: mark ledger non_usa_location, Ack
+// the NATS message, increment metrics "non_usa", and return ok=false.
+func TestFetchOne_NonUSALocationRejectedAfterBackfill(t *testing.T) {
+	// Serve a page whose stripped content will be ignored — we only care about
+	// the location backfill path.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "<html><body>Job in Bangalore</body></html>")
+	}))
+	defer ts.Close()
+
+	pipeline := &fakePipelineService{}
+	clk := &fakeClock{now: time.Now()}
+	w := makeWorkerFull(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{}, clk, 5)
+	w.client = ts.Client()
+
+	// Job with empty Location — will be backfilled from content.Location.
+	job := ats.RawJob{
+		ID:       "thin-india-1",
+		Adapter:  "unknown-adp",
+		Title:    "",
+		Location: "",
+		URL:      ts.URL,
+	}
+	// Use a content-returning adapter via FullContent so location backfill is
+	// controlled: set Location directly on the RawJob via a FullContent job.
+	job.FullContent = &atstypes.FullJobContent{
+		Description: "Software Engineer role in Bangalore, India",
+	}
+	// Manually set what the backfill will produce by using FullContent path
+	// which copies job.Location — so instead, set Location on the job directly
+	// to simulate "backfill happened" and the resulting location is non-USA.
+	job.Location = "Bangalore, India"
+
+	before := nonUSACount()
+	msg, state := makeTestMsg(t, job, 1)
+	result, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+
+	if ok {
+		t.Errorf("fetchOne should return ok=false for non-USA location; got result=%+v", result)
+	}
+	if !state.Acked {
+		t.Errorf("msg should be Acked on non-USA rejection, got %+v", state)
+	}
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != job.ID {
+		t.Errorf("expected MarkLedgerNonUSA call for %q, got %v", job.ID, pipeline.markCalls)
+	}
+	if got := nonUSACount() - before; got != 1 {
+		t.Errorf("expected EnricherJobsTotal{non_usa} +1, got %v", got)
+	}
+}
+
+// TestFetchOne_USALocationPassesThrough — a job with a clear USA location must
+// pass through fetchOne without being rejected.
+func TestFetchOne_USALocationPassesThrough(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+
+	job := ats.RawJob{
+		ID:       "usa-job-1",
+		Adapter:  "google",
+		Title:    "Engineer",
+		Location: "San Francisco, CA",
+		URL:      "https://example.com/jobs/1",
+		FullContent: &atstypes.FullJobContent{
+			Description: "Great US role",
+		},
+	}
+	msg, state := makeTestMsg(t, job, 1)
+	result, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+
+	if !ok {
+		t.Errorf("fetchOne should return ok=true for USA location")
+	}
+	if state.Acked || state.Termed {
+		t.Errorf("msg should not be disposed for USA location, got %+v", state)
+	}
+	if result.job.ID != job.ID {
+		t.Errorf("expected result job ID=%q, got %q", job.ID, result.job.ID)
+	}
+	if len(pipeline.markCalls) != 0 {
+		t.Errorf("expected no mark calls for USA job, got %v", pipeline.markCalls)
+	}
+}
+
+// TestFetchOne_UnknownLocationPassesThrough — a job with an ambiguous / empty
+// location must pass through (Unknown stays — never reject on missing signal).
+func TestFetchOne_UnknownLocationPassesThrough(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+
+	job := ats.RawJob{
+		ID:       "remote-job-1",
+		Adapter:  "google",
+		Title:    "Engineer",
+		Location: "Remote",
+		URL:      "https://example.com/jobs/2",
+		FullContent: &atstypes.FullJobContent{
+			Description: "Remote role anywhere",
+		},
+	}
+	msg, _ := makeTestMsg(t, job, 1)
+	_, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+
+	if !ok {
+		t.Errorf("fetchOne should return ok=true for unknown/ambiguous location")
+	}
+	if len(pipeline.markCalls) != 0 {
+		t.Errorf("expected no mark calls for unknown location, got %v", pipeline.markCalls)
+	}
+}
+
+// ── metric helpers ─────────────────────────────────────────────────────────────
+
+func nonUSACount() float64 {
+	return counterValue(metrics.EnricherJobsTotal.WithLabelValues("non_usa"))
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

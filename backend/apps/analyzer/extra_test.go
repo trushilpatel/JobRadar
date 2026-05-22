@@ -194,6 +194,24 @@ func TestMarkIrrelevant_DirectCallTolerantOfError(t *testing.T) {
 	}
 }
 
+func TestMarkNonUSA_DirectCallTolerantOfError(t *testing.T) {
+	pipeline := &fakePipelineService{markErr: stderrors.New("boom")}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+	w.markNonUSA(context.Background(), "job-india-1")
+	if len(pipeline.markCalls) != 1 {
+		t.Errorf("expected one mark call, got %v", pipeline.markCalls)
+	}
+}
+
+func TestMarkNonUSA_DirectCallSuccess(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+	w.markNonUSA(context.Background(), "job-india-2")
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != "job-india-2" {
+		t.Errorf("expected one mark call for job-india-2, got %v", pipeline.markCalls)
+	}
+}
+
 // ── marshalContent ────────────────────────────────────────────────────────────
 
 func TestMarshalContent_EmptyResponse(t *testing.T) {
