@@ -7,7 +7,7 @@ metadata:
     {{- include "jobradar.labels" . | nindent 4 }}
     component: filter
 data:
-  KAFKA_BROKERS: {{ .Values.filter.kafkaBrokers | quote }}
+  NATS_URL: {{ .Values.filter.natsUrl | quote }}
   FILTER_BATCH_SIZE: {{ .Values.filter.batchSize | quote }}
   FILTER_FLUSH_TIMEOUT_SECONDS: {{ .Values.filter.flushTimeoutSeconds | quote }}
   FILTER_LLM_CALL_INTERVAL_SECONDS: {{ .Values.filter.llmCallIntervalSeconds | quote }}

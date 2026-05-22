@@ -6,17 +6,13 @@ images:
     repository: jobradar-backend
     tag: local
     pullPolicy: IfNotPresent
-  crawler:
-    repository: jobradar-crawler
-    tag: local
-    pullPolicy: IfNotPresent
   console:
     repository: jobradar-console
     tag: local
     pullPolicy: IfNotPresent
-  kafka:
-    repository: docker.redpanda.com/redpandadata/redpanda
-    tag: "v24.3.6"
+  nats:
+    repository: nats
+    tag: "2-alpine"
     pullPolicy: IfNotPresent
   redis:
     repository: redis
@@ -44,35 +40,8 @@ api:
 console:
   nodePort: 30300
 
-scheduler:
-  scanIntervalMinutes: "1440"
-  checkIntervalSeconds: "60"
-  stuckTimeoutMinutes: "30"
-  logLevel: info
-  logFormat: json
-  metricsAddr: ":9101"
-  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
-  dbSslmode: require
-  dbPort: "6543"
-
-crawler:
-  kafkaBrokers: "kafka:9092"
-  pollIntervalSeconds: "60"
-  stuckTimeoutSeconds: "120"
-  heartbeatIntervalSeconds: "30"
-  googleMinDelay: "20000"
-  googleMaxDelay: "40000"
-  googleTimeoutMs: "7200000"
-  googleMaxPages: "0"
-  logLevel: info
-  logFormat: json
-  metricsAddr: ":9101"
-  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
-  dbSslmode: require
-  dbPort: "6543"
-
 filter:
-  kafkaBrokers: "kafka:9092"
+  natsUrl: "nats://nats:4222"
   batchSize: "50"
   flushTimeoutSeconds: "30"
   llmCallIntervalSeconds: "5"
@@ -88,7 +57,7 @@ filter:
   dbPort: "6543"
 
 enricher:
-  kafkaBrokers: "kafka:9092"
+  natsUrl: "nats://nats:4222"
   fetchConcurrency: "15"
   llmBatchSize: "5"
   flushTimeoutSeconds: "120"
@@ -108,8 +77,5 @@ enricher:
   dbSslmode: require
   dbPort: "6543"
 
-kafka:
-  storage: 5Gi
-  storageClass: local-path
-  retentionMs: "604800000"   # 7 days in ms
-  memory: "400M"             # Redpanda heap; explicit cap keeps RSS ~100Mi at idle
+nats:
+  url: "nats://nats:4222"    # in-cluster URL; override with Synadia Cloud URL for production

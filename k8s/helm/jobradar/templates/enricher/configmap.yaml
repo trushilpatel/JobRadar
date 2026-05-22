@@ -7,7 +7,7 @@ metadata:
     {{- include "jobradar.labels" . | nindent 4 }}
     component: enricher
 data:
-  KAFKA_BROKERS: {{ .Values.enricher.kafkaBrokers | quote }}
+  NATS_URL: {{ .Values.enricher.natsUrl | quote }}
   ENRICHER_FETCH_CONCURRENCY: {{ .Values.enricher.fetchConcurrency | quote }}
   ENRICHER_LLM_BATCH_SIZE: {{ .Values.enricher.llmBatchSize | quote }}
   ENRICHER_FLUSH_TIMEOUT_SECONDS: {{ .Values.enricher.flushTimeoutSeconds | quote }}
