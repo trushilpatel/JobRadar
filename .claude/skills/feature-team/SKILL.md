@@ -557,3 +557,9 @@ Raw agent reports are internal. The user receives the synthesized summary only.
 | Routing [DESIGN] issues to SWE                       | DESIGN issues go to Architect — design must be re-locked before Phase 5 restarts   |
 | Stopping QA loop after one FAIL                      | Loop continues until PASS or iteration 4 — SWE must address every flagged issue    |
 | SWE skips a Test Plan case                           | Every skipped case requires a documented reason; QA will reject undocumented skips |
+
+---
+
+## Self-Improvement
+
+After this skill completes, invoke `skill-self-improvement` to check whether any finding warrants updating this file or `CLAUDE.md`.

@@ -419,3 +419,9 @@ After running all sections, produce this report:
 | Adapter scan success rate             | > 95%  | 90–95%  | < 90%          |
 | Queue depth (queued)                  | < 20   | 20–50   | > 50           |
 | User dismiss rate                     | < 50%  | 50–80%  | > 80%          |
+
+---
+
+## Self-Improvement
+
+After this skill completes, invoke `skill-self-improvement` to check whether any finding warrants updating this file or `CLAUDE.md`. Focus especially on: threshold calibration from real observed data, new anomaly patterns discovered, schema changes (new tables/fields), or queries that produced false positives.

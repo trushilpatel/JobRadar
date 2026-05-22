@@ -118,8 +118,13 @@ Always parallel via `superpowers:dispatching-parallel-agents`:
 - Run one QA reviewer over the combined output after parallel work finishes
 - Never execute plans inline in the same session
 
+## Self-improving documentation
+
+This file and the project's skill files evolve as the codebase is worked on. When you discover something that belongs here — a new project-wide invariant, an outdated rule, a non-obvious constraint — update it inline. Follow `skill-self-improvement` for the protocol (when/how). Do not add session-specific state, bug descriptions, or anything derivable by reading the code.
+
 ## See also
 
 - `infra/CLAUDE.md` — local k8s deployment + iteration
 - `docs/QUALITY.md` — quality attributes reference (`.claude/rules/quality-attributes.md` auto-loads on backend files; `frontend-quality-attributes.md` on frontend files)
 - Subdirectory `CLAUDE.md` files cover each `backend/*` and `ui/console/*` area and auto-load when you work there
+- `.claude/skills/` — project skills; each has a self-improvement footer that invokes `skill-self-improvement` after completion
