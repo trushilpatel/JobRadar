@@ -1,73 +1,63 @@
-# React + TypeScript + Vite
+# JobRadar Console
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript frontend for JobRadar. Displays the job feed, insights, company management, and admin tools.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+React 19 · TypeScript (strict) · Vite · TanStack Query v5 · TanStack Table v8 · Zustand · Tailwind CSS · Radix UI · Recharts · Supabase Auth · Vitest + Testing Library
 
-## React Compiler
+## Project layout
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+src/
+  api/            ← one file per domain; pure functions, no UI concerns
+  types/          ← all shared types in index.ts (single source of truth)
+  constants/      ← typed status/stage/reason constants
+  lib/            ← api-client, queryClient, supabase, utils (cn, etc.)
+  features/       ← one folder per domain: components + hooks + queryKeys + __tests__
+  components/
+    ui/           ← generic, zero domain knowledge (Button, Badge, etc.)
+    shared/       ← lightly domain-aware shared components
+  pages/          ← route-level components; compose features only, no data fetching
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Local development
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```bash
+# From repo root
+make dev          # Kafka + Redis in Docker; API on :8080; Vite dev server on :5173
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Console only (API must already be running)
+make dev-console
 ```
+
+Auth uses Supabase magic link. Add `http://localhost:5173/auth/callback` to the Supabase allowed redirect URLs.
+
+## Build
+
+```bash
+cd ui/console && npm run build
+```
+
+The Kubernetes image is built via `make k8s-build-console` (from repo root) and served by a static nginx container.
+
+## Tests
+
+```bash
+cd ui/console && npx vitest run            # all tests
+cd ui/console && npx vitest run --coverage # with coverage report
+cd ui/console && npm run lint              # ESLint
+cd ui/console && npm run tsc               # TypeScript check (no emit)
+```
+
+Coverage target is 90% statement coverage per file.
+
+## Key patterns
+
+- **Server state**: TanStack Query only — never `fetch` + `useState` for API data
+- **App-wide state**: Zustand (`features/auth/store.ts` for session)
+- **HTTP**: always via `lib/api-client.ts` — auth, error handling, envelope unwrapping in one place
+- **Query keys**: always imported from `features/<domain>/queryKeys.ts` — never inline strings
+- **Components**: Container (fetches, handles loading/error) → Content (pure props, no fetching)
+- **Styling**: `cn()` (clsx + tailwind-merge) only — no inline styles
+- **Accessible primitives**: Radix UI for dialogs, selects, tooltips, switches
