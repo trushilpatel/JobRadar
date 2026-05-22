@@ -16,7 +16,7 @@ type recordingPublic struct {
 	listCalls, getCalls int
 }
 
-func (r *recordingPublic) ListPublic(_ context.Context, _ companydto.CompanyFilter, _, _ int) (companydto.CompanyPublicListResult, error) {
+func (r *recordingPublic) ListPublic(_ context.Context, _ companydto.CompanyFilter, _ int) (companydto.CompanyPublicListResult, error) {
 	r.listCalls++
 	return companydto.CompanyPublicListResult{}, nil
 }
@@ -35,7 +35,7 @@ type recordingAdmin struct {
 	listResult                             companydto.CompanyAdminListResult
 }
 
-func (r *recordingAdmin) List(_ context.Context, _ companydto.CompanyFilter, _, _ int) (companydto.CompanyAdminListResult, error) {
+func (r *recordingAdmin) List(_ context.Context, _ companydto.CompanyFilter, _ int) (companydto.CompanyAdminListResult, error) {
 	r.list++
 	return r.listResult, nil
 }
@@ -80,7 +80,7 @@ func TestImplService_DelegatesEverything(t *testing.T) {
 	next := &recordingPublic{}
 	svc := companysvc.NewImplService(next)
 
-	if _, err := svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 1, 10); err != nil {
+	if _, err := svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 10); err != nil {
 		t.Fatalf("ListPublic: %v", err)
 	}
 	if _, err := svc.GetPublic(context.Background(), "x"); err != nil {
@@ -119,7 +119,7 @@ func TestBasePublicService_DelegatesEverything(t *testing.T) {
 	next := &recordingPublic{}
 	base := companysvc.NewBasePublicService(next)
 
-	_, _ = base.ListPublic(context.Background(), companydto.CompanyFilter{}, 1, 10)
+	_, _ = base.ListPublic(context.Background(), companydto.CompanyFilter{}, 10)
 	_, _ = base.GetPublic(context.Background(), "x")
 
 	if next.listCalls != 1 || next.getCalls != 1 {
@@ -134,7 +134,7 @@ func TestBaseAdminService_DelegatesEverything(t *testing.T) {
 	next := &recordingAdmin{}
 	base := companysvc.NewBaseAdminService(next)
 
-	_, _ = base.List(context.Background(), companydto.CompanyFilter{}, 1, 10)
+	_, _ = base.List(context.Background(), companydto.CompanyFilter{}, 10)
 	_, _ = base.Get(context.Background(), "x")
 	_, _ = base.Create(context.Background(), companydto.CompanyPublicInput{}, companydto.CompanyScanSettingsInput{})
 	_ = base.UpdatePublic(context.Background(), "x", companydto.CompanyPublicInput{})
@@ -170,9 +170,9 @@ func TestBaseAdminService_DelegatesEverything(t *testing.T) {
 // SetAllActive, GetByIDs, GetAll — and that UpdateScanSettings reaches next.
 func TestAdminImpl_SetAllActiveAndQueriesDelegate(t *testing.T) {
 	next := &recordingAdmin{}
-	svc := companysvc.NewAdminImplService(next, nil)
+	svc := companysvc.NewAdminImplService(next, nil, nil)
 
-	_, _ = svc.List(context.Background(), companydto.CompanyFilter{}, 1, 10)
+	_, _ = svc.List(context.Background(), companydto.CompanyFilter{}, 10)
 	_, _ = svc.Get(context.Background(), "x")
 	_ = svc.SetAllActive(context.Background(), true)
 	_, _ = svc.GetByIDs(context.Background(), []string{"a"})
@@ -190,7 +190,7 @@ func TestAdminImpl_SetAllActiveAndQueriesDelegate(t *testing.T) {
 func TestAdminImpl_Create_NextErrorBubbles(t *testing.T) {
 	boom := errors.New("create failed")
 	fake := &fakeAdmin{createErr: boom}
-	svc := companysvc.NewAdminImplService(fake, nil)
+	svc := companysvc.NewAdminImplService(fake, nil, nil)
 	if _, err := svc.Create(context.Background(), companydto.CompanyPublicInput{ID: "x"}, companydto.CompanyScanSettingsInput{}); !errors.Is(err, boom) {
 		t.Errorf("expected wrapped boom, got %v", err)
 	}
@@ -202,7 +202,7 @@ func TestAdminImpl_Create_NextErrorBubbles(t *testing.T) {
 func TestAdminImpl_UpdatePublic_NextErrorBubbles(t *testing.T) {
 	boom := errors.New("update failed")
 	fake := &fakeAdmin{updateErr: boom}
-	svc := companysvc.NewAdminImplService(fake, nil)
+	svc := companysvc.NewAdminImplService(fake, nil, nil)
 	if err := svc.UpdatePublic(context.Background(), "x", companydto.CompanyPublicInput{Name: "y"}); !errors.Is(err, boom) {
 		t.Errorf("expected wrapped boom, got %v", err)
 	}
@@ -212,7 +212,7 @@ func TestAdminImpl_UpdatePublic_NextErrorBubbles(t *testing.T) {
 func TestAdminImpl_Delete_NextErrorBubbles(t *testing.T) {
 	boom := errors.New("delete failed")
 	fake := &fakeAdmin{deleteErr: boom}
-	svc := companysvc.NewAdminImplService(fake, nil)
+	svc := companysvc.NewAdminImplService(fake, nil, nil)
 	if err := svc.Delete(context.Background(), "x"); !errors.Is(err, boom) {
 		t.Errorf("expected wrapped boom, got %v", err)
 	}

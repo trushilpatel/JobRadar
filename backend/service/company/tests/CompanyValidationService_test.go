@@ -11,7 +11,7 @@ import (
 // noopPublic is the terminal pass-through used under the validation layer.
 type noopPublic struct{}
 
-func (n *noopPublic) ListPublic(_ context.Context, _ companydto.CompanyFilter, _, _ int) (companydto.CompanyPublicListResult, error) {
+func (n *noopPublic) ListPublic(_ context.Context, _ companydto.CompanyFilter, _ int) (companydto.CompanyPublicListResult, error) {
 	return companydto.CompanyPublicListResult{}, nil
 }
 func (n *noopPublic) GetPublic(_ context.Context, _ string) (*companydto.CompanyPublicView, error) {
@@ -28,18 +28,16 @@ func TestPublicValidator_ListPublic(t *testing.T) {
 	cases := []struct {
 		name    string
 		filter  companydto.CompanyFilter
-		page    int
 		limit   int
 		wantErr bool
 	}{
-		{name: "ok defaults", page: 1, limit: 20},
-		{name: "page zero", page: 0, limit: 20, wantErr: true},
-		{name: "limit too large", page: 1, limit: 200, wantErr: true},
-		{name: "search too long", filter: companydto.CompanyFilter{Search: stringOfLen(101)}, page: 1, limit: 20, wantErr: true},
+		{name: "ok defaults", limit: 20},
+		{name: "limit too large", limit: 200, wantErr: true},
+		{name: "search too long", filter: companydto.CompanyFilter{Search: stringOfLen(101)}, limit: 20, wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := v.ListPublic(context.Background(), tc.filter, tc.page, tc.limit)
+			_, err := v.ListPublic(context.Background(), tc.filter, tc.limit)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ListPublic: err = %v, wantErr = %v", err, tc.wantErr)
 			}

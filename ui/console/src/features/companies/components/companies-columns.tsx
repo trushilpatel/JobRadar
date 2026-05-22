@@ -177,6 +177,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
               onClick={() => actions.onScan(c)}
               disabled={isScanning}
               title={isScanning ? 'Scanning…' : 'Scan now'}
+              aria-label={isScanning ? `Scanning ${c.name}` : `Scan ${c.name} now`}
               className={cn(
                 'p-1.5 rounded-md transition-colors',
                 isScanning
@@ -190,6 +191,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
               type="button"
               onClick={() => actions.onEdit(c)}
               title="Edit"
+              aria-label={`Edit ${c.name}`}
               className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-white/[0.06] transition-colors opacity-0 group-hover:opacity-100 focus-within:opacity-100"
             >
               <Pencil size={14} />
@@ -198,6 +200,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
               type="button"
               onClick={() => actions.onDelete(c.id)}
               title="Delete"
+              aria-label={`Delete ${c.name}`}
               className="p-1.5 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100 focus-within:opacity-100"
             >
               <Trash2 size={14} />

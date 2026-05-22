@@ -22,15 +22,16 @@ func NewAdminRestService(next CompanyAdminService) *AdminRestService {
 	return &AdminRestService{next: next}
 }
 
-// adminListResponse is the envelope for GET /admin/companies. Extends the
-// standard paged envelope with total_active for header stats (counts every
-// company_scan_settings row with active=true).
-type adminListResponse struct {
-	Data        []companydto.CompanyAdminView `json:"data"`
-	Total       int64                         `json:"total"`
-	TotalActive int64                         `json:"total_active"`
-	Page        int                           `json:"page"`
-	Limit       int                           `json:"limit"`
+// adminListEnvelope is the JSON envelope for GET /admin/companies. Extends
+// the cursor-paged envelope with total_active for header stats.
+// Uses CompanyAdminListView (no adapter_config) — the detail endpoint
+// (GET /admin/companies/{id}) returns the full CompanyAdminView with adapter_config.
+type adminListEnvelope struct {
+	Data        []companydto.CompanyAdminListView `json:"data"`
+	Total       int64                             `json:"total"`
+	TotalActive int64                             `json:"total_active"`
+	Limit       int                               `json:"limit"`
+	NextCursor  *string                           `json:"next_cursor"`
 }
 
 // list handles GET /admin/companies.
@@ -64,19 +65,22 @@ func (h *AdminRestService) list(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("scan_status"); v != "" {
 		filter.ScanStatus = v
 	}
+	if v := q.Get("cursor"); v != "" {
+		filter.Cursor = v
+	}
 
-	result, err := h.next.List(r.Context(), filter, p.Page, p.Limit)
+	result, err := h.next.List(r.Context(), filter, p.Limit)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
 	}
 
-	handler.Respond(w, http.StatusOK, adminListResponse{
+	handler.Respond(w, http.StatusOK, adminListEnvelope{
 		Data:        result.Items,
 		Total:       result.Total,
 		TotalActive: result.TotalActive,
-		Page:        p.Page,
 		Limit:       p.Limit,
+		NextCursor:  result.NextCursor,
 	})
 }
 

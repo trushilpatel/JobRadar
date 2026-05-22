@@ -11,4 +11,5 @@ type CompanyFilter struct {
 	SortBy       string   // "name" — defaults to "name"
 	SortDir      string   // "asc" | "desc" — defaults to "asc"
 	ScanStatus   string   // "ok" | "error" | "queued" | "running"; empty = all
+	Cursor       string   // opaque keyset cursor; empty = first page
 }

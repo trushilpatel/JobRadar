@@ -16,9 +16,9 @@ import (
 func TestCache_ListPublic_NextErrorPropagates(t *testing.T) {
 	boom := errors.New("repo failure")
 	fake := &fakePublic{err: boom}
-	svc := companysvc.NewCacheService(fake, cache.NewMemoryCache(), time.Minute)
+	svc := companysvc.NewCacheService(fake, cache.NewMemoryCache(), time.Minute, nil)
 
-	_, err := svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 1, 10)
+	_, err := svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 10)
 	if !errors.Is(err, boom) {
 		t.Errorf("expected wrapped boom, got %v", err)
 	}
@@ -29,7 +29,7 @@ func TestCache_ListPublic_NextErrorPropagates(t *testing.T) {
 func TestCache_GetPublic_NextErrorPropagates(t *testing.T) {
 	boom := errors.New("repo failure")
 	fake := &fakePublic{err: boom}
-	svc := companysvc.NewCacheService(fake, cache.NewMemoryCache(), time.Minute)
+	svc := companysvc.NewCacheService(fake, cache.NewMemoryCache(), time.Minute, nil)
 
 	_, err := svc.GetPublic(context.Background(), "x")
 	if !errors.Is(err, boom) {
@@ -44,7 +44,7 @@ func TestCache_GetPublic_NextErrorPropagates(t *testing.T) {
 func TestCache_GetPublic_NilResultIsNotCached(t *testing.T) {
 	fake := &fakePublic{getResult: nil}
 	c := cache.NewMemoryCache()
-	svc := companysvc.NewCacheService(fake, c, time.Minute)
+	svc := companysvc.NewCacheService(fake, c, time.Minute, nil)
 
 	_, _ = svc.GetPublic(context.Background(), "x")
 	_, _ = svc.GetPublic(context.Background(), "x")
@@ -58,7 +58,7 @@ func TestCache_GetPublic_NilResultIsNotCached(t *testing.T) {
 func TestCache_ZeroTTLIsPassThrough(t *testing.T) {
 	fake := &fakePublic{getResult: &companydto.CompanyPublicView{}}
 	c := cache.NewMemoryCache()
-	svc := companysvc.NewCacheService(fake, c, 0)
+	svc := companysvc.NewCacheService(fake, c, 0, nil)
 
 	_, _ = svc.GetPublic(context.Background(), "x")
 	_, _ = svc.GetPublic(context.Background(), "x")
@@ -66,8 +66,8 @@ func TestCache_ZeroTTLIsPassThrough(t *testing.T) {
 		t.Errorf("ttl=0 must disable caching; getCalls = %d, want 2", fake.getCalls)
 	}
 
-	_, _ = svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 1, 10)
-	_, _ = svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 1, 10)
+	_, _ = svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 10)
+	_, _ = svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 10)
 	if fake.listCalls != 2 {
 		t.Errorf("ttl=0 must disable list caching; listCalls = %d, want 2", fake.listCalls)
 	}

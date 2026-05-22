@@ -177,7 +177,7 @@ func TestRouter_OperationalEndpointsSeparateFromHandlers(t *testing.T) {
 
 type fakeCompanyService struct{}
 
-func (f *fakeCompanyService) ListPublic(_ context.Context, _ companydto.CompanyFilter, _, _ int) (companydto.CompanyPublicListResult, error) {
+func (f *fakeCompanyService) ListPublic(_ context.Context, _ companydto.CompanyFilter, _ int) (companydto.CompanyPublicListResult, error) {
 	return companydto.CompanyPublicListResult{}, nil
 }
 func (f *fakeCompanyService) GetPublic(_ context.Context, _ string) (*companydto.CompanyPublicView, error) {

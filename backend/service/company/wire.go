@@ -1,15 +1,15 @@
 // Package company wires the two decorator chains exposed by the company
 // slice (public + admin) plus the standalone ScanSettings repository.
 //
-// Phase 2 chains:
+// Decorator chains (outer → inner):
 //
 //	public:
-//	  RepositoryService → ImplService → CacheService → ValidationService
-//	    → RestService → RestRouter
+//	  RestRouter → RestService → ValidationService → CacheService
+//	    → ImplService → RepositoryService
 //
 //	admin:
-//	  AdminRepositoryService → AdminImplService(+cache invalidation)
-//	    → AdminValidationService → AdminRestService → AdminRestRouter
+//	  AdminRestRouter → AdminRestService → AdminValidationService
+//	    → AdminImplService(+cache invalidation) → AdminRepositoryService
 //
 // Both chains share the same *cache.Cache and the same TTL pulled from
 // MultiUserConfig.CacheTTLCompanySeconds. The admin chain calls

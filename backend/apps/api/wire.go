@@ -12,6 +12,7 @@ import (
 	"github.com/trushilpatel/jobradar/service/application"
 	appsvc "github.com/trushilpatel/jobradar/service/application/services"
 	"github.com/trushilpatel/jobradar/service/company"
+	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	"github.com/trushilpatel/jobradar/service/dashboard"
 	dashsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
@@ -51,7 +52,7 @@ func provideScanLogReader(s scansvc.ScanLogStore) scansvc.ScanLogReader {
 
 // provideScanHistoryReader binds ScanLogStore to the ScanHistoryReader interface
 // needed by company.Service.
-func provideScanHistoryReader(s scansvc.ScanLogStore) company.ScanHistoryReader {
+func provideScanHistoryReader(s scansvc.ScanLogStore) companysvc.ScanHistoryReader {
 	return s
 }
 

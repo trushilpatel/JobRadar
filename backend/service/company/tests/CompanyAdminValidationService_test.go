@@ -14,7 +14,7 @@ import (
 // noopAdmin is the terminal pass-through used under the admin validator.
 type noopAdmin struct{}
 
-func (n *noopAdmin) List(_ context.Context, _ companydto.CompanyFilter, _, _ int) (companydto.CompanyAdminListResult, error) {
+func (n *noopAdmin) List(_ context.Context, _ companydto.CompanyFilter, _ int) (companydto.CompanyAdminListResult, error) {
 	return companydto.CompanyAdminListResult{}, nil
 }
 func (n *noopAdmin) Get(_ context.Context, _ string) (*companydto.CompanyAdminView, error) {
@@ -146,16 +146,16 @@ func TestAdminValidator_UpdateScanSettings(t *testing.T) {
 
 func TestAdminValidator_List(t *testing.T) {
 	v := newAdminValidator()
-	if _, err := v.List(context.Background(), companydto.CompanyFilter{AdapterTypes: []string{"nope"}}, 1, 20); err == nil {
+	if _, err := v.List(context.Background(), companydto.CompanyFilter{AdapterTypes: []string{"nope"}}, 20); err == nil {
 		t.Errorf("expected validation error for invalid adapter")
 	}
-	if _, err := v.List(context.Background(), companydto.CompanyFilter{}, 0, 20); err == nil {
+	if _, err := v.List(context.Background(), companydto.CompanyFilter{}, 0); err == nil {
 		t.Errorf("expected validation error for page=0")
 	}
-	if _, err := v.List(context.Background(), companydto.CompanyFilter{}, 1, 1000); err == nil {
+	if _, err := v.List(context.Background(), companydto.CompanyFilter{}, 1000); err == nil {
 		t.Errorf("expected validation error for limit too large")
 	}
-	if _, err := v.List(context.Background(), companydto.CompanyFilter{}, 1, 20); err != nil {
+	if _, err := v.List(context.Background(), companydto.CompanyFilter{}, 20); err != nil {
 		t.Errorf("expected default ok, got %v", err)
 	}
 }

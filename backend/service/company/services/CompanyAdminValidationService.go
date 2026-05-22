@@ -42,7 +42,7 @@ func NewAdminValidationService(next CompanyAdminService) CompanyAdminService {
 }
 
 // List validates filter and pagination then delegates.
-func (v *adminValidationService) List(ctx context.Context, filter companydto.CompanyFilter, page, limit int) (companydto.CompanyAdminListResult, error) {
+func (v *adminValidationService) List(ctx context.Context, filter companydto.CompanyFilter, limit int) (companydto.CompanyAdminListResult, error) {
 	var errs apperr.ValidationErrors
 	for _, at := range filter.AdapterTypes {
 		if !validAdapters[at] {
@@ -61,13 +61,6 @@ func (v *adminValidationService) List(ctx context.Context, filter companydto.Com
 			Message: "search must be 100 characters or fewer",
 		})
 	}
-	if page < 1 {
-		errs = append(errs, apperr.ValidationError{
-			Field:   "page",
-			Code:    "INVALID_VALUE",
-			Message: "page must be >= 1",
-		})
-	}
 	if limit < 1 || limit > 100 {
 		errs = append(errs, apperr.ValidationError{
 			Field:   "limit",
@@ -78,24 +71,25 @@ func (v *adminValidationService) List(ctx context.Context, filter companydto.Com
 	if len(errs) > 0 {
 		return companydto.CompanyAdminListResult{}, errs
 	}
-	return v.next.List(ctx, filter, page, limit)
+	return v.next.List(ctx, filter, limit)
 }
 
 // Create validates required public fields and the scan_settings adapter
-// (when supplied) then delegates.
+// (when supplied) then delegates. All validation errors from both halves are
+// always combined before returning so the caller sees the full error set
+// in one response.
 func (v *adminValidationService) Create(ctx context.Context, public companydto.CompanyPublicInput, settings companydto.CompanyScanSettingsInput) (*companydto.CompanyAdminView, error) {
-	if errs := validatePublicCreate(public); len(errs) > 0 {
-		errs = append(errs, validateScanSettings(settings, true)...)
-		return nil, errs
-	}
-	if errs := validateScanSettings(settings, true); len(errs) > 0 {
-		return nil, errs
+	var allErrs apperr.ValidationErrors
+	allErrs = append(allErrs, validatePublicCreate(public)...)
+	allErrs = append(allErrs, validateScanSettings(settings, true)...)
+	if len(allErrs) > 0 {
+		return nil, allErrs
 	}
 	return v.next.Create(ctx, public, settings)
 }
 
 // UpdatePublic validates the partial-patch — at least one field must be
-// supplied; supplied fields are non-empty.
+// supplied; supplied fields are non-empty and within max-length bounds.
 func (v *adminValidationService) UpdatePublic(ctx context.Context, id string, p companydto.CompanyPublicInput) error {
 	var errs apperr.ValidationErrors
 	if p.Name == "" && p.Slug == "" && p.Website == nil && p.CareersURL == nil && p.LogoURL == nil {
@@ -104,6 +98,21 @@ func (v *adminValidationService) UpdatePublic(ctx context.Context, id string, p 
 			Code:    "BAD_REQUEST",
 			Message: "at least one field must be provided",
 		})
+	}
+	if p.Name != "" && len(p.Name) > 200 {
+		errs = append(errs, apperr.ValidationError{Field: "name", Code: "INVALID_VALUE", Message: "name must be 200 characters or fewer"})
+	}
+	if p.Slug != "" && len(p.Slug) > 100 {
+		errs = append(errs, apperr.ValidationError{Field: "slug", Code: "INVALID_VALUE", Message: "slug must be 100 characters or fewer"})
+	}
+	if p.Website != nil && len(*p.Website) > 2048 {
+		errs = append(errs, apperr.ValidationError{Field: "website", Code: "INVALID_VALUE", Message: "website must be 2048 characters or fewer"})
+	}
+	if p.CareersURL != nil && len(*p.CareersURL) > 2048 {
+		errs = append(errs, apperr.ValidationError{Field: "careers_url", Code: "INVALID_VALUE", Message: "careers_url must be 2048 characters or fewer"})
+	}
+	if p.LogoURL != nil && len(*p.LogoURL) > 2048 {
+		errs = append(errs, apperr.ValidationError{Field: "logo_url", Code: "INVALID_VALUE", Message: "logo_url must be 2048 characters or fewer"})
 	}
 	if len(errs) > 0 {
 		return errs
@@ -130,17 +139,33 @@ func (v *adminValidationService) UpdateScanSettings(ctx context.Context, id stri
 }
 
 // validatePublicCreate enforces the required-public-field invariants used
-// only on Create.
+// only on Create. Also enforces max-length bounds to prevent unbounded
+// DB column overflows and storage abuse.
 func validatePublicCreate(p companydto.CompanyPublicInput) apperr.ValidationErrors {
 	var errs apperr.ValidationErrors
 	if p.ID == "" {
 		errs = append(errs, apperr.ValidationError{Field: "id", Code: "REQUIRED", Message: "id is required"})
+	} else if len(p.ID) > 100 {
+		errs = append(errs, apperr.ValidationError{Field: "id", Code: "INVALID_VALUE", Message: "id must be 100 characters or fewer"})
 	}
 	if p.Name == "" {
 		errs = append(errs, apperr.ValidationError{Field: "name", Code: "REQUIRED", Message: "name is required"})
+	} else if len(p.Name) > 200 {
+		errs = append(errs, apperr.ValidationError{Field: "name", Code: "INVALID_VALUE", Message: "name must be 200 characters or fewer"})
 	}
 	if p.Slug == "" {
 		errs = append(errs, apperr.ValidationError{Field: "slug", Code: "REQUIRED", Message: "slug is required"})
+	} else if len(p.Slug) > 100 {
+		errs = append(errs, apperr.ValidationError{Field: "slug", Code: "INVALID_VALUE", Message: "slug must be 100 characters or fewer"})
+	}
+	if p.Website != nil && len(*p.Website) > 2048 {
+		errs = append(errs, apperr.ValidationError{Field: "website", Code: "INVALID_VALUE", Message: "website must be 2048 characters or fewer"})
+	}
+	if p.CareersURL != nil && len(*p.CareersURL) > 2048 {
+		errs = append(errs, apperr.ValidationError{Field: "careers_url", Code: "INVALID_VALUE", Message: "careers_url must be 2048 characters or fewer"})
+	}
+	if p.LogoURL != nil && len(*p.LogoURL) > 2048 {
+		errs = append(errs, apperr.ValidationError{Field: "logo_url", Code: "INVALID_VALUE", Message: "logo_url must be 2048 characters or fewer"})
 	}
 	return errs
 }
@@ -162,6 +187,13 @@ func validateScanSettings(s companydto.CompanyScanSettingsInput, _ bool) apperr.
 			Field:   "scan_interval_override",
 			Code:    "INVALID_VALUE",
 			Message: "scan_interval_override must be > 0",
+		})
+	}
+	if s.AdapterConfig != nil && len(*s.AdapterConfig) > 10240 {
+		errs = append(errs, apperr.ValidationError{
+			Field:   "adapter_config",
+			Code:    "INVALID_VALUE",
+			Message: "adapter_config must be 10240 bytes (10 KB) or fewer",
 		})
 	}
 	return errs

@@ -121,8 +121,8 @@ type fakeCompanyAdminService struct {
 	err   error
 }
 
-func (f *fakeCompanyAdminService) List(_ context.Context, _ companydto.CompanyFilter, _, _ int) (companydto.CompanyAdminListResult, error) {
-	return companydto.CompanyAdminListResult{Items: f.views, Total: int64(len(f.views))}, f.err
+func (f *fakeCompanyAdminService) List(_ context.Context, _ companydto.CompanyFilter, _ int) (companydto.CompanyAdminListResult, error) {
+	return companydto.CompanyAdminListResult{Total: int64(len(f.views))}, f.err
 }
 func (f *fakeCompanyAdminService) Get(_ context.Context, id string) (*companydto.CompanyAdminView, error) {
 	for i := range f.views {

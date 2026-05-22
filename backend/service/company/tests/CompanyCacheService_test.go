@@ -21,7 +21,7 @@ type fakePublic struct {
 	err        error
 }
 
-func (f *fakePublic) ListPublic(_ context.Context, _ companydto.CompanyFilter, _, _ int) (companydto.CompanyPublicListResult, error) {
+func (f *fakePublic) ListPublic(_ context.Context, _ companydto.CompanyFilter, _ int) (companydto.CompanyPublicListResult, error) {
 	f.listCalls++
 	return f.listResult, f.err
 }
@@ -34,7 +34,7 @@ func TestCache_GetPublic_HitMiss(t *testing.T) {
 	view := &companydto.CompanyPublicView{Company: companymodel.Company{ID: "stripe", Name: "Stripe", Slug: "stripe"}}
 	fake := &fakePublic{getResult: view}
 	c := cache.NewMemoryCache()
-	svc := companysvc.NewCacheService(fake, c, 1*time.Minute)
+	svc := companysvc.NewCacheService(fake, c, 1*time.Minute, nil)
 
 	// Miss — falls through to next, populates cache.
 	if _, err := svc.GetPublic(context.Background(), "stripe"); err != nil {
@@ -61,15 +61,15 @@ func TestCache_ListPublic_HitMiss(t *testing.T) {
 		},
 	}
 	c := cache.NewMemoryCache()
-	svc := companysvc.NewCacheService(fake, c, 1*time.Minute)
+	svc := companysvc.NewCacheService(fake, c, 1*time.Minute, nil)
 
-	if _, err := svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 1, 20); err != nil {
+	if _, err := svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 20); err != nil {
 		t.Fatalf("first ListPublic err = %v", err)
 	}
 	if fake.listCalls != 1 {
 		t.Errorf("expected 1 next.ListPublic call, got %d", fake.listCalls)
 	}
-	if _, err := svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 1, 20); err != nil {
+	if _, err := svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 20); err != nil {
 		t.Fatalf("second ListPublic err = %v", err)
 	}
 	if fake.listCalls != 1 {
@@ -80,10 +80,10 @@ func TestCache_ListPublic_HitMiss(t *testing.T) {
 func TestCache_ListPublic_DistinctFiltersDistinctKeys(t *testing.T) {
 	fake := &fakePublic{}
 	c := cache.NewMemoryCache()
-	svc := companysvc.NewCacheService(fake, c, 1*time.Minute)
+	svc := companysvc.NewCacheService(fake, c, 1*time.Minute, nil)
 
-	_, _ = svc.ListPublic(context.Background(), companydto.CompanyFilter{Search: "a"}, 1, 20)
-	_, _ = svc.ListPublic(context.Background(), companydto.CompanyFilter{Search: "b"}, 1, 20)
+	_, _ = svc.ListPublic(context.Background(), companydto.CompanyFilter{Search: "a"}, 20)
+	_, _ = svc.ListPublic(context.Background(), companydto.CompanyFilter{Search: "b"}, 20)
 	if fake.listCalls != 2 {
 		t.Errorf("distinct filters must miss the cache distinctly, calls = %d", fake.listCalls)
 	}
@@ -91,7 +91,7 @@ func TestCache_ListPublic_DistinctFiltersDistinctKeys(t *testing.T) {
 
 func TestCache_NilCacheIsPassThrough(t *testing.T) {
 	fake := &fakePublic{getResult: &companydto.CompanyPublicView{Company: companymodel.Company{ID: "x"}}}
-	svc := companysvc.NewCacheService(fake, nil, 1*time.Minute)
+	svc := companysvc.NewCacheService(fake, nil, 1*time.Minute, nil)
 	if _, err := svc.GetPublic(context.Background(), "x"); err != nil {
 		t.Fatalf("nil cache: %v", err)
 	}
