@@ -15,7 +15,7 @@ job_listing_crawler       ← fetches careers pages via ATS adapters
         ↓  (Kafka: job_listings.raw)
 job_listing_relevance_filter  ← LLM batch-scores job titles
         ↓  (Kafka: job_listings.filtered)
-job_post_analyzer         ← fetches full page, LLM enriches, eligibility check
+analyzer                  ← fetches full page, LLM enriches, eligibility check
         ↓  (Supabase: jobs)
 REST API + React UI
 ```
@@ -70,12 +70,16 @@ Analytics over all enriched jobs: funnel, role categories, company hiring veloci
 | Lever      | `backend/apps/crawler/ats/lever`                                 |
 | Ashby      | `backend/apps/crawler/ats/ashby`                                 |
 | Apple      | `backend/apps/crawler/ats/apple`                                 |
+| Deel       | `backend/apps/crawler/ats/deel`                                  |
+| Eightfold  | `backend/apps/crawler/ats/eightfold`                             |
+| Gem        | `backend/apps/crawler/ats/gem`                                   |
+| Google     | `backend/apps/crawler/ats/google` (pure HTTP + RE2 — no browser) |
 | Meta       | `backend/apps/crawler/ats/meta`                                  |
 | Microsoft  | `backend/apps/crawler/ats/microsoft`                             |
-| Google     | `backend/apps/crawler/ats/google` (pure HTTP + RE2 — no browser) |
 | Netflix    | `backend/apps/crawler/ats/netflix`                               |
 | Rippling   | `backend/apps/crawler/ats/rippling`                              |
 | Uber       | `backend/apps/crawler/ats/uber`                                  |
+| Workday    | `backend/apps/crawler/ats/workday`                               |
 
 ---
 
@@ -109,34 +113,38 @@ Kubernetes with Helm is the primary way to run JobRadar locally. Everything runs
 ```bash
 k3d cluster create jobradar \
   --port "30080:30080@loadbalancer" \
-  --port "30300:30300@loadbalancer" \
-  --port "30001:30001@loadbalancer" \
-  --port "30090:30090@loadbalancer" \
-  --port "30686:30686@loadbalancer"
+  --port "30300:30300@loadbalancer"
 ```
 
-This wires NodePorts directly to localhost — no port-forwarding needed for day-to-day use.
+This wires the API and console NodePorts directly to localhost — no port-forwarding needed for day-to-day use.
 
 ### 2. Create secrets
 
-Each service needs a Kubernetes Secret with its DB credentials. Examples are in `k8s/helm/jobradar/examples/secrets/`.
+Each service needs a Kubernetes Secret with its sensitive env vars (DB credentials, API keys, auth secrets). The required vars mirror those in `.env.example`. Create each secret with `kubectl create secret generic`:
 
 ```bash
-# Copy and fill in real values for each service
-for svc in api scheduler crawler filter enricher migrate; do
-  cp k8s/helm/jobradar/examples/secrets/${svc}-secret.yaml.example /tmp/${svc}-secret.yaml
-  # edit /tmp/${svc}-secret.yaml with real DB credentials
-  kubectl apply -f /tmp/${svc}-secret.yaml -n jobradar-local
-done
+# Example for the API service — repeat for each: scheduler, crawler, filter, enricher, migrate
+kubectl create secret generic jobradar-api-secret \
+  --from-literal=DB_HOST="..." \
+  --from-literal=DB_USER="..." \
+  --from-literal=DB_PASSWORD="..." \
+  --from-literal=SUPABASE_JWKS_URL="..." \
+  --from-literal=SUPABASE_URL="..." \
+  --from-literal=SUPABASE_SERVICE_ROLE_KEY="..." \
+  -n jobradar-local
 ```
 
-For the observability audit sync (optional — ships Supabase auth logs to Loki):
+Non-sensitive config (ports, log levels, etc.) comes from `values.yaml` via ConfigMaps — only secrets need to be created manually. Check each service's `templates/<svc>/configmap.yaml` to see what is already covered.
+
+For the observability audit sync:
 
 ```bash
 kubectl create secret generic supabase-audit-sync-secret \
   --from-literal=SUPABASE_DB_URL="postgres://postgres:PASSWORD@HOST.supabase.co:5432/postgres" \
   -n jobradar-local
 ```
+
+Grafana Cloud credentials (for the observability chart) go in `k8s/helm/observability/values.local.yaml` — see `values.local.yaml.example`.
 
 ### 3. Build and import images
 
@@ -160,40 +168,39 @@ make k8s-up             # helm install jobradar chart (namespace → kafka → r
 ### 5. Deploy observability (optional)
 
 ```bash
-make k8s-obs-up         # helm install obs chart (Prometheus + Grafana + Loki + Jaeger + audit-sync)
+make k8s-obs-up         # helm install observability chart (Grafana Alloy + audit-sync, ships to Grafana Cloud)
 ```
+
+Requires Grafana Cloud credentials in `k8s/helm/observability/values.local.yaml` (gitignored — see `values.local.yaml.example`).
 
 ### Access
 
-| Service          | URL                    | Notes                                          |
-| ---------------- | ---------------------- | ---------------------------------------------- |
-| Console (UI)     | http://localhost:30300 | Direct via NodePort                            |
-| API              | http://localhost:30080 | Direct via NodePort                            |
-| Grafana          | http://localhost:30001 | Login: `admin` / `admin` — change on first use |
-| Jaeger (tracing) | http://localhost:30686 | Direct via NodePort                            |
-| Prometheus       | http://localhost:30090 | Direct via NodePort                            |
+| Service      | URL                    | Notes               |
+| ------------ | ---------------------- | ------------------- |
+| Console (UI) | http://localhost:30300 | Direct via NodePort |
+| API          | http://localhost:30080 | Direct via NodePort |
 
-> If the cluster was created **without** the `--port` flags above, use `make k8s-forward` and `make k8s-obs-forward` instead.
+> If the cluster was created **without** the `--port` flags above, use `make k8s-forward` instead.
 
 ### Day-to-day commands
 
 ```bash
 make k8s-status              # show all pod statuses
 make k8s-logs                # tail logs for all app services
-make k8s-logs-api            # tail a specific service (also: -crawler, -filter, -enricher, -scheduler, -console)
+make k8s-logs-api            # tail a specific service (also: -crawler, -filter, -analyzer, -scheduler, -console)
 make k8s-restart             # rolling restart all app deployments
 make k8s-restart-api         # rolling restart one service
 make k8s-migrate             # re-run DB migrations
 make k8s-forward             # port-forward console → :3000, api → :8080 (if no NodePort mappings)
-make k8s-obs-forward         # port-forward Grafana :3001, Jaeger :16686, Prometheus :9090
 make k8s-down                # uninstall app chart (secrets and PVCs preserved)
+make k8s-nuke                # fully wipe namespace + PVCs (use when storage class / StatefulSet spec changed)
 make k8s-obs-down            # uninstall observability chart
 ```
 
 ### After a code change
 
 ```bash
-make k8s-build-backend       # rebuild + reimport backend image (api/scheduler/filter/enricher/migrate)
+make k8s-build-backend       # rebuild + reimport backend image (api/scheduler/filter/analyzer/migrate)
 make k8s-build-crawler       # rebuild + reimport crawler image
 make k8s-build-console       # rebuild + reimport console image
 make k8s-restart             # roll all deployments onto the new image
@@ -253,19 +260,19 @@ k8s/helm/
     values.yaml         ← all config defaults
     templates/          ← one directory per component
     examples/secrets/   ← secret templates (fill in and apply manually)
-  observability/        ← observability chart (Prometheus, Grafana, Loki, Jaeger, audit-sync)
-    Chart.yaml          ← depends on kube-prometheus-stack, loki-stack, jaeger
+  observability/        ← observability chart (Grafana Alloy, ships to Grafana Cloud + audit-sync)
+    Chart.yaml          ← depends on grafana/alloy
     values.yaml
+    values.local.yaml.example  ← Grafana Cloud credentials template
     templates/
-    dashboards/         ← Grafana dashboard JSON files
 ```
 
 Helm releases in namespace `jobradar-local`:
 
-| Release    | Chart                    | Manages                                                                   |
-| ---------- | ------------------------ | ------------------------------------------------------------------------- |
-| `jobradar` | `k8s/helm/jobradar`      | api, console, scheduler, crawler, filter, enricher, kafka, redis, migrate |
-| `obs`      | `k8s/helm/observability` | Grafana, Prometheus, Loki, Promtail, Jaeger, supabase-audit-sync          |
+| Release    | Chart                    | Manages                                                                         |
+| ---------- | ------------------------ | ------------------------------------------------------------------------------- |
+| `jobradar` | `k8s/helm/jobradar`      | api, console, scheduler, crawler, filter, enricher (analyzer), kafka, migrate   |
+| `obs`      | `k8s/helm/observability` | Grafana Alloy (ships metrics/logs/traces to Grafana Cloud), supabase-audit-sync |
 
 ---
 
