@@ -315,11 +315,19 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		)
 	}
 
-	for _, item := range passThrough {
-		w.publishDetail(ctx, item.job.job)
-		_ = item.msg.Ack()
-	}
 	if len(passThrough) > 0 {
+		passThroughIDs := make([]string, len(passThrough))
+		for i, it := range passThrough {
+			w.publishDetail(ctx, it.job.job)
+			passThroughIDs[i] = it.job.job.ID
+			_ = it.msg.Ack()
+		}
+		if err := w.ledger.UpdateSeenReasonBatch(ctx, passThroughIDs, jobcommon.SeenReasonFiltered); err != nil {
+			w.log.Error("mark filtered (pass-through) failed", err,
+				logger.Str(logger.FieldFetchID, fetchID),
+				logger.Int(logger.FieldChunkIndex, chunkIndex),
+			)
+		}
 		w.log.Info("chunk pass-through (no title)",
 			logger.Str(logger.FieldFetchID, fetchID),
 			logger.Int(logger.FieldChunkIndex, chunkIndex),
@@ -435,6 +443,15 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 	if len(irrelevantIDs) > 0 {
 		if err := w.ledger.UpdateSeenReasonBatch(ctx, irrelevantIDs, jobcommon.SeenReasonLLMIrrelevant); err != nil {
 			w.log.Error("mark irrelevant failed", err,
+				logger.Str(logger.FieldFetchID, fetchID),
+				logger.Int(logger.FieldChunkIndex, chunkIndex),
+			)
+		}
+	}
+
+	if len(relevantIDs) > 0 {
+		if err := w.ledger.UpdateSeenReasonBatch(ctx, relevantIDs, jobcommon.SeenReasonFiltered); err != nil {
+			w.log.Error("mark filtered (relevant) failed", err,
 				logger.Str(logger.FieldFetchID, fetchID),
 				logger.Int(logger.FieldChunkIndex, chunkIndex),
 			)

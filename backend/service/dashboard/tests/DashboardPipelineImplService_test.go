@@ -46,16 +46,16 @@ func (f *fakePipelineStore) GetPipelineDBStats(_ context.Context) (dto.PipelineD
 func TestPipelineService_GetPipelineStats_OK(t *testing.T) {
 	svc := services.NewPipelineService(
 		&fakePipelineStore{stats: dto.PipelineDBStats{
-			TotalCompanies:  10,
-			ActiveCompanies: 8,
-			Queued:          2,
-			Crawling:        1,
-			NewJobs24h:      5,
-			Errors24h:       0,
-			PipelinePending: 12,
+			TotalCompanies:   10,
+			ActiveCompanies:  8,
+			Queued:           2,
+			Crawling:         1,
+			NewJobs24h:       5,
+			Errors24h:        0,
+			PipelinePending:  12,
+			PipelineFiltered: 3,
 		}},
 		&fakeLagReader{lags: map[string]int64{
-			"job-post-analyzer":                      3,
 			"job-listing-relevance-filter-retry-1m":  4,
 			"job-listing-relevance-filter-retry-10m": 5,
 			"job-listing-relevance-filter-retry-1h":  6,
@@ -74,12 +74,13 @@ func TestPipelineService_GetPipelineStats_OK(t *testing.T) {
 	if stats.TotalCompanies != 10 {
 		t.Errorf("TotalCompanies = %d, want 10", stats.TotalCompanies)
 	}
-	// AwaitingFilter comes from DB (pipeline_pending), not Kafka lag.
+	// AwaitingFilter comes from DB (pipeline_pending): reason='fetch' not yet in jobs.
 	if stats.AwaitingFilter != 12 {
 		t.Errorf("AwaitingFilter = %d, want 12 (pipeline_pending from DB)", stats.AwaitingFilter)
 	}
+	// AwaitingEnrichment comes from DB (pipeline_filtered): reason='filtered' not yet in jobs.
 	if stats.AwaitingEnrichment != 3 {
-		t.Errorf("AwaitingEnrichment = %d, want 3 (job-post-analyzer lag)", stats.AwaitingEnrichment)
+		t.Errorf("AwaitingEnrichment = %d, want 3 (pipeline_filtered from DB)", stats.AwaitingEnrichment)
 	}
 	if stats.FilterRetries.Tier1m != 4 {
 		t.Errorf("FilterRetries.Tier1m = %d, want 4", stats.FilterRetries.Tier1m)
@@ -101,10 +102,10 @@ func TestPipelineService_GetPipelineStats_OK(t *testing.T) {
 	}
 }
 
-func TestPipelineService_GetPipelineStats_KafkaError(t *testing.T) {
+func TestPipelineService_GetPipelineStats_LagError(t *testing.T) {
 	svc := services.NewPipelineService(
 		&fakePipelineStore{stats: dto.PipelineDBStats{TotalCompanies: 5}},
-		&fakeLagReader{lags: nil, err: errors.New("kafka unavailable")},
+		&fakeLagReader{lags: nil, err: errors.New("lag unavailable")},
 		&fakeDrainer{},
 	)
 
@@ -112,11 +113,13 @@ func TestPipelineService_GetPipelineStats_KafkaError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	// AwaitingEnrichment comes from DB (pipeline_filtered=0 in this store).
 	if stats.AwaitingEnrichment != 0 {
-		t.Errorf("AwaitingEnrichment = %d, want 0 on kafka error", stats.AwaitingEnrichment)
+		t.Errorf("AwaitingEnrichment = %d, want 0", stats.AwaitingEnrichment)
 	}
+	// FilterRetries still come from the lag reader; error → 0.
 	if stats.FilterRetries.Tier1m != 0 {
-		t.Errorf("FilterRetries.Tier1m = %d, want 0 on kafka error", stats.FilterRetries.Tier1m)
+		t.Errorf("FilterRetries.Tier1m = %d, want 0 on lag error", stats.FilterRetries.Tier1m)
 	}
 }
 
