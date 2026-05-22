@@ -390,3 +390,11 @@ func (w *Worker) markIrrelevant(ctx context.Context, jobID string) {
 		w.log.Error("failed to mark irrelevant in seen_ledger", err, logger.Str(logger.FieldJobID, jobID))
 	}
 }
+
+// markNonUSA marks a job as non_usa_location so it is skipped cleanly without
+// counting as an error.
+func (w *Worker) markNonUSA(ctx context.Context, jobID string) {
+	if err := w.pipeline.MarkLedgerNonUSA(ctx, jobID); err != nil {
+		w.log.Error("failed to mark non_usa in seen_ledger", err, logger.Str(logger.FieldJobID, jobID))
+	}
+}

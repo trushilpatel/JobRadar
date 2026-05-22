@@ -12,7 +12,12 @@ Structured audit of jobs, companies, pipeline ledger, enrichment fields, and use
 ## Connect to DB
 
 ```bash
+# If psql is installed locally:
 psql "$(grep '^SUPABASE_DB_URL=' /Users/trushil/Projects/JobRadar/.env | cut -d= -f2-)"
+
+# If psql is not installed (fallback via Docker):
+DB_URL="$(grep '^SUPABASE_DB_URL=' /Users/trushil/Projects/JobRadar/.env | cut -d= -f2-)"
+docker run --rm postgres:16-alpine psql "$DB_URL" -c "<query>"
 ```
 
 Run each section below. Collect results. Report at the end using the **Anomaly Report Format**.
@@ -24,9 +29,14 @@ Run each section below. Collect results. Report at the end using the **Anomaly R
 **1a. Orphaned jobs (no ledger entry)**
 
 ```sql
+-- Note (2026-05-22): join must use j.job_post_id, NOT j.id.
+-- job_pipeline_ledger.job_id stores the adapter-prefixed external ID
+-- (e.g. "greenhouse-5221910008"), which matches jobs.job_post_id.
+-- jobs.id is an internal UUID — joining on it always returns a false
+-- count equal to the total number of jobs in the table.
 SELECT COUNT(*) AS orphaned_jobs
 FROM jobs j
-LEFT JOIN job_pipeline_ledger l ON l.job_id = j.id
+LEFT JOIN job_pipeline_ledger l ON l.job_id = j.job_post_id
 WHERE l.job_id IS NULL;
 -- Expected: 0. Any value = job inserted bypassing the ledger.
 ```
@@ -366,6 +376,22 @@ FROM company_scan_settings s
 JOIN companies c ON c.id = s.company_id
 WHERE s.last_error_at > s.last_success_at;
 -- Any row = most recent scan for this company failed.
+```
+
+**5c. Analytics snapshot recency** _(discovered 2026-05-22)_
+
+```sql
+-- Note: job_analytics.snapshotted_at is a DATE column (not timestamp).
+SELECT
+  MAX(snapshotted_at) AS latest_analytics_date,
+  COUNT(*) AS total_analytics_rows,
+  (SELECT COUNT(*) FROM jobs j LEFT JOIN job_analytics a ON a.id = j.id WHERE a.id IS NULL
+   AND j.added_at > NOW() - INTERVAL '7 days') AS recent_jobs_missing_analytics
+FROM job_analytics;
+-- Flag: latest_analytics_date > 3 days ago = analyzer stopped writing snapshots
+-- Flag: recent_jobs_missing_analytics > 0 = enricher not producing analytics for new jobs
+-- This catches silent enricher regressions that check 2c alone may undercount
+-- (2c counts all-time missing; this confirms whether it is a current or historical gap)
 ```
 
 ---

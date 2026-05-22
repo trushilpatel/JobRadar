@@ -17,6 +17,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	"github.com/trushilpatel/jobradar/service/job/location"
 )
 
 // fetchAll runs HTTP fetches for every message in parallel, capped by fetchConc
@@ -112,6 +113,20 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.M
 	}
 	if job.Location == "" && content.Location != "" {
 		job.Location = content.Location
+	}
+
+	// Post-backfill location gate: reject unambiguously non-USA jobs so they
+	// never reach the LLM enricher. ACK the message (terminal — no retry).
+	if location.IsNonUSA(job.Location) {
+		span.SetAttributes(attribute.String("outcome", "non_usa"))
+		jobLog.Info("rejecting non-USA job after location backfill",
+			logger.Str(logger.FieldJobID, job.ID),
+			logger.Str("location", job.Location),
+		)
+		metrics.EnricherJobsTotal.WithLabelValues("non_usa").Inc()
+		w.markNonUSA(msgCtx, job.ID)
+		_ = msg.Ack()
+		return fetchedJob{}, false
 	}
 
 	span.SetAttributes(attribute.String("outcome", "ok"))

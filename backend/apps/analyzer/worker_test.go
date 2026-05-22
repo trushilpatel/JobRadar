@@ -74,6 +74,13 @@ func (f *fakePipelineService) MarkLedgerIrrelevant(_ context.Context, id string)
 	return f.markErr
 }
 
+func (f *fakePipelineService) MarkLedgerNonUSA(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.markCalls = append(f.markCalls, id)
+	return f.markErr
+}
+
 func (f *fakePipelineService) HasSeenJob(_ context.Context, id string) (bool, error) {
 	return f.hasSeen, f.hasSeenErr
 }

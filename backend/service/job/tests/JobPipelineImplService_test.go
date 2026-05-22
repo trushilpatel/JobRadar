@@ -147,8 +147,8 @@ func TestSaveEnrichedJob_HappyPath(t *testing.T) {
 	if ledger.updateReasonJobID != input.Raw.ID {
 		t.Errorf("ledger marked job ID = %q, want %q", ledger.updateReasonJobID, input.Raw.ID)
 	}
-	if ledger.updateReasonVal != jobcommon.SeenReasonFetch {
-		t.Errorf("ledger marked reason = %q, want %q", ledger.updateReasonVal, jobcommon.SeenReasonFetch)
+	if ledger.updateReasonVal != jobcommon.SeenReasonSaved {
+		t.Errorf("ledger marked reason = %q, want %q", ledger.updateReasonVal, jobcommon.SeenReasonSaved)
 	}
 }
 
@@ -188,8 +188,8 @@ func TestSaveEnrichedJob_SnapshotFailIsNonFatal(t *testing.T) {
 		t.Error("expected job to be inserted despite snapshot failure")
 	}
 	// Ledger should still be marked.
-	if ledger.updateReasonVal != jobcommon.SeenReasonFetch {
-		t.Errorf("ledger reason = %q, want %q", ledger.updateReasonVal, jobcommon.SeenReasonFetch)
+	if ledger.updateReasonVal != jobcommon.SeenReasonSaved {
+		t.Errorf("ledger reason = %q, want %q", ledger.updateReasonVal, jobcommon.SeenReasonSaved)
 	}
 }
 
