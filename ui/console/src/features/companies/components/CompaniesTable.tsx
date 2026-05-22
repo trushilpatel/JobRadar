@@ -8,10 +8,12 @@ interface CompaniesTableProps {
   companies: Company[]
   total: number
   loading: boolean
-  page: number
   limit: number
-  onPageChange: (page: number) => void
   onLimitChange: (limit: number) => void
+  nextCursor: string | null
+  hasPrev: boolean
+  onNext: () => void
+  onPrev: () => void
   onRowClick: (c: Company) => void
   activeCompanyId?: string
   actions: CompanyColumnActions
@@ -21,9 +23,17 @@ interface CompaniesTableProps {
 }
 
 export function CompaniesTable({
-  companies, total, loading,
-  page, limit, onPageChange, onLimitChange,
-  onRowClick, activeCompanyId,
+  companies,
+  total,
+  loading,
+  limit,
+  onLimitChange,
+  nextCursor,
+  hasPrev,
+  onNext,
+  onPrev,
+  onRowClick,
+  activeCompanyId,
   actions,
   emptyMessage = 'No companies match the current filters',
   sorting,
@@ -32,7 +42,7 @@ export function CompaniesTable({
   const columns = useMemo(
     () => buildCompanyColumns(actions),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [actions.scanning],
+    [actions.scanning]
   )
 
   return (
@@ -43,7 +53,7 @@ export function CompaniesTable({
           data={companies}
           loading={loading}
           emptyMessage={emptyMessage}
-          getRowId={c => c.id}
+          getRowId={(c) => c.id}
           selectedId={activeCompanyId}
           onRowClick={onRowClick}
           sorting={sorting}
@@ -53,12 +63,14 @@ export function CompaniesTable({
 
       <div className="border-t border-white/[0.07] shrink-0">
         <Pagination
-          mode="offset"
-          page={page}
+          mode="cursor"
           total={total}
           limit={limit}
-          onPageChange={onPageChange}
           onLimitChange={onLimitChange}
+          hasNext={!!nextCursor}
+          hasPrev={hasPrev}
+          onNext={onNext}
+          onPrev={onPrev}
           loading={loading}
         />
       </div>

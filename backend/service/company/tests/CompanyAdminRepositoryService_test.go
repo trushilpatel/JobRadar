@@ -663,3 +663,60 @@ func sameSet(a, b []string) bool {
 	}
 	return true
 }
+
+// TestAdminRepo_List_SearchFilter verifies that the Search field adds an ILIKE
+// clause that is emitted in the SQL. Because SQLite does not support ILIKE we
+// use DryRun mode and inspect the captured statements — the same pattern as
+// TestPublicRepo_ListPublic_SearchEmitsILIKE in CompanyRepositoryService_test.go.
+func TestAdminRepo_List_SearchFilter(t *testing.T) {
+	cap := &publicSQLCapture{}
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{DryRun: true, Logger: cap})
+	if err != nil {
+		t.Fatalf("open dryrun: %v", err)
+	}
+	hist := &fakeScanHistory{}
+	repo := companysvc.NewAdminRepositoryService(db, hist)
+
+	_, _ = repo.List(context.Background(), companydto.CompanyFilter{Search: "alpha"}, 10)
+
+	captured := cap.statements()
+	if len(captured) == 0 {
+		t.Fatal("no SQL captured")
+	}
+	foundILIKE := false
+	for _, s := range captured {
+		if strings.Contains(s, "ILIKE") {
+			foundILIKE = true
+			break
+		}
+	}
+	if !foundILIKE {
+		t.Errorf("expected ILIKE in emitted SQL, got: %v", captured)
+	}
+}
+
+// TestAdminRepo_Get_ScanSettingsDBError verifies that when the company row
+// exists but the scan_settings table query fails with a non-not-found error
+// (e.g. table dropped), Get returns ErrInternal, not ErrNotFound.
+func TestAdminRepo_Get_ScanSettingsDBError(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	seedAdminCompany(t, db, "stripe", "Stripe")
+
+	// Drop the scan_settings table to cause a hard DB error on the second
+	// query inside Get(). The company row still exists so the first query
+	// succeeds; only the settings query fails — exercising the
+	// "non-not-found error → ErrInternal" branch.
+	if err := db.Exec("DROP TABLE company_scan_settings").Error; err != nil {
+		t.Fatalf("drop table: %v", err)
+	}
+
+	repo := companysvc.NewAdminRepositoryService(db, hist)
+	_, err := repo.Get(context.Background(), "stripe")
+	if err == nil {
+		t.Fatal("expected INTERNAL error, got nil")
+	}
+	var se *apperr.ServiceError
+	if !errors.As(err, &se) || se.Code != "INTERNAL" {
+		t.Errorf("expected INTERNAL ServiceError, got %T %v", err, err)
+	}
+}

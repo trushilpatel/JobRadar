@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
@@ -14,12 +15,14 @@ import (
 
 // scanSettingsRepository is the GORM-backed terminal implementation.
 type scanSettingsRepository struct {
-	db *gorm.DB
+	db  *gorm.DB
+	log logger.Logger
 }
 
 // NewScanSettingsRepositoryService constructs the ScanSettingsRepository.
+// A nil log silences all structured logging.
 func NewScanSettingsRepositoryService(db *gorm.DB) ScanSettingsRepository {
-	return &scanSettingsRepository{db: db}
+	return &scanSettingsRepository{db: db, log: logger.NewNoop()}
 }
 
 // errNoCompany is the canonical guard error for empty companyID. Returned
@@ -31,17 +34,19 @@ func errNoCompany() error {
 // Get returns the scan_settings row for companyID, or NOT_FOUND when no
 // row exists yet (post-cutover companies start without settings).
 func (r *scanSettingsRepository) Get(ctx context.Context, companyID string) (_ *companymodel.CompanyScanSettings, err error) {
+	ctx, span := tracing.Start(ctx, "company.scan_settings.repo.Get")
+	defer tracing.End(span, &err)
+
 	if companyID == "" {
 		return nil, errNoCompany()
 	}
-	ctx, span := tracing.Start(ctx, "company.scan_settings.repo.Get")
-	defer tracing.End(span, &err)
 
 	var row companymodel.CompanyScanSettings
 	if err = r.db.WithContext(ctx).First(&row, "company_id = ?", companyID).Error; err != nil {
 		if apperr.IsNotFound(err) {
 			return nil, apperr.ErrNotFound.WithMessage("scan settings not found")
 		}
+		r.log.Warn("failed to fetch scan settings", logger.Str(logger.FieldCompany, companyID), logger.Err(err))
 		return nil, apperr.ErrInternal.WithMessage("failed to fetch scan settings")
 	}
 	return &row, nil
@@ -83,6 +88,7 @@ func (r *scanSettingsRepository) Create(ctx context.Context, s companymodel.Comp
 		if isUniqueViolation(err) {
 			return apperr.ErrConflict.WithMessage("scan settings already exist for company")
 		}
+		r.log.Warn("failed to create scan settings", logger.Str(logger.FieldCompany, s.CompanyID), logger.Err(err))
 		return apperr.ErrInternal.WithMessage("failed to create scan settings")
 	}
 	return nil
@@ -106,6 +112,7 @@ func (r *scanSettingsRepository) Update(ctx context.Context, companyID string, p
 		Where("company_id = ?", companyID).
 		Updates(fields)
 	if res.Error != nil {
+		r.log.Warn("failed to update scan settings", logger.Str(logger.FieldCompany, companyID), logger.Err(res.Error))
 		return apperr.ErrInternal.WithMessage("failed to update scan settings")
 	}
 	if res.RowsAffected == 0 {

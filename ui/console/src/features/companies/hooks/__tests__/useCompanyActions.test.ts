@@ -71,6 +71,29 @@ describe('useCompanyActions', () => {
       })
     })
 
+    it('shows success toast with deactivated message when toggling active company off', async () => {
+      vi.mocked(adminApi.updateAdminCompanyScanSettings).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useCompanyActions(), { wrapper: makeWrapper() })
+
+      await act(async () => {
+        await result.current.toggleActive(mockCompany) // active: true → false
+      })
+
+      expect(toast.success).toHaveBeenCalledWith('Stripe deactivated')
+    })
+
+    it('shows success toast with activated message when toggling inactive company on', async () => {
+      vi.mocked(adminApi.updateAdminCompanyScanSettings).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useCompanyActions(), { wrapper: makeWrapper() })
+      const inactiveCompany: Company = { ...mockCompany, active: false }
+
+      await act(async () => {
+        await result.current.toggleActive(inactiveCompany)
+      })
+
+      expect(toast.success).toHaveBeenCalledWith('Stripe activated')
+    })
+
     it('shows error toast when toggleActive fails', async () => {
       vi.mocked(adminApi.updateAdminCompanyScanSettings).mockRejectedValue(
         new Error('Server error')

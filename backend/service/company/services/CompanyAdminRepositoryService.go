@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
@@ -52,11 +53,13 @@ func decodeAdminCursor(s string) adminCursor {
 type adminRepositoryService struct {
 	db                *gorm.DB
 	scanHistoryReader ScanHistoryReader
+	log               logger.Logger
 }
 
 // NewAdminRepositoryService constructs the terminal CompanyAdminService.
+// A nil log silences all structured logging.
 func NewAdminRepositoryService(db *gorm.DB, scanHistoryReader ScanHistoryReader) CompanyAdminService {
-	return &adminRepositoryService{db: db, scanHistoryReader: scanHistoryReader}
+	return &adminRepositoryService{db: db, scanHistoryReader: scanHistoryReader, log: logger.NewNoop()}
 }
 
 // List returns admin views joined with scan_settings. Honours every filter
@@ -132,6 +135,7 @@ func (r *adminRepositoryService) Get(ctx context.Context, id string) (_ *company
 		if apperr.IsNotFound(err) {
 			return nil, apperr.ErrNotFound.WithMessage("company not found")
 		}
+		r.log.Warn("failed to fetch company", logger.Str(logger.FieldCompany, id), logger.Err(err))
 		return nil, apperr.ErrInternal.WithMessage("failed to fetch company")
 	}
 
@@ -139,6 +143,7 @@ func (r *adminRepositoryService) Get(ctx context.Context, id string) (_ *company
 	var s companymodel.CompanyScanSettings
 	if err = r.db.WithContext(ctx).First(&s, "company_id = ?", id).Error; err != nil {
 		if !apperr.IsNotFound(err) {
+			r.log.Warn("failed to fetch scan settings", logger.Str(logger.FieldCompany, id), logger.Err(err))
 			return nil, apperr.ErrInternal.WithMessage("failed to fetch scan settings")
 		}
 	} else {
@@ -196,6 +201,7 @@ func (r *adminRepositoryService) Create(ctx context.Context, public companydto.C
 		return nil
 	})
 	if err != nil {
+		r.log.Warn("failed to create company", logger.Str(logger.FieldCompany, public.ID), logger.Err(err))
 		return nil, apperr.ErrInternal.WithMessage("failed to create company")
 	}
 
@@ -219,6 +225,7 @@ func (r *adminRepositoryService) UpdatePublic(ctx context.Context, id string, p 
 		Where("id = ?", id).
 		Updates(fields)
 	if res.Error != nil {
+		r.log.Warn("failed to update company", logger.Str(logger.FieldCompany, id), logger.Err(res.Error))
 		return apperr.ErrInternal.WithMessage("failed to update company")
 	}
 	if res.RowsAffected == 0 {
@@ -241,6 +248,7 @@ func (r *adminRepositoryService) UpdateScanSettings(ctx context.Context, id stri
 		Where("company_id = ?", id).
 		Updates(fields)
 	if res.Error != nil {
+		r.log.Warn("failed to update scan settings", logger.Str(logger.FieldCompany, id), logger.Err(res.Error))
 		return apperr.ErrInternal.WithMessage("failed to update scan settings")
 	}
 	if res.RowsAffected == 0 {
@@ -257,6 +265,7 @@ func (r *adminRepositoryService) Delete(ctx context.Context, id string) (err err
 
 	res := r.db.WithContext(ctx).Delete(&companymodel.Company{}, "id = ?", id)
 	if res.Error != nil {
+		r.log.Warn("failed to delete company", logger.Str(logger.FieldCompany, id), logger.Err(res.Error))
 		return apperr.ErrInternal.WithMessage("failed to delete company")
 	}
 	if res.RowsAffected == 0 {

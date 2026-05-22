@@ -146,17 +146,30 @@ func TestAdminValidator_UpdateScanSettings(t *testing.T) {
 
 func TestAdminValidator_List(t *testing.T) {
 	v := newAdminValidator()
-	if _, err := v.List(context.Background(), companydto.CompanyFilter{AdapterTypes: []string{"nope"}}, 20); err == nil {
-		t.Errorf("expected validation error for invalid adapter")
+
+	cases := []struct {
+		name    string
+		filter  companydto.CompanyFilter
+		limit   int
+		wantErr bool
+	}{
+		{name: "ok defaults", limit: 20},
+		{name: "invalid adapter rejects", filter: companydto.CompanyFilter{AdapterTypes: []string{"nope"}}, limit: 20, wantErr: true},
+		{name: "limit=0 rejects", limit: 0, wantErr: true},
+		{name: "limit=1 minimum valid", limit: 1},
+		{name: "limit=101 over-max rejects", limit: 101, wantErr: true},
+		{name: "search empty is valid", filter: companydto.CompanyFilter{Search: ""}, limit: 20},
+		{name: "search exactly 100 chars passes", filter: companydto.CompanyFilter{Search: stringOfLen(100)}, limit: 20},
+		{name: "search 101 chars rejects", filter: companydto.CompanyFilter{Search: stringOfLen(101)}, limit: 20, wantErr: true},
+		{name: "valid adapter_types pass", filter: companydto.CompanyFilter{AdapterTypes: []string{companycommon.AdapterGreenhouse}}, limit: 20},
 	}
-	if _, err := v.List(context.Background(), companydto.CompanyFilter{}, 0); err == nil {
-		t.Errorf("expected validation error for page=0")
-	}
-	if _, err := v.List(context.Background(), companydto.CompanyFilter{}, 1000); err == nil {
-		t.Errorf("expected validation error for limit too large")
-	}
-	if _, err := v.List(context.Background(), companydto.CompanyFilter{}, 20); err != nil {
-		t.Errorf("expected default ok, got %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := v.List(context.Background(), tc.filter, tc.limit)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("List: err = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
 	}
 }
 

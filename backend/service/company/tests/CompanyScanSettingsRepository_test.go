@@ -133,8 +133,9 @@ func TestScanSettingsRepo_Create_HappyAndConflict(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	// Second create on same PK returns CONFLICT (mapped from unique
-	// violation via gorm.ErrDuplicatedKey).
+	// Second create on same PK returns CONFLICT. The isUniqueViolation check
+	// in the repo maps gorm.ErrDuplicatedKey (surfaced by SQLite with
+	// TranslateError:true, set in newScanSettingsDB) to ErrConflict.
 	err := repo.Create(context.Background(), row)
 	if err == nil {
 		t.Fatal("expected CONFLICT, got nil")
@@ -143,10 +144,8 @@ func TestScanSettingsRepo_Create_HappyAndConflict(t *testing.T) {
 	if !errors.As(err, &se) {
 		t.Fatalf("expected ServiceError, got %T %v", err, err)
 	}
-	// SQLite without TranslateError may surface INTERNAL; with TranslateError
-	// on, it surfaces CONFLICT. Either way the code path is exercised.
-	if se.Code != "CONFLICT" && se.Code != "INTERNAL" {
-		t.Errorf("expected CONFLICT or INTERNAL, got %s", se.Code)
+	if se.Code != "CONFLICT" {
+		t.Errorf("expected CONFLICT, got %s", se.Code)
 	}
 }
 
