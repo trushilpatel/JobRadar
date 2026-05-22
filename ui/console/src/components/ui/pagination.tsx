@@ -133,8 +133,7 @@ function CursorPagination({
   let text: string
   if (itemsOnPage === 0 && !hasPrev) text = 'No results'
   else if (itemsOnPage === 0) text = 'Loading…'
-  else if (knownTotal != null)
-    text = `Showing ${from}–${to} of ${knownTotal.toLocaleString()}`
+  else if (knownTotal != null) text = `Showing ${from}–${to} of ${knownTotal.toLocaleString()}`
   else text = `Showing ${from}–${to}`
 
   return (
@@ -147,11 +146,7 @@ function CursorPagination({
         <NextButton disabled={!hasNext} onClick={onNext} />
       </div>
 
-      <RowsSelector
-        limit={limit}
-        limitOptions={limitOptions}
-        onLimitChange={onLimitChange}
-      />
+      <RowsSelector limit={limit} limitOptions={limitOptions} onLimitChange={onLimitChange} />
     </Shell>
   )
 }
@@ -166,7 +161,9 @@ function Shell({ children, className }: { children: React.ReactNode; className?:
 
 function Status({ loading, text }: { loading?: boolean; text: string }) {
   return (
-    <p className="text-xs text-slate-500 shrink-0 mr-1">{loading ? null : text}</p>
+    <p className={cn('text-xs shrink-0 mr-1', loading ? 'text-slate-600' : 'text-slate-500')}>
+      {text}
+    </p>
   )
 }
 

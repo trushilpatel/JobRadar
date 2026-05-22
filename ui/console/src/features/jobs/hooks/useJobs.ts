@@ -134,7 +134,7 @@ export function useJobs() {
   const hasNextPage = pageIndex < fetchedPages.length - 1 || (query.hasNextPage ?? false)
 
   const countsQuery = useQuery({
-    queryKey: ['jobs', 'counts'],
+    queryKey: jobQueryKeys.counts(),
     queryFn: fetchJobCounts,
     staleTime: 30_000,
   })
@@ -151,7 +151,7 @@ export function useJobs() {
     : {}
 
   const companiesQuery = useQuery({
-    queryKey: ['jobs', 'companies'],
+    queryKey: jobQueryKeys.companies(),
     queryFn: fetchJobCompanies,
     staleTime: 5 * 60_000,
   })

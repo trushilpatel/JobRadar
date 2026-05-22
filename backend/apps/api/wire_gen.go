@@ -10,6 +10,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/kafka"
+	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/service/application"
 	services3 "github.com/trushilpatel/jobradar/service/application/services"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
@@ -24,7 +25,7 @@ import (
 
 // Injectors from wire.go:
 
-func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {
+func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, error) {
 	// ── Company (public chain) ───────────────────────────────────────────────
 	companyRepositoryService := services.NewRepositoryService(db)
 	companyImplService := services.NewImplService(companyRepositoryService)
@@ -71,10 +72,9 @@ func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {
 	applicationWriter := provideJobApplicationWriter(db)
 	seenLedgerStore := jobsvc.NewSeenLedgerStore(db)
 	seenLedgerWriter := provideSeenLedgerWriter(seenLedgerStore)
-	// nil cache and logger: both are optional; tests and dev still boot without
-	// Redis. Real cache is threaded via buildMultiUserPlatform in main.go for
-	// the rate-limiter, but the job service cache is a separate concern.
-	jobImplService := jobsvc.NewImplService(jobStore, userJobStateRepository, snapshotWriter, applicationWriter, seenLedgerWriter, nil, nil)
+	// nil cache: optional; real cache is threaded via buildMultiUserPlatform.
+	// jobLogAdapter wraps the app logger to satisfy the narrow Warn interface.
+	jobImplService := jobsvc.NewImplService(jobStore, userJobStateRepository, snapshotWriter, applicationWriter, seenLedgerWriter, nil, &jobLogAdapter{log: log})
 	jobValidationService := jobsvc.NewValidationService(jobImplService)
 	jobRestService := jobsvc.NewRestService(jobValidationService)
 	jobHandler := jobsvc.NewRestRouter(jobRestService)
@@ -200,4 +200,21 @@ func (*zeroJobCountReader) GetJobCounts() (int64, int64, int64, error) { return 
 
 func provideZeroJobCountReader() dashboard.JobCountReader {
 	return &zeroJobCountReader{}
+}
+
+// jobLogAdapter adapts common/logger.Logger to the narrow Warn-only interface
+// that jobsvc.NewImplService accepts. kv pairs are forwarded as structured
+// logger.Str fields (key string, value string); non-string values are skipped.
+type jobLogAdapter struct{ log logger.Logger }
+
+func (a *jobLogAdapter) Warn(msg string, kv ...any) {
+	fields := make([]logger.Field, 0, len(kv)/2)
+	for i := 0; i+1 < len(kv); i += 2 {
+		k, ok1 := kv[i].(string)
+		v, ok2 := kv[i+1].(string)
+		if ok1 && ok2 {
+			fields = append(fields, logger.Str(k, v))
+		}
+	}
+	a.log.Warn(msg, fields...)
 }

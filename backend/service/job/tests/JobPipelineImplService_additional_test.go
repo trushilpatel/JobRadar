@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/trushilpatel/jobradar/common/logger"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
@@ -33,7 +34,7 @@ func TestMarkLedgerIrrelevant_HappyPath(t *testing.T) {
 	ledger := &pipelineLedgerStore{}
 	snapshot := &pipelineSnapshotWriter{}
 
-	svc := jobsvc.NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
+	svc := jobsvc.NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{}, logger.NewNoop())
 	if err := svc.MarkLedgerIrrelevant(context.Background(), "job-xyz"); err != nil {
 		t.Fatalf("MarkLedgerIrrelevant err = %v", err)
 	}
@@ -49,7 +50,7 @@ func TestMarkLedgerIrrelevant_HappyPath(t *testing.T) {
 // fails, the error bubbles up so the worker can route the job to retry.
 func TestMarkLedgerIrrelevant_PropagatesLedgerError(t *testing.T) {
 	ledger := &pipelineLedgerStore{updateReasonErr: errors.New("ledger down")}
-	svc := jobsvc.NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{})
+	svc := jobsvc.NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{}, logger.NewNoop())
 	if err := svc.MarkLedgerIrrelevant(context.Background(), "job-1"); err == nil {
 		t.Fatal("expected error when ledger update fails")
 	}
@@ -63,7 +64,7 @@ func TestSaveEnrichedJob_LedgerUpdateError_Propagates(t *testing.T) {
 	jobs := &pipelineJobWriter{}
 	ledger := &pipelineLedgerStore{updateReasonErr: errors.New("ledger update fail")}
 	snapshot := &pipelineSnapshotWriter{}
-	svc := jobsvc.NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
+	svc := jobsvc.NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{}, logger.NewNoop())
 
 	if err := svc.SaveEnrichedJob(context.Background(), makeInput()); err == nil {
 		t.Fatal("expected error when ledger update fails after insert")
@@ -83,7 +84,7 @@ func TestSaveEnrichedJob_EmptyTechStack_NoTagInsert(t *testing.T) {
 	tt := &countingTechTagWriter{}
 	jobs := &pipelineJobWriter{}
 	ledger := &pipelineLedgerStore{}
-	svc := jobsvc.NewPipelineService(jobs, ledger, &pipelineSnapshotWriter{}, tt)
+	svc := jobsvc.NewPipelineService(jobs, ledger, &pipelineSnapshotWriter{}, tt, logger.NewNoop())
 
 	input := makeInput()
 	input.Enriched.TechStack = nil
@@ -102,7 +103,7 @@ func TestSaveEnrichedJob_TechTagsCalled(t *testing.T) {
 	tt := &countingTechTagWriter{}
 	jobs := &pipelineJobWriter{}
 	ledger := &pipelineLedgerStore{}
-	svc := jobsvc.NewPipelineService(jobs, ledger, &pipelineSnapshotWriter{}, tt)
+	svc := jobsvc.NewPipelineService(jobs, ledger, &pipelineSnapshotWriter{}, tt, logger.NewNoop())
 
 	if err := svc.SaveEnrichedJob(context.Background(), makeInput()); err != nil {
 		t.Fatalf("SaveEnrichedJob err = %v", err)
@@ -120,7 +121,7 @@ func TestMarkLedgerNonUSA_HappyPath(t *testing.T) {
 	ledger := &pipelineLedgerStore{}
 	snapshot := &pipelineSnapshotWriter{}
 
-	svc := jobsvc.NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{})
+	svc := jobsvc.NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{}, logger.NewNoop())
 	if err := svc.MarkLedgerNonUSA(context.Background(), "job-india-1"); err != nil {
 		t.Fatalf("MarkLedgerNonUSA err = %v", err)
 	}
@@ -136,7 +137,7 @@ func TestMarkLedgerNonUSA_HappyPath(t *testing.T) {
 // the error bubbles up so the worker can handle it.
 func TestMarkLedgerNonUSA_PropagatesLedgerError(t *testing.T) {
 	ledger := &pipelineLedgerStore{updateReasonErr: errors.New("ledger down")}
-	svc := jobsvc.NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{})
+	svc := jobsvc.NewPipelineService(&pipelineJobWriter{}, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{}, logger.NewNoop())
 	if err := svc.MarkLedgerNonUSA(context.Background(), "job-1"); err == nil {
 		t.Fatal("expected error when ledger update fails")
 	}

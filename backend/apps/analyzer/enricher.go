@@ -210,7 +210,7 @@ func (w *Worker) processResult(ctx context.Context, fj fetchedJob, result *llmdt
 
 	if reason := w.dropJob(result); reason != "" {
 		jobLog.Info("job dropped", logger.Str("drop_reason", reason))
-		w.markError(ctx, fj.job.ID)
+		w.markIrrelevant(ctx, fj.job.ID)
 		_ = fj.msg.Ack()
 		metrics.EnricherJobsTotal.WithLabelValues("dropped").Inc()
 		stats.markDropped()

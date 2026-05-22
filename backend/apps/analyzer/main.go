@@ -104,7 +104,7 @@ func main() {
 	ledgerStore := jobsvc.NewSeenLedgerStore(database)
 	snapshotStore := jobsvc.NewSnapshotStore(database)
 	techTagStore := jobsvc.NewTechTagStore(database)
-	pipeline := jobsvc.NewPipelineService(jobStore, ledgerStore, snapshotStore, techTagStore)
+	pipeline := jobsvc.NewPipelineService(jobStore, ledgerStore, snapshotStore, techTagStore, log)
 
 	rateLimiter := NewAdapterRateLimiter(
 		cfg.Enricher.DefaultRPS,
