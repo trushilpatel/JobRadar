@@ -6,6 +6,27 @@ import (
 	"testing"
 )
 
+// TestStripHTML_RemovesTagsAndCollapses verifies StripHTML removes HTML tags,
+// decodes entities, and collapses whitespace.
+func TestStripHTML_RemovesTagsAndCollapses(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"<p>Hello <b>World</b></p>", "Hello World"},
+		{"<br/>line1<br/>line2", "line1 line2"},
+		{"&lt;em&gt;text&lt;/em&gt;", "<em>text</em>"},
+		{"  extra   spaces  ", "extra spaces"},
+		{"", ""},
+	}
+	for _, tc := range cases {
+		got := StripHTML(tc.in)
+		if got != tc.want {
+			t.Errorf("StripHTML(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 // TestRawJob_FullContentOmitEmpty verifies that a RawJob with nil FullContent
 // does NOT include "full_content" in its JSON serialization.
 // This is critical for backward compatibility: existing Kafka consumers that

@@ -88,6 +88,8 @@ func (r *fetchJobsResponse) toFetchJobsResponse(slug string) types.FetchJobsResp
 			Location:       location,
 			URL:            fmt.Sprintf("https://jobs.ashbyhq.com/%s/%s", slug, j.ID),
 			EmploymentType: normalizeAshbyEmploymentType(j.EmploymentType),
+			LocationKnown:  true,
+			AllLocations:   []string{location},
 		})
 	}
 	return types.FetchJobsResponse{Jobs: items}

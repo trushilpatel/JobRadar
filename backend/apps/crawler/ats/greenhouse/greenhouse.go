@@ -60,10 +60,12 @@ func (r *fetchJobsResponse) toFetchJobsResponse() types.FetchJobsResponse {
 	items := make([]types.FetchJobsItem, 0, len(r.Jobs))
 	for _, j := range r.Jobs {
 		items = append(items, types.FetchJobsItem{
-			ID:       fmt.Sprintf("%s-%d", companycommon.AdapterGreenhouse, j.ID),
-			Title:    j.Title,
-			Location: j.Location.Name,
-			URL:      j.AbsoluteURL,
+			ID:            fmt.Sprintf("%s-%d", companycommon.AdapterGreenhouse, j.ID),
+			Title:         j.Title,
+			Location:      j.Location.Name,
+			URL:           j.AbsoluteURL,
+			LocationKnown: true,
+			AllLocations:  []string{j.Location.Name},
 			// EmploymentType: not provided in Greenhouse listing API
 		})
 	}

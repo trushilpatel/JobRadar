@@ -255,6 +255,8 @@ func positionToItem(p position) types.FetchJobsItem {
 		Location:       loc,
 		EmploymentType: jobcommon.EmployFullTime, // Default — detailed type comes from FetchJobContent
 		FullContent:    nil,                      // thin adapter — detail fetched later
+		LocationKnown:  true,
+		AllLocations:   p.Locations,
 	}
 }
 

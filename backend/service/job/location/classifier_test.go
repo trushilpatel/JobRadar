@@ -281,6 +281,60 @@ func TestClassification_String(t *testing.T) {
 	}
 }
 
+// TestAnyNonUSA_EmptySlice — false for nil/empty input.
+func TestAnyNonUSA_EmptySlice(t *testing.T) {
+	if AnyNonUSA(nil) {
+		t.Error("AnyNonUSA(nil) = true, want false")
+	}
+	if AnyNonUSA([]string{}) {
+		t.Error("AnyNonUSA([]) = true, want false")
+	}
+}
+
+// TestAnyNonUSA_AnyUSAWins — if any string classifies as USA, result is false.
+func TestAnyNonUSA_AnyUSAWins(t *testing.T) {
+	cases := [][]string{
+		{"San Francisco, CA"},
+		{"London, UK", "New York, NY"},
+		{"London, UK", "San Francisco, CA", "Berlin, Germany"},
+	}
+	for _, locs := range cases {
+		if AnyNonUSA(locs) {
+			t.Errorf("AnyNonUSA(%v) = true, want false (any-USA-wins rule)", locs)
+		}
+	}
+}
+
+// TestAnyNonUSA_AllNonUSA — true only when at least one is NonUSA and none is USA.
+func TestAnyNonUSA_AllNonUSA(t *testing.T) {
+	cases := [][]string{
+		{"London, UK"},
+		{"Bangalore, India"},
+		{"London, UK", "Berlin, Germany"},
+		{"Remote - EMEA"},
+	}
+	for _, locs := range cases {
+		if !AnyNonUSA(locs) {
+			t.Errorf("AnyNonUSA(%v) = false, want true", locs)
+		}
+	}
+}
+
+// TestAnyNonUSA_AllUnknown — false when every string is Unknown (never reject on missing signal).
+func TestAnyNonUSA_AllUnknown(t *testing.T) {
+	cases := [][]string{
+		{"Remote"},
+		{"Worldwide"},
+		{""},
+		{"Remote", "Worldwide"},
+	}
+	for _, locs := range cases {
+		if AnyNonUSA(locs) {
+			t.Errorf("AnyNonUSA(%v) = true, want false (unknown = keep)", locs)
+		}
+	}
+}
+
 func BenchmarkClassify(b *testing.B) {
 	cases := []string{
 		"San Francisco, CA",

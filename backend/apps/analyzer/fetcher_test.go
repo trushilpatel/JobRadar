@@ -360,6 +360,253 @@ func TestFetchOne_UnknownLocationPassesThrough(t *testing.T) {
 	}
 }
 
+// ── AC-6: LocationKnown early gate and CountryCode check ────────────────────
+
+// TestFetchOne_LocationKnownTrue_EarlyGateBeforeHTTP verifies that when
+// LocationKnown=true and AllLocations is non-USA, the job is rejected before
+// any HTTP call is made (Path A: saves a round-trip for already-classified jobs).
+func TestFetchOne_LocationKnownTrue_EarlyGateBeforeHTTP(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+	// Install a transport that fails if ever called — proves no HTTP happened.
+	w.client = badHTTPClient()
+
+	job := ats.RawJob{
+		ID:            "lever-uk-1",
+		Adapter:       "lever",
+		Title:         "Engineer",
+		Location:      "London, UK",
+		URL:           "https://example.com/j/1",
+		LocationKnown: true,
+		AllLocations:  []string{"London, UK"},
+	}
+	before := nonUSACount()
+	msg, state := makeTestMsg(t, job, 1)
+	result, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+
+	if ok {
+		t.Errorf("fetchOne should return ok=false for LocationKnown=true non-USA job; got %+v", result)
+	}
+	if !state.Acked {
+		t.Errorf("msg should be Acked on early non-USA rejection, got %+v", state)
+	}
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != job.ID {
+		t.Errorf("expected MarkLedgerNonUSA(%q), got %v", job.ID, pipeline.markCalls)
+	}
+	if got := nonUSACount() - before; got != 1 {
+		t.Errorf("expected EnricherJobsTotal{non_usa} +1, got %v", got)
+	}
+}
+
+// TestFetchOne_LocationKnownTrue_USAPassesEarlyGate verifies that a job with
+// LocationKnown=true and a USA AllLocations is NOT rejected by the early gate.
+func TestFetchOne_LocationKnownTrue_USAPassesEarlyGate(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+	job := ats.RawJob{
+		ID:            "lever-nyc-1",
+		Adapter:       "lever",
+		Title:         "Engineer",
+		Location:      "New York, NY",
+		URL:           "https://example.com/j/2",
+		LocationKnown: true,
+		AllLocations:  []string{"New York, NY"},
+		FullContent:   &atstypes.FullJobContent{Description: "Great NYC role"},
+	}
+	msg, state := makeTestMsg(t, job, 1)
+	result, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+
+	if !ok {
+		t.Errorf("fetchOne should return ok=true for LocationKnown=true USA job")
+	}
+	if state.Acked || state.Termed {
+		t.Errorf("msg must not be disposed for USA LocationKnown job, got %+v", state)
+	}
+	if result.job.ID != job.ID {
+		t.Errorf("expected result job ID=%q, got %q", job.ID, result.job.ID)
+	}
+	if len(pipeline.markCalls) != 0 {
+		t.Errorf("expected no mark calls for USA LocationKnown job, got %v", pipeline.markCalls)
+	}
+}
+
+// TestFetchOne_LocationKnownFalse_CountryCodeUSA_PassesThrough verifies Path B:
+// when LocationKnown=false (Workday/Meta) and the detail content returns a US
+// country code, the job is NOT rejected.
+func TestFetchOne_LocationKnownFalse_CountryCodeUSA_PassesThrough(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+
+	job := ats.RawJob{
+		ID:            "wd-us-1",
+		Adapter:       "workday",
+		Title:         "",
+		Location:      "",
+		LocationKnown: false,
+		URL:           "https://example.com/j/3",
+		FullContent: &atstypes.FullJobContent{
+			Description: "Role in Seattle",
+		},
+	}
+	// Inject CountryCode via FullContent — the fetcher reads from content.CountryCode
+	// after fullContentToResponse. We simulate via a custom content response by
+	// using the FullContent path and a pre-set Location that is USA.
+	job.Location = "Seattle, WA"
+	msg, state := makeTestMsg(t, job, 1)
+	result, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+
+	if !ok {
+		t.Errorf("fetchOne should return ok=true for USA location on thin-listing job")
+	}
+	if state.Acked || state.Termed {
+		t.Errorf("msg must not be disposed for USA thin-listing job, got %+v", state)
+	}
+	_ = result
+	if len(pipeline.markCalls) != 0 {
+		t.Errorf("expected no mark calls, got %v", pipeline.markCalls)
+	}
+}
+
+// TestFetchOne_LocationKnownFalse_CountryCodeNonUSA_Rejected verifies Path B:
+// when LocationKnown=false and content.CountryCode is a non-US alpha-2, the
+// job is rejected (mark + ack, ok=false).
+func TestFetchOne_LocationKnownFalse_CountryCodeNonUSA_Rejected(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+
+	// Simulate a Workday job where the detail page reveals CountryCode="GB".
+	// We inject via a fake ContentFetcher by using FullContent with a custom
+	// content type. Since fullContentToResponse doesn't set CountryCode, we
+	// simulate by patching: set Location to a GB city so the string fallback
+	// catches it, and verify the rejection happens.
+	job := ats.RawJob{
+		ID:            "wd-gb-1",
+		Adapter:       "workday",
+		Title:         "Engineer",
+		Location:      "London, United Kingdom",
+		LocationKnown: false,
+		URL:           "https://example.com/j/4",
+		FullContent: &atstypes.FullJobContent{
+			Description: "Role in London",
+		},
+	}
+	before := nonUSACount()
+	msg, state := makeTestMsg(t, job, 1)
+	result, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+
+	if ok {
+		t.Errorf("fetchOne should return ok=false for non-USA thin-listing job; got %+v", result)
+	}
+	if !state.Acked {
+		t.Errorf("msg should be Acked on non-USA rejection, got %+v", state)
+	}
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != job.ID {
+		t.Errorf("expected MarkLedgerNonUSA(%q), got %v", job.ID, pipeline.markCalls)
+	}
+	if got := nonUSACount() - before; got != 1 {
+		t.Errorf("expected EnricherJobsTotal{non_usa} +1, got %v", got)
+	}
+}
+
+// TestFetchOne_CountryCodeNonUS_Rejected verifies Path B: when the ContentFetcher
+// returns a non-US CountryCode the job is rejected via the country_code branch
+// (not the string_match fallback). This exercises lines 143–146 of fetcher.go.
+func TestFetchOne_CountryCodeNonUS_Rejected(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+	// Inject a fake ContentFetcher that returns CountryCode="IN" (India).
+	w.registryFn = func(_ string) (ats.Adapter, error) {
+		return &fakeContentFetcher{resp: ats.FetchJobContentResponse{
+			ID:          "wd-in-1",
+			Title:       "Engineer",
+			Location:    "Bengaluru",
+			CountryCode: "IN",
+			Description: "role in India",
+		}}, nil
+	}
+
+	job := ats.RawJob{
+		ID:            "wd-in-1",
+		Adapter:       "workday",
+		Title:         "",
+		Location:      "",
+		LocationKnown: false,
+		URL:           "https://example.com/j/5",
+	}
+	before := nonUSACount()
+	msg, state := makeTestMsg(t, job, 1)
+	result, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+
+	if ok {
+		t.Errorf("fetchOne should return ok=false for CountryCode=IN; got %+v", result)
+	}
+	if !state.Acked {
+		t.Errorf("msg should be Acked on country_code rejection, got %+v", state)
+	}
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != job.ID {
+		t.Errorf("expected MarkLedgerNonUSA(%q), got %v", job.ID, pipeline.markCalls)
+	}
+	if got := nonUSACount() - before; got != 1 {
+		t.Errorf("expected EnricherJobsTotal{non_usa} +1, got %v", got)
+	}
+}
+
+// TestFetchOne_CountryCodeUS_PassesThrough verifies Path B: when the
+// ContentFetcher returns CountryCode="US", the job is NOT rejected by the
+// country_code branch — exercises the isUSCode fast-keep path.
+func TestFetchOne_CountryCodeUS_PassesThrough(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+	w.registryFn = func(_ string) (ats.Adapter, error) {
+		return &fakeContentFetcher{resp: ats.FetchJobContentResponse{
+			ID:          "wd-us-2",
+			Title:       "Engineer",
+			Location:    "Seattle, WA",
+			CountryCode: "US",
+			Description: "role in Seattle",
+		}}, nil
+	}
+
+	job := ats.RawJob{
+		ID:            "wd-us-2",
+		Adapter:       "workday",
+		Title:         "",
+		Location:      "",
+		LocationKnown: false,
+		URL:           "https://example.com/j/6",
+	}
+	msg, state := makeTestMsg(t, job, 1)
+	result, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+
+	if !ok {
+		t.Errorf("fetchOne should return ok=true for CountryCode=US")
+	}
+	if state.Acked || state.Termed {
+		t.Errorf("msg must not be disposed for US country code job, got %+v", state)
+	}
+	if result.job.ID != job.ID {
+		t.Errorf("expected result job ID=%q, got %q", job.ID, result.job.ID)
+	}
+	if len(pipeline.markCalls) != 0 {
+		t.Errorf("expected no mark calls for US country code job, got %v", pipeline.markCalls)
+	}
+}
+
+// fakeContentFetcher is a minimal Adapter+ContentFetcher that returns a
+// pre-programmed FetchJobContentResponse. Used to inject CountryCode in tests.
+type fakeContentFetcher struct {
+	resp ats.FetchJobContentResponse
+	err  error
+}
+
+func (f *fakeContentFetcher) FetchJobs(_ context.Context, _ string) (ats.FetchJobsResponse, error) {
+	return ats.FetchJobsResponse{}, nil
+}
+
+func (f *fakeContentFetcher) FetchJobContent(_ context.Context, _ ats.RawJob) (ats.FetchJobContentResponse, error) {
+	return f.resp, f.err
+}
+
 // ── metric helpers ─────────────────────────────────────────────────────────────
 
 func nonUSACount() float64 {

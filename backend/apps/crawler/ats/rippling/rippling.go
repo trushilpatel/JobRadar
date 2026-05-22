@@ -177,6 +177,8 @@ func (r *Rippling) FetchJobs(ctx context.Context, _ string) (types.FetchJobsResp
 			Location:       location,
 			EmploymentType: jobcommon.EmployFullTime, // default; Rippling doesn't expose this in listing
 			FullContent:    nil,                      // thin adapter — detail fetched later
+			LocationKnown:  true,
+			AllLocations:   []string{location},
 		})
 	}
 

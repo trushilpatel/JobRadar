@@ -332,13 +332,46 @@ func (jp *JobPosting) Compose() string {
 	return strings.TrimSpace(b.String())
 }
 
+// metaCountryToCode converts a Meta address country value to an ISO alpha-2
+// code. Meta emits "USA", "United States", plain 2-char codes (e.g. "IN"),
+// or empty strings. Unknown values return "".
+func metaCountryToCode(country string) string {
+	c := strings.TrimSpace(country)
+	switch strings.ToUpper(c) {
+	case "USA", "UNITED STATES", "UNITED STATES OF AMERICA", "US":
+		return "US"
+	case "":
+		return ""
+	default:
+		// Pass through if already a 2-char ISO code; ignore everything else.
+		if len(c) == 2 {
+			return strings.ToUpper(c)
+		}
+		return ""
+	}
+}
+
 // toFetchJobContentResponse maps the parsed JobPosting onto the shared
 // FetchJobContentResponse contract every adapter implements. Mirrors the
 // Greenhouse / Lever toFetchJobContentResponse helpers.
 func (jp *JobPosting) toFetchJobContentResponse(jobID string) types.FetchJobContentResponse {
+	// Prefer the full "City, Region, Country" string from Locations() — it is
+	// the most human-readable and what the test contract requires. Fall back to
+	// the raw Locality field only when Locations() is empty (e.g. no address).
 	location := ""
-	if locs := jp.Locations(); len(locs) > 0 {
-		location = locs[0]
+	if allLocs := jp.Locations(); len(allLocs) > 0 {
+		location = allLocs[0]
+	} else if locs := jp.JobLocation; len(locs) > 0 {
+		location = strings.TrimSpace(string(locs[0].Address.Locality))
+	}
+
+	// Walk all locations to find the first non-empty country code.
+	countryCode := ""
+	for _, l := range jp.JobLocation {
+		if code := metaCountryToCode(strings.TrimSpace(string(l.Address.Country))); code != "" {
+			countryCode = code
+			break
+		}
 	}
 	return types.FetchJobContentResponse{
 		ID:             jobID,
@@ -349,6 +382,7 @@ func (jp *JobPosting) toFetchJobContentResponse(jobID string) types.FetchJobCont
 		EmploymentType: jobcommon.EmployFullTime, // Meta lists full-time only on this filter
 		Department:     jp.HiringOrg.Name,
 		PublishedDate:  jp.DatePosted,
+		CountryCode:    countryCode,
 	}
 }
 

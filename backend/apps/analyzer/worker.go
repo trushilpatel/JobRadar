@@ -87,6 +87,7 @@ type Worker struct {
 	client          *http.Client
 	log             logger.Logger
 	clock           clock
+	registryFn      func(string) (ats.Adapter, error) // defaults to ats.Registry; replaced in tests
 	maxExpYears     int
 	fetchConc       int
 	llmBatchSize    int
@@ -114,6 +115,7 @@ func NewWorker(opts WorkerOptions) *Worker {
 		client:          &http.Client{Timeout: 15 * time.Second},
 		log:             opts.Log,
 		clock:           realClock{},
+		registryFn:      ats.Registry,
 		maxExpYears:     opts.MaxExpYears,
 		fetchConc:       opts.FetchConcurrency,
 		llmBatchSize:    opts.LLMBatchSize,

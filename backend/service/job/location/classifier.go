@@ -102,6 +102,28 @@ func IsUSA(raw string) bool {
 	return Classify(raw) == ClassificationUSA
 }
 
+// AnyNonUSA returns true when at least one string in the slice classifies as
+// NonUSA and no string classifies as USA ("any USA wins" rule).
+//
+// Returns false for a nil or empty slice so callers can safely pass AllLocations
+// without a nil guard — the gate is effectively disabled when no locations are
+// known.
+func AnyNonUSA(locations []string) bool {
+	if len(locations) == 0 {
+		return false
+	}
+	var sawNonUSA bool
+	for _, loc := range locations {
+		switch Classify(loc) {
+		case ClassificationUSA:
+			return false // any USA wins — keep the job
+		case ClassificationNonUSA:
+			sawNonUSA = true
+		}
+	}
+	return sawNonUSA
+}
+
 // ── internals ────────────────────────────────────────────────────────────────
 
 // partSplitter matches the separators commonly used by ATSs to join multiple

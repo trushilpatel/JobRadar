@@ -394,6 +394,8 @@ func toItem(j parsedJob) types.FetchJobsItem {
 		URL:            j.URL,
 		Location:       j.Location,
 		EmploymentType: "full_time",
+		LocationKnown:  true,
+		AllLocations:   []string{j.Location},
 	}
 }
 

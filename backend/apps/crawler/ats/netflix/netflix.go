@@ -246,6 +246,8 @@ func positionToItem(p position) types.FetchJobsItem {
 		Location:       loc,
 		EmploymentType: normalizeWorkLocation(p.WorkLocationOption),
 		FullContent:    nil, // thin adapter — detail fetched later
+		LocationKnown:  true,
+		AllLocations:   []string{loc},
 	}
 }
 

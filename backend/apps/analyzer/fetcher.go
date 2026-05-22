@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -93,6 +94,20 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.M
 	)
 	jobLog.Debug("fetching content")
 
+	// Path A early gate: when LocationKnown=true the adapter already supplied
+	// structured location data. Reject non-USA jobs here before any HTTP call.
+	if job.LocationKnown && location.AnyNonUSA(analyzerMergedLocations(job)) {
+		span.SetAttributes(attribute.String("outcome", "non_usa_early"))
+		jobLog.Info("early reject: non-USA job (LocationKnown=true)",
+			logger.Str("location", job.Location),
+			logger.Bool("location_known", true),
+		)
+		metrics.EnricherJobsTotal.WithLabelValues("non_usa").Inc()
+		w.markNonUSA(msgCtx, job.ID)
+		_ = msg.Ack()
+		return fetchedJob{}, false
+	}
+
 	fetchStart := time.Now()
 	content, err := w.fetchContent(msgCtx, job)
 	span.SetAttributes(attribute.Int64("wait_ms", time.Since(fetchStart).Milliseconds()))
@@ -115,13 +130,34 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.M
 		job.Location = content.Location
 	}
 
-	// Post-backfill location gate: reject unambiguously non-USA jobs so they
-	// never reach the LLM enricher. ACK the message (terminal — no retry).
-	if location.IsNonUSA(job.Location) {
+	// Path B post-backfill gate: reject unambiguously non-USA jobs so they
+	// never reach the LLM enricher. CountryCode (ISO alpha-2) from the detail
+	// response is checked first — it is the most reliable signal. Falls back
+	// to string-based AnyNonUSA on the merged location slice.
+	// ACK the message (terminal — no retry).
+	var nonUSA bool
+	var rejectedBy string
+	switch {
+	case isUSCode(content.CountryCode):
+		// Confirmed USA via country code — keep.
+	case content.CountryCode != "" && !isUSCode(content.CountryCode):
+		// Non-empty, non-US country code → definite non-USA.
+		nonUSA = true
+		rejectedBy = "country_code"
+	default:
+		// No country code — fall back to string matching.
+		if location.AnyNonUSA(analyzerMergedLocations(job)) {
+			nonUSA = true
+			rejectedBy = "string_match"
+		}
+	}
+	if nonUSA {
 		span.SetAttributes(attribute.String("outcome", "non_usa"))
 		jobLog.Info("rejecting non-USA job after location backfill",
 			logger.Str(logger.FieldJobID, job.ID),
 			logger.Str("location", job.Location),
+			logger.Str("country_code", content.CountryCode),
+			logger.Str("rejected_by", rejectedBy),
 		)
 		metrics.EnricherJobsTotal.WithLabelValues("non_usa").Inc()
 		w.markNonUSA(msgCtx, job.ID)
@@ -158,7 +194,7 @@ func (w *Worker) fetchContent(ctx context.Context, job ats.RawJob) (ats.FetchJob
 		}
 	}
 
-	adp, err := ats.Registry(job.Adapter)
+	adp, err := w.registryFn(job.Adapter)
 	if err == nil {
 		if cf, ok := adp.(ats.ContentFetcher); ok {
 			return cf.FetchJobContent(ctx, job)
@@ -202,6 +238,25 @@ func (w *Worker) fetchPage(ctx context.Context, url string) (string, error) {
 		return "", fmt.Errorf("read body: %w", err)
 	}
 	return string(body), nil
+}
+
+// isUSCode reports whether code is the ISO alpha-2 code for the United States.
+// Empty string returns false — absence of a code is not a USA confirmation.
+func isUSCode(code string) bool {
+	return strings.EqualFold(strings.TrimSpace(code), "US")
+}
+
+// analyzerMergedLocations returns AllLocations if set, otherwise wraps the
+// single Location string in a slice. Mirrors the same helper in the filter
+// worker so both stages apply AnyNonUSA consistently.
+func analyzerMergedLocations(job ats.RawJob) []string {
+	if len(job.AllLocations) > 0 {
+		return job.AllLocations
+	}
+	if job.Location != "" {
+		return []string{job.Location}
+	}
+	return nil
 }
 
 // fullContentToResponse converts a pre-fetched FullJobContent into the

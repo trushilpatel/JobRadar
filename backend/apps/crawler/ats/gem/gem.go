@@ -133,11 +133,12 @@ func (g *Gem) FetchJobs(ctx context.Context, companyID string) (types.FetchJobsR
 // ── Converters ──────────────────────────────────────────────────────────────
 
 func jobToItem(j gemJobPost) types.FetchJobsItem {
+	loc := resolveLocation(j)
 	return types.FetchJobsItem{
 		ID:             fmt.Sprintf("%s-%s", companycommon.AdapterGem, j.ID),
 		Title:          j.Title,
 		URL:            j.AbsoluteURL,
-		Location:       resolveLocation(j),
+		Location:       loc,
 		EmploymentType: mapEmploymentType(j.EmploymentType),
 		FullContent: &types.FullJobContent{
 			Description:   resolveDescription(j),
@@ -145,6 +146,8 @@ func jobToItem(j gemJobPost) types.FetchJobsItem {
 			WorkplaceType: mapWorkplaceType(j.LocationType),
 			PublishedDate: resolvePublishedDate(j),
 		},
+		LocationKnown: true,
+		AllLocations:  []string{loc},
 	}
 }
 

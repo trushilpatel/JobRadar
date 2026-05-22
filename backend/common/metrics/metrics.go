@@ -38,6 +38,11 @@ var CrawlerScanDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 	Buckets: []float64{0.5, 1, 2, 5, 10, 30, 60},
 })
 
+var CrawlerJobsNonUSADropped = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "crawler_jobs_non_usa_dropped_total",
+	Help: "Total non-USA jobs dropped at the crawler (LocationKnown=true gate) by adapter.",
+}, []string{"adapter"})
+
 // ── Filter ────────────────────────────────────────────────────────────────────
 
 var FilterJobsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -171,6 +176,7 @@ func init() {
 		CrawlerScansTotal,
 		CrawlerJobsFetchedTotal,
 		CrawlerScanDuration,
+		CrawlerJobsNonUSADropped,
 		FilterJobsTotal,
 		FilterLLMDuration,
 		FilterChunkDuration,
