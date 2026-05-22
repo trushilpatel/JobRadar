@@ -180,8 +180,14 @@ func TestProcessChunk_PassThrough_NoTitle(t *testing.T) {
 	if len(filtered) != 2 {
 		t.Errorf("expected 2 filtered publishes, got %d", len(filtered))
 	}
-	if len(ledger.calls) != 0 {
-		t.Errorf("no ledger calls for pass-through, got %d", len(ledger.calls))
+	if len(ledger.calls) != 1 {
+		t.Fatalf("expected 1 ledger call (filtered) for pass-through, got %d", len(ledger.calls))
+	}
+	if ledger.calls[0].reason != jobcommon.SeenReasonFiltered {
+		t.Errorf("expected reason %q, got %q", jobcommon.SeenReasonFiltered, ledger.calls[0].reason)
+	}
+	if len(ledger.calls[0].ids) != 2 {
+		t.Errorf("expected 2 filtered IDs, got %v", ledger.calls[0].ids)
 	}
 }
 

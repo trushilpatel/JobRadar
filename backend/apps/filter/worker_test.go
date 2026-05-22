@@ -208,8 +208,14 @@ func TestProcessChunk_AllRelevant(t *testing.T) {
 	if len(pub.payloads) != 3 {
 		t.Errorf("expected 3 published jobs, got %d", len(pub.payloads))
 	}
-	if len(ledger.calls) != 0 {
-		t.Errorf("expected no ledger calls, got %d", len(ledger.calls))
+	if len(ledger.calls) != 1 {
+		t.Fatalf("expected 1 ledger call (filtered), got %d", len(ledger.calls))
+	}
+	if ledger.calls[0].reason != jobcommon.SeenReasonFiltered {
+		t.Errorf("expected reason %q, got %q", jobcommon.SeenReasonFiltered, ledger.calls[0].reason)
+	}
+	if len(ledger.calls[0].ids) != 3 {
+		t.Errorf("expected 3 filtered IDs, got %v", ledger.calls[0].ids)
 	}
 }
 
@@ -235,15 +241,22 @@ func TestProcessChunk_PartialRelevant(t *testing.T) {
 			t.Errorf("unexpected published job ID: %s", job.ID)
 		}
 	}
-	if len(ledger.calls) != 1 {
-		t.Fatalf("expected 1 ledger call, got %d", len(ledger.calls))
+	if len(ledger.calls) != 2 {
+		t.Fatalf("expected 2 ledger calls (irrelevant + filtered), got %d", len(ledger.calls))
 	}
-	call := ledger.calls[0]
-	if call.reason != jobcommon.SeenReasonLLMIrrelevant {
-		t.Errorf("expected reason %q, got %q", jobcommon.SeenReasonLLMIrrelevant, call.reason)
+	irrelevantCall := ledger.calls[0]
+	if irrelevantCall.reason != jobcommon.SeenReasonLLMIrrelevant {
+		t.Errorf("expected reason %q, got %q", jobcommon.SeenReasonLLMIrrelevant, irrelevantCall.reason)
 	}
-	if len(call.ids) != 1 || call.ids[0] != "job-2" {
-		t.Errorf("expected irrelevant IDs [job-2], got %v", call.ids)
+	if len(irrelevantCall.ids) != 1 || irrelevantCall.ids[0] != "job-2" {
+		t.Errorf("expected irrelevant IDs [job-2], got %v", irrelevantCall.ids)
+	}
+	filteredCall := ledger.calls[1]
+	if filteredCall.reason != jobcommon.SeenReasonFiltered {
+		t.Errorf("expected reason %q, got %q", jobcommon.SeenReasonFiltered, filteredCall.reason)
+	}
+	if len(filteredCall.ids) != 2 {
+		t.Errorf("expected 2 filtered IDs, got %v", filteredCall.ids)
 	}
 }
 

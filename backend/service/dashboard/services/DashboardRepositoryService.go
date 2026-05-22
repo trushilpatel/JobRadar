@@ -209,7 +209,7 @@ func (s *pipelineRepository) GetPipelineDBStats(ctx context.Context) (_ dto.Pipe
 	defer tracing.End(span, &err)
 	var result dto.PipelineDBStats
 	err = s.db.WithContext(ctx).Raw(`
-		SELECT total_companies, active_companies, queued, crawling, new_jobs_24h, errors_24h, pipeline_pending
+		SELECT total_companies, active_companies, queued, crawling, new_jobs_24h, errors_24h, pipeline_pending, pipeline_filtered
 		FROM mv_pipeline_db_stats
 	`).Scan(&result).Error
 	return result, err

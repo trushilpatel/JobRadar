@@ -14,10 +14,11 @@ const (
 )
 
 // SeenReason values for job_pipeline_ledger.reason. Mirrors the CHECK
-// constraint installed by migration 057. Adding a new value here must be
+// constraint installed by migration 058. Adding a new value here must be
 // paired with a new migration that widens the constraint.
 const (
 	SeenReasonFetch         = "fetch"
+	SeenReasonFiltered      = "filtered" // passed filter, published to jobs.filtered.*
 	SeenReasonLLMIrrelevant = "llm_irrelevant"
 	SeenReasonRetry         = "retry"
 	SeenReasonUserDismissed = "user_dismissed"

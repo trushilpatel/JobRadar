@@ -41,7 +41,8 @@ type PipelineDBStats struct {
 	Crawling        int64 `gorm:"column:crawling"`
 	NewJobs24h      int64 `gorm:"column:new_jobs_24h"`
 	Errors24h       int64 `gorm:"column:errors_24h"`
-	// PipelinePending: jobs crawled (reason='fetch') but not yet written to `jobs`.
-	// Used as the DB-based proxy for awaiting_filter when Kafka lag is unavailable.
+	// PipelinePending: jobs with reason='fetch' not yet in `jobs` — truly awaiting the filter worker.
 	PipelinePending int64 `gorm:"column:pipeline_pending"`
+	// PipelineFiltered: jobs with reason='filtered' not yet in `jobs` — passed filter, awaiting enricher.
+	PipelineFiltered int64 `gorm:"column:pipeline_filtered"`
 }
