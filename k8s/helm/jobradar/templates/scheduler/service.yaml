@@ -7,10 +7,9 @@ metadata:
     {{- include "jobradar.labels" . | nindent 4 }}
     component: scheduler
 spec:
-  type: ClusterIP
-  ports:
-    - name: metrics
-      port: 9101
-      targetPort: 9101
   selector:
     {{- include "jobradar.selectorLabels" (dict "component" "scheduler") | nindent 4 }}
+  ports:
+    - name: metrics
+      port: 9103
+      targetPort: metrics

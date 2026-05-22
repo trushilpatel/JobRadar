@@ -4,16 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strconv"
-	"sync"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/twmb/franz-go/pkg/kgo"
-
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
-	"github.com/trushilpatel/jobradar/common/kafka"
+	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -63,62 +60,38 @@ func (f *fakeLedger) UpdateRetryBatch(_ context.Context, entries []jobsvc.RetryL
 
 // publishedRecord captures one publish call.
 type publishedRecord struct {
-	topic   string
+	subject string
 	value   []byte
-	headers []kgo.RecordHeader
 }
 
 type fakePublisher struct {
 	payloads [][]byte
 	records  []publishedRecord
+	err      error
 }
 
-func (f *fakePublisher) Publish(_ context.Context, topic string, value []byte) error {
+func (f *fakePublisher) Publish(_ context.Context, subject string, value []byte) error {
+	if f.err != nil {
+		return f.err
+	}
 	f.payloads = append(f.payloads, value)
-	f.records = append(f.records, publishedRecord{topic: topic, value: value})
+	f.records = append(f.records, publishedRecord{subject: subject, value: value})
 	return nil
 }
 
-func (f *fakePublisher) PublishWithHeaders(_ context.Context, topic string, value []byte, headers []kgo.RecordHeader) error {
-	f.payloads = append(f.payloads, value)
-	dup := make([]kgo.RecordHeader, len(headers))
-	copy(dup, headers)
-	f.records = append(f.records, publishedRecord{topic: topic, value: value, headers: dup})
-	return nil
+func (f *fakePublisher) PublishWithMsgID(_ context.Context, subject string, value []byte, _ string) error {
+	return f.Publish(context.Background(), subject, value)
 }
 
-func (f *fakePublisher) recordsOnTopic(topic string) []publishedRecord {
+// recordsOnSubject returns all publishes whose subject contains needle.
+func (f *fakePublisher) recordsOnSubject(needle string) []publishedRecord {
 	var out []publishedRecord
 	for _, r := range f.records {
-		if r.topic == topic {
+		if strings.Contains(r.subject, needle) {
 			out = append(out, r)
 		}
 	}
 	return out
-}
-
-type committedBatch struct {
-	records []*kgo.Record
-}
-
-type fakeCommitter struct {
-	mu       sync.Mutex
-	batches  []committedBatch
-	errQueue []error
-}
-
-func (f *fakeCommitter) CommitRecords(_ context.Context, records ...*kgo.Record) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	dup := make([]*kgo.Record, len(records))
-	copy(dup, records)
-	f.batches = append(f.batches, committedBatch{records: dup})
-	if len(f.errQueue) > 0 {
-		e := f.errQueue[0]
-		f.errQueue = f.errQueue[1:]
-		return e
-	}
-	return nil
 }
 
 type fakeClock struct {
@@ -148,21 +121,20 @@ func makeWorker(scorer *fakeScorer, ledger *fakeLedger, pub *fakePublisher) *Wor
 		ledger:          ledger,
 		publisher:       pub,
 		batchSize:       5,
+		flushTimeout:    30 * time.Second,
 		llmCallInterval: 5 * time.Second,
 		clock:           realClock{},
 		log:             logger.NewNoop(),
 	}
 }
 
-// makeWorkerFull wires a worker with a fake committer + fake clock for
-// processFetch-level tests.
-func makeWorkerFull(scorer *fakeScorer, ledger *fakeLedger, pub *fakePublisher, committer recordCommitter, clk clock, batchSize int) *Worker {
+func makeWorkerWithClock(scorer *fakeScorer, ledger *fakeLedger, pub *fakePublisher, clk clock, batchSize int) *Worker {
 	return &Worker{
 		scorer:          scorer,
 		ledger:          ledger,
 		publisher:       pub,
-		committer:       committer,
 		batchSize:       batchSize,
+		flushTimeout:    30 * time.Second,
 		llmCallInterval: 5 * time.Second,
 		clock:           clk,
 		log:             logger.NewNoop(),
@@ -173,54 +145,52 @@ func makeJob(id string) ats.RawJob {
 	return ats.RawJob{ID: id, Title: "Software Engineer"}
 }
 
+// makeChunkItem builds a chunkItem from a job and returns its TestMsgState.
+func makeChunkItem(job ats.RawJob, deliveryCount int) (chunkItem, *js.TestMsgState) {
+	msg, state := js.NewTestMsg([]byte("{}"), deliveryCount)
+	return chunkItem{
+		job: jobWithCtx{ctx: context.Background(), job: job, retryCount: deliveryCount - 1},
+		msg: msg,
+	}, state
+}
+
+// makeBatch builds chunkItems from jobs with deliveryCount=1 (first delivery).
+// States are discarded — use makeChunkItem directly when you need state inspection.
 func makeBatch(jobs ...ats.RawJob) []chunkItem {
 	batch := make([]chunkItem, len(jobs))
 	for i, j := range jobs {
-		batch[i] = chunkItem{
-			job:    jobWithCtx{ctx: context.Background(), job: j},
-			record: &kgo.Record{Partition: 0, Offset: int64(i)},
-		}
+		item, _ := makeChunkItem(j, 1)
+		batch[i] = item
 	}
 	return batch
 }
 
+// makeBatchWithRetryCount builds chunkItems at the given retry count.
 func makeBatchWithRetryCount(retryCount int, jobs ...ats.RawJob) []chunkItem {
 	batch := make([]chunkItem, len(jobs))
 	for i, j := range jobs {
-		batch[i] = chunkItem{
-			job:    jobWithCtx{ctx: context.Background(), job: j, retryCount: retryCount},
-			record: &kgo.Record{Partition: 0, Offset: int64(i)},
-		}
+		item, _ := makeChunkItem(j, retryCount+1)
+		batch[i] = item
 	}
 	return batch
 }
 
-// makeRawRecord builds a kgo.Record with a JSON-encoded job and the retry_count
-// header. Used to drive processFetch end-to-end.
-func makeRawRecord(t *testing.T, id string, retryCount int, partition int32, offset int64) *kgo.Record {
+// makeTestMsgs creates NATS test messages from job/delivery-count pairs.
+func makeTestMsgs(t *testing.T, specs []struct {
+	id            string
+	deliveryCount int
+}) ([]*js.Msg, []*js.TestMsgState) {
 	t.Helper()
-	payload, err := json.Marshal(makeJob(id))
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	headers := []kgo.RecordHeader{
-		{Key: kafka.HeaderRetryCount, Value: []byte(strconv.Itoa(retryCount))},
-	}
-	return &kgo.Record{
-		Value:     payload,
-		Headers:   headers,
-		Partition: partition,
-		Offset:    offset,
-	}
-}
-
-func headerValue(h []kgo.RecordHeader, key string) (string, bool) {
-	for _, rh := range h {
-		if rh.Key == key {
-			return string(rh.Value), true
+	msgs := make([]*js.Msg, len(specs))
+	states := make([]*js.TestMsgState, len(specs))
+	for i, s := range specs {
+		payload, err := json.Marshal(makeJob(s.id))
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
 		}
+		msgs[i], states[i] = js.NewTestMsg(payload, s.deliveryCount)
 	}
-	return "", false
+	return msgs, states
 }
 
 // ── processChunk tests (domain-level) ─────────────────────────────────────────
@@ -256,7 +226,6 @@ func TestProcessChunk_PartialRelevant(t *testing.T) {
 	if len(pub.payloads) != 2 {
 		t.Errorf("expected 2 published jobs, got %d", len(pub.payloads))
 	}
-
 	for _, payload := range pub.payloads {
 		var job ats.RawJob
 		if err := json.Unmarshal(payload, &job); err != nil {
@@ -266,7 +235,6 @@ func TestProcessChunk_PartialRelevant(t *testing.T) {
 			t.Errorf("unexpected published job ID: %s", job.ID)
 		}
 	}
-
 	if len(ledger.calls) != 1 {
 		t.Fatalf("expected 1 ledger call, got %d", len(ledger.calls))
 	}
@@ -279,9 +247,8 @@ func TestProcessChunk_PartialRelevant(t *testing.T) {
 	}
 }
 
-// On a generic (transient) scorer error with incoming retry_count=0, jobs go to
-// the 1m retry tier with retry_count=1 and next_attempt_at = clock.Now()+1m.
-// UpdateRetryBatch receives matching entries; no reason='error' ledger write.
+// On a generic transient scorer error with retryCount=0, jobs are Nak'd and
+// UpdateRetryBatch is called with correct next_attempt_at (based on BackOff).
 func TestProcessChunk_ScorerError_RoutesToRetry(t *testing.T) {
 	scorer := &fakeScorer{err: context.DeadlineExceeded}
 	ledger := &fakeLedger{}
@@ -291,31 +258,18 @@ func TestProcessChunk_ScorerError_RoutesToRetry(t *testing.T) {
 	w := makeWorker(scorer, ledger, pub)
 	w.clock = &fakeClock{now: now}
 
-	w.processChunk(context.Background(), makeBatch(
-		makeJob("job-1"), makeJob("job-2"),
-	), "fetch-1", 0, 1)
+	item1, state1 := makeChunkItem(makeJob("job-1"), 1)
+	item2, state2 := makeChunkItem(makeJob("job-2"), 1)
+	w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-1", 0, 1)
 
-	retryRecords := pub.recordsOnTopic(kafka.TopicJobListingsRawRetry1m)
-	if len(retryRecords) != 2 {
-		t.Fatalf("expected 2 records on retry.1m, got %d (records: %+v)", len(retryRecords), pub.records)
+	if !state1.Naked || !state2.Naked {
+		t.Errorf("expected both jobs Nak'd: job-1 naked=%v, job-2 naked=%v", state1.Naked, state2.Naked)
 	}
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsRawDLQ)) != 0 {
-		t.Errorf("expected 0 records on DLQ")
+	if state1.Termed || state2.Termed {
+		t.Errorf("jobs should NOT be Term'd on first retry attempt")
 	}
-
-	want := now.Add(1 * time.Minute).UnixMilli()
-	for _, rec := range retryRecords {
-		rc, ok := headerValue(rec.headers, kafka.HeaderRetryCount)
-		if !ok || rc != "1" {
-			t.Errorf("expected retry_count '1', got %q (present=%v)", rc, ok)
-		}
-		naStr, ok := headerValue(rec.headers, kafka.HeaderNextAttemptAt)
-		if !ok {
-			t.Fatalf("missing next_attempt_at header")
-		}
-		if naStr != strconv.FormatInt(want, 10) {
-			t.Errorf("expected next_attempt_at %d, got %s", want, naStr)
-		}
+	if len(pub.recordsOnSubject(js.SubjectJobsDLQ)) != 0 {
+		t.Errorf("expected 0 DLQ records, got %d", len(pub.recordsOnSubject(js.SubjectJobsDLQ)))
 	}
 
 	if len(ledger.retryBatches) != 1 {
@@ -329,8 +283,8 @@ func TestProcessChunk_ScorerError_RoutesToRetry(t *testing.T) {
 		if e.RetryCount != 1 {
 			t.Errorf("expected retry_count=1, got %d for %s", e.RetryCount, e.JobID)
 		}
-		if !e.NextAttemptAt.Equal(now.Add(1 * time.Minute)) {
-			t.Errorf("expected next_attempt_at=%v, got %v", now.Add(1*time.Minute), e.NextAttemptAt)
+		if !e.NextAttemptAt.Equal(now.Add(time.Minute)) {
+			t.Errorf("expected next_attempt_at=%v, got %v", now.Add(time.Minute), e.NextAttemptAt)
 		}
 	}
 	for _, call := range ledger.calls {
@@ -340,20 +294,22 @@ func TestProcessChunk_ScorerError_RoutesToRetry(t *testing.T) {
 	}
 }
 
-// Exhausted retry count → all DLQ'd, UpdateSeenReasonBatch(error) called.
+// Exhausted retry count → all jobs Term'd + DLQ published.
 func TestProcessChunk_ScorerError_ExhaustedGoesToDLQ(t *testing.T) {
 	scorer := &fakeScorer{err: context.DeadlineExceeded}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), makeBatchWithRetryCount(3,
-		makeJob("job-1"), makeJob("job-2"),
-	), "fetch-1", 0, 1)
+	item1, state1 := makeChunkItem(makeJob("job-1"), filterMaxRetries+1)
+	item2, state2 := makeChunkItem(makeJob("job-2"), filterMaxRetries+1)
+	w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-1", 0, 1)
 
-	dlq := pub.recordsOnTopic(kafka.TopicJobListingsRawDLQ)
-	if len(dlq) != 2 {
-		t.Fatalf("expected 2 records on DLQ, got %d", len(dlq))
+	if !state1.Termed || !state2.Termed {
+		t.Errorf("expected both jobs Term'd: job-1 termed=%v, job-2 termed=%v", state1.Termed, state2.Termed)
+	}
+	if len(pub.recordsOnSubject(js.SubjectJobsDLQ)) != 2 {
+		t.Fatalf("expected 2 DLQ publishes, got %d", len(pub.recordsOnSubject(js.SubjectJobsDLQ)))
 	}
 	if len(ledger.retryBatches) != 0 {
 		t.Errorf("expected no UpdateRetryBatch call on exhausted path, got %d", len(ledger.retryBatches))
@@ -366,23 +322,22 @@ func TestProcessChunk_ScorerError_ExhaustedGoesToDLQ(t *testing.T) {
 	}
 }
 
-// ErrLLMValidation → all jobs DLQ'd regardless of retry_count.
+// ErrLLMValidation → all jobs Term'd to DLQ regardless of retry count.
 func TestProcessChunk_ValidationErrorGoesStraightToDLQ(t *testing.T) {
 	scorer := &fakeScorer{err: domainerr.ErrLLMValidation}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), makeBatchWithRetryCount(0,
-		makeJob("job-1"), makeJob("job-2"),
-	), "fetch-1", 0, 1)
+	item1, state1 := makeChunkItem(makeJob("job-1"), 1)
+	item2, state2 := makeChunkItem(makeJob("job-2"), 1)
+	w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-1", 0, 1)
 
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsRawRetry1m)) != 0 {
-		t.Errorf("expected no retry.1m records for validation error")
+	if !state1.Termed || !state2.Termed {
+		t.Errorf("expected both jobs Term'd for validation error")
 	}
-	dlq := pub.recordsOnTopic(kafka.TopicJobListingsRawDLQ)
-	if len(dlq) != 2 {
-		t.Fatalf("expected 2 DLQ records, got %d", len(dlq))
+	if len(pub.recordsOnSubject(js.SubjectJobsDLQ)) != 2 {
+		t.Fatalf("expected 2 DLQ records, got %d", len(pub.recordsOnSubject(js.SubjectJobsDLQ)))
 	}
 	if len(ledger.retryBatches) != 0 {
 		t.Errorf("expected no UpdateRetryBatch on validation")
@@ -392,27 +347,28 @@ func TestProcessChunk_ValidationErrorGoesStraightToDLQ(t *testing.T) {
 	}
 }
 
-// Mixed retry counts under a generic error: some retried, some DLQ'd in same chunk.
+// Mixed retry counts: retryCount=0 → Nak, retryCount=filterMaxRetries → DLQ.
 func TestProcessChunk_MixedRetryCounts(t *testing.T) {
 	scorer := &fakeScorer{err: context.DeadlineExceeded}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	chunk := []chunkItem{
-		{job: jobWithCtx{ctx: context.Background(), job: makeJob("job-a"), retryCount: 0}, record: &kgo.Record{Offset: 1}},
-		{job: jobWithCtx{ctx: context.Background(), job: makeJob("job-b"), retryCount: 3}, record: &kgo.Record{Offset: 2}},
-	}
-	w.processChunk(context.Background(), chunk, "fetch-1", 0, 1)
+	itemA, stateA := makeChunkItem(makeJob("job-a"), 1)                  // retryCount=0
+	itemB, stateB := makeChunkItem(makeJob("job-b"), filterMaxRetries+1) // retryCount=filterMaxRetries
+	w.processChunk(context.Background(), []chunkItem{itemA, itemB}, "fetch-1", 0, 1)
 
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsRawRetry1m)) != 1 {
-		t.Errorf("expected 1 record on retry.1m, got %d", len(pub.recordsOnTopic(kafka.TopicJobListingsRawRetry1m)))
+	if !stateA.Naked {
+		t.Errorf("job-a: expected Nak'd (within budget), got acked=%v termed=%v", stateA.Acked, stateA.Termed)
 	}
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsRawDLQ)) != 1 {
-		t.Errorf("expected 1 record on DLQ, got %d", len(pub.recordsOnTopic(kafka.TopicJobListingsRawDLQ)))
+	if !stateB.Termed {
+		t.Errorf("job-b: expected Term'd (exhausted), got acked=%v naked=%v", stateB.Acked, stateB.Naked)
+	}
+	if len(pub.recordsOnSubject(js.SubjectJobsDLQ)) != 1 {
+		t.Errorf("expected 1 DLQ record, got %d", len(pub.recordsOnSubject(js.SubjectJobsDLQ)))
 	}
 	if len(ledger.retryBatches) != 1 || len(ledger.retryBatches[0]) != 1 {
-		t.Errorf("expected 1 retry entry, got %+v", ledger.retryBatches)
+		t.Errorf("expected 1 retry entry for job-a, got %+v", ledger.retryBatches)
 	}
 	foundErr := false
 	for _, call := range ledger.calls {
@@ -425,18 +381,18 @@ func TestProcessChunk_MixedRetryCounts(t *testing.T) {
 	}
 }
 
-// UpdateRetryBatch DB failure → logged, not propagated; chunk processing completes.
+// UpdateRetryBatch DB failure → logged, not propagated; Nak still called.
 func TestProcessChunk_UpdateRetryBatchFailure(t *testing.T) {
 	scorer := &fakeScorer{err: context.DeadlineExceeded}
 	ledger := &fakeLedger{retryErr: errors.New("db down")}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), makeBatch(makeJob("job-1")), "fetch-1", 0, 1)
+	item, state := makeChunkItem(makeJob("job-1"), 1)
+	w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
 
-	// Retry publish still happened.
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsRawRetry1m)) != 1 {
-		t.Errorf("expected retry publish to succeed despite ledger failure")
+	if !state.Naked {
+		t.Errorf("expected job Nak'd even when ledger write fails")
 	}
 }
 
@@ -458,25 +414,24 @@ func TestProcessChunk_EmptyBatch(t *testing.T) {
 
 // ── processFetch tests ────────────────────────────────────────────────────────
 
-// N scoreable chunks: N-1 sleeps of llmCallInterval each, CommitRecords called N times.
-func TestProcessFetch_SerialChunkExecutionAndCommits(t *testing.T) {
-	scorer := &fakeScorer{relevantIDs: nil} // all irrelevant → no publish failures
+// N scoreable chunks: N-1 inter-chunk sleeps, all msgs Ack'd on success.
+func TestProcessFetch_SerialChunkExecutionAndAcks(t *testing.T) {
+	scorer := &fakeScorer{relevantIDs: nil}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
-	commit := &fakeCommitter{}
 	clk := &fakeClock{now: time.Now()}
 
-	// batchSize=2 → 3 records produce 2 chunks? actually 3 records / 2 = 2 chunks
-	// Use batchSize=1 with 3 records → 3 chunks, 2 inter-chunk sleeps.
-	w := makeWorkerFull(scorer, ledger, pub, commit, clk, 1)
+	// batchSize=1 → 3 messages = 3 chunks, 2 inter-chunk sleeps.
+	w := makeWorkerWithClock(scorer, ledger, pub, clk, 1)
 
-	records := []*kgo.Record{
-		makeRawRecord(t, "job-1", 0, 0, 10),
-		makeRawRecord(t, "job-2", 0, 0, 11),
-		makeRawRecord(t, "job-3", 0, 0, 12),
-	}
+	msgs, states := makeTestMsgs(t, []struct {
+		id            string
+		deliveryCount int
+	}{
+		{"job-1", 1}, {"job-2", 1}, {"job-3", 1},
+	})
 
-	if err := w.processFetch(context.Background(), records); err != nil {
+	if err := w.processFetch(context.Background(), msgs); err != nil {
 		t.Fatalf("processFetch: %v", err)
 	}
 
@@ -488,39 +443,38 @@ func TestProcessFetch_SerialChunkExecutionAndCommits(t *testing.T) {
 			t.Errorf("expected sleep=%v, got %v", w.llmCallInterval, d)
 		}
 	}
-
-	if len(commit.batches) != 3 {
-		t.Fatalf("expected 3 CommitRecords calls, got %d", len(commit.batches))
-	}
-	// Offsets committed in order 10, 11, 12.
-	for i, want := range []int64{10, 11, 12} {
-		got := commit.batches[i].records
-		if len(got) != 1 || got[0].Offset != want {
-			t.Errorf("commit batch %d: expected offset %d, got %+v", i, want, got)
+	for i, state := range states {
+		if !state.Acked {
+			t.Errorf("msg %d: expected Ack'd after successful processing", i)
 		}
 	}
 }
 
-// processFetch with ScoreBatch error: UpdateRetryBatch invoked with correct entries,
-// chunk committed, next chunk proceeds.
-func TestProcessFetch_ScoreBatchFailureRetriesAndCommits(t *testing.T) {
+// ScoreBatch error → all messages Nak'd, ledger retry entries written.
+func TestProcessFetch_ScoreBatchFailureNaksAll(t *testing.T) {
 	scorer := &fakeScorer{err: context.DeadlineExceeded}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
-	commit := &fakeCommitter{}
 	now := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 	clk := &fakeClock{now: now}
 
-	w := makeWorkerFull(scorer, ledger, pub, commit, clk, 2)
-	records := []*kgo.Record{
-		makeRawRecord(t, "job-1", 0, 0, 10),
-		makeRawRecord(t, "job-2", 0, 0, 11),
-	}
+	w := makeWorkerWithClock(scorer, ledger, pub, clk, 5)
+	msgs, states := makeTestMsgs(t, []struct {
+		id            string
+		deliveryCount int
+	}{
+		{"job-1", 1}, {"job-2", 1},
+	})
 
-	if err := w.processFetch(context.Background(), records); err != nil {
+	if err := w.processFetch(context.Background(), msgs); err != nil {
 		t.Fatalf("processFetch: %v", err)
 	}
 
+	for i, state := range states {
+		if !state.Naked {
+			t.Errorf("msg %d: expected Nak'd on ScoreBatch failure", i)
+		}
+	}
 	if len(ledger.retryBatches) != 1 || len(ledger.retryBatches[0]) != 2 {
 		t.Fatalf("expected 1 UpdateRetryBatch call with 2 entries, got %+v", ledger.retryBatches)
 	}
@@ -528,152 +482,83 @@ func TestProcessFetch_ScoreBatchFailureRetriesAndCommits(t *testing.T) {
 		if e.RetryCount != 1 {
 			t.Errorf("expected retry_count=1, got %d", e.RetryCount)
 		}
-		if !e.NextAttemptAt.Equal(now.Add(1 * time.Minute)) {
-			t.Errorf("expected next_attempt_at=%v, got %v", now.Add(1*time.Minute), e.NextAttemptAt)
+		if !e.NextAttemptAt.Equal(now.Add(time.Minute)) {
+			t.Errorf("expected next_attempt_at=%v, got %v", now.Add(time.Minute), e.NextAttemptAt)
 		}
-	}
-	if len(commit.batches) != 1 {
-		t.Errorf("expected 1 commit, got %d", len(commit.batches))
 	}
 }
 
-// Ctx cancellation mid-sleep: fake clock returns ctx.Err; next chunk not started.
+// Ctx cancellation mid-sleep: second chunk not started.
 func TestProcessFetch_CtxCancelMidSleep(t *testing.T) {
 	scorer := &fakeScorer{relevantIDs: nil}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
-	commit := &fakeCommitter{}
 	clk := &fakeClock{now: time.Now(), sleepErr: context.Canceled}
 
-	w := makeWorkerFull(scorer, ledger, pub, commit, clk, 1)
-	records := []*kgo.Record{
-		makeRawRecord(t, "job-1", 0, 0, 10),
-		makeRawRecord(t, "job-2", 0, 0, 11),
-		makeRawRecord(t, "job-3", 0, 0, 12),
-	}
+	w := makeWorkerWithClock(scorer, ledger, pub, clk, 1)
+	msgs, _ := makeTestMsgs(t, []struct {
+		id            string
+		deliveryCount int
+	}{
+		{"job-1", 1}, {"job-2", 1}, {"job-3", 1},
+	})
 
-	err := w.processFetch(context.Background(), records)
+	err := w.processFetch(context.Background(), msgs)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
-
-	// First chunk processed + committed before the sleep. Second chunk aborts.
-	if len(commit.batches) != 1 {
-		t.Errorf("expected exactly 1 commit before ctx cancel, got %d", len(commit.batches))
-	}
+	// First chunk processed before sleep; second aborts.
 	if scorer.calls != 1 {
 		t.Errorf("expected 1 scorer call before cancel, got %d", scorer.calls)
 	}
 }
 
-// CommitRecords error: counter incremented, next chunk still runs.
-func TestProcessFetch_CommitRecordsErrorContinues(t *testing.T) {
-	scorer := &fakeScorer{relevantIDs: nil}
-	ledger := &fakeLedger{}
-	pub := &fakePublisher{}
-	commit := &fakeCommitter{errQueue: []error{errors.New("commit boom")}}
-	clk := &fakeClock{now: time.Now()}
-
-	w := makeWorkerFull(scorer, ledger, pub, commit, clk, 1)
-	records := []*kgo.Record{
-		makeRawRecord(t, "job-1", 0, 0, 10),
-		makeRawRecord(t, "job-2", 0, 0, 11),
-	}
-
-	if err := w.processFetch(context.Background(), records); err != nil {
-		t.Fatalf("processFetch: %v", err)
-	}
-	if scorer.calls != 2 {
-		t.Errorf("expected 2 scorer calls, got %d", scorer.calls)
-	}
-	// Both chunks attempted commit (first errored, second OK).
-	if len(commit.batches) != 2 {
-		t.Errorf("expected 2 commit attempts, got %d", len(commit.batches))
-	}
-}
-
-// Empty items slice (all malformed): returns nil, no panic, no commit attempts.
+// All malformed messages → Term'd, scorer not called.
 func TestProcessFetch_AllMalformedReturnsNil(t *testing.T) {
 	scorer := &fakeScorer{}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
-	commit := &fakeCommitter{}
 	clk := &fakeClock{now: time.Now()}
 
-	w := makeWorkerFull(scorer, ledger, pub, commit, clk, 5)
-	records := []*kgo.Record{
-		{Value: []byte("not json"), Partition: 0, Offset: 1},
-		{Value: []byte("{{{"), Partition: 0, Offset: 2},
-	}
+	w := makeWorkerWithClock(scorer, ledger, pub, clk, 5)
 
-	if err := w.processFetch(context.Background(), records); err != nil {
+	msg1, state1 := js.NewTestMsg([]byte("not json"), 1)
+	msg2, state2 := js.NewTestMsg([]byte("{{{"), 1)
+
+	if err := w.processFetch(context.Background(), []*js.Msg{msg1, msg2}); err != nil {
 		t.Fatalf("expected nil, got %v", err)
-	}
-	// Malformed records are DLQ'd then committed so they don't re-deliver.
-	// All 2 malformed records land in one batch commit.
-	if len(commit.batches) != 1 {
-		t.Errorf("expected 1 commit (malformed batch), got %d", len(commit.batches))
 	}
 	if scorer.calls != 0 {
 		t.Errorf("expected no scorer calls, got %d", scorer.calls)
 	}
-}
-
-// Partial-partition chunk: one chunk spans two partitions; CommitRecords called
-// with both records (consumer commits max offset per partition).
-func TestProcessFetch_PartialPartitionChunk(t *testing.T) {
-	scorer := &fakeScorer{relevantIDs: nil}
-	ledger := &fakeLedger{}
-	pub := &fakePublisher{}
-	commit := &fakeCommitter{}
-	clk := &fakeClock{now: time.Now()}
-
-	w := makeWorkerFull(scorer, ledger, pub, commit, clk, 5)
-	records := []*kgo.Record{
-		makeRawRecord(t, "job-a", 0, 0, 10), // partition 0
-		makeRawRecord(t, "job-b", 0, 1, 20), // partition 1
-	}
-
-	if err := w.processFetch(context.Background(), records); err != nil {
-		t.Fatalf("processFetch: %v", err)
-	}
-	if len(commit.batches) != 1 {
-		t.Fatalf("expected 1 commit batch, got %d", len(commit.batches))
-	}
-	got := commit.batches[0].records
-	if len(got) != 2 {
-		t.Fatalf("expected commit with 2 records, got %d", len(got))
-	}
-	partitions := map[int32]int64{}
-	for _, r := range got {
-		partitions[r.Partition] = r.Offset
-	}
-	if partitions[0] != 10 || partitions[1] != 20 {
-		t.Errorf("expected per-partition offsets {0:10, 1:20}, got %+v", partitions)
+	for i, state := range []*js.TestMsgState{state1, state2} {
+		if !state.Termed {
+			t.Errorf("malformed msg %d: expected Term'd", i)
+		}
 	}
 }
 
-// Ensure chunk retry_count increment propagation works over processFetch path too.
-func TestProcessFetch_RetryCountAdvances(t *testing.T) {
+// deliveryCount=2 → retryCount=1, next tier is the 10m BackOff slot.
+func TestProcessFetch_RetryCountFromDelivery(t *testing.T) {
 	scorer := &fakeScorer{err: context.DeadlineExceeded}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
-	commit := &fakeCommitter{}
 	now := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 	clk := &fakeClock{now: now}
 
-	w := makeWorkerFull(scorer, ledger, pub, commit, clk, 5)
-	records := []*kgo.Record{
-		makeRawRecord(t, "job-1", 1, 0, 10), // incoming retry_count=1 → goes to 10m tier
-	}
+	w := makeWorkerWithClock(scorer, ledger, pub, clk, 5)
 
-	if err := w.processFetch(context.Background(), records); err != nil {
+	payload, _ := json.Marshal(makeJob("job-1"))
+	msg, _ := js.NewTestMsg(payload, 2) // deliveryCount=2 → retryCount=1
+
+	if err := w.processFetch(context.Background(), []*js.Msg{msg}); err != nil {
 		t.Fatalf("processFetch: %v", err)
-	}
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsRawRetry10m)) != 1 {
-		t.Errorf("expected 1 record on retry.10m")
 	}
 	if len(ledger.retryBatches) != 1 || ledger.retryBatches[0][0].RetryCount != 2 {
 		t.Errorf("expected retry_count=2 ledger entry, got %+v", ledger.retryBatches)
+	}
+	want := now.Add(10 * time.Minute)
+	if !ledger.retryBatches[0][0].NextAttemptAt.Equal(want) {
+		t.Errorf("expected next_attempt_at=%v (10m tier), got %v", want, ledger.retryBatches[0][0].NextAttemptAt)
 	}
 }

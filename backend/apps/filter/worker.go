@@ -10,12 +10,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/twmb/franz-go/pkg/kgo"
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
-	"github.com/trushilpatel/jobradar/common/kafka"
+	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
@@ -26,9 +25,17 @@ import (
 	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 )
 
+// filterMaxRetries is the max number of delivery attempts before a job goes to DLQ.
+// Must match the BackOff length on JOBS_RAW consumer in common/jetstream/streams.go.
+const filterMaxRetries = 3
+
+// filterBackOff mirrors the JOBS_RAW consumer BackOff config so the ledger's
+// next_attempt_at field stays meaningful for dashboards.
+var filterBackOff = []time.Duration{time.Minute, 10 * time.Minute, time.Hour}
+
 // clock abstracts wall-clock reads and ctx-aware sleeps so tests can control
 // both the inter-chunk pacing and the NextAttemptAt value stamped into the
-// retry header + ledger row.
+// retry ledger row.
 type clock interface {
 	Now() time.Time
 	Sleep(ctx context.Context, d time.Duration) error
@@ -52,140 +59,133 @@ func (realClock) Sleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// recordCommitter is the slice of *kafka.Consumer the worker actually needs
-// for per-chunk commits. Kept as a package-local interface so tests can
-// substitute a fake without depending on the full Consumer type.
-type recordCommitter interface {
-	CommitRecords(ctx context.Context, records ...*kgo.Record) error
-}
-
-// Worker consumes job_listings.raw via PollBatch, splits each fetch into
+// Worker consumes JOBS_RAW via NATS pull consumer, splits each fetch into
 // chunks of batchSize, and scores each chunk serially via ScoreBatch. An
-// inter-chunk sleep paces successive LLM calls. Offsets are committed after
-// each chunk so a crash mid-fetch only replays the uncommitted tail.
+// inter-chunk sleep paces successive LLM calls. Each message is individually
+// Ack'd, Nak'd (retry), or Term'd (DLQ) — no batch commit.
 type Worker struct {
-	consumer        *kafka.Consumer
-	committer       recordCommitter
-	publisher       kafka.Publisher
+	consumer        *js.PullConsumer
+	publisher       js.Publisher
 	scorer          llmcore.JobsRelevanceFilter
 	ledger          FilterLedger
 	batchSize       int
+	flushTimeout    time.Duration
 	llmCallInterval time.Duration
 	clock           clock
 	log             logger.Logger
 }
 
 func NewWorker(
-	consumer *kafka.Consumer,
-	publisher kafka.Publisher,
+	consumer *js.PullConsumer,
+	publisher js.Publisher,
 	scorer llmcore.JobsRelevanceFilter,
 	ledger FilterLedger,
 	batchSize int,
+	flushTimeout time.Duration,
 	llmCallInterval time.Duration,
 	log logger.Logger,
 ) *Worker {
 	return &Worker{
 		consumer:        consumer,
-		committer:       consumer,
 		publisher:       publisher,
 		scorer:          scorer,
 		ledger:          ledger,
 		batchSize:       batchSize,
+		flushTimeout:    flushTimeout,
 		llmCallInterval: llmCallInterval,
 		clock:           realClock{},
 		log:             log,
 	}
 }
 
-// jobWithCtx pairs a raw job with the trace context extracted from its Kafka
-// headers and the retry_count value carried on its incoming Kafka record.
-// This type stays domain-only — the Kafka record lives on chunkItem.
+// jobWithCtx pairs a raw job with its retry delivery count.
 type jobWithCtx struct {
 	ctx        context.Context
 	job        ats.RawJob
 	retryCount int
 }
 
-// chunkItem pairs a jobWithCtx with its source Kafka record so the worker
-// can commit offsets per-chunk without polluting jobWithCtx with Kafka types.
+// chunkItem pairs a jobWithCtx with its NATS message for per-message ack control.
 type chunkItem struct {
-	job    jobWithCtx
-	record *kgo.Record
+	job jobWithCtx
+	msg *js.Msg
 }
 
-// routeOutcome is what routeFailedChunk reports back to processChunk so the
-// ledger can be updated correctly. Publish failures are counter-incremented
-// and logged; they do not appear in either slice.
+// routeOutcome is what routeFailedChunk reports so processChunk can update the ledger.
 type routeOutcome struct {
 	DLQed   []string
 	Retried []jobsvc.RetryLedgerEntry
 }
 
-// Run starts consuming job_listings.raw and blocks until ctx is cancelled.
-// Each Kafka fetch is split into chunks of batchSize and processed serially.
+// Run starts consuming JOBS_RAW and blocks until ctx is cancelled.
 func (w *Worker) Run(ctx context.Context) error {
 	w.log.Info("worker started",
 		logger.Int(logger.FieldBatch, w.batchSize),
 		logger.Dur("llm_call_interval", w.llmCallInterval),
 	)
 
-	return w.consumer.PollBatch(ctx, func(records []*kgo.Record) error {
-		return w.processFetch(ctx, records)
-	})
+	// Fetch batchSize*4 per cycle so we get several chunks worth of work per poll,
+	// preserving the inter-chunk sleep behaviour between ScoreBatch calls.
+	fetchN := w.batchSize * 4
+
+	for {
+		if ctx.Err() != nil {
+			return nil
+		}
+
+		msgs, err := w.consumer.Fetch(fetchN, w.flushTimeout)
+		if err != nil {
+			w.log.Error("fetch failed", err)
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(time.Second):
+			}
+			continue
+		}
+		if len(msgs) == 0 {
+			continue
+		}
+
+		if err := w.processFetch(ctx, msgs); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			w.log.Error("process fetch error", err)
+		}
+	}
 }
 
-// processFetch parses all records from one Kafka fetch, splits them into
-// chunks of batchSize, and processes each chunk serially with a clock-gated
-// inter-chunk sleep. After each chunk, the chunk's records are committed so
-// a crash only replays the uncommitted tail.
-func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err error) {
+// processFetch parses all messages from one fetch, splits them into chunks of
+// batchSize, and processes each chunk serially with a clock-gated inter-chunk
+// sleep. Each message is Ack'd, Nak'd, or Term'd inside processChunk so a crash
+// only replays messages whose disposition was not yet set.
+func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 	fetchID := uuid.NewString()
 	fetchLog := w.log.With(logger.Str(logger.FieldFetchID, fetchID))
 
-	items := make([]chunkItem, 0, len(records))
-	var malformed []*kgo.Record
-	var (
-		firstOffset int64 = -1
-		lastOffset  int64 = -1
-		partition   int32
-	)
-	for _, r := range records {
-		if firstOffset < 0 {
-			firstOffset = r.Offset
-			partition = r.Partition
-		}
-		lastOffset = r.Offset
-
-		msgCtx := tracing.ExtractKafka(ctx, r.Headers)
+	items := make([]chunkItem, 0, len(msgs))
+	for _, msg := range msgs {
 		var job ats.RawJob
-		if jerr := json.Unmarshal(r.Value, &job); jerr != nil {
+		if jerr := json.Unmarshal(msg.Data(), &job); jerr != nil {
 			fetchLog.Warn("malformed message, routing to DLQ", logger.Err(jerr))
-			headers := []kgo.RecordHeader{
-				{Key: kafka.HeaderReason, Value: []byte("malformed")},
-				{Key: kafka.HeaderLastError, Value: []byte(jerr.Error())},
+			if perr := w.publisher.Publish(ctx, js.SubjectJobsDLQ, msg.Data()); perr != nil {
+				fetchLog.Error("publish malformed to DLQ failed", perr)
 			}
-			if perr := w.publisher.PublishWithHeaders(ctx, kafka.TopicJobListingsRawDLQ, r.Value, headers); perr != nil {
-				fetchLog.Error("publish malformed message to DLQ failed", perr)
-			}
-			malformed = append(malformed, r)
+			_ = msg.Term()
 			continue
 		}
 		items = append(items, chunkItem{
 			job: jobWithCtx{
-				ctx:        msgCtx,
+				ctx:        ctx,
 				job:        job,
-				retryCount: kafka.RetryCountFromHeaders(r.Headers),
+				retryCount: msg.DeliveryCount() - 1,
 			},
-			record: r,
+			msg: msg,
 		})
 	}
 
 	if len(items) == 0 {
-		if len(malformed) > 0 {
-			if cerr := w.committer.CommitRecords(ctx, malformed...); cerr != nil {
-				fetchLog.Error("commit malformed records failed", cerr)
-			}
-		}
 		return nil
 	}
 
@@ -194,29 +194,18 @@ func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err e
 	fetchCtx, span := tracing.Start(ctx, "filter.worker.processFetch")
 	span.SetAttributes(
 		attribute.String("fetch.id", fetchID),
-		attribute.Int("fetch.records", len(records)),
+		attribute.Int("fetch.records", len(msgs)),
 		attribute.Int("fetch.chunks", len(chunks)),
-		attribute.Int("kafka.partition", int(partition)),
 	)
 	defer tracing.End(span, &err)
 
 	metrics.FilterChunksPerFetch.Observe(float64(len(chunks)))
 
 	fetchLog.Info("fetch received",
-		logger.Int("records", len(records)),
+		logger.Int("records", len(msgs)),
 		logger.Int(logger.FieldChunkCount, len(chunks)),
-		logger.Int(logger.FieldPartition, int(partition)),
-		logger.Int("first_offset", int(firstOffset)),
-		logger.Int("last_offset", int(lastOffset)),
 	)
 
-	// Serial chunk processing is load-bearing: chunks are processed in strict
-	// fetch order (splitBySize preserves PollFetches ordering), and Kafka
-	// offset commits are per-partition max-offset semantics. Committing chunk
-	// N implicitly advances past chunks 1..N-1 on the same partition. A
-	// future change that reintroduces parallel chunk processing here would
-	// make this commit strategy unsafe — a fast later chunk could commit past
-	// an unfinished earlier one and silently skip records.
 	for i, chunk := range chunks {
 		if i > 0 {
 			fetchLog.Debug("inter-chunk sleep",
@@ -247,6 +236,11 @@ func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err e
 							logger.Int(logger.FieldChunkIndex, i),
 						)
 					}
+					// Nak all messages so NATS redelivers; ignore errors since
+					// we're already in a panic recovery path.
+					for _, it := range chunk {
+						_ = it.msg.Nak()
+					}
 				}
 			}()
 			w.processChunk(fetchCtx, chunk, fetchID, i, len(chunks))
@@ -255,41 +249,14 @@ func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err e
 		if fetchCtx.Err() != nil {
 			return nil
 		}
-
-		recs := chunkRecords(chunk)
-		if cerr := w.committer.CommitRecords(fetchCtx, recs...); cerr != nil {
-			metrics.FilterCommitFailuresTotal.Inc()
-			fetchLog.Error("commit failed", cerr,
-				logger.Int(logger.FieldChunkIndex, i),
-				logger.Int(logger.FieldPartition, int(partition)),
-			)
-			// Continue — next fetch will redeliver uncommitted records.
-			continue
-		}
-		if len(recs) > 0 {
-			last := recs[len(recs)-1]
-			fetchLog.Debug("chunk committed",
-				logger.Int(logger.FieldChunkIndex, i),
-				logger.Int(logger.FieldChunkCount, len(chunks)),
-				logger.Int(logger.FieldOffset, int(last.Offset)),
-				logger.Int(logger.FieldPartition, int(last.Partition)),
-			)
-		}
-	}
-
-	if len(malformed) > 0 {
-		if cerr := w.committer.CommitRecords(fetchCtx, malformed...); cerr != nil {
-			fetchLog.Error("commit malformed records failed", cerr)
-		}
 	}
 
 	return nil
 }
 
 // processChunk owns one chunk end-to-end: ScoreBatch → publish relevant /
-// mark irrelevant, or route errors through retry ladder / DLQ and update
-// the ledger. It never returns an error signal; commit happens after it
-// returns regardless of outcome.
+// mark irrelevant, or route errors through retry ladder / DLQ. Each message
+// is Ack'd (done), Nak'd (retry), or Term'd (DLQ) before this returns.
 func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID string, chunkIndex, chunkCount int) {
 	if len(chunk) == 0 {
 		return
@@ -312,23 +279,11 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 
 	start := w.clock.Now()
 
-	// Partition the chunk before the LLM call:
-	//
-	//   1. nonUSA   — location classifier flagged the job as clearly non-USA.
-	//                 These never reach the LLM; ledger reason='non_usa_location'.
-	//   2. passThrough — no title, so the LLM has no signal. Forwarded to the
-	//                    enricher which will fetch full content and re-evaluate.
-	//   3. scorable — everything else; goes to ScoreBatch.
-	//
-	// nonUSA is checked before the title check on purpose: a job with no title
-	// but a clearly non-USA location should still be rejected here rather than
-	// passed through to the enricher (where it would consume a full HTTP fetch
-	// budget on a job we already know we don't want).
 	var scorable, passThrough []chunkItem
-	var nonUSAIDs []string
+	var nonUSAItems []chunkItem
 	for _, item := range chunk {
 		if location.IsNonUSA(item.job.job.Location) {
-			nonUSAIDs = append(nonUSAIDs, item.job.job.ID)
+			nonUSAItems = append(nonUSAItems, item)
 			continue
 		}
 		if item.job.job.Title == "" {
@@ -338,23 +293,31 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		}
 	}
 
-	if len(nonUSAIDs) > 0 {
-		if err := w.ledger.UpdateSeenReasonBatch(ctx, nonUSAIDs, jobcommon.SeenReasonNonUSA); err != nil {
+	if len(nonUSAItems) > 0 {
+		ids := make([]string, len(nonUSAItems))
+		for i, it := range nonUSAItems {
+			ids[i] = it.job.job.ID
+		}
+		if err := w.ledger.UpdateSeenReasonBatch(ctx, ids, jobcommon.SeenReasonNonUSA); err != nil {
 			w.log.Error("mark non_usa_location batch failed", err,
 				logger.Str(logger.FieldFetchID, fetchID),
 				logger.Int(logger.FieldChunkIndex, chunkIndex),
 			)
 		}
-		metrics.FilterJobsTotal.WithLabelValues("non_usa").Add(float64(len(nonUSAIDs)))
+		metrics.FilterJobsTotal.WithLabelValues("non_usa").Add(float64(len(nonUSAItems)))
+		for _, it := range nonUSAItems {
+			_ = it.msg.Ack()
+		}
 		w.log.Info("chunk non-USA rejected",
 			logger.Str(logger.FieldFetchID, fetchID),
 			logger.Int(logger.FieldChunkIndex, chunkIndex),
-			logger.Int("non_usa_count", len(nonUSAIDs)),
+			logger.Int("non_usa_count", len(nonUSAItems)),
 		)
 	}
 
 	for _, item := range passThrough {
 		w.publishDetail(ctx, item.job.job)
+		_ = item.msg.Ack()
 	}
 	if len(passThrough) > 0 {
 		w.log.Info("chunk pass-through (no title)",
@@ -413,7 +376,6 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		)
 		routeSpan.End()
 
-		// DLQ ledger update (ledger reason=error).
 		if len(outcome.DLQed) > 0 {
 			if merr := w.ledger.UpdateSeenReasonBatch(ctx, outcome.DLQed, jobcommon.SeenReasonError); merr != nil {
 				w.log.Error("mark error batch failed", merr,
@@ -430,7 +392,6 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 			metrics.FilterDLQPublishesTotal.WithLabelValues(cause).Add(float64(len(outcome.DLQed)))
 		}
 
-		// Retry ledger update (ledger reason=retry, per-job retry_count + next_attempt_at).
 		if len(outcome.Retried) > 0 {
 			if rerr := w.ledger.UpdateRetryBatch(ctx, outcome.Retried); rerr != nil {
 				w.log.Error("UpdateRetryBatch failed", rerr,
@@ -468,6 +429,7 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		} else {
 			irrelevantIDs = append(irrelevantIDs, item.job.job.ID)
 		}
+		_ = item.msg.Ack()
 	}
 
 	if len(irrelevantIDs) > 0 {
@@ -503,17 +465,14 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 	)
 }
 
-// routeFailedChunk ships each job in a failed chunk to the correct retry tier
-// (or DLQ if exhausted / validation error). Returns the routing outcome so
-// processChunk can update the ledger accordingly. NextAttemptAt is computed
-// once per job and used for both the Kafka header and the ledger row.
+// routeFailedChunk routes each job in a failed chunk to retry (Nak) or DLQ (Term).
+// NATS BackOff handles redelivery timing — we don't need to publish to retry topics.
 func (w *Worker) routeFailedChunk(ctx context.Context, chunk []chunkItem, scoreErr error) routeOutcome {
-	tiers := kafka.FilterRetryTiers()
 	var outcome routeOutcome
 
 	if stderrors.Is(scoreErr, domainerr.ErrLLMValidation) {
 		for _, item := range chunk {
-			if w.publishToDLQ(ctx, item.job, scoreErr) {
+			if w.publishToDLQ(ctx, item, scoreErr) {
 				outcome.DLQed = append(outcome.DLQed, item.job.job.ID)
 			}
 		}
@@ -521,60 +480,55 @@ func (w *Worker) routeFailedChunk(ctx context.Context, chunk []chunkItem, scoreE
 	}
 
 	for _, item := range chunk {
-		if item.job.retryCount >= len(tiers) {
-			if w.publishToDLQ(ctx, item.job, scoreErr) {
+		retryCount := item.job.retryCount
+		if retryCount >= filterMaxRetries {
+			if w.publishToDLQ(ctx, item, scoreErr) {
 				outcome.DLQed = append(outcome.DLQed, item.job.job.ID)
 			}
 			continue
 		}
-		tier := tiers[item.job.retryCount]
-		tierName := tier.Name()
-		newCount := item.job.retryCount + 1
-		nextAt := w.clock.Now().Add(tier.Delay)
 
-		payload, err := json.Marshal(item.job.job)
-		if err != nil {
-			w.log.Error("marshal for retry failed", err,
+		// Within retry budget: Nak so NATS redelivers via BackOff schedule.
+		if nerr := item.msg.Nak(); nerr != nil {
+			w.log.Warn("nak failed",
+				logger.Err(nerr),
 				logger.Str(logger.FieldJobID, item.job.job.ID),
 			)
+			metrics.FilterRetryPublishFailures.WithLabelValues("nak").Inc()
 			continue
 		}
-		headers := kafka.BuildRetryHeaders(newCount, nextAt)
-		if perr := w.publisher.PublishWithHeaders(ctx, tier.Topic, payload, headers); perr != nil {
-			w.log.Warn("publish to retry tier failed",
-				logger.Err(perr),
-				logger.Str(logger.FieldJobID, item.job.job.ID),
-				logger.Int(logger.FieldRetryCount, newCount),
-				logger.Str(logger.FieldRetryTier, tierName),
-			)
-			metrics.FilterRetryPublishFailures.WithLabelValues(tierName).Inc()
-			continue
-		}
+
+		newCount := retryCount + 1
+		nextAt := w.clock.Now().Add(filterBackOff[retryCount])
 		outcome.Retried = append(outcome.Retried, jobsvc.RetryLedgerEntry{
 			JobID:         item.job.job.ID,
 			RetryCount:    newCount,
 			NextAttemptAt: nextAt,
 		})
-		metrics.FilterRetryPublishesTotal.WithLabelValues(tierName).Inc()
+		metrics.FilterRetryPublishesTotal.WithLabelValues(fmt.Sprintf("retry_%d", newCount)).Inc()
 	}
 	return outcome
 }
 
-// publishToDLQ marshals and publishes a single job to the raw DLQ. Returns true on success.
-func (w *Worker) publishToDLQ(ctx context.Context, item jobWithCtx, scoreErr error) bool {
-	payload, err := json.Marshal(item.job)
+// publishToDLQ publishes the job payload to the DLQ subject and Terms the message.
+// Returns true on success. On failure the message is also Term'd to prevent
+// endless redelivery of an exhausted job.
+func (w *Worker) publishToDLQ(ctx context.Context, item chunkItem, scoreErr error) bool {
+	payload, err := json.Marshal(item.job.job)
 	if err != nil {
-		w.log.Error("marshal for DLQ failed", err, logger.Str(logger.FieldJobID, item.job.ID))
+		w.log.Error("marshal for DLQ failed", err, logger.Str(logger.FieldJobID, item.job.job.ID))
+		_ = item.msg.Term()
 		return false
 	}
-	headers := kafka.BuildDLQHeaders(item.retryCount, scoreErr.Error())
-	if perr := w.publisher.PublishWithHeaders(ctx, kafka.TopicJobListingsRawDLQ, payload, headers); perr != nil {
+	if perr := w.publisher.Publish(ctx, js.SubjectJobsDLQ, payload); perr != nil {
 		w.log.Warn("publish to DLQ failed",
 			logger.Err(perr),
-			logger.Str(logger.FieldJobID, item.job.ID),
+			logger.Str(logger.FieldJobID, item.job.job.ID),
 		)
+		_ = item.msg.Term()
 		return false
 	}
+	_ = item.msg.Term()
 	return true
 }
 
@@ -584,13 +538,13 @@ func (w *Worker) publishDetail(ctx context.Context, job ats.RawJob) {
 		w.log.Error("marshal failed", err, logger.Str(logger.FieldJobID, job.ID))
 		return
 	}
-	if err := w.publisher.Publish(ctx, kafka.TopicJobListingsFiltered, payload); err != nil {
+	subject := fmt.Sprintf(js.SubjectJobsFilteredFmt, job.Adapter)
+	if err := w.publisher.Publish(ctx, subject, payload); err != nil {
 		w.log.Error("publish failed", err, logger.Str(logger.FieldJobID, job.ID))
 	}
 }
 
-// formatSlotStatuses renders per-slot exhaustion detail for log output:
-// "slot_id=reason(fail=N,cd=RFC3339)" joined by "; ".
+// formatSlotStatuses renders per-slot exhaustion detail for log output.
 func formatSlotStatuses(ss []domainerr.LLMSlotStatus) string {
 	if len(ss) == 0 {
 		return ""
@@ -620,16 +574,4 @@ func splitBySize(s []chunkItem, size int) [][]chunkItem {
 		chunks = append(chunks, s[i:end])
 	}
 	return chunks
-}
-
-// chunkRecords returns the *kgo.Record slice for a chunk, used to commit
-// offsets after the chunk completes processing.
-func chunkRecords(chunk []chunkItem) []*kgo.Record {
-	out := make([]*kgo.Record, 0, len(chunk))
-	for _, it := range chunk {
-		if it.record != nil {
-			out = append(out, it.record)
-		}
-	}
-	return out
 }

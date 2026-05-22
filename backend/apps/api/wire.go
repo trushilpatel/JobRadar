@@ -21,9 +21,18 @@ import (
 	"gorm.io/gorm"
 )
 
-func provideKafkaConfig(cfg *config.Config) config.KafkaConfig {
-	return cfg.Kafka
-}
+// noopLagReader returns 0 for all consumer lag queries. NATS JetStream handles
+// retries via BackOff/MaxDeliver on durable consumers — there are no separate
+// retry topics to monitor, so lag tracking via the old Kafka model is not applicable.
+type noopLagReader struct{}
+
+func (*noopLagReader) GetLag(_ context.Context, _, _ string) (int64, error) { return 0, nil }
+
+// noopRetryDrainer is a no-op drain. NATS redelivers messages automatically via
+// consumer BackOff — there is no separate retry topic to drain back to main.
+type noopRetryDrainer struct{}
+
+func (*noopRetryDrainer) Drain(_ context.Context, _, _, _ string) (int64, error) { return 0, nil }
 
 func provideCompanyConfig(cfg *config.Config) company.Config {
 	return company.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
@@ -79,14 +88,12 @@ func provideApplicationListReader(s appsvc.ApplicationService) dashsvc.Applicati
 	return s
 }
 
-// provideLagReader creates a Kafka LagReader from the config.
-func provideLagReader(cfg *config.Config) (kafka.LagReader, error) {
-	return kafka.NewLagReader(cfg.Kafka)
+func provideLagReader(_ *config.Config) (kafka.LagReader, error) {
+	return &noopLagReader{}, nil
 }
 
-// provideRetryDrainer creates a Kafka RetryDrainer from the config.
-func provideRetryDrainer(cfg *config.Config) (kafka.RetryDrainer, error) {
-	return kafka.NewRetryDrainer(cfg.Kafka)
+func provideRetryDrainer(_ *config.Config) (kafka.RetryDrainer, error) {
+	return &noopRetryDrainer{}, nil
 }
 
 func InitializeApp(db *gorm.DB, cfg *config.Config) (*App, error) {

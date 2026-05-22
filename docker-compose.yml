@@ -1,14 +1,12 @@
 x-app-env: &app-env
-  KAFKA_BROKERS: kafka:29092
-  KAFKA_USER: ""
-  KAFKA_PASSWORD: ""
+  NATS_URL: nats://nats:4222
   LOG_LEVEL: info
   LOG_FORMAT: json
   JAEGER_ENDPOINT: http://jaeger:4318
 
 x-app-depends: &app-depends
-  kafka-init:
-    condition: service_completed_successfully
+  nats:
+    condition: service_healthy
   migrate:
     condition: service_completed_successfully
 
@@ -27,48 +25,20 @@ services:
 
   # ── Infrastructure ────────────────────────────────────────────────────────────
 
-  kafka:
-    image: redpandadata/redpanda:v24.3.1
-    container_name: jobradar_kafka
+  nats:
+    image: nats:alpine
+    container_name: jobradar_nats
     profiles: [infra]
-    stop_grace_period: 30s
-    volumes:
-      - redpandadata:/var/lib/redpanda/data
-    command:
-      - redpanda
-      - start
-      - --mode dev-container
-      - --smp 1
-      - --memory 256M
-      - --reserve-memory 0M
-      - --overprovisioned
-      - --kafka-addr internal://0.0.0.0:29092,external://0.0.0.0:9092
-      - --advertise-kafka-addr internal://kafka:29092,external://localhost:9092
+    command: ["-js", "-m", "8222"]
     ports:
-      # SSH-tunnel only; workers use internal listener kafka:29092.
-      - "127.0.0.1:9092:9092"
+      - "127.0.0.1:4222:4222"
     healthcheck:
-      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 15
-      start_period: 15s
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8222/healthz 2>/dev/null | grep -q ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
     restart: unless-stopped
-
-  kafka-init:
-    image: redpandadata/redpanda:v24.3.1
-    container_name: jobradar_kafka_init
-    profiles: [infra]
-    depends_on:
-      kafka:
-        condition: service_healthy
-    entrypoint: ["/bin/bash", "-c"]
-    command: >
-      rpk topic create job_listings.raw job_listings.filtered
-      --brokers kafka:29092
-      --partitions 1
-      --replicas 1
-    restart: "no"
 
   # ── One-shot migration ────────────────────────────────────────────────────────
 
@@ -412,7 +382,6 @@ secrets:
 volumes:
   prometheusdata:
   grafanadata:
-  redpandadata:
   caddy_data:
   caddy_config:
   caddy_logs:

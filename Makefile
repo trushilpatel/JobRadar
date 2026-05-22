@@ -16,9 +16,9 @@ export GIT_SHA
         k8s-build k8s-build-backend k8s-build-crawler k8s-build-console \
         k8s-up k8s-down k8s-migrate k8s-status k8s-forward k8s-unforward \
         k8s-obs-up k8s-obs-down k8s-obs-forward \
-        k8s-logs k8s-logs-scheduler k8s-logs-crawler k8s-logs-filter k8s-logs-analyzer k8s-logs-api k8s-logs-console \
+        k8s-logs k8s-logs-nats k8s-logs-filter k8s-logs-analyzer k8s-logs-api k8s-logs-console k8s-logs-crawler k8s-logs-scheduler \
         k8s-restart \
-        k8s-preflight k8s-nuke \
+        k8s-bootstrap k8s-preflight k8s-nuke \
         install-hooks \
         help
 
@@ -155,7 +155,7 @@ vet: ## Run go vet
 
 # ── Docker (infra only — for local dev) ──────────────────────────────────────
 
-docker-up: ## Start infra only in Docker (Kafka + Redis) — for use with make dev
+docker-up: ## Start infra only in Docker (NATS JetStream) — for use with make dev
 	docker compose --profile infra up -d
 
 docker-logs: ## Tail docker-compose logs
@@ -167,7 +167,6 @@ up: ## Start the full stack using existing images (fast — no rebuild)
 	docker-compose --profile workers up -d
 
 rebuild: ## Rebuild all images then start full local stack
-	docker volume rm jobradar_redpandadata 2>/dev/null || true
 	DOCKER_BUILDKIT=1 docker compose --profile infra --profile app --profile obs up -d --build
 
 rebuild-backend: ## Rebuild backend image only (api/scheduler/filter/enricher)
@@ -208,12 +207,12 @@ k8s-build-backend: ## Build backend image and import into k3d
 
 k8s-build-crawler: ## Build crawler image and import into k3d
 	@mkdir -p $(K8S_CACHE)
-	@DIGEST=$$(find backend -type f \( -name "*.go" -o -name "go.mod" -o -name "go.sum" \) | sort | xargs shasum 2>/dev/null | shasum | cut -c1-16); \
+	@DIGEST=$$(find backend -type f \( -name "*.go" -o -name "go.mod" -o -name "go.sum" \) \( -path "*/apps/crawler/*" -o -path "*/common/*" \) | sort | xargs shasum 2>/dev/null | shasum | cut -c1-16); \
 	CACHED=$$(cat $(K8S_CACHE)/crawler 2>/dev/null || echo ""); \
 	if [ "$$DIGEST" = "$$CACHED" ]; then \
 		echo "  [skip] crawler image is up to date"; \
 	else \
-		docker build -t jobradar-crawler:local -f infra/Dockerfile.crawler ./backend && \
+		docker build -t jobradar-crawler:local --build-arg GIT_SHA=$(GIT_SHA) -f infra/Dockerfile.crawler ./backend && \
 		k3d image import jobradar-crawler:local -c $(K3D_CLUSTER) --mode=direct && \
 		printf '%s' "$$DIGEST" > $(K8S_CACHE)/crawler; \
 	fi
@@ -239,6 +238,9 @@ k8s-build-console: ## Build console image (bakes VITE_ vars from root .env) and 
 k8s-build: ## Build all images in parallel and import into k3d
 	$(MAKE) -j3 k8s-build-backend k8s-build-crawler k8s-build-console
 
+k8s-bootstrap: ## Fresh-machine setup: validate all files/env/creds, create cluster + all k8s secrets
+	@bash scripts/k8s-bootstrap.sh
+
 k8s-preflight: ## Verify kubectl context is k3d-jobradar before any deploy
 	@CTX=$$(kubectl config current-context 2>/dev/null); \
 	if [ "$$CTX" != "k3d-jobradar" ]; then \
@@ -249,7 +251,7 @@ k8s-preflight: ## Verify kubectl context is k3d-jobradar before any deploy
 	@echo "Context OK: k3d-jobradar"
 	@kubectl get nodes --no-headers 2>/dev/null | grep -q "Ready" || (echo "ERROR: cluster not reachable"; exit 1)
 	@echo "Cluster OK"
-	@for svc in api scheduler crawler filter enricher migrate; do \
+	@for svc in api filter enricher migrate; do \
 		kubectl get secret jobradar-$$svc-secret -n $(K8S_NS) >/dev/null 2>&1 || \
 		echo "WARN: secret jobradar-$$svc-secret missing — pods will fail with CreateContainerConfigError"; \
 	done
@@ -264,7 +266,6 @@ k8s-up: k8s-preflight ## Deploy app chart via Helm — reads DEV_TOKEN from .env
 	else \
 		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace $$LOCAL_VALUES; \
 	fi
-	kubectl rollout status statefulset/kafka -n $(K8S_NS) --timeout=180s
 	kubectl get pods -n $(K8S_NS)
 
 k8s-nuke: ## Fully wipe namespace + PVCs — use when storage class or StatefulSet spec changed
@@ -302,11 +303,8 @@ k8s-status: ## Show pod statuses and restart counts
 k8s-logs: ## Tail logs for all jobradar services
 	kubectl logs -f -l app=jobradar -n $(K8S_NS) --max-log-requests=10 --prefix
 
-k8s-logs-scheduler: ## Tail scheduler logs
-	kubectl logs -f -l app=jobradar,component=scheduler -n $(K8S_NS)
-
-k8s-logs-crawler: ## Tail crawler logs
-	kubectl logs -f -l app=jobradar,component=crawler -n $(K8S_NS)
+k8s-logs-nats: ## Tail NATS logs
+	kubectl logs -f -l app=jobradar,component=nats -n $(K8S_NS)
 
 k8s-logs-filter: ## Tail filter logs
 	kubectl logs -f -l app=jobradar,component=filter -n $(K8S_NS)
@@ -319,6 +317,12 @@ k8s-logs-api: ## Tail api logs
 
 k8s-logs-console: ## Tail console logs
 	kubectl logs -f -l app=jobradar,component=console -n $(K8S_NS)
+
+k8s-logs-crawler: ## Tail crawler logs
+	kubectl logs -f -l app=jobradar,component=crawler -n $(K8S_NS)
+
+k8s-logs-scheduler: ## Tail scheduler logs
+	kubectl logs -f -l app=jobradar,component=scheduler -n $(K8S_NS)
 
 k8s-forward: ## Port-forward console :3000 and API :8080 (when cluster has no NodePort mappings)
 	kubectl port-forward svc/jobradar-console -n $(K8S_NS) 3000:8080 &

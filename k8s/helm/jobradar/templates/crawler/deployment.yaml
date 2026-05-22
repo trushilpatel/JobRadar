@@ -19,55 +19,38 @@ spec:
         {{- include "jobradar.labels" . | nindent 8 }}
         component: crawler
     spec:
+      volumes:
+        {{- if .Values.crawler.natsCredsFile }}
+        - name: nats-creds
+          secret:
+            secretName: nats-creds
+        {{- end }}
       containers:
         - name: crawler
           image: {{ .Values.images.crawler.repository }}:{{ .Values.images.crawler.tag }}
           imagePullPolicy: {{ .Values.images.crawler.pullPolicy }}
+          command: ["/app/crawler"]
           envFrom:
             - configMapRef:
                 name: jobradar-crawler-config
             - secretRef:
                 name: jobradar-crawler-secret
+          {{- if .Values.crawler.natsCredsFile }}
+          volumeMounts:
+            - name: nats-creds
+              mountPath: /etc/nats
+              readOnly: true
+          {{- end }}
           ports:
-            - containerPort: 9101
+            - containerPort: 9102
               name: metrics
           resources:
             requests:
-              memory: "1Gi"
-              cpu: "250m"
+              memory: "128Mi"
+              cpu: "100m"
             limits:
-              memory: "3Gi"
-              cpu: "1000m"
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 9101
-            initialDelaySeconds: 15
-            periodSeconds: 30
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /ready
-              port: 9101
-            initialDelaySeconds: 10
-            periodSeconds: 15
-            failureThreshold: 3
+              memory: "1Gi"
           securityContext:
-            # Chrome (rod) needs SYS_ADMIN for user namespace sandboxing and
-            # write access to /tmp for its temp profile.
-            runAsNonRoot: false
-            readOnlyRootFilesystem: false
-            capabilities:
-              drop: ["ALL"]
-              add: ["SYS_ADMIN"]
-          volumeMounts:
-            - name: dshm
-              mountPath: /dev/shm
-      volumes:
-        # Chrome uses /dev/shm. Default 64Mi causes renderer crashes.
-        - name: dshm
-          emptyDir:
-            medium: Memory
-            sizeLimit: "512Mi"
+            {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
       securityContext:
-        runAsNonRoot: false
+        runAsNonRoot: true

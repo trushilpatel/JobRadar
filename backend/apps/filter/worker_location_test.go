@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/twmb/franz-go/pkg/kgo"
-
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
-	"github.com/trushilpatel/jobradar/common/kafka"
+	js "github.com/trushilpatel/jobradar/common/jetstream"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
 
@@ -20,16 +18,17 @@ func makeJobAt(id, title, loc string) ats.RawJob {
 func chunkOf(jobs ...ats.RawJob) []chunkItem {
 	out := make([]chunkItem, len(jobs))
 	for i, j := range jobs {
+		msg, _ := js.NewTestMsg([]byte("{}"), 1)
 		out[i] = chunkItem{
-			job:    jobWithCtx{ctx: context.Background(), job: j},
-			record: &kgo.Record{Partition: 0, Offset: int64(i)},
+			job: jobWithCtx{ctx: context.Background(), job: j},
+			msg: msg,
 		}
 	}
 	return out
 }
 
 // Non-USA jobs are rejected before the LLM scorer is called. The ledger
-// receives reason='non_usa_location' for those IDs and the filtered topic
+// receives reason='non_usa_location' for those IDs and the filtered subject
 // receives no record.
 func TestProcessChunk_NonUSALocation_RejectedBeforeLLM(t *testing.T) {
 	scorer := &fakeScorer{relevantIDs: []string{"us-1"}}
@@ -48,10 +47,10 @@ func TestProcessChunk_NonUSALocation_RejectedBeforeLLM(t *testing.T) {
 		t.Errorf("expected scorer called once for the USA job, got %d calls", scorer.calls)
 	}
 
-	// Only one publish (us-1) on the filtered topic.
-	filtered := pub.recordsOnTopic(kafka.TopicJobListingsFiltered)
+	// Only one publish (us-1) on the filtered subject.
+	filtered := pub.recordsOnSubject("jobs.filtered.")
 	if len(filtered) != 1 {
-		t.Fatalf("expected 1 publish on filtered topic, got %d", len(filtered))
+		t.Fatalf("expected 1 publish on filtered subject, got %d", len(filtered))
 	}
 	var pubJob ats.RawJob
 	if err := json.Unmarshal(filtered[0].value, &pubJob); err != nil {
@@ -84,7 +83,7 @@ func TestProcessChunk_NonUSALocation_RejectedBeforeLLM(t *testing.T) {
 }
 
 // A chunk where every job is non-USA: scorer must not be called at all, the
-// filtered topic stays empty, ledger gets exactly one non_usa_location batch.
+// filtered subject stays empty, ledger gets exactly one non_usa_location batch.
 func TestProcessChunk_AllNonUSA_SkipsLLMEntirely(t *testing.T) {
 	scorer := &fakeScorer{}
 	ledger := &fakeLedger{}
@@ -131,9 +130,9 @@ func TestProcessChunk_UnknownLocation_ReachesLLM(t *testing.T) {
 	if scorer.calls != 1 {
 		t.Errorf("expected one ScoreBatch call covering the unknown-location jobs, got %d", scorer.calls)
 	}
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsFiltered)) != 3 {
-		t.Errorf("expected 3 jobs published to filtered topic, got %d",
-			len(pub.recordsOnTopic(kafka.TopicJobListingsFiltered)))
+	if len(pub.recordsOnSubject("jobs.filtered.")) != 3 {
+		t.Errorf("expected 3 jobs published to filtered subject, got %d",
+			len(pub.recordsOnSubject("jobs.filtered.")))
 	}
 	for _, c := range ledger.calls {
 		if c.reason == jobcommon.SeenReasonNonUSA {
@@ -162,8 +161,8 @@ func TestProcessChunk_MultiLocationWithUSA_NotRejected(t *testing.T) {
 	if scorer.calls != 1 {
 		t.Errorf("expected ScoreBatch to be called for multi-location USA job, got %d", scorer.calls)
 	}
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsFiltered)) != 1 {
-		t.Errorf("expected 1 publish on filtered, got %d", len(pub.recordsOnTopic(kafka.TopicJobListingsFiltered)))
+	if len(pub.recordsOnSubject("jobs.filtered.")) != 1 {
+		t.Errorf("expected 1 publish on filtered, got %d", len(pub.recordsOnSubject("jobs.filtered.")))
 	}
 }
 
@@ -180,8 +179,8 @@ func TestProcessChunk_NonUSAWithoutTitle_RejectedNotPassedThrough(t *testing.T) 
 		makeJobAt("uk-x", "", "London, UK"),
 	), "fetch-1", 0, 1)
 
-	// Filtered topic must be empty — the job was rejected, not passed through.
-	if got := len(pub.recordsOnTopic(kafka.TopicJobListingsFiltered)); got != 0 {
+	// Filtered subject must be empty — the job was rejected, not passed through.
+	if got := len(pub.recordsOnSubject("jobs.filtered.")); got != 0 {
 		t.Errorf("expected no filtered publishes for non-USA no-title job, got %d", got)
 	}
 	if len(ledger.calls) != 1 || ledger.calls[0].reason != jobcommon.SeenReasonNonUSA {
@@ -204,7 +203,7 @@ func TestProcessChunk_NoTitleUnknownLocation_PassesThrough(t *testing.T) {
 		makeJobAt("pt-1", "", "Remote"),
 	), "fetch-1", 0, 1)
 
-	if got := len(pub.recordsOnTopic(kafka.TopicJobListingsFiltered)); got != 1 {
+	if got := len(pub.recordsOnSubject("jobs.filtered.")); got != 1 {
 		t.Errorf("expected 1 passthrough publish, got %d", got)
 	}
 	for _, c := range ledger.calls {

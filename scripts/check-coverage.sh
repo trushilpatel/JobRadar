@@ -22,9 +22,9 @@ fi
 #   - main entry points, generated wire output, transitional compat shims
 #   - dto / models (data carriers — exercised through services)
 #   - testutil (test helpers)
-#   - common/db, common/kafka — broker / Postgres-coupled infrastructure;
+#   - common/db, common/jetstream — broker / Postgres-coupled infrastructure;
 #     verified by the integration tier (.github/workflows/integration.yml)
-EXCLUDE_REGEX='(/main|/wire_gen|/compat|/testutil|/dto|/models|/common/db|/common/kafka)(/|$)'
+EXCLUDE_REGEX='(/main|/wire_gen|/compat|/testutil|/dto|/models|/common/db|/common/jetstream)(/|$)'
 
 # Files excluded individually: wire.go, generated wire_gen.go, any
 # wire_*.go wiring helper, and every main.go entry point.

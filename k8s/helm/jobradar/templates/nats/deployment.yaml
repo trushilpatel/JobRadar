@@ -1,0 +1,60 @@
+{{- if not .Values.nats.external }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: nats
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "jobradar.selectorLabels" (dict "component" "nats") | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "jobradar.labels" . | nindent 8 }}
+        component: nats
+    spec:
+      containers:
+        - name: nats
+          image: {{ .Values.images.nats.repository }}:{{ .Values.images.nats.tag }}
+          imagePullPolicy: {{ .Values.images.nats.pullPolicy }}
+          args:
+            - -js
+            - --http_port
+            - "8222"
+          ports:
+            - containerPort: 4222
+              name: client
+            - containerPort: 8222
+              name: monitor
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8222
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8222
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+{{- end }}

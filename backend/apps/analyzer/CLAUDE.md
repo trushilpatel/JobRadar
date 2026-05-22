@@ -1,11 +1,11 @@
 # apps/analyzer/ — Job post analyzer (enricher)
 
-Consumes `job_listings.filtered` (Kafka), fetches full job content (with per-adapter rate limiting), runs LLM enrichment in batches, writes final rows to `jobs` and `job_analytics`.
+Consumes `jobs.filtered.*` (NATS JetStream), fetches full job content (with per-adapter rate limiting), runs LLM enrichment in batches, writes final rows to `jobs` and `job_analytics`.
 
-## Two-stage flow per Kafka fetch
+## Two-stage flow per fetch
 
 ```
-PollBatch (FetchMaxWait = ENRICHER_FLUSH_TIMEOUT_SECONDS)
+FetchBatch (up to ENRICHER_FLUSH_TIMEOUT_SECONDS)
    ↓
 Stage 1 — parallel HTTP fetches (cap = ENRICHER_FETCH_CONCURRENCY)
    - FullContent set?   → fullContentToResponse()  (no HTTP)
@@ -43,7 +43,7 @@ Stage 2 — serial: group successful (job, content) into chunks of ENRICHER_LLM_
 | -------------------------------- | ------- | ---------------------------------------- |
 | `ENRICHER_FETCH_CONCURRENCY`     | `15`    | Parallel HTTP fetches (Stage 1)          |
 | `ENRICHER_LLM_BATCH_SIZE`        | `5`     | Jobs per EnrichBatch call (Stage 2)      |
-| `ENRICHER_FLUSH_TIMEOUT_SECONDS` | `120`   | Kafka FetchMaxWait                       |
+| `ENRICHER_FLUSH_TIMEOUT_SECONDS` | `120`   | NATS fetch timeout                       |
 | `ENRICHER_DEFAULT_RPS`           | `2`     | Per-adapter token-bucket rate            |
 | `ENRICHER_DEFAULT_BURST`         | `3`     | Per-adapter burst capacity               |
 | `ENRICHER_JITTER_MS`             | `200`   | Random ±jitter after rate-limit grant    |

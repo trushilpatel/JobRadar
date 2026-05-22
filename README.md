@@ -12,9 +12,9 @@ Built for job seekers who need visa sponsorship — jobs that explicitly deny sp
 company_scan_scheduler
         ↓  (DB queue)
 job_listing_crawler       ← fetches careers pages via ATS adapters
-        ↓  (Kafka: job_listings.raw)
+        ↓  (NATS JetStream: jobs.raw.<adapter>)
 job_listing_relevance_filter  ← LLM batch-scores job titles
-        ↓  (Kafka: job_listings.filtered)
+        ↓  (NATS JetStream: jobs.filtered.<adapter>)
 analyzer                  ← fetches full page, LLM enriches, eligibility check
         ↓  (Supabase: jobs)
 REST API + React UI
@@ -90,7 +90,7 @@ Analytics over all enriched jobs: funnel, role categories, company hiring veloci
 | Backend                 | Go                                    |
 | Frontend                | React + TypeScript + Tailwind         |
 | Database                | Supabase (PostgreSQL)                 |
-| Message queue           | Kafka                                 |
+| Message queue           | NATS JetStream (Synadia Cloud)        |
 | LLM                     | Gemini (via Google Generative AI SDK) |
 | Auth                    | Supabase (magic link / email OTP)     |
 | Migrations              | goose                                 |
@@ -108,19 +108,34 @@ Kubernetes with Helm is the primary way to run JobRadar locally. Everything runs
 - [k3d](https://k3d.io) + [kubectl](https://kubernetes.io/docs/tasks/tools/) + [Helm 3](https://helm.sh/docs/intro/install/)
 - Docker Desktop running
 
-### 1. Create the cluster
+### 1. One-shot bootstrap (new machine)
+
+Before running anything, make sure these files are in place:
+
+| File                                  | Description                                                                                     |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `.env`                                | All env vars — copy from `.env.example` and fill in                                             |
+| `secrets/jobradar_NATS.creds`         | Synadia Cloud credentials — download from Account → User → Get Connected → Download Credentials |
+| `k8s/helm/jobradar/values.local.yaml` | Local Helm overrides — must set `filter.natsCredsFile` and `enricher.natsCredsFile`             |
+
+Then run:
 
 ```bash
-k3d cluster create jobradar \
-  --port "30080:30080@loadbalancer" \
-  --port "30300:30300@loadbalancer"
+make k8s-bootstrap
 ```
 
-This wires the API and console NodePorts directly to localhost — no port-forwarding needed for day-to-day use.
+This validates all required files, env vars, and credential files; creates the k3d cluster if needed; and creates every k8s secret automatically. It will fail with a clear message for anything missing — fix and re-run.
 
-### 2. Create secrets
+After bootstrap succeeds:
 
-Each service needs a Kubernetes Secret with its sensitive env vars (DB credentials, API keys, auth secrets). The required vars mirror those in `.env.example`. Create each secret with `kubectl create secret generic`:
+```bash
+make k8s-build   # build + import images
+make k8s-up      # deploy via Helm
+```
+
+### 2. What bootstrap checks
+
+Each service needs a Kubernetes Secret with its sensitive env vars (DB credentials, API keys, auth secrets). The required vars mirror those in `.env.example`. `make k8s-bootstrap` creates them all — but here is the full list for reference:
 
 ```bash
 # Example for the API service — repeat for each: scheduler, crawler, filter, enricher, migrate
@@ -136,15 +151,64 @@ kubectl create secret generic jobradar-api-secret \
 
 Non-sensitive config (ports, log levels, etc.) comes from `values.yaml` via ConfigMaps — only secrets need to be created manually. Check each service's `templates/<svc>/configmap.yaml` to see what is already covered.
 
-For the observability audit sync:
+---
+
+**NATS credentials (Synadia Cloud)**
+
+Download from: Synadia Cloud → Account → User → Get Connected → Download Credentials
+
+```
+# File goes here (gitignored — never commit):
+secrets/jobradar_NATS.creds
+```
+
+```bash
+# Create the k8s secret from that file:
+kubectl create secret generic nats-creds \
+  --from-file=jobradar.creds=./secrets/jobradar_NATS.creds \
+  -n jobradar-local \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+```
+# File to edit (gitignored — create if it doesn't exist):
+k8s/helm/jobradar/values.local.yaml
+```
+
+```yaml
+# Add these lines to k8s/helm/jobradar/values.local.yaml:
+filter:
+  natsCredsFile: '/etc/nats/jobradar.creds'
+
+enricher:
+  natsCredsFile: '/etc/nats/jobradar.creds'
+```
+
+> `natsUrl` and `nats.external` are already set to Synadia Cloud defaults in `values.yaml` — no override needed.
+
+---
+
+**Grafana Cloud credentials (observability chart)**
+
+```
+# File to edit (gitignored — copy from the example first):
+k8s/helm/observability/values.local.yaml
+
+# Example to copy from:
+k8s/helm/observability/values.local.yaml.example
+```
+
+Fill in Grafana Cloud details (URL, username, API key) from your Grafana Cloud stack.
+
+---
+
+**Observability audit sync (Supabase → Loki)**
 
 ```bash
 kubectl create secret generic supabase-audit-sync-secret \
   --from-literal=SUPABASE_DB_URL="postgres://postgres:PASSWORD@HOST.supabase.co:5432/postgres" \
   -n jobradar-local
 ```
-
-Grafana Cloud credentials (for the observability chart) go in `k8s/helm/observability/values.local.yaml` — see `values.local.yaml.example`.
 
 ### 3. Build and import images
 
@@ -162,7 +226,7 @@ k3d image import jobradar-supabase-audit-sync:local -c jobradar
 ### 4. Deploy the app
 
 ```bash
-make k8s-up             # helm install jobradar chart (namespace → kafka → redis → migrate → workers → api → console)
+make k8s-up             # helm install jobradar chart (namespace → migrate → workers → api → console)
 ```
 
 ### 5. Deploy observability (optional)
@@ -213,7 +277,7 @@ make k8s-restart             # roll all deployments onto the new image
 For iterating quickly on the API or frontend without rebuilding containers:
 
 ```bash
-make dev          # Kafka + Redis in Docker; API on host :8080, Vite dev server :5173
+make dev          # NATS JetStream in Docker; API on host :8080, Vite dev server :5173
 ```
 
 ---
@@ -255,7 +319,7 @@ Single source of truth — Helm renders this file directly into the `jobradar-ll
 
 ```
 k8s/helm/
-  jobradar/             ← app chart (api, console, workers, kafka, redis, migrate)
+  jobradar/             ← app chart (api, console, workers, redis, migrate)
     Chart.yaml
     values.yaml         ← all config defaults
     templates/          ← one directory per component
@@ -271,7 +335,7 @@ Helm releases in namespace `jobradar-local`:
 
 | Release    | Chart                    | Manages                                                                         |
 | ---------- | ------------------------ | ------------------------------------------------------------------------------- |
-| `jobradar` | `k8s/helm/jobradar`      | api, console, scheduler, crawler, filter, enricher (analyzer), kafka, migrate   |
+| `jobradar` | `k8s/helm/jobradar`      | api, console, scheduler, crawler, filter, enricher (analyzer), migrate          |
 | `obs`      | `k8s/helm/observability` | Grafana Alloy (ships metrics/logs/traces to Grafana Cloud), supabase-audit-sync |
 
 ---

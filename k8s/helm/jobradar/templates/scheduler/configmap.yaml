@@ -8,8 +8,8 @@ metadata:
     component: scheduler
 data:
   SCAN_INTERVAL_MINUTES: {{ .Values.scheduler.scanIntervalMinutes | quote }}
-  SCHEDULER_CHECK_INTERVAL_SECONDS: {{ .Values.scheduler.checkIntervalSeconds | quote }}
   SCHEDULER_STUCK_TIMEOUT_MINUTES: {{ .Values.scheduler.stuckTimeoutMinutes | quote }}
+  SCHEDULER_CHECK_INTERVAL_SECONDS: {{ .Values.scheduler.checkIntervalSeconds | quote }}
   LOG_LEVEL: {{ .Values.scheduler.logLevel | quote }}
   LOG_FORMAT: {{ .Values.scheduler.logFormat | quote }}
   METRICS_ADDR: {{ .Values.scheduler.metricsAddr | quote }}

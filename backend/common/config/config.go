@@ -13,6 +13,7 @@ import (
 type Config struct {
 	DB            DatabaseConfig
 	Kafka         KafkaConfig
+	NATS          NATSConfig
 	Redis         RedisConfig
 	Cooldown      CooldownConfig
 	LLM           LLMConfig
@@ -105,6 +106,11 @@ type KafkaConfig struct {
 	Brokers  string
 	User     string
 	Password string
+}
+
+type NATSConfig struct {
+	URL       string
+	CredsFile string
 }
 
 type LLMConfig struct {
@@ -252,6 +258,10 @@ func Load() *Config {
 			Brokers:  getEnv("KAFKA_BROKERS", "localhost:9092"),
 			User:     getEnv("KAFKA_USER", ""),
 			Password: getEnv("KAFKA_PASSWORD", ""),
+		},
+		NATS: NATSConfig{
+			URL:       getEnv("NATS_URL", "nats://localhost:4222"),
+			CredsFile: getEnv("NATS_CREDS_FILE", ""),
 		},
 		Redis: RedisConfig{
 			URL: getEnv("REDIS_URL", "redis://localhost:6379/0"),

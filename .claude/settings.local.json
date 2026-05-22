@@ -18,8 +18,17 @@
       "Skill(superpowers:dispatching-parallel-agents)",
       "Skill(superpowers:dispatching-parallel-agents:*)",
       "Skill(superpowers:systematic-debugging)",
-      "Skill(superpowers:systematic-debugging:*)"
+      "Skill(superpowers:systematic-debugging:*)",
+      "Bash(mkdir -p /Users/trushil/.claude/skills/quality-team)",
+      "Bash(mkdir -p /Users/trushil/.claude/skills/feature-team)",
+      "Bash(cp /Users/trushil/.claude/skills/production-team-loop/architect-prompt.md /Users/trushil/.claude/skills/feature-team/architect-prompt.md && ls /Users/trushil/.claude/skills/feature-team/)",
+      "Bash(mkdir -p /Users/trushil/Projects/JobRadar/.claude/skills/next-actions)",
+      "Bash(mkdir -p /Users/trushil/.claude/skills/next-actions)"
     ],
-    "additionalDirectories": ["/tmp"]
+    "additionalDirectories": [
+      "/tmp",
+      "/Users/trushil/.claude/skills",
+      "/Users/trushil/.claude/skills/production-team-loop"
+    ]
   }
 }

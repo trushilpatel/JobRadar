@@ -5,7 +5,7 @@ Production-grade automated job tracker. Monitors careers pages, filters via LLM,
 ## Pipeline
 
 ```
-scheduler → company_scan_queue (DB) → crawler → job_listings.raw (Kafka) → filter → job_listings.filtered (Kafka) → analyzer → jobs (DB) → API
+scheduler → company_scan_queue (DB) → crawler → jobs.raw.<adapter> (NATS JetStream) → filter → jobs.filtered.<adapter> (NATS JetStream) → analyzer → jobs (DB) → API
 ```
 
 Each binary lives in `backend/apps/<name>/` (wiring + worker loop only) and depends on domain logic in `backend/service/<domain>/`. Subdirectory `CLAUDE.md` files auto-load when you work in that area.
@@ -66,7 +66,7 @@ Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_{READ,WRITE,A
 - API responses use `handler.Respond[T]`, `handler.RespondPaged[T]`, `handler.RespondError` — never raw `json.NewEncoder` in handlers
 - Typed values (status, stage, reason) use constants from the owning service's `common/` package — never raw strings
 - Insights: `job_analytics` for historical / time-series; `user_job_state.status` for current per-user aggregations
-- Filter batch failures mark jobs `error` in `job_pipeline_ledger` — never re-queue to Kafka
+- Filter batch failures mark jobs `error` in `job_pipeline_ledger` — never re-queue to NATS
 - All logging goes through `platform/logger.Logger` — never stdlib `log`; field keys come from `platform/logger/fields.go` only
 - Crawler image (`infra/Dockerfile.crawler`) is **pure Go** — no Node, no Chromium, no Playwright. Do not add browser deps
 - Each service domain follows the decorator chain — see `backend/service/CLAUDE.md`
@@ -104,7 +104,7 @@ Every feature must ship with:
 
 **Per-service test workflow.** Follow the 3-phase per-package flow in `.claude/agents/service-test-lead.md`: edge-case discovery (read-only) → numbered test plan (read-only) → implementation + QA. For multi-package backfill, dispatch one general-purpose agent per package in parallel.
 
-**Coverage gate details.** Statement-weighted: `covered_statements / total_statements` per package. Excluded from the unit tier: `main.go`, `wire.go`, `wire_*.go`, `wire_gen.go`, `/compat/`, `/dto/`, `/models/`, `/testutil/`, plus broker/Postgres infrastructure (`common/db`, `common/kafka`). The integration tier (`.github/workflows/integration.yml`) runs nightly + on infra-touching PRs against real Postgres/Kafka/Redis via testcontainers; gate with `//go:build integration`.
+**Coverage gate details.** Statement-weighted: `covered_statements / total_statements` per package. Excluded from the unit tier: `main.go`, `wire.go`, `wire_*.go`, `wire_gen.go`, `/compat/`, `/dto/`, `/models/`, `/testutil/`, plus broker/Postgres infrastructure (`common/db`, `common/jetstream`). The integration tier (`.github/workflows/integration.yml`) runs nightly + on infra-touching PRs against real Postgres/NATS/Redis via testcontainers; gate with `//go:build integration`.
 
 After implementation: write a brief spec doc to `docs/superpowers/specs/` with date prefix — file-level references only, no code snippets, no filler.
 

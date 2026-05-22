@@ -7,15 +7,16 @@ import (
 	"sync"
 	"testing"
 
+	"fmt"
+
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
 	atstypes "github.com/trushilpatel/jobradar/apps/crawler/ats/types"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
-	"github.com/trushilpatel/jobradar/common/kafka"
+	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	scandto "github.com/trushilpatel/jobradar/service/scan/dto"
-	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 // fakeSettingsReader is a test double for ScanSettingsReader.
@@ -104,25 +105,21 @@ func (f *fakeRecorder) RecordScanResult(_ context.Context, _ string, result scan
 	return f.err
 }
 
-// fakePublisher satisfies kafka.Publisher; tracks whether Publish fired.
+// fakePublisher satisfies js.Publisher; tracks whether Publish fired.
 type fakePublisher struct {
 	mu       sync.Mutex
 	called   bool
 	messages [][]byte
-	topic    string
+	subject  string
 	err      error
 	// failOn allows the publisher to fail for specific job IDs (matched by
-	// JSON substring on `"id":"<value>"`).
+	// JSON field `"id":"<value>"`).
 	failOn map[string]error
 }
 
-func (f *fakePublisher) Publish(_ context.Context, topic string, payload []byte) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+func (f *fakePublisher) doPublish(subject string, payload []byte) error {
 	f.called = true
-	f.topic = topic
-	// Per-id failure simulation — used to verify the engine retries the next
-	// job after a single publish failure without bubbling the error up.
+	f.subject = subject
 	if f.failOn != nil {
 		var raw map[string]any
 		_ = json.Unmarshal(payload, &raw)
@@ -139,14 +136,19 @@ func (f *fakePublisher) Publish(_ context.Context, topic string, payload []byte)
 	return nil
 }
 
-func (f *fakePublisher) PublishWithHeaders(_ context.Context, _ string, _ []byte, _ []kgo.RecordHeader) error {
+func (f *fakePublisher) Publish(_ context.Context, subject string, payload []byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.called = true
-	return nil
+	return f.doPublish(subject, payload)
 }
 
-var _ kafka.Publisher = (*fakePublisher)(nil)
+func (f *fakePublisher) PublishWithMsgID(_ context.Context, subject string, payload []byte, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.doPublish(subject, payload)
+}
+
+var _ js.Publisher = (*fakePublisher)(nil)
 
 func newTestEngine(settings *fakeSettingsReader, ledger *fakeLedger, rec *fakeRecorder, pub *fakePublisher) *Engine {
 	return NewEngine(settings, ledger, rec, pub, google.Config{}, logger.NewNoop())
@@ -307,13 +309,11 @@ func TestToRawJob_NilFullContent(t *testing.T) {
 	}
 }
 
-// ── publish (private kafka wrapper) ──────────────────────────────────────────
+// ── publish (private NATS wrapper) ───────────────────────────────────────────
 
-// TestPublish_MarshalsAndSendsToRawTopic verifies publish marshals the RawJob
-// and routes it to the canonical raw topic. Kafka topic constant lives in
-// common/kafka; the engine must use exactly that — a typo would silently
-// route to a dead topic.
-func TestPublish_MarshalsAndSendsToRawTopic(t *testing.T) {
+// TestPublish_MarshalsAndSendsToRawSubject verifies publish marshals the RawJob
+// and routes it to the adapter-scoped NATS subject (jobs.raw.<adapter>).
+func TestPublish_MarshalsAndSendsToRawSubject(t *testing.T) {
 	pub := &fakePublisher{}
 	e := newTestEngine(&fakeSettingsReader{}, &fakeLedger{}, &fakeRecorder{}, pub)
 	job := ats.RawJob{ID: "g-1", CompanyID: "co", Adapter: "greenhouse"}
@@ -321,8 +321,9 @@ func TestPublish_MarshalsAndSendsToRawTopic(t *testing.T) {
 	if err := e.publish(context.Background(), job); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
-	if pub.topic != kafka.TopicJobListingsRaw {
-		t.Errorf("topic: got %q, want %q", pub.topic, kafka.TopicJobListingsRaw)
+	want := fmt.Sprintf(js.SubjectJobsRawFmt, "greenhouse")
+	if pub.subject != want {
+		t.Errorf("subject: got %q, want %q", pub.subject, want)
 	}
 	if len(pub.messages) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(pub.messages))

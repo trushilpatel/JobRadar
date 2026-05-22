@@ -14,10 +14,6 @@ images:
     repository: jobradar-console
     tag: local
     pullPolicy: IfNotPresent
-  kafka:
-    repository: docker.redpanda.com/redpandadata/redpanda
-    tag: "v24.3.6"
-    pullPolicy: IfNotPresent
   redis:
     repository: redis
     tag: "7-alpine"
@@ -44,35 +40,9 @@ api:
 console:
   nodePort: 30300
 
-scheduler:
-  scanIntervalMinutes: "1440"
-  checkIntervalSeconds: "60"
-  stuckTimeoutMinutes: "30"
-  logLevel: info
-  logFormat: json
-  metricsAddr: ":9101"
-  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
-  dbSslmode: require
-  dbPort: "6543"
-
-crawler:
-  kafkaBrokers: "kafka:9092"
-  pollIntervalSeconds: "60"
-  stuckTimeoutSeconds: "120"
-  heartbeatIntervalSeconds: "30"
-  googleMinDelay: "20000"
-  googleMaxDelay: "40000"
-  googleTimeoutMs: "7200000"
-  googleMaxPages: "0"
-  logLevel: info
-  logFormat: json
-  metricsAddr: ":9101"
-  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
-  dbSslmode: require
-  dbPort: "6543"
-
 filter:
-  kafkaBrokers: "kafka:9092"
+  natsUrl: "tls://connect.ngs.global"
+  natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
   batchSize: "50"
   flushTimeoutSeconds: "30"
   llmCallIntervalSeconds: "5"
@@ -88,7 +58,8 @@ filter:
   dbPort: "6543"
 
 enricher:
-  kafkaBrokers: "kafka:9092"
+  natsUrl: "tls://connect.ngs.global"
+  natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
   fetchConcurrency: "15"
   llmBatchSize: "5"
   flushTimeoutSeconds: "120"
@@ -108,8 +79,31 @@ enricher:
   dbSslmode: require
   dbPort: "6543"
 
-kafka:
-  storage: 5Gi
-  storageClass: local-path
-  retentionMs: "604800000"   # 7 days in ms
-  memory: "400M"             # Redpanda heap; explicit cap keeps RSS ~100Mi at idle
+crawler:
+  natsUrl: "tls://connect.ngs.global"
+  natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
+  pollIntervalSeconds: "60"
+  stuckTimeoutSeconds: "120"
+  heartbeatIntervalSeconds: "30"
+  companyDelaySeconds: "30"
+  scanIntervalMinutes: "1440"
+  logLevel: info
+  logFormat: json
+  metricsAddr: ":9102"
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  dbSslmode: require
+  dbPort: "6543"
+
+scheduler:
+  scanIntervalMinutes: "1440"
+  stuckTimeoutMinutes: "30"
+  checkIntervalSeconds: "60"
+  logLevel: info
+  logFormat: json
+  metricsAddr: ":9103"
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  dbSslmode: require
+  dbPort: "6543"
+
+nats:
+  external: true   # Synadia Cloud is the broker — no in-cluster NATS deployed

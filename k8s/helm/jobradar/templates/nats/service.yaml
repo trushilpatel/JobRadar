@@ -1,0 +1,21 @@
+{{- if not .Values.nats.external }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: nats
+spec:
+  type: ClusterIP
+  ports:
+    - name: client
+      port: 4222
+      targetPort: 4222
+    - name: monitor
+      port: 8222
+      targetPort: 8222
+  selector:
+    {{- include "jobradar.selectorLabels" (dict "component" "nats") | nindent 4 }}
+{{- end }}

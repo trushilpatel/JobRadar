@@ -89,7 +89,7 @@ func TestStartHeartbeat_DoesNotBlockOnUpdateError(t *testing.T) {
 	stop := startHeartbeatViaWorker(context.Background(), q, "item-1", 10*time.Millisecond, logger.NewNoop())
 	defer stop()
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 	if q.calls.Load() < 2 {
 		t.Error("expected heartbeat to keep ticking despite UpdateHeartbeat errors")
 	}

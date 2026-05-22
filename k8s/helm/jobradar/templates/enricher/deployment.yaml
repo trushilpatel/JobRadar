@@ -23,6 +23,11 @@ spec:
         - name: llm-slots
           configMap:
             name: jobradar-llm-slots
+        {{- if .Values.enricher.natsCredsFile }}
+        - name: nats-creds
+          secret:
+            secretName: nats-creds
+        {{- end }}
       containers:
         - name: enricher
           image: {{ .Values.images.backend.repository }}:{{ .Values.images.backend.tag }}
@@ -39,6 +44,11 @@ spec:
           volumeMounts:
             - name: llm-slots
               mountPath: /etc/jobradar
+            {{- if .Values.enricher.natsCredsFile }}
+            - name: nats-creds
+              mountPath: /etc/nats
+              readOnly: true
+            {{- end }}
           ports:
             - containerPort: 9101
               name: metrics
