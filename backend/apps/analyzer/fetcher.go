@@ -10,44 +10,42 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/twmb/franz-go/pkg/kgo"
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
-	"github.com/trushilpatel/jobradar/common/kafka"
+	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
 )
 
-// fetchAll runs HTTP fetches for every record in parallel, capped by
-// fetchConc and additionally rate-limited per adapter. Records that fail
-// to parse, fetch, or whose adapter is unknown are routed to the retry
-// ladder / DLQ here (stage="fetch") — they never reach stage 2.
+// fetchAll runs HTTP fetches for every message in parallel, capped by fetchConc
+// and additionally rate-limited per adapter. Messages that fail to parse, fetch,
+// or whose adapter is unknown are routed to Nak/Term here (stage="fetch") — they
+// never reach stage 2.
 //
-// The returned slice contains only successfully-fetched jobs in arbitrary
-// order; processFetch sorts by (partition, offset) before grouping.
-func (w *Worker) fetchAll(ctx context.Context, fetchLog logger.Logger, records []*kgo.Record) []fetchedJob {
+// The returned slice contains only successfully-fetched jobs in arbitrary order.
+func (w *Worker) fetchAll(ctx context.Context, fetchLog logger.Logger, msgs []*js.Msg) []fetchedJob {
 	ctx, span := tracing.Start(ctx, "analyzer.worker.fetchAll")
 	defer span.End()
-	span.SetAttributes(attribute.Int("records", len(records)))
+	span.SetAttributes(attribute.Int("msgs", len(msgs)))
 
 	sem := make(chan struct{}, w.fetchConc)
 	var (
 		wg      sync.WaitGroup
 		mu      sync.Mutex
-		fetched = make([]fetchedJob, 0, len(records))
+		fetched = make([]fetchedJob, 0, len(msgs))
 		failed  atomic.Int64
 	)
 
-	for _, r := range records {
+	for _, msg := range msgs {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(rec *kgo.Record) {
+		go func(m *js.Msg) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			result, ok := w.fetchOne(ctx, fetchLog, rec)
+			result, ok := w.fetchOne(ctx, fetchLog, m)
 			if !ok {
 				failed.Add(1)
 				return
@@ -55,7 +53,7 @@ func (w *Worker) fetchAll(ctx context.Context, fetchLog logger.Logger, records [
 			mu.Lock()
 			fetched = append(fetched, result)
 			mu.Unlock()
-		}(r)
+		}(msg)
 	}
 
 	wg.Wait()
@@ -66,30 +64,18 @@ func (w *Worker) fetchAll(ctx context.Context, fetchLog logger.Logger, records [
 	return fetched
 }
 
-// fetchOne handles all error routing for a single record so the caller can
-// just collect the success cases. Returns ok=false when the record was
-// dropped (parse error, malformed, fetch failed → already routed via
-// handleFailure with stage="fetch").
-func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, r *kgo.Record) (fetchedJob, bool) {
-	msgCtx := tracing.ExtractKafka(ctx, r.Headers)
-
-	msgCtx, span := tracing.Start(msgCtx, "analyzer.worker.fetchOne")
+// fetchOne handles all error routing for a single message so the caller can
+// just collect the success cases. Returns ok=false when the message was dropped
+// (malformed → Term, fetch failed → Nak/Term via handleFailure).
+func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.Msg) (fetchedJob, bool) {
+	msgCtx, span := tracing.Start(ctx, "analyzer.worker.fetchOne")
 	defer span.End()
 
 	var job ats.RawJob
-	if err := json.Unmarshal(r.Value, &job); err != nil {
+	if err := json.Unmarshal(msg.Data(), &job); err != nil {
 		span.SetAttributes(attribute.String("outcome", "malformed"))
-		fetchLog.Warn("malformed message, routing to DLQ", logger.Err(err))
-		headers := []kgo.RecordHeader{
-			{Key: kafka.HeaderReason, Value: []byte("malformed")},
-			{Key: kafka.HeaderLastError, Value: []byte(err.Error())},
-		}
-		if perr := w.publisher.PublishWithHeaders(ctx, kafka.TopicJobListingsFilteredDLQ, r.Value, headers); perr != nil {
-			fetchLog.Error("publish malformed message to DLQ failed", perr)
-		}
-		if cerr := w.committer.CommitRecords(ctx, r); cerr != nil {
-			fetchLog.Error("commit malformed record failed", cerr)
-		}
+		fetchLog.Warn("malformed message, terminating", logger.Err(err))
+		_ = msg.Term()
 		return fetchedJob{}, false
 	}
 
@@ -98,7 +84,7 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, r *kgo.Re
 		attribute.String("adapter", job.Adapter),
 	)
 
-	retryCount := kafka.RetryCountFromHeaders(r.Headers)
+	retryCount := msg.DeliveryCount() - 1
 	jobLog := fetchLog.With(
 		logger.Str(logger.FieldJobID, job.ID),
 		logger.Str("adapter", job.Adapter),
@@ -113,7 +99,8 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, r *kgo.Re
 		span.SetAttributes(attribute.String("outcome", "fetch_failed"))
 		jobLog.Error("fetch content failed", err)
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
-		w.handleFailure(msgCtx, fetchLog, job, r.Value, retryCount, "fetch", fmt.Errorf("fetch content: %w", err))
+		fj := fetchedJob{job: job, msg: msg, retryCount: retryCount, ctx: msgCtx}
+		w.handleFailure(msgCtx, fetchLog, fj, "fetch", fmt.Errorf("fetch content: %w", err))
 		return fetchedJob{}, false
 	}
 
@@ -132,16 +119,16 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, r *kgo.Re
 	return fetchedJob{
 		job:        job,
 		content:    content,
-		record:     r,
+		msg:        msg,
 		retryCount: retryCount,
 		ctx:        msgCtx,
 	}, true
 }
 
-// fetchContent returns the full content of a job posting. If the Kafka
-// message already carries FullContent (full-detail adapters like Google or
-// Uber), no HTTP call is made. Otherwise it tries the adapter's native
-// ContentFetcher first and falls back to a plain HTTP GET on the hosted URL.
+// fetchContent returns the full content of a job posting. If the message
+// already carries FullContent (full-detail adapters like Google or Uber), no
+// HTTP call is made. Otherwise it tries the adapter's native ContentFetcher
+// first and falls back to a plain HTTP GET on the hosted URL.
 //
 // Per-adapter rate limiting is applied before any outbound network call so
 // concurrent fetches for the same ATS don't trip rate limits.

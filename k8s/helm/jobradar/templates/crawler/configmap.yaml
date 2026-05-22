@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-crawler-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: crawler
+data:
+  NATS_URL: {{ .Values.crawler.natsUrl | quote }}
+  {{- if .Values.crawler.natsCredsFile }}
+  NATS_CREDS_FILE: {{ .Values.crawler.natsCredsFile | quote }}
+  {{- end }}
+  CRAWLER_POLL_INTERVAL_SECONDS: {{ .Values.crawler.pollIntervalSeconds | quote }}
+  CRAWLER_STUCK_TIMEOUT_SECONDS: {{ .Values.crawler.stuckTimeoutSeconds | quote }}
+  CRAWLER_HEARTBEAT_INTERVAL_SECONDS: {{ .Values.crawler.heartbeatIntervalSeconds | quote }}
+  SCAN_COMPANY_DELAY_SECONDS: {{ .Values.crawler.companyDelaySeconds | quote }}
+  SCAN_INTERVAL_MINUTES: {{ .Values.crawler.scanIntervalMinutes | quote }}
+  LOG_LEVEL: {{ .Values.crawler.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.crawler.logFormat | quote }}
+  METRICS_ADDR: {{ .Values.crawler.metricsAddr | quote }}
+  JAEGER_ENDPOINT: {{ .Values.crawler.jaegerEndpoint | quote }}
+  DB_SSLMODE: {{ .Values.crawler.dbSslmode | quote }}
+  DB_PORT: {{ .Values.crawler.dbPort | quote }}

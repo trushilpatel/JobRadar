@@ -27,7 +27,7 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler/workers"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/db"
-	"github.com/trushilpatel/jobradar/common/kafka"
+	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
@@ -46,13 +46,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	database, producer, err := initInfra(ctx, cfg, log)
+	database, publisher, err := initInfra(ctx, cfg, log)
 	if err != nil {
 		os.Exit(1)
 	}
-	defer producer.Close()
 
-	engine, rawQueue := buildEngine(database, producer, cfg, log)
+	engine, rawQueue := buildEngine(database, publisher, cfg, log)
 
 	stuckTimeout := time.Duration(cfg.Crawler.StuckTimeoutSeconds) * time.Second
 	if err := rawQueue.ResetStuck(ctx, stuckTimeout); err != nil {
@@ -115,7 +114,7 @@ func main() {
 	log.Info("crawler stopped")
 }
 
-func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gorm.DB, *kafka.Producer, error) {
+func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gorm.DB, js.Publisher, error) {
 	database, err := db.Open(cfg.DB, 5)
 	if err != nil {
 		log.Error("db open failed", err)
@@ -124,21 +123,25 @@ func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gor
 
 	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
 
-	if err := kafka.EnsureTopics(ctx, cfg.Kafka, kafka.TopicJobListingsRaw); err != nil {
-		log.Error("kafka topics failed", err)
-		return nil, nil, err
-	}
-
-	producer, err := kafka.NewProducer(cfg.Kafka)
+	nc, njs, err := js.Connect(js.Config{URL: cfg.NATS.URL, CredsFile: cfg.NATS.CredsFile})
 	if err != nil {
-		log.Error("kafka producer failed", err)
+		log.Error("nats connect failed", err)
+		return nil, nil, err
+	}
+	go func() {
+		<-ctx.Done()
+		nc.Close()
+	}()
+
+	if err := js.EnsureStreams(ctx, njs); err != nil {
+		log.Error("nats ensure streams failed", err)
 		return nil, nil, err
 	}
 
-	return database, producer, nil
+	return database, js.NewPublisher(njs), nil
 }
 
-func buildEngine(database *gorm.DB, producer *kafka.Producer, cfg *config.Config, log logger.Logger) (*Engine, scansvc.CrawlerQueueService) {
+func buildEngine(database *gorm.DB, publisher js.Publisher, cfg *config.Config, log logger.Logger) (*Engine, scansvc.CrawlerQueueService) {
 	scanSettings := companysvc.NewScanSettingsRepositoryService(database)
 	ledgerStore := jobsvc.NewSeenLedgerStore(database)
 	scanLog := scansvc.NewLogStore(database)
@@ -155,7 +158,7 @@ func buildEngine(database *gorm.DB, producer *kafka.Producer, cfg *config.Config
 		MaxPages:   cfg.Crawler.Google.MaxPages,
 	}
 
-	engine := NewEngine(scanSettings, ledger, recorder, producer, googleCfg, log)
+	engine := NewEngine(scanSettings, ledger, recorder, publisher, googleCfg, log)
 	return engine, queue
 }
 

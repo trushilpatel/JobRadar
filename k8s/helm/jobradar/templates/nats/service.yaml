@@ -1,3 +1,4 @@
+{{- if not .Values.nats.external }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -17,3 +18,4 @@ spec:
       targetPort: 8222
   selector:
     {{- include "jobradar.selectorLabels" (dict "component" "nats") | nindent 4 }}
+{{- end }}

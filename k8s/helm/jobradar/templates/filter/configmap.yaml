@@ -8,6 +8,9 @@ metadata:
     component: filter
 data:
   NATS_URL: {{ .Values.filter.natsUrl | quote }}
+  {{- if .Values.filter.natsCredsFile }}
+  NATS_CREDS_FILE: {{ .Values.filter.natsCredsFile | quote }}
+  {{- end }}
   FILTER_BATCH_SIZE: {{ .Values.filter.batchSize | quote }}
   FILTER_FLUSH_TIMEOUT_SECONDS: {{ .Values.filter.flushTimeoutSeconds | quote }}
   FILTER_LLM_CALL_INTERVAL_SECONDS: {{ .Values.filter.llmCallIntervalSeconds | quote }}

@@ -2,20 +2,19 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	stderrors "errors"
 	"fmt"
 	"net/http"
 	"runtime/debug"
-	"sort"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/twmb/franz-go/pkg/kgo"
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
-	"github.com/trushilpatel/jobradar/common/kafka"
+	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
@@ -23,9 +22,13 @@ import (
 	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 )
 
+const analyzerMaxRetries = 3
+
+var analyzerBackOff = []time.Duration{time.Minute, 10 * time.Minute, time.Hour}
+
 // clock abstracts wall-clock reads and ctx-aware sleeps so tests can control
 // both the inter-group pacing and the NextAttemptAt value stamped into the
-// retry header + ledger row.
+// retry ledger row.
 type clock interface {
 	Now() time.Time
 	Sleep(ctx context.Context, d time.Duration) error
@@ -49,18 +52,10 @@ func (realClock) Sleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// recordCommitter is the slice of *kafka.Consumer the worker actually needs
-// for per-group commits. Kept as a package-local interface so tests can
-// substitute a fake without depending on the full Consumer type.
-type recordCommitter interface {
-	CommitRecords(ctx context.Context, records ...*kgo.Record) error
-}
-
-// WorkerOptions collects the dependencies required to build a Worker. Using
-// an options struct keeps NewWorker's signature stable as the worker grows.
+// WorkerOptions collects the dependencies required to build a Worker.
 type WorkerOptions struct {
-	Consumer         *kafka.Consumer
-	Publisher        kafka.Publisher
+	Consumer         *js.PullConsumer
+	Publisher        js.Publisher
 	Scorer           llmcore.JobPostEnricher
 	Pipeline         jobsvc.PipelineService
 	Ledger           EnricherLedger
@@ -70,23 +65,21 @@ type WorkerOptions struct {
 	FetchConcurrency int
 	LLMBatchSize     int
 	LLMCallInterval  time.Duration
+	FlushTimeout     time.Duration
 }
 
-// Worker consumes job_listings.filtered, runs each Kafka fetch through two
-// stages, and commits offsets per enriched group:
+// Worker consumes job_listings.filtered (NATS JetStream), runs each fetch
+// through two stages, and acks/naks each message individually:
 //
 //  1. Fetch stage  — parallel HTTP fetches, per-adapter rate limited.
-//     Failures route to retry/DLQ for that single job (Stage 1 — stage="fetch").
+//     Failures call Nak (retry) or Term (exhausted / malformed).
 //  2. Enrich stage — successful (job, content) pairs are grouped into batches
 //     of llmBatchSize and sent through EnrichBatch serially, paced by
-//     llmCallInterval. Per-group commits shrink restart replay window from the
-//     whole fetch to a single group. Per-job failures route via retry ladder
-//     or DLQ (Stage 2 — stage="enrich") and write retry state to
-//     job_pipeline_ledger.
+//     llmCallInterval. Per-job terminal outcomes call Ack; transient failures
+//     call Nak (within retry budget) or send to DLQ + Term (exhausted).
 type Worker struct {
-	consumer        *kafka.Consumer
-	committer       recordCommitter
-	publisher       kafka.Publisher
+	consumer        *js.PullConsumer
+	publisher       js.Publisher
 	scorer          llmcore.JobPostEnricher
 	pipeline        jobsvc.PipelineService
 	ledger          EnricherLedger
@@ -98,19 +91,9 @@ type Worker struct {
 	fetchConc       int
 	llmBatchSize    int
 	llmCallInterval time.Duration
+	flushTimeout    time.Duration
 }
 
-// NewWorker constructs the analyzer worker from an options struct.
-//
-//   - FetchConcurrency  caps in-flight HTTP fetches inside one PollBatch
-//     cycle. IO-bound — set higher than enrich (e.g. 15).
-//   - LLMBatchSize       jobs grouped per single EnrichBatch call. 1 falls
-//     back to single-job behaviour without any code change.
-//   - LLMCallInterval    inter-group sleep between successive EnrichBatch
-//     calls; provides a wall-clock floor independent of the LLM layer's
-//     slot/cooldown pacing.
-//   - RateLimiter        shared per-adapter limiter so concurrent fetches
-//     don't trip ATS rate limits.
 func NewWorker(opts WorkerOptions) *Worker {
 	if opts.FetchConcurrency < 1 {
 		opts.FetchConcurrency = 1
@@ -118,9 +101,11 @@ func NewWorker(opts WorkerOptions) *Worker {
 	if opts.LLMBatchSize < 1 {
 		opts.LLMBatchSize = 1
 	}
+	if opts.FlushTimeout <= 0 {
+		opts.FlushTimeout = 120 * time.Second
+	}
 	return &Worker{
 		consumer:        opts.Consumer,
-		committer:       opts.Consumer,
 		publisher:       opts.Publisher,
 		scorer:          opts.Scorer,
 		pipeline:        opts.Pipeline,
@@ -133,28 +118,23 @@ func NewWorker(opts WorkerOptions) *Worker {
 		fetchConc:       opts.FetchConcurrency,
 		llmBatchSize:    opts.LLMBatchSize,
 		llmCallInterval: opts.LLMCallInterval,
+		flushTimeout:    opts.FlushTimeout,
 	}
 }
 
-// fetchedJob carries an already-fetched job through stage 2. The original
-// Kafka record is retained so the worker can commit offsets per-group and
-// route to retry/DLQ if the LLM batch fails.
-//
-// do not hold record across PollBatch boundaries — franz-go reuses the
-// record storage after the batch handler returns.
+// fetchedJob carries an already-fetched job through stage 2. The NATS message
+// is retained so per-job Ack/Nak/Term can be called at terminal routing points.
 type fetchedJob struct {
 	job        ats.RawJob
 	content    ats.FetchJobContentResponse
-	record     *kgo.Record
+	msg        *js.Msg
 	retryCount int
 	ctx        context.Context
 }
 
-// Run consumes records via PollBatch and processes each fetch synchronously.
-// processFetch commits offsets per group; returning nil from the callback
-// triggers PollBatch's trailing CommitUncommittedOffsets (a no-op when every
-// group already committed, and the escape hatch for the all-Stage-1-failed
-// case).
+// Run fetches messages from NATS JetStream in a loop and processes each batch
+// through the two-stage pipeline. Each message is individually acked/nakked/
+// termed at its terminal routing point — NATS handles redelivery via BackOff.
 func (w *Worker) Run(ctx context.Context) error {
 	w.log.Info("worker started",
 		logger.Int("fetch_concurrency", w.fetchConc),
@@ -162,76 +142,75 @@ func (w *Worker) Run(ctx context.Context) error {
 		logger.Dur("llm_call_interval", w.llmCallInterval),
 	)
 
-	return w.consumer.PollBatch(ctx, func(records []*kgo.Record) error {
-		return w.processFetch(ctx, records)
-	})
+	fetchSize := w.fetchConc * w.llmBatchSize
+	if fetchSize < 1 {
+		fetchSize = 1
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		msgs, err := w.consumer.Fetch(fetchSize, w.flushTimeout)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			w.log.Error("fetch failed", err)
+			continue
+		}
+		if len(msgs) == 0 {
+			continue
+		}
+
+		if perr := w.processFetch(ctx, msgs); perr != nil && ctx.Err() == nil {
+			w.log.Error("processFetch error", perr)
+		}
+	}
 }
 
-// processFetch is the two-stage pipeline for one Kafka fetch. Stage 1 fetches
-// content for all jobs concurrently (rate limited per adapter). Stage 2
-// groups the successfully-fetched jobs, sleeps llmCallInterval between
-// successive EnrichBatch calls, and commits each group's records after it is
-// fully routed.
-func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err error) {
-	if len(records) == 0 {
+// processFetch is the two-stage pipeline for one NATS fetch batch. Stage 1
+// fetches content for all messages concurrently (rate limited per adapter).
+// Stage 2 groups the successfully-fetched jobs, sleeps llmCallInterval between
+// successive EnrichBatch calls, and routes each job to a terminal outcome.
+func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
+	if len(msgs) == 0 {
 		return nil
 	}
 
 	fetchID := uuid.NewString()
 	fetchLog := w.log.With(logger.Str(logger.FieldFetchID, fetchID))
 
-	var (
-		firstOffset int64 = -1
-		lastOffset  int64 = -1
-		partition   int32
-	)
-	for _, r := range records {
-		if firstOffset < 0 {
-			firstOffset = r.Offset
-			partition = r.Partition
-		}
-		if r.Offset > lastOffset {
-			lastOffset = r.Offset
-		}
-	}
-
 	fetchCtx, span := tracing.Start(ctx, "analyzer.worker.processFetch")
 	span.SetAttributes(
 		attribute.String("fetch.id", fetchID),
-		attribute.Int("fetch.records", len(records)),
-		attribute.Int("kafka.partition", int(partition)),
+		attribute.Int("fetch.msgs", len(msgs)),
 	)
 	defer tracing.End(span, &err)
 
-	fetchLog.Info("fetch received",
-		logger.Int("records", len(records)),
-		logger.Int(logger.FieldPartition, int(partition)),
-		logger.Int("first_offset", int(firstOffset)),
-		logger.Int("last_offset", int(lastOffset)),
-	)
+	fetchLog.Info("fetch received", logger.Int("msgs", len(msgs)))
 
 	start := time.Now()
-	fetched := w.fetchAll(fetchCtx, fetchLog, records)
+	fetched := w.fetchAll(fetchCtx, fetchLog, msgs)
 	fetchDuration := time.Since(start)
 
 	if len(fetched) == 0 {
 		fetchLog.Info("fetch processed",
-			logger.Int("records", len(records)),
+			logger.Int("msgs", len(msgs)),
 			logger.Int("fetched", 0),
 			logger.Dur("fetch_duration", fetchDuration),
 		)
 		return nil
 	}
 
-	// Groups may span partitions; CommitRecords commits per-partition max so
-	// this is safe; do not assume one partition per group. Sorting by
-	// (partition, offset) keeps group composition deterministic and guarantees
-	// per-partition offsets advance monotonically as successive groups commit.
-	sortFetched(fetched)
-
 	groups := chunkFetched(fetched, w.llmBatchSize)
-	span.SetAttributes(attribute.Int("fetch.fetched", len(fetched)))
-	span.SetAttributes(attribute.Int("fetch.groups", len(groups)))
+	span.SetAttributes(
+		attribute.Int("fetch.fetched", len(fetched)),
+		attribute.Int("fetch.groups", len(groups)),
+	)
 
 	metrics.EnricherGroupsPerFetch.Observe(float64(len(groups)))
 
@@ -243,14 +222,12 @@ func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err e
 				logger.Int(logger.FieldChunkIndex, i),
 			)
 			if serr := w.clock.Sleep(fetchCtx, w.llmCallInterval); serr != nil {
-				// ctx cancelled mid-sleep; uncommitted tail replays on next
-				// poll. Return nil so PollBatch skips its trailing commit path
-				// for the unprocessed records.
+				// ctx cancelled mid-sleep; unacked messages are redelivered by
+				// NATS after AckWait expires — no manual intervention needed.
 				return nil
 			}
 		}
 
-		var routed bool
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -262,68 +239,26 @@ func (w *Worker) processFetch(ctx context.Context, records []*kgo.Record) (err e
 					)
 					for _, fj := range group {
 						w.markError(fetchCtx, fj.job.ID)
+						_ = fj.msg.Term()
 					}
-					routed = fetchCtx.Err() == nil
 				}
 			}()
-			routed = w.processGroup(fetchCtx, fetchLog, group, fetchID, i, len(groups))
+			w.processGroup(fetchCtx, fetchLog, group, fetchID, i, len(groups))
 		}()
 
 		if fetchCtx.Err() != nil {
 			return nil
 		}
-		if !routed {
-			// Ctx cancel mid-EnrichBatch or mid-publish inside handleFailure
-			// means this group's jobs did not all reach a terminal routing.
-			// Skip commit so Kafka redelivers the whole tail including this
-			// group on next poll.
-			return nil
-		}
-
-		recs := recordsOf(group)
-		if cerr := w.committer.CommitRecords(fetchCtx, recs...); cerr != nil {
-			metrics.EnricherCommitFailuresTotal.Inc()
-			fetchLog.Error("commit failed", cerr,
-				logger.Int(logger.FieldChunkIndex, i),
-				logger.Int(logger.FieldPartition, int(partition)),
-			)
-			// Continue — next fetch will redeliver uncommitted records.
-			continue
-		}
-		if len(recs) > 0 {
-			last := recs[len(recs)-1]
-			fetchLog.Debug("group committed",
-				logger.Int(logger.FieldChunkIndex, i),
-				logger.Int(logger.FieldChunkCount, len(groups)),
-				logger.Int(logger.FieldOffset, int(last.Offset)),
-				logger.Int(logger.FieldPartition, int(last.Partition)),
-			)
-		}
 	}
 
 	fetchLog.Info("fetch processed",
-		logger.Int("records", len(records)),
+		logger.Int("msgs", len(msgs)),
 		logger.Int("fetched", len(fetched)),
 		logger.Int("batches", len(groups)),
 		logger.Dur("fetch_duration", fetchDuration),
 		logger.Dur("enrich_duration", time.Since(enrichStart)),
 	)
 	return nil
-}
-
-// sortFetched stable-sorts by (partition, offset) so groups composed off the
-// slice commit in per-partition ascending order. Exported-for-test helper.
-func sortFetched(s []fetchedJob) {
-	sort.SliceStable(s, func(i, j int) bool {
-		ri, rj := s[i].record, s[j].record
-		if ri == nil || rj == nil {
-			return false
-		}
-		if ri.Partition != rj.Partition {
-			return ri.Partition < rj.Partition
-		}
-		return ri.Offset < rj.Offset
-	})
 }
 
 // chunkFetched splits the fetched list into groups of at most size each.
@@ -342,127 +277,100 @@ func chunkFetched(s []fetchedJob, size int) [][]fetchedJob {
 	return groups
 }
 
-// recordsOf returns the *kgo.Record slice for a group, used to commit offsets
-// after the group completes processing.
-func recordsOf(group []fetchedJob) []*kgo.Record {
-	out := make([]*kgo.Record, 0, len(group))
-	for _, fj := range group {
-		if fj.record != nil {
-			out = append(out, fj.record)
-		}
-	}
-	return out
-}
-
-// ── retry / DLQ routing ──────────────────────────────────────────────────────
-
-// handleFailure routes a single failed job to the appropriate Kafka topic.
-// Validation errors skip retries entirely and go straight to DLQ (cause=validation).
-// Transient errors move through the retry ladder; exhausted attempts go to DLQ.
-// The `stage` argument distinguishes Stage 1 ("fetch") from Stage 2 ("enrich"):
-//   - Only Stage 2 writes retry state to job_pipeline_ledger via UpdateRetryBatch.
-//   - Only Stage 1's exhausted DLQ publishes carry cause="fetch_failed" (caller
-//     drives the DLQ cause via sendToDLQ).
+// handleFailure routes a single failed job via NATS dispositions:
+//   - Validation errors → DLQ immediately (Term).
+//   - Within retry budget → Nak (NATS redelivers with consumer BackOff).
+//   - Budget exhausted → DLQ (Term).
 //
-// Context cancellation during shutdown short-circuits — Kafka will redeliver
-// on restart rather than us racing to publish during shutdown.
-//
-// Returns true when the job reached a terminal state (retry-published OK or
-// DLQ'd OK). False on ctx cancel or publish failure — callers use this to
-// decide whether to skip the group commit (preserving at-least-once).
-func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, job ats.RawJob, value []byte, retryCount int, stage string, err error) bool {
+// Only stage="enrich" failures write retry state to job_pipeline_ledger.
+// Returns true when the job reached a terminal routing state; false on ctx
+// cancel, Nak failure, or DLQ publish failure.
+func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj fetchedJob, stage string, err error) bool {
 	if stderrors.Is(err, context.Canceled) || ctx.Err() != nil {
 		return false
 	}
 
 	jobLog := fetchLog.With(
-		logger.Str(logger.FieldJobID, job.ID),
-		logger.Int(logger.FieldRetryCount, retryCount),
+		logger.Str(logger.FieldJobID, fj.job.ID),
+		logger.Int(logger.FieldRetryCount, fj.retryCount),
 	)
 
 	if stderrors.Is(err, domainerr.ErrLLMValidation) {
-		return w.sendToDLQ(ctx, jobLog, job.ID, value, retryCount, "validation", err)
+		return w.sendToDLQ(ctx, jobLog, fj, "validation", err)
 	}
 
-	tiers := kafka.AnalyzerRetryTiers()
-	if retryCount >= len(tiers) {
+	if fj.retryCount >= analyzerMaxRetries {
 		cause := "exhausted"
 		if stage == "fetch" {
 			cause = "fetch_failed"
 		}
-		return w.sendToDLQ(ctx, jobLog, job.ID, value, retryCount, cause, err)
+		return w.sendToDLQ(ctx, jobLog, fj, cause, err)
 	}
 
-	tier := tiers[retryCount]
-	tierName := tier.Name()
-	newCount := retryCount + 1
-	nextAttemptAt := w.clock.Now().Add(tier.Delay)
-	headers := kafka.BuildRetryHeaders(newCount, nextAttemptAt)
-
-	if perr := w.publisher.PublishWithHeaders(ctx, tier.Topic, value, headers); perr != nil {
-		metrics.EnricherRetryPublishFailures.WithLabelValues(tierName, stage).Inc()
-		jobLog.Warn("publish retry failed",
-			logger.Err(perr),
-			logger.Str(logger.FieldRetryTier, tierName),
-			logger.Str("stage", stage),
-		)
+	// Within retry budget — Nak so NATS redelivers with consumer BackOff.
+	if nerr := fj.msg.Nak(); nerr != nil {
+		metrics.EnricherRetryPublishFailures.WithLabelValues("nats", stage).Inc()
+		jobLog.Error("nak failed", nerr, logger.Str("stage", stage))
 		return false
 	}
-	metrics.EnricherRetryPublishesTotal.WithLabelValues(tierName, stage).Inc()
+	metrics.EnricherRetryPublishesTotal.WithLabelValues("nats", stage).Inc()
+
+	nextAttemptAt := w.clock.Now().Add(analyzerBackOff[fj.retryCount])
 
 	if stage == "enrich" {
 		entry := jobsvc.RetryLedgerEntry{
-			JobID:         job.ID,
-			RetryCount:    newCount,
+			JobID:         fj.job.ID,
+			RetryCount:    fj.retryCount + 1,
 			NextAttemptAt: nextAttemptAt,
 		}
 		if lerr := w.markLedgerRetryWithRetry(ctx, entry); lerr != nil {
 			metrics.EnricherRetryLedgerFailuresTotal.Inc()
 			jobLog.Error("mark ledger retry failed after retry", lerr,
-				logger.Int(logger.FieldRetryCount, newCount),
+				logger.Int(logger.FieldRetryCount, fj.retryCount+1),
 			)
-			// Non-fatal — Kafka is authoritative for retry scheduling; the
-			// ledger is an observability surface.
 		}
 	}
 
-	jobLog.Info("scheduled retry",
-		logger.Str("topic", tier.Topic),
-		logger.Str(logger.FieldRetryTier, tierName),
+	jobLog.Info("scheduled retry via NATS BackOff",
 		logger.Str(logger.FieldNextAttemptAt, nextAttemptAt.UTC().Format(time.RFC3339)),
 		logger.Str("stage", stage),
-		logger.Dur("delay", tier.Delay),
 	)
 	return true
 }
 
 // markLedgerRetryWithRetry attempts UpdateRetryBatch with one inline retry on
-// transient failure before giving up. Kafka publish is authoritative; a stale
-// ledger row is a brief observability gap, not a correctness issue.
+// transient failure before giving up. NATS is authoritative for retry scheduling;
+// a stale ledger row is a brief observability gap, not a correctness issue.
 func (w *Worker) markLedgerRetryWithRetry(ctx context.Context, entry jobsvc.RetryLedgerEntry) error {
 	err := w.ledger.UpdateRetryBatch(ctx, []jobsvc.RetryLedgerEntry{entry})
 	if err == nil {
 		return nil
 	}
-	// One short inline retry — the ledger is best-effort.
 	if sleepErr := w.clock.Sleep(ctx, 100*time.Millisecond); sleepErr != nil {
 		return err
 	}
 	return w.ledger.UpdateRetryBatch(ctx, []jobsvc.RetryLedgerEntry{entry})
 }
 
-// sendToDLQ publishes the original message to the DLQ topic and marks the
-// ledger row as errored. The `cause` argument labels enricher_dlq_publishes_total
-// (validation | exhausted | fetch_failed | llm_result_missing) — see callers.
-// Returns true on successful publish.
-func (w *Worker) sendToDLQ(ctx context.Context, jobLog logger.Logger, jobID string, value []byte, retryCount int, cause string, err error) bool {
-	headers := kafka.BuildDLQHeaders(retryCount, err.Error())
-	if perr := w.publisher.PublishWithHeaders(ctx, kafka.TopicJobListingsFilteredDLQ, value, headers); perr != nil {
+// sendToDLQ publishes the job to the DLQ stream and Terms the NATS message.
+// If the DLQ publish fails the message is NOT Termed so NATS will redeliver.
+// Returns true on successful publish + Term.
+func (w *Worker) sendToDLQ(ctx context.Context, jobLog logger.Logger, fj fetchedJob, cause string, err error) bool {
+	payload, merr := json.Marshal(fj.job)
+	if merr != nil {
+		jobLog.Error("marshal job for DLQ failed, terminating message", merr)
+		_ = fj.msg.Term()
+		w.markError(ctx, fj.job.ID)
+		return false
+	}
+
+	if perr := w.publisher.Publish(ctx, js.SubjectJobsDLQ, payload); perr != nil {
 		jobLog.Error("publish DLQ failed", perr, logger.Str("cause", cause))
 		return false
 	}
 	metrics.EnricherDLQPublishesTotal.WithLabelValues(cause).Inc()
-	w.markError(ctx, jobID)
+	_ = fj.msg.Term()
+	w.markError(ctx, fj.job.ID)
 	jobLog.Warn("moved to DLQ", logger.Err(err), logger.Str("cause", cause))
 	metrics.EnricherJobsTotal.WithLabelValues("dlq").Inc()
 	return true

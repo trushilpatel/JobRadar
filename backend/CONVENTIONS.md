@@ -15,8 +15,9 @@ func NewJobStore(db *gorm.DB) *jobStore { return &jobStore{db: db} }
 
 ## Interface-first everywhere
 
-Same rule applies to Kafka, LLM, and Logger:
-- Workers depend on `platform/kafka.Publisher`, not `*kafka.Producer`
+Same rule applies to NATS, LLM, and Logger:
+
+- Workers depend on `common/jetstream.Publisher`, not a concrete NATS connection
 - Filter worker depends on `service/llm/services.JobsRelevanceFilter`, not `*geminiScorer`
 - Analyzer worker depends on `service/llm/services.JobPostEnricher`, not `*geminiScorer`
 - Workers depend on `platform/logger.Logger`, not `*logger.zerologLogger`
@@ -49,6 +50,7 @@ jobLog := w.log.With(
 ```
 
 **Log levels:**
+
 - `Debug` — per-item events, sleep intervals, routine steps (suppressed at `LOG_LEVEL=info`)
 - `Info` — meaningful milestones: worker started, cycle complete, job saved
 - `Warn` — recoverable issues: malformed messages, flush timeouts, rate limit waits
@@ -66,15 +68,15 @@ logger.FieldFetched  // "fetched"
 
 All models have an explicit `TableName()` method. Never rely on GORM auto-naming.
 
-| Struct | Table |
-|---|---|
-| `Company` | `companies` |
-| `JobSeenLedger` | `job_pipeline_ledger` |
-| `CompanyScanLog` | `company_scan_log` |
-| `Job` | `jobs` |
-| `JobSnapshot` | `job_analytics` |
+| Struct           | Table                     |
+| ---------------- | ------------------------- |
+| `Company`        | `companies`               |
+| `JobSeenLedger`  | `job_pipeline_ledger`     |
+| `CompanyScanLog` | `company_scan_log`        |
+| `Job`            | `jobs`                    |
+| `JobSnapshot`    | `job_analytics`           |
 | `JobApplication` | `job_application_tracker` |
-| `Discarded` | `job_dismissal_log` |
+| `Discarded`      | `job_dismissal_log`       |
 
 ## Constants
 

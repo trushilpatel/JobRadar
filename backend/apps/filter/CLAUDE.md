@@ -1,6 +1,6 @@
 # apps/filter/ — Relevance filter worker
 
-Consumes `job_listings.raw` (Kafka), scores jobs in batches via LLM, routes relevant jobs to `job_listings.filtered`, marks irrelevant / error / retry jobs in `job_pipeline_ledger`.
+Consumes `jobs.raw.*` (NATS JetStream), scores jobs in batches via LLM, routes relevant jobs to `jobs.filtered.*`, marks irrelevant / error / retry jobs in `job_pipeline_ledger`.
 
 Design spec: `docs/superpowers/specs/2026-04-22-filter-simplification-design.md`.
 
@@ -8,19 +8,19 @@ Design spec: `docs/superpowers/specs/2026-04-22-filter-simplification-design.md`
 
 | File            | Role                                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `main.go`       | Wiring — Kafka consumer/producer, LLM scorer, ledger store, clock                                                 |
+| `main.go`       | Wiring — NATS consumer/publisher, LLM scorer, ledger store, clock                                                 |
 | `worker.go`     | Serial per-chunk processing: `chunkItem`, `clock` interface, `routeOutcome`, `processFetch`, observability wiring |
 | `interfaces.go` | `FilterLedger` — narrow ledger interface the worker depends on (`UpdateSeenReasonBatch`, `UpdateRetryBatch`)      |
 
 ## Batch flow
 
-1. `Consumer.PollBatch` fetches records (broker-side accumulation via `FetchMaxWait = FILTER_FLUSH_TIMEOUT_SECONDS`)
+1. `Consumer.FetchBatch` pulls messages from the `JOBS_RAW` stream (accumulated up to `FILTER_FLUSH_TIMEOUT_SECONDS`)
 2. The fetch is split into chunks of exactly `FILTER_BATCH_SIZE` jobs (order-preserving)
 3. Chunks are processed **serially**. Between consecutive `ScoreBatch` calls the worker sleeps `FILTER_LLM_CALL_INTERVAL_SECONDS` (default `5s`), ctx-aware via the injected `clock`
-4. Each chunk's offsets are committed via `Consumer.CommitRecords` after `processChunk` returns — success or routed-failure. Commit ordering is load-bearing (per-partition max-offset semantics)
-5. Relevant → publish to `job_listings.filtered`
+4. Each chunk's messages are acked via `Msg.Ack()` after `processChunk` returns — success or routed-failure
+5. Relevant → publish to `jobs.filtered.<adapter>` (NATS JetStream `JOBS_FILTERED` stream)
 6. Irrelevant → mark `reason='llm_irrelevant'` in ledger via `UpdateSeenReasonBatch`
-7. `ScoreBatch` error → `routeFailedChunk` routes to retry tier (`raw.retry.{1m,10m,1h}`) or DLQ. Retried jobs get `UpdateRetryBatch` (sets `reason='retry'`, `retry_count`, `next_attempt_at`); DLQ'd jobs get `UpdateSeenReasonBatch('error')`
+7. `ScoreBatch` error → `routeFailedChunk` routes to retry tier or DLQ (`jobs.dlq`). Retried jobs get `UpdateRetryBatch` (sets `reason='retry'`, `retry_count`, `next_attempt_at`); DLQ'd jobs get `UpdateSeenReasonBatch('error')`
 
 ## Error handling rules
 

@@ -2,16 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"strconv"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/twmb/franz-go/pkg/kgo"
-
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
-	"github.com/trushilpatel/jobradar/common/kafka"
+	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
@@ -79,18 +78,6 @@ func TestSplitBySize_ExactMultiple(t *testing.T) {
 	}
 }
 
-func TestChunkRecords_FiltersNil(t *testing.T) {
-	chunk := []chunkItem{
-		{job: jobWithCtx{job: makeJob("a")}, record: &kgo.Record{Offset: 1}},
-		{job: jobWithCtx{job: makeJob("b")}, record: nil},
-		{job: jobWithCtx{job: makeJob("c")}, record: &kgo.Record{Offset: 3}},
-	}
-	got := chunkRecords(chunk)
-	if len(got) != 2 || got[0].Offset != 1 || got[1].Offset != 3 {
-		t.Errorf("unexpected filtered records: %+v", got)
-	}
-}
-
 // ── realClock tests ─────────────────────────────────────────────────────────
 
 func TestRealClock_Now(t *testing.T) {
@@ -152,9 +139,7 @@ func TestNewWorker_FieldsWired(t *testing.T) {
 	pub := &fakePublisher{}
 	log := logger.NewNoop()
 
-	// Use nil consumer — Worker only uses the embedded recordCommitter from the
-	// concrete *kafka.Consumer at runtime; NewWorker simply assigns it.
-	w := NewWorker(nil, pub, scorer, ledger, 7, 3*time.Second, log)
+	w := NewWorker(nil, pub, scorer, ledger, 7, 30*time.Second, 3*time.Second, log)
 	if w == nil {
 		t.Fatal("expected non-nil worker")
 	}
@@ -163,6 +148,9 @@ func TestNewWorker_FieldsWired(t *testing.T) {
 	}
 	if w.llmCallInterval != 3*time.Second {
 		t.Errorf("llmCallInterval=%v, want 3s", w.llmCallInterval)
+	}
+	if w.flushTimeout != 30*time.Second {
+		t.Errorf("flushTimeout=%v, want 30s", w.flushTimeout)
 	}
 	if w.scorer != scorer || w.ledger != ledger || w.publisher != pub {
 		t.Errorf("constructor wired wrong dependency")
@@ -180,22 +168,15 @@ func TestProcessChunk_PassThrough_NoTitle(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	chunk := []chunkItem{
-		{
-			job:    jobWithCtx{ctx: context.Background(), job: ats.RawJob{ID: "no-title-1", Title: ""}},
-			record: &kgo.Record{Offset: 1},
-		},
-		{
-			job:    jobWithCtx{ctx: context.Background(), job: ats.RawJob{ID: "no-title-2", Title: ""}},
-			record: &kgo.Record{Offset: 2},
-		},
-	}
+	item1, _ := makeChunkItem(ats.RawJob{ID: "no-title-1", Title: ""}, 1)
+	item2, _ := makeChunkItem(ats.RawJob{ID: "no-title-2", Title: ""}, 1)
+	chunk := []chunkItem{item1, item2}
 	w.processChunk(context.Background(), chunk, "fetch-1", 0, 1)
 
 	if scorer.calls != 0 {
 		t.Errorf("scorer should not be called for titleless chunk, got %d calls", scorer.calls)
 	}
-	filtered := pub.recordsOnTopic(kafka.TopicJobListingsFiltered)
+	filtered := pub.recordsOnSubject("jobs.filtered.")
 	if len(filtered) != 2 {
 		t.Errorf("expected 2 filtered publishes, got %d", len(filtered))
 	}
@@ -210,23 +191,16 @@ func TestProcessChunk_PassThroughMixed(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	chunk := []chunkItem{
-		{
-			job:    jobWithCtx{ctx: context.Background(), job: ats.RawJob{ID: "no-title-x", Title: ""}},
-			record: &kgo.Record{Offset: 1},
-		},
-		{
-			job:    jobWithCtx{ctx: context.Background(), job: ats.RawJob{ID: "titled-1", Title: "Engineer"}},
-			record: &kgo.Record{Offset: 2},
-		},
-	}
+	item1, _ := makeChunkItem(ats.RawJob{ID: "no-title-x", Title: ""}, 1)
+	item2, _ := makeChunkItem(ats.RawJob{ID: "titled-1", Title: "Engineer"}, 1)
+	chunk := []chunkItem{item1, item2}
 	w.processChunk(context.Background(), chunk, "fetch-1", 0, 1)
 
 	if scorer.calls != 1 {
 		t.Errorf("expected scorer called once (for titled job), got %d", scorer.calls)
 	}
-	// Both pass-through and titled-relevant land on the filtered topic.
-	filtered := pub.recordsOnTopic(kafka.TopicJobListingsFiltered)
+	// Both pass-through and titled-relevant land on the filtered subject.
+	filtered := pub.recordsOnSubject("jobs.filtered.")
 	if len(filtered) != 2 {
 		t.Errorf("expected 2 filtered publishes, got %d", len(filtered))
 	}
@@ -251,11 +225,12 @@ func TestProcessChunk_LLMExhaustedLogsAndRetries(t *testing.T) {
 	w := makeWorker(scorer, ledger, pub)
 	w.clock = &fakeClock{now: now}
 
-	w.processChunk(context.Background(), makeBatch(makeJob("job-1")), "fetch-1", 0, 1)
+	item, state := makeChunkItem(makeJob("job-1"), 1)
+	w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
 
-	// Exhausted is treated as a transient error → retry path.
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsRawRetry1m)) != 1 {
-		t.Errorf("expected 1 retry.1m publish, got %d", len(pub.recordsOnTopic(kafka.TopicJobListingsRawRetry1m)))
+	// Exhausted is treated as a transient error → retry via Nak.
+	if !state.Naked {
+		t.Errorf("expected job Nak'd on LLM exhausted error")
 	}
 	if len(ledger.retryBatches) != 1 || ledger.retryBatches[0][0].RetryCount != 1 {
 		t.Errorf("expected retry ledger entry retry_count=1, got %+v", ledger.retryBatches)
@@ -272,44 +247,42 @@ func TestProcessChunk_LLMExhaustedZeroRetryAfter(t *testing.T) {
 	w := makeWorker(scorer, ledger, pub)
 	w.clock = &fakeClock{now: time.Now()}
 
-	w.processChunk(context.Background(), makeBatch(makeJob("job-1")), "fetch-1", 0, 1)
+	item, state := makeChunkItem(makeJob("job-1"), 1)
+	w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
 
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsRawRetry1m)) != 1 {
-		t.Errorf("expected retry.1m publish")
+	if !state.Naked {
+		t.Errorf("expected job Nak'd")
+	}
+	if len(ledger.retryBatches) != 1 {
+		t.Errorf("expected retry ledger entry")
 	}
 }
 
 // ── publishToDLQ / publishDetail failure paths ──────────────────────────────
 
-// failingPublisher returns errors for the specified topic.
+// failingPublisher returns errors for subjects matching failSubject.
 type failingPublisher struct {
-	failTopic string
-	failAll   bool
-	records   []publishedRecord
+	failSubject string
+	failAll     bool
+	records     []publishedRecord
 }
 
-func (f *failingPublisher) Publish(_ context.Context, topic string, value []byte) error {
-	if f.failAll || topic == f.failTopic {
+func (f *failingPublisher) Publish(_ context.Context, subject string, value []byte) error {
+	if f.failAll || strings.Contains(subject, f.failSubject) {
 		return errors.New("publish boom")
 	}
-	f.records = append(f.records, publishedRecord{topic: topic, value: value})
+	f.records = append(f.records, publishedRecord{subject: subject, value: value})
 	return nil
 }
 
-func (f *failingPublisher) PublishWithHeaders(_ context.Context, topic string, value []byte, headers []kgo.RecordHeader) error {
-	if f.failAll || topic == f.failTopic {
-		return errors.New("publish boom")
-	}
-	dup := make([]kgo.RecordHeader, len(headers))
-	copy(dup, headers)
-	f.records = append(f.records, publishedRecord{topic: topic, value: value, headers: dup})
-	return nil
+func (f *failingPublisher) PublishWithMsgID(_ context.Context, subject string, value []byte, _ string) error {
+	return f.Publish(context.Background(), subject, value)
 }
 
-func (f *failingPublisher) recordsOnTopic(topic string) []publishedRecord {
+func (f *failingPublisher) recordsOnSubject(needle string) []publishedRecord {
 	var out []publishedRecord
 	for _, r := range f.records {
-		if r.topic == topic {
+		if strings.Contains(r.subject, needle) {
 			out = append(out, r)
 		}
 	}
@@ -317,10 +290,10 @@ func (f *failingPublisher) recordsOnTopic(topic string) []publishedRecord {
 }
 
 func TestProcessChunk_DLQPublishFailure(t *testing.T) {
-	// Exhausted retry path → DLQ. Publisher fails for DLQ topic.
+	// Exhausted retry path → DLQ. Publisher fails for DLQ subject.
 	scorer := &fakeScorer{err: context.DeadlineExceeded}
 	ledger := &fakeLedger{}
-	pub := &failingPublisher{failTopic: kafka.TopicJobListingsRawDLQ}
+	pub := &failingPublisher{failSubject: js.SubjectJobsDLQ}
 
 	w := &Worker{
 		scorer:    scorer,
@@ -332,45 +305,23 @@ func TestProcessChunk_DLQPublishFailure(t *testing.T) {
 	}
 	w.processChunk(context.Background(), makeBatchWithRetryCount(3, makeJob("job-1")), "fetch-1", 0, 1)
 
-	// DLQ publish failed → job not in outcome.DLQed; UpdateSeenReasonBatch must not be invoked
-	// with this job ID.
+	// DLQ publish failed → job not in outcome.DLQed; UpdateSeenReasonBatch must not be invoked.
 	for _, c := range ledger.calls {
 		if c.reason == jobcommon.SeenReasonError && len(c.ids) > 0 {
 			t.Errorf("expected no error ledger call when DLQ publish failed, got %+v", c)
 		}
 	}
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsRawDLQ)) != 0 {
+	if len(pub.recordsOnSubject(js.SubjectJobsDLQ)) != 0 {
 		t.Errorf("DLQ publish should have failed")
 	}
 }
 
-func TestProcessChunk_RetryPublishFailure(t *testing.T) {
-	// Generic scorer error, retry publish fails for retry.1m.
-	scorer := &fakeScorer{err: context.DeadlineExceeded}
-	ledger := &fakeLedger{}
-	pub := &failingPublisher{failTopic: kafka.TopicJobListingsRawRetry1m}
-
-	w := &Worker{
-		scorer:    scorer,
-		ledger:    ledger,
-		publisher: pub,
-		batchSize: 5,
-		clock:     &fakeClock{now: time.Now()},
-		log:       logger.NewNoop(),
-	}
-	w.processChunk(context.Background(), makeBatch(makeJob("job-1")), "fetch-1", 0, 1)
-
-	if len(ledger.retryBatches) != 0 {
-		t.Errorf("expected no retry ledger entries when retry publish fails, got %+v", ledger.retryBatches)
-	}
-}
-
 func TestProcessChunk_PublishDetailFailureLogged(t *testing.T) {
-	// All-relevant scorer with publisher failing on filtered topic.
+	// All-relevant scorer with publisher failing on filtered subject.
 	// Should log but not panic.
 	scorer := &fakeScorer{relevantIDs: []string{"job-1"}}
 	ledger := &fakeLedger{}
-	pub := &failingPublisher{failTopic: kafka.TopicJobListingsFiltered}
+	pub := &failingPublisher{failSubject: "jobs.filtered."}
 
 	w := &Worker{
 		scorer:    scorer,
@@ -393,7 +344,7 @@ func TestProcessChunk_PublishDetailFailureLogged(t *testing.T) {
 func TestProcessChunk_PassThroughPublishFailure(t *testing.T) {
 	scorer := &fakeScorer{}
 	ledger := &fakeLedger{}
-	pub := &failingPublisher{failTopic: kafka.TopicJobListingsFiltered}
+	pub := &failingPublisher{failSubject: "jobs.filtered."}
 
 	w := &Worker{
 		scorer:    scorer,
@@ -403,10 +354,8 @@ func TestProcessChunk_PassThroughPublishFailure(t *testing.T) {
 		clock:     &fakeClock{now: time.Now()},
 		log:       logger.NewNoop(),
 	}
-	chunk := []chunkItem{
-		{job: jobWithCtx{job: ats.RawJob{ID: "no-title", Title: ""}}, record: &kgo.Record{}},
-	}
-	w.processChunk(context.Background(), chunk, "fetch-1", 0, 1)
+	item, _ := makeChunkItem(ats.RawJob{ID: "no-title", Title: ""}, 1)
+	w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
 	// No assertion beyond "didn't panic".
 }
 
@@ -418,7 +367,7 @@ func TestProcessChunk_AllIrrelevant(t *testing.T) {
 	w := makeWorker(scorer, ledger, pub)
 	w.processChunk(context.Background(), makeBatch(makeJob("a"), makeJob("b")), "f", 0, 1)
 
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsFiltered)) != 0 {
+	if len(pub.recordsOnSubject("jobs.filtered.")) != 0 {
 		t.Errorf("expected no filtered publishes, got some")
 	}
 	if len(ledger.calls) != 1 || ledger.calls[0].reason != jobcommon.SeenReasonLLMIrrelevant {
@@ -441,16 +390,15 @@ func (panickyScorer) ScoreBatch(_ context.Context, _ []llmdto.JobsRelevanceFilte
 func TestProcessFetch_PanicRecoveredAndMarkedError(t *testing.T) {
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
-	commit := &fakeCommitter{}
 	clk := &fakeClock{now: time.Now()}
 
-	w := makeWorkerFull(nil, ledger, pub, commit, clk, 5)
+	w := makeWorkerWithClock(&fakeScorer{}, ledger, pub, clk, 5)
 	w.scorer = panickyScorer{}
 
-	records := []*kgo.Record{
-		makeRawRecord(t, "job-1", 0, 0, 10),
-	}
-	if err := w.processFetch(context.Background(), records); err != nil {
+	payload, _ := json.Marshal(makeJob("job-1"))
+	msg, state := js.NewTestMsg(payload, 1)
+
+	if err := w.processFetch(context.Background(), []*js.Msg{msg}); err != nil {
 		t.Fatalf("processFetch returned err: %v", err)
 	}
 
@@ -464,9 +412,9 @@ func TestProcessFetch_PanicRecoveredAndMarkedError(t *testing.T) {
 	if !foundErr {
 		t.Errorf("expected error ledger entry for job-1 after panic, got %+v", ledger.calls)
 	}
-	// Commit still happens.
-	if len(commit.batches) != 1 {
-		t.Errorf("expected 1 commit after panic recovery, got %d", len(commit.batches))
+	// Panic recovery Nak's the message so NATS redelivers it.
+	if !state.Naked {
+		t.Errorf("expected msg Nak'd after panic recovery")
 	}
 }
 
@@ -476,15 +424,14 @@ func TestProcessFetch_EmptyRecordsReturnsNil(t *testing.T) {
 	scorer := &fakeScorer{}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
-	commit := &fakeCommitter{}
 	clk := &fakeClock{now: time.Now()}
 
-	w := makeWorkerFull(scorer, ledger, pub, commit, clk, 5)
+	w := makeWorkerWithClock(scorer, ledger, pub, clk, 5)
 	if err := w.processFetch(context.Background(), nil); err != nil {
-		t.Errorf("expected nil for empty records, got %v", err)
+		t.Errorf("expected nil for empty msgs, got %v", err)
 	}
-	if scorer.calls != 0 || len(commit.batches) != 0 {
-		t.Errorf("no work should have happened: scorer=%d commits=%d", scorer.calls, len(commit.batches))
+	if scorer.calls != 0 {
+		t.Errorf("no work should have happened: scorer=%d", scorer.calls)
 	}
 }
 
@@ -492,119 +439,28 @@ func TestProcessFetch_MalformedMixedWithGood(t *testing.T) {
 	scorer := &fakeScorer{relevantIDs: []string{"job-good"}}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
-	commit := &fakeCommitter{}
 	clk := &fakeClock{now: time.Now()}
 
-	w := makeWorkerFull(scorer, ledger, pub, commit, clk, 5)
-	records := []*kgo.Record{
-		{Value: []byte("not json"), Partition: 0, Offset: 1},
-		makeRawRecord(t, "job-good", 0, 0, 2),
-	}
-	if err := w.processFetch(context.Background(), records); err != nil {
+	w := makeWorkerWithClock(scorer, ledger, pub, clk, 5)
+	malformed, malformedState := js.NewTestMsg([]byte("not json"), 1)
+	goodPayload, _ := json.Marshal(makeJob("job-good"))
+	good, goodState := js.NewTestMsg(goodPayload, 1)
+
+	if err := w.processFetch(context.Background(), []*js.Msg{malformed, good}); err != nil {
 		t.Fatalf("processFetch: %v", err)
 	}
-	// Malformed record should land in DLQ.
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsRawDLQ)) != 1 {
-		t.Errorf("expected malformed payload on DLQ")
+	// Malformed record → Term'd + published to DLQ.
+	if !malformedState.Termed {
+		t.Errorf("expected malformed msg Term'd")
 	}
-	// Good record published to filtered.
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsFiltered)) != 1 {
-		t.Errorf("expected good record on filtered topic")
+	if len(pub.recordsOnSubject(js.SubjectJobsDLQ)) != 1 {
+		t.Errorf("expected malformed payload on DLQ, got %d", len(pub.recordsOnSubject(js.SubjectJobsDLQ)))
 	}
-	// We expect 2 commit calls: one for the chunk, one for the malformed tail batch.
-	if len(commit.batches) != 2 {
-		t.Errorf("expected 2 commits (chunk + malformed batch), got %d", len(commit.batches))
+	// Good record → scored relevant → Ack'd + published to filtered.
+	if !goodState.Acked {
+		t.Errorf("expected good msg Ack'd")
 	}
-}
-
-// ── handleRetryRecord tests (extracted retry consumer body) ─────────────────
-
-// fakeRetryClock isn't needed — handleRetryRecord uses real time.Until/time.After.
-// We use a past nextAt so wait <= 0 and the sleep branch is skipped.
-
-func TestHandleRetryRecord_RepublishesToMainTopic(t *testing.T) {
-	pub := &fakePublisher{}
-	// Past nextAt → no wait.
-	past := time.Now().Add(-1 * time.Hour)
-	headers := []kgo.RecordHeader{
-		{Key: kafka.HeaderRetryCount, Value: []byte("2")},
-		{Key: kafka.HeaderNextAttemptAt, Value: []byte(strconv.FormatInt(past.UnixMilli(), 10))},
-	}
-	value := []byte(`{"id":"job-1"}`)
-
-	err := handleRetryRecord(context.Background(), pub, kafka.TopicJobListingsRawRetry1m, logger.NewNoop(), value, headers)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsRaw)) != 1 {
-		t.Fatalf("expected 1 record on main raw topic")
-	}
-	rec := pub.recordsOnTopic(kafka.TopicJobListingsRaw)[0]
-	rc, _ := headerValue(rec.headers, kafka.HeaderRetryCount)
-	if rc != "2" {
-		t.Errorf("retry_count header not preserved: %q", rc)
-	}
-}
-
-func TestHandleRetryRecord_MalformedPayloadDropped(t *testing.T) {
-	pub := &fakePublisher{}
-	past := time.Now().Add(-1 * time.Hour)
-	headers := []kgo.RecordHeader{
-		{Key: kafka.HeaderRetryCount, Value: []byte("1")},
-		{Key: kafka.HeaderNextAttemptAt, Value: []byte(strconv.FormatInt(past.UnixMilli(), 10))},
-	}
-	err := handleRetryRecord(context.Background(), pub, kafka.TopicJobListingsRawRetry1m, logger.NewNoop(), []byte("not json"), headers)
-	if err != nil {
-		t.Fatalf("expected nil err for malformed (dropped), got %v", err)
-	}
-	if len(pub.records) != 0 {
-		t.Errorf("expected no publishes for malformed payload, got %+v", pub.records)
-	}
-}
-
-func TestHandleRetryRecord_PublishErrorPropagates(t *testing.T) {
-	pub := &failingPublisher{failTopic: kafka.TopicJobListingsRaw}
-	past := time.Now().Add(-1 * time.Hour)
-	headers := []kgo.RecordHeader{
-		{Key: kafka.HeaderRetryCount, Value: []byte("0")},
-		{Key: kafka.HeaderNextAttemptAt, Value: []byte(strconv.FormatInt(past.UnixMilli(), 10))},
-	}
-	err := handleRetryRecord(context.Background(), pub, kafka.TopicJobListingsRawRetry1m, logger.NewNoop(), []byte(`{"id":"j"}`), headers)
-	if err == nil {
-		t.Errorf("expected publish err to propagate")
-	}
-}
-
-func TestHandleRetryRecord_CtxCancelMidWait(t *testing.T) {
-	pub := &fakePublisher{}
-	future := time.Now().Add(1 * time.Hour)
-	headers := []kgo.RecordHeader{
-		{Key: kafka.HeaderRetryCount, Value: []byte("0")},
-		{Key: kafka.HeaderNextAttemptAt, Value: []byte(strconv.FormatInt(future.UnixMilli(), 10))},
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // pre-cancelled; select sees ctx.Done immediately
-
-	err := handleRetryRecord(ctx, pub, kafka.TopicJobListingsRawRetry1m, logger.NewNoop(), []byte(`{"id":"j"}`), headers)
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("expected context.Canceled, got %v", err)
-	}
-	if len(pub.records) != 0 {
-		t.Errorf("expected no publishes after ctx cancel")
-	}
-}
-
-func TestHandleRetryRecord_NoNextAttemptHeaderRepublishes(t *testing.T) {
-	// No HeaderNextAttemptAt → zero-time → no wait branch.
-	pub := &fakePublisher{}
-	headers := []kgo.RecordHeader{
-		{Key: kafka.HeaderRetryCount, Value: []byte("3")},
-	}
-	err := handleRetryRecord(context.Background(), pub, kafka.TopicJobListingsRawRetry1m, logger.NewNoop(), []byte(`{"id":"j"}`), headers)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	if len(pub.recordsOnTopic(kafka.TopicJobListingsRaw)) != 1 {
-		t.Errorf("expected publish on main topic")
+	if len(pub.recordsOnSubject("jobs.filtered.")) != 1 {
+		t.Errorf("expected good record on filtered subject, got %d", len(pub.recordsOnSubject("jobs.filtered.")))
 	}
 }

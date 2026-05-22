@@ -8,6 +8,9 @@ metadata:
     component: enricher
 data:
   NATS_URL: {{ .Values.enricher.natsUrl | quote }}
+  {{- if .Values.enricher.natsCredsFile }}
+  NATS_CREDS_FILE: {{ .Values.enricher.natsCredsFile | quote }}
+  {{- end }}
   ENRICHER_FETCH_CONCURRENCY: {{ .Values.enricher.fetchConcurrency | quote }}
   ENRICHER_LLM_BATCH_SIZE: {{ .Values.enricher.llmBatchSize | quote }}
   ENRICHER_FLUSH_TIMEOUT_SECONDS: {{ .Values.enricher.flushTimeoutSeconds | quote }}

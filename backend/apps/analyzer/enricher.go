@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
-	"github.com/trushilpatel/jobradar/common/kafka"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
@@ -19,21 +18,17 @@ import (
 )
 
 // processGroup runs one EnrichBatch call for a group of fetched jobs and
-// processes the per-job results. Returns routed=true if every job in the
-// group reached a terminal routing (saved, dropped, retry-published, DLQ'd).
-// Returns routed=false if any job was left un-routed (ctx cancel mid-route) —
-// the caller must skip the Kafka commit in that case.
+// processes the per-job results. Returns routed=true if every job in the group
+// reached a terminal routing (saved, dropped, retry-Nak'd, DLQ-Term'd).
+// Returns routed=false if any job was left un-routed (ctx cancel mid-route).
 //
 // Failure modes:
 //
 //   - Whole batch fails  → every job in the group is routed via handleFailure
-//     using its own retryCount, stage="enrich". The retry consumer naturally
-//     re-batches them with whatever else arrives next.
-//   - Result missing for a job → that job is treated as a transient failure
-//     and routed to retry (cause="llm_result_missing" at exhausted budget).
+//     using its own retryCount, stage="enrich". NATS redelivers via BackOff.
+//   - Result missing for a job → routed to Nak (within budget) or DLQ (exhausted).
 //   - Extra unknown job_ids in the response → ignored with a warning log.
-//   - Per-job save error → logged as error, ledger marked, other jobs in the
-//     same batch are unaffected.
+//   - Per-job save error → Ack'd with ledger marked; other jobs in the batch unaffected.
 func (w *Worker) processGroup(ctx context.Context, fetchLog logger.Logger, group []fetchedJob, fetchID string, groupIdx, groupCount int) (routed bool) {
 	if len(group) == 0 {
 		return true
@@ -129,9 +124,8 @@ func (w *Worker) buildEnrichInputs(group []fetchedJob) ([]llmdto.JobPostEnrichIn
 	return inputs, nil
 }
 
-// distributeResults walks the LLM response and routes each job to save,
-// drop, or retry. Returns false if any job was left un-routed (ctx cancel
-// mid-route) so the caller can skip the Kafka commit.
+// distributeResults walks the LLM response and routes each job to save, drop,
+// or retry. Returns false if any job was left un-routed (ctx cancel mid-route).
 func (w *Worker) distributeResults(ctx context.Context, groupLog logger.Logger, group []fetchedJob, results []*llmdto.JobPostEnrichResult, stats *groupOutcomeStats) bool {
 	resultByID := make(map[string]*llmdto.JobPostEnrichResult, len(results))
 	for _, r := range results {
@@ -175,42 +169,40 @@ func (w *Worker) distributeResults(ctx context.Context, groupLog logger.Logger, 
 			}
 			continue
 		}
-		w.processResult(fj.ctx, fj.job, result, stats)
+		w.processResult(fj.ctx, fj, result, stats)
 	}
 	return allRouted
 }
 
-// routeMissingResult routes a missing-result job to retry (within budget) or
-// DLQ (exhausted, cause="llm_result_missing"). stage="enrich" since this is a
-// Stage 2 failure.
+// routeMissingResult routes a missing-result job to Nak (within budget) or
+// DLQ (exhausted, cause="llm_result_missing"). stage="enrich".
 func (w *Worker) routeMissingResult(ctx context.Context, fetchLog logger.Logger, fj fetchedJob, err error) bool {
 	if ctx.Err() != nil {
 		return false
 	}
-	tiers := kafka.AnalyzerRetryTiers()
-	if fj.retryCount >= len(tiers) {
+	if fj.retryCount >= analyzerMaxRetries {
 		jobLog := fetchLog.With(
 			logger.Str(logger.FieldJobID, fj.job.ID),
 			logger.Int(logger.FieldRetryCount, fj.retryCount),
 		)
-		return w.sendToDLQ(ctx, jobLog, fj.job.ID, fj.record.Value, fj.retryCount, "llm_result_missing", err)
+		return w.sendToDLQ(ctx, jobLog, fj, "llm_result_missing", err)
 	}
-	// Within retry budget — delegate to handleFailure so ledger + metrics are
-	// consistent with every other Stage 2 transient failure.
-	return w.handleFailure(ctx, fetchLog, fj.job, fj.record.Value, fj.retryCount, "enrich", err)
+	return w.handleFailure(ctx, fetchLog, fj, "enrich", err)
 }
 
-// processResult applies the drop rules and either saves the job or marks
-// the ledger row appropriately. Mirrors the original single-job path.
-func (w *Worker) processResult(ctx context.Context, job ats.RawJob, result *llmdto.JobPostEnrichResult, stats *groupOutcomeStats) {
+// processResult applies the drop rules and either saves the job or marks the
+// ledger row appropriately. All terminal paths call msg.Ack() to acknowledge
+// the NATS message.
+func (w *Worker) processResult(ctx context.Context, fj fetchedJob, result *llmdto.JobPostEnrichResult, stats *groupOutcomeStats) {
 	jobLog := w.log.With(
-		logger.Str(logger.FieldJobID, job.ID),
-		logger.Str("title", job.Title),
+		logger.Str(logger.FieldJobID, fj.job.ID),
+		logger.Str("title", fj.job.Title),
 	)
 
 	if !result.RoleMatch {
 		jobLog.Debug("job dropped: role mismatch")
-		w.markIrrelevant(ctx, job.ID)
+		w.markIrrelevant(ctx, fj.job.ID)
+		_ = fj.msg.Ack()
 		metrics.EnricherJobsTotal.WithLabelValues("dropped").Inc()
 		stats.markDropped()
 		return
@@ -218,21 +210,24 @@ func (w *Worker) processResult(ctx context.Context, job ats.RawJob, result *llmd
 
 	if reason := w.dropJob(result); reason != "" {
 		jobLog.Info("job dropped", logger.Str("drop_reason", reason))
-		w.markError(ctx, job.ID)
+		w.markError(ctx, fj.job.ID)
+		_ = fj.msg.Ack()
 		metrics.EnricherJobsTotal.WithLabelValues("dropped").Inc()
 		stats.markDropped()
 		return
 	}
 
-	input := toEnrichedInput(job, result)
+	input := toEnrichedInput(fj.job, result)
 	if err := w.pipeline.SaveEnrichedJob(ctx, input); err != nil {
 		jobLog.Error("save enriched job failed", err)
-		w.markError(ctx, job.ID)
+		w.markError(ctx, fj.job.ID)
+		_ = fj.msg.Ack()
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 		stats.markRouteFailure()
 		return
 	}
 
+	_ = fj.msg.Ack()
 	metrics.EnricherJobsTotal.WithLabelValues("saved").Inc()
 	stats.markSaved()
 	jobLog.Debug("enriched and saved",
@@ -243,21 +238,20 @@ func (w *Worker) processResult(ctx context.Context, job ats.RawJob, result *llmd
 
 // routeBatchFailure routes every job in a failed batch via handleFailure.
 // Each job carries its own retryCount, so the retry tier per job depends on
-// how many times it has previously failed (not how many times the current
-// batch failed). Returns true if every job reached a terminal routing.
+// how many times it has previously failed. Returns true if every job reached
+// a terminal routing.
 func (w *Worker) routeBatchFailure(ctx context.Context, fetchLog logger.Logger, group []fetchedJob, err error) bool {
 	routeCtx, span := tracing.Start(ctx, "analyzer.worker.routeBatchFailure")
 	defer span.End()
 
-	tiers := kafka.AnalyzerRetryTiers()
 	var retried, dlqed, publishFailed int
 	for _, fj := range group {
-		ok := w.handleFailure(routeCtx, fetchLog, fj.job, fj.record.Value, fj.retryCount, "enrich", err)
+		ok := w.handleFailure(routeCtx, fetchLog, fj, "enrich", err)
 		if !ok {
 			publishFailed++
 			continue
 		}
-		if fj.retryCount >= len(tiers) {
+		if fj.retryCount >= analyzerMaxRetries {
 			dlqed++
 		} else {
 			retried++
@@ -298,8 +292,6 @@ func toEnrichedInput(job ats.RawJob, result *llmdto.JobPostEnrichResult) jobdto.
 }
 
 // marshalContent serializes the structured content to JSON for the LLM.
-// JSON gives the LLM all available fields (description, compensation, etc.)
-// in a compact, consistent format regardless of which platform fetched it.
 func marshalContent(content ats.FetchJobContentResponse) (string, error) {
 	bytes, err := json.Marshal(content)
 	if err != nil {
@@ -309,12 +301,7 @@ func marshalContent(content ats.FetchJobContentResponse) (string, error) {
 }
 
 // groupOutcomeStats tracks per-group routing outcomes for the
-// enricher_group_duration_seconds{outcome} histogram. Precedence (first match):
-//
-//  1. Any handleFailure/route failure → "error"
-//  2. Any saved + any dropped → "mixed"
-//  3. All saved → "saved"
-//  4. All dropped → "dropped"
+// enricher_group_duration_seconds{outcome} histogram.
 type groupOutcomeStats struct {
 	saved         int
 	dropped       int
@@ -338,6 +325,5 @@ func (s *groupOutcomeStats) label() string {
 	if s.dropped > 0 {
 		return "dropped"
 	}
-	// Empty or unresolved groups — label conservatively as error.
 	return "error"
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
-	"github.com/trushilpatel/jobradar/common/kafka"
+	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
@@ -19,7 +19,7 @@ import (
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
-// Engine crawls company careers pages, deduplicates jobs, and publishes new ones to Kafka.
+// Engine crawls company careers pages, deduplicates jobs, and publishes new ones to NATS JetStream.
 //
 // Phase 2: per-company scan configuration (adapter_type, adapter_config,
 // active flag) lives on `company_scan_settings`. RunForCompany pulls the
@@ -33,7 +33,7 @@ type Engine struct {
 	settings  ScanSettingsReader
 	ledger    PipelineLedger
 	recorder  ScanRecorder
-	publisher kafka.Publisher
+	publisher js.Publisher
 	googleCfg google.Config
 	log       logger.Logger
 	// adapterFactory resolves an adapter implementation for a given adapter type.
@@ -46,7 +46,7 @@ func NewEngine(
 	settings ScanSettingsReader,
 	ledger PipelineLedger,
 	recorder ScanRecorder,
-	publisher kafka.Publisher,
+	publisher js.Publisher,
 	googleCfg google.Config,
 	log logger.Logger,
 ) *Engine {
@@ -127,8 +127,8 @@ func (e *Engine) scanCompany(ctx context.Context, companyID string, settings *co
 	}
 
 	// Streaming adapters publish per-page inside FetchJobs via the stream callback —
-	// result.Jobs is what was already committed to Kafka and the ledger. Skip the
-	// post-scan publish pass to avoid a redundant HasSeenBatch round-trip.
+	// result.Jobs is what was already published to NATS and written to the ledger.
+	// Skip the post-scan publish pass to avoid a redundant HasSeenBatch round-trip.
 	var newCount int
 	if streamed {
 		newCount = len(result.Jobs)
@@ -177,8 +177,8 @@ func (e *Engine) fetchJobs(ctx context.Context, companyID, adapterType string, a
 		log.Debug("live seen checker enabled for adapter")
 	}
 
-	// If the adapter supports streaming, wire up a publish callback so jobs enter
-	// Kafka immediately after each page instead of waiting for the full scan.
+	// If the adapter supports streaming, wire up a publish callback so jobs are
+	// published to NATS immediately after each page instead of waiting for the full scan.
 	streamed := false
 	if sp, ok := adp.(ats.StreamPublisher); ok {
 		sp.SetStreamPublish(func(items []ats.FetchJobsItem) {
@@ -235,9 +235,9 @@ func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, c
 		return 0
 	}
 
-	// Publish first, collect IDs that made it to Kafka.
+	// Publish first, collect IDs that made it to NATS.
 	// MarkSeenBatch runs only after — if the process crashes between publish and mark,
-	// the next scan re-publishes those jobs. Downstream filter handles duplicates.
+	// the next scan re-publishes those jobs. NATS dedup (Duplicates window) handles them.
 	var publishedIDs []string
 	for _, job := range newJobs {
 		if err := e.publish(ctx, toRawJob(job, companyID, adapterType)); err != nil {
@@ -251,14 +251,14 @@ func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, c
 	}
 
 	if err := e.ledger.MarkSeenBatch(ctx, publishedIDs, companyID, jobcommon.SeenReasonFetch); err != nil {
-		// Jobs are in Kafka but not marked seen — next scan will re-publish them.
-		// Downstream filter deduplicates by job_id so this is safe.
+		// Jobs are in NATS but not marked seen — next scan will re-publish them.
+		// NATS JetStream dedup (Duplicates window + MsgID) ensures idempotent delivery.
 		log.Error("batch mark seen failed (jobs published, will be re-sent on next scan)", err)
 	}
 	return len(publishedIDs)
 }
 
-// toRawJob converts a FetchJobsItem into the RawJob Kafka message.
+// toRawJob converts a FetchJobsItem into the RawJob message payload.
 // CompanyID and AdapterType come from the company record, not the listing.
 func toRawJob(item ats.FetchJobsItem, companyID, adapterType string) ats.RawJob {
 	return ats.RawJob{
@@ -278,7 +278,8 @@ func (e *Engine) publish(ctx context.Context, job ats.RawJob) error {
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
-	return e.publisher.Publish(ctx, kafka.TopicJobListingsRaw, payload)
+	subject := fmt.Sprintf(js.SubjectJobsRawFmt, job.Adapter)
+	return e.publisher.PublishWithMsgID(ctx, subject, payload, job.ID)
 }
 
 // detectRemovedJobs compares the current scan results against previousIDs (fetched

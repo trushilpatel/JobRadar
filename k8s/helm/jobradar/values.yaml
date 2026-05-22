@@ -6,13 +6,13 @@ images:
     repository: jobradar-backend
     tag: local
     pullPolicy: IfNotPresent
+  crawler:
+    repository: jobradar-crawler
+    tag: local
+    pullPolicy: IfNotPresent
   console:
     repository: jobradar-console
     tag: local
-    pullPolicy: IfNotPresent
-  nats:
-    repository: nats
-    tag: "2-alpine"
     pullPolicy: IfNotPresent
   redis:
     repository: redis
@@ -41,7 +41,8 @@ console:
   nodePort: 30300
 
 filter:
-  natsUrl: "nats://nats:4222"
+  natsUrl: "tls://connect.ngs.global"
+  natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
   batchSize: "50"
   flushTimeoutSeconds: "30"
   llmCallIntervalSeconds: "5"
@@ -57,7 +58,8 @@ filter:
   dbPort: "6543"
 
 enricher:
-  natsUrl: "nats://nats:4222"
+  natsUrl: "tls://connect.ngs.global"
+  natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
   fetchConcurrency: "15"
   llmBatchSize: "5"
   flushTimeoutSeconds: "120"
@@ -77,5 +79,31 @@ enricher:
   dbSslmode: require
   dbPort: "6543"
 
+crawler:
+  natsUrl: "tls://connect.ngs.global"
+  natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
+  pollIntervalSeconds: "60"
+  stuckTimeoutSeconds: "120"
+  heartbeatIntervalSeconds: "30"
+  companyDelaySeconds: "30"
+  scanIntervalMinutes: "1440"
+  logLevel: info
+  logFormat: json
+  metricsAddr: ":9102"
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  dbSslmode: require
+  dbPort: "6543"
+
+scheduler:
+  scanIntervalMinutes: "1440"
+  stuckTimeoutMinutes: "30"
+  checkIntervalSeconds: "60"
+  logLevel: info
+  logFormat: json
+  metricsAddr: ":9103"
+  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  dbSslmode: require
+  dbPort: "6543"
+
 nats:
-  url: "nats://nats:4222"    # in-cluster URL; override with Synadia Cloud URL for production
+  external: true   # Synadia Cloud is the broker — no in-cluster NATS deployed

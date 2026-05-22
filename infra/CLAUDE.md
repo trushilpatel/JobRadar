@@ -1,6 +1,6 @@
 # infra/ — Dockerfiles + ops configs + local k8s
 
-Dockerfiles for backend services and ops configs for Caddy, CrowdSec, Grafana, Kafka, Loki, Prometheus, Promtail. The local k3d cluster is driven from `k8s/helm/` charts — this file documents the deploy workflow.
+Dockerfiles for backend services and ops configs for Caddy, CrowdSec, Grafana, Loki, Prometheus, Promtail. The local k3d cluster is driven from `k8s/helm/` charts — this file documents the deploy workflow.
 
 ## Crawler image is pure Go
 
@@ -20,7 +20,7 @@ All ATS adapters (Greenhouse, Lever, Ashby, Apple, Microsoft, Netflix, Rippling,
 ```bash
 kubectl config use-context k3d-jobradar    # verify context first
 make k8s-build                              # build + import all images into k3d
-make k8s-up                                 # preflight + helm install + wait for kafka
+make k8s-up                                 # preflight + helm install
 make k8s-logs-crawler                       # verify
 ```
 
@@ -41,9 +41,9 @@ make k8s-logs-crawler
 
 ## Common failure modes
 
-| Symptom                       | Cause                                                                   | Fix                                                                                                                                                                                                                       |
-| ----------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ErrImagePull` on all pods    | Wrong kubectl context (docker-desktop) or images not imported           | Switch context; `make k8s-build`                                                                                                                                                                                          |
-| Kafka PVC stuck `Pending`     | StatefulSet storage class mismatch or first-time `WaitForFirstConsumer` | `make k8s-nuke` then `make k8s-up`                                                                                                                                                                                        |
-| `TLS handshake timeout`       | k3d API server still starting after restart                             | Wait ~30s; `until kubectl get nodes 2>/dev/null \| grep -q Ready; do sleep 3; done`                                                                                                                                       |
-| Namespace stuck `Terminating` | Finalizers not cleared                                                  | Force-clear: `kubectl get ns <name> -o json \| python3 -c "import sys,json; d=json.load(sys.stdin); d['spec']['finalizers']=[]; print(json.dumps(d))" \| kubectl replace --raw "/api/v1/namespaces/<name>/finalize" -f -` |
+| Symptom                            | Cause                                                                      | Fix                                                                                                                                                                                                                       |
+| ---------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ErrImagePull` on all pods         | Wrong kubectl context (docker-desktop) or images not imported              | Switch context; `make k8s-build`                                                                                                                                                                                          |
+| filter/enricher `CrashLoopBackOff` | `secrets/jobradar_NATS.creds` empty or wrong, or NATS secret not recreated | Fill creds file, run `make k8s-bootstrap`, then restart pods                                                                                                                                                              |
+| `TLS handshake timeout`            | k3d API server still starting after restart                                | Wait ~30s; `until kubectl get nodes 2>/dev/null \| grep -q Ready; do sleep 3; done`                                                                                                                                       |
+| Namespace stuck `Terminating`      | Finalizers not cleared                                                     | Force-clear: `kubectl get ns <name> -o json \| python3 -c "import sys,json; d=json.load(sys.stdin); d['spec']['finalizers']=[]; print(json.dumps(d))" \| kubectl replace --raw "/api/v1/namespaces/<name>/finalize" -f -` |
