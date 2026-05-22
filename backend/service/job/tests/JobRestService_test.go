@@ -563,8 +563,8 @@ func TestRest_Dismiss_DefaultReason(t *testing.T) {
 			}
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
-			if w.Code != http.StatusOK {
-				t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+			if w.Code != http.StatusNoContent {
+				t.Fatalf("status = %d, want 204: %s", w.Code, w.Body.String())
 			}
 			if fake.dismissReason != tc.wantReason {
 				t.Errorf("reason forwarded = %q, want %q", fake.dismissReason, tc.wantReason)

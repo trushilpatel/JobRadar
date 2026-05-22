@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/tracing"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -124,7 +125,7 @@ func (s *seenLedgerStore) UpdateRetryBatch(ctx context.Context, entries []RetryL
 	}
 
 	query := "UPDATE job_pipeline_ledger AS l " +
-		"SET reason = 'retry', retry_count = v.retry_count, next_attempt_at = v.next_attempt_at " +
+		"SET reason = '" + jobcommon.SeenReasonRetry + "', retry_count = v.retry_count, next_attempt_at = v.next_attempt_at " +
 		"FROM (VALUES " + strings.Join(valuesClauses, ",") + ") " +
 		"AS v(job_id, retry_count, next_attempt_at) " +
 		"WHERE l.job_id = v.job_id"

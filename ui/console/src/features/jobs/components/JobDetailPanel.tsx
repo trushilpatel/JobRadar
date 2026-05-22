@@ -316,10 +316,7 @@ export function JobDetailPanel({
       </div>
 
       {isRoute && (
-        <div
-          className="sticky bottom-0 flex gap-2 border-t border-white/[0.08] bg-[#0d0d14] px-3 pt-3"
-          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
-        >
+        <div className="sticky bottom-0 flex gap-2 border-t border-white/[0.08] bg-[#0d0d14] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
             onClick={() => onStatusChange(job, JOB_STATUS.SAVED)}

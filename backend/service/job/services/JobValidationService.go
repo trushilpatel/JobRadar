@@ -85,14 +85,37 @@ func (v *validationService) List(ctx context.Context, filter dto.JobFilter, curs
 	return v.next.List(ctx, filter, cursor, limit)
 }
 
-// Dismiss validates the reason before delegating.
-func (v *validationService) Dismiss(ctx context.Context, id string, reason, note string) error {
-	if !validDismissalReasons[reason] {
+// SetNotes validates the notes length before delegating.
+func (v *validationService) SetNotes(ctx context.Context, id, notes string) error {
+	if len(notes) > 5000 {
 		return errors.ValidationErrors{{
+			Field:   "notes",
+			Code:    "INVALID_VALUE",
+			Message: "notes must be 5000 characters or fewer",
+		}}
+	}
+	return v.next.SetNotes(ctx, id, notes)
+}
+
+// Dismiss validates the reason and note before delegating.
+func (v *validationService) Dismiss(ctx context.Context, id string, reason, note string) error {
+	var errs errors.ValidationErrors
+	if !validDismissalReasons[reason] {
+		errs = append(errs, errors.ValidationError{
 			Field:   "reason",
 			Code:    "INVALID_VALUE",
 			Message: "reason must be 'user_dismissed' or 'user_not_relevant'",
-		}}
+		})
+	}
+	if len(note) > 5000 {
+		errs = append(errs, errors.ValidationError{
+			Field:   "note",
+			Code:    "INVALID_VALUE",
+			Message: "note must be 5000 characters or fewer",
+		})
+	}
+	if len(errs) > 0 {
+		return errs
 	}
 	return v.next.Dismiss(ctx, id, reason, note)
 }
@@ -110,7 +133,7 @@ func (v *validationService) SetStatus(ctx context.Context, id, status string) er
 	return v.next.SetStatus(ctx, id, status)
 }
 
-// BulkDismiss validates the IDs slice and reason before delegating.
+// BulkDismiss validates the IDs slice, reason, and note before delegating.
 func (v *validationService) BulkDismiss(ctx context.Context, ids []string, reason, note string) error {
 	var errs errors.ValidationErrors
 	if len(ids) == 0 {
@@ -132,6 +155,13 @@ func (v *validationService) BulkDismiss(ctx context.Context, ids []string, reaso
 			Field:   "reason",
 			Code:    "INVALID_VALUE",
 			Message: "reason must be 'user_dismissed' or 'user_not_relevant'",
+		})
+	}
+	if len(note) > 5000 {
+		errs = append(errs, errors.ValidationError{
+			Field:   "note",
+			Code:    "INVALID_VALUE",
+			Message: "note must be 5000 characters or fewer",
 		})
 	}
 	if len(errs) > 0 {

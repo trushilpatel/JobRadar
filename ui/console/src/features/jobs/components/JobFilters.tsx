@@ -19,9 +19,11 @@ function FilterPill({
 }) {
   return (
     <button
+      type="button"
+      aria-pressed={active}
       onClick={onClick}
       className={cn(
-        'px-2.5 py-1.5 text-xs rounded-lg border transition-colors',
+        'px-2.5 py-1.5 text-xs rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500',
         active && color === 'violet' && 'bg-violet-500/15 border-violet-500/30 text-violet-300',
         active && color === 'emerald' && 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
         !active &&
@@ -219,8 +221,10 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
         <>
           <Divider />
           <button
+            type="button"
+            aria-label="Reset filters"
             onClick={onReset}
-            className="text-[11px] text-slate-500 hover:text-slate-300 px-2"
+            className="text-[11px] text-slate-500 hover:text-slate-300 px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
           >
             Reset
           </button>

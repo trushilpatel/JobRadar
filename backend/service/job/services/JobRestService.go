@@ -184,7 +184,7 @@ func (h *RestService) dismiss(w http.ResponseWriter, r *http.Request) {
 		handler.HandleError(w, err)
 		return
 	}
-	handler.Respond(w, http.StatusOK, map[string]string{"id": id, "reason": input.Reason})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // bulkDismiss serves POST /api/jobs/dismiss/bulk.

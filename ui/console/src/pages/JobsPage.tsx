@@ -49,7 +49,7 @@ export function JobsPage() {
   // Focused-row tracking. Keyed by tab+filter+page so deliberate context
   // switches reset focus to the first item; otherwise focus follows the
   // same job id across refetches.
-  const focusResetKey = `${jobs.tab}|${jobs.page}`
+  const focusResetKey = jobs.tab
   const focus = useFocusedJob(jobs.jobs, { resetKey: focusResetKey })
 
   // ── Selection lifecycle ────────────────────────────────────────────────────
@@ -368,22 +368,25 @@ export function JobsPage() {
           <span className="text-xs text-violet-300 font-medium">{selectedIds.size} selected</span>
           <button
             onClick={handleBulkSave}
+            disabled={actions.bulkSave.isPending}
             aria-label={`Save ${selectedIds.size} selected jobs`}
-            className="flex items-center gap-1.5 text-xs text-white bg-violet-600/80 hover:bg-violet-600 px-3 py-1.5 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+            className="flex items-center gap-1.5 text-xs text-white bg-violet-600/80 hover:bg-violet-600 px-3 py-1.5 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <BookmarkCheck size={12} /> Save
           </button>
           <button
             onClick={handleBulkApplied}
+            disabled={actions.bulkApplied.isPending}
             aria-label={`Mark ${selectedIds.size} selected jobs as applied`}
-            className="flex items-center gap-1.5 text-xs text-white bg-emerald-600/80 hover:bg-emerald-600 px-3 py-1.5 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+            className="flex items-center gap-1.5 text-xs text-white bg-emerald-600/80 hover:bg-emerald-600 px-3 py-1.5 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <CheckCircle2 size={12} /> Mark applied
           </button>
           <button
             onClick={handleBulkDismiss}
+            disabled={actions.bulkDismiss.isPending}
             aria-label={`Dismiss ${selectedIds.size} selected jobs`}
-            className="flex items-center gap-1.5 text-xs text-white bg-red-600/80 hover:bg-red-600 px-3 py-1.5 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+            className="flex items-center gap-1.5 text-xs text-white bg-red-600/80 hover:bg-red-600 px-3 py-1.5 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Trash2 size={12} /> Mark not relevant
           </button>
@@ -402,7 +405,7 @@ export function JobsPage() {
         <div ref={tableScrollRef} className="flex flex-1 min-w-0 overflow-hidden">
           <JobsTable
             jobs={jobs.jobs}
-            loading={jobs.isLoading}
+            loading={jobs.isLoading || jobs.isFetchingNextPage}
             isError={jobs.isError}
             onRetry={() => void jobs.refetch()}
             tab={jobs.tab}

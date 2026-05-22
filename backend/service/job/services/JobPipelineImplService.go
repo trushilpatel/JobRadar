@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/trushilpatel/jobradar/apps/analyzer/techtag"
+	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
@@ -28,13 +29,14 @@ type pipelineService struct {
 	ledger   pipelineLedgerSink
 	snapshot SnapshotWriter
 	techTags TechTagWriter
+	logger   logger.Logger
 }
 
 // NewPipelineService constructs a PipelineService backed by the provided
 // stores. The ledger argument can be any type satisfying the narrow
 // HasSeen + UpdateSeenReason pair (the full SeenLedgerStore qualifies).
-func NewPipelineService(jobs JobWriter, ledger pipelineLedgerSink, snapshot SnapshotWriter, techTags TechTagWriter) PipelineService {
-	return &pipelineService{jobs: jobs, ledger: ledger, snapshot: snapshot, techTags: techTags}
+func NewPipelineService(jobs JobWriter, ledger pipelineLedgerSink, snapshot SnapshotWriter, techTags TechTagWriter, log logger.Logger) PipelineService {
+	return &pipelineService{jobs: jobs, ledger: ledger, snapshot: snapshot, techTags: techTags, logger: log}
 }
 
 // SaveEnrichedJob builds the job row, inserts it into `jobs`, writes the analytics
@@ -51,8 +53,8 @@ func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.Enriche
 		return fmt.Errorf("insert job: %w", err)
 	}
 
-	// Non-fatal: snapshot write failure is logged by the caller — job is already saved.
-	_ = p.snapshot.InsertSnapshot(ctx, dto.SnapshotInput{
+	// Non-fatal: snapshot write failure is logged but does not block the saved job.
+	if err := p.snapshot.InsertSnapshot(ctx, dto.SnapshotInput{
 		ID:                row.ID,
 		CompanyID:         input.Raw.CompanyID,
 		Country:           input.Enriched.Country,
@@ -65,11 +67,15 @@ func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.Enriche
 		ExperienceYears:   input.Enriched.ExperienceYears,
 		TechStack:         []byte(row.TechStack), // already marshalled by buildJobRow
 		RoleCategory:      input.Enriched.RoleCategory,
-	})
+	}); err != nil {
+		p.logger.Warn("snapshot insert failed", logger.Str(logger.FieldJobID, row.ID), logger.Err(err))
+	}
 
 	// Non-fatal: write validated+normalized tech tags for trend analysis.
 	if cleaned := techtag.Clean(input.Enriched.TechStack); len(cleaned) > 0 {
-		_ = p.techTags.InsertTechTags(ctx, row.ID, input.Raw.CompanyID, cleaned, time.Now())
+		if err := p.techTags.InsertTechTags(ctx, row.ID, input.Raw.CompanyID, cleaned, time.Now()); err != nil {
+			p.logger.Warn("tech tags insert failed", logger.Str(logger.FieldJobID, row.ID), logger.Err(err))
+		}
 	}
 
 	if err := p.ledger.UpdateSeenReason(ctx, input.Raw.ID, jobcommon.SeenReasonSaved); err != nil {

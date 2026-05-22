@@ -48,7 +48,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	app, err := InitializeApp(database, cfg)
+	app, err := InitializeApp(database, cfg, log)
 	if err != nil {
 		log.Error("wire initialization failed", err)
 		os.Exit(1)

@@ -402,10 +402,14 @@ func TestImpl_SetStatus_InvalidatesCountsCache(t *testing.T) {
 }
 
 func TestList_SavedTab_RoutesToGetJobsByStatus(t *testing.T) {
+	savedStatus := jobcommon.JobStatusSaved
 	reader := &fakeJobReader{}
 	state := &fakeUserState{
 		statusJobs: []jobmodel.Job{
 			{ID: "j1", Title: "Engineer", AddedAt: time.Now()},
+		},
+		manyResult: map[string]*jobmodel.UserJobState{
+			"j1": {JobID: "j1", Status: savedStatus},
 		},
 	}
 	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
@@ -450,10 +454,15 @@ func TestList_NewTab_UsesGlobalFeed(t *testing.T) {
 }
 
 func TestList_AppliedTab_SetsStatusOnAllViews(t *testing.T) {
+	appliedStatus := jobcommon.JobStatusApplied
 	state := &fakeUserState{
 		statusJobs: []jobmodel.Job{
 			{ID: "j1", Title: "SWE", AddedAt: time.Now()},
 			{ID: "j2", Title: "SRE", AddedAt: time.Now().Add(-time.Hour)},
+		},
+		manyResult: map[string]*jobmodel.UserJobState{
+			"j1": {JobID: "j1", Status: appliedStatus},
+			"j2": {JobID: "j2", Status: appliedStatus},
 		},
 	}
 	svc := newSvc(&fakeJobReader{}, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
