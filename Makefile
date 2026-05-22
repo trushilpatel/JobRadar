@@ -3,16 +3,11 @@ export GIT_SHA
 
 .PHONY: dev dev-console dev-backend \
         build build-console build-backend clean-console \
-        run-api run-crawler run-filter run-enricher run-scheduler \
+        run-crawler run-filter run-enricher run-scheduler \
         migrate scan-google db-truncate lint lint-go tsc \
-        test test-short test-unit \
-        test-api test-workers test-scheduler test-llm \
+        test test-short test-adapters \
         fmt \
-        test-adapters \
-        test-adapter-greenhouse test-adapter-lever test-adapter-ashby \
         docker-up \
-        local local-down prod prod-down \
-        up rebuild rebuild-backend rebuild-crawler rebuild-console down logs build-docker \
         k8s-build k8s-build-backend k8s-build-crawler k8s-build-console \
         k8s-up k8s-down k8s-migrate k8s-status k8s-forward k8s-unforward \
         k8s-obs-up k8s-obs-down k8s-obs-forward \
@@ -35,18 +30,6 @@ dev-console: ## Start Vite dev server (ui/console)
 dev-backend: ## Start API server (hot-reload via go run)
 	cd backend && go run ./apps/api
 
-local: ## Start full local stack in Docker (everything except Caddy) — API :8080, console :3000
-	docker compose --profile infra --profile app --profile workers --profile obs up -d --build
-
-local-down: ## Stop local stack
-	docker compose --profile infra --profile app --profile workers --profile obs down --remove-orphans
-
-prod: ## Start full production stack (all profiles)
-	docker compose --profile infra --profile app --profile workers --profile obs --profile proxy up -d
-
-prod-down: ## Stop production stack
-	docker compose --profile infra --profile app --profile workers --profile obs --profile proxy down --remove-orphans
-
 # ── Build ─────────────────────────────────────────────────────────────────────
 
 build: build-console build-backend ## Build everything
@@ -61,9 +44,6 @@ build-backend: ## Compile all Go binaries
 	cd backend && go build ./...
 
 # ── Run individual workers ────────────────────────────────────────────────────
-
-run-api: ## Run API server
-	cd backend && go run ./apps/api
 
 run-crawler: ## Run job listing crawler worker
 	cd backend && go run ./apps/crawler
@@ -104,88 +84,22 @@ lint-go: ## Run golangci-lint on backend (matches CI config)
 fmt: ## Format all Go files with gofmt
 	cd backend && go fmt ./...
 
-lint-go-fast: ## Lint only files changed vs main branch
-	@command -v golangci-lint >/dev/null 2>&1 || { \
-		echo "golangci-lint not found — install via: brew install golangci-lint"; \
-		exit 1; \
-	}
-	cd backend && golangci-lint run --config ../.github/.golangci.yml --new-from-rev=main --timeout 2m
-
 tsc: ## Type-check console without emitting
 	cd ui/console && npx tsc --noEmit
 
-test: ## Run all Go tests (unit + integration, hits real APIs)
+test: ## Run all Go tests
 	cd backend && go test ./...
 
 test-short: ## Run unit tests only — no real HTTP calls, fast
 	cd backend && go test -short ./...
 
-test-unit: test-scheduler test-workers test-api ## Run all unit tests (scheduler + workers + api) — no real connections
-
-test-scheduler: ## Test company_scan_scheduler
-	cd backend && go test -v ./apps/scheduler/...
-
-test-workers: ## Test all pipeline workers (crawler, filter, enricher)
-	cd backend && go test -v \
-		./apps/crawler/... \
-		./apps/crawler/... \
-		./apps/filter/... \
-		./apps/analyzer/...
-
-test-api: ## Test API handlers and services
-	cd backend && go test -v ./apps/api/... ./service/...
-
-test-llm: ## Test LLM package
-	cd backend && go test -v ./service/llm/...
-
 test-adapters: ## Run all adapter integration tests (Greenhouse + Lever + Ashby hit real APIs)
 	cd backend && go test -v -run "Integration" ./apps/crawler/ats/greenhouse/... ./apps/crawler/ats/lever/... ./apps/crawler/ats/ashby/...
-
-test-adapter-greenhouse: ## Run Greenhouse integration tests only
-	cd backend && go test -v -run "Integration" ./apps/crawler/ats/greenhouse/...
-
-test-adapter-lever: ## Run Lever integration tests only
-	cd backend && go test -v -run "Integration" ./apps/crawler/ats/lever/...
-
-test-adapter-ashby: ## Run Ashby integration tests only
-	cd backend && go test -v -run "Integration" ./apps/crawler/ats/ashby/...
-
-vet: ## Run go vet
-	cd backend && go vet ./...
 
 # ── Docker (infra only — for local dev) ──────────────────────────────────────
 
 docker-up: ## Start infra only in Docker (NATS JetStream) — for use with make dev
 	docker compose --profile infra up -d
-
-docker-logs: ## Tail docker-compose logs
-	docker-compose logs -f
-
-# ── Full stack ────────────────────────────────────────────────────────────────
-
-up: ## Start the full stack using existing images (fast — no rebuild)
-	docker-compose --profile workers up -d
-
-rebuild: ## Rebuild all images then start full local stack
-	DOCKER_BUILDKIT=1 docker compose --profile infra --profile app --profile obs up -d --build
-
-rebuild-backend: ## Rebuild backend image only (api/scheduler/filter/enricher)
-	DOCKER_BUILDKIT=1 docker-compose up -d --build api scheduler filter enricher migrate
-
-rebuild-crawler: ## Rebuild crawler image only
-	DOCKER_BUILDKIT=1 docker-compose up -d --build crawler
-
-rebuild-console: ## Rebuild console image only (build happens inside Docker)
-	DOCKER_BUILDKIT=1 docker-compose up -d --build console
-
-down: ## Stop all containers (keeps volumes)
-	docker compose --profile infra --profile app --profile workers --profile obs --profile proxy down --remove-orphans
-
-logs: ## Tail logs for all services (Ctrl-C to stop)
-	docker-compose logs -f
-
-build-docker: ## Build all images without starting (GIT_SHA=$(GIT_SHA) baked into labels)
-	DOCKER_BUILDKIT=1 docker-compose build
 
 # ── Kubernetes (local k3d) ────────────────────────────────────────────────────
 
