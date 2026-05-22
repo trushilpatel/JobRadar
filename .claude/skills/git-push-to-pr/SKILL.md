@@ -143,3 +143,9 @@ git push -u origin feat/my-feature
 - You're considering `--no-verify`
 - You're about to `git push --force` (not `--force-with-lease`)
 - The rebase produced more conflicts than expected — `git rebase --abort` and verify you fetched first
+
+---
+
+## Self-Improvement
+
+After this skill completes, invoke `skill-self-improvement` to check whether any finding warrants updating this file or `CLAUDE.md`.

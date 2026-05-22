@@ -214,3 +214,9 @@ If scope was full-product, note which areas were **not** covered due to agent co
 | Synthesizer only summarizing without deduplication | Require explicit dedup: "do not repeat findings already in P0"                    |
 | Presenting all 10 agent raw reports to the user    | Always synthesize — raw reports are internal; the user gets the consolidated view |
 | Scope creep — agent reading the entire codebase    | Give each agent a directory/file glob; bound their search                         |
+
+---
+
+## Self-Improvement
+
+After this skill completes, invoke `skill-self-improvement` to check whether any finding warrants updating this file or `CLAUDE.md`.

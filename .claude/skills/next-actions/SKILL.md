@@ -399,3 +399,9 @@ Prompt to start now: `/feature-team {full invocation}` or `/quality-team {full i
 | Git Analyst applying priority scoring to branches          | Git findings are informational only — no P0/P1/P2 for branch age                                                   |
 | Prompt field left as generic                               | Every Prompt must be specific enough to invoke immediately — name the exact feature, scope, and files              |
 | Reporting raw grep output as findings                      | Every finding must be a human-readable task with Fix and Prompt — not a raw grep line                              |
+
+---
+
+## Self-Improvement
+
+After this skill completes, invoke `skill-self-improvement` to check whether any finding warrants updating this file or `CLAUDE.md`.
