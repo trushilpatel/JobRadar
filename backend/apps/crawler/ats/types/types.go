@@ -11,14 +11,16 @@ import (
 // RawJob is the Kafka message published to job_listings.raw.
 // Set by the scan engine after FetchJobs returns — never by the adapter itself.
 type RawJob struct {
-	ID          string          `json:"id"`         // e.g. "greenhouse-12345"
-	CompanyID   string          `json:"company_id"` // UUID from companies table
-	Adapter     string          `json:"adapter"`    // "greenhouse", "lever", "ashby", etc.
-	Title       string          `json:"title"`
-	Location    string          `json:"location"`
-	URL         string          `json:"url"`
-	EmployType  string          `json:"employ_type"` // full_time, contract, part_time, internship
-	FullContent *FullJobContent `json:"full_content,omitempty"`
+	ID            string          `json:"id"`         // e.g. "greenhouse-12345"
+	CompanyID     string          `json:"company_id"` // UUID from companies table
+	Adapter       string          `json:"adapter"`    // "greenhouse", "lever", "ashby", etc.
+	Title         string          `json:"title"`
+	Location      string          `json:"location"`
+	URL           string          `json:"url"`
+	EmployType    string          `json:"employ_type"` // full_time, contract, part_time, internship
+	FullContent   *FullJobContent `json:"full_content,omitempty"`
+	LocationKnown bool            `json:"location_known,omitempty"` // true when AllLocations is reliable
+	AllLocations  []string        `json:"all_locations,omitempty"`  // every distinct location from the adapter
 }
 
 // FetchJobsItem is one job from a company's listing page.
@@ -30,6 +32,8 @@ type FetchJobsItem struct {
 	Location       string
 	EmploymentType string
 	FullContent    *FullJobContent // nil for thin adapters
+	LocationKnown  bool            // true when AllLocations is reliable
+	AllLocations   []string        // every distinct location from the adapter
 }
 
 // FetchJobsResponse is returned by Adapter.FetchJobs.
@@ -64,6 +68,7 @@ type FetchJobContentResponse struct {
 	WorkplaceType  string // Lever (workplaceType), Ashby (workplaceType)
 	Requirements   string // plain text — Lever (lists[])
 	PublishedDate  string // Lever (createdAt ms), Ashby (publishedDate), Greenhouse (updated_at)
+	CountryCode    string // ISO alpha-2 country code; populated by Workday and Meta FetchJobContent converters
 }
 
 // Adapter fetches the current job listings for a company.

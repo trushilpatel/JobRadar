@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
@@ -11,8 +12,39 @@ import (
 )
 
 // makeJobAt is like makeJob but lets the test set Location.
+// LocationKnown is false (zero value) — use makeJobKnownAt when the location
+// should be treated as structured/trusted for non-USA gating.
 func makeJobAt(id, title, loc string) ats.RawJob {
 	return ats.RawJob{ID: id, Title: title, Location: loc}
+}
+
+// makeJobKnownAt creates a RawJob with LocationKnown=true and AllLocations set
+// to the single supplied location string. Use this whenever the test intends
+// the non-USA gate to evaluate the location.
+func makeJobKnownAt(id, title, loc string) ats.RawJob {
+	return ats.RawJob{
+		ID:            id,
+		Title:         title,
+		Location:      loc,
+		LocationKnown: true,
+		AllLocations:  []string{loc},
+	}
+}
+
+// makeJobKnownMultiAt creates a RawJob with LocationKnown=true and multiple
+// AllLocations. Use to test the "any USA wins" rule across multi-location jobs.
+func makeJobKnownMultiAt(id, title string, locs ...string) ats.RawJob {
+	loc := locs[0]
+	if len(locs) > 1 {
+		loc = strings.Join(locs, "; ")
+	}
+	return ats.RawJob{
+		ID:            id,
+		Title:         title,
+		Location:      loc,
+		LocationKnown: true,
+		AllLocations:  locs,
+	}
 }
 
 func chunkOf(jobs ...ats.RawJob) []chunkItem {
@@ -37,9 +69,9 @@ func TestProcessChunk_NonUSALocation_RejectedBeforeLLM(t *testing.T) {
 
 	w := makeWorker(scorer, ledger, pub)
 	w.processChunk(context.Background(), chunkOf(
-		makeJobAt("us-1", "Software Engineer", "San Francisco, CA"),
-		makeJobAt("uk-1", "Software Engineer", "London, United Kingdom"),
-		makeJobAt("in-1", "Software Engineer", "Bangalore, India"),
+		makeJobKnownAt("us-1", "Software Engineer", "San Francisco, CA"),
+		makeJobKnownAt("uk-1", "Software Engineer", "London, United Kingdom"),
+		makeJobKnownAt("in-1", "Software Engineer", "Bangalore, India"),
 	), "fetch-1", 0, 1)
 
 	// Only one job (us-1) should have been scored.
@@ -91,9 +123,9 @@ func TestProcessChunk_AllNonUSA_SkipsLLMEntirely(t *testing.T) {
 
 	w := makeWorker(scorer, ledger, pub)
 	w.processChunk(context.Background(), chunkOf(
-		makeJobAt("uk-1", "SWE", "London"),
-		makeJobAt("ca-1", "SWE", "Toronto, Canada"),
-		makeJobAt("de-1", "SWE", "Berlin, Germany"),
+		makeJobKnownAt("uk-1", "SWE", "London"),
+		makeJobKnownAt("ca-1", "SWE", "Toronto, Canada"),
+		makeJobKnownAt("de-1", "SWE", "Berlin, Germany"),
 	), "fetch-1", 0, 1)
 
 	if scorer.calls != 0 {
@@ -150,7 +182,7 @@ func TestProcessChunk_MultiLocationWithUSA_NotRejected(t *testing.T) {
 
 	w := makeWorker(scorer, ledger, pub)
 	w.processChunk(context.Background(), chunkOf(
-		makeJobAt("m-1", "SWE", "London, UK / New York, NY"),
+		makeJobKnownAt("m-1", "SWE", "London, UK / New York, NY"),
 	), "fetch-1", 0, 1)
 
 	for _, c := range ledger.calls {
@@ -176,7 +208,7 @@ func TestProcessChunk_NonUSAWithoutTitle_RejectedNotPassedThrough(t *testing.T) 
 
 	w := makeWorker(scorer, ledger, pub)
 	w.processChunk(context.Background(), chunkOf(
-		makeJobAt("uk-x", "", "London, UK"),
+		makeJobKnownAt("uk-x", "", "London, UK"),
 	), "fetch-1", 0, 1)
 
 	// Filtered subject must be empty — the job was rejected, not passed through.
@@ -213,5 +245,86 @@ func TestProcessChunk_NoTitleUnknownLocation_PassesThrough(t *testing.T) {
 	}
 	if scorer.calls != 0 {
 		t.Errorf("expected scorer not called (no scorable jobs), got %d", scorer.calls)
+	}
+}
+
+// ── AC-5: LocationKnown gate ─────────────────────────────────────────────────
+
+// Jobs with LocationKnown=false bypass the non-USA gate entirely and reach
+// the scorer even when Location contains a clearly non-USA string. This is the
+// Workday/Meta thin-listing path where location is resolved at analyzer time.
+func TestProcessChunk_LocationKnownFalse_BypassesNonUSAGate(t *testing.T) {
+	scorer := &fakeScorer{relevantIDs: []string{"wd-1"}}
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{}
+
+	w := makeWorker(scorer, ledger, pub)
+	// LocationKnown=false (zero value via makeJobAt) + an explicitly non-USA string.
+	w.processChunk(context.Background(), chunkOf(
+		makeJobAt("wd-1", "Software Engineer", "London, United Kingdom"),
+	), "fetch-1", 0, 1)
+
+	// Must NOT be rejected as non-USA.
+	for _, c := range ledger.calls {
+		if c.reason == jobcommon.SeenReasonNonUSA {
+			t.Errorf("LocationKnown=false job must not be rejected as non-USA; ledger=%+v", ledger.calls)
+		}
+	}
+	// Must reach the scorer.
+	if scorer.calls != 1 {
+		t.Errorf("expected scorer called once for LocationKnown=false job, got %d", scorer.calls)
+	}
+	// Must be published to filtered subject.
+	if len(pub.recordsOnSubject("jobs.filtered.")) != 1 {
+		t.Errorf("expected 1 filtered publish for LocationKnown=false job, got %d",
+			len(pub.recordsOnSubject("jobs.filtered.")))
+	}
+}
+
+// AllLocations slice is used for non-USA evaluation when LocationKnown=true.
+// When AllLocations contains mixed USA+non-USA entries, "any USA wins" → keep.
+func TestProcessChunk_AllLocations_AnyUSAWins(t *testing.T) {
+	scorer := &fakeScorer{relevantIDs: []string{"mixed-1"}}
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{}
+
+	w := makeWorker(scorer, ledger, pub)
+	w.processChunk(context.Background(), chunkOf(
+		makeJobKnownMultiAt("mixed-1", "SWE", "London, UK", "New York, NY"),
+	), "fetch-1", 0, 1)
+
+	for _, c := range ledger.calls {
+		if c.reason == jobcommon.SeenReasonNonUSA {
+			t.Errorf("mixed USA+non-USA AllLocations must NOT be rejected; ledger=%+v", ledger.calls)
+		}
+	}
+	if scorer.calls != 1 {
+		t.Errorf("expected scorer called; got %d", scorer.calls)
+	}
+}
+
+// When AllLocations is set with multiple non-USA entries and LocationKnown=true,
+// AnyNonUSA returns true → rejected.
+func TestProcessChunk_AllLocations_AllNonUSA_Rejected(t *testing.T) {
+	scorer := &fakeScorer{}
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{}
+
+	w := makeWorker(scorer, ledger, pub)
+	w.processChunk(context.Background(), chunkOf(
+		makeJobKnownMultiAt("multi-uk-1", "SWE", "London, UK", "Berlin, Germany"),
+	), "fetch-1", 0, 1)
+
+	var sawNonUSA bool
+	for _, c := range ledger.calls {
+		if c.reason == jobcommon.SeenReasonNonUSA {
+			sawNonUSA = true
+		}
+	}
+	if !sawNonUSA {
+		t.Errorf("expected non_usa_location for all-non-USA AllLocations job; ledger=%+v", ledger.calls)
+	}
+	if scorer.calls != 0 {
+		t.Errorf("expected scorer NOT called; got %d", scorer.calls)
 	}
 }

@@ -304,6 +304,7 @@ func (w *Workday) FetchJobContent(ctx context.Context, job types.RawJob) (types.
 		Description:    types.StripHTML(info.JobDescription),
 		EmploymentType: mapEmploymentType(info.TimeType),
 		PublishedDate:  publishedDate,
+		CountryCode:    extractWorkdayCountryCode(info.Country),
 	}, nil
 }
 
@@ -445,6 +446,25 @@ func buildID(requisitionID, externalPath string) string {
 		id = "unknown"
 	}
 	return fmt.Sprintf("%s-%s", companycommon.AdapterWorkday, id)
+}
+
+// extractWorkdayCountryCode reads the ISO alpha-2 country code from Workday's
+// `country` detail field. The field is a JSON object shaped like:
+//
+//	{"descriptor": "United States of America", "id": "US"}
+//
+// We extract the "id" key. An unset, null, or differently-shaped field returns "".
+func extractWorkdayCountryCode(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var obj struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return ""
+	}
+	return obj.ID
 }
 
 // mapEmploymentType normalises Workday's `timeType` strings ("Full time",

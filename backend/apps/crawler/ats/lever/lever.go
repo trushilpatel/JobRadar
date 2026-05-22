@@ -59,6 +59,8 @@ func (r fetchJobsResponse) toFetchJobsResponse() types.FetchJobsResponse {
 			Location:       j.Categories.Location,
 			URL:            j.HostedURL,
 			EmploymentType: normalizeLeverCommitment(j.Categories.Commitment),
+			LocationKnown:  true,
+			AllLocations:   j.Categories.AllLocations,
 		})
 	}
 	return types.FetchJobsResponse{Jobs: items}

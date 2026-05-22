@@ -16,6 +16,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/tracing"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
+	"github.com/trushilpatel/jobradar/service/job/location"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
@@ -235,11 +236,36 @@ func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, c
 		return 0
 	}
 
+	// Non-USA gate: when LocationKnown=true and all locations are outside the USA,
+	// drop the job before publishing. LocationKnown=false (Workday, Meta thin
+	// listing) bypasses the gate — location is resolved later at analyzer time.
+	// Per-job isolation: a ledger failure for one dropped job does not stop others.
+	var filteredJobs []ats.FetchJobsItem
+	for _, job := range newJobs {
+		if job.LocationKnown && location.AnyNonUSA(job.AllLocations) {
+			if err := e.ledger.MarkSeenBatch(ctx, []string{job.ID}, companyID, jobcommon.SeenReasonNonUSA); err != nil {
+				log.Error("failed to mark non-USA job as seen (skipping publish anyway)", err,
+					logger.Str(logger.FieldJobID, job.ID),
+				)
+			}
+			metrics.CrawlerJobsNonUSADropped.WithLabelValues(adapterType).Inc()
+			log.Info("dropped non-USA job before publish",
+				logger.Str(logger.FieldJobID, job.ID),
+				logger.Str("location", job.Location),
+			)
+			continue
+		}
+		filteredJobs = append(filteredJobs, job)
+	}
+	if len(filteredJobs) == 0 {
+		return 0
+	}
+
 	// Publish first, collect IDs that made it to NATS.
 	// MarkSeenBatch runs only after — if the process crashes between publish and mark,
 	// the next scan re-publishes those jobs. NATS dedup (Duplicates window) handles them.
 	var publishedIDs []string
-	for _, job := range newJobs {
+	for _, job := range filteredJobs {
 		if err := e.publish(ctx, toRawJob(job, companyID, adapterType)); err != nil {
 			log.Error("publish failed", err, logger.Str(logger.FieldJobID, job.ID))
 			continue
@@ -262,14 +288,16 @@ func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, c
 // CompanyID and AdapterType come from the company record, not the listing.
 func toRawJob(item ats.FetchJobsItem, companyID, adapterType string) ats.RawJob {
 	return ats.RawJob{
-		ID:          item.ID,
-		CompanyID:   companyID,
-		Adapter:     adapterType,
-		Title:       item.Title,
-		Location:    item.Location,
-		URL:         item.URL,
-		EmployType:  item.EmploymentType,
-		FullContent: item.FullContent,
+		ID:            item.ID,
+		CompanyID:     companyID,
+		Adapter:       adapterType,
+		Title:         item.Title,
+		Location:      item.Location,
+		URL:           item.URL,
+		EmployType:    item.EmploymentType,
+		FullContent:   item.FullContent,
+		LocationKnown: item.LocationKnown,
+		AllLocations:  item.AllLocations,
 	}
 }
 

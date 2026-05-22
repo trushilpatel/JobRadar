@@ -261,11 +261,13 @@ func jobToItem(j uberJob) types.FetchJobsItem {
 		description += fmt.Sprintf("\n\nUber Level: %s", j.Level)
 	}
 
+	loc := formatLocation(j.AllLocations, j.Location)
+
 	return types.FetchJobsItem{
 		ID:             fmt.Sprintf("%s-%d", companycommon.AdapterUber, j.ID),
 		Title:          j.Title,
 		URL:            fmt.Sprintf(jobURLTemplate, defaultBaseURL, j.ID),
-		Location:       formatLocation(j.AllLocations, j.Location),
+		Location:       loc,
 		EmploymentType: mapTimeType(j.TimeType),
 		FullContent: &types.FullJobContent{
 			Description:   description,
@@ -273,6 +275,8 @@ func jobToItem(j uberJob) types.FetchJobsItem {
 			WorkplaceType: "", // not available in Uber API
 			PublishedDate: j.CreationDate,
 		},
+		LocationKnown: true,
+		AllLocations:  []string{loc},
 	}
 }
 

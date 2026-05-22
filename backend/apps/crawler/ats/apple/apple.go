@@ -264,11 +264,12 @@ func scanToClosingQuote(s string, quote byte) (string, error) {
 
 // jobToItem converts an appleJob to a FetchJobsItem with FullContent populated.
 func jobToItem(job appleJob) types.FetchJobsItem {
+	loc := formatLocation(job.Locations)
 	return types.FetchJobsItem{
 		ID:             fmt.Sprintf("%s-%s", companycommon.AdapterApple, job.ID),
 		Title:          job.PostingTitle,
 		URL:            fmt.Sprintf(publicJobURLTemplate, defaultBaseURL, job.ID, job.TransformedPostingTitle),
-		Location:       formatLocation(job.Locations),
+		Location:       loc,
 		EmploymentType: mapJobType(job.Type),
 		FullContent: &types.FullJobContent{
 			Description:   types.StripHTML(job.JobSummary),
@@ -277,6 +278,8 @@ func jobToItem(job appleJob) types.FetchJobsItem {
 			WorkplaceType: "", // not available in listing API
 			Compensation:  "", // not available in listing API
 		},
+		LocationKnown: true,
+		AllLocations:  []string{loc},
 	}
 }
 

@@ -274,11 +274,12 @@ func matchBalanced(s string, start int) int {
 // ── Converters ──────────────────────────────────────────────────────────────
 
 func jobToItem(r rawJobPosting, slug string, chunks map[string]string) types.FetchJobsItem {
+	loc := formatLocations(r.Job.JobLocations)
 	return types.FetchJobsItem{
 		ID:             fmt.Sprintf("%s-%s", companycommon.AdapterDeel, r.ID),
 		Title:          r.Title,
 		URL:            fmt.Sprintf("%s/%s/job-details/%s", defaultBaseURL, slug, r.ID),
-		Location:       formatLocations(r.Job.JobLocations),
+		Location:       loc,
 		EmploymentType: mapEmploymentType(firstEmploymentTypeName(r.Job.JobEmploymentTypes)),
 		FullContent: &types.FullJobContent{
 			Description:   resolveDescription(r.RichtextDescription, chunks),
@@ -287,6 +288,8 @@ func jobToItem(r rawJobPosting, slug string, chunks map[string]string) types.Fet
 			Compensation:  formatCompensation(r.Job.CurrentCompensation),
 			PublishedDate: firstPublishedAt(r.JobPostingPubs),
 		},
+		LocationKnown: true,
+		AllLocations:  []string{loc},
 	}
 }
 

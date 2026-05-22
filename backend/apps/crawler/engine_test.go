@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
-
-	"fmt"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
@@ -16,6 +15,7 @@ import (
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	scandto "github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
@@ -47,6 +47,11 @@ type fakeLedger struct {
 	hasSeenBatchCalls   int
 	markSeenLastReason  string
 	markSeenLastCompany string
+	// markSeenReasons records the reason for each MarkSeenBatch call in order.
+	markSeenReasons []string
+	// markSeenErrForReason allows injecting a per-reason error: if set and the
+	// call's reason matches a key, that error is returned for that call.
+	markSeenErrForReason map[string]error
 }
 
 func (f *fakeLedger) HasSeenBatch(_ context.Context, ids []string) (map[string]bool, error) {
@@ -70,6 +75,12 @@ func (f *fakeLedger) MarkSeenBatch(_ context.Context, ids []string, companyID, r
 	f.markSeenCalls = append(f.markSeenCalls, append([]string(nil), ids...))
 	f.markSeenLastReason = reason
 	f.markSeenLastCompany = companyID
+	f.markSeenReasons = append(f.markSeenReasons, reason)
+	if f.markSeenErrForReason != nil {
+		if err, ok := f.markSeenErrForReason[reason]; ok {
+			return err
+		}
+	}
 	return f.markSeenErr
 }
 func (f *fakeLedger) GetActiveJobIDsByCompany(_ context.Context, _ string) ([]string, error) {
@@ -306,6 +317,108 @@ func TestToRawJob_NilFullContent(t *testing.T) {
 	raw := toRawJob(item, "co", "lever")
 	if raw.FullContent != nil {
 		t.Errorf("nil FullContent must stay nil; got %+v", raw.FullContent)
+	}
+}
+
+// TestToRawJob_PropagatesLocationFields verifies LocationKnown and AllLocations
+// are propagated from FetchJobsItem to RawJob by toRawJob.
+func TestToRawJob_PropagatesLocationFields(t *testing.T) {
+	item := ats.FetchJobsItem{
+		ID:            "lever-2",
+		LocationKnown: true,
+		AllLocations:  []string{"San Francisco, CA", "New York, NY"},
+	}
+	raw := toRawJob(item, "co", "lever")
+	if !raw.LocationKnown {
+		t.Errorf("LocationKnown must be propagated; got false")
+	}
+	if len(raw.AllLocations) != 2 || raw.AllLocations[0] != "San Francisco, CA" {
+		t.Errorf("AllLocations must be propagated; got %v", raw.AllLocations)
+	}
+}
+
+// TestPublishNewJobs_NonUSADroppedBeforePublish verifies that jobs with
+// LocationKnown=true and a non-USA AllLocations are dropped via MarkSeenBatch
+// (reason=non_usa_location) before publishing to NATS. The publisher must not
+// see those jobs.
+func TestPublishNewJobs_NonUSADroppedBeforePublish(t *testing.T) {
+	jobs := []ats.FetchJobsItem{
+		{ID: "g-1", LocationKnown: true, AllLocations: []string{"San Francisco, CA"}},
+		{ID: "g-2", LocationKnown: true, AllLocations: []string{"London, UK"}},
+		{ID: "g-3", LocationKnown: false, AllLocations: nil}, // unknown — keep
+	}
+	ledger := &fakeLedger{seenMap: map[string]bool{}}
+	pub := &fakePublisher{}
+	e := newTestEngine(&fakeSettingsReader{}, ledger, &fakeRecorder{}, pub)
+
+	n := e.publishNewJobs(context.Background(), jobs, "co", "greenhouse", logger.NewNoop())
+
+	// g-1 (USA) + g-3 (unknown) should publish; g-2 (non-USA) should be dropped.
+	if n != 2 {
+		t.Errorf("expected 2 published (g-1, g-3), got %d", n)
+	}
+	if len(pub.messages) != 2 {
+		t.Errorf("expected 2 NATS publishes, got %d", len(pub.messages))
+	}
+	// Verify the non-USA job was marked seen with the non_usa_location reason.
+	var foundNonUSA bool
+	for _, call := range ledger.markSeenCalls {
+		for _, id := range call {
+			if id == "g-2" {
+				foundNonUSA = true
+			}
+		}
+	}
+	if !foundNonUSA {
+		t.Errorf("expected g-2 to be marked seen via MarkSeenBatch; calls=%v", ledger.markSeenCalls)
+	}
+	// Verify at least one MarkSeenBatch call used the non_usa_location reason.
+	var foundReason bool
+	for _, r := range ledger.markSeenReasons {
+		if r == jobcommon.SeenReasonNonUSA {
+			foundReason = true
+			break
+		}
+	}
+	if !foundReason {
+		t.Errorf("expected a MarkSeenBatch call with reason %q; reasons seen=%v", jobcommon.SeenReasonNonUSA, ledger.markSeenReasons)
+	}
+}
+
+// TestPublishNewJobs_NonUSALedgerFailureIsolated verifies that a MarkSeenBatch
+// failure for the non-USA gate does not stop other jobs from being published.
+func TestPublishNewJobs_NonUSALedgerFailureIsolated(t *testing.T) {
+	jobs := []ats.FetchJobsItem{
+		{ID: "g-1", LocationKnown: true, AllLocations: []string{"London, UK"}},
+		{ID: "g-2", LocationKnown: true, AllLocations: []string{"San Francisco, CA"}},
+	}
+	ledger := &fakeLedger{
+		seenMap:              map[string]bool{},
+		markSeenErrForReason: map[string]error{jobcommon.SeenReasonNonUSA: errors.New("ledger flaky")},
+	}
+	pub := &fakePublisher{}
+	e := newTestEngine(&fakeSettingsReader{}, ledger, &fakeRecorder{}, pub)
+
+	n := e.publishNewJobs(context.Background(), jobs, "co", "greenhouse", logger.NewNoop())
+	// g-2 (USA) must still publish even though the non-USA mark for g-1 failed.
+	if n != 1 {
+		t.Errorf("expected 1 published (g-2), got %d", n)
+	}
+}
+
+// TestPublishNewJobs_LocationKnownFalsePassesThrough verifies that jobs with
+// LocationKnown=false bypass the non-USA gate entirely and proceed to publish.
+func TestPublishNewJobs_LocationKnownFalsePassesThrough(t *testing.T) {
+	jobs := []ats.FetchJobsItem{
+		{ID: "meta-1", LocationKnown: false, AllLocations: nil},
+	}
+	ledger := &fakeLedger{seenMap: map[string]bool{}}
+	pub := &fakePublisher{}
+	e := newTestEngine(&fakeSettingsReader{}, ledger, &fakeRecorder{}, pub)
+
+	n := e.publishNewJobs(context.Background(), jobs, "co", "meta", logger.NewNoop())
+	if n != 1 {
+		t.Errorf("expected 1 published for LocationKnown=false job, got %d", n)
 	}
 }
 

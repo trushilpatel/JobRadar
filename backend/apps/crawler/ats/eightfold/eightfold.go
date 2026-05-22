@@ -436,6 +436,8 @@ func positionToItem(p position, cfg adapterConfig) types.FetchJobsItem {
 		Location:       loc,
 		EmploymentType: mapEmploymentType(p.Type),
 		FullContent:    nil, // thin adapter — detail fetched in phase two
+		LocationKnown:  true,
+		AllLocations:   []string{loc},
 	}
 }
 

@@ -282,7 +282,10 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 	var scorable, passThrough []chunkItem
 	var nonUSAItems []chunkItem
 	for _, item := range chunk {
-		if location.IsNonUSA(item.job.job.Location) {
+		// Non-USA gate: only applied when LocationKnown=true (adapter-supplied
+		// structured location). When LocationKnown=false (Workday/Meta thin listing),
+		// location is unknown at this stage and must not be rejected here.
+		if item.job.job.LocationKnown && location.AnyNonUSA(mergedLocations(item.job.job)) {
 			nonUSAItems = append(nonUSAItems, item)
 			continue
 		}
@@ -575,6 +578,20 @@ func formatSlotStatuses(ss []domainerr.LLMSlotStatus) string {
 		parts = append(parts, fmt.Sprintf("%s=%s(fail=%d,cd=%s)", s.SlotID, s.LastDenial, s.FailureCount, cd))
 	}
 	return strings.Join(parts, "; ")
+}
+
+// mergedLocations returns the slice to pass to location.AnyNonUSA.
+// If AllLocations is populated it is used directly; otherwise the single
+// Location string is wrapped in a one-element slice for backward compatibility
+// with thin-listing adapters that pre-date the AllLocations field.
+func mergedLocations(job ats.RawJob) []string {
+	if len(job.AllLocations) > 0 {
+		return job.AllLocations
+	}
+	if job.Location != "" {
+		return []string{job.Location}
+	}
+	return nil
 }
 
 // splitBySize divides s into chunks of at most size elements each.
