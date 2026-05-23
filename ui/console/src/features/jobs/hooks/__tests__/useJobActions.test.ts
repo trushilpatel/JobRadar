@@ -99,29 +99,29 @@ describe('useJobActions', () => {
     vi.clearAllMocks()
   })
 
-  describe('setStatus', () => {
-    it('calls setJobStatus with id and status when status is saved', async () => {
+  describe('setStatus (workflow only — saved is orthogonal)', () => {
+    it('calls setJobStatus with applied status', async () => {
       vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
       await act(async () => {
-        await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.SAVED })
+        await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.APPLIED })
       })
-      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('j1', JOB_STATUS.SAVED)
+      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('j1', JOB_STATUS.APPLIED)
       expect(jobsApi.setJobSaved).not.toHaveBeenCalled()
     })
 
-    it('calls setJobSaved(false) when status is "new"', async () => {
-      vi.mocked(jobsApi.setJobSaved).mockResolvedValue(undefined)
+    it('calls setJobStatus with "new" to clear workflow status', async () => {
+      vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
       await act(async () => {
         await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.NEW })
       })
-      expect(jobsApi.setJobSaved).toHaveBeenCalledWith('j1', false)
-      expect(jobsApi.setJobStatus).not.toHaveBeenCalled()
+      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('j1', JOB_STATUS.NEW)
+      expect(jobsApi.setJobSaved).not.toHaveBeenCalled()
     })
 
     it('shows "Moved back to New" undo toast when status is new', async () => {
-      vi.mocked(jobsApi.setJobSaved).mockResolvedValue(undefined)
+      vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
       await act(async () => {
         await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.NEW })
@@ -132,15 +132,6 @@ describe('useJobActions', () => {
           action: expect.objectContaining({ label: 'Undo' }),
         })
       )
-    })
-
-    it('shows "Moved to saved" undo toast when status is saved', async () => {
-      vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
-      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
-      await act(async () => {
-        await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.SAVED })
-      })
-      expect(toast).toHaveBeenCalledWith('Moved to saved', expect.any(Object))
     })
 
     it('shows "Moved to applied" undo toast when status is applied', async () => {
@@ -157,12 +148,51 @@ describe('useJobActions', () => {
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
       await act(async () => {
         try {
-          await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.SAVED })
+          await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.APPLIED })
         } catch {
           // expected
         }
       })
       await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to update status'))
+    })
+  })
+
+  describe('setSaved (orthogonal bookmark flag)', () => {
+    it('calls setJobSaved(true) — never touches workflow status', async () => {
+      vi.mocked(jobsApi.setJobSaved).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
+      await act(async () => {
+        await result.current.setSaved.mutateAsync({ id: 'j1', saved: true })
+      })
+      expect(jobsApi.setJobSaved).toHaveBeenCalledWith('j1', true)
+      expect(jobsApi.setJobStatus).not.toHaveBeenCalled()
+    })
+
+    it('calls setJobSaved(false) when un-saving', async () => {
+      vi.mocked(jobsApi.setJobSaved).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
+      await act(async () => {
+        await result.current.setSaved.mutateAsync({ id: 'j1', saved: false })
+      })
+      expect(jobsApi.setJobSaved).toHaveBeenCalledWith('j1', false)
+    })
+
+    it('shows "Saved" undo toast when saving', async () => {
+      vi.mocked(jobsApi.setJobSaved).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
+      await act(async () => {
+        await result.current.setSaved.mutateAsync({ id: 'j1', saved: true })
+      })
+      expect(toast).toHaveBeenCalledWith('Saved', expect.any(Object))
+    })
+
+    it('shows "Removed from saved" toast when un-saving', async () => {
+      vi.mocked(jobsApi.setJobSaved).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
+      await act(async () => {
+        await result.current.setSaved.mutateAsync({ id: 'j1', saved: false })
+      })
+      expect(toast).toHaveBeenCalledWith('Removed from saved', expect.any(Object))
     })
 
     it('shows error toast when setJobSaved fails', async () => {
@@ -170,12 +200,12 @@ describe('useJobActions', () => {
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
       await act(async () => {
         try {
-          await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.NEW })
+          await result.current.setSaved.mutateAsync({ id: 'j1', saved: true })
         } catch {
           // expected
         }
       })
-      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to update status'))
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to update saved state'))
     })
   })
 
@@ -267,20 +297,21 @@ describe('useJobActions', () => {
     })
   })
 
-  describe('bulkSave', () => {
-    it('calls setJobStatus once per id with saved', async () => {
-      vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
+  describe('bulkSave (orthogonal flag — never touches workflow status)', () => {
+    it('calls setJobSaved(true) once per id, not setJobStatus', async () => {
+      vi.mocked(jobsApi.setJobSaved).mockResolvedValue(undefined)
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
       await act(async () => {
         await result.current.bulkSave.mutateAsync(['j1', 'j2'])
       })
-      expect(jobsApi.setJobStatus).toHaveBeenCalledTimes(2)
-      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('j1', JOB_STATUS.SAVED)
-      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('j2', JOB_STATUS.SAVED)
+      expect(jobsApi.setJobSaved).toHaveBeenCalledTimes(2)
+      expect(jobsApi.setJobSaved).toHaveBeenCalledWith('j1', true)
+      expect(jobsApi.setJobSaved).toHaveBeenCalledWith('j2', true)
+      expect(jobsApi.setJobStatus).not.toHaveBeenCalled()
     })
 
     it('shows undo toast reporting all succeeded when no failures', async () => {
-      vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
+      vi.mocked(jobsApi.setJobSaved).mockResolvedValue(undefined)
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
       await act(async () => {
         await result.current.bulkSave.mutateAsync(['j1', 'j2'])
@@ -289,7 +320,7 @@ describe('useJobActions', () => {
     })
 
     it('reports partial failure in the toast', async () => {
-      vi.mocked(jobsApi.setJobStatus).mockImplementation((id) => {
+      vi.mocked(jobsApi.setJobSaved).mockImplementation((id) => {
         return id === 'j1' ? Promise.resolve() : Promise.reject(new Error('fail'))
       })
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
@@ -317,15 +348,16 @@ describe('useJobActions', () => {
       vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
       await act(async () => {
-        await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.SAVED })
+        await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.APPLIED })
       })
       vi.mocked(jobsApi.setJobStatus).mockClear()
       vi.mocked(jobsApi.setJobSaved).mockClear()
       await act(async () => {
         await result.current.undoLast()
       })
-      // Prior status was JOB_STATUS.NEW (default) — undo calls setJobSaved(id, false)
-      expect(jobsApi.setJobSaved).toHaveBeenCalledWith('j1', false)
+      // Prior status was NEW (empty cache default) — undo calls setJobStatus(id, 'new')
+      // which the backend interprets as "clear workflow status".
+      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('j1', JOB_STATUS.NEW)
     })
 
     it('shows a "Nothing to undo" warning when history is empty', async () => {
@@ -345,10 +377,10 @@ describe('useJobActions', () => {
       vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
 
-      // Seed the cache with the job already in `saved` state.
-      seedListCache([makeJob('j1', JOB_STATUS.SAVED)])
+      // Seed the cache with the job in `interviewing` state.
+      seedListCache([makeJob('j1', JOB_STATUS.INTERVIEWING)])
 
-      // Promote saved → applied.
+      // Promote interviewing → applied.
       await act(async () => {
         await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.APPLIED })
       })
@@ -360,8 +392,8 @@ describe('useJobActions', () => {
         await result.current.undoLast()
       })
 
-      // MUST revert to 'saved', not to NEW.
-      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('j1', JOB_STATUS.SAVED)
+      // MUST revert to the prior status (interviewing), not to NEW.
+      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('j1', JOB_STATUS.INTERVIEWING)
       expect(jobsApi.setJobSaved).not.toHaveBeenCalled()
     })
   })
@@ -373,30 +405,30 @@ describe('useJobActions', () => {
       // Push 25 entries.
       for (let i = 0; i < 25; i++) {
         await act(async () => {
-          await result.current.setStatus.mutateAsync({ id: `j${i}`, status: JOB_STATUS.SAVED })
+          await result.current.setStatus.mutateAsync({ id: `j${i}`, status: JOB_STATUS.APPLIED })
         })
       }
       // Pop them all by undoing 25 times; only 20 should result in calls.
-      vi.mocked(jobsApi.setJobSaved).mockClear()
+      vi.mocked(jobsApi.setJobStatus).mockClear()
       for (let i = 0; i < 25; i++) {
         await act(async () => {
           await result.current.undoLast()
         })
       }
       // The 20 most recent ids were j5..j24; 25 - 20 = 5 oldest were dropped.
-      expect(jobsApi.setJobSaved).toHaveBeenCalledTimes(20)
+      expect(jobsApi.setJobStatus).toHaveBeenCalledTimes(20)
       // The first undo after the cap pops the most recent (j24), the last pops
       // j5; everything older has been dropped.
-      const calls = vi.mocked(jobsApi.setJobSaved).mock.calls
+      const calls = vi.mocked(jobsApi.setJobStatus).mock.calls
       const calledIds = calls.map((c) => c[0])
       expect(calledIds[0]).toBe('j24')
       expect(calledIds[19]).toBe('j5')
     })
 
-    it('throttles bulk mutations to at most 5 concurrent', async () => {
+    it('throttles bulk save mutations to at most 5 concurrent', async () => {
       let inFlight = 0
       let peak = 0
-      vi.mocked(jobsApi.setJobStatus).mockImplementation(async () => {
+      vi.mocked(jobsApi.setJobSaved).mockImplementation(async () => {
         inFlight += 1
         if (inFlight > peak) peak = inFlight
         await new Promise((r) => setTimeout(r, 10))
@@ -408,7 +440,8 @@ describe('useJobActions', () => {
         await result.current.bulkSave.mutateAsync(ids)
       })
       expect(peak).toBeLessThanOrEqual(5)
-      expect(jobsApi.setJobStatus).toHaveBeenCalledTimes(20)
+      // bulkSave routes through setJobSaved (orthogonal) — not setJobStatus.
+      expect(jobsApi.setJobSaved).toHaveBeenCalledTimes(20)
     })
 
     it('invalidates dashboard + insights along with jobs on mutation', async () => {
@@ -416,7 +449,7 @@ describe('useJobActions', () => {
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
       const invalidateSpy = vi.spyOn(lastQc!, 'invalidateQueries')
       await act(async () => {
-        await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.SAVED })
+        await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.APPLIED })
       })
       const calledKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey)
       expect(calledKeys).toContainEqual(['jobs'])
@@ -436,7 +469,7 @@ describe('useJobActions', () => {
       // call resolveFn).
       const mutatePromise = result.current.setStatus.mutateAsync({
         id: 'j1',
-        status: JOB_STATUS.SAVED,
+        status: JOB_STATUS.APPLIED,
       })
 
       // Wait for the optimistic onMutate hook to finish patching the cache.
@@ -444,7 +477,7 @@ describe('useJobActions', () => {
         const cached = lastQc!.getQueryData<{ pages: jobsApi.JobsPage[] }>(
           jobQueryKeys.list({ status: JOB_STATUS.NEW }, 20)
         )
-        expect(cached?.pages[0].items[0].status).toBe(JOB_STATUS.SAVED)
+        expect(cached?.pages[0].items[0].status).toBe(JOB_STATUS.APPLIED)
       })
 
       // Resolve and tidy up so the test exits cleanly.
@@ -461,7 +494,7 @@ describe('useJobActions', () => {
 
       await act(async () => {
         try {
-          await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.SAVED })
+          await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.APPLIED })
         } catch {
           // expected
         }

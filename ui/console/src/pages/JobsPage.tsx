@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Keyboard } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { Job, JobStatus } from '@/types'
-import { JOB_STATUS } from '@/constants/jobStatus'
 import { ResizeHandle } from '@/components/ui/resize-handle'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { TabKey } from '@/constants/jobStatus'
@@ -22,7 +21,7 @@ import { useIsMobile } from '@/lib/use-media-query'
 import { useHiddenItems } from '@/lib/hidden-items'
 import { showDismissStripe } from '@/components/ui/dismiss-stripe'
 
-type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new'>
+type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new' | 'saved'>
 
 const SCROLL_RESTORATION_KEY = 'jobs-page-scroll-y'
 const HIDDEN_COMPANIES_CATEGORY = 'companies'
@@ -109,7 +108,7 @@ export function JobsPage() {
 
   // ── Action handlers ───────────────────────────────────────────────────────
   const handleStatusChange = useCallback(
-    (job: Job, status: Exclude<JobStatus, 'dismissed'>) => {
+    (job: Job, status: Exclude<JobStatus, 'dismissed' | 'saved'>) => {
       actions.setStatus.mutate({ id: job.id, status })
       if (jobs.openJobId === job.id) jobs.setOpenJobId(null)
     },
@@ -142,14 +141,15 @@ export function JobsPage() {
     [actions, jobs]
   )
 
-  // The bookmark column wires a one-click save toggle. When the job is
-  // already saved, clicking again reverts it to "new".
+  // The bookmark column wires a one-click save toggle. Saved is an
+  // ORTHOGONAL flag (saved_at on user_job_state), NOT a workflow status —
+  // toggling it never moves the job out of its current tab.
   const handleToggleSave = useCallback(
     (job: Job) => {
-      const nextStatus = job.status === JOB_STATUS.SAVED ? JOB_STATUS.NEW : JOB_STATUS.SAVED
-      handleStatusChange(job, nextStatus)
+      const currentlySaved = job.user_state?.saved_at != null
+      actions.setSaved.mutate({ id: job.id, saved: !currentlySaved })
     },
-    [handleStatusChange]
+    [actions.setSaved]
   )
 
   const handleOpenFocused = useCallback(() => {
@@ -192,6 +192,11 @@ export function JobsPage() {
     [focus.focusedJob, handleStatusChange]
   )
 
+  const handleKeyboardToggleSave = useCallback(() => {
+    if (!focus.focusedJob) return
+    handleToggleSave(focus.focusedJob)
+  }, [focus.focusedJob, handleToggleSave])
+
   const handleKeyboardDismiss = useCallback(() => {
     if (!focus.focusedJob) return
     handleDismiss(focus.focusedJob)
@@ -218,6 +223,7 @@ export function JobsPage() {
     onFirstPage: jobs.goToFirstPage,
     onGoToTab: handleGoToTab,
     onSetStatus: handleKeyboardSetStatus,
+    onToggleSave: handleKeyboardToggleSave,
     onDismiss: handleKeyboardDismiss,
     onUndo: actions.undoLast,
     onFocusSearch: handleFocusSearch,
@@ -353,6 +359,7 @@ export function JobsPage() {
                   jobs.setOpenJobId(null)
                 }}
                 onStatusChange={handleStatusChange}
+                onToggleSave={handleToggleSave}
                 onDismiss={handleDismiss}
               />
             </div>

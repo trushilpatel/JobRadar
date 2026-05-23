@@ -9,9 +9,12 @@ const STATUS_CONFIG: Record<JobStatus, { label: string; classes: string }> = {
     label: 'New',
     classes: 'text-slate-300 bg-white/[0.06] border-white/[0.12]',
   },
+  // 'saved' kept in the config only to satisfy the JobStatus Record<>.
+  // It's never offered in the dropdown — SELECT_STATUSES excludes it.
+  // The bookmark icon next to the dropdown handles save/unsave instead.
   saved: {
     label: 'Saved',
-    classes: 'text-violet-300 bg-violet-500/10 border-violet-500/20',
+    classes: 'text-amber-300 bg-amber-500/10 border-amber-500/20',
   },
   applied: {
     label: 'Applied',

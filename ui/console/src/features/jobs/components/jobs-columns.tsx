@@ -1,7 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { MapPin, Wifi, Bookmark, BookmarkCheck, X, Paperclip } from 'lucide-react'
+import { MapPin, Wifi, Bookmark, X, Paperclip } from 'lucide-react'
 import type { Job } from '@/types'
-import { JOB_STATUS } from '@/constants/jobStatus'
 import { DataTableColumnHeader } from '@/components/ui/data-table'
 import { formatRelativeTime, cn } from '@/lib/utils'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
@@ -27,7 +26,11 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       header: () => null,
       cell: ({ row }) => {
         const job = row.original
-        const saved = job.status === JOB_STATUS.SAVED
+        // Source of truth: saved_at IS NOT NULL — orthogonal to status.
+        // A saved job stays in whatever workflow stage it's in (typically
+        // none/new) and visually shows the filled bookmark in every tab
+        // where it appears.
+        const saved = job.user_state?.saved_at != null
         return (
           <button
             type="button"
@@ -46,7 +49,8 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
                 : 'text-slate-500 hover:text-amber-300 hover:bg-white/[0.06]'
             )}
           >
-            {saved ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
+            <Bookmark size={15} fill={saved ? 'currentColor' : 'none'} />
+            {/* Lucide accepts fill/stroke — same icon, different state. */}
           </button>
         )
       },

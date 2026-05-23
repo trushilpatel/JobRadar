@@ -36,7 +36,7 @@ describe('JobShortcutSheet', () => {
     render(<JobShortcutSheet open={true} onOpenChange={() => {}} />)
     // 's' and 'a' appear in both status and selection sections; just check they render.
     expect(screen.getAllByText('s').length).toBeGreaterThan(0)
-    expect(screen.getByText('Save')).toBeInTheDocument()
+    expect(screen.getByText(/Toggle bookmark/i)).toBeInTheDocument()
   })
 
   it('calls onOpenChange when sheet wants to close', () => {

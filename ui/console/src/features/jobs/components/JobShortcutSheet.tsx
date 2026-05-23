@@ -47,7 +47,7 @@ const TAB_SHORTCUTS: ShortcutRow[] = [
 ]
 
 const STATUS_SHORTCUTS: ShortcutRow[] = [
-  { chords: [['s']], label: 'Save' },
+  { chords: [['s']], label: 'Toggle bookmark (save / unsave)' },
   { chords: [['a']], label: 'Applied' },
   { chords: [['i']], label: 'Interviewing' },
   { chords: [['o']], label: 'Offer' },

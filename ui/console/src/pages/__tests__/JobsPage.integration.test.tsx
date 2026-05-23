@@ -138,20 +138,20 @@ beforeEach(() => {
 describe('JobsPage — regression coverage for audit fixes', () => {
   it('REGRESSION: clicking row 1 then pressing `s` saves row 1, not row 0', async () => {
     render(wrap(<JobsPage />))
-    // Click row 'b' (status=new) so the keyboard `s` shortcut transitions it
-    // to SAVED. We deliberately avoid row 'c' here because it's already SAVED
-    // (pressing `s` would be a no-op that still calls setJobStatus and could
-    // mask the focus-tracking regression we're guarding against).
+    // Click row 'b' so the keyboard `s` shortcut targets it. Under the sparse
+    // model, `s` toggles the orthogonal saved flag (setJobSaved), not the
+    // workflow status. The regression we guard against here is that the
+    // shortcut targets the CLICKED row, not jobs[0].
     const row = await screen.findByRole('button', { name: /Title b at Acme/i })
     fireEvent.click(row)
 
     fireEvent.keyDown(document.body, { key: 's', code: 'KeyS' })
 
     await waitFor(() => {
-      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('b', JOB_STATUS.SAVED)
+      expect(jobsApi.setJobSaved).toHaveBeenCalledWith('b', true)
     })
     // And NOT row 0.
-    const calls = vi.mocked(jobsApi.setJobStatus).mock.calls.map((c) => c[0])
+    const calls = vi.mocked(jobsApi.setJobSaved).mock.calls.map((c) => c[0])
     expect(calls).not.toContain('a')
   })
 
@@ -163,20 +163,42 @@ describe('JobsPage — regression coverage for audit fixes', () => {
 })
 
 describe('JobsPage — bookmark and dismiss flows', () => {
-  it('bookmark button on a `new` row calls setJobStatus(SAVED)', async () => {
+  it('bookmark button on an unsaved row calls setJobSaved(true) — orthogonal to status', async () => {
     render(wrap(<JobsPage />))
-    // Row "a" is status=new → bookmark says "Save Title a"
+    // Row "a" is unsaved (saved_at = null) → bookmark says "Save Title a"
     const btn = await screen.findByRole('button', { name: /Save Title a/i })
     fireEvent.click(btn)
 
     await waitFor(() => {
-      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('a', JOB_STATUS.SAVED)
+      expect(jobsApi.setJobSaved).toHaveBeenCalledWith('a', true)
     })
+    // Workflow status must remain untouched.
+    expect(jobsApi.setJobStatus).not.toHaveBeenCalled()
   })
 
-  it('bookmark button on a `saved` row toggles back to NEW', async () => {
+  it('bookmark button on a saved row toggles saved_at to null', async () => {
+    // Re-mock so job 'c' has saved_at populated. Status stays as 'new' —
+    // saved is orthogonal.
+    vi.mocked(jobsApi.fetchJobs).mockResolvedValue({
+      items: [
+        makeJob('a'),
+        makeJob('b'),
+        makeJob('c', {
+          user_state: {
+            status: JOB_STATUS.NEW,
+            notes: null,
+            saved_at: '2024-05-01T00:00:00Z',
+            applied_at: null,
+            dismissed_at: null,
+            dismissal_reason: null,
+            dismissal_note: null,
+          },
+        }),
+      ],
+      next_cursor: '',
+    })
+
     render(wrap(<JobsPage />))
-    // Row "c" is status=saved → bookmark says "Remove Title c from saved"
     const btn = await screen.findByRole('button', { name: /Remove Title c from saved/i })
     fireEvent.click(btn)
 
