@@ -11,22 +11,27 @@ import {
   Users,
   ClipboardList,
   Settings,
+  FileText,
+  Send,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { routes } from '@/lib/routes'
 import { useAuthStore } from '@/features/auth/store'
 import { LogoLockup } from '@/components/brand/Logo'
 
 const userNav: { to: string; label: string; icon: React.ReactNode }[] = [
-  { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
-  { to: '/jobs', label: 'Jobs', icon: <Briefcase size={16} /> },
+  { to: routes.dashboard(), label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
+  { to: routes.jobs(), label: 'Jobs', icon: <Briefcase size={16} /> },
 ]
 
 const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [
-  { to: '/admin/companies', label: 'Companies', icon: <Building2 size={16} /> },
-  { to: '/admin/users', label: 'Users', icon: <Users size={16} /> },
-  { to: '/admin/audit', label: 'Audit Log', icon: <ClipboardList size={16} /> },
-  { to: '/insights', label: 'Insights', icon: <BarChart2 size={16} /> },
-  { to: '/settings', label: 'Settings', icon: <Settings size={16} /> },
+  { to: routes.adminCompanies(), label: 'Companies', icon: <Building2 size={16} /> },
+  { to: routes.adminUsers(), label: 'Users', icon: <Users size={16} /> },
+  { to: routes.resumeLibrary(), label: 'Resumes', icon: <FileText size={16} /> },
+  { to: routes.applyQueue(), label: 'Apply Queue', icon: <Send size={16} /> },
+  { to: routes.adminAudit(), label: 'Audit Log', icon: <ClipboardList size={16} /> },
+  { to: routes.insights(), label: 'Insights', icon: <BarChart2 size={16} /> },
+  { to: routes.settings(), label: 'Settings', icon: <Settings size={16} /> },
 ]
 
 function NavItem({

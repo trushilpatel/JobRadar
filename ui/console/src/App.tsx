@@ -15,7 +15,12 @@ import { SettingsPage } from '@/pages/SettingsPage'
 import { AccountPage } from '@/pages/AccountPage'
 import { AdminUsersPage } from '@/pages/admin/AdminUsersPage'
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage'
+import { ResumeLibraryPage } from '@/pages/admin/ResumeLibraryPage'
+import { ResumeDetailPage } from '@/pages/admin/ResumeDetailPage'
+import { ResumeEditorPage } from '@/pages/admin/ResumeEditorPage'
+import { ApplyQueuePage } from '@/pages/admin/ApplyQueuePage'
 import { RequireAdmin } from '@/features/auth/RequireAdmin'
+import { routes } from '@/lib/routes'
 
 function AuthBootstrap({ children }: { children: React.ReactNode }) {
   const bootstrap = useAuthStore((s) => s.bootstrap)
@@ -37,7 +42,7 @@ function ProtectedLayout() {
       <Sidebar />
       <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<Navigate to={routes.dashboard()} replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:id" element={<MobileJobDetailRoute />} />
@@ -48,6 +53,10 @@ function ProtectedLayout() {
             <Route path="/admin/companies" element={<CompaniesPage />} />
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/audit" element={<AdminAuditPage />} />
+            <Route path="/admin/resumes" element={<ResumeLibraryPage />} />
+            <Route path="/admin/resumes/:id" element={<ResumeDetailPage />} />
+            <Route path="/admin/resumes/:id/edit" element={<ResumeEditorPage />} />
+            <Route path="/admin/apply-queue" element={<ApplyQueuePage />} />
             <Route path="/insights" element={<InsightsPage />} />
           </Route>
         </Routes>

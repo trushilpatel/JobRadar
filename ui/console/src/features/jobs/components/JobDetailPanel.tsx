@@ -20,6 +20,7 @@ import { formatSalary } from '@/services/jobs.service'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { StatusSelect } from '@/features/jobs/components/StatusSelect'
 import { setJobNotes } from '@/api/jobs'
+import { JobResumeSection } from '@/features/jobs/components/JobResumeSection'
 
 export type JobDetailMode = 'pane' | 'route'
 
@@ -275,6 +276,8 @@ export function JobDetailPanel({
             </div>
           </div>
         )}
+
+        <JobResumeSection jobId={job.id} />
 
         <div>
           <label
