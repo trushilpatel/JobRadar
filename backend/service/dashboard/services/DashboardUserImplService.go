@@ -5,8 +5,8 @@ import (
 	"math"
 
 	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/identity"
 	"github.com/trushilpatel/jobradar/common/tracing"
-	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 	insightscommon "github.com/trushilpatel/jobradar/service/insights/common"
 )
@@ -26,7 +26,8 @@ func NewUserDashboardService(store UserDashboardStore, appStore ApplicationListR
 func (s *userDashboardImplService) GetProgressStats(ctx context.Context) (_ *dto.ProgressStats, err error) {
 	ctx, span := tracing.Start(ctx, "dashboard.userdashboard.GetProgressStats")
 	defer tracing.End(span, &err)
-	stats, err := s.store.GetProgressStats(ctx)
+	userID := identity.UserIDFrom(ctx)
+	stats, err := s.store.GetProgressStats(ctx, userID)
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch progress stats")
 	}
@@ -55,7 +56,7 @@ func (s *userDashboardImplService) GetHeatmap(ctx context.Context) (_ []dto.Week
 
 // GetInterviews returns active applications mapped to InterviewRow, excluding rejected.
 func (s *userDashboardImplService) GetInterviews(ctx context.Context) (_ []dto.InterviewRow, err error) {
-	_, span := tracing.Start(ctx, "dashboard.userdashboard.GetInterviews")
+	ctx, span := tracing.Start(ctx, "dashboard.userdashboard.GetInterviews")
 	defer tracing.End(span, &err)
 	apps, err := s.appStore.ListActive(ctx)
 	if err != nil {
@@ -77,18 +78,22 @@ func (s *userDashboardImplService) GetInterviews(ctx context.Context) (_ []dto.I
 	return rows, nil
 }
 
+// displayStageMap maps DB stage keys to their UI display labels.
+// Defined locally to avoid coupling to the application domain's constants package.
+var displayStageMap = map[string]string{
+	"applied":      "Waiting",
+	"phone_screen": "Interviewing",
+	"technical":    "Interviewing",
+	"final_round":  "Interviewing",
+	"offer":        "Offer received",
+}
+
 // toDisplayStage maps a raw DB application stage to its UI display label.
 func toDisplayStage(stage string) string {
-	switch stage {
-	case appcommon.StageApplied:
-		return appcommon.DisplayStageWaiting
-	case appcommon.StagePhoneScreen, appcommon.StageTechnical, appcommon.StageFinalRound:
-		return appcommon.DisplayStageInterviewing
-	case appcommon.StageOffer:
-		return appcommon.DisplayStageOffer
-	default:
-		return stage
+	if label, ok := displayStageMap[stage]; ok {
+		return label
 	}
+	return stage
 }
 
 // GetVelocity returns top-N companies ranked by current-week job count with 4-week sparklines.

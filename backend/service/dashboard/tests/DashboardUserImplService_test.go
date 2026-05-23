@@ -39,7 +39,7 @@ type fakeUserDashboardStore struct {
 	velocityLimit int
 }
 
-func (f *fakeUserDashboardStore) GetProgressStats(_ context.Context) (dto.ProgressStats, error) {
+func (f *fakeUserDashboardStore) GetProgressStats(_ context.Context, _ string) (dto.ProgressStats, error) {
 	return f.progress, f.progressErr
 }
 func (f *fakeUserDashboardStore) GetMarketStats(_ context.Context) (dto.MarketStats, error) {
@@ -63,9 +63,6 @@ type fakeApplicationListReader struct {
 	activeErr error
 }
 
-func (f *fakeApplicationListReader) ListAll(_, _ int) ([]appsvc.ApplicationWithJob, int, error) {
-	return nil, 0, nil
-}
 func (f *fakeApplicationListReader) ListActive(_ context.Context) ([]appsvc.ApplicationWithJob, error) {
 	return f.active, f.activeErr
 }

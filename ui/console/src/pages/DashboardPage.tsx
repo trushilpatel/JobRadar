@@ -1,3 +1,4 @@
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { ProgressPanel } from '@/features/dashboard/ProgressPanel'
 import { MarketPanel } from '@/features/dashboard/MarketPanel'
 import { HeatmapPanel } from '@/features/dashboard/HeatmapPanel'
@@ -12,20 +13,32 @@ export function DashboardPage() {
         {/* Row 1: Progress + Market side-by-side (left) | Heatmap 2×26 (right) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
           <div className="grid grid-cols-2 gap-4">
-            <ProgressPanel />
-            <MarketPanel />
+            <ErrorBoundary>
+              <ProgressPanel />
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <MarketPanel />
+            </ErrorBoundary>
           </div>
-          <HeatmapPanel />
+          <ErrorBoundary>
+            <HeatmapPanel />
+          </ErrorBoundary>
         </div>
 
         {/* Row 3: Interviewing + Velocity */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <InterviewingPanel />
-          <VelocityPanel />
+          <ErrorBoundary>
+            <InterviewingPanel />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <VelocityPanel />
+          </ErrorBoundary>
         </div>
 
         {/* Row 4: Tech Stack Trends */}
-        <TechTrendsPanel />
+        <ErrorBoundary>
+          <TechTrendsPanel />
+        </ErrorBoundary>
       </div>
     </div>
   )

@@ -12,15 +12,13 @@ import (
 type RestService struct {
 	dashboard     DashboardService
 	userDashboard UserDashboardService
-	pipeline      PipelineService
 }
 
 // NewDashboardRestService constructs a RestService.
-func NewDashboardRestService(dashboard DashboardService, userDashboard UserDashboardService, pipeline PipelineService) *RestService {
+func NewDashboardRestService(dashboard DashboardService, userDashboard UserDashboardService) *RestService {
 	return &RestService{
 		dashboard:     dashboard,
 		userDashboard: userDashboard,
-		pipeline:      pipeline,
 	}
 }
 
@@ -38,16 +36,18 @@ func (h *RestService) Stats(w http.ResponseWriter, r *http.Request) {
 func (h *RestService) Activity(w http.ResponseWriter, r *http.Request) {
 	days := 7
 	if d := r.URL.Query().Get("days"); d != "" {
-		if parsed, err := strconv.Atoi(d); err == nil {
-			days = parsed
+		parsed, err := strconv.Atoi(d)
+		if err != nil {
+			handler.HandleError(w, &errors.ValidationError{
+				Field: "days", Code: "INVALID_FORMAT", Message: "days must be an integer",
+			})
+			return
 		}
+		days = parsed
 	}
-
-	if days < 1 {
+	if days < 1 || days > 365 {
 		handler.HandleError(w, &errors.ValidationError{
-			Field:   "days",
-			Code:    "INVALID_VALUE",
-			Message: "days must be >= 1",
+			Field: "days", Code: "INVALID_VALUE", Message: "days must be between 1 and 365",
 		})
 		return
 	}
@@ -57,7 +57,6 @@ func (h *RestService) Activity(w http.ResponseWriter, r *http.Request) {
 		handler.HandleError(w, err)
 		return
 	}
-
 	handler.Respond(w, http.StatusOK, activity)
 }
 
@@ -105,9 +104,14 @@ func (h *RestService) Interviews(w http.ResponseWriter, r *http.Request) {
 func (h *RestService) Velocity(w http.ResponseWriter, r *http.Request) {
 	limit := 10
 	if l := r.URL.Query().Get("limit"); l != "" {
-		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
-			limit = parsed
+		parsed, err := strconv.Atoi(l)
+		if err != nil || parsed < 1 || parsed > 100 {
+			handler.HandleError(w, &errors.ValidationError{
+				Field: "limit", Code: "INVALID_VALUE", Message: "limit must be between 1 and 100",
+			})
+			return
 		}
+		limit = parsed
 	}
 
 	rows, err := h.userDashboard.GetVelocity(r.Context(), limit)
@@ -126,14 +130,4 @@ func (h *RestService) TechTrends(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handler.Respond(w, http.StatusOK, trends)
-}
-
-// GET /dashboard/pipeline
-func (h *RestService) Pipeline(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.pipeline.GetPipelineStats(r.Context())
-	if err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, stats)
 }

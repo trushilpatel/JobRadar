@@ -15,9 +15,6 @@ type Handler = services.RestRouter
 // Service is a compatibility alias for DashboardService.
 type Service = services.DashboardService
 
-// JobCountReader is a compatibility alias for the interface from services.
-type JobCountReader = services.JobCountReader
-
 // StatsView is a compatibility alias for dto.StatsView.
 type StatsView = dto.StatsView
 
@@ -25,8 +22,8 @@ type StatsView = dto.StatsView
 type ActivityView = dto.ActivityView
 
 // NewService constructs a Service implementation.
-func NewService(scanLog scansvc.ScanLogReader, insightsSvc insightssvc.InsightsService, jobCounts JobCountReader) services.DashboardService {
-	return services.NewDashboardImplService(scanLog, insightsSvc, jobCounts)
+func NewService(scanLog scansvc.ScanLogReader, insightsSvc insightssvc.InsightsService) services.DashboardService {
+	return services.NewDashboardImplService(scanLog, insightsSvc)
 }
 
 // NewUserDashboardStore constructs a UserDashboardStore from the services package.

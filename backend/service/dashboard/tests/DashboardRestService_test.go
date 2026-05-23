@@ -37,7 +37,7 @@ func newDashboardTestRouter(h *dashboardsvc.RestService) *chi.Mux {
 }
 
 func TestDashboardHandlerStats_OK(t *testing.T) {
-	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{stats: &dto.StatsView{}}, nil, nil)
+	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{stats: &dto.StatsView{}}, nil)
 	r := newDashboardTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/stats", nil)
@@ -55,7 +55,7 @@ func TestDashboardHandlerStats_OK(t *testing.T) {
 func TestDashboardHandlerStats_ServiceError(t *testing.T) {
 	h := dashboardsvc.NewDashboardRestService(
 		&fakeDashboardService{err: errors.ErrInternal.WithMessage("db down")},
-		nil, nil,
+		nil,
 	)
 	r := newDashboardTestRouter(h)
 
@@ -72,7 +72,7 @@ func TestDashboardHandlerStats_ServiceError(t *testing.T) {
 }
 
 func TestDashboardHandlerActivity_OK(t *testing.T) {
-	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{activity: []dto.ActivityView{}}, nil, nil)
+	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{activity: []dto.ActivityView{}}, nil)
 	r := newDashboardTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/activity?days=7", nil)
@@ -85,8 +85,8 @@ func TestDashboardHandlerActivity_OK(t *testing.T) {
 }
 
 func TestDashboardHandlerActivity_ValidationError(t *testing.T) {
-	// days=0 triggers the inlined validation in the handler (days < 1).
-	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{}, nil, nil)
+	// days=0 triggers the validation: days must be between 1 and 365.
+	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{}, nil)
 	r := newDashboardTestRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/activity?days=0", nil)
@@ -98,10 +98,52 @@ func TestDashboardHandlerActivity_ValidationError(t *testing.T) {
 	}
 }
 
+// days=abc must return 400 INVALID_FORMAT (non-integer).
+func TestDashboardHandlerActivity_InvalidFormat(t *testing.T) {
+	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{}, nil)
+	r := newDashboardTestRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/activity?days=abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("got status %d, want 400", w.Code)
+	}
+}
+
+// days=366 must return 400 INVALID_VALUE (exceeds upper bound).
+func TestDashboardHandlerActivity_ExceedsUpperBound(t *testing.T) {
+	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{}, nil)
+	r := newDashboardTestRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/activity?days=366", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("got status %d, want 400", w.Code)
+	}
+}
+
+// days=365 must be accepted (boundary value).
+func TestDashboardHandlerActivity_MaxBoundary(t *testing.T) {
+	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{activity: []dto.ActivityView{}}, nil)
+	r := newDashboardTestRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/activity?days=365", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("got status %d, want 200", w.Code)
+	}
+}
+
 func TestDashboardHandlerActivity_ServiceError(t *testing.T) {
 	h := dashboardsvc.NewDashboardRestService(
 		&fakeDashboardService{err: errors.ErrInternal.WithMessage("db down")},
-		nil, nil,
+		nil,
 	)
 	r := newDashboardTestRouter(h)
 
@@ -177,9 +219,7 @@ func TestDashboardHandlerPipeline_ServiceError(t *testing.T) {
 	}
 }
 
-// fakeUserDashboardSvc is a test double for the UserDashboardService interface
-// — only sufficient detail for handler-layer tests. The impl-layer logic is
-// covered separately in DashboardUserImplService_test.go.
+// fakeUserDashboardSvc is a test double for the UserDashboardService interface.
 type fakeUserDashboardSvc struct {
 	progress     *dto.ProgressStats
 	market       *dto.MarketStats
@@ -216,10 +256,9 @@ func (f *fakeUserDashboardSvc) GetTechTrends(_ context.Context) (*dto.TechTrends
 	return f.techTrends, f.trendsErr
 }
 
-// progressUserRouter mounts the user-facing dashboard router with the supplied
-// fake UserDashboardService and a no-op DashboardService.
+// newUserDashboardRouter mounts the user-facing dashboard router.
 func newUserDashboardRouter(u *fakeUserDashboardSvc) *chi.Mux {
-	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{}, u, nil)
+	h := dashboardsvc.NewDashboardRestService(&fakeDashboardService{}, u)
 	return newDashboardTestRouter(h)
 }
 
@@ -325,7 +364,7 @@ func TestDashboardHandlerInterviews_ServiceError(t *testing.T) {
 
 // ---------- Velocity ----------
 
-// Default limit (no query string) must be 10 — pin the documented contract.
+// Default limit (no query string) must be 10.
 func TestDashboardHandlerVelocity_DefaultLimit(t *testing.T) {
 	svc := &fakeUserDashboardSvc{velocity: []dto.CompanyVelocityRow{{CompanyName: "Acme"}}}
 	r := newUserDashboardRouter(svc)
@@ -347,37 +386,62 @@ func TestDashboardHandlerVelocity_CustomLimit(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/velocity?limit=25", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
 	if svc.velocityArg != 25 {
 		t.Errorf("limit = %d, want 25", svc.velocityArg)
 	}
 }
 
-// limit=invalid must NOT crash — it falls back to the default. The handler
-// only honours a positive integer; otherwise the default 10 stands.
-func TestDashboardHandlerVelocity_InvalidLimit_FallsBackToDefault(t *testing.T) {
+// limit=abc must return 400 — non-integer input is rejected.
+func TestDashboardHandlerVelocity_InvalidLimit_Returns400(t *testing.T) {
 	svc := &fakeUserDashboardSvc{velocity: []dto.CompanyVelocityRow{}}
 	r := newUserDashboardRouter(svc)
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/velocity?limit=abc", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200 (silent fallback)", w.Code)
-	}
-	if svc.velocityArg != 10 {
-		t.Errorf("limit = %d, want 10 (default)", svc.velocityArg)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
 	}
 }
 
-// limit=0 must NOT be propagated as zero — the handler only honours `>0`
-// otherwise the default 10 stands. Guards against a callable returning all rows.
-func TestDashboardHandlerVelocity_ZeroLimit_FallsBackToDefault(t *testing.T) {
+// limit=0 must return 400 — out-of-range (must be 1-100).
+func TestDashboardHandlerVelocity_ZeroLimit_Returns400(t *testing.T) {
 	svc := &fakeUserDashboardSvc{velocity: []dto.CompanyVelocityRow{}}
 	r := newUserDashboardRouter(svc)
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/velocity?limit=0", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if svc.velocityArg != 10 {
-		t.Errorf("limit = %d, want 10 (zero rejected)", svc.velocityArg)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+// limit=101 must return 400 — exceeds upper bound.
+func TestDashboardHandlerVelocity_ExceedsUpperBound_Returns400(t *testing.T) {
+	svc := &fakeUserDashboardSvc{velocity: []dto.CompanyVelocityRow{}}
+	r := newUserDashboardRouter(svc)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/velocity?limit=101", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+// limit=100 must be accepted (boundary value).
+func TestDashboardHandlerVelocity_MaxBoundary(t *testing.T) {
+	svc := &fakeUserDashboardSvc{velocity: []dto.CompanyVelocityRow{}}
+	r := newUserDashboardRouter(svc)
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/velocity?limit=100", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	if svc.velocityArg != 100 {
+		t.Errorf("limit = %d, want 100", svc.velocityArg)
 	}
 }
 
@@ -446,7 +510,7 @@ func TestPipelineHandlerTriggerRetry_OK(t *testing.T) {
 	}
 }
 
-// Malformed JSON body must surface as 400 BAD_REQUEST — not 500.
+// Malformed JSON body must surface as 400 BAD_REQUEST.
 func TestPipelineHandlerTriggerRetry_MalformedBody(t *testing.T) {
 	r := newPipelineTestRouter(&fakePipelineService{})
 	req := httptest.NewRequest(http.MethodPost, "/dashboard/pipeline/retry", strings.NewReader("not-json"))
@@ -457,8 +521,7 @@ func TestPipelineHandlerTriggerRetry_MalformedBody(t *testing.T) {
 	}
 }
 
-// Underlying service error must propagate the service status code (in this
-// case 400 from "unknown worker", surfaced via TriggerRetry's BAD_REQUEST).
+// Underlying service error must propagate the service status code.
 func TestPipelineHandlerTriggerRetry_ServiceError(t *testing.T) {
 	r := newPipelineTestRouter(&fakePipelineService{triggerErr: errors.ErrBadRequest.WithMessage("unknown worker")})
 	body := []byte(`{"worker":"unknown","tier":"1m"}`)
@@ -470,8 +533,7 @@ func TestPipelineHandlerTriggerRetry_ServiceError(t *testing.T) {
 	}
 }
 
-// NewPipelineRestService must panic when next is nil — guards against a
-// misconfigured wire setup silently producing a half-built handler.
+// NewPipelineRestService must panic when next is nil.
 func TestPipelineRestService_NilNextPanics(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
@@ -479,41 +541,6 @@ func TestPipelineRestService_NilNextPanics(t *testing.T) {
 		}
 	}()
 	dashboardsvc.NewPipelineRestService(nil)
-}
-
-// RestService.Pipeline is the legacy admin endpoint kept on RestService for
-// callers wired before the dedicated PipelineRestRouter shipped. Routing
-// for /dashboard/pipeline has moved to PipelineRestRouter under /admin, but
-// the method is still exercised by tests so it does not silently rot.
-func TestDashboardHandlerPipeline_DirectInvocation_OK(t *testing.T) {
-	h := dashboardsvc.NewDashboardRestService(
-		&fakeDashboardService{},
-		nil,
-		&fakePipelineService{stats: &dto.PipelineStats{TotalCompanies: 7}},
-	)
-	req := httptest.NewRequest(http.MethodGet, "/anything", nil)
-	w := httptest.NewRecorder()
-	h.Pipeline(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
-	}
-	if !strings.Contains(w.Body.String(), `"total_companies":7`) {
-		t.Errorf("body missing total_companies: %s", w.Body.String())
-	}
-}
-
-func TestDashboardHandlerPipeline_DirectInvocation_ServiceError(t *testing.T) {
-	h := dashboardsvc.NewDashboardRestService(
-		&fakeDashboardService{},
-		nil,
-		&fakePipelineService{err: errors.ErrInternal.WithMessage("kafka down")},
-	)
-	req := httptest.NewRequest(http.MethodGet, "/anything", nil)
-	w := httptest.NewRecorder()
-	h.Pipeline(w, req)
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500", w.Code)
-	}
 }
 
 // Ensure test doubles implement interfaces.

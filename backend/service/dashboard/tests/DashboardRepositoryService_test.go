@@ -50,7 +50,7 @@ func closedDashboardDB(t *testing.T) *gorm.DB {
 
 func TestUserDashboardStore_GetProgressStats_DBError(t *testing.T) {
 	store := services.NewUserDashboardStore(closedDashboardDB(t))
-	if _, err := store.GetProgressStats(context.Background()); err == nil {
+	if _, err := store.GetProgressStats(context.Background(), "user-1"); err == nil {
 		t.Fatal("expected DB error, got nil")
 	}
 }

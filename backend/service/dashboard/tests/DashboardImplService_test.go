@@ -67,23 +67,10 @@ func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insightsdto.
 	return f.pipeline, f.err
 }
 
-// fakeJobCountReader is a test double for JobCountReader.
-type fakeJobCountReader struct {
-	newCount     int64
-	savedCount   int64
-	appliedCount int64
-	err          error
-}
-
-func (f *fakeJobCountReader) GetJobCounts() (int64, int64, int64, error) {
-	return f.newCount, f.savedCount, f.appliedCount, f.err
-}
-
 func TestGetStats_OK(t *testing.T) {
 	svc := services.NewDashboardImplService(
 		&fakeScanLogReader{scannedToday: 10},
 		&fakeInsightsService{pipeline: insightsdto.PipelineCounts{Pending: 3, Errors: 1}},
-		&fakeJobCountReader{newCount: 5, savedCount: 2, appliedCount: 1},
 	)
 
 	stats, err := svc.GetStats(context.Background())
@@ -93,23 +80,18 @@ func TestGetStats_OK(t *testing.T) {
 	if stats.JobsScannedToday != 10 {
 		t.Errorf("expected JobsScannedToday 10, got %d", stats.JobsScannedToday)
 	}
-	if stats.JobsNew != 5 {
-		t.Errorf("expected JobsNew 5, got %d", stats.JobsNew)
-	}
 	if stats.PipelinePending != 3 {
 		t.Errorf("expected PipelinePending 3, got %d", stats.PipelinePending)
 	}
-	// Funnel relevant = new + saved + applied
-	if stats.Funnel.Relevant != 8 {
-		t.Errorf("expected Funnel.Relevant 8, got %d", stats.Funnel.Relevant)
+	if stats.PipelineErrors != 1 {
+		t.Errorf("expected PipelineErrors 1, got %d", stats.PipelineErrors)
 	}
 }
 
-func TestGetStats_Error(t *testing.T) {
+func TestGetStats_ScanLogError(t *testing.T) {
 	svc := services.NewDashboardImplService(
 		&fakeScanLogReader{err: errors.New("db error")},
 		&fakeInsightsService{},
-		&fakeJobCountReader{},
 	)
 
 	_, err := svc.GetStats(context.Background())
@@ -122,6 +104,41 @@ func TestGetStats_Error(t *testing.T) {
 	}
 }
 
+func TestGetStats_InsightsError(t *testing.T) {
+	svc := services.NewDashboardImplService(
+		&fakeScanLogReader{scannedToday: 10},
+		&fakeInsightsService{err: errors.New("insights down")},
+	)
+
+	_, err := svc.GetStats(context.Background())
+	if err == nil {
+		t.Fatal("expected error from insights failure")
+	}
+	var sErr *apperr.ServiceError
+	if !errors.As(err, &sErr) || sErr.Status != 500 {
+		t.Errorf("expected 500 ServiceError, got %v", err)
+	}
+}
+
+// GetStats with all zero counts must produce a stats view with zero values.
+func TestGetStats_AllZero(t *testing.T) {
+	svc := services.NewDashboardImplService(
+		&fakeScanLogReader{},
+		&fakeInsightsService{},
+	)
+
+	stats, err := svc.GetStats(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stats.JobsScannedToday != 0 {
+		t.Errorf("unexpected non-zero JobsScannedToday: %d", stats.JobsScannedToday)
+	}
+	if stats.PipelinePending != 0 || stats.PipelineErrors != 0 {
+		t.Errorf("unexpected non-zero pipeline counts: pending=%d errors=%d", stats.PipelinePending, stats.PipelineErrors)
+	}
+}
+
 func TestGetActivity_OK(t *testing.T) {
 	svc := services.NewDashboardImplService(
 		&fakeScanLogReader{
@@ -130,7 +147,6 @@ func TestGetActivity_OK(t *testing.T) {
 			},
 		},
 		&fakeInsightsService{},
-		&fakeJobCountReader{},
 	)
 
 	activity, err := svc.GetActivity(context.Background(), 7)
@@ -145,78 +161,11 @@ func TestGetActivity_OK(t *testing.T) {
 	}
 }
 
-// GetStats must fail with ErrInternal when the job count reader fails
-// independently of the scan log and insights services. The errgroup wraps
-// every concurrent failure into one — the first error reaches the caller.
-func TestGetStats_JobCountError(t *testing.T) {
-	svc := services.NewDashboardImplService(
-		&fakeScanLogReader{scannedToday: 10},
-		&fakeInsightsService{},
-		&fakeJobCountReader{err: errors.New("boom")},
-	)
-
-	_, err := svc.GetStats(context.Background())
-	if err == nil {
-		t.Fatal("expected error from job count reader failure")
-	}
-	var sErr *apperr.ServiceError
-	if !errors.As(err, &sErr) || sErr.Status != 500 {
-		t.Errorf("expected 500 ServiceError, got %v", err)
-	}
-}
-
-// GetStats must fail with ErrInternal when the insights service fails.
-func TestGetStats_InsightsError(t *testing.T) {
-	svc := services.NewDashboardImplService(
-		&fakeScanLogReader{scannedToday: 10},
-		&fakeInsightsService{err: errors.New("insights down")},
-		&fakeJobCountReader{newCount: 1},
-	)
-
-	_, err := svc.GetStats(context.Background())
-	if err == nil {
-		t.Fatal("expected error from insights failure")
-	}
-	var sErr *apperr.ServiceError
-	if !errors.As(err, &sErr) || sErr.Status != 500 {
-		t.Errorf("expected 500 ServiceError, got %v", err)
-	}
-}
-
-// GetStats with all zero counts must produce a stats view with zero values
-// across the board and a Funnel.Relevant of zero (new+saved+applied).
-func TestGetStats_AllZero(t *testing.T) {
-	svc := services.NewDashboardImplService(
-		&fakeScanLogReader{},
-		&fakeInsightsService{},
-		&fakeJobCountReader{},
-	)
-
-	stats, err := svc.GetStats(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if stats.Funnel.Relevant != 0 {
-		t.Errorf("relevant = %d, want 0", stats.Funnel.Relevant)
-	}
-	if stats.JobsScannedToday != 0 || stats.JobsNew != 0 || stats.JobsSaved != 0 || stats.JobsApplied != 0 {
-		t.Errorf("unexpected non-zero counts in zero-input stats: %+v", stats)
-	}
-	if stats.PipelinePending != 0 || stats.PipelineErrors != 0 {
-		t.Errorf("unexpected non-zero pipeline counts: pending=%d errors=%d", stats.PipelinePending, stats.PipelineErrors)
-	}
-	if stats.Funnel.Scanned != 0 || stats.Funnel.Saved != 0 || stats.Funnel.Applied != 0 {
-		t.Errorf("unexpected non-zero funnel fields: %+v", stats.Funnel)
-	}
-}
-
-// GetActivity must surface DB errors as ErrInternal — the underlying error
-// from the scan log reader is wrapped so handlers can map it to HTTP 500.
+// GetActivity must surface DB errors as ErrInternal.
 func TestGetActivity_Error(t *testing.T) {
 	svc := services.NewDashboardImplService(
 		&fakeScanLogReader{err: errors.New("scan log down")},
 		&fakeInsightsService{},
-		&fakeJobCountReader{},
 	)
 
 	_, err := svc.GetActivity(context.Background(), 7)
@@ -229,14 +178,11 @@ func TestGetActivity_Error(t *testing.T) {
 	}
 }
 
-// GetActivity with an empty result set must return a non-nil empty slice (not
-// nil) so the API envelope `{data:[]}` is consistent and serializes as a JSON
-// array, never null.
+// GetActivity with an empty result set must return a non-nil empty slice.
 func TestGetActivity_EmptyResult(t *testing.T) {
 	svc := services.NewDashboardImplService(
 		&fakeScanLogReader{scansByDay: []dto.DailyScanCount{}},
 		&fakeInsightsService{},
-		&fakeJobCountReader{},
 	)
 
 	activity, err := svc.GetActivity(context.Background(), 7)
@@ -251,8 +197,7 @@ func TestGetActivity_EmptyResult(t *testing.T) {
 	}
 }
 
-// GetActivity must map every scan row 1:1 — verifies the loop body for
-// multiple-day output, not just the single-row happy path.
+// GetActivity must map every scan row 1:1.
 func TestGetActivity_MultipleDays(t *testing.T) {
 	svc := services.NewDashboardImplService(
 		&fakeScanLogReader{
@@ -263,7 +208,6 @@ func TestGetActivity_MultipleDays(t *testing.T) {
 			},
 		},
 		&fakeInsightsService{},
-		&fakeJobCountReader{},
 	)
 
 	activity, err := svc.GetActivity(context.Background(), 3)
@@ -281,4 +225,3 @@ func TestGetActivity_MultipleDays(t *testing.T) {
 // Ensure test doubles implement interfaces.
 var _ scansvc.ScanLogReader = (*fakeScanLogReader)(nil)
 var _ insightssvc.InsightsService = (*fakeInsightsService)(nil)
-var _ services.JobCountReader = (*fakeJobCountReader)(nil) // JobCountReader is exported from services package

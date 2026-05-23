@@ -1,13 +1,13 @@
-import { useRef, useState, useEffect } from 'react'
+import * as Select from '@radix-ui/react-select'
+import { ChevronDown, Check } from 'lucide-react'
+import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown } from 'lucide-react'
 import { fetchInterviews, updateApplicationStage } from '@/api/dashboard'
 import type { InterviewRow } from '@/types'
 import { cn } from '@/lib/utils'
 import { dashboardQueryKeys } from './queryKeys'
 
-// Stage options shown in the dropdown
-const STAGES: { key: string; label: string; dotColor: string; pillClass: string }[] = [
+const STAGES = [
   {
     key: 'applied',
     label: 'Waiting',
@@ -16,18 +16,6 @@ const STAGES: { key: string; label: string; dotColor: string; pillClass: string 
   },
   {
     key: 'phone_screen',
-    label: 'Interviewing',
-    dotColor: '#7f77dd',
-    pillClass: 'bg-violet-500/15 text-violet-300',
-  },
-  {
-    key: 'technical',
-    label: 'Interviewing',
-    dotColor: '#7f77dd',
-    pillClass: 'bg-violet-500/15 text-violet-300',
-  },
-  {
-    key: 'final_round',
     label: 'Interviewing',
     dotColor: '#7f77dd',
     pillClass: 'bg-violet-500/15 text-violet-300',
@@ -51,92 +39,76 @@ function pillConfig(stage: string) {
   )
 }
 
-// The unique display-stage options for the dropdown
-const DROPDOWN_OPTIONS = [
-  { key: 'applied', label: 'Waiting', dotColor: '#888780' },
-  { key: 'phone_screen', label: 'Interviewing', dotColor: '#7f77dd' },
-  { key: 'offer', label: 'Offer received', dotColor: '#1d9e75' },
-]
-
-function StageDropdown({
+function StageSelect({
   row,
   onStageChange,
 }: {
   row: InterviewRow
   onStageChange: (id: number, stage: string) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
   const cfg = pillConfig(row.stage)
-
-  useEffect(() => {
-    if (!open) return
-    function onClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onClickOutside)
-    return () => document.removeEventListener('mousedown', onClickOutside)
-  }, [open])
-
   return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          setOpen((v) => !v)
-        }}
+    <Select.Root value={row.stage} onValueChange={(val) => onStageChange(row.application_id, val)}>
+      <Select.Trigger
         className={cn(
-          'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border-0 cursor-pointer hover:opacity-85 transition-opacity',
+          'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium cursor-pointer hover:opacity-85 transition-opacity focus:outline-none focus-visible:ring-1 focus-visible:ring-white/30',
           cfg.pillClass
         )}
+        aria-label={`Stage: ${cfg.label}`}
       >
-        {cfg.label}
-        <ChevronDown size={11} className="opacity-60" />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-[26px] z-20 bg-[#141418] border border-white/[0.12] rounded-lg shadow-xl min-w-[160px] overflow-hidden">
-          {DROPDOWN_OPTIONS.map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => {
-                onStageChange(row.application_id, opt.key)
-                setOpen(false)
-              }}
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 text-[11px] text-left transition-colors',
-                row.stage === opt.key
-                  ? 'bg-white/[0.06] text-white'
-                  : 'text-slate-300 hover:bg-white/[0.05]'
-              )}
-            >
-              <span
-                className="w-[6px] h-[6px] rounded-full shrink-0"
-                style={{ background: opt.dotColor }}
-              />
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+        <Select.Value>{cfg.label}</Select.Value>
+        <Select.Icon>
+          <ChevronDown size={11} className="opacity-60" />
+        </Select.Icon>
+      </Select.Trigger>
+      <Select.Portal>
+        <Select.Content
+          className="z-50 min-w-[160px] overflow-hidden bg-[#141418] border border-white/[0.12] rounded-lg shadow-xl"
+          position="popper"
+          sideOffset={4}
+        >
+          <Select.Viewport className="p-1">
+            {STAGES.map((opt) => (
+              <Select.Item
+                key={opt.key}
+                value={opt.key}
+                className="flex items-center gap-2 px-3 py-2 text-[11px] text-slate-300 rounded cursor-pointer hover:bg-white/[0.05] focus:bg-white/[0.05] focus:outline-none data-[state=checked]:text-white data-[state=checked]:bg-white/[0.06]"
+              >
+                <span
+                  className="w-[6px] h-[6px] rounded-full shrink-0"
+                  style={{ background: opt.dotColor }}
+                />
+                <Select.ItemText>{opt.label}</Select.ItemText>
+                <Select.ItemIndicator className="ml-auto">
+                  <Check size={11} />
+                </Select.ItemIndicator>
+              </Select.Item>
+            ))}
+          </Select.Viewport>
+        </Select.Content>
+      </Select.Portal>
+    </Select.Root>
   )
 }
 
 export function InterviewingPanel() {
   const queryClient = useQueryClient()
-
-  const { data: rows, isLoading } = useQuery({
+  const {
+    data: rows,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: dashboardQueryKeys.interviews(),
     queryFn: fetchInterviews,
     refetchInterval: 30_000,
   })
-
   const mutation = useMutation({
     mutationFn: ({ id, stage }: { id: number; stage: string }) => updateApplicationStage(id, stage),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.interviews() })
+      queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.progress() })
     },
+    onError: () => toast.error('Failed to update stage'),
   })
 
   return (
@@ -145,13 +117,15 @@ export function InterviewingPanel() {
         interviewing
       </p>
 
-      {isLoading || !rows ? (
+      {isLoading ? (
         <div className="space-y-3 animate-pulse">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="h-10 bg-white/[0.04] rounded-lg" />
           ))}
         </div>
-      ) : rows.length === 0 ? (
+      ) : isError ? (
+        <p className="text-sm text-slate-500 py-2">Failed to load interviews</p>
+      ) : !rows || rows.length === 0 ? (
         <p className="text-sm text-slate-600 py-2">No active applications</p>
       ) : (
         <div>
@@ -167,7 +141,7 @@ export function InterviewingPanel() {
                 <p className="text-[13px] font-medium text-white truncate">{row.company_name}</p>
                 <p className="text-[11px] text-slate-500 truncate mt-0.5">{row.job_title}</p>
               </div>
-              <StageDropdown
+              <StageSelect
                 row={row}
                 onStageChange={(id, stage) => mutation.mutate({ id, stage })}
               />

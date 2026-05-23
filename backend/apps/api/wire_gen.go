@@ -13,7 +13,6 @@ import (
 	"github.com/trushilpatel/jobradar/service/application"
 	services3 "github.com/trushilpatel/jobradar/service/application/services"
 	services "github.com/trushilpatel/jobradar/service/company/services"
-	"github.com/trushilpatel/jobradar/service/dashboard"
 	services4 "github.com/trushilpatel/jobradar/service/dashboard/services"
 	services5 "github.com/trushilpatel/jobradar/service/insights/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -92,18 +91,13 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	insightsRestRouter := services5.NewRestRouter(insightsRestService)
 
 	// ── Dashboard ─────────────────────────────────────────────────────────────
-	// zeroJobCountReader is a temporary adapter: Phase 2 moved per-user job
-	// counts to user_job_state (served by UserDashboardService.GetProgressStats).
-	// DashboardService.GetStats still needs a JobCountReader — return zeros
-	// until that endpoint is refactored or removed.
-	jobCountReader := provideZeroJobCountReader()
-	dashboardService := services4.NewDashboardImplService(scanLogReader, insightsImplService, jobCountReader)
+	dashboardService := services4.NewDashboardImplService(scanLogReader, insightsImplService)
 	userDashboardStore := services4.NewUserDashboardStore(db)
 	appListReader := provideApplicationListReader(applicationImplService)
 	userDashboardService := services4.NewUserDashboardService(userDashboardStore, appListReader)
 	pipelineStore := services4.NewPipelineStore(db)
 	pipelineService := services4.NewPipelineService(pipelineStore)
-	dashboardRestService := services4.NewDashboardRestService(dashboardService, userDashboardService, pipelineService)
+	dashboardRestService := services4.NewDashboardRestService(dashboardService, userDashboardService)
 	dashboardRestRouter := services4.NewRestRouter(dashboardRestService)
 
 	app := NewApp(companyHandler, scanRestRouter, adapterConfigRestRouter, jobHandler, applicationRestRouter, dashboardRestRouter, insightsRestRouter, pipelineService, companyAdminRouter)
@@ -142,9 +136,6 @@ func provideJobApplicationWriter(db *gorm.DB) jobsvc.ApplicationWriter {
 // applicationListReaderAdapter adapts ApplicationService to ApplicationListReader.
 type applicationListReaderAdapter struct{ svc services3.ApplicationService }
 
-func (a *applicationListReaderAdapter) ListAll(page, limit int) ([]services3.ApplicationWithJob, int, error) {
-	return a.svc.ListAll(context.Background(), page, limit)
-}
 func (a *applicationListReaderAdapter) ListActive(ctx context.Context) ([]services3.ApplicationWithJob, error) {
 	return a.svc.ListActive(ctx)
 }
@@ -153,17 +144,6 @@ func (a *applicationListReaderAdapter) ListActive(ctx context.Context) ([]servic
 // satisfies the ApplicationListReader interface used by UserDashboardService.
 func provideApplicationListReader(s services3.ApplicationService) services4.ApplicationListReader {
 	return &applicationListReaderAdapter{svc: s}
-}
-
-// zeroJobCountReader is a placeholder JobCountReader that returns zeros.
-// Phase 2 moved per-user job counts to user_job_state; DashboardService.GetStats
-// still expects a JobCountReader — return zeros until that API is updated.
-type zeroJobCountReader struct{}
-
-func (*zeroJobCountReader) GetJobCounts() (int64, int64, int64, error) { return 0, 0, 0, nil }
-
-func provideZeroJobCountReader() dashboard.JobCountReader {
-	return &zeroJobCountReader{}
 }
 
 // jobLogAdapter adapts common/logger.Logger to the narrow Warn-only interface

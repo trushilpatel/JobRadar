@@ -11,7 +11,7 @@ import (
 
 // UserDashboardStore provides all DB queries for the user dashboard panels.
 type UserDashboardStore interface {
-	GetProgressStats(ctx context.Context) (dto.ProgressStats, error)
+	GetProgressStats(ctx context.Context, userID string) (dto.ProgressStats, error)
 	GetMarketStats(ctx context.Context) (dto.MarketStats, error)
 	GetWeeklyHiringActivity(ctx context.Context, weeks int) ([]dto.WeeklyCount, error)
 	GetCompanyVelocityDetailed(ctx context.Context, limit int) ([]dto.CompanyVelocityRow, error)
@@ -27,25 +27,25 @@ func NewUserDashboardStore(db *gorm.DB) UserDashboardStore {
 	return &userDashboardRepository{db: db}
 }
 
-func (s *userDashboardRepository) GetProgressStats(ctx context.Context) (_ dto.ProgressStats, err error) {
+func (s *userDashboardRepository) GetProgressStats(ctx context.Context, userID string) (_ dto.ProgressStats, err error) {
 	ctx, span := tracing.Start(ctx, "dashboard.store.GetProgressStats")
 	defer tracing.End(span, &err)
 	var result dto.ProgressStats
-	// Phase 2: status moved from jobs to user_job_state (per-user).
-	// applied/saved/dismissed counts come from user_job_state; interviewing/offer
-	// stages are tracked in job_application_tracker. awaiting_reply = applied
-	// jobs with no advanced tracker stage.
 	err = s.db.WithContext(ctx).Raw(`
 		WITH status_counts AS (
-			SELECT
-				COUNT(*) FILTER (WHERE status = 'applied')  AS applied_count,
-				COUNT(*)                                     AS interviewing_count,
-				0                                            AS offer_count
+			SELECT COUNT(*) AS applied_count
 			FROM user_job_state
 			WHERE status = 'applied'
+			  AND user_id = ?
 		),
 		tracker_stats AS (
 			SELECT
+				COUNT(DISTINCT ja.job_result_id) FILTER (
+					WHERE ja.stage IN ('phone_screen', 'technical', 'final_round')
+				) AS interviewing_count,
+				COUNT(DISTINCT ja.job_result_id) FILTER (
+					WHERE ja.stage = 'offer'
+				) AS offer_count,
 				COUNT(DISTINCT ja.job_result_id) FILTER (
 					WHERE ja.stage IN ('phone_screen', 'technical', 'final_round')
 					  AND ja.stage_at >= DATE_TRUNC('week', NOW())
@@ -58,16 +58,18 @@ func (s *userDashboardRepository) GetProgressStats(ctx context.Context) (_ dto.P
 				SELECT DISTINCT job_result_id
 				FROM job_application_tracker
 				WHERE stage != 'applied'
+				  AND user_id = ?
 			) advanced ON advanced.job_result_id = ja.job_result_id
+			WHERE ja.user_id = ?
 		)
 		SELECT
 			sc.applied_count,
-			sc.interviewing_count,
-			sc.offer_count,
+			ts.interviewing_count,
+			ts.offer_count,
 			ts.awaiting_reply,
 			ts.interviewing_this_week
 		FROM status_counts sc, tracker_stats ts
-	`).Scan(&result).Error
+	`, userID, userID, userID).Scan(&result).Error
 	return result, err
 }
 
@@ -168,22 +170,19 @@ func (s *userDashboardRepository) GetTechStackQuarterlyAdoption(ctx context.Cont
 				) AS q3,
 				COUNT(*) FILTER (
 					WHERE tagged_at >= DATE_TRUNC('quarter', NOW())
-				) AS q4
+				) AS q4,
+				COUNT(DISTINCT job_id) FILTER (
+					WHERE tagged_at >= DATE_TRUNC('quarter', NOW())
+				) AS total_jobs_this_q
 			FROM job_tech_tags
 			WHERE tagged_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '9 months')
 			GROUP BY tech
-		),
-		total_q4 AS (
-			SELECT COUNT(DISTINCT job_id) AS total
-			FROM job_tech_tags
-			WHERE tagged_at >= DATE_TRUNC('quarter', NOW())
 		)
 		SELECT
 			qc.tech,
 			qc.q1, qc.q2, qc.q3, qc.q4,
-			COALESCE(t.total, 0) AS total_jobs
+			COALESCE(SUM(qc.total_jobs_this_q) OVER (), 0)::bigint AS total_jobs
 		FROM quarterly_counts qc
-		CROSS JOIN total_q4 t
 		WHERE qc.q4 > 0
 		ORDER BY qc.q4 DESC
 	`).Scan(&results).Error
@@ -204,15 +203,37 @@ func NewPipelineStore(db *gorm.DB) PipelineStore {
 	return &pipelineRepository{db: db}
 }
 
+// pipelineDBStatsRow is an internal scan struct that carries GORM column tags.
+// PipelineDBStats is kept ORM-agnostic; the mapping happens here at the repo boundary.
+type pipelineDBStatsRow struct {
+	TotalCompanies   int64 `gorm:"column:total_companies"`
+	ActiveCompanies  int64 `gorm:"column:active_companies"`
+	Queued           int64 `gorm:"column:queued"`
+	Crawling         int64 `gorm:"column:crawling"`
+	NewJobs24h       int64 `gorm:"column:new_jobs_24h"`
+	Errors24h        int64 `gorm:"column:errors_24h"`
+	PipelinePending  int64 `gorm:"column:pipeline_pending"`
+	PipelineFiltered int64 `gorm:"column:pipeline_filtered"`
+}
+
 func (s *pipelineRepository) GetPipelineDBStats(ctx context.Context) (_ dto.PipelineDBStats, err error) {
 	ctx, span := tracing.Start(ctx, "dashboard.store.GetPipelineDBStats")
 	defer tracing.End(span, &err)
-	var result dto.PipelineDBStats
+	var row pipelineDBStatsRow
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT total_companies, active_companies, queued, crawling, new_jobs_24h, errors_24h, pipeline_pending, pipeline_filtered
 		FROM mv_pipeline_db_stats
-	`).Scan(&result).Error
-	return result, err
+	`).Scan(&row).Error
+	return dto.PipelineDBStats{
+		TotalCompanies:   row.TotalCompanies,
+		ActiveCompanies:  row.ActiveCompanies,
+		Queued:           row.Queued,
+		Crawling:         row.Crawling,
+		NewJobs24h:       row.NewJobs24h,
+		Errors24h:        row.Errors24h,
+		PipelinePending:  row.PipelinePending,
+		PipelineFiltered: row.PipelineFiltered,
+	}, err
 }
 
 // StatsRefresher refreshes the dashboard materialized views on a schedule.
@@ -228,10 +249,14 @@ func NewDashboardRefresher(db *gorm.DB) StatsRefresher {
 	return &dashboardRefresher{db: db}
 }
 
-func (r *dashboardRefresher) RefreshPipelineStats(ctx context.Context) error {
+func (r *dashboardRefresher) RefreshPipelineStats(ctx context.Context) (err error) {
+	ctx, span := tracing.Start(ctx, "dashboard.store.RefreshPipelineStats")
+	defer tracing.End(span, &err)
 	return r.db.WithContext(ctx).Exec(`REFRESH MATERIALIZED VIEW CONCURRENTLY mv_pipeline_db_stats`).Error
 }
 
-func (r *dashboardRefresher) RefreshHeatmap(ctx context.Context) error {
+func (r *dashboardRefresher) RefreshHeatmap(ctx context.Context) (err error) {
+	ctx, span := tracing.Start(ctx, "dashboard.store.RefreshHeatmap")
+	defer tracing.End(span, &err)
 	return r.db.WithContext(ctx).Exec(`REFRESH MATERIALIZED VIEW CONCURRENTLY mv_weekly_hiring_activity`).Error
 }

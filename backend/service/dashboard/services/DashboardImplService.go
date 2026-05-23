@@ -2,30 +2,31 @@ package services
 
 import (
 	"context"
-
-	"golang.org/x/sync/errgroup"
+	"fmt"
 
 	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 	insightsdto "github.com/trushilpatel/jobradar/service/insights/dto"
-	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
+// pipelineCountReader is the narrow interface this service needs from insights.
+type pipelineCountReader interface {
+	GetPipelineCounts(ctx context.Context) (insightsdto.PipelineCounts, error)
+}
+
 // DashboardImplService implements the DashboardService interface.
 type DashboardImplService struct {
-	scanLog     scansvc.ScanLogReader
-	insightsSvc insightssvc.InsightsService
-	jobCounts   JobCountReader
+	scanLog  scansvc.ScanLogReader
+	pipeline pipelineCountReader
 }
 
 // NewDashboardImplService constructs a DashboardImplService implementation.
-func NewDashboardImplService(scanLog scansvc.ScanLogReader, insightsSvc insightssvc.InsightsService, jobCounts JobCountReader) DashboardService {
+func NewDashboardImplService(scanLog scansvc.ScanLogReader, pipeline pipelineCountReader) DashboardService {
 	return &DashboardImplService{
-		scanLog:     scanLog,
-		insightsSvc: insightsSvc,
-		jobCounts:   jobCounts,
+		scanLog:  scanLog,
+		pipeline: pipeline,
 	}
 }
 
@@ -34,60 +35,20 @@ func (s *DashboardImplService) GetStats(ctx context.Context) (_ *dto.StatsView, 
 	ctx, span := tracing.Start(ctx, "dashboard.service.GetStats")
 	defer tracing.End(span, &err)
 
-	var (
-		scannedToday                       int64
-		newCount, savedCount, appliedCount int64
-		pipeline                           insightsdto.PipelineCounts
-	)
-
-	g, gctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		v, e := s.scanLog.GetJobsScannedToday(gctx)
-		if e != nil {
-			return errors.ErrInternal.WithMessage("failed to fetch scanned today")
-		}
-		scannedToday = v
-		return nil
-	})
-
-	g.Go(func() error {
-		n, sv, ap, e := s.jobCounts.GetJobCounts()
-		if e != nil {
-			return errors.ErrInternal.WithMessage("failed to fetch job counts")
-		}
-		newCount, savedCount, appliedCount = n, sv, ap
-		return nil
-	})
-
-	g.Go(func() error {
-		p, e := s.insightsSvc.GetPipelineCounts(gctx)
-		if e != nil {
-			return errors.ErrInternal.WithMessage("failed to fetch pipeline counts")
-		}
-		pipeline = p
-		return nil
-	})
-
-	if err = g.Wait(); err != nil {
-		return nil, err
+	scannedToday, e := s.scanLog.GetJobsScannedToday(ctx)
+	if e != nil {
+		return nil, errors.ErrInternal.WithMessage(fmt.Sprintf("failed to fetch scanned today: %v", e))
 	}
 
-	relevant := newCount + savedCount + appliedCount
+	pipeline, e := s.pipeline.GetPipelineCounts(ctx)
+	if e != nil {
+		return nil, errors.ErrInternal.WithMessage(fmt.Sprintf("failed to fetch pipeline counts: %v", e))
+	}
 
 	return &dto.StatsView{
 		JobsScannedToday: scannedToday,
-		JobsNew:          newCount,
-		JobsSaved:        savedCount,
-		JobsApplied:      appliedCount,
 		PipelinePending:  pipeline.Pending,
 		PipelineErrors:   pipeline.Errors,
-		Funnel: dto.FunnelSummary{
-			Scanned:  scannedToday,
-			Relevant: relevant,
-			Saved:    savedCount,
-			Applied:  appliedCount,
-		},
 	}, nil
 }
 
@@ -99,14 +60,9 @@ func (s *DashboardImplService) GetActivity(ctx context.Context, days int) (_ []d
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch activity")
 	}
-
 	views := make([]dto.ActivityView, len(scans))
 	for i, sc := range scans {
-		views[i] = dto.ActivityView{
-			Date:    sc.Date,
-			Scanned: sc.Scanned,
-			NewJobs: sc.NewJobs,
-		}
+		views[i] = dto.ActivityView{Date: sc.Date, Scanned: sc.Scanned, NewJobs: sc.NewJobs}
 	}
 	return views, nil
 }
