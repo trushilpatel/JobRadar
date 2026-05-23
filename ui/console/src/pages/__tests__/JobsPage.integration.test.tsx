@@ -8,7 +8,7 @@
  * would not catch them.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { NuqsTestingAdapter } from 'nuqs/adapters/testing'
@@ -21,11 +21,15 @@ vi.mock('sonner', () => {
     success: ReturnType<typeof vi.fn>
     error: ReturnType<typeof vi.fn>
     warning: ReturnType<typeof vi.fn>
+    custom: ReturnType<typeof vi.fn>
+    dismiss: ReturnType<typeof vi.fn>
   }
   toast.success = vi.fn()
   toast.error = vi.fn()
   toast.warning = vi.fn()
-  return { toast }
+  toast.custom = vi.fn()
+  toast.dismiss = vi.fn()
+  return { toast, Toaster: () => null }
 })
 vi.mock('@/features/auth/store', () => ({
   useAuthStore: vi.fn((sel: (s: unknown) => unknown) =>
@@ -44,8 +48,10 @@ vi.mock('@/lib/use-media-query', () => ({
 }))
 
 import * as jobsApi from '@/api/jobs'
+import { toast } from 'sonner'
 import { JobsPage } from '@/pages/JobsPage'
 import { JOB_STATUS } from '@/constants/jobStatus'
+import { hiddenItems } from '@/lib/hidden-items'
 import type { Job } from '@/types'
 
 function makeJob(id: string, overrides: Partial<Job> = {}): Job {
@@ -110,7 +116,7 @@ function wrap(ui: ReactNode) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  // Default API responses.
+  localStorage.clear()
   vi.mocked(jobsApi.fetchJobs).mockResolvedValue({
     items: [makeJob('a'), makeJob('b'), makeJob('c', { status: JOB_STATUS.SAVED })],
     next_cursor: '',
@@ -127,21 +133,22 @@ beforeEach(() => {
   vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
   vi.mocked(jobsApi.setJobSaved).mockResolvedValue(undefined)
   vi.mocked(jobsApi.dismissJob).mockResolvedValue(undefined)
-  vi.mocked(jobsApi.bulkDismissJobs).mockResolvedValue({ dismissed: 0 })
 })
 
 describe('JobsPage — regression coverage for audit fixes', () => {
-  it('REGRESSION: clicking row 3 then pressing `s` saves row 3, not row 0', async () => {
+  it('REGRESSION: clicking row 1 then pressing `s` saves row 1, not row 0', async () => {
     render(wrap(<JobsPage />))
-    // Wait for the rows to render.
-    const row = await screen.findByRole('button', { name: /Title c at Acme/i })
+    // Click row 'b' (status=new) so the keyboard `s` shortcut transitions it
+    // to SAVED. We deliberately avoid row 'c' here because it's already SAVED
+    // (pressing `s` would be a no-op that still calls setJobStatus and could
+    // mask the focus-tracking regression we're guarding against).
+    const row = await screen.findByRole('button', { name: /Title b at Acme/i })
     fireEvent.click(row)
 
-    // Press `s` to save — should target the clicked job ('c'), not jobs[0].
     fireEvent.keyDown(document.body, { key: 's', code: 'KeyS' })
 
     await waitFor(() => {
-      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('c', JOB_STATUS.SAVED)
+      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('b', JOB_STATUS.SAVED)
     })
     // And NOT row 0.
     const calls = vi.mocked(jobsApi.setJobStatus).mock.calls.map((c) => c[0])
@@ -153,49 +160,59 @@ describe('JobsPage — regression coverage for audit fixes', () => {
     const row = await screen.findByRole('button', { name: /Title a at Acme, status new/i })
     expect(row).toBeInTheDocument()
   })
+})
 
-  it('REGRESSION: clicking bulk dismiss opens the modal (no longer silent)', async () => {
+describe('JobsPage — bookmark and dismiss flows', () => {
+  it('bookmark button on a `new` row calls setJobStatus(SAVED)', async () => {
     render(wrap(<JobsPage />))
-    // Wait for rows then check one.
-    await screen.findByRole('button', { name: /Title a at Acme/i })
-    const headerCheckbox = screen.getByLabelText('Select all jobs on this page')
-    fireEvent.click(headerCheckbox)
+    // Row "a" is status=new → bookmark says "Save Title a"
+    const btn = await screen.findByRole('button', { name: /Save Title a/i })
+    fireEvent.click(btn)
 
-    // The bulk action bar should now show "3 selected" + a "Mark not relevant" button.
-    expect(await screen.findByText(/3 selected/)).toBeInTheDocument()
-
-    const dismissBtn = screen.getByRole('button', {
-      name: /Dismiss 3 selected jobs/i,
+    await waitFor(() => {
+      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('a', JOB_STATUS.SAVED)
     })
+  })
+
+  it('bookmark button on a `saved` row toggles back to NEW', async () => {
+    render(wrap(<JobsPage />))
+    // Row "c" is status=saved → bookmark says "Remove Title c from saved"
+    const btn = await screen.findByRole('button', { name: /Remove Title c from saved/i })
+    fireEvent.click(btn)
+
+    await waitFor(() => {
+      expect(jobsApi.setJobSaved).toHaveBeenCalledWith('c', false)
+    })
+  })
+
+  it('dismiss button calls dismissJob with default reason and shows DismissStripe toast', async () => {
+    render(wrap(<JobsPage />))
+    const dismissBtn = await screen.findByRole('button', { name: /Dismiss Title a/i })
     fireEvent.click(dismissBtn)
 
-    // The DismissModal should open in bulk mode.
-    expect(await screen.findByText('Dismiss 3 jobs?')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(jobsApi.dismissJob).toHaveBeenCalledWith('a', 'user_dismissed', undefined)
+    })
 
-    // Confirming should call bulkDismissJobs (not silently — the modal must
-    // have opened first). Pick the modal's confirm button (exact text)
-    // rather than the bar's button (aria-label "Dismiss 3 selected jobs").
-    const dialog = await screen.findByRole('dialog')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Dismiss 3' }))
-    await waitFor(() => expect(jobsApi.bulkDismissJobs).toHaveBeenCalledWith(['a', 'b', 'c']))
+    // The dismiss stripe is rendered via toast.custom — assert it was invoked.
+    expect(vi.mocked(toast).custom).toHaveBeenCalled()
   })
 
-  it('REGRESSION: bulk save and mark-applied buttons exist in the bulk bar', async () => {
+  it('hides jobs whose company is in the hidden-items list', async () => {
+    hiddenItems.add('companies', 'Acme')
     render(wrap(<JobsPage />))
-    await screen.findByRole('button', { name: /Title a at Acme/i })
-    fireEvent.click(screen.getByLabelText('Select all jobs on this page'))
 
-    const bar = await screen.findByRole('status')
-    expect(within(bar).getByRole('button', { name: /Save 3 selected jobs/ })).toBeInTheDocument()
-    expect(
-      within(bar).getByRole('button', { name: /Mark 3 selected jobs as applied/ })
-    ).toBeInTheDocument()
+    // All three jobs were from "Acme" — none should render
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Title a at Acme/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Title b at Acme/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Title c at Acme/i })).not.toBeInTheDocument()
+    })
   })
 
-  it('REGRESSION: bulk action bar is a live region (role=status)', async () => {
+  it('renders normally when no companies are hidden', async () => {
     render(wrap(<JobsPage />))
-    await screen.findByRole('button', { name: /Title a at Acme/i })
-    fireEvent.click(screen.getByLabelText('Select all jobs on this page'))
-    expect(await screen.findByRole('status')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Title a at Acme/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Title b at Acme/i })).toBeInTheDocument()
   })
 })

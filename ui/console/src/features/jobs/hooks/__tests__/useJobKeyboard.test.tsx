@@ -17,12 +17,6 @@ function makeArgs(): UseJobKeyboardArgs {
     onSetStatus: vi.fn(),
     onDismiss: vi.fn(),
     onUndo: vi.fn(),
-    onToggleSelect: vi.fn(),
-    onRangeSelect: vi.fn(),
-    onSelectAll: vi.fn(),
-    onBulkSave: vi.fn(),
-    onBulkApplied: vi.fn(),
-    onBulkDismiss: vi.fn(),
     onFocusSearch: vi.fn(),
     onOpenPalette: vi.fn(),
     onResetFilters: vi.fn(),
@@ -100,6 +94,36 @@ describe('useJobKeyboard', () => {
     expect(args.onNextPage).toHaveBeenCalledTimes(1)
   })
 
+  it('single ArrowLeft fires onPrevPage only (not onFirstPage)', () => {
+    const onFirstPage = vi.fn()
+    renderHook(() => useJobKeyboard({ ...args, onFirstPage }))
+    fireKey({ key: 'ArrowLeft' })
+    expect(args.onPrevPage).toHaveBeenCalledTimes(1)
+    expect(onFirstPage).not.toHaveBeenCalled()
+  })
+
+  it('double ArrowLeft within 200ms fires onFirstPage on the second press', () => {
+    const onFirstPage = vi.fn()
+    renderHook(() => useJobKeyboard({ ...args, onFirstPage }))
+    // First press: fires prev.
+    fireKey({ key: 'ArrowLeft' })
+    expect(args.onPrevPage).toHaveBeenCalledTimes(1)
+    // Second press immediately after: fires first (not a second prev).
+    fireKey({ key: 'ArrowLeft' })
+    expect(onFirstPage).toHaveBeenCalledTimes(1)
+    expect(args.onPrevPage).toHaveBeenCalledTimes(1) // still only the first call
+  })
+
+  it('three ArrowLeft presses fire prev → first → prev (third press resets the window)', () => {
+    const onFirstPage = vi.fn()
+    renderHook(() => useJobKeyboard({ ...args, onFirstPage }))
+    fireKey({ key: 'ArrowLeft' })
+    fireKey({ key: 'ArrowLeft' })
+    fireKey({ key: 'ArrowLeft' })
+    expect(args.onPrevPage).toHaveBeenCalledTimes(2)
+    expect(onFirstPage).toHaveBeenCalledTimes(1)
+  })
+
   // ── Status keys ───────────────────────────────────────────────────────────
   it.each([
     ['s', 'saved'],
@@ -121,20 +145,10 @@ describe('useJobKeyboard', () => {
     expect(args.onUndo).toHaveBeenCalledTimes(1)
   })
 
-  // ── Selection ─────────────────────────────────────────────────────────────
-  it('x toggles select; Shift+X range-selects', () => {
-    renderHook(() => useJobKeyboard(args))
-    fireKey({ key: 'x' })
-    fireKey({ key: 'X', shiftKey: true })
-    expect(args.onToggleSelect).toHaveBeenCalledTimes(1)
-    expect(args.onRangeSelect).toHaveBeenCalledTimes(1)
-  })
-
-  it('Cmd+A no longer hijacks "select all" — text selection stays native', () => {
-    renderHook(() => useJobKeyboard(args))
-    fireKey({ key: 'a', metaKey: true })
-    expect(args.onSelectAll).not.toHaveBeenCalled()
-  })
+  // ── Selection / bulk shortcuts removed in the bookmark refactor ───────────
+  // x, shift+x, shift+s, shift+a, shift+d no longer exist — verify they are
+  // truly inert (don't fire any callback). The status `a` shortcut on the
+  // focused row still works without modifiers.
 
   it('ArrowLeft / ArrowRight are suppressed inside a Radix popover', () => {
     function Harness() {
@@ -161,16 +175,6 @@ describe('useJobKeyboard', () => {
     fireKey({ key: '/', shiftKey: true })
     // shift+/ should fire onOpenHelp at least once.
     expect(args.onOpenHelp).toHaveBeenCalled()
-  })
-
-  it('Shift+S / Shift+A / Shift+D fire bulk actions', () => {
-    renderHook(() => useJobKeyboard(args))
-    fireKey({ key: 'S', shiftKey: true })
-    fireKey({ key: 'A', shiftKey: true })
-    fireKey({ key: 'D', shiftKey: true })
-    expect(args.onBulkSave).toHaveBeenCalledTimes(1)
-    expect(args.onBulkApplied).toHaveBeenCalledTimes(1)
-    expect(args.onBulkDismiss).toHaveBeenCalledTimes(1)
   })
 
   // ── Search / palette / help ───────────────────────────────────────────────

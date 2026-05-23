@@ -26,6 +26,7 @@ const NAVIGATION_SHORTCUTS: ShortcutRow[] = [
   { chords: [['esc']], label: 'Close preview / clear selection / exit search' },
   { chords: [['←']], label: 'Previous page' },
   { chords: [['→']], label: 'Next page' },
+  { chords: [['←', '←']], label: 'Jump to first page (double-press within 200ms)' },
   { chords: [['g', 'g']], label: 'Jump to top of list' },
   { chords: [['⇧', 'G']], label: 'Jump to bottom of list' },
 ]

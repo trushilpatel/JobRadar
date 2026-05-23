@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import type { JobStatus } from '@/types'
 import type { TabKey } from '@/constants/jobStatus'
@@ -18,6 +19,12 @@ export interface UseJobKeyboardArgs {
   onEscape: () => void
   onPrevPage: () => void
   onNextPage: () => void
+  /**
+   * Optional — when provided, a fast double-press of `←` (within 200ms)
+   * fires this instead of a second `onPrevPage`. Single press always fires
+   * `onPrevPage`. See implementation note in the hook body.
+   */
+  onFirstPage?: () => void
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   onGoToTab: (tab: TabKey) => void
@@ -30,21 +37,6 @@ export interface UseJobKeyboardArgs {
   onSetStatus: (status: SettableStatus) => void
   onDismiss: () => void
   onUndo: () => void
-
-  // ── Selection / bulk ───────────────────────────────────────────────────────
-  onToggleSelect: () => void
-  onRangeSelect: () => void
-  /**
-   * Optional — no keyboard binding fires this. It was previously bound to
-   * Cmd/Ctrl+A but that hijacked the browser's native "select all text",
-   * making it impossible to copy text from the detail panel. Callers that
-   * still want a "select all rows" affordance should wire it to a button
-   * (the header checkbox already does).
-   */
-  onSelectAll?: () => void
-  onBulkSave: () => void
-  onBulkApplied: () => void
-  onBulkDismiss: () => void
 
   // ── Search / palette / help ────────────────────────────────────────────────
   onFocusSearch: () => void
@@ -68,9 +60,6 @@ const BASE_OPTS = {
  * (Select listbox, Menu, Combobox, Dialog) or a contenteditable region. We
  * suppress global navigation shortcuts (ArrowLeft / ArrowRight for page nav)
  * in those contexts so the popover's own keyboard navigation isn't hijacked.
- *
- * `enableOnFormTags: false` only filters `<input>` / `<textarea>` / `<select>`,
- * which doesn't cover Radix's `<button>` triggers — hence this extra guard.
  */
 function isInPopover(): boolean {
   const el = document.activeElement
@@ -83,22 +72,14 @@ function isInPopover(): boolean {
 /**
  * Centralised keyboard map for the jobs page.
  *
- * Callbacks are injected so this hook doesn't reach into URL state, the
- * focused-job hook, or mutations. The page owns the wiring; this hook just
- * binds keys.
- *
- * Notes on a few less-obvious decisions:
- * - There's no `Cmd/Ctrl+A` binding any more — the old one prevented the
- *   browser's text select-all everywhere on the page, making it impossible
- *   to copy text from the detail panel. Use `x` + `shift+x` for keyboard
- *   selection.
- * - `/` won't refocus the search input if the user is already typing in it
- *   (`enableOnFormTags: false`). To re-arm the shortcut, press Escape first
- *   to leave the input.
- * - `?` and `shift+/` both open help — both forms exist because `?` on
- *   AZERTY / Windows layouts often requires AltGr; `shift+/` always
- *   produces the same physical key.
+ * Multi-select shortcuts (x, shift+x, shift+s, shift+a, shift+d) were removed
+ * along with the multi-select / bulk-action UI. To act on multiple jobs,
+ * users now operate on the focused row one at a time.
  */
+// Window during which two consecutive `←` presses are treated as
+// "jump to first page" instead of two consecutive `prev` actions.
+const DOUBLE_PRESS_MS = 200
+
 export function useJobKeyboard(args: UseJobKeyboardArgs) {
   const enabled = args.enabled ?? true
   const opts = { ...BASE_OPTS, enabled }
@@ -111,13 +92,31 @@ export function useJobKeyboard(args: UseJobKeyboardArgs) {
   useHotkeys('enter', () => args.onOpenPreview(), opts, [args.onOpenPreview])
   useHotkeys('meta+enter, ctrl+enter', () => args.onOpenUrl(), opts, [args.onOpenUrl])
   useHotkeys('escape', () => args.onEscape(), opts, [args.onEscape])
-  // Page nav is scoped via safeOpts so pressing ← / → inside a Radix Select
-  // (status dropdown) does NOT close the popover + advance the page.
-  useHotkeys('left', () => args.onPrevPage(), safeOpts, [args.onPrevPage])
+
+  // `←` — single press: prev page. Double press within 200ms: jump to first
+  // page (if `onFirstPage` is wired). No debounce — single press fires
+  // instantly. The intermediate state (page N-1) is replaced by page 1 fast
+  // enough that the user sees only the final state.
+  const lastLeftRef = useRef(0)
+  useHotkeys(
+    'left',
+    () => {
+      const now = performance.now()
+      const elapsed = now - lastLeftRef.current
+      if (elapsed < DOUBLE_PRESS_MS && args.onFirstPage) {
+        args.onFirstPage()
+        lastLeftRef.current = 0 // reset so a 3rd press is treated as new prev
+      } else {
+        args.onPrevPage()
+        lastLeftRef.current = now
+      }
+    },
+    safeOpts,
+    [args.onPrevPage, args.onFirstPage]
+  )
   useHotkeys('right', () => args.onNextPage(), safeOpts, [args.onNextPage])
 
   // ── Chord navigation ─────────────────────────────────────────────────────
-  // `g g` jump-to-top, `shift+g` (G) jump-to-bottom.
   useHotkeys('g>g', () => args.onFocusFirst(), opts, [args.onFocusFirst])
   useHotkeys('shift+g', () => args.onFocusLast(), opts, [args.onFocusLast])
 
@@ -138,17 +137,7 @@ export function useJobKeyboard(args: UseJobKeyboardArgs) {
   useHotkeys('d', () => args.onDismiss(), opts, [args.onDismiss])
   useHotkeys('u', () => args.onUndo(), opts, [args.onUndo])
 
-  // ── Selection / bulk ─────────────────────────────────────────────────────
-  // Note: no `meta+a, ctrl+a` binding — see hook JSDoc.
-  useHotkeys('x', () => args.onToggleSelect(), opts, [args.onToggleSelect])
-  useHotkeys('shift+x', () => args.onRangeSelect(), opts, [args.onRangeSelect])
-  useHotkeys('shift+s', () => args.onBulkSave(), opts, [args.onBulkSave])
-  useHotkeys('shift+a', () => args.onBulkApplied(), opts, [args.onBulkApplied])
-  useHotkeys('shift+d', () => args.onBulkDismiss(), opts, [args.onBulkDismiss])
-
   // ── Search / palette / help ──────────────────────────────────────────────
-  // `/` and `?` rely on `useKey: true` so react-hotkeys-hook matches `e.key`
-  // directly instead of `e.code` (which for both is "Slash").
   useHotkeys('/', () => args.onFocusSearch(), { ...opts, useKey: true }, [args.onFocusSearch])
   useHotkeys('meta+k, ctrl+k', () => args.onOpenPalette(), opts, [args.onOpenPalette])
   useHotkeys('meta+shift+r, ctrl+shift+r', () => args.onResetFilters(), opts, [args.onResetFilters])

@@ -20,15 +20,15 @@ interface JobsTableProps {
   hasPrevPage: boolean
   knownTotal?: number
   hasActiveFilters?: boolean
-  selectedIds: Set<string>
   activeJobId: string | null
   /** Index of the keyboard-focused row. -1 disables the focus indicator. */
   focusedIndex?: number
   onRowClick: (job: Job) => void
-  onToggleSelect: (id: string, checked: boolean) => void
-  onSelectAll: (checked: boolean) => void
+  onToggleSave: (job: Job) => void
+  onDismiss: (job: Job) => void
   onNextPage: () => void
   onPrevPage: () => void
+  onFirstPage?: () => void
   onLimitChange: (limit: number) => void
   sorting: SortingState
   onSortingChange: (sorting: SortingState) => void
@@ -36,7 +36,7 @@ interface JobsTableProps {
 
 const EMPTY_MESSAGES: Record<TabKey, string> = {
   new: 'No new jobs — run a scan to populate the feed',
-  saved: 'No saved jobs yet',
+  saved: 'No saved jobs yet — bookmark a job to save it here',
   applied: 'No applied jobs yet',
   interviewing: 'No jobs in interviewing stage',
   offer: 'No jobs with offers',
@@ -57,27 +57,21 @@ export function JobsTable({
   hasPrevPage,
   knownTotal,
   hasActiveFilters = false,
-  selectedIds,
   activeJobId,
   focusedIndex,
   onRowClick,
-  onToggleSelect,
-  onSelectAll,
+  onToggleSave,
+  onDismiss,
   onNextPage,
   onPrevPage,
+  onFirstPage,
   onLimitChange,
   sorting,
   onSortingChange,
 }: JobsTableProps) {
   const columns = useMemo(
-    () =>
-      buildJobColumns({
-        selectedIds,
-        filteredIds: jobs.map((j) => j.id),
-        onToggleSelect,
-        onSelectAll,
-      }),
-    [selectedIds, jobs, onToggleSelect, onSelectAll]
+    () => buildJobColumns({ onToggleSave, onDismiss }),
+    [onToggleSave, onDismiss]
   )
 
   // Scroll the focused row into view whenever the focused index changes.
@@ -115,17 +109,13 @@ export function JobsTable({
           getRowClassName={(job) => {
             const idx = jobs.findIndex((j) => j.id === job.id)
             const isFocused = focusedIndex !== undefined && focusedIndex === idx
-            const isSelected = selectedIds.has(job.id)
             const isActive = activeJobId === job.id
             return cn(
-              // Focused row: solid violet inset ring — strong and unmistakable
-              // even when the row is also `isActive`.
+              // `group/row` enables Tailwind named-group hover for child cells
+              // (the hover-revealed Dismiss button in jobs-columns.tsx).
+              'group/row',
               isFocused && 'ring-2 ring-violet-400 ring-inset',
-              isSelected
-                ? 'bg-violet-500/[0.06]'
-                : isActive
-                  ? 'bg-violet-500/[0.08]'
-                  : 'hover:bg-white/[0.03]'
+              isActive ? 'bg-violet-500/[0.08]' : 'hover:bg-white/[0.03]'
             )
           }}
           getRowProps={(job) => ({
@@ -159,6 +149,7 @@ export function JobsTable({
           knownTotal={knownTotal}
           onNext={onNextPage}
           onPrev={onPrevPage}
+          onFirst={onFirstPage}
           onLimitChange={onLimitChange}
           loading={loading}
         />

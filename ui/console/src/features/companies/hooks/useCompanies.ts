@@ -93,6 +93,11 @@ export function useCompanies() {
     })
   }
 
+  function goToFirstPage() {
+    setCursor('')
+    setCursorHistory([])
+  }
+
   function handleSortingChange(newSorting: SortingState) {
     setSorting(newSorting)
     setCursor('')
@@ -143,6 +148,7 @@ export function useCompanies() {
     hasPrev: cursorHistory.length > 0,
     goToNextPage,
     goToPrevPage,
+    goToFirstPage,
     page,
     itemsOnPage,
     itemsBeforePage,
