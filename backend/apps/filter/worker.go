@@ -64,7 +64,7 @@ func (realClock) Sleep(ctx context.Context, d time.Duration) error {
 // inter-chunk sleep paces successive LLM calls. Each message is individually
 // Ack'd, Nak'd (retry), or Term'd (DLQ) — no batch commit.
 type Worker struct {
-	consumer        *js.PullConsumer
+	consumer        MessageFetcher
 	publisher       js.Publisher
 	scorer          llmcore.JobsRelevanceFilter
 	ledger          FilterLedger
@@ -76,7 +76,7 @@ type Worker struct {
 }
 
 func NewWorker(
-	consumer *js.PullConsumer,
+	consumer MessageFetcher,
 	publisher js.Publisher,
 	scorer llmcore.JobsRelevanceFilter,
 	ledger FilterLedger,
@@ -121,7 +121,7 @@ type routeOutcome struct {
 func (w *Worker) Run(ctx context.Context) error {
 	w.log.Info("worker started",
 		logger.Int(logger.FieldBatch, w.batchSize),
-		logger.Dur("llm_call_interval", w.llmCallInterval),
+		logger.Dur(logger.FieldLLMCallInterval, w.llmCallInterval),
 	)
 
 	// Fetch batchSize*4 per cycle so we get several chunks worth of work per poll,
@@ -165,6 +165,7 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 	fetchLog := w.log.With(logger.Str(logger.FieldFetchID, fetchID))
 
 	items := make([]chunkItem, 0, len(msgs))
+	// TODO: extract W3C trace context from msg headers via tracing.ExtractNATS once available
 	for _, msg := range msgs {
 		var job ats.RawJob
 		if jerr := json.Unmarshal(msg.Data(), &job); jerr != nil {
@@ -172,7 +173,9 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 			if perr := w.publisher.Publish(ctx, js.SubjectJobsDLQ, msg.Data()); perr != nil {
 				fetchLog.Error("publish malformed to DLQ failed", perr)
 			}
-			_ = msg.Term()
+			if terr := msg.Term(); terr != nil {
+				fetchLog.Warn("msg term failed", logger.Err(terr))
+			}
 			continue
 		}
 		items = append(items, chunkItem{
@@ -202,14 +205,14 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 	metrics.FilterChunksPerFetch.Observe(float64(len(chunks)))
 
 	fetchLog.Info("fetch received",
-		logger.Int("records", len(msgs)),
+		logger.Int(logger.FieldRecords, len(msgs)),
 		logger.Int(logger.FieldChunkCount, len(chunks)),
 	)
 
 	for i, chunk := range chunks {
 		if i > 0 {
 			fetchLog.Debug("inter-chunk sleep",
-				logger.Dur("sleep", w.llmCallInterval),
+				logger.Dur(logger.FieldSleep, w.llmCallInterval),
 				logger.Int(logger.FieldChunkIndex, i),
 			)
 			if serr := w.clock.Sleep(fetchCtx, w.llmCallInterval); serr != nil {
@@ -228,7 +231,7 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 						fmt.Errorf("panic: %v", r),
 						logger.Str(logger.FieldFetchID, fetchID),
 						logger.Int(logger.FieldChunkIndex, i),
-						logger.Str("stack", string(debug.Stack())),
+						logger.Str(logger.FieldStack, string(debug.Stack())),
 					)
 					if merr := w.ledger.UpdateSeenReasonBatch(fetchCtx, ids, jobcommon.SeenReasonError); merr != nil {
 						w.log.Error("mark error batch failed after panic", merr,
@@ -236,14 +239,21 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 							logger.Int(logger.FieldChunkIndex, i),
 						)
 					}
-					// Nak all messages so NATS redelivers; ignore errors since
-					// we're already in a panic recovery path.
+					// Nak all messages so NATS redelivers.
 					for _, it := range chunk {
-						_ = it.msg.Nak()
+						if nerr := it.msg.Nak(); nerr != nil {
+							w.log.Warn("msg nak failed", logger.Err(nerr))
+						}
 					}
 				}
 			}()
-			w.processChunk(fetchCtx, chunk, fetchID, i, len(chunks))
+			// processChunk handles all errors internally (routing to retry/DLQ);
+			// a non-nil return means an unexpected internal failure worth logging.
+			if cerr := w.processChunk(fetchCtx, chunk, fetchID, i, len(chunks)); cerr != nil {
+				fetchLog.Error("processChunk returned unexpected error", cerr,
+					logger.Int(logger.FieldChunkIndex, i),
+				)
+			}
 		}()
 
 		if fetchCtx.Err() != nil {
@@ -257,9 +267,9 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 // processChunk owns one chunk end-to-end: ScoreBatch → publish relevant /
 // mark irrelevant, or route errors through retry ladder / DLQ. Each message
 // is Ack'd (done), Nak'd (retry), or Term'd (DLQ) before this returns.
-func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID string, chunkIndex, chunkCount int) {
+func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID string, chunkIndex, chunkCount int) (err error) {
 	if len(chunk) == 0 {
-		return
+		return nil
 	}
 
 	retryMax := 0
@@ -275,7 +285,7 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		attribute.Int("chunk.size", len(chunk)),
 		attribute.Int("chunk.retry_count_max", retryMax),
 	)
-	defer sp.End()
+	defer tracing.End(sp, &err)
 
 	start := w.clock.Now()
 
@@ -309,12 +319,14 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		}
 		metrics.FilterJobsTotal.WithLabelValues("non_usa").Add(float64(len(nonUSAItems)))
 		for _, it := range nonUSAItems {
-			_ = it.msg.Ack()
+			if aerr := it.msg.Ack(); aerr != nil {
+				w.log.Warn("msg ack failed", logger.Err(aerr))
+			}
 		}
 		w.log.Info("chunk non-USA rejected",
 			logger.Str(logger.FieldFetchID, fetchID),
 			logger.Int(logger.FieldChunkIndex, chunkIndex),
-			logger.Int("non_usa_count", len(nonUSAItems)),
+			logger.Int(logger.FieldNonUSACount, len(nonUSAItems)),
 		)
 	}
 
@@ -336,19 +348,21 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		}
 		// Phase 3: Ack only after the ledger write has been attempted.
 		for _, it := range passThrough {
-			_ = it.msg.Ack()
+			if aerr := it.msg.Ack(); aerr != nil {
+				w.log.Warn("msg ack failed", logger.Err(aerr))
+			}
 		}
 		w.log.Info("chunk pass-through (no title)",
 			logger.Str(logger.FieldFetchID, fetchID),
 			logger.Int(logger.FieldChunkIndex, chunkIndex),
-			logger.Int("pass_through_count", len(passThrough)),
+			logger.Int(logger.FieldPassThroughCount, len(passThrough)),
 		)
 		metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(passThrough)))
 	}
 
 	if len(scorable) == 0 {
 		metrics.FilterChunkDuration.WithLabelValues("relevant").Observe(w.clock.Now().Sub(start).Seconds())
-		return
+		return nil
 	}
 
 	inputs := make([]llmdto.JobsRelevanceFilterInput, len(scorable))
@@ -378,11 +392,11 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		if stderrors.As(err, &exhausted) {
 			if !exhausted.RetryAfter.IsZero() {
 				fields = append(fields,
-					logger.Str("retry_after", exhausted.RetryAfter.UTC().Format(time.RFC3339)),
-					logger.Dur("retry_in", time.Until(exhausted.RetryAfter)),
+					logger.Str(logger.FieldRetryAfter, exhausted.RetryAfter.UTC().Format(time.RFC3339)),
+					logger.Dur(logger.FieldRetryIn, time.Until(exhausted.RetryAfter)),
 				)
 			}
-			fields = append(fields, logger.Str("slots_detail", formatSlotStatuses(exhausted.Slots)))
+			fields = append(fields, logger.Str(logger.FieldSlotsDetail, formatSlotStatuses(exhausted.Slots)))
 		}
 		w.log.Error("ScoreBatch failed, routing chunk", err, fields...)
 
@@ -415,7 +429,7 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 				w.log.Error("UpdateRetryBatch failed", rerr,
 					logger.Str(logger.FieldFetchID, fetchID),
 					logger.Int(logger.FieldChunkIndex, chunkIndex),
-					logger.Int("entries_count", len(outcome.Retried)),
+					logger.Int(logger.FieldEntriesCount, len(outcome.Retried)),
 				)
 			}
 		}
@@ -425,13 +439,16 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 			logger.Str(logger.FieldFetchID, fetchID),
 			logger.Int(logger.FieldChunkIndex, chunkIndex),
 			logger.Int(logger.FieldChunkCount, chunkCount),
-			logger.Int("retried_count", len(outcome.Retried)),
-			logger.Int("dlqed_count", len(outcome.DLQed)),
-			logger.Int("publish_failed_count", publishFailed),
+			logger.Int(logger.FieldRetriedCount, len(outcome.Retried)),
+			logger.Int(logger.FieldDLQedCount, len(outcome.DLQed)),
+			logger.Int(logger.FieldPublishFailedCount, publishFailed),
 		)
 
 		metrics.FilterChunkDuration.WithLabelValues("error").Observe(w.clock.Now().Sub(start).Seconds())
-		return
+		// The ScoreBatch error was fully routed (retry/DLQ); clear err so the
+		// processChunk span does not record it as an unhandled propagated error.
+		err = nil
+		return nil
 	}
 	scoreSpan.End()
 
@@ -472,7 +489,9 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 
 	// Phase 3: Ack all scorable messages only after both ledger writes have been attempted.
 	for _, item := range scorable {
-		_ = item.msg.Ack()
+		if aerr := item.msg.Ack(); aerr != nil {
+			w.log.Warn("msg ack failed", logger.Err(aerr))
+		}
 	}
 
 	metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(relevantIDs)))
@@ -495,8 +514,9 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		logger.Int(logger.FieldChunkCount, chunkCount),
 		logger.Int(logger.FieldBatch, len(scorable)),
 		logger.Int(logger.FieldRelevant, len(relevantIDs)),
-		logger.Int("irrelevant", len(irrelevantIDs)),
+		logger.Int(logger.FieldIrrelevant, len(irrelevantIDs)),
 	)
+	return nil
 }
 
 // routeFailedChunk routes each job in a failed chunk to retry (Nak) or DLQ (Term).
@@ -551,7 +571,9 @@ func (w *Worker) publishToDLQ(ctx context.Context, item chunkItem, scoreErr erro
 	payload, err := json.Marshal(item.job.job)
 	if err != nil {
 		w.log.Error("marshal for DLQ failed", err, logger.Str(logger.FieldJobID, item.job.job.ID))
-		_ = item.msg.Term()
+		if terr := item.msg.Term(); terr != nil {
+			w.log.Warn("msg term failed", logger.Err(terr))
+		}
 		return false
 	}
 	if perr := w.publisher.Publish(ctx, js.SubjectJobsDLQ, payload); perr != nil {
@@ -559,10 +581,14 @@ func (w *Worker) publishToDLQ(ctx context.Context, item chunkItem, scoreErr erro
 			logger.Err(perr),
 			logger.Str(logger.FieldJobID, item.job.job.ID),
 		)
-		_ = item.msg.Term()
+		if terr := item.msg.Term(); terr != nil {
+			w.log.Warn("msg term failed", logger.Err(terr))
+		}
 		return false
 	}
-	_ = item.msg.Term()
+	if terr := item.msg.Term(); terr != nil {
+		w.log.Warn("msg term failed", logger.Err(terr))
+	}
 	return true
 }
 

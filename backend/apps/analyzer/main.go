@@ -32,29 +32,29 @@ func main() {
 	database, err := db.Open(cfg.DB, 5)
 	if err != nil {
 		log.Error("db open failed", err)
+		shutdown()
 		os.Exit(1)
 	}
 
 	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.PoolReady(database) })
 
-	nc, njs, err := js.Connect(js.Config{URL: cfg.NATS.URL, CredsFile: cfg.NATS.CredsFile})
+	njs, err := js.ConnectManaged(ctx, js.Config{URL: cfg.NATS.URL, CredsFile: cfg.NATS.CredsFile})
 	if err != nil {
 		log.Error("nats connect failed", err)
+		shutdown()
 		os.Exit(1)
 	}
-	go func() {
-		<-ctx.Done()
-		nc.Close()
-	}()
 
 	if err := js.EnsureStreams(ctx, njs); err != nil {
 		log.Error("nats ensure streams failed", err)
+		shutdown()
 		os.Exit(1)
 	}
 
 	consumer, err := js.NewPullConsumer(ctx, njs, js.StreamJobsFiltered, js.ConsumerAnalyzerWorkers)
 	if err != nil {
 		log.Error("nats pull consumer failed", err)
+		shutdown()
 		os.Exit(1)
 	}
 
@@ -63,28 +63,13 @@ func main() {
 	rdb, err := redispkg.New(ctx, cfg.Redis.URL)
 	if err != nil {
 		log.Error("redis connect failed", err)
+		shutdown()
 		os.Exit(1)
 	}
 	defer func() { _ = rdb.Close() }()
 
-	rateStore := llmstore.NewLLMRateLimitRedisStore(rdb)
-	cooldownStore := llmstore.NewLLMCooldownRedisStore(rdb, llmstore.CooldownPolicy{
-		Base:   time.Duration(cfg.Cooldown.BaseSeconds) * time.Second,
-		Max:    time.Duration(cfg.Cooldown.MaxSeconds) * time.Second,
-		Jitter: cfg.Cooldown.Jitter,
-	})
-
-	slots := make([]llmcore.SlotOptions, 0, len(cfg.Enricher.Slots))
-	for _, s := range cfg.Enricher.Slots {
-		slots = append(slots, llmcore.SlotOptions{
-			KeyID:  s.KeyID,
-			APIKey: s.APIKey,
-			Model:  s.Model,
-			RPM:    s.RPM,
-			RPD:    s.RPD,
-			TPMIn:  s.TPMIn,
-		})
-	}
+	rateStore, cooldownStore := llmstore.NewRedisStores(rdb, cfg.Cooldown)
+	slots := llmcore.SlotsFromConfig(cfg.Enricher.Slots)
 
 	scorer, err := llmcore.NewScorer(ctx, llmcore.Options{
 		Provider:       cfg.LLM.Provider,
@@ -97,6 +82,7 @@ func main() {
 	})
 	if err != nil {
 		log.Error("llm init failed", err)
+		shutdown()
 		os.Exit(1)
 	}
 
@@ -130,6 +116,7 @@ func main() {
 
 	if err := worker.Run(ctx); err != nil && ctx.Err() == nil {
 		log.Error("worker exited with error", err)
+		shutdown()
 		os.Exit(1)
 	}
 	log.Info("shutting down")

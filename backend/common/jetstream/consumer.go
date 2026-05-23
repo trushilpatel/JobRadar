@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	natsjs "github.com/nats-io/nats.go/jetstream"
 )
 
@@ -21,6 +22,10 @@ func (m *Msg) Nak() error                         { return m.inner.Nak() }
 func (m *Msg) NakWithDelay(d time.Duration) error { return m.inner.NakWithDelay(d) }
 func (m *Msg) InProgress() error                  { return m.inner.InProgress() }
 func (m *Msg) Term() error                        { return m.inner.Term() }
+
+// Headers returns the raw NATS message headers.
+// Use tracing.ExtractNATS(ctx, msg.Headers()) to extract W3C trace context from a consumed message.
+func (m *Msg) Headers() nats.Header { return m.inner.Headers() }
 
 // DeliveryCount returns how many times NATS has delivered this message.
 // First delivery = 1, first retry = 2, etc. Returns 1 on metadata error.

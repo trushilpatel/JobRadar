@@ -58,16 +58,11 @@ func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gor
 
 	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.PoolReady(database) })
 
-	nc, njs, err := js.Connect(js.Config{URL: cfg.NATS.URL, CredsFile: cfg.NATS.CredsFile})
+	njs, err := js.ConnectManaged(ctx, js.Config{URL: cfg.NATS.URL, CredsFile: cfg.NATS.CredsFile})
 	if err != nil {
 		log.Error("nats connect failed", err)
 		return nil, nil, nil, nil, err
 	}
-	// nc lives until process exits; register a clean close on shutdown
-	go func() {
-		<-ctx.Done()
-		nc.Close()
-	}()
 
 	if err := js.EnsureStreams(ctx, njs); err != nil {
 		log.Error("nats ensure streams failed", err)
@@ -92,24 +87,8 @@ func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gor
 }
 
 func buildWorker(ctx context.Context, cfg *config.Config, database *gorm.DB, consumer *js.PullConsumer, publisher js.Publisher, rdb *redispkg.Client, log logger.Logger) (*Worker, error) {
-	rateStore := llmstore.NewLLMRateLimitRedisStore(rdb)
-	cooldownStore := llmstore.NewLLMCooldownRedisStore(rdb, llmstore.CooldownPolicy{
-		Base:   time.Duration(cfg.Cooldown.BaseSeconds) * time.Second,
-		Max:    time.Duration(cfg.Cooldown.MaxSeconds) * time.Second,
-		Jitter: cfg.Cooldown.Jitter,
-	})
-
-	slots := make([]llmcore.SlotOptions, 0, len(cfg.Filter.Slots))
-	for _, s := range cfg.Filter.Slots {
-		slots = append(slots, llmcore.SlotOptions{
-			KeyID:  s.KeyID,
-			APIKey: s.APIKey,
-			Model:  s.Model,
-			RPM:    s.RPM,
-			RPD:    s.RPD,
-			TPMIn:  s.TPMIn,
-		})
-	}
+	rateStore, cooldownStore := llmstore.NewRedisStores(rdb, cfg.Cooldown)
+	slots := llmcore.SlotsFromConfig(cfg.Filter.Slots)
 
 	scorer, err := llmcore.NewScorer(ctx, llmcore.Options{
 		Provider:       cfg.LLM.Provider,

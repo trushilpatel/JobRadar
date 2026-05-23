@@ -54,12 +54,12 @@ func (realClock) Sleep(ctx context.Context, d time.Duration) error {
 
 // WorkerOptions collects the dependencies required to build a Worker.
 type WorkerOptions struct {
-	Consumer         *js.PullConsumer
+	Consumer         MessageFetcher
 	Publisher        js.Publisher
 	Scorer           llmcore.JobPostEnricher
 	Pipeline         jobsvc.PipelineService
 	Ledger           EnricherLedger
-	RateLimiter      *AdapterRateLimiter
+	RateLimiter      RateLimiter
 	Log              logger.Logger
 	MaxExpYears      int
 	FetchConcurrency int
@@ -78,12 +78,12 @@ type WorkerOptions struct {
 //     llmCallInterval. Per-job terminal outcomes call Ack; transient failures
 //     call Nak (within retry budget) or send to DLQ + Term (exhausted).
 type Worker struct {
-	consumer        *js.PullConsumer
+	consumer        MessageFetcher
 	publisher       js.Publisher
 	scorer          llmcore.JobPostEnricher
 	pipeline        jobsvc.PipelineService
 	ledger          EnricherLedger
-	rateLimiter     *AdapterRateLimiter
+	rateLimiter     RateLimiter
 	client          *http.Client
 	log             logger.Logger
 	clock           clock
@@ -139,9 +139,9 @@ type fetchedJob struct {
 // termed at its terminal routing point — NATS handles redelivery via BackOff.
 func (w *Worker) Run(ctx context.Context) error {
 	w.log.Info("worker started",
-		logger.Int("fetch_concurrency", w.fetchConc),
-		logger.Int("llm_batch_size", w.llmBatchSize),
-		logger.Dur("llm_call_interval", w.llmCallInterval),
+		logger.Int(logger.FieldFetchConcurrency, w.fetchConc),
+		logger.Int(logger.FieldLLMBatchSize, w.llmBatchSize),
+		logger.Dur(logger.FieldLLMCallInterval, w.llmCallInterval),
 	)
 
 	fetchSize := w.fetchConc * w.llmBatchSize
@@ -183,6 +183,8 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 		return nil
 	}
 
+	// TODO: extract W3C trace context from msg headers via tracing.ExtractNATS once available
+
 	fetchID := uuid.NewString()
 	fetchLog := w.log.With(logger.Str(logger.FieldFetchID, fetchID))
 
@@ -193,7 +195,7 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 	)
 	defer tracing.End(span, &err)
 
-	fetchLog.Info("fetch received", logger.Int("msgs", len(msgs)))
+	fetchLog.Info("fetch received", logger.Int(logger.FieldMsgs, len(msgs)))
 
 	start := time.Now()
 	fetched := w.fetchAll(fetchCtx, fetchLog, msgs)
@@ -201,9 +203,9 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 
 	if len(fetched) == 0 {
 		fetchLog.Info("fetch processed",
-			logger.Int("msgs", len(msgs)),
-			logger.Int("fetched", 0),
-			logger.Dur("fetch_duration", fetchDuration),
+			logger.Int(logger.FieldMsgs, len(msgs)),
+			logger.Int(logger.FieldFetched, 0),
+			logger.Dur(logger.FieldFetchDuration, fetchDuration),
 		)
 		return nil
 	}
@@ -220,7 +222,7 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 	for i, group := range groups {
 		if i > 0 {
 			fetchLog.Debug("inter-group sleep",
-				logger.Dur("sleep", w.llmCallInterval),
+				logger.Dur(logger.FieldSleep, w.llmCallInterval),
 				logger.Int(logger.FieldChunkIndex, i),
 			)
 			if serr := w.clock.Sleep(fetchCtx, w.llmCallInterval); serr != nil {
@@ -237,11 +239,13 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 						fmt.Errorf("panic: %v", r),
 						logger.Str(logger.FieldFetchID, fetchID),
 						logger.Int(logger.FieldChunkIndex, i),
-						logger.Str("stack", string(debug.Stack())),
+						logger.Str(logger.FieldStack, string(debug.Stack())),
 					)
 					for _, fj := range group {
 						w.markError(fetchCtx, fj.job.ID)
-						_ = fj.msg.Term()
+						if terr := fj.msg.Term(); terr != nil {
+							w.log.Warn("msg term failed", logger.Err(terr))
+						}
 					}
 				}
 			}()
@@ -254,11 +258,11 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 	}
 
 	fetchLog.Info("fetch processed",
-		logger.Int("msgs", len(msgs)),
-		logger.Int("fetched", len(fetched)),
-		logger.Int("batches", len(groups)),
-		logger.Dur("fetch_duration", fetchDuration),
-		logger.Dur("enrich_duration", time.Since(enrichStart)),
+		logger.Int(logger.FieldMsgs, len(msgs)),
+		logger.Int(logger.FieldFetched, len(fetched)),
+		logger.Int(logger.FieldBatches, len(groups)),
+		logger.Dur(logger.FieldFetchDuration, fetchDuration),
+		logger.Dur(logger.FieldEnrichDuration, time.Since(enrichStart)),
 	)
 	return nil
 }
@@ -312,7 +316,7 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 	// Within retry budget — Nak so NATS redelivers with consumer BackOff.
 	if nerr := fj.msg.Nak(); nerr != nil {
 		metrics.EnricherRetryPublishFailures.WithLabelValues("nats", stage).Inc()
-		jobLog.Error("nak failed", nerr, logger.Str("stage", stage))
+		jobLog.Error("nak failed", nerr, logger.Str(logger.FieldStage, stage))
 		return false
 	}
 	metrics.EnricherRetryPublishesTotal.WithLabelValues("nats", stage).Inc()
@@ -335,7 +339,7 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 
 	jobLog.Info("scheduled retry via NATS BackOff",
 		logger.Str(logger.FieldNextAttemptAt, nextAttemptAt.UTC().Format(time.RFC3339)),
-		logger.Str("stage", stage),
+		logger.Str(logger.FieldStage, stage),
 	)
 	return true
 }
@@ -361,19 +365,23 @@ func (w *Worker) sendToDLQ(ctx context.Context, jobLog logger.Logger, fj fetched
 	payload, merr := json.Marshal(fj.job)
 	if merr != nil {
 		jobLog.Error("marshal job for DLQ failed, terminating message", merr)
-		_ = fj.msg.Term()
+		if terr := fj.msg.Term(); terr != nil {
+			jobLog.Warn("msg term failed", logger.Err(terr))
+		}
 		w.markError(ctx, fj.job.ID)
 		return false
 	}
 
 	if perr := w.publisher.Publish(ctx, js.SubjectJobsDLQ, payload); perr != nil {
-		jobLog.Error("publish DLQ failed", perr, logger.Str("cause", cause))
+		jobLog.Error("publish DLQ failed", perr, logger.Str(logger.FieldCause, cause))
 		return false
 	}
 	metrics.EnricherDLQPublishesTotal.WithLabelValues(cause).Inc()
-	_ = fj.msg.Term()
+	if terr := fj.msg.Term(); terr != nil {
+		jobLog.Warn("msg term failed", logger.Err(terr))
+	}
 	w.markError(ctx, fj.job.ID)
-	jobLog.Warn("moved to DLQ", logger.Err(err), logger.Str("cause", cause))
+	jobLog.Warn("moved to DLQ", logger.Err(err), logger.Str(logger.FieldCause, cause))
 	metrics.EnricherJobsTotal.WithLabelValues("dlq").Inc()
 	return true
 }

@@ -12,27 +12,6 @@ import (
 // Ensure test doubles implement interfaces.
 var _ services.PipelineStore = (*fakePipelineStore)(nil)
 
-// fakeLagReader is a test double for kafka.LagReader.
-// lags maps groupID → lag value so each Kafka call can return a distinct count.
-type fakeLagReader struct {
-	lags map[string]int64
-	err  error
-}
-
-func (f *fakeLagReader) GetLag(_ context.Context, groupID, _ string) (int64, error) {
-	return f.lags[groupID], f.err
-}
-
-// fakeDrainer is a test double for kafka.RetryDrainer.
-type fakeDrainer struct {
-	drained int64
-	err     error
-}
-
-func (f *fakeDrainer) Drain(_ context.Context, _, _, _ string) (int64, error) {
-	return f.drained, f.err
-}
-
 // fakePipelineStore is a test double for PipelineStore.
 type fakePipelineStore struct {
 	stats dto.PipelineDBStats
@@ -55,16 +34,6 @@ func TestPipelineService_GetPipelineStats_OK(t *testing.T) {
 			PipelinePending:  12,
 			PipelineFiltered: 3,
 		}},
-		&fakeLagReader{lags: map[string]int64{
-			"job-listing-relevance-filter-retry-1m":  4,
-			"job-listing-relevance-filter-retry-10m": 5,
-			"job-listing-relevance-filter-retry-1h":  6,
-			"jobradar-dlq-observer":                  1,
-			"job-post-analyzer-retry-1m":             2,
-			"job-post-analyzer-retry-10m":            3,
-			"job-post-analyzer-retry-1h":             1,
-		}},
-		&fakeDrainer{},
 	)
 
 	stats, err := svc.GetPipelineStats(context.Background())
@@ -82,52 +51,21 @@ func TestPipelineService_GetPipelineStats_OK(t *testing.T) {
 	if stats.AwaitingEnrichment != 3 {
 		t.Errorf("AwaitingEnrichment = %d, want 3 (pipeline_filtered from DB)", stats.AwaitingEnrichment)
 	}
-	if stats.FilterRetries.Tier1m != 4 {
-		t.Errorf("FilterRetries.Tier1m = %d, want 4", stats.FilterRetries.Tier1m)
+	// NATS BackOff handles retries — retry tier counts are always zero.
+	if stats.FilterRetries.Tier1m != 0 {
+		t.Errorf("FilterRetries.Tier1m = %d, want 0 (NATS, no lag)", stats.FilterRetries.Tier1m)
 	}
-	if stats.FilterRetries.Tier10m != 5 {
-		t.Errorf("FilterRetries.Tier10m = %d, want 5", stats.FilterRetries.Tier10m)
-	}
-	if stats.FilterRetries.Tier1h != 6 {
-		t.Errorf("FilterRetries.Tier1h = %d, want 6", stats.FilterRetries.Tier1h)
-	}
-	if stats.FilterRetries.DLQ != 1 {
-		t.Errorf("FilterRetries.DLQ = %d, want 1", stats.FilterRetries.DLQ)
-	}
-	if stats.EnricherRetries.Tier1m != 2 {
-		t.Errorf("EnricherRetries.Tier1m = %d, want 2", stats.EnricherRetries.Tier1m)
+	if stats.EnricherRetries.Tier1m != 0 {
+		t.Errorf("EnricherRetries.Tier1m = %d, want 0 (NATS, no lag)", stats.EnricherRetries.Tier1m)
 	}
 	if stats.NewJobs24h != 5 {
 		t.Errorf("NewJobs24h = %d, want 5", stats.NewJobs24h)
 	}
 }
 
-func TestPipelineService_GetPipelineStats_LagError(t *testing.T) {
-	svc := services.NewPipelineService(
-		&fakePipelineStore{stats: dto.PipelineDBStats{TotalCompanies: 5}},
-		&fakeLagReader{lags: nil, err: errors.New("lag unavailable")},
-		&fakeDrainer{},
-	)
-
-	stats, err := svc.GetPipelineStats(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// AwaitingEnrichment comes from DB (pipeline_filtered=0 in this store).
-	if stats.AwaitingEnrichment != 0 {
-		t.Errorf("AwaitingEnrichment = %d, want 0", stats.AwaitingEnrichment)
-	}
-	// FilterRetries still come from the lag reader; error → 0.
-	if stats.FilterRetries.Tier1m != 0 {
-		t.Errorf("FilterRetries.Tier1m = %d, want 0 on lag error", stats.FilterRetries.Tier1m)
-	}
-}
-
 func TestPipelineService_GetPipelineStats_StoreError(t *testing.T) {
 	svc := services.NewPipelineService(
 		&fakePipelineStore{err: errors.New("db down")},
-		&fakeLagReader{},
-		&fakeDrainer{},
 	)
 
 	_, err := svc.GetPipelineStats(context.Background())
@@ -137,23 +75,20 @@ func TestPipelineService_GetPipelineStats_StoreError(t *testing.T) {
 }
 
 func TestPipelineService_TriggerRetry_OK(t *testing.T) {
-	svc := services.NewPipelineService(
-		&fakePipelineStore{},
-		&fakeLagReader{},
-		&fakeDrainer{drained: 42},
-	)
+	svc := services.NewPipelineService(&fakePipelineStore{})
 
 	n, err := svc.TriggerRetry(context.Background(), "filter", "1m")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if n != 42 {
-		t.Errorf("drained = %d, want 42", n)
+	// NATS redelivers automatically — manual drain always returns 0.
+	if n != 0 {
+		t.Errorf("drained = %d, want 0 (NATS, no drain needed)", n)
 	}
 }
 
 func TestPipelineService_TriggerRetry_UnknownWorker(t *testing.T) {
-	svc := services.NewPipelineService(&fakePipelineStore{}, &fakeLagReader{}, &fakeDrainer{})
+	svc := services.NewPipelineService(&fakePipelineStore{})
 
 	_, err := svc.TriggerRetry(context.Background(), "unknown", "1m")
 	if err == nil {
@@ -162,7 +97,7 @@ func TestPipelineService_TriggerRetry_UnknownWorker(t *testing.T) {
 }
 
 func TestPipelineService_TriggerRetry_UnknownTier(t *testing.T) {
-	svc := services.NewPipelineService(&fakePipelineStore{}, &fakeLagReader{}, &fakeDrainer{})
+	svc := services.NewPipelineService(&fakePipelineStore{})
 
 	_, err := svc.TriggerRetry(context.Background(), "filter", "99m")
 	if err == nil {
@@ -170,15 +105,20 @@ func TestPipelineService_TriggerRetry_UnknownTier(t *testing.T) {
 	}
 }
 
-func TestPipelineService_TriggerRetry_DrainerError(t *testing.T) {
-	svc := services.NewPipelineService(
-		&fakePipelineStore{},
-		&fakeLagReader{},
-		&fakeDrainer{err: errors.New("kafka unavailable")},
-	)
+func TestPipelineService_TriggerRetry_AllValidCombinations(t *testing.T) {
+	svc := services.NewPipelineService(&fakePipelineStore{})
+	workers := []string{"filter", "enricher"}
+	tiers := []string{"1m", "10m", "1h", "dlq"}
 
-	_, err := svc.TriggerRetry(context.Background(), "enricher", "10m")
-	if err == nil {
-		t.Fatal("expected error from drainer failure, got nil")
+	for _, w := range workers {
+		for _, tier := range tiers {
+			n, err := svc.TriggerRetry(context.Background(), w, tier)
+			if err != nil {
+				t.Errorf("TriggerRetry(%q, %q): unexpected error: %v", w, tier, err)
+			}
+			if n != 0 {
+				t.Errorf("TriggerRetry(%q, %q): got %d, want 0", w, tier, n)
+			}
+		}
 	}
 }

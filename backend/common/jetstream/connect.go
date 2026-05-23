@@ -1,6 +1,7 @@
 package jetstream
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -32,4 +33,18 @@ func Connect(cfg Config) (*nats.Conn, natsjs.JetStream, error) {
 	}
 
 	return nc, js, nil
+}
+
+// ConnectManaged dials NATS, registers a context-cancel close goroutine, and
+// returns only the JetStream handle. The *nats.Conn is managed internally.
+func ConnectManaged(ctx context.Context, cfg Config) (natsjs.JetStream, error) {
+	nc, js, err := Connect(cfg)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		<-ctx.Done()
+		nc.Close()
+	}()
+	return js, nil
 }

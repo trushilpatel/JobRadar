@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/apps/analyzer/techtag"
+	"github.com/trushilpatel/jobradar/service/job/techtag"
 )
 
 // TestClean_EmptyInputReturnsEmpty — Clean returns empty slice when there is

@@ -59,16 +59,16 @@ func (w *BaseWorker) StartHeartbeatForTest(ctx context.Context, id string) func(
 // RunLoop runs the claim → heartbeat → scan → complete loop until ctx is cancelled.
 // The inter-company delay is enforced at ClaimNext (DB level) — no sleep after scan.
 func (w *BaseWorker) RunLoop(ctx context.Context) {
-	w.log.Info("adapter worker started", logger.Str("adapter_type", w.adapterType))
+	w.log.Info("adapter worker started", logger.Str(logger.FieldAdapterType, w.adapterType))
 	for {
 		if ctx.Err() != nil {
-			w.log.Info("adapter worker stopping", logger.Str("adapter_type", w.adapterType))
+			w.log.Info("adapter worker stopping", logger.Str(logger.FieldAdapterType, w.adapterType))
 			return
 		}
 
 		item, err := w.queue.ClaimNext(ctx, w.adapterType)
 		if err != nil {
-			w.log.Error("claim failed", err, logger.Str("adapter_type", w.adapterType))
+			w.log.Error("claim failed", err, logger.Str(logger.FieldAdapterType, w.adapterType))
 			if err := w.Sleep(ctx, w.pollInterval); err != nil {
 				return
 			}
@@ -83,9 +83,9 @@ func (w *BaseWorker) RunLoop(ctx context.Context) {
 		}
 
 		w.log.Info("processing company",
-			logger.Str("adapter_type", w.adapterType),
+			logger.Str(logger.FieldAdapterType, w.adapterType),
 			logger.Str(logger.FieldCompany, item.CompanyID),
-			logger.Str("source", item.Source),
+			logger.Str(logger.FieldSource, item.Source),
 		)
 
 		stop := w.startHeartbeat(ctx, item.ID)
@@ -94,9 +94,9 @@ func (w *BaseWorker) RunLoop(ctx context.Context) {
 				if r := recover(); r != nil {
 					w.log.Error("panic in RunForCompany, recovering",
 						fmt.Errorf("panic: %v", r),
-						logger.Str("adapter_type", w.adapterType),
+						logger.Str(logger.FieldAdapterType, w.adapterType),
 						logger.Str(logger.FieldCompany, item.CompanyID),
-						logger.Str("stack", string(debug.Stack())),
+						logger.Str(logger.FieldStack, string(debug.Stack())),
 					)
 				}
 			}()
@@ -104,7 +104,7 @@ func (w *BaseWorker) RunLoop(ctx context.Context) {
 		}()
 		if ctx.Err() != nil {
 			stop()
-			w.log.Info("adapter worker stopping after panic recovery", logger.Str("adapter_type", w.adapterType))
+			w.log.Info("adapter worker stopping after panic recovery", logger.Str(logger.FieldAdapterType, w.adapterType))
 			return
 		}
 		if err := w.queue.Complete(ctx, item.ID); err != nil {

@@ -7,7 +7,6 @@ import (
 
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
-	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 // computeJitter returns a duration uniformly distributed in
@@ -38,7 +37,7 @@ func computeJitter(checkInterval time.Duration, src *rand.Rand) time.Duration {
 func Run(
 	ctx context.Context,
 	log logger.Logger,
-	svc scansvc.SchedulerService,
+	svc SchedulerService,
 	scanIntervalMinutes int,
 	tickInterval time.Duration,
 	stuckTimeout time.Duration,
@@ -70,7 +69,7 @@ func Run(
 //  1. Resets any processing rows whose crawler has gone silent (stuck detection).
 //  2. Removes queued rows for companies that have since been deactivated.
 //  3. Enqueues all companies currently due for a scan in a single query.
-func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerService, intervalMinutes int, stuckTimeout time.Duration) {
+func runCycle(ctx context.Context, log logger.Logger, svc SchedulerService, intervalMinutes int, stuckTimeout time.Duration) {
 	start := time.Now()
 
 	if err := svc.ResetStuck(ctx, stuckTimeout); err != nil {
@@ -84,7 +83,7 @@ func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerServi
 		metrics.SchedulerErrorsTotal.WithLabelValues("purge_inactive").Inc()
 		log.Error("purge inactive failed", err)
 	} else if purged > 0 {
-		log.Info("purged inactive company queue entries", logger.Int("purged", purged))
+		log.Info("purged inactive company queue entries", logger.Int(logger.FieldPurged, purged))
 	}
 
 	res, err := svc.EnqueueDue(ctx, intervalMinutes)
@@ -101,7 +100,7 @@ func runCycle(ctx context.Context, log logger.Logger, svc scansvc.SchedulerServi
 	// the queue is idle but every company still needs onboarding).
 	if res.SkippedNoSettings > 0 {
 		log.Info("companies skipped — no scan_settings configured",
-			logger.Int("skipped_no_settings", res.SkippedNoSettings),
+			logger.Int(logger.FieldSkippedNoSettings, res.SkippedNoSettings),
 		)
 	}
 

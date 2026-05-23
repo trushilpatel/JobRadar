@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/wire"
 	"github.com/trushilpatel/jobradar/common/config"
-	"github.com/trushilpatel/jobradar/common/kafka"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/service/application"
 	appsvc "github.com/trushilpatel/jobradar/service/application/services"
@@ -22,19 +21,6 @@ import (
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 	"gorm.io/gorm"
 )
-
-// noopLagReader returns 0 for all consumer lag queries. NATS JetStream handles
-// retries via BackOff/MaxDeliver on durable consumers — there are no separate
-// retry topics to monitor, so lag tracking via the old Kafka model is not applicable.
-type noopLagReader struct{}
-
-func (*noopLagReader) GetLag(_ context.Context, _, _ string) (int64, error) { return 0, nil }
-
-// noopRetryDrainer is a no-op drain. NATS redelivers messages automatically via
-// consumer BackOff — there is no separate retry topic to drain back to main.
-type noopRetryDrainer struct{}
-
-func (*noopRetryDrainer) Drain(_ context.Context, _, _, _ string) (int64, error) { return 0, nil }
 
 func provideCompanyConfig(cfg *config.Config) company.Config {
 	return company.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
@@ -90,14 +76,6 @@ func provideApplicationListReader(s appsvc.ApplicationService) dashsvc.Applicati
 	return s
 }
 
-func provideLagReader(_ *config.Config) (kafka.LagReader, error) {
-	return &noopLagReader{}, nil
-}
-
-func provideRetryDrainer(_ *config.Config) (kafka.RetryDrainer, error) {
-	return &noopRetryDrainer{}, nil
-}
-
 func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, error) {
 	wire.Build(
 		provideCompanyConfig,
@@ -108,7 +86,6 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 		provideJobCountReader,
 		provideJobApplicationWriter,
 		provideApplicationListReader,
-		provideLagReader,
 		company.ProviderSet,
 		scan.ProviderSet,
 		job.ProviderSet,
