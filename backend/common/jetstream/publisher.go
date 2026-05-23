@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
 	natsjs "github.com/nats-io/nats.go/jetstream"
+	"github.com/trushilpatel/jobradar/common/tracing"
 )
 
 // Publisher sends messages to NATS JetStream subjects.
@@ -34,7 +36,13 @@ func (p *jetStreamPublisher) PublishWithMsgID(ctx context.Context, subject strin
 }
 
 func (p *jetStreamPublisher) publish(ctx context.Context, subject string, payload []byte, msgID string) error {
-	if _, err := p.js.Publish(ctx, subject, payload, natsjs.WithMsgID(msgID)); err != nil {
+	msg := &nats.Msg{
+		Subject: subject,
+		Data:    payload,
+		Header:  make(nats.Header),
+	}
+	tracing.InjectNATS(ctx, msg.Header)
+	if _, err := p.js.PublishMsg(ctx, msg, natsjs.WithMsgID(msgID)); err != nil {
 		return fmt.Errorf("publish to %s: %w", subject, err)
 	}
 	return nil

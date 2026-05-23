@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/nats-io/nats.go"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/tracing"
-	"github.com/twmb/franz-go/pkg/kgo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
@@ -143,7 +143,7 @@ func TestEnd_RecordsErrorAndSetsErrorStatus(t *testing.T) {
 	}
 }
 
-func TestInjectKafka_ExtractKafka_RoundTrip(t *testing.T) {
+func TestInjectNATS_ExtractNATS_RoundTrip(t *testing.T) {
 	setupRecorder(t)
 
 	// Build a context that carries an active span (so there's something to propagate).
@@ -151,27 +151,22 @@ func TestInjectKafka_ExtractKafka_RoundTrip(t *testing.T) {
 	defer span.End()
 	parentSC := span.SpanContext()
 
-	headers := tracing.InjectKafka(ctx, nil)
-	if len(headers) == 0 {
-		t.Fatal("InjectKafka: expected headers to be appended, got none")
+	h := make(nats.Header)
+	tracing.InjectNATS(ctx, h)
+	if len(h) == 0 {
+		t.Fatal("InjectNATS: expected headers to be set, got none")
 	}
 
 	// traceparent header must be present.
-	var foundTraceparent bool
-	for _, h := range headers {
-		if h.Key == "traceparent" {
-			foundTraceparent = true
-		}
-	}
-	if !foundTraceparent {
-		t.Fatalf("InjectKafka: traceparent header missing, headers=%+v", headers)
+	if h.Get("traceparent") == "" {
+		t.Fatalf("InjectNATS: traceparent header missing, headers=%+v", h)
 	}
 
 	// Extract into a fresh context — the remote span must match the original.
-	extractedCtx := tracing.ExtractKafka(context.Background(), headers)
+	extractedCtx := tracing.ExtractNATS(context.Background(), h)
 	remoteSC := trace.SpanContextFromContext(extractedCtx)
 	if !remoteSC.IsValid() {
-		t.Fatal("ExtractKafka: remote span context is not valid")
+		t.Fatal("ExtractNATS: remote span context is not valid")
 	}
 	if remoteSC.TraceID() != parentSC.TraceID() {
 		t.Fatalf("TraceID mismatch: want %v got %v", parentSC.TraceID(), remoteSC.TraceID())
@@ -181,33 +176,28 @@ func TestInjectKafka_ExtractKafka_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestInjectKafka_PreservesExistingHeaders(t *testing.T) {
+func TestInjectNATS_PreservesExistingHeaders(t *testing.T) {
 	setupRecorder(t)
 
 	ctx, span := tracing.Start(context.Background(), "producer")
 	defer span.End()
 
-	existing := []kgo.RecordHeader{{Key: "x-custom", Value: []byte("v1")}}
-	out := tracing.InjectKafka(ctx, existing)
+	h := make(nats.Header)
+	h.Set("x-custom", "v1")
+	tracing.InjectNATS(ctx, h)
 
-	var found bool
-	for _, h := range out {
-		if h.Key == "x-custom" && string(h.Value) == "v1" {
-			found = true
-		}
+	if h.Get("x-custom") != "v1" {
+		t.Fatalf("expected pre-existing header preserved, got %+v", h)
 	}
-	if !found {
-		t.Fatalf("expected pre-existing header preserved, got %+v", out)
-	}
-	if len(out) <= len(existing) {
-		t.Fatalf("expected new headers appended; before=%d after=%d", len(existing), len(out))
+	if h.Get("traceparent") == "" {
+		t.Fatalf("expected traceparent injected alongside custom header")
 	}
 }
 
-func TestExtractKafka_NoHeadersYieldsNoRemoteSpan(t *testing.T) {
+func TestExtractNATS_NoHeadersYieldsNoRemoteSpan(t *testing.T) {
 	setupRecorder(t)
 
-	ctx := tracing.ExtractKafka(context.Background(), nil)
+	ctx := tracing.ExtractNATS(context.Background(), nil)
 	sc := trace.SpanContextFromContext(ctx)
 	if sc.IsValid() {
 		t.Fatalf("expected invalid span context for empty headers, got %+v", sc)
@@ -249,18 +239,13 @@ func TestInit_NonEmptyEndpointInstallsProviderAndPropagator(t *testing.T) {
 		t.Fatal("Init: expected global TracerProvider to be replaced")
 	}
 
-	// The composite propagator must carry W3C traceparent on Inject.
+	// The composite propagator must carry W3C traceparent on Inject via NATS.
 	ctx, span := tracing.Start(context.Background(), "init-test")
 	defer span.End()
-	headers := tracing.InjectKafka(ctx, nil)
-	var foundTraceparent bool
-	for _, h := range headers {
-		if h.Key == "traceparent" {
-			foundTraceparent = true
-		}
-	}
-	if !foundTraceparent {
-		t.Fatalf("expected traceparent header after Init, got %+v", headers)
+	h := make(nats.Header)
+	tracing.InjectNATS(ctx, h)
+	if h.Get("traceparent") == "" {
+		t.Fatalf("expected traceparent header after Init, got %+v", h)
 	}
 }
 
