@@ -14,38 +14,43 @@ import (
 	svc "github.com/trushilpatel/jobradar/service/insights/services"
 )
 
-// fakeInsightsService is a test double for InsightsService.
 type fakeInsightsService struct {
-	mu             sync.Mutex
-	data           interface{}
-	pipelineCounts dto.PipelineCounts
-	err            error
-	// Capture the most recent Sponsorship filter so handler tests can assert
-	// the days query-param parsing behavior end-to-end.
+	mu                    sync.Mutex
+	techCounts            []dto.TechCount
+	activity              []dto.CompanyActivityItem
+	funnel                []dto.FunnelStep
+	location              dto.LocationBreakdown
+	sponsorship           []dto.SponsorshipDay
+	velocity              []dto.CompanyVelocity
+	roleCategories        []dto.RoleCategoryCount
+	pipelineCounts        dto.PipelineCounts
+	err                   error
 	lastSponsorshipFilter dto.InsightsFilter
 }
 
-func (f *fakeInsightsService) TechStack(_ context.Context) (interface{}, error) {
-	return f.data, f.err
+func (f *fakeInsightsService) TechStack(_ context.Context) ([]dto.TechCount, error) {
+	return f.techCounts, f.err
 }
-func (f *fakeInsightsService) CompanyActivity(_ context.Context) (interface{}, error) {
-	return f.data, f.err
+func (f *fakeInsightsService) CompanyActivity(_ context.Context) ([]dto.CompanyActivityItem, error) {
+	return f.activity, f.err
 }
-func (f *fakeInsightsService) Funnel(_ context.Context) (interface{}, error) { return f.data, f.err }
-func (f *fakeInsightsService) Location(_ context.Context) (interface{}, error) {
-	return f.data, f.err
+func (f *fakeInsightsService) Funnel(_ context.Context) ([]dto.FunnelStep, error) {
+	return f.funnel, f.err
 }
-func (f *fakeInsightsService) Sponsorship(_ context.Context, filter dto.InsightsFilter) (interface{}, error) {
+func (f *fakeInsightsService) Location(_ context.Context) (dto.LocationBreakdown, error) {
+	return f.location, f.err
+}
+func (f *fakeInsightsService) Sponsorship(_ context.Context, filter dto.InsightsFilter) ([]dto.SponsorshipDay, error) {
 	f.mu.Lock()
 	f.lastSponsorshipFilter = filter
 	f.mu.Unlock()
-	return f.data, f.err
+	return f.sponsorship, f.err
 }
-func (f *fakeInsightsService) Velocity(_ context.Context) (interface{}, error) {
-	return f.data, f.err
+func (f *fakeInsightsService) Velocity(_ context.Context) ([]dto.CompanyVelocity, error) {
+	return f.velocity, f.err
 }
-func (f *fakeInsightsService) RoleCategories(_ context.Context) (interface{}, error) {
-	return f.data, f.err
+func (f *fakeInsightsService) RoleCategories(_ context.Context) ([]dto.RoleCategoryCount, error) {
+	return f.roleCategories, f.err
 }
 func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (dto.PipelineCounts, error) {
 	return f.pipelineCounts, f.err
@@ -59,13 +64,11 @@ func newInsightsTestRouter(h *svc.RestService) *chi.Mux {
 }
 
 func TestInsightsHandlerTechStack_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeInsightsService{data: []dto.TechCount{}})
+	h := svc.NewRestService(&fakeInsightsService{techCounts: []dto.TechCount{}})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/tech-stack", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusOK {
 		t.Errorf("got status %d, want 200", w.Code)
 	}
@@ -75,15 +78,11 @@ func TestInsightsHandlerTechStack_OK(t *testing.T) {
 }
 
 func TestInsightsHandlerTechStack_ServiceError(t *testing.T) {
-	h := svc.NewRestService(
-		&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")},
-	)
+	h := svc.NewRestService(&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/tech-stack", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("got status %d, want 500", w.Code)
 	}
@@ -93,83 +92,68 @@ func TestInsightsHandlerTechStack_ServiceError(t *testing.T) {
 }
 
 func TestInsightsHandlerFunnel_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeInsightsService{data: []dto.FunnelStep{}})
+	h := svc.NewRestService(&fakeInsightsService{funnel: []dto.FunnelStep{}})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/funnel", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusOK {
 		t.Errorf("got status %d, want 200", w.Code)
 	}
 }
 
 func TestInsightsHandlerSponsorship_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeInsightsService{data: []dto.SponsorshipDay{}})
+	h := svc.NewRestService(&fakeInsightsService{sponsorship: []dto.SponsorshipDay{}})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/sponsorship?days=30", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusOK {
 		t.Errorf("got status %d, want 200", w.Code)
 	}
 }
 
 func TestInsightsHandlerSponsorship_ValidationError(t *testing.T) {
-	// Wire validation into the chain: ValidationService wraps the fake
-	fake := &fakeInsightsService{data: []dto.SponsorshipDay{}}
+	fake := &fakeInsightsService{sponsorship: []dto.SponsorshipDay{}}
 	validationSvc := svc.NewValidationService(fake)
 	h := svc.NewRestService(validationSvc)
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/sponsorship?days=0", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("got status %d, want 400", w.Code)
 	}
 }
 
 func TestInsightsHandlerVelocity_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeInsightsService{data: []dto.CompanyVelocity{}})
+	h := svc.NewRestService(&fakeInsightsService{velocity: []dto.CompanyVelocity{}})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/velocity", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusOK {
 		t.Errorf("got status %d, want 200", w.Code)
 	}
 }
 
 func TestInsightsHandlerRoleCategories_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeInsightsService{data: []dto.RoleCategoryCount{}})
+	h := svc.NewRestService(&fakeInsightsService{roleCategories: []dto.RoleCategoryCount{}})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/role-categories", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusOK {
 		t.Errorf("got status %d, want 200", w.Code)
 	}
 }
 
-// TestInsightsHandlerCompanyActivity_OK ensures the company activity endpoint
-// returns 200 with a data envelope on success.
 func TestInsightsHandlerCompanyActivity_OK(t *testing.T) {
-	h := svc.NewRestService(&fakeInsightsService{data: []dto.CompanyActivityItem{}})
+	h := svc.NewRestService(&fakeInsightsService{activity: []dto.CompanyActivityItem{}})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/company-activity", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusOK {
 		t.Errorf("got status %d, want 200", w.Code)
 	}
@@ -179,30 +163,22 @@ func TestInsightsHandlerCompanyActivity_OK(t *testing.T) {
 }
 
 func TestInsightsHandlerCompanyActivity_ServiceError(t *testing.T) {
-	h := svc.NewRestService(
-		&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")},
-	)
+	h := svc.NewRestService(&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/company-activity", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("got status %d, want 500", w.Code)
 	}
 }
 
 func TestInsightsHandlerFunnel_ServiceError(t *testing.T) {
-	h := svc.NewRestService(
-		&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")},
-	)
+	h := svc.NewRestService(&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/funnel", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("got status %d, want 500", w.Code)
 	}
@@ -210,17 +186,15 @@ func TestInsightsHandlerFunnel_ServiceError(t *testing.T) {
 
 func TestInsightsHandlerLocation_OK(t *testing.T) {
 	h := svc.NewRestService(&fakeInsightsService{
-		data: map[string]interface{}{
-			"countries": []dto.LocationCount{},
-			"states":    []dto.StateCount{},
+		location: dto.LocationBreakdown{
+			Countries: []dto.LocationCount{},
+			States:    []dto.StateCount{},
 		},
 	})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/location", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusOK {
 		t.Errorf("got status %d, want 200", w.Code)
 	}
@@ -230,31 +204,23 @@ func TestInsightsHandlerLocation_OK(t *testing.T) {
 }
 
 func TestInsightsHandlerLocation_ServiceError(t *testing.T) {
-	h := svc.NewRestService(
-		&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")},
-	)
+	h := svc.NewRestService(&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/location", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("got status %d, want 500", w.Code)
 	}
 }
 
-// TestInsightsHandlerSponsorship_DefaultDays asserts the days query-param
-// defaults to 30 when omitted entirely. This is the documented contract.
 func TestInsightsHandlerSponsorship_DefaultDays(t *testing.T) {
-	fake := &fakeInsightsService{data: []dto.SponsorshipDay{}}
+	fake := &fakeInsightsService{sponsorship: []dto.SponsorshipDay{}}
 	h := svc.NewRestService(fake)
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/sponsorship", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusOK {
 		t.Errorf("got status %d, want 200", w.Code)
 	}
@@ -263,37 +229,27 @@ func TestInsightsHandlerSponsorship_DefaultDays(t *testing.T) {
 	}
 }
 
-// TestInsightsHandlerSponsorship_InvalidDays asserts a non-numeric days
-// param falls back to the 30-day default rather than producing an error —
-// strconv.Atoi failures are silently ignored.
+// TestInsightsHandlerSponsorship_InvalidDays asserts a non-numeric days param
+// returns 400 — the handler rejects unparseable values explicitly.
 func TestInsightsHandlerSponsorship_InvalidDays(t *testing.T) {
-	fake := &fakeInsightsService{data: []dto.SponsorshipDay{}}
+	fake := &fakeInsightsService{sponsorship: []dto.SponsorshipDay{}}
 	h := svc.NewRestService(fake)
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/sponsorship?days=abc", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("got status %d, want 200", w.Code)
-	}
-	if fake.lastSponsorshipFilter.Days != 30 {
-		t.Errorf("filter.Days = %d, want 30 (default on parse failure)", fake.lastSponsorshipFilter.Days)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("got status %d, want 400 (non-numeric days rejected)", w.Code)
 	}
 }
 
-// TestInsightsHandlerSponsorship_CustomDays asserts a valid numeric days
-// param is forwarded verbatim to the underlying service.
 func TestInsightsHandlerSponsorship_CustomDays(t *testing.T) {
-	fake := &fakeInsightsService{data: []dto.SponsorshipDay{}}
+	fake := &fakeInsightsService{sponsorship: []dto.SponsorshipDay{}}
 	h := svc.NewRestService(fake)
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/sponsorship?days=7", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusOK {
 		t.Errorf("got status %d, want 200", w.Code)
 	}
@@ -302,18 +258,13 @@ func TestInsightsHandlerSponsorship_CustomDays(t *testing.T) {
 	}
 }
 
-// TestInsightsHandlerSponsorship_NegativeDays asserts negative days passes
-// through the parse step (strconv.Atoi accepts them). Validation, when wired,
-// catches this; the handler alone does not reject.
 func TestInsightsHandlerSponsorship_NegativeDays_PassesParser(t *testing.T) {
-	fake := &fakeInsightsService{data: []dto.SponsorshipDay{}}
+	fake := &fakeInsightsService{sponsorship: []dto.SponsorshipDay{}}
 	h := svc.NewRestService(fake)
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/sponsorship?days=-5", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusOK {
 		t.Errorf("got status %d, want 200", w.Code)
 	}
@@ -322,19 +273,14 @@ func TestInsightsHandlerSponsorship_NegativeDays_PassesParser(t *testing.T) {
 	}
 }
 
-// TestInsightsHandlerSponsorship_NegativeDays_RejectedByValidation wires the
-// validation layer in front of the handler and confirms a negative `days`
-// query string is rejected with 400.
 func TestInsightsHandlerSponsorship_NegativeDays_RejectedByValidation(t *testing.T) {
-	fake := &fakeInsightsService{data: []dto.SponsorshipDay{}}
+	fake := &fakeInsightsService{sponsorship: []dto.SponsorshipDay{}}
 	validation := svc.NewValidationService(fake)
 	h := svc.NewRestService(validation)
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/sponsorship?days=-5", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("got status %d, want 400", w.Code)
 	}
@@ -344,57 +290,41 @@ func TestInsightsHandlerSponsorship_NegativeDays_RejectedByValidation(t *testing
 }
 
 func TestInsightsHandlerSponsorship_ServiceError(t *testing.T) {
-	h := svc.NewRestService(
-		&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")},
-	)
+	h := svc.NewRestService(&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/sponsorship?days=30", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("got status %d, want 500", w.Code)
 	}
 }
 
 func TestInsightsHandlerVelocity_ServiceError(t *testing.T) {
-	h := svc.NewRestService(
-		&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")},
-	)
+	h := svc.NewRestService(&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/velocity", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("got status %d, want 500", w.Code)
 	}
 }
 
 func TestInsightsHandlerRoleCategories_ServiceError(t *testing.T) {
-	h := svc.NewRestService(
-		&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")},
-	)
+	h := svc.NewRestService(&fakeInsightsService{err: errors.ErrInternal.WithMessage("db down")})
 	r := newInsightsTestRouter(h)
-
 	req := httptest.NewRequest(http.MethodGet, "/insights/role-categories", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("got status %d, want 500", w.Code)
 	}
 }
 
-// TestInsightsRouter_RegisteredRoutes asserts every documented endpoint is
-// mounted exactly once by NewRestRouter — protects against accidental route
-// removal in future refactors.
 func TestInsightsRouter_RegisteredRoutes(t *testing.T) {
-	h := svc.NewRestService(&fakeInsightsService{data: []dto.TechCount{}})
+	h := svc.NewRestService(&fakeInsightsService{techCounts: []dto.TechCount{}})
 	r := newInsightsTestRouter(h)
-
 	for _, path := range []string{
 		"/insights/tech-stack",
 		"/insights/company-activity",
@@ -413,5 +343,4 @@ func TestInsightsRouter_RegisteredRoutes(t *testing.T) {
 	}
 }
 
-// Ensure test double implements InsightsService.
 var _ svc.InsightsService = (*fakeInsightsService)(nil)

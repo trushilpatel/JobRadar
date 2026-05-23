@@ -8,13 +8,13 @@ import (
 
 // InsightsService defines all analytics queries for the insights domain.
 type InsightsService interface {
-	TechStack(ctx context.Context) (any, error)
-	CompanyActivity(ctx context.Context) (any, error)
-	Funnel(ctx context.Context) (any, error)
-	Location(ctx context.Context) (any, error)
-	Sponsorship(ctx context.Context, filter dto.InsightsFilter) (any, error)
-	Velocity(ctx context.Context) (any, error)
-	RoleCategories(ctx context.Context) (any, error)
+	TechStack(ctx context.Context) ([]dto.TechCount, error)
+	CompanyActivity(ctx context.Context) ([]dto.CompanyActivityItem, error)
+	Funnel(ctx context.Context) ([]dto.FunnelStep, error)
+	Location(ctx context.Context) (dto.LocationBreakdown, error)
+	Sponsorship(ctx context.Context, filter dto.InsightsFilter) ([]dto.SponsorshipDay, error)
+	Velocity(ctx context.Context) ([]dto.CompanyVelocity, error)
+	RoleCategories(ctx context.Context) ([]dto.RoleCategoryCount, error)
 	GetPipelineCounts(ctx context.Context) (dto.PipelineCounts, error)
 }
 
@@ -32,31 +32,31 @@ func NewBaseService(next InsightsService) BaseService {
 	return BaseService{next: next}
 }
 
-func (b *BaseService) TechStack(ctx context.Context) (any, error) {
+func (b *BaseService) TechStack(ctx context.Context) ([]dto.TechCount, error) {
 	return b.next.TechStack(ctx)
 }
 
-func (b *BaseService) CompanyActivity(ctx context.Context) (any, error) {
+func (b *BaseService) CompanyActivity(ctx context.Context) ([]dto.CompanyActivityItem, error) {
 	return b.next.CompanyActivity(ctx)
 }
 
-func (b *BaseService) Funnel(ctx context.Context) (any, error) {
+func (b *BaseService) Funnel(ctx context.Context) ([]dto.FunnelStep, error) {
 	return b.next.Funnel(ctx)
 }
 
-func (b *BaseService) Location(ctx context.Context) (any, error) {
+func (b *BaseService) Location(ctx context.Context) (dto.LocationBreakdown, error) {
 	return b.next.Location(ctx)
 }
 
-func (b *BaseService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) (any, error) {
+func (b *BaseService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) ([]dto.SponsorshipDay, error) {
 	return b.next.Sponsorship(ctx, filter)
 }
 
-func (b *BaseService) Velocity(ctx context.Context) (any, error) {
+func (b *BaseService) Velocity(ctx context.Context) ([]dto.CompanyVelocity, error) {
 	return b.next.Velocity(ctx)
 }
 
-func (b *BaseService) RoleCategories(ctx context.Context) (any, error) {
+func (b *BaseService) RoleCategories(ctx context.Context) ([]dto.RoleCategoryCount, error) {
 	return b.next.RoleCategories(ctx)
 }
 

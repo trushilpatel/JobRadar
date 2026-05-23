@@ -119,6 +119,7 @@ Always parallel via `superpowers:dispatching-parallel-agents`:
 - Serialise only truly dependent tasks
 - Run one QA reviewer over the combined output after parallel work finishes
 - Never execute plans inline in the same session
+- After each parallel batch, verify changes actually landed: run `git status` and spot-read key output files — agent summaries describe intent, not persistence; worktree isolation can leave the main tree untouched
 
 ## Self-improving documentation
 

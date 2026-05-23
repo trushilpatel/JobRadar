@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/trushilpatel/jobradar/apps/api/handler"
+	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 )
 
@@ -57,9 +58,12 @@ func (h *RestService) Location(w http.ResponseWriter, r *http.Request) {
 func (h *RestService) Sponsorship(w http.ResponseWriter, r *http.Request) {
 	days := 30
 	if d := r.URL.Query().Get("days"); d != "" {
-		if parsed, err := strconv.Atoi(d); err == nil {
-			days = parsed
+		parsed, err := strconv.Atoi(d)
+		if err != nil {
+			handler.RespondValidationErrors(w, errors.ValidationErrors{{Field: "days", Code: "INVALID_VALUE", Message: "days must be a positive integer"}})
+			return
 		}
+		days = parsed
 	}
 
 	data, err := h.next.Sponsorship(r.Context(), dto.InsightsFilter{Days: days})

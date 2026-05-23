@@ -22,14 +22,18 @@ export interface EffectiveScanConfig {
 }
 
 export async function getAdapterConfigs(): Promise<AdapterConfig[]> {
-  return apiClient.get<AdapterConfig[]>('/adapter-configs')
+  const result = await apiClient.get<AdapterConfig[] | null>('/admin/adapter-configs')
+  return result ?? []
 }
 
 export async function updateAdapterConfig(
   adapterType: string,
   data: UpdateAdapterConfigInput
 ): Promise<AdapterConfig> {
-  return apiClient.patch<AdapterConfig>(`/adapter-configs/${encodeURIComponent(adapterType)}`, data)
+  return apiClient.patch<AdapterConfig>(
+    `/admin/adapter-configs/${encodeURIComponent(adapterType)}`,
+    data
+  )
 }
 
 export async function updateScanIntervalOverride(
@@ -37,13 +41,13 @@ export async function updateScanIntervalOverride(
   override: number | null
 ): Promise<Company> {
   return apiClient.patch<Company>(
-    `/companies/${encodeURIComponent(companyId)}/scan-interval-override`,
+    `/admin/companies/${encodeURIComponent(companyId)}/scan-interval-override`,
     { scan_interval_minutes_override: override }
   )
 }
 
 export async function getCompanyScanConfig(companyId: string): Promise<EffectiveScanConfig> {
   return apiClient.get<EffectiveScanConfig>(
-    `/companies/${encodeURIComponent(companyId)}/scan-config`
+    `/admin/companies/${encodeURIComponent(companyId)}/scan-config`
   )
 }

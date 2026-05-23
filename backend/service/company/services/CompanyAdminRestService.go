@@ -159,7 +159,7 @@ func (h *AdminRestService) delete(w http.ResponseWriter, r *http.Request) {
 		handler.HandleError(w, err)
 		return
 	}
-	handler.Respond(w, http.StatusOK, map[string]string{"id": id})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // setAllActive handles PATCH /admin/companies/active.

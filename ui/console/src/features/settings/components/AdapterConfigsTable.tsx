@@ -101,6 +101,10 @@ export function AdapterConfigsTable() {
 
   const rows = configs ?? []
 
+  if (rows.length === 0) {
+    return <p className="text-sm text-white/40 py-4">No adapter configurations found.</p>
+  }
+
   return (
     <>
       <div className="rounded-lg border border-white/[0.07] overflow-hidden">

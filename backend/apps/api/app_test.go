@@ -62,8 +62,8 @@ func buildTestApp() *App {
 
 func TestApp_Handlers_ReturnsExpectedCount(t *testing.T) {
 	app := buildTestApp()
-	if got := len(app.Handlers()); got != 6 {
-		t.Fatalf("expected 6 route groups, got %d", got)
+	if got := len(app.Handlers()); got != 5 {
+		t.Fatalf("expected 5 route groups, got %d", got)
 	}
 }
 
@@ -102,11 +102,6 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 	})
 
 	expected := []struct{ method, route string }{
-		// Adapter configs (admin-accessible via /api in Phase 2)
-		{http.MethodGet, "/api/adapter-configs"},
-		{http.MethodPatch, "/api/adapter-configs/{adapter_type}"},
-		{http.MethodPatch, "/api/companies/{id}/scan-interval-override"},
-		{http.MethodGet, "/api/companies/{id}/scan-config"},
 		// Jobs
 		{http.MethodGet, "/api/jobs"},
 		{http.MethodGet, "/api/jobs/{id}"},
@@ -285,17 +280,27 @@ func (f *fakePipelineService) TriggerRetry(_ context.Context, _, _ string) (int6
 
 type fakeInsightsService struct{}
 
-func (f *fakeInsightsService) TechStack(_ context.Context) (any, error) { return nil, nil }
-func (f *fakeInsightsService) CompanyActivity(_ context.Context) (any, error) {
+func (f *fakeInsightsService) TechStack(_ context.Context) ([]insightsdto.TechCount, error) {
 	return nil, nil
 }
-func (f *fakeInsightsService) Funnel(_ context.Context) (any, error)   { return nil, nil }
-func (f *fakeInsightsService) Location(_ context.Context) (any, error) { return nil, nil }
-func (f *fakeInsightsService) Sponsorship(_ context.Context, _ insightsdto.InsightsFilter) (any, error) {
+func (f *fakeInsightsService) CompanyActivity(_ context.Context) ([]insightsdto.CompanyActivityItem, error) {
 	return nil, nil
 }
-func (f *fakeInsightsService) Velocity(_ context.Context) (any, error)       { return nil, nil }
-func (f *fakeInsightsService) RoleCategories(_ context.Context) (any, error) { return nil, nil }
+func (f *fakeInsightsService) Funnel(_ context.Context) ([]insightsdto.FunnelStep, error) {
+	return nil, nil
+}
+func (f *fakeInsightsService) Location(_ context.Context) (insightsdto.LocationBreakdown, error) {
+	return insightsdto.LocationBreakdown{}, nil
+}
+func (f *fakeInsightsService) Sponsorship(_ context.Context, _ insightsdto.InsightsFilter) ([]insightsdto.SponsorshipDay, error) {
+	return nil, nil
+}
+func (f *fakeInsightsService) Velocity(_ context.Context) ([]insightsdto.CompanyVelocity, error) {
+	return nil, nil
+}
+func (f *fakeInsightsService) RoleCategories(_ context.Context) ([]insightsdto.RoleCategoryCount, error) {
+	return nil, nil
+}
 func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insightsdto.PipelineCounts, error) {
 	return insightsdto.PipelineCounts{}, nil
 }

@@ -1,9 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
-import { fetchFunnel } from '@/api/insights'
 import type { FunnelStep } from '@/types'
 import { cn } from '@/lib/utils'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
-import { insightQueryKeys } from './queryKeys'
+import { useFunnel } from './hooks/useInsights'
 
 const COLORS: Record<string, string> = {
   enriched: 'bg-slate-500',
@@ -51,11 +49,7 @@ function FunnelContent({ data }: { data: FunnelStep[] }) {
 }
 
 export function PipelineFunnelPanel() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: insightQueryKeys.funnel(),
-    queryFn: fetchFunnel,
-    staleTime: 30_000,
-  })
+  const { data, isLoading, isError } = useFunnel()
   return (
     <InsightCard title="Pipeline Funnel" subtitle="Enriched → saved → applied (all time)">
       {isLoading ? (

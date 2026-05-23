@@ -254,8 +254,8 @@ func TestAdminRest_Delete_OK(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/companies/stripe", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200", w.Code)
+	if w.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want 204", w.Code)
 	}
 	if rec.deleteID != "stripe" {
 		t.Errorf("deleteID = %q, want stripe", rec.deleteID)

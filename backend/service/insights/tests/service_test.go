@@ -25,43 +25,43 @@ type fakeInsightsRepository struct {
 	err            error
 }
 
-func (f *fakeInsightsRepository) TechStack(_ context.Context) (interface{}, error) {
+func (f *fakeInsightsRepository) TechStack(_ context.Context) ([]dto.TechCount, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f.techCounts, nil
 }
-func (f *fakeInsightsRepository) CompanyActivity(_ context.Context) (interface{}, error) {
+func (f *fakeInsightsRepository) CompanyActivity(_ context.Context) ([]dto.CompanyActivityItem, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f.activity, nil
 }
-func (f *fakeInsightsRepository) Funnel(_ context.Context) (interface{}, error) {
+func (f *fakeInsightsRepository) Funnel(_ context.Context) ([]dto.FunnelStep, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f.funnel, nil
 }
-func (f *fakeInsightsRepository) Location(_ context.Context) (interface{}, error) {
+func (f *fakeInsightsRepository) Location(_ context.Context) (dto.LocationBreakdown, error) {
 	if f.err != nil {
-		return nil, f.err
+		return dto.LocationBreakdown{}, f.err
 	}
-	return map[string]interface{}{"countries": f.countries, "states": f.states}, nil
+	return dto.LocationBreakdown{Countries: f.countries, States: f.states}, nil
 }
-func (f *fakeInsightsRepository) Sponsorship(_ context.Context, filter dto.InsightsFilter) (interface{}, error) {
+func (f *fakeInsightsRepository) Sponsorship(_ context.Context, _ dto.InsightsFilter) ([]dto.SponsorshipDay, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f.sponsorship, nil
 }
-func (f *fakeInsightsRepository) Velocity(_ context.Context) (interface{}, error) {
+func (f *fakeInsightsRepository) Velocity(_ context.Context) ([]dto.CompanyVelocity, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f.velocity, nil
 }
-func (f *fakeInsightsRepository) RoleCategories(_ context.Context) (interface{}, error) {
+func (f *fakeInsightsRepository) RoleCategories(_ context.Context) ([]dto.RoleCategoryCount, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -84,8 +84,6 @@ func TestTechStack_OK(t *testing.T) {
 }
 
 func TestTechStack_Error(t *testing.T) {
-	// RepositoryService wraps DB errors into apperr.ServiceError before returning.
-	// Simulate that by having the fake return a wrapped ServiceError directly.
 	repo := &fakeInsightsRepository{err: apperr.ErrInternal.WithMessage("failed to fetch tech stack")}
 	service := svc.NewImplService(repo)
 	_, err := service.TechStack(context.Background())
@@ -101,7 +99,6 @@ func TestTechStack_Error(t *testing.T) {
 func TestSponsorship_DefaultDays(t *testing.T) {
 	repo := &fakeInsightsRepository{sponsorship: []dto.SponsorshipDay{}}
 	service := svc.NewImplService(repo)
-	// days=0 — ValidationService would reject it, but ImplService passes through to repo
 	data, err := service.Sponsorship(context.Background(), dto.InsightsFilter{Days: 0})
 	if err != nil {
 		t.Fatalf("Sponsorship() error = %v", err)
@@ -114,13 +111,9 @@ func TestSponsorship_DefaultDays(t *testing.T) {
 func TestCompanyActivity_OK(t *testing.T) {
 	repo := &fakeInsightsRepository{activity: []dto.CompanyActivityItem{{CompanyName: "Acme", Week: "2025-01-01", Count: 3}}}
 	service := svc.NewImplService(repo)
-	data, err := service.CompanyActivity(context.Background())
+	rows, err := service.CompanyActivity(context.Background())
 	if err != nil {
 		t.Fatalf("CompanyActivity() error = %v", err)
-	}
-	rows, ok := data.([]dto.CompanyActivityItem)
-	if !ok {
-		t.Fatalf("expected []CompanyActivityItem, got %T", data)
 	}
 	if len(rows) != 1 || rows[0].CompanyName != "Acme" {
 		t.Errorf("unexpected rows: %+v", rows)
@@ -139,12 +132,12 @@ func TestCompanyActivity_Error(t *testing.T) {
 func TestFunnel_OK(t *testing.T) {
 	repo := &fakeInsightsRepository{funnel: []dto.FunnelStep{{Stage: "enriched", Count: 10}}}
 	service := svc.NewImplService(repo)
-	data, err := service.Funnel(context.Background())
+	steps, err := service.Funnel(context.Background())
 	if err != nil {
 		t.Fatalf("Funnel() error = %v", err)
 	}
-	if data == nil {
-		t.Error("expected non-nil data")
+	if len(steps) == 0 {
+		t.Error("expected non-empty steps")
 	}
 }
 
@@ -163,31 +156,27 @@ func TestLocation_OK(t *testing.T) {
 		states:    []dto.StateCount{{State: "CA", Count: 3}},
 	}
 	service := svc.NewImplService(repo)
-	data, err := service.Location(context.Background())
+	breakdown, err := service.Location(context.Background())
 	if err != nil {
 		t.Fatalf("Location() error = %v", err)
 	}
-	m, ok := data.(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected map result, got %T", data)
+	if len(breakdown.Countries) == 0 {
+		t.Error("missing countries")
 	}
-	if _, ok := m["countries"]; !ok {
-		t.Error("missing countries key")
-	}
-	if _, ok := m["states"]; !ok {
-		t.Error("missing states key")
+	if len(breakdown.States) == 0 {
+		t.Error("missing states")
 	}
 }
 
 func TestRoleCategories_OK(t *testing.T) {
 	repo := &fakeInsightsRepository{roleCategories: []dto.RoleCategoryCount{{Category: "engineering", Count: 50}}}
 	service := svc.NewImplService(repo)
-	data, err := service.RoleCategories(context.Background())
+	rows, err := service.RoleCategories(context.Background())
 	if err != nil {
 		t.Fatalf("RoleCategories() error = %v", err)
 	}
-	if data == nil {
-		t.Error("expected non-nil data")
+	if len(rows) == 0 {
+		t.Error("expected non-empty rows")
 	}
 }
 
@@ -235,31 +224,21 @@ func TestSponsorship_RepoError(t *testing.T) {
 }
 
 // TestVelocity_EnrichesRows ensures the impl layer rewrites Multiplier and
-// VelocityTag on every row returned by the repository — the only behaviour
-// the impl layer adds on top of BaseService delegation.
+// VelocityTag on every row returned by the repository.
 func TestVelocity_EnrichesRows(t *testing.T) {
 	repo := &fakeInsightsRepository{
 		velocity: []dto.CompanyVelocity{
-			// avg prior = 10, current = 30 -> 3.0 spike
 			{CompanyID: "c1", CompanyName: "Spiker", WeekCurrent: 30, Week1: 10, Week2: 10, Week3: 10},
-			// avg prior = 10, current = 13 -> 1.3 rising
 			{CompanyID: "c2", CompanyName: "Riser", WeekCurrent: 13, Week1: 10, Week2: 10, Week3: 10},
-			// avg prior = 10, current = 5 -> 0.5 normal
 			{CompanyID: "c3", CompanyName: "Calm", WeekCurrent: 5, Week1: 10, Week2: 10, Week3: 10},
-			// avg prior = 0, current = 0 -> 0 normal
 			{CompanyID: "c4", CompanyName: "Quiet", WeekCurrent: 0, Week1: 0, Week2: 0, Week3: 0},
-			// avg prior = 0, current = 5 -> 3.0 spike (no-baseline rule)
 			{CompanyID: "c5", CompanyName: "FreshSpike", WeekCurrent: 5, Week1: 0, Week2: 0, Week3: 0},
 		},
 	}
 	service := svc.NewImplService(repo)
-	data, err := service.Velocity(context.Background())
+	rows, err := service.Velocity(context.Background())
 	if err != nil {
 		t.Fatalf("Velocity() error = %v", err)
-	}
-	rows, ok := data.([]dto.CompanyVelocity)
-	if !ok {
-		t.Fatalf("expected []CompanyVelocity, got %T", data)
 	}
 	if len(rows) != 5 {
 		t.Fatalf("want 5 rows, got %d", len(rows))
@@ -291,75 +270,24 @@ func TestVelocity_RepoError(t *testing.T) {
 	}
 }
 
-// TestVelocity_TypeMismatch ensures the impl layer returns the raw value when
-// the repository returns something other than []dto.CompanyVelocity — a safety
-// net against future schema drift that should not panic or wrap unexpectedly.
-func TestVelocity_TypeMismatch(t *testing.T) {
-	repo := &mismatchedVelocityRepo{}
-	service := svc.NewImplService(repo)
-	data, err := service.Velocity(context.Background())
-	if err != nil {
-		t.Fatalf("Velocity() error = %v", err)
-	}
-	if data == nil {
-		t.Fatal("expected raw passthrough, got nil")
-	}
-	if _, ok := data.([]dto.CompanyVelocity); ok {
-		t.Error("expected non-velocity type to pass through unchanged")
-	}
-}
-
-// TestVelocity_EmptyRows ensures empty repository output passes through cleanly
-// (no enrichment to apply, but no error either).
 func TestVelocity_EmptyRows(t *testing.T) {
 	repo := &fakeInsightsRepository{velocity: []dto.CompanyVelocity{}}
 	service := svc.NewImplService(repo)
-	data, err := service.Velocity(context.Background())
+	rows, err := service.Velocity(context.Background())
 	if err != nil {
 		t.Fatalf("Velocity() error = %v", err)
-	}
-	rows, ok := data.([]dto.CompanyVelocity)
-	if !ok {
-		t.Fatalf("expected []CompanyVelocity, got %T", data)
 	}
 	if len(rows) != 0 {
 		t.Errorf("expected empty slice, got %d rows", len(rows))
 	}
 }
 
-// mismatchedVelocityRepo is a repo that returns the wrong type from Velocity
-// to exercise the impl-layer type-assertion guard.
-type mismatchedVelocityRepo struct{}
-
-func (r *mismatchedVelocityRepo) TechStack(_ context.Context) (interface{}, error) { return nil, nil }
-func (r *mismatchedVelocityRepo) CompanyActivity(_ context.Context) (interface{}, error) {
-	return nil, nil
-}
-func (r *mismatchedVelocityRepo) Funnel(_ context.Context) (interface{}, error)   { return nil, nil }
-func (r *mismatchedVelocityRepo) Location(_ context.Context) (interface{}, error) { return nil, nil }
-func (r *mismatchedVelocityRepo) Sponsorship(_ context.Context, _ dto.InsightsFilter) (interface{}, error) {
-	return nil, nil
-}
-func (r *mismatchedVelocityRepo) Velocity(_ context.Context) (interface{}, error) {
-	return "not a velocity slice", nil
-}
-func (r *mismatchedVelocityRepo) RoleCategories(_ context.Context) (interface{}, error) {
-	return nil, nil
-}
-func (r *mismatchedVelocityRepo) GetPipelineCounts(_ context.Context) (dto.PipelineCounts, error) {
-	return dto.PipelineCounts{}, nil
-}
-
-// TestNewBaseService_PanicsOnNil verifies the constructor invariant — a nil
-// next is a wire-setup bug and must fail loudly rather than silently NPE
-// later inside one of the delegate methods.
 func TestNewBaseService_PanicsOnNil(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
 			t.Fatal("expected panic on NewBaseService(nil)")
 		}
 	}()
-	// NewImplService threads the input through NewBaseService and panics on nil.
 	_ = svc.NewImplService(nil)
 }
 
@@ -372,12 +300,6 @@ func TestNewValidationService_PanicsOnNil(t *testing.T) {
 	_ = svc.NewValidationService(nil)
 }
 
-// TestBaseService_DelegatesAll verifies every method of the InsightsService
-// interface is wired through BaseService's auto-delegation. We exercise the
-// chain through ValidationService (which does not override most methods) so
-// that the BaseService.* delegation path is hit for every method including
-// Velocity — ImplService overrides Velocity and would mask that delegation
-// otherwise.
 func TestBaseService_DelegatesAll(t *testing.T) {
 	spy := &callSpy{}
 	service := svc.NewValidationService(spy)
@@ -425,7 +347,6 @@ func TestBaseService_DelegatesAll(t *testing.T) {
 	}
 }
 
-// callSpy is a minimal InsightsService double that records each method call.
 type callSpy struct {
 	calls map[string]int
 }
@@ -437,31 +358,31 @@ func (s *callSpy) bump(name string) {
 	s.calls[name]++
 }
 
-func (s *callSpy) TechStack(_ context.Context) (interface{}, error) {
+func (s *callSpy) TechStack(_ context.Context) ([]dto.TechCount, error) {
 	s.bump("TechStack")
 	return nil, nil
 }
-func (s *callSpy) CompanyActivity(_ context.Context) (interface{}, error) {
+func (s *callSpy) CompanyActivity(_ context.Context) ([]dto.CompanyActivityItem, error) {
 	s.bump("CompanyActivity")
 	return nil, nil
 }
-func (s *callSpy) Funnel(_ context.Context) (interface{}, error) {
+func (s *callSpy) Funnel(_ context.Context) ([]dto.FunnelStep, error) {
 	s.bump("Funnel")
 	return nil, nil
 }
-func (s *callSpy) Location(_ context.Context) (interface{}, error) {
+func (s *callSpy) Location(_ context.Context) (dto.LocationBreakdown, error) {
 	s.bump("Location")
-	return nil, nil
+	return dto.LocationBreakdown{}, nil
 }
-func (s *callSpy) Sponsorship(_ context.Context, _ dto.InsightsFilter) (interface{}, error) {
+func (s *callSpy) Sponsorship(_ context.Context, _ dto.InsightsFilter) ([]dto.SponsorshipDay, error) {
 	s.bump("Sponsorship")
 	return nil, nil
 }
-func (s *callSpy) Velocity(_ context.Context) (interface{}, error) {
+func (s *callSpy) Velocity(_ context.Context) ([]dto.CompanyVelocity, error) {
 	s.bump("Velocity")
 	return nil, nil
 }
-func (s *callSpy) RoleCategories(_ context.Context) (interface{}, error) {
+func (s *callSpy) RoleCategories(_ context.Context) ([]dto.RoleCategoryCount, error) {
 	s.bump("RoleCategories")
 	return nil, nil
 }
@@ -470,11 +391,7 @@ func (s *callSpy) GetPipelineCounts(_ context.Context) (dto.PipelineCounts, erro
 	return dto.PipelineCounts{}, nil
 }
 
-// Compile-time check the test doubles still satisfy InsightsService.
 var (
-	_ svc.InsightsService = (*mismatchedVelocityRepo)(nil)
 	_ svc.InsightsService = (*callSpy)(nil)
+	_ svc.InsightsService = (*fakeInsightsRepository)(nil)
 )
-
-// Ensure test double implements the InsightsService interface.
-var _ svc.InsightsService = (*fakeInsightsRepository)(nil)

@@ -60,17 +60,21 @@ func NewApp(
 }
 
 // Handlers returns all route groups for mounting onto the public router.
-// Insights is intentionally excluded — it is mounted under /admin by
-// buildMultiUser and must not also appear on the public router.
+// Insights and AdapterConfig are intentionally excluded — they are mounted
+// under /admin by buildMultiUser and must not also appear on the public router.
 func (a *App) Handlers() []handler.RouteGroup {
 	return []handler.RouteGroup{
 		a.companyHandler,
 		a.scanHandler,
-		a.adapterConfigHandler,
 		a.jobHandler,
 		a.applicationHandler,
 		a.dashboardHandler,
 	}
+}
+
+// AdapterConfigHandler returns the adapter config router for admin mounting.
+func (a *App) AdapterConfigHandler() *scansvc.AdapterConfigRestRouter {
+	return a.adapterConfigHandler
 }
 
 // InsightsHandler returns the insights router for admin mounting.
