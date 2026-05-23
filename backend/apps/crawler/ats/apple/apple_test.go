@@ -25,6 +25,10 @@ func TestApple_ImplementsURLProvider(t *testing.T) {
 	var _ types.URLProvider = (*Apple)(nil)
 }
 
+func TestApple_ImplementsContentFetcher(t *testing.T) {
+	var _ types.ContentFetcher = (*Apple)(nil)
+}
+
 // ── Constructor ─────────────────────────────────────────────────────────────
 
 func TestNew_DefaultSettings(t *testing.T) {
@@ -45,7 +49,7 @@ func TestCareersURL(t *testing.T) {
 	}
 }
 
-// ── FetchJobs — single page ────────────────────────────────────────────────
+// ── FetchJobs — single page ─────────────────────────────────────────────────
 
 func TestFetchJobs_SinglePage(t *testing.T) {
 	srv := newTestServer(t, []pageConfig{
@@ -59,7 +63,13 @@ func TestFetchJobs_SinglePage(t *testing.T) {
 					TransformedPostingTitle: "software-engineer",
 					JobSummary:              "<p>About the position: Build great software.</p>",
 					Locations: []appleLocation{
-						{City: "Cupertino", StateCode: "CA", CountryCode: "USA"},
+						{
+							Name:          "Cupertino",
+							City:          "Cupertino",
+							StateProvince: "California",
+							CountryName:   "United States",
+							CountryID:     usaCountryID,
+						},
 					},
 					PostDateInGMT:       "2026-03-15 00:00:00",
 					Team:                appleTeam{TeamName: "Software and Services", TeamCode: "SWDVR"},
@@ -68,7 +78,7 @@ func TestFetchJobs_SinglePage(t *testing.T) {
 				},
 			},
 		},
-		{page: 2, jobs: []appleJob{}}, // empty second page stops iteration
+		{page: 2, jobs: []appleJob{}},
 	})
 	defer srv.Close()
 
@@ -85,20 +95,19 @@ func TestFetchJobs_SinglePage(t *testing.T) {
 	j := result.Jobs[0]
 	assertEqual(t, "ID", j.ID, "apple-200647207-3543")
 	assertEqual(t, "Title", j.Title, "Software Engineer")
-	assertEqual(t, "Location", j.Location, "Cupertino, CA")
-	assertEqual(t, "URL", j.URL, "https://jobs.apple.com/en-us/details/200647207-3543/software-engineer")
+	assertEqual(t, "Location", j.Location, "Cupertino, California")
+	assertEqual(t, "URL", j.URL, srv.URL+"/en-us/details/200647207-3543/software-engineer")
 	assertEqual(t, "EmploymentType", j.EmploymentType, jobcommon.EmployFullTime)
 
-	if j.FullContent == nil {
-		t.Fatal("FullContent must not be nil — Apple is a fat adapter")
+	if j.FullContent != nil {
+		t.Error("FullContent must be nil — Apple is now a thin adapter")
 	}
-	if !strings.Contains(j.FullContent.Description, "Build great software") {
-		t.Error("FullContent.Description should contain job text without HTML")
+	if !j.LocationKnown {
+		t.Error("LocationKnown should be true when a USA countryID is present")
 	}
-	assertEqual(t, "Department", j.FullContent.Department, "Software and Services")
 }
 
-// ── FetchJobs — multiple pages ───────────────────────────────────────────────
+// ── FetchJobs — multiple pages ──────────────────────────────────────────────
 
 func TestFetchJobs_MultiPage_Pagination(t *testing.T) {
 	srv := newTestServer(t, []pageConfig{
@@ -122,7 +131,7 @@ func TestFetchJobs_MultiPage_Pagination(t *testing.T) {
 				{ID: "100005-5", PostingTitle: "Job 5", TransformedPostingTitle: "job-5", Type: "Regular"},
 			},
 		},
-		{page: 4, jobs: []appleJob{}}, // empty page stops iteration
+		{page: 4, jobs: []appleJob{}},
 	})
 	defer srv.Close()
 
@@ -162,12 +171,14 @@ func TestFetchJobs_EmptyFirstPage(t *testing.T) {
 	}
 }
 
-// ── FetchJobs — HTTP error ─────────────────────────────────────────────────
+// ── FetchJobs — HTTP error ──────────────────────────────────────────────────
 
 func TestFetchJobs_HTTPError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 	}))
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
 	defer srv.Close()
 
 	a := &Apple{baseURL: srv.URL}
@@ -188,12 +199,13 @@ func TestFetchJobs_JSONParseHydrationFormat(t *testing.T) {
 		PostingTitle:            "Software Engineer",
 		TransformedPostingTitle: "software-engineer",
 		JobSummary:              "<p>Build great software.</p>",
-		Locations:               []appleLocation{{City: "Cupertino", StateCode: "CA", CountryCode: "USA"}},
-		Type:                    "Regular",
-		Team:                    appleTeam{TeamName: "Software and Services"},
+		Locations: []appleLocation{
+			{Name: "Cupertino", StateProvince: "California", CountryID: usaCountryID},
+		},
+		Type: "Regular",
+		Team: appleTeam{TeamName: "Software and Services"},
 	}
 
-	// Build the hydration JSON and wrap it as Apple now does: JSON.parse("...")
 	hydrationObj := hydrationData{
 		LoaderData: loaderData{
 			Search: searchData{
@@ -203,11 +215,9 @@ func TestFetchJobs_JSONParseHydrationFormat(t *testing.T) {
 		},
 	}
 	rawJSON, _ := json.Marshal(hydrationObj)
-	// Escape the JSON bytes as a JS string literal (double-quotes and backslashes).
 	escapedJSON := strings.ReplaceAll(string(rawJSON), `\`, `\\`)
 	escapedJSON = strings.ReplaceAll(escapedJSON, `"`, `\"`)
 
-	// Page 2 returns an empty result so pagination stops
 	emptyHydration := hydrationData{LoaderData: loaderData{Search: searchData{SearchResults: []appleJob{}}}}
 	emptyJSON, _ := json.Marshal(emptyHydration)
 	escapedEmpty := strings.ReplaceAll(string(emptyJSON), `\`, `\\`)
@@ -237,7 +247,7 @@ func TestFetchJobs_JSONParseHydrationFormat(t *testing.T) {
 	assertEqual(t, "Title", result.Jobs[0].Title, "Software Engineer")
 }
 
-// ── FetchJobs — JSON.parse() single-quote hydration format ─────────────────
+// ── FetchJobs — JSON.parse() single-quote hydration format ──────────────────
 
 func TestFetchJobs_JSONParseHydrationFormat_SingleQuote(t *testing.T) {
 	job := appleJob{
@@ -245,9 +255,11 @@ func TestFetchJobs_JSONParseHydrationFormat_SingleQuote(t *testing.T) {
 		PostingTitle:            "Software Engineer",
 		TransformedPostingTitle: "software-engineer",
 		JobSummary:              "<p>Build great software.</p>",
-		Locations:               []appleLocation{{City: "Cupertino", StateCode: "CA", CountryCode: "USA"}},
-		Type:                    "Regular",
-		Team:                    appleTeam{TeamName: "Software and Services"},
+		Locations: []appleLocation{
+			{Name: "Cupertino", StateProvince: "California", CountryID: usaCountryID},
+		},
+		Type: "Regular",
+		Team: appleTeam{TeamName: "Software and Services"},
 	}
 
 	hydrationObj := hydrationData{
@@ -259,7 +271,6 @@ func TestFetchJobs_JSONParseHydrationFormat_SingleQuote(t *testing.T) {
 		},
 	}
 	rawJSON, _ := json.Marshal(hydrationObj)
-	// Escape for a single-quoted JS string: only \' and \ need escaping.
 	escapedJSON := strings.ReplaceAll(string(rawJSON), `\`, `\\`)
 	escapedJSON = strings.ReplaceAll(escapedJSON, `'`, `\'`)
 
@@ -293,10 +304,6 @@ func TestFetchJobs_JSONParseHydrationFormat_SingleQuote(t *testing.T) {
 }
 
 // ── FetchJobs — trailing content after JSON.parse() ─────────────────────────
-// Apple pages may have additional JS statements or comments after the
-// JSON.parse("...") call and before </script>. The old code failed because it
-// used the </script> boundary and then checked HasSuffix("\")")  — any trailing
-// content caused the suffix check to fail.
 
 func TestFetchJobs_TrailingContentAfterJSONParse(t *testing.T) {
 	job := appleJob{
@@ -324,7 +331,6 @@ func TestFetchJobs_TrailingContentAfterJSONParse(t *testing.T) {
 		if pageStr == "2" {
 			escaped = escapedEmpty
 		}
-		// Trailing comment and second statement after the JSON.parse call.
 		html := fmt.Sprintf(`<!DOCTYPE html><html><body><script>window.__staticRouterHydrationData = JSON.parse("%s");
 // apple internal
 window.__otherVar = {};
@@ -346,10 +352,10 @@ window.__otherVar = {};
 	assertEqual(t, "Title", result.Jobs[0].Title, "Staff Engineer")
 }
 
-// ── FetchJobs — malformed HTML (no hydration data) ─────────────────────────
+// ── FetchJobs — malformed HTML (no hydration data) ──────────────────────────
 
 func TestFetchJobs_MalformedHTML(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`<html><body>No hydration data here</body></html>`))
@@ -392,7 +398,7 @@ func TestFetchJobs_IDFormat(t *testing.T) {
 	}
 }
 
-// ── FetchJobs — job URL ─────────────────────────────────────────────────────
+// ── FetchJobs — job URL uses adapter base ───────────────────────────────────
 
 func TestFetchJobs_JobURL(t *testing.T) {
 	srv := newTestServer(t, []pageConfig{
@@ -412,20 +418,37 @@ func TestFetchJobs_JobURL(t *testing.T) {
 		t.Fatalf("FetchJobs error: %v", err)
 	}
 
-	wantURL := "https://jobs.apple.com/en-us/details/999-123/senior-engineer"
+	wantURL := srv.URL + "/en-us/details/999-123/senior-engineer"
 	if result.Jobs[0].URL != wantURL {
 		t.Errorf("URL = %q, want %q", result.Jobs[0].URL, wantURL)
 	}
 }
 
-// ── FetchJobs — FullContent always set ──────────────────────────────────────
+// ── FetchJobs — production URL pattern ──────────────────────────────────────
 
-func TestFetchJobs_FullContentAlwaysSet(t *testing.T) {
+func TestFetchJobs_ProductionURL(t *testing.T) {
+	// Default baseURL must yield the canonical jobs.apple.com host.
+	a := New()
+	item := a.jobToItem(appleJob{
+		ID:                      "200647207-3543",
+		PostingTitle:            "Engineer",
+		TransformedPostingTitle: "engineer",
+		Type:                    "Regular",
+	})
+	want := "https://jobs.apple.com/en-us/details/200647207-3543/engineer"
+	if item.URL != want {
+		t.Errorf("production URL = %q, want %q", item.URL, want)
+	}
+}
+
+// ── FetchJobs — FullContent intentionally nil ───────────────────────────────
+
+func TestFetchJobs_NoFullContent(t *testing.T) {
 	srv := newTestServer(t, []pageConfig{
 		{
 			page: 1,
 			jobs: []appleJob{
-				{ID: "100-1", PostingTitle: "Job", TransformedPostingTitle: "job", JobSummary: "<p>Full description</p>", Type: "Regular"},
+				{ID: "100-1", PostingTitle: "Job", TransformedPostingTitle: "job", JobSummary: "<p>Intro only</p>", Type: "Regular"},
 			},
 		},
 		{page: 2, jobs: []appleJob{}},
@@ -438,46 +461,14 @@ func TestFetchJobs_FullContentAlwaysSet(t *testing.T) {
 		t.Fatalf("FetchJobs error: %v", err)
 	}
 
-	if result.Jobs[0].FullContent == nil {
-		t.Fatal("FullContent must not be nil — Apple is a fat adapter")
+	if result.Jobs[0].FullContent != nil {
+		t.Error("FullContent must be nil — Apple is a thin adapter; rich content is fetched via ContentFetcher")
 	}
 }
 
-// ── FetchJobs — description strips HTML ─────────────────────────────────────
+// ── FetchJobs — location format (single location, new schema) ───────────────
 
-func TestFetchJobs_DescriptionStripsHTML(t *testing.T) {
-	htmlSummary := `<p>About the role:</p><ul><li>Skill 1</li><li>Skill 2</li></ul><p>Great opportunity!</p>`
-	srv := newTestServer(t, []pageConfig{
-		{
-			page: 1,
-			jobs: []appleJob{
-				{ID: "100-1", PostingTitle: "Job", TransformedPostingTitle: "job", JobSummary: htmlSummary, Type: "Regular"},
-			},
-		},
-		{page: 2, jobs: []appleJob{}},
-	})
-	defer srv.Close()
-
-	a := &Apple{baseURL: srv.URL}
-	result, err := a.FetchJobs(context.Background(), "apple")
-	if err != nil {
-		t.Fatalf("FetchJobs error: %v", err)
-	}
-
-	description := result.Jobs[0].FullContent.Description
-	// Should not contain HTML tags
-	if strings.Contains(description, "<p>") || strings.Contains(description, "<li>") {
-		t.Errorf("Description should not contain HTML tags: %q", description)
-	}
-	// Should contain the text content
-	if !strings.Contains(description, "Skill 1") || !strings.Contains(description, "Great opportunity") {
-		t.Errorf("Description should contain text content: %q", description)
-	}
-}
-
-// ── FetchJobs — location format (single location) ──────────────────────────
-
-func TestFetchJobs_LocationFormat(t *testing.T) {
+func TestFetchJobs_LocationFormat_NewSchema(t *testing.T) {
 	srv := newTestServer(t, []pageConfig{
 		{
 			page: 1,
@@ -487,7 +478,12 @@ func TestFetchJobs_LocationFormat(t *testing.T) {
 					PostingTitle:            "Job",
 					TransformedPostingTitle: "job",
 					Locations: []appleLocation{
-						{City: "San Francisco", StateCode: "CA", CountryCode: "USA"},
+						{
+							Name:          "San Francisco",
+							City:          "San Francisco",
+							StateProvince: "California",
+							CountryID:     usaCountryID,
+						},
 					},
 					Type: "Regular",
 				},
@@ -503,13 +499,46 @@ func TestFetchJobs_LocationFormat(t *testing.T) {
 		t.Fatalf("FetchJobs error: %v", err)
 	}
 
-	wantLocation := "San Francisco, CA"
+	wantLocation := "San Francisco, California"
 	if result.Jobs[0].Location != wantLocation {
 		t.Errorf("Location = %q, want %q", result.Jobs[0].Location, wantLocation)
 	}
 }
 
-// ── FetchJobs — multiple locations ──────────────────────────────────────────
+// ── FetchJobs — location falls back to Name when City empty ─────────────────
+
+func TestFetchJobs_LocationFallbackToName(t *testing.T) {
+	srv := newTestServer(t, []pageConfig{
+		{
+			page: 1,
+			jobs: []appleJob{
+				{
+					ID:                      "100-1",
+					PostingTitle:            "Job",
+					TransformedPostingTitle: "job",
+					Locations: []appleLocation{
+						{Name: "Austin", CountryID: usaCountryID, Level: 5},
+					},
+					Type: "Regular",
+				},
+			},
+		},
+		{page: 2, jobs: []appleJob{}},
+	})
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	result, err := a.FetchJobs(context.Background(), "apple")
+	if err != nil {
+		t.Fatalf("FetchJobs error: %v", err)
+	}
+
+	if result.Jobs[0].Location != "Austin" {
+		t.Errorf("Location = %q, want %q", result.Jobs[0].Location, "Austin")
+	}
+}
+
+// ── FetchJobs — multiple locations joined ───────────────────────────────────
 
 func TestFetchJobs_MultiLocation(t *testing.T) {
 	srv := newTestServer(t, []pageConfig{
@@ -521,9 +550,9 @@ func TestFetchJobs_MultiLocation(t *testing.T) {
 					PostingTitle:            "Job",
 					TransformedPostingTitle: "job",
 					Locations: []appleLocation{
-						{City: "Cupertino", StateCode: "CA", CountryCode: "USA"},
-						{City: "Austin", StateCode: "TX", CountryCode: "USA"},
-						{City: "New York", StateCode: "NY", CountryCode: "USA"},
+						{City: "Cupertino", StateProvince: "California", CountryID: usaCountryID},
+						{City: "Austin", StateProvince: "Texas", CountryID: usaCountryID},
+						{City: "New York", StateProvince: "New York", CountryID: usaCountryID},
 					},
 					Type: "Regular",
 				},
@@ -539,9 +568,12 @@ func TestFetchJobs_MultiLocation(t *testing.T) {
 		t.Fatalf("FetchJobs error: %v", err)
 	}
 
-	wantLocation := "Cupertino, CA; Austin, TX; New York, NY"
+	wantLocation := "Cupertino, California; Austin, Texas; New York, New York"
 	if result.Jobs[0].Location != wantLocation {
 		t.Errorf("Location = %q, want %q", result.Jobs[0].Location, wantLocation)
+	}
+	if len(result.Jobs[0].AllLocations) != 3 {
+		t.Errorf("AllLocations len = %d, want 3", len(result.Jobs[0].AllLocations))
 	}
 }
 
@@ -566,6 +598,284 @@ func TestFetchJobs_ContextCancelled(t *testing.T) {
 	}
 }
 
+// ── FetchJobContent — rich detail extraction ────────────────────────────────
+
+func TestFetchJobContent_FullDetail(t *testing.T) {
+	detail := appleJobDetail{
+		ID:                      "PIPE-200664943",
+		JobNumber:               "200664943-3337",
+		PostingTitle:            "Senior Software Engineer, Apple Services Engineering",
+		TransformedPostingTitle: "senior-software-engineer-apple-services-engineering",
+		JobSummary:              "We are looking for an experienced Software Engineer...",
+		Description:             "CloudKit manages data at a massive scale!",
+		Responsibilities:        "Design, develop, and support a multi-tenant platform",
+		MinimumQualifications:   "7+ years of industry experience developing software in Java, C, or C++",
+		PreferredQualifications: "Strong background with KV data stores, e.g., FoundationDB, DynamoDB, or Cassandra",
+		TeamNames:               []string{"Software and Services"},
+		Locations: []appleLocation{
+			{City: "San Francisco", StateProvince: "California", CountryID: usaCountryID},
+			{City: "Seattle", StateProvince: "Washington", CountryID: usaCountryID},
+		},
+		EmploymentType: "Standard",
+		JobType:        "CORPORATE",
+		HomeOffice:     false,
+		PostDateInGMT:  "2026-05-22T00:00:00Z",
+		PostingFooters: []appleFooter{
+			{
+				Type:    "POSTING_FOOTER_RULES_NEW",
+				Content: "At Apple, base pay is one part of our total compensation package and is determined within a range. The base pay range for this role is between $171,600 and $302,200, and your base pay will depend on your skills.",
+			},
+		},
+	}
+
+	srv := newDetailServer(t, detail)
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	job := types.RawJob{
+		ID:    "apple-200664943-3337",
+		Title: "Senior Software Engineer, Apple Services Engineering",
+		URL:   srv.URL + "/en-us/details/200664943-3337/senior-software-engineer-apple-services-engineering",
+	}
+	got, err := a.FetchJobContent(context.Background(), job)
+	if err != nil {
+		t.Fatalf("FetchJobContent error: %v", err)
+	}
+
+	assertEqual(t, "ID", got.ID, "apple-200664943-3337")
+	assertEqual(t, "Title", got.Title, "Senior Software Engineer, Apple Services Engineering")
+	assertEqual(t, "URL", got.URL, job.URL)
+	assertEqual(t, "Department", got.Department, "Software and Services")
+	assertEqual(t, "Compensation", got.Compensation, "$171,600 and $302,200")
+	assertEqual(t, "Location", got.Location, "San Francisco, California; Seattle, Washington")
+	assertEqual(t, "CountryCode", got.CountryCode, "US")
+	assertEqual(t, "WorkplaceType", got.WorkplaceType, "")
+	assertEqual(t, "PublishedDate", got.PublishedDate, "2026-05-22T00:00:00Z")
+	assertEqual(t, "EmploymentType", got.EmploymentType, jobcommon.EmployFullTime)
+
+	// Description must contain every section, with labels for the structured parts.
+	for _, want := range []string{
+		"We are looking for an experienced",
+		"CloudKit manages data",
+		"Responsibilities:",
+		"Design, develop",
+		"Minimum Qualifications:",
+		"7+ years of industry experience",
+		"Preferred Qualifications:",
+		"FoundationDB",
+	} {
+		if !strings.Contains(got.Description, want) {
+			t.Errorf("Description missing %q\n--- description:\n%s", want, got.Description)
+		}
+	}
+}
+
+// ── FetchJobContent — homeOffice maps to remote ─────────────────────────────
+
+func TestFetchJobContent_HomeOfficeRemote(t *testing.T) {
+	detail := appleJobDetail{
+		PostingTitle: "Remote Role",
+		HomeOffice:   true,
+		Locations: []appleLocation{
+			{City: "Cupertino", StateProvince: "California", CountryID: usaCountryID},
+		},
+	}
+	srv := newDetailServer(t, detail)
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	got, err := a.FetchJobContent(context.Background(), types.RawJob{URL: srv.URL + "/x"})
+	if err != nil {
+		t.Fatalf("FetchJobContent error: %v", err)
+	}
+	if got.WorkplaceType != "remote" {
+		t.Errorf("WorkplaceType = %q, want %q (homeOffice=true must map to remote)", got.WorkplaceType, "remote")
+	}
+}
+
+// ── FetchJobContent — no salary range present ───────────────────────────────
+
+func TestFetchJobContent_NoSalary(t *testing.T) {
+	detail := appleJobDetail{
+		PostingTitle: "Apple Retail Specialist",
+		JobSummary:   "Apple Retail is where the best of Apple comes together.",
+		Locations: []appleLocation{
+			{Name: "United States", CountryID: usaCountryID, Level: 1},
+		},
+		PostingFooters: []appleFooter{
+			{Type: "POSTING_FOOTER_GENERIC", Content: "Apple is an equal opportunity employer."},
+		},
+	}
+	srv := newDetailServer(t, detail)
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	got, err := a.FetchJobContent(context.Background(), types.RawJob{URL: srv.URL + "/x"})
+	if err != nil {
+		t.Fatalf("FetchJobContent error: %v", err)
+	}
+	if got.Compensation != "" {
+		t.Errorf("Compensation = %q, want empty (no salary range present)", got.Compensation)
+	}
+}
+
+// ── FetchJobContent — salary uses dash separator ────────────────────────────
+
+func TestFetchJobContent_SalaryDashSeparator(t *testing.T) {
+	detail := appleJobDetail{
+		PostingTitle: "Engineer",
+		PostingFooters: []appleFooter{
+			{Type: "POSTING_FOOTER_RULES_NEW", Content: "The base pay range for this role is $150,000 - $250,000 depending on location."},
+		},
+	}
+	srv := newDetailServer(t, detail)
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	got, err := a.FetchJobContent(context.Background(), types.RawJob{URL: srv.URL + "/x"})
+	if err != nil {
+		t.Fatalf("FetchJobContent error: %v", err)
+	}
+	if got.Compensation != "$150,000 - $250,000" {
+		t.Errorf("Compensation = %q, want %q", got.Compensation, "$150,000 - $250,000")
+	}
+}
+
+// ── FetchJobContent — non-USA country code ──────────────────────────────────
+
+func TestFetchJobContent_NonUSACountryCode(t *testing.T) {
+	detail := appleJobDetail{
+		PostingTitle: "Engineer",
+		Locations: []appleLocation{
+			{City: "London", CountryName: "United Kingdom", CountryID: "iso-country-GBR"},
+		},
+	}
+	srv := newDetailServer(t, detail)
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	got, err := a.FetchJobContent(context.Background(), types.RawJob{URL: srv.URL + "/x"})
+	if err != nil {
+		t.Fatalf("FetchJobContent error: %v", err)
+	}
+	if got.CountryCode == "US" || got.CountryCode == "" {
+		t.Errorf("CountryCode = %q, want a non-empty non-US code for UK job", got.CountryCode)
+	}
+}
+
+// ── FetchJobContent — malformed detail page ────────────────────────────────
+
+func TestFetchJobContent_MalformedDetail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`<html><body>no hydration here</body></html>`))
+	}))
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	_, err := a.FetchJobContent(context.Background(), types.RawJob{URL: srv.URL + "/x"})
+	if err == nil {
+		t.Fatal("expected error on malformed detail page")
+	}
+	if !strings.Contains(err.Error(), "extract detail hydration") {
+		t.Errorf("error should mention extract detail hydration: %v", err)
+	}
+}
+
+// ── FetchJobContent — HTTP error ────────────────────────────────────────────
+
+func TestFetchJobContent_HTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	_, err := a.FetchJobContent(context.Background(), types.RawJob{URL: srv.URL + "/x"})
+	if err == nil {
+		t.Fatal("expected error on HTTP 500")
+	}
+	if !strings.Contains(err.Error(), "unexpected status 500") {
+		t.Errorf("error should mention status 500: %v", err)
+	}
+}
+
+// ── FetchJobContent — empty URL ────────────────────────────────────────────
+
+func TestFetchJobContent_EmptyURL(t *testing.T) {
+	a := New()
+	_, err := a.FetchJobContent(context.Background(), types.RawJob{URL: ""})
+	if err == nil {
+		t.Fatal("expected error on empty URL")
+	}
+	if !strings.Contains(err.Error(), "empty job URL") {
+		t.Errorf("error should mention empty job URL: %v", err)
+	}
+}
+
+// ── FetchJobContent — context cancelled ─────────────────────────────────────
+
+func TestFetchJobContent_ContextCancelled(t *testing.T) {
+	srv := newDetailServer(t, appleJobDetail{PostingTitle: "x"})
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	a := &Apple{baseURL: srv.URL}
+	_, err := a.FetchJobContent(ctx, types.RawJob{URL: srv.URL + "/x"})
+	if err == nil {
+		t.Fatal("expected error when context is cancelled")
+	}
+}
+
+// ── FetchJobContent — falls back to listing-supplied values ────────────────
+
+func TestFetchJobContent_FallsBackToListingValues(t *testing.T) {
+	detail := appleJobDetail{
+		// PostingTitle intentionally empty; Locations empty
+	}
+	srv := newDetailServer(t, detail)
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	got, err := a.FetchJobContent(context.Background(), types.RawJob{
+		URL:      srv.URL + "/x",
+		Title:    "Listing Title",
+		Location: "Listing Location",
+	})
+	if err != nil {
+		t.Fatalf("FetchJobContent error: %v", err)
+	}
+	if got.Title != "Listing Title" {
+		t.Errorf("Title = %q, want fallback to listing title", got.Title)
+	}
+	if got.Location != "Listing Location" {
+		t.Errorf("Location = %q, want fallback to listing location", got.Location)
+	}
+}
+
+// ── FetchJobContent — internship mapping ────────────────────────────────────
+
+func TestFetchJobContent_InternshipMapping(t *testing.T) {
+	detail := appleJobDetail{
+		PostingTitle: "Software Engineering Intern",
+		Type:         "Intern",
+	}
+	srv := newDetailServer(t, detail)
+	defer srv.Close()
+
+	a := &Apple{baseURL: srv.URL}
+	got, err := a.FetchJobContent(context.Background(), types.RawJob{URL: srv.URL + "/x"})
+	if err != nil {
+		t.Fatalf("FetchJobContent error: %v", err)
+	}
+	if got.EmploymentType != jobcommon.EmployInternship {
+		t.Errorf("EmploymentType = %q, want %q", got.EmploymentType, jobcommon.EmployInternship)
+	}
+}
+
 // ── mapJobType ──────────────────────────────────────────────────────────────
 
 func TestMapJobType(t *testing.T) {
@@ -582,7 +892,11 @@ func TestMapJobType(t *testing.T) {
 		{"contract", jobcommon.EmployContract},
 		{"Intern", jobcommon.EmployInternship},
 		{"intern", jobcommon.EmployInternship},
-		{"Unknown", jobcommon.EmployFullTime}, // unrecognised defaults to full_time
+		{"PIPE", jobcommon.EmployFullTime},
+		{"REQ", jobcommon.EmployFullTime},
+		{"CORPORATE", jobcommon.EmployFullTime},
+		{"Standard", jobcommon.EmployFullTime},
+		{"Unknown", jobcommon.EmployFullTime},
 	}
 	for _, tc := range tests {
 		got := mapJobType(tc.input)
@@ -601,21 +915,31 @@ func TestFormatLocation(t *testing.T) {
 		want      string
 	}{
 		{
-			name:      "single location",
+			name:      "city + stateProvince",
+			locations: []appleLocation{{City: "Cupertino", StateProvince: "California"}},
+			want:      "Cupertino, California",
+		},
+		{
+			name:      "name fallback when city empty",
+			locations: []appleLocation{{Name: "Austin", StateProvince: "Texas"}},
+			want:      "Austin, Texas",
+		},
+		{
+			name:      "stateCode fallback when stateProvince empty",
 			locations: []appleLocation{{City: "Cupertino", StateCode: "CA"}},
 			want:      "Cupertino, CA",
 		},
 		{
-			name: "multiple locations",
+			name: "multiple locations joined",
 			locations: []appleLocation{
-				{City: "Cupertino", StateCode: "CA"},
-				{City: "Austin", StateCode: "TX"},
+				{City: "Cupertino", StateProvince: "California"},
+				{City: "Austin", StateProvince: "Texas"},
 			},
-			want: "Cupertino, CA; Austin, TX",
+			want: "Cupertino, California; Austin, Texas",
 		},
 		{
-			name:      "empty city is skipped",
-			locations: []appleLocation{{City: "", StateCode: "CA"}},
+			name:      "empty city falls back to empty when name also empty",
+			locations: []appleLocation{{StateProvince: "CA"}},
 			want:      "CA",
 		},
 		{
@@ -624,7 +948,7 @@ func TestFormatLocation(t *testing.T) {
 			want:      "",
 		},
 		{
-			name:      "no state code",
+			name:      "no state info",
 			locations: []appleLocation{{City: "London"}},
 			want:      "London",
 		},
@@ -646,16 +970,81 @@ func TestFormatSingleLocation(t *testing.T) {
 		loc  appleLocation
 		want string
 	}{
-		{appleLocation{City: "Cupertino", StateCode: "CA"}, "Cupertino, CA"},
-		{appleLocation{City: "London", StateCode: ""}, "London"},
-		{appleLocation{City: "", StateCode: "CA"}, "CA"},
-		{appleLocation{City: "", StateCode: ""}, ""},
+		{appleLocation{City: "Cupertino", StateProvince: "California"}, "Cupertino, California"},
+		{appleLocation{Name: "Cupertino", StateCode: "CA"}, "Cupertino, CA"},
+		{appleLocation{City: "London"}, "London"},
+		{appleLocation{StateProvince: "CA"}, "CA"},
+		{appleLocation{}, ""},
 	}
 	for _, tc := range tests {
 		got := formatSingleLocation(tc.loc)
 		if got != tc.want {
 			t.Errorf("formatSingleLocation(%+v) = %q, want %q", tc.loc, got, tc.want)
 		}
+	}
+}
+
+// ── isUSALocation / primaryCountryCode ─────────────────────────────────────
+
+func TestIsUSALocation(t *testing.T) {
+	tests := []struct {
+		name string
+		loc  appleLocation
+		want bool
+	}{
+		{"countryID iso-country-USA", appleLocation{CountryID: usaCountryID}, true},
+		{"countryCode USA", appleLocation{CountryCode: "USA"}, true},
+		{"countryCode US", appleLocation{CountryCode: "US"}, true},
+		{"countryName United States", appleLocation{CountryName: "United States"}, true},
+		{"countryName United States of America", appleLocation{CountryName: "United States of America"}, true},
+		{"non-USA countryID", appleLocation{CountryID: "iso-country-GBR"}, false},
+		{"empty", appleLocation{}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isUSALocation(tc.loc)
+			if got != tc.want {
+				t.Errorf("isUSALocation(%+v) = %v, want %v", tc.loc, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPrimaryCountryCode(t *testing.T) {
+	tests := []struct {
+		name string
+		locs []appleLocation
+		want string
+	}{
+		{"USA via countryID", []appleLocation{{CountryID: usaCountryID}}, "US"},
+		{"UK via iso-country prefix", []appleLocation{{CountryID: "iso-country-GBR"}}, "GBR"},
+		{"explicit countryCode", []appleLocation{{CountryCode: "fr"}}, "FR"},
+		{"empty locations", nil, ""},
+		{"empty fields", []appleLocation{{}}, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := primaryCountryCode(tc.locs)
+			if got != tc.want {
+				t.Errorf("primaryCountryCode(%+v) = %q, want %q", tc.locs, got, tc.want)
+			}
+		})
+	}
+}
+
+// ── Resolver fallback ──────────────────────────────────────────────────────
+
+func TestResolveBaseURL_ZeroValueFallsBackToDefault(t *testing.T) {
+	a := &Apple{}
+	if got := a.resolveBaseURL(); got != defaultBaseURL {
+		t.Errorf("zero-value resolveBaseURL: got %q, want %q", got, defaultBaseURL)
+	}
+}
+
+func TestResolveBaseURL_OverrideHonoured(t *testing.T) {
+	a := &Apple{baseURL: "https://override.example"}
+	if got := a.resolveBaseURL(); got != "https://override.example" {
+		t.Errorf("resolveBaseURL: got %q, want override", got)
 	}
 }
 
@@ -676,7 +1065,6 @@ func TestFetchJobs_Real(t *testing.T) {
 		t.Fatal("expected at least one job from live Apple careers")
 	}
 
-	// Spot-check the first job
 	j := result.Jobs[0]
 	if !strings.HasPrefix(j.ID, "apple-") {
 		t.Errorf("ID %q does not have 'apple-' prefix", j.ID)
@@ -684,134 +1072,88 @@ func TestFetchJobs_Real(t *testing.T) {
 	if j.Title == "" {
 		t.Error("Title should not be empty")
 	}
-	if j.URL == "" {
-		t.Error("URL should not be empty")
-	}
 	if !strings.HasPrefix(j.URL, "https://jobs.apple.com/en-us/details/") {
 		t.Errorf("URL %q does not match expected pattern", j.URL)
 	}
-	if j.FullContent == nil {
-		t.Fatal("FullContent must not be nil — Apple is a fat adapter")
-	}
-	if j.FullContent.Description == "" {
-		t.Error("FullContent.Description should not be empty")
-	}
-	if j.FullContent.Department == "" {
-		t.Error("FullContent.Department should not be empty")
+	if j.FullContent != nil {
+		t.Error("FullContent must be nil — Apple is a thin adapter")
 	}
 
-	t.Logf("fetched %d jobs; first: %q at %q (dept: %q)", len(result.Jobs), j.Title, j.Location, j.FullContent.Department)
+	t.Logf("fetched %d jobs; first: %q at %q (employType=%s)", len(result.Jobs), j.Title, j.Location, j.EmploymentType)
 }
 
-// ── Real: salary and experience diagnostic ───────────────────────────────────
-// Verifies what salary/YOE data the live Apple listing API actually returns.
-// Apple exposes no structured salary field — this checks if jobSummary descriptions
-// contain salary or experience text the LLM can extract.
-
-func TestFetchJobs_Real_SalaryAndExperience(t *testing.T) {
+func TestFetchJobContent_Real(t *testing.T) {
 	if os.Getenv("TEST_REAL") == "" {
 		t.Skip("skipping real API test; set TEST_REAL=1 to run")
 	}
 
 	a := New()
-	// Fetch only the first page to keep the test fast.
-	jobs, err := a.fetchJobsPage(context.Background(), 1)
+	// Use only page 1 so the test doesn't paginate Apple's full ~5000-job catalog.
+	pageJobs, err := a.fetchJobsPage(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("fetchJobsPage error: %v", err)
 	}
-	if len(jobs) == 0 {
-		t.Fatal("no jobs returned from live Apple API page 1")
+	if len(pageJobs) == 0 {
+		t.Fatal("no jobs on page 1 to enrich")
 	}
 
-	jobsWithSalary := 0
-	jobsWithYOE := 0
-	var salarySample, yoeSample string
-
-	for _, j := range jobs {
-		if j.FullContent == nil {
-			continue
-		}
-		desc := strings.ToLower(j.FullContent.Description)
-
-		if strings.Contains(desc, "$") || strings.Contains(desc, "salary") ||
-			strings.Contains(desc, "compensation") || strings.Contains(desc, "usd") {
-			jobsWithSalary++
-			if salarySample == "" {
-				idx := strings.Index(desc, "$")
-				if idx < 0 {
-					idx = strings.Index(desc, "salary")
-				}
-				if idx >= 0 {
-					start := idx - 80
-					if start < 0 {
-						start = 0
-					}
-					end := idx + 200
-					if end > len(j.FullContent.Description) {
-						end = len(j.FullContent.Description)
-					}
-					salarySample = fmt.Sprintf("job=%q: ...%s...", j.Title, j.FullContent.Description[start:end])
-				}
-			}
-		}
-
-		for _, pat := range []string{"years of experience", "year(s) of experience", "years experience"} {
-			if strings.Contains(desc, pat) {
-				jobsWithYOE++
-				if yoeSample == "" {
-					if idx := strings.Index(desc, pat); idx >= 0 {
-						start := idx - 80
-						if start < 0 {
-							start = 0
-						}
-						end := idx + 200
-						if end > len(j.FullContent.Description) {
-							end = len(j.FullContent.Description)
-						}
-						yoeSample = fmt.Sprintf("job=%q: ...%s...", j.Title, j.FullContent.Description[start:end])
-					}
-				}
-				break
-			}
+	// Pick the first non-PIPE job (PIPE roles often have minimal detail content).
+	var picked types.FetchJobsItem
+	for _, j := range pageJobs {
+		if !strings.Contains(j.URL, "PIPE-") {
+			picked = j
+			break
 		}
 	}
-
-	t.Logf("[Salary] page-1 jobs: %d total, %d with salary keywords in description", len(jobs), jobsWithSalary)
-	if salarySample != "" {
-		t.Logf("[Salary] sample: %s", salarySample)
-	} else {
-		t.Log("[Salary] Apple jobSummary descriptions do not contain salary data — Compensation field will always be empty")
+	if picked.URL == "" {
+		picked = pageJobs[0]
 	}
 
-	t.Logf("[YOE] page-1 jobs: %d total, %d with YOE keywords in description", len(jobs), jobsWithYOE)
-	if yoeSample != "" {
-		t.Logf("[YOE] sample: %s", yoeSample)
-	} else {
-		t.Log("[YOE] Apple jobSummary descriptions do not contain explicit YOE keywords")
+	got, err := a.FetchJobContent(context.Background(), types.RawJob{
+		ID:       picked.ID,
+		Title:    picked.Title,
+		Location: picked.Location,
+		URL:      picked.URL,
+		Adapter:  companycommon.AdapterApple,
+	})
+	if err != nil {
+		t.Fatalf("FetchJobContent error: %v", err)
 	}
+
+	if got.Description == "" {
+		t.Error("Description should not be empty for a real Apple job")
+	}
+	if got.Department == "" {
+		t.Error("Department should not be empty for a real Apple job")
+	}
+	if got.CountryCode == "" {
+		t.Error("CountryCode should not be empty for a real Apple job")
+	}
+
+	t.Logf("Enriched %q (%s):\n  Department=%q Compensation=%q CountryCode=%q\n  Description (first 300): %s",
+		got.Title, picked.URL, got.Department, got.Compensation, got.CountryCode,
+		truncate(got.Description, 300))
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Test server helpers ─────────────────────────────────────────────────────
 
-// pageConfig describes what to return for a given page number.
+// pageConfig describes what to return for a given listing page number.
 type pageConfig struct {
 	page int
 	jobs []appleJob
 }
 
-// newTestServer creates an httptest.Server that serves job listing pages
-// with embedded window.__staticRouterHydrationData based on the provided config.
+// newTestServer creates an httptest.Server that serves job listing pages with
+// embedded window.__staticRouterHydrationData based on the provided config.
 func newTestServer(t *testing.T, pages []pageConfig) *httptest.Server {
 	t.Helper()
 
-	// Build a map for quick lookup
 	pageMap := make(map[int][]appleJob)
 	for _, pc := range pages {
 		pageMap[pc.page] = pc.jobs
 	}
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract page number from query param
 		pageStr := r.URL.Query().Get("page")
 		if pageStr == "" {
 			pageStr = "1"
@@ -825,8 +1167,7 @@ func newTestServer(t *testing.T, pages []pageConfig) *httptest.Server {
 			jobs = []appleJob{}
 		}
 
-		// Build the hydration data structure
-		hydrationData := hydrationData{
+		hyd := hydrationData{
 			LoaderData: loaderData{
 				Search: searchData{
 					SearchResults: jobs,
@@ -834,10 +1175,8 @@ func newTestServer(t *testing.T, pages []pageConfig) *httptest.Server {
 				},
 			},
 		}
+		hydJSON, _ := json.Marshal(hyd)
 
-		hydrationJSON, _ := json.Marshal(hydrationData)
-
-		// Render a minimal HTML page with embedded hydration data
 		html := fmt.Sprintf(`<!DOCTYPE html>
 <html>
 <head><title>Apple Jobs</title></head>
@@ -846,8 +1185,26 @@ func newTestServer(t *testing.T, pages []pageConfig) *httptest.Server {
 window.__staticRouterHydrationData = %s;
 </script>
 </body>
-</html>`, string(hydrationJSON))
+</html>`, string(hydJSON))
 
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(html))
+	}))
+}
+
+// newDetailServer serves a job-detail page whose hydration data wraps the
+// supplied appleJobDetail.
+func newDetailServer(t *testing.T, detail appleJobDetail) *httptest.Server {
+	t.Helper()
+	hyd := detailHydrationData{
+		LoaderData: detailLoaderData{
+			JobDetails: detailJobDetails{JobsData: detail},
+		},
+	}
+	hydJSON, _ := json.Marshal(hyd)
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		html := fmt.Sprintf(`<!DOCTYPE html><html><head></head><body><script>window.__staticRouterHydrationData = %s;</script></body></html>`, string(hydJSON))
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(html))
@@ -861,22 +1218,9 @@ func assertEqual(t *testing.T, field, got, want string) {
 	}
 }
 
-// ── Resolver fallback ───────────────────────────────────────────────────────
-
-// TestResolveBaseURL_ZeroValueFallsBackToDefault verifies a zero-value Apple
-// struct still produces a usable host via the default constant. Otherwise a
-// dropped-in default initialisation would emit "/en-us/search…" with no host.
-func TestResolveBaseURL_ZeroValueFallsBackToDefault(t *testing.T) {
-	a := &Apple{}
-	if got := a.resolveBaseURL(); got != defaultBaseURL {
-		t.Errorf("zero-value resolveBaseURL: got %q, want %q", got, defaultBaseURL)
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
 	}
-}
-
-// TestResolveBaseURL_OverrideHonoured verifies the non-empty branch.
-func TestResolveBaseURL_OverrideHonoured(t *testing.T) {
-	a := &Apple{baseURL: "https://override.example"}
-	if got := a.resolveBaseURL(); got != "https://override.example" {
-		t.Errorf("resolveBaseURL: got %q, want override", got)
-	}
+	return s[:n] + "…"
 }

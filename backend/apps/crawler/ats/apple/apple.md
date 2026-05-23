@@ -1,161 +1,132 @@
 # Apple Adapter
 
-Fat HTTP adapter for [jobs.apple.com](https://jobs.apple.com). Scrapes listing pages where job descriptions are embedded directly in the HTML as React Router hydration data.
+HTTP adapter for [jobs.apple.com](https://jobs.apple.com). Scrapes the listing page for the index and the per-job detail page for rich content (description, qualifications, salary).
 
 ## Architecture
 
-**Pattern**: Fat adapter (FullContent always populated on FetchJobs)
+**Pattern**: Thin adapter — `Adapter` for listing, `ContentFetcher` for detail.
 
-**No ContentFetcher**: The listing page contains the full job description in `jobSummary`, so no separate detail fetch is needed.
+The listing endpoint exposes only stub data per job (~300-char `jobSummary` and basic metadata). Description, responsibilities, minimum/preferred qualifications, salary, and homeOffice all live on the detail page, so the analyzer triggers `FetchJobContent` for every job that survives dedup. Because the pipeline ledger drops already-seen IDs upstream of the analyzer, only the newly listed jobs (~25–100 per scan in practice) trigger a detail fetch.
 
-## API Details
+## API details
 
-### Listing Endpoint
+### Listing endpoint
 
 ```
 GET https://jobs.apple.com/en-us/search?location=united-states-USA&page={n}
 ```
 
-- **Filter**: US jobs only (applied via `location=united-states-USA` URL param)
-- **Pagination**: Increment page starting at `page=1`; stop when `searchResults` is empty
-- **Page size**: ~20 jobs per page (varies, don't hardcode)
+- **Filter**: US jobs only via the `location=united-states-USA` URL param.
+- **Pagination**: increment `page` starting at 1; stop when `searchResults` is empty (~20 jobs/page, varies).
+- **Hydration**: each page embeds `window.__staticRouterHydrationData = JSON.parse("…");` (also tolerates direct-object and single-quote variants).
+- **Job shape** (`loaderData.search.searchResults[]`): `id`, `positionId`, `postingTitle`, `transformedPostingTitle`, `jobSummary` (intro only, do not rely on for content), `locations[]`, `postDateInGMT`, `team.teamName`, `homeOffice`, `type`.
 
-### Hydration Data Extraction
+### Detail endpoint
 
-Each listing page embeds React Router hydration data in an HTML script tag:
-
-```html
-<script>
-  window.__staticRouterHydrationData = {"loaderData": {"search": {...}}, ...};
-</script>
+```
+GET https://jobs.apple.com/en-us/details/{id}/{transformedPostingTitle}
 ```
 
-Extraction strategy:
-1. Find the string `window.__staticRouterHydrationData = ` in the page HTML
-2. Extract JSON from that position until the closing `;</script>`
-3. Parse as JSON to get the `loaderData.search.searchResults` array
+- Returns the same React Router hydration script. The job payload is at `loaderData.jobDetails.jobsData`.
+- Apple 301-redirects bare `/en-us/details/{id}` to the slug form — `http.DefaultClient` follows by default.
+- **Captured fields**: `jobSummary`, `description`, `responsibilities`, `minimumQualifications`, `preferredQualifications`, `teamNames[]`, `locations[]` (full city/stateProvince/countryID), `employmentType`, `jobType`, `type`, `homeOffice`, `postDateInGMT`, `postingFooters[].content`.
 
-### Response Structure
+### Locations
 
-```json
-{
-  "loaderData": {
-    "search": {
-      "searchResults": [
-        {
-          "id": "200647207-3543",
-          "positionId": "200647207",
-          "postingTitle": "Software Engineer",
-          "jobSummary": "<p>About the position...</p><p>Key Qualifications...</p>",
-          "locations": [
-            {
-              "city": "Cupertino",
-              "stateCode": "CA",
-              "countryCode": "USA"
-            }
-          ],
-          "postDateInGMT": "2026-03-15 00:00:00",
-          "team": {
-            "teamName": "Software and Services",
-            "teamCode": "SWDVR"
-          },
-          "homeOffice": false,
-          "standardWeeklyHours": 40,
-          "transformedPostingTitle": "software-engineer",
-          "type": "Regular",
-          "reqId": "200647207",
-          "isMultiLocation": false
-        }
-      ],
-      "totalRecords": 4744
-    }
-  }
-}
-```
+Listing locations populate `name`, `countryID`, `countryName`, and `level`; `city`/`stateProvince` are often empty on listing payloads. Detail-page locations populate the full structure (`city`, `stateProvince`, `code`, `zipCode`, `countryID`, etc.). The adapter tolerates both the new (`stateProvince` + `countryID`) and older (`stateCode` + `countryCode`) shapes.
+
+`formatSingleLocation` falls back: city → name, stateProvince → stateCode.
+
+`isUSALocation` matches `countryID == iso-country-USA`, `countryCode in {USA,US}`, or `countryName in {United States, United States of America}`.
 
 ## Mapping
 
-### ID Format
+### ID format
 
-`apple-{id}` where `id` is the job's `id` field (e.g., `apple-200647207-3543`)
+`apple-{id}` where `id` is the job's listing `id` field (e.g. `apple-200647207-3543` or `apple-PIPE-114438158`).
 
 ### Job URL
 
-Template: `https://jobs.apple.com/en-us/details/{id}/{transformedPostingTitle}`
+`https://jobs.apple.com/en-us/details/{id}/{transformedPostingTitle}`.
 
-Example: `https://jobs.apple.com/en-us/details/200647207-3543/software-engineer`
+The URL is built from the adapter's `resolveBaseURL()` so tests can redirect both listing and detail fetches to one mock server.
 
-### Location
+### FullContent
 
-- **Single location**: `"City, State"` (e.g., `"Cupertino, CA"`)
-- **Multiple locations**: Joined with `"; "` (e.g., `"Cupertino, CA; Austin, TX; New York, NY"`)
-- **Empty city/state**: Skipped in formatting
-- **All locations empty**: Return empty string
+Nil at listing time (thin adapter). All rich fields are returned by `FetchJobContent`.
 
-### FullContent Fields
+### `FetchJobContentResponse` fields
 
-All fields populated from the listing page (fat adapter):
+| Field            | Source                                                                    | Notes                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `Description`    | `jobSummary` + `description` + Responsibilities + Min/Pref Qualifications | Labeled sections; empty sections skipped; HTML stripped via `types.StripHTML()`                                                 |
+| `Compensation`   | `postingFooters[].content`                                                | First `$X,XXX and $Y,YYY` / `$X to $Y` range; empty if absent                                                                   |
+| `Department`     | `teamNames[0]`                                                            |                                                                                                                                 |
+| `WorkplaceType`  | `homeOffice`                                                              | `"remote"` when true, `""` otherwise                                                                                            |
+| `Location`       | `locations[]`                                                             | `"City, State"` joined with `"; "`; falls back to listing-supplied value when detail has no locations                           |
+| `CountryCode`    | `locations[0].countryID`                                                  | `"US"` for USA marker; non-empty other code (3-letter ISO from `iso-country-XXX`) otherwise — feeds the analyzer's non-USA gate |
+| `EmploymentType` | `type` / `jobType` / `employmentType`                                     | See mapping below; defaults to full-time for unknown values                                                                     |
+| `PublishedDate`  | `postDateInGMT`                                                           | As-is, e.g. `"2026-05-22T00:00:00Z"`                                                                                            |
+| `Title`          | `postingTitle`                                                            | Falls back to listing title when detail title is empty                                                                          |
+| `Requirements`   | —                                                                         | Included inline in `Description`                                                                                                |
 
-| Field | Source | Notes |
-|-------|--------|-------|
-| `Description` | `jobSummary` (HTML stripped) | Always present; HTML tags removed via `types.StripHTML()` |
-| `Department` | `team.teamName` | Always present |
-| `PublishedDate` | `postDateInGMT` | As-is from API (e.g., `"2026-03-15 00:00:00"`) |
-| `WorkplaceType` | — | Not available; set to empty string |
-| `Compensation` | — | Not available; set to empty string |
-| `Requirements` | — | Not available; included in Description via jobSummary |
+### Employment type mapping
 
-### Employment Type Mapping
+| Input (any of `type`/`jobType`/`employmentType`, case-insensitive)                | Output       |
+| --------------------------------------------------------------------------------- | ------------ |
+| `Part-Time` / `part_time` / `parttime`                                            | `part_time`  |
+| `Contract` / `contractor`                                                         | `contract`   |
+| `Intern` / `internship`                                                           | `internship` |
+| Anything else (`Regular`, `PIPE`, `REQ`, `CORPORATE`, `Standard`, empty, unknown) | `full_time`  |
 
-`type` field → `model.EmployType`:
+### Salary regex
 
-| Input | Output | Notes |
-|-------|--------|-------|
-| `"Regular"` | `"full_time"` | Default |
-| `""` (empty) | `"full_time"` | Treats as full-time |
-| `"Part-Time"` | `"part_time"` | |
-| `"Contract"` | `"contract"` | |
-| `"Intern"` | `"internship"` | |
-| Other | `"full_time"` | Unknown types default to full-time |
+```
+\$\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:and|to|–|—|-)\s*\$\d{1,3}(?:,\d{3})*(?:\.\d+)?
+```
+
+Anchored on grouped US numbers so a trailing list comma in the footer (`"$X and $Y, and your base pay…"`) cannot leak into the capture.
 
 ## Implementation
 
-### Class: `Apple`
+### Type: `Apple`
 
 ```go
 type Apple struct {
-    baseURL string  // "https://jobs.apple.com" (prod), overridable for tests
+    baseURL string // overridable for tests
 }
 
-// Constructor
 func New() *Apple
-
-// Interfaces
 func (a *Apple) FetchJobs(ctx context.Context, companyID string) (types.FetchJobsResponse, error)
+func (a *Apple) FetchJobContent(ctx context.Context, job types.RawJob) (types.FetchJobContentResponse, error)
 func (a *Apple) CareersURL(id string) string
 ```
 
-### Response Structs
+### Internal structs
 
-- **`hydrationData`**: Top-level JSON from `window.__staticRouterHydrationData`
-- **`loaderData`**: Container for `search` field
-- **`searchData`**: Holds `searchResults` array and `totalRecords`
-- **`appleJob`**: Single job in the results (captures all API fields)
-- **`appleLocation`**: City, state, country of a job location
-- **`appleTeam`**: Team/department info
+- `hydrationData` / `loaderData` / `searchData` — listing-page hydration shape.
+- `appleJob` — one listing entry.
+- `appleLocation` — tolerant of both listing (`stateProvince`/`countryID`) and detail (`stateCode`/`countryCode` may also appear) shapes.
+- `appleTeam` — `teamName` / `teamCode` / `teamID`.
+- `detailHydrationData` / `detailLoaderData` / `detailJobDetails` — detail-page hydration shape.
+- `appleJobDetail` — `loaderData.jobDetails.jobsData`.
+- `appleFooter` — one entry in `postingFooters` (carries the salary text on `POSTING_FOOTER_RULES*`).
 
-### Key Functions
+### Key functions
 
-- **`FetchJobs(ctx, companyID)`**: Main entry point; paginates and aggregates all jobs
-- **`fetchJobsPage(ctx, page)`**: Fetches single page of listings
-- **`extractHydrationData(body string)`**: Parses JSON from HTML script tag
-- **`jobToItem(job appleJob)`**: Converts API job to pipeline `FetchJobsItem`
-- **`formatLocation(locations []appleLocation)`**: Formats location list
-- **`mapJobType(jobType string)`**: Maps `type` to `model.EmployType`
+- `FetchJobs(ctx, _)` — paginates listings.
+- `fetchJobsPage(ctx, page)` — single page of listings.
+- `FetchJobContent(ctx, job)` — GETs `job.URL`, parses detail hydration.
+- `jobToItem(job)` — converts listing `appleJob` → thin `FetchJobsItem` (no `FullContent`).
+- `jobsDataToResponse(job, jd)` — converts `appleJobDetail` → `FetchJobContentResponse`.
+- `extractHydrationData(body)` — shared between listing and detail; handles direct-object, double-quote `JSON.parse`, and single-quote `JSON.parse` variants.
+- `buildDescription(jd)` — joins labeled sections, skipping empties.
+- `extractCompensation(footers)` — regex over each footer's stripped content.
+- `formatLocation` / `formatSingleLocation` — city ⇢ name and stateProvince ⇢ stateCode fallbacks.
+- `isUSALocation` / `primaryCountryCode` / `hasUSACountry` — country detection across listing + detail shapes.
+- `mapJobType` — employment type table; full-time default.
 
 ## Headers
-
-All requests include browser-like headers to avoid blocking:
 
 ```
 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36
@@ -163,80 +134,41 @@ Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
 Accept-Language: en-US,en;q=0.5
 ```
 
-## Testing
+## Error handling
 
-### Unit Tests
+- **Context cancelled**: propagates `context.Canceled`.
+- **HTTP non-200**: `unexpected status {code}`.
+- **Missing hydration data**: `window.__staticRouterHydrationData not found in page`.
+- **Malformed JSON**: `decode hydration JSON: …` (listing) or `apple: decode detail JSON: …` (detail).
+- **Empty `RawJob.URL` on `FetchJobContent`**: `apple: empty job URL`.
 
-- **`TestNew_DefaultSettings`**: Constructor initializes with correct base URL
-- **`TestCareersURL`**: Public careers page URL is correct
-- **`TestFetchJobs_SinglePage`**: Single page of jobs stops on empty page 2
-- **`TestFetchJobs_MultiPage_Pagination`**: Increments page correctly across 3+ pages
-- **`TestFetchJobs_EmptyFirstPage`**: Returns 0 jobs when first page is empty
-- **`TestFetchJobs_HTTPError`**: Propagates HTTP errors (e.g., 500)
-- **`TestFetchJobs_MalformedHTML`**: Returns error when hydration data is missing
-- **`TestFetchJobs_IDFormat`**: Verifies `apple-{id}` ID format
-- **`TestFetchJobs_JobURL`**: Constructs correct job URLs from id and title
-- **`TestFetchJobs_FullContentAlwaysSet`**: FullContent is never nil
-- **`TestFetchJobs_DescriptionStripsHTML`**: HTML tags removed from jobSummary
-- **`TestFetchJobs_LocationFormat`**: Formats single and multiple locations correctly
-- **`TestFetchJobs_MultiLocation`**: Multiple locations joined with `"; "`
-- **`TestFetchJobs_ContextCancelled`**: Respects context cancellation
-- **`TestMapJobType`**: Employment type mapping table test
-- **`TestFormatLocation`**: Location formatting edge cases
-- **`TestFormatSingleLocation`**: Single location formatting
-- **`TestFetchJobs_Real`** (gated `TEST_REAL=1`): Live API test
+## Interface compliance
 
-### Test Server
+- `types.Adapter` — `FetchJobs`
+- `types.URLProvider` — `CareersURL`
+- `types.ContentFetcher` — `FetchJobContent`
 
-`newTestServer(t, pages)` creates a mock HTTP server that:
-- Accepts `page` query param
-- Returns pre-configured job listings for each page
-- Embeds `window.__staticRouterHydrationData` in HTML response
-- Returns empty results for unconfigured pages
+Compile-time checks:
 
-## Error Handling
-
-- **Context cancelled**: Propagates `context.Canceled`
-- **Request failure**: Wraps with `"apple: fetch page {n}: {err}"`
-- **HTTP non-200**: Returns formatted error with status code
-- **Missing hydration data**: `"extract hydration data: window.__staticRouterHydrationData not found in page"`
-- **Malformed JSON**: `"decode hydration JSON: {json.Unmarshal error}"`
-
-## Pagination Logic
-
-```
-for page = 1; ; page++ {
-  jobs = fetchJobsPage(page)
-  if len(jobs) == 0 {
-    break  // Stop on empty page
-  }
-  allJobs.append(jobs)
-}
-```
-
-## Interface Compliance
-
-- Implements `types.Adapter` (required: `FetchJobs()`)
-- Implements `types.URLProvider` (optional: `CareersURL()`)
-- Does **not** implement `types.ContentFetcher` (fat adapter)
-
-Compile-time checks in code:
 ```go
-var _ types.Adapter = (*Apple)(nil)
-var _ types.URLProvider = (*Apple)(nil)
+var (
+    _ types.Adapter        = (*Apple)(nil)
+    _ types.URLProvider    = (*Apple)(nil)
+    _ types.ContentFetcher = (*Apple)(nil)
+)
 ```
 
 ## Constants
 
-| Name | Value |
-|------|-------|
-| `defaultBaseURL` | `"https://jobs.apple.com"` |
-| `listingPath` | `"/en-us/search?location=united-states-USA&page=%d"` |
-| `userAgent` | Chrome 124 on macOS |
-| `publicJobURLTemplate` | `"%s/en-us/details/%s/%s"` |
+| Name                   | Value                                                 |
+| ---------------------- | ----------------------------------------------------- |
+| `defaultBaseURL`       | `https://jobs.apple.com`                              |
+| `listingPath`          | `/en-us/search?location=united-states-USA&page=%d`    |
+| `userAgent`            | Chrome 124 on macOS                                   |
+| `publicJobURLTemplate` | `%s/en-us/details/%s/%s` (host resolved at scan time) |
+| `usaCountryID`         | `iso-country-USA`                                     |
 
 ## Dependencies
 
-- Standard library: `context`, `encoding/json`, `fmt`, `io`, `net/http`, `regexp`, `strings`
-- Project: `model`, `pipeline/ats/types`
-- Module: `github.com/trushilpatel/jobradar`
+- Standard library: `context`, `encoding/json`, `fmt`, `io`, `net/http`, `regexp`, `slices`, `strings`
+- Project: `apps/crawler/ats/types`, `service/company/common`, `service/job/common`
