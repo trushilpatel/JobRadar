@@ -39,8 +39,8 @@ const mockListResult: AdminCompanyListResult = {
   ],
   total: 1,
   total_active: 1,
-  page: 1,
   limit: 20,
+  next_cursor: null,
 }
 
 function makeWrapper() {
@@ -71,10 +71,11 @@ describe('useCompanies', () => {
     expect(result.current.companies[0].active).toBe(true)
   })
 
-  it('initial page is 1', () => {
+  it('initial cursor is empty (first page)', () => {
     vi.mocked(adminApi.fetchAdminCompanies).mockResolvedValue(mockListResult)
     const { result } = renderHook(() => useCompanies(), { wrapper: makeWrapper() })
-    expect(result.current.page).toBe(1)
+    // hasPrev is false when on first page (no cursor history)
+    expect(result.current.hasPrev).toBe(false)
   })
 
   it('initial scanStatus filter is "all"', () => {
@@ -89,46 +90,88 @@ describe('useCompanies', () => {
     expect(result.current.activeFilter).toBe('all')
   })
 
-  it('setPage changes page', async () => {
-    vi.mocked(adminApi.fetchAdminCompanies).mockResolvedValue(mockListResult)
+  it('goToNextPage advances cursor when nextCursor is available', async () => {
+    const resultWithCursor: AdminCompanyListResult = {
+      ...mockListResult,
+      next_cursor: 'cursor-abc',
+    }
+    vi.mocked(adminApi.fetchAdminCompanies).mockResolvedValue(resultWithCursor)
     const { result } = renderHook(() => useCompanies(), { wrapper: makeWrapper() })
 
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    expect(result.current.nextCursor).toBe('cursor-abc')
+
     act(() => {
-      result.current.setPage(3)
+      result.current.goToNextPage()
     })
 
-    expect(result.current.page).toBe(3)
+    // After going to next page, hasPrev should be true (cursor history has entry)
+    expect(result.current.hasPrev).toBe(true)
   })
 
-  it('changing scanStatus resets page to 1', async () => {
-    vi.mocked(adminApi.fetchAdminCompanies).mockResolvedValue(mockListResult)
+  it('goToPrevPage navigates back when hasPrev is true', async () => {
+    const resultWithCursor: AdminCompanyListResult = {
+      ...mockListResult,
+      next_cursor: 'cursor-abc',
+    }
+    vi.mocked(adminApi.fetchAdminCompanies).mockResolvedValue(resultWithCursor)
     const { result } = renderHook(() => useCompanies(), { wrapper: makeWrapper() })
 
-    // Go to page 2, then change filter
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
     act(() => {
-      result.current.setPage(2)
+      result.current.goToNextPage()
     })
-    expect(result.current.page).toBe(2)
+    expect(result.current.hasPrev).toBe(true)
+
+    act(() => {
+      result.current.goToPrevPage()
+    })
+    expect(result.current.hasPrev).toBe(false)
+  })
+
+  it('changing scanStatus resets cursor and hasPrev to false', async () => {
+    const resultWithCursor: AdminCompanyListResult = {
+      ...mockListResult,
+      next_cursor: 'cursor-abc',
+    }
+    vi.mocked(adminApi.fetchAdminCompanies).mockResolvedValue(resultWithCursor)
+    const { result } = renderHook(() => useCompanies(), { wrapper: makeWrapper() })
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    act(() => {
+      result.current.goToNextPage()
+    })
+    expect(result.current.hasPrev).toBe(true)
 
     act(() => {
       result.current.setScanStatus('error')
     })
-    expect(result.current.page).toBe(1)
+    expect(result.current.hasPrev).toBe(false)
     expect(result.current.scanStatus).toBe('error')
   })
 
-  it('changing activeFilter resets page to 1', async () => {
-    vi.mocked(adminApi.fetchAdminCompanies).mockResolvedValue(mockListResult)
+  it('changing activeFilter resets cursor and hasPrev to false', async () => {
+    const resultWithCursor: AdminCompanyListResult = {
+      ...mockListResult,
+      next_cursor: 'cursor-abc',
+    }
+    vi.mocked(adminApi.fetchAdminCompanies).mockResolvedValue(resultWithCursor)
     const { result } = renderHook(() => useCompanies(), { wrapper: makeWrapper() })
 
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
     act(() => {
-      result.current.setPage(2)
+      result.current.goToNextPage()
     })
+    expect(result.current.hasPrev).toBe(true)
+
     act(() => {
       result.current.setActiveFilter('active')
     })
-
-    expect(result.current.page).toBe(1)
+    expect(result.current.hasPrev).toBe(false)
     expect(result.current.activeFilter).toBe('active')
   })
 
@@ -231,6 +274,16 @@ describe('useCompanies', () => {
       () => new Promise(() => {}) // never resolves
     )
     const { result } = renderHook(() => useCompanies(), { wrapper: makeWrapper() })
+    expect(result.current.companies).toEqual([])
+    expect(result.current.total).toBe(0)
+  })
+
+  it('sets isError when fetchAdminCompanies rejects and companies stays empty', async () => {
+    vi.mocked(adminApi.fetchAdminCompanies).mockRejectedValue(new Error('Network error'))
+    const { result } = renderHook(() => useCompanies(), { wrapper: makeWrapper() })
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
     expect(result.current.companies).toEqual([])
     expect(result.current.total).toBe(0)
   })

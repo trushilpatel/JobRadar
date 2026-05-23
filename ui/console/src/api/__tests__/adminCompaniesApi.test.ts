@@ -36,8 +36,8 @@ const mockListResult: AdminCompanyListResult = {
   data: [mockAdminCompany],
   total: 1,
   total_active: 1,
-  page: 1,
   limit: 50,
+  next_cursor: null,
 }
 
 describe('adminCompanies API', () => {
@@ -48,20 +48,20 @@ describe('adminCompanies API', () => {
   // ── fetchAdminCompanies ─────────────────────────────────────────────────────
 
   describe('fetchAdminCompanies', () => {
-    it('calls the correct endpoint with default page and limit', async () => {
+    it('calls the correct endpoint with default cursor and limit', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockListResult)
       await fetchAdminCompanies()
       const [url] = vi.mocked(apiClient.get).mock.calls[0]
       expect(url).toContain('/admin/companies')
-      expect(url).toContain('page=1')
+      expect(url).not.toContain('cursor=')
       expect(url).toContain('limit=50')
     })
 
-    it('appends page and limit params', async () => {
+    it('appends cursor and limit params when cursor is non-empty', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockListResult)
-      await fetchAdminCompanies({}, 2, 25)
+      await fetchAdminCompanies({}, 'cursor-abc', 25)
       const [url] = vi.mocked(apiClient.get).mock.calls[0]
-      expect(url).toContain('page=2')
+      expect(url).toContain('cursor=cursor-abc')
       expect(url).toContain('limit=25')
     })
 
@@ -122,6 +122,11 @@ describe('adminCompanies API', () => {
       expect(result.total).toBe(1)
       expect(result.data).toHaveLength(1)
       expect(result.data[0].id).toBe('stripe')
+    })
+
+    it('propagates rejection when apiClient.get rejects', async () => {
+      vi.mocked(apiClient.get).mockRejectedValue(new Error('Network error'))
+      await expect(fetchAdminCompanies()).rejects.toThrow('Network error')
     })
   })
 

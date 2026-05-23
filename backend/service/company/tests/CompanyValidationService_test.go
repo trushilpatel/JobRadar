@@ -34,6 +34,9 @@ func TestPublicValidator_ListPublic(t *testing.T) {
 		{name: "ok defaults", limit: 20},
 		{name: "limit too large", limit: 200, wantErr: true},
 		{name: "search too long", filter: companydto.CompanyFilter{Search: stringOfLen(101)}, limit: 20, wantErr: true},
+		{name: "limit=0 rejects", limit: 0, wantErr: true},
+		{name: "search exactly 100 chars passes", filter: companydto.CompanyFilter{Search: stringOfLen(100)}, limit: 20},
+		{name: "page=1 limit=1 minimum valid", limit: 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

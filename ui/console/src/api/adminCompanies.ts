@@ -30,8 +30,8 @@ export interface AdminCompanyListResult {
   data: AdminCompany[]
   total: number
   total_active: number
-  page: number
   limit: number
+  next_cursor: string | null
 }
 
 export interface ScanSettingsInput {
@@ -55,11 +55,11 @@ export type AdapterTypeValue = (typeof ADAPTER_TYPES)[number]
 
 export async function fetchAdminCompanies(
   filters: AdminCompanyFilters = {},
-  page = 1,
+  cursor = '',
   limit = 50
 ): Promise<AdminCompanyListResult> {
   const p = new URLSearchParams()
-  p.set('page', String(page))
+  if (cursor) p.set('cursor', cursor)
   p.set('limit', String(limit))
   if (filters.search) p.set('search', filters.search)
   if (filters.has_settings !== undefined) p.set('has_settings', String(filters.has_settings))

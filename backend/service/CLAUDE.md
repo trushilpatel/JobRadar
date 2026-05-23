@@ -140,6 +140,7 @@ router  := NewRestRouter(handler)
 
 ## General rules
 
+- All list endpoints use **keyset cursor pagination** — `filter.Cursor string` in the DTO, `next_cursor *string` in the result, tuple comparison in SQL (e.g. `(sort_col, id) > (?, ?)`). Never use `OFFSET`-based pagination.
 - All service methods take `context.Context` as the first argument and use `tracing.Start` / `tracing.End` for OTel spans
 - Services return `domain.ServiceError` via sentinel `.WithMessage()` — never `fmt.Errorf` for errors handlers inspect
 - All responses use `handler.Respond`, `handler.RespondPaged`, or `handler.HandleError` — never raw `json.NewEncoder`

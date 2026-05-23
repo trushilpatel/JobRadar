@@ -17,8 +17,9 @@ export function useCompanies() {
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>(ACTIVE_FILTER.ALL)
   const [scanStatus, setScanStatus] = useState<ScanStatusFilter>(SCAN_STATUS_FILTER.ALL)
   const [sorting, setSorting] = useState<SortingState>([])
-  const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
+  const [cursor, setCursor] = useState('')
+  const [cursorHistory, setCursorHistory] = useState<string[]>([])
   const [autoRefresh, setAutoRefresh] = useState(
     () => localStorage.getItem(STORAGE_KEYS.AUTO_REFRESH) === 'true'
   )
@@ -47,15 +48,17 @@ export function useCompanies() {
     [debouncedSearch, adapters, activeFilter, scanStatus, sortBy, sortDir]
   )
 
+  // Reset cursor when filters change
   const [prevFilters, setPrevFilters] = useState(filters)
   if (prevFilters !== filters) {
     setPrevFilters(filters)
-    setPage(1)
+    setCursor('')
+    setCursorHistory([])
   }
 
   const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: companyQueryKeys.adminCompanies(filters, page, limit),
-    queryFn: () => fetchAdminCompanies(filters, page, limit),
+    queryKey: companyQueryKeys.adminCompanies(filters, cursor, limit),
+    queryFn: () => fetchAdminCompanies(filters, cursor, limit),
     staleTime: 10_000,
     refetchInterval: autoRefresh ? 10_000 : false,
   })
@@ -63,6 +66,7 @@ export function useCompanies() {
   const companies = useMemo(() => (data?.data ?? []).map(normalizeAdminCompany), [data?.data])
   const total = data?.total ?? 0
   const totalActive = data?.total_active ?? 0
+  const nextCursor = data?.next_cursor ?? null
 
   const hasActiveFilters =
     search !== '' ||
@@ -71,9 +75,24 @@ export function useCompanies() {
     scanStatus !== SCAN_STATUS_FILTER.ALL ||
     sorting.length > 0
 
+  function goToNextPage() {
+    if (!nextCursor) return
+    setCursorHistory((h) => [...h, cursor])
+    setCursor(nextCursor)
+  }
+
+  function goToPrevPage() {
+    setCursorHistory((h) => {
+      const prev = h[h.length - 1] ?? ''
+      setCursor(prev)
+      return h.slice(0, -1)
+    })
+  }
+
   function handleSortingChange(newSorting: SortingState) {
     setSorting(newSorting)
-    setPage(1)
+    setCursor('')
+    setCursorHistory([])
   }
 
   function resetFilters() {
@@ -82,7 +101,8 @@ export function useCompanies() {
     setActiveFilter(ACTIVE_FILTER.ALL)
     setScanStatus(SCAN_STATUS_FILTER.ALL)
     setSorting([])
-    setPage(1)
+    setCursor('')
+    setCursorHistory([])
   }
 
   function toggleAutoRefresh() {
@@ -113,10 +133,12 @@ export function useCompanies() {
     sorting,
     handleSortingChange,
 
-    page,
-    setPage,
     limit,
     setLimit,
+    nextCursor,
+    hasPrev: cursorHistory.length > 0,
+    goToNextPage,
+    goToPrevPage,
 
     hasActiveFilters,
     resetFilters,

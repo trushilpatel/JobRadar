@@ -68,10 +68,12 @@ export function CompaniesPage() {
           companies={c.companies}
           total={c.total}
           loading={c.isLoading || c.isFetching}
-          page={c.page}
           limit={c.limit}
-          onPageChange={c.setPage}
           onLimitChange={c.setLimit}
+          nextCursor={c.nextCursor}
+          hasPrev={c.hasPrev}
+          onNext={c.goToNextPage}
+          onPrev={c.goToPrevPage}
           emptyMessage={
             c.hasActiveFilters ? EMPTY_MESSAGES.WITH_FILTERS : EMPTY_MESSAGES.WITHOUT_FILTERS
           }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
@@ -17,12 +18,14 @@ import (
 // the public chain cannot accidentally leak operational fields. Each method
 // converts companymodel.Company straight into a CompanyPublicView.
 type publicRepositoryService struct {
-	db *gorm.DB
+	db  *gorm.DB
+	log logger.Logger
 }
 
 // NewRepositoryService constructs the terminal CompanyService backed by GORM.
+// A nil log silences all structured logging.
 func NewRepositoryService(db *gorm.DB) CompanyService {
-	return &publicRepositoryService{db: db}
+	return &publicRepositoryService{db: db, log: logger.NewNoop()}
 }
 
 // publicCursor is the decoded form of the opaque cursor string passed by
@@ -73,6 +76,7 @@ func (r *publicRepositoryService) ListPublic(ctx context.Context, filter company
 
 	var total int64
 	if err = q.Count(&total).Error; err != nil {
+		r.log.Warn("failed to count companies", logger.Err(err))
 		return companydto.CompanyPublicListResult{}, apperr.ErrInternal.WithMessage("failed to count companies")
 	}
 
@@ -100,6 +104,7 @@ func (r *publicRepositoryService) ListPublic(ctx context.Context, filter company
 		Order("id " + dir).
 		Limit(limit + 1).
 		Find(&rows).Error; err != nil {
+		r.log.Warn("failed to fetch companies", logger.Err(err))
 		return companydto.CompanyPublicListResult{}, apperr.ErrInternal.WithMessage("failed to fetch companies")
 	}
 
@@ -128,6 +133,7 @@ func (r *publicRepositoryService) GetPublic(ctx context.Context, id string) (_ *
 		if apperr.IsNotFound(err) {
 			return nil, apperr.ErrNotFound.WithMessage("company not found")
 		}
+		r.log.Warn("failed to fetch company", logger.Str(logger.FieldCompany, id), logger.Err(err))
 		return nil, apperr.ErrInternal.WithMessage("failed to fetch company")
 	}
 	return &companydto.CompanyPublicView{Company: c}, nil
