@@ -1,11 +1,12 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { MapPin, Wifi, Bookmark, BookmarkCheck, X } from 'lucide-react'
+import { MapPin, Wifi, Bookmark, BookmarkCheck, X, Paperclip } from 'lucide-react'
 import type { Job } from '@/types'
 import { JOB_STATUS } from '@/constants/jobStatus'
 import { DataTableColumnHeader } from '@/components/ui/data-table'
 import { formatRelativeTime, cn } from '@/lib/utils'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { formatSalary } from '@/services/jobs.service'
+import { getMockAttachmentForJob } from '@/features/resumes/mockData'
 
 export interface JobTableActions {
   onToggleSave: (job: Job) => void
@@ -72,9 +73,24 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
     {
       accessorKey: 'title',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Title" />,
-      cell: ({ getValue }) => (
-        <span className="font-medium text-white text-sm">{getValue() as string}</span>
-      ),
+      cell: ({ row, getValue }) => {
+        // Mockup paperclip indicator — shown when a resume is attached to
+        // this job (any state). Real impl will read from user_job_state /
+        // resume_job_attachments via a join, not from mock data.
+        const attachment = getMockAttachmentForJob(row.original.id)
+        return (
+          <div className="flex items-center gap-1.5 min-w-0">
+            {attachment && (
+              <Paperclip
+                size={11}
+                className="text-violet-400 shrink-0"
+                aria-label={`Resume attached (${attachment.state})`}
+              />
+            )}
+            <span className="font-medium text-white text-sm truncate">{getValue() as string}</span>
+          </div>
+        )
+      },
     },
 
     // ── 4. Location ────────────────────────────────────────────────────────
