@@ -127,7 +127,7 @@ This file and the project's skill files evolve as the codebase is worked on. Whe
 
 ## See also
 
-- `infra/CLAUDE.md` — local k8s deployment + iteration
+- `infra/CLAUDE.md` — k8s deployment + iteration (k3d is the only deployment target; no Docker Compose)
 - `docs/QUALITY.md` — quality attributes reference (`.claude/rules/quality-attributes.md` auto-loads on backend files; `frontend-quality-attributes.md` on frontend files)
 - Subdirectory `CLAUDE.md` files cover each `backend/*` and `ui/console/*` area and auto-load when you work there
 - `.claude/skills/` — project skills; each has a self-improvement footer that invokes `skill-self-improvement` after completion
