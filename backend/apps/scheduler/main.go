@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -27,7 +26,7 @@ func main() {
 	log := logger.Init("scheduler")
 
 	if err := cfg.Scheduler.Validate(); err != nil {
-		fmt.Fprintf(os.Stderr, "scheduler: invalid config: %v\n", err)
+		log.Error("invalid config", err)
 		os.Exit(1)
 	}
 
@@ -40,7 +39,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
+	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.PoolReady(database) })
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -52,10 +51,10 @@ func main() {
 	jitter := computeJitter(checkInterval, rand.New(rand.NewSource(time.Now().UnixNano())))
 
 	log.Info("started",
-		logger.Int("scan_interval_minutes", cfg.Scheduler.ScanIntervalMinutes),
-		logger.Dur("check_interval", checkInterval),
-		logger.Dur("stuck_timeout", stuckTimeout),
-		logger.Dur("jitter", jitter),
+		logger.Int(logger.FieldScanIntervalMinutes, cfg.Scheduler.ScanIntervalMinutes),
+		logger.Dur(logger.FieldCheckInterval, checkInterval),
+		logger.Dur(logger.FieldStuckTimeout, stuckTimeout),
+		logger.Dur(logger.FieldJitter, jitter),
 	)
 
 	Run(ctx, log, svc, cfg.Scheduler.ScanIntervalMinutes, checkInterval+jitter, stuckTimeout)

@@ -70,7 +70,7 @@ func (f *fakeSchedulerService) resetCalled() bool { return f.resetCalls.Load() >
 // purgeCalled reports whether PurgeInactive has been invoked at least once.
 func (f *fakeSchedulerService) purgeCalled() bool { return f.purgeCalls.Load() > 0 }
 
-var _ scansvc.SchedulerService = (*fakeSchedulerService)(nil)
+var _ SchedulerService = (*fakeSchedulerService)(nil)
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
