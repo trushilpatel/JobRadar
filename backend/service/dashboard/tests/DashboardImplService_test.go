@@ -42,17 +42,25 @@ type fakeInsightsService struct {
 	err      error
 }
 
-func (f *fakeInsightsService) TechStack(_ context.Context) (any, error) { return nil, f.err }
-func (f *fakeInsightsService) CompanyActivity(_ context.Context) (any, error) {
+func (f *fakeInsightsService) TechStack(_ context.Context) ([]insightsdto.TechCount, error) {
 	return nil, f.err
 }
-func (f *fakeInsightsService) Funnel(_ context.Context) (any, error)   { return nil, f.err }
-func (f *fakeInsightsService) Location(_ context.Context) (any, error) { return nil, f.err }
-func (f *fakeInsightsService) Sponsorship(_ context.Context, _ insightsdto.InsightsFilter) (any, error) {
+func (f *fakeInsightsService) CompanyActivity(_ context.Context) ([]insightsdto.CompanyActivityItem, error) {
 	return nil, f.err
 }
-func (f *fakeInsightsService) Velocity(_ context.Context) (any, error) { return nil, f.err }
-func (f *fakeInsightsService) RoleCategories(_ context.Context) (any, error) {
+func (f *fakeInsightsService) Funnel(_ context.Context) ([]insightsdto.FunnelStep, error) {
+	return nil, f.err
+}
+func (f *fakeInsightsService) Location(_ context.Context) (insightsdto.LocationBreakdown, error) {
+	return insightsdto.LocationBreakdown{}, f.err
+}
+func (f *fakeInsightsService) Sponsorship(_ context.Context, _ insightsdto.InsightsFilter) ([]insightsdto.SponsorshipDay, error) {
+	return nil, f.err
+}
+func (f *fakeInsightsService) Velocity(_ context.Context) ([]insightsdto.CompanyVelocity, error) {
+	return nil, f.err
+}
+func (f *fakeInsightsService) RoleCategories(_ context.Context) ([]insightsdto.RoleCategoryCount, error) {
 	return nil, f.err
 }
 func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insightsdto.PipelineCounts, error) {

@@ -1,9 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
-import { fetchVelocity } from '@/api/insights'
 import type { CompanyVelocityInsight } from '@/types'
 import { cn } from '@/lib/utils'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
-import { insightQueryKeys } from './queryKeys'
+import { useVelocity } from './hooks/useInsights'
 
 const BADGE: Record<string, string> = {
   spike: 'bg-amber-500/15 text-amber-400',
@@ -81,11 +79,7 @@ function VelocityContent({ data }: { data: CompanyVelocityInsight[] }) {
 }
 
 export function CompanyVelocityPanel() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: insightQueryKeys.velocity(20),
-    queryFn: () => fetchVelocity(20),
-    staleTime: 30_000,
-  })
+  const { data, isLoading, isError } = useVelocity(20)
   return (
     <InsightCard
       title="Company Hiring Velocity"

@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query'
 import {
   LineChart,
   Line,
@@ -8,11 +7,10 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from 'recharts'
-import { fetchSponsorshipTrend } from '@/api/insights'
 import type { SponsorshipDay } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
 import { tooltipStyle } from './insightStyles'
-import { insightQueryKeys } from './queryKeys'
+import { useSponsorshipTrend } from './hooks/useInsights'
 
 function SponsorshipContent({ data }: { data: SponsorshipDay[] }) {
   if (data.length === 0) return <InsightEmpty />
@@ -61,11 +59,7 @@ function SponsorshipContent({ data }: { data: SponsorshipDay[] }) {
 }
 
 export function SponsorshipTrendPanel() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: insightQueryKeys.sponsorshipTrend(30),
-    queryFn: () => fetchSponsorshipTrend(30),
-    staleTime: 30_000,
-  })
+  const { data, isLoading, isError } = useSponsorshipTrend(30)
   return (
     <InsightCard
       title="Sponsorship Availability"

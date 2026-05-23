@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 
+	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/service/insights/common"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 )
@@ -19,14 +20,12 @@ func NewImplService(next InsightsService) InsightsService {
 }
 
 // Velocity enriches repository rows with multiplier and velocity_tag before returning.
-func (s *implService) Velocity(ctx context.Context) (_ any, err error) {
-	raw, err := s.next.Velocity(ctx)
+func (s *implService) Velocity(ctx context.Context) (_ []dto.CompanyVelocity, err error) {
+	ctx, span := tracing.Start(ctx, "insights.impl.Velocity")
+	defer tracing.End(span, &err)
+	rows, err := s.next.Velocity(ctx)
 	if err != nil {
 		return nil, err
-	}
-	rows, ok := raw.([]dto.CompanyVelocity)
-	if !ok {
-		return raw, nil
 	}
 	for i := range rows {
 		rows[i].Multiplier, rows[i].VelocityTag = classifyVelocity(

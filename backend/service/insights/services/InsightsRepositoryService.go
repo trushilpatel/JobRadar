@@ -4,22 +4,25 @@ import (
 	"context"
 
 	"github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	"github.com/trushilpatel/jobradar/service/insights/common"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"gorm.io/gorm"
 )
 
 type repositoryService struct {
-	db *gorm.DB
+	db  *gorm.DB
+	log logger.Logger
 }
 
 // NewRepositoryService constructs the terminal InsightsService implementation backed by GORM.
 func NewRepositoryService(db *gorm.DB) InsightsService {
-	return &repositoryService{db: db}
+	return &repositoryService{db: db, log: logger.NewNoop()}
 }
 
-func (s *repositoryService) TechStack(ctx context.Context) (_ any, err error) {
+func (s *repositoryService) TechStack(ctx context.Context) (_ []dto.TechCount, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.TechStack")
 	defer tracing.End(span, &err)
 	var results []dto.TechCount
@@ -32,12 +35,13 @@ func (s *repositoryService) TechStack(ctx context.Context) (_ any, err error) {
 		LIMIT ?
 	`, 15).Scan(&results).Error
 	if err != nil {
+		s.log.Warn("insights.techStack db query failed", logger.Err(err))
 		return nil, errors.ErrInternal.WithMessage("failed to fetch tech stack")
 	}
 	return results, nil
 }
 
-func (s *repositoryService) CompanyActivity(ctx context.Context) (_ any, err error) {
+func (s *repositoryService) CompanyActivity(ctx context.Context) (_ []dto.CompanyActivityItem, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.CompanyActivity")
 	defer tracing.End(span, &err)
 	var results []dto.CompanyActivityItem
@@ -54,12 +58,13 @@ func (s *repositoryService) CompanyActivity(ctx context.Context) (_ any, err err
 		LIMIT 200
 	`).Scan(&results).Error
 	if err != nil {
+		s.log.Warn("insights.companyActivity db query failed", logger.Err(err))
 		return nil, errors.ErrInternal.WithMessage("failed to fetch company activity")
 	}
 	return results, nil
 }
 
-func (s *repositoryService) Funnel(ctx context.Context) (_ any, err error) {
+func (s *repositoryService) Funnel(ctx context.Context) (_ []dto.FunnelStep, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.Funnel")
 	defer tracing.End(span, &err)
 	var result struct {
@@ -73,25 +78,28 @@ func (s *repositoryService) Funnel(ctx context.Context) (_ any, err error) {
 	// applied includes interviewing and offer — all stages beyond initial application.
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT
-			(SELECT COUNT(*) FROM job_analytics)                                            AS enriched,
-			COUNT(*) FILTER (WHERE status = 'saved')                                        AS saved,
-			COUNT(*) FILTER (WHERE status IN ('applied', 'interviewing', 'offer'))          AS applied,
-			COUNT(*) FILTER (WHERE status = 'dismissed')                                    AS dismissed
+			(SELECT COUNT(*) FROM job_analytics)                                                       AS enriched,
+			COUNT(*) FILTER (WHERE status = ?)                                                         AS saved,
+			COUNT(*) FILTER (WHERE status IN (?, ?, ?))                                                AS applied,
+			COUNT(*) FILTER (WHERE status = ?)                                                         AS dismissed
 		FROM user_job_state
-	`).Scan(&result).Error
+	`, jobcommon.JobStatusSaved,
+		jobcommon.JobStatusApplied, jobcommon.JobStatusInterviewing, jobcommon.JobStatusOffer,
+		jobcommon.JobStatusDismissed).Scan(&result).Error
 	if err != nil {
+		s.log.Warn("insights.funnel db query failed", logger.Err(err))
 		return nil, errors.ErrInternal.WithMessage("failed to fetch funnel")
 	}
 
 	return []dto.FunnelStep{
-		{Stage: "enriched", Count: result.Enriched},
+		{Stage: common.FunnelStageEnriched, Count: result.Enriched},
 		{Stage: jobcommon.JobStatusSaved, Count: result.Saved},
 		{Stage: jobcommon.JobStatusApplied, Count: result.Applied},
 		{Stage: jobcommon.JobStatusDismissed, Count: result.Dismissed},
 	}, nil
 }
 
-func (s *repositoryService) Location(ctx context.Context) (_ any, err error) {
+func (s *repositoryService) Location(ctx context.Context) (_ dto.LocationBreakdown, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.Location")
 	defer tracing.End(span, &err)
 	var countries []dto.LocationCount
@@ -103,34 +111,36 @@ func (s *repositoryService) Location(ctx context.Context) (_ any, err error) {
 		LIMIT 50
 	`).Scan(&countries).Error
 	if err != nil {
-		return nil, errors.ErrInternal.WithMessage("failed to fetch location breakdown")
+		s.log.Warn("insights.location countries db query failed", logger.Err(err))
+		return dto.LocationBreakdown{}, errors.ErrInternal.WithMessage("failed to fetch location breakdown")
 	}
 
 	var states []dto.StateCount
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT COALESCE(state, 'Unknown') AS state, COUNT(*) AS count
 		FROM job_analytics
-		WHERE country = 'USA' AND state IS NOT NULL
+		WHERE country = ? AND state IS NOT NULL
 		GROUP BY state
 		ORDER BY count DESC
 		LIMIT 20
-	`).Scan(&states).Error
+	`, common.LocationCountryUSA).Scan(&states).Error
 	if err != nil {
-		return nil, errors.ErrInternal.WithMessage("failed to fetch state breakdown")
+		s.log.Warn("insights.location states db query failed", logger.Err(err))
+		return dto.LocationBreakdown{}, errors.ErrInternal.WithMessage("failed to fetch state breakdown")
 	}
 
-	return map[string]any{
-		"countries": countries,
-		"states":    states,
-	}, nil
+	return dto.LocationBreakdown{Countries: countries, States: states}, nil
 }
 
-func (s *repositoryService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) (_ any, err error) {
+func (s *repositoryService) Sponsorship(ctx context.Context, filter dto.InsightsFilter) (_ []dto.SponsorshipDay, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.Sponsorship")
 	defer tracing.End(span, &err)
 	days := filter.Days
 	if days <= 0 {
 		days = 30
+	}
+	if days > 365 {
+		days = 365
 	}
 	var results []dto.SponsorshipDay
 	err = s.db.WithContext(ctx).Raw(`
@@ -144,12 +154,13 @@ func (s *repositoryService) Sponsorship(ctx context.Context, filter dto.Insights
 		ORDER BY snapshotted_at ASC
 	`, days).Scan(&results).Error
 	if err != nil {
+		s.log.Warn("insights.sponsorship db query failed", logger.Err(err))
 		return nil, errors.ErrInternal.WithMessage("failed to fetch sponsorship trend")
 	}
 	return results, nil
 }
 
-func (s *repositoryService) Velocity(ctx context.Context) (_ any, err error) {
+func (s *repositoryService) Velocity(ctx context.Context) (_ []dto.CompanyVelocity, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.Velocity")
 	defer tracing.End(span, &err)
 	var results []dto.CompanyVelocity
@@ -184,12 +195,13 @@ func (s *repositoryService) Velocity(ctx context.Context) (_ any, err error) {
 		LIMIT ?
 	`, 20).Scan(&results).Error
 	if err != nil {
+		s.log.Warn("insights.velocity db query failed", logger.Err(err))
 		return nil, errors.ErrInternal.WithMessage("failed to fetch company velocity")
 	}
 	return results, nil
 }
 
-func (s *repositoryService) RoleCategories(ctx context.Context) (_ any, err error) {
+func (s *repositoryService) RoleCategories(ctx context.Context) (_ []dto.RoleCategoryCount, err error) {
 	ctx, span := tracing.Start(ctx, "insights.repository.RoleCategories")
 	defer tracing.End(span, &err)
 	var results []dto.RoleCategoryCount
@@ -201,6 +213,7 @@ func (s *repositoryService) RoleCategories(ctx context.Context) (_ any, err erro
 		LIMIT 25
 	`).Scan(&results).Error
 	if err != nil {
+		s.log.Warn("insights.roleCategories db query failed", logger.Err(err))
 		return nil, errors.ErrInternal.WithMessage("failed to fetch role categories")
 	}
 	return results, nil
@@ -215,12 +228,14 @@ func (s *repositoryService) GetPipelineCounts(ctx context.Context) (_ dto.Pipeli
 	}
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT
-			COUNT(*) FILTER (WHERE l.reason = 'fetch' AND j.job_post_id IS NULL) AS pending,
-			COUNT(*) FILTER (WHERE l.reason = 'error') AS errors
+			COUNT(*) FILTER (WHERE l.reason = ? AND j.job_post_id IS NULL) AS pending,
+			COUNT(*) FILTER (WHERE l.reason = ?) AS errors
 		FROM job_pipeline_ledger l
 		LEFT JOIN jobs j ON j.job_post_id = l.job_id
-	`).Scan(&result).Error
+		WHERE l.reason IN (?, ?)
+	`, jobcommon.SeenReasonFetch, jobcommon.SeenReasonError, jobcommon.SeenReasonFetch, jobcommon.SeenReasonError).Scan(&result).Error
 	if err != nil {
+		s.log.Warn("insights.getPipelineCounts db query failed", logger.Err(err))
 		return dto.PipelineCounts{}, errors.ErrInternal.WithMessage("failed to fetch pipeline counts")
 	}
 	return dto.PipelineCounts{Pending: result.Pending, Errors: result.Errors}, nil

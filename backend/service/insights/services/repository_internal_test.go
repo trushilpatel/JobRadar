@@ -30,6 +30,7 @@ import (
 	"time"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -72,7 +73,13 @@ func newDryRunRepo(t *testing.T) (*repositoryService, *repoSQLCapture) {
 	if err != nil {
 		t.Fatalf("open dryrun: %v", err)
 	}
-	return &repositoryService{db: db}, cap
+	return &repositoryService{db: db, log: logger.NewNoop()}, cap
+}
+
+// newExecRepo creates a real sqlite-backed repositoryService for success-path tests.
+func newExecRepo(t *testing.T, db *gorm.DB) *repositoryService {
+	t.Helper()
+	return &repositoryService{db: db, log: logger.NewNoop()}
 }
 
 func mustContain(t *testing.T, captured []string, needle string) {
@@ -145,9 +152,14 @@ func TestRepository_Funnel_SQL(t *testing.T) {
 	}
 	mustContain(t, captured, "FROM job_analytics")
 	mustContain(t, captured, "FROM user_job_state")
-	mustContain(t, captured, "status = 'saved'")
-	mustContain(t, captured, "status IN ('applied', 'interviewing', 'offer')")
-	mustContain(t, captured, "status = 'dismissed'")
+	// GORM renders bound parameters with the dialect's quoting; check for the
+	// value without quotes so the assertion is dialect-agnostic.
+	mustContain(t, captured, "status =")
+	mustContain(t, captured, "saved")
+	mustContain(t, captured, "status IN")
+	mustContain(t, captured, "applied")
+	mustContain(t, captured, "interviewing")
+	mustContain(t, captured, "dismissed")
 }
 
 // TestRepository_Funnel_SuccessShape exercises the Funnel success branch
@@ -166,14 +178,10 @@ func TestRepository_Funnel_SuccessShape(t *testing.T) {
 	if err := db.Exec(`CREATE TABLE user_job_state (id INTEGER PRIMARY KEY, status TEXT)`).Error; err != nil {
 		t.Fatalf("create user_job_state: %v", err)
 	}
-	repo := &repositoryService{db: db}
-	data, err := repo.Funnel(context.Background())
+	repo := newExecRepo(t, db)
+	steps, err := repo.Funnel(context.Background())
 	if err != nil {
 		t.Fatalf("Funnel: %v", err)
-	}
-	steps, ok := data.([]dto.FunnelStep)
-	if !ok {
-		t.Fatalf("expected []FunnelStep, got %T", data)
 	}
 	wantStages := []string{"enriched", "saved", "applied", "dismissed"}
 	if len(steps) != len(wantStages) {
@@ -213,14 +221,10 @@ func TestRepository_Funnel_CountsFromUserJobState(t *testing.T) {
 		(9, 'new')`).Error; err != nil {
 		t.Fatalf("seed user_job_state: %v", err)
 	}
-	repo := &repositoryService{db: db}
-	data, err := repo.Funnel(context.Background())
+	repo := newExecRepo(t, db)
+	steps, err := repo.Funnel(context.Background())
 	if err != nil {
 		t.Fatalf("Funnel: %v", err)
-	}
-	steps, ok := data.([]dto.FunnelStep)
-	if !ok {
-		t.Fatalf("expected []FunnelStep, got %T", data)
 	}
 	got := map[string]int{}
 	for _, s := range steps {
@@ -258,7 +262,7 @@ func TestRepository_Location_SQL(t *testing.T) {
 
 // TestRepository_Location_Success runs the full Location method against a
 // real sqlite database — both the countries query and the states query —
-// and asserts the returned map carries both keys.
+// and asserts the returned breakdown carries both slices.
 func TestRepository_Location_Success(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard})
 	if err != nil {
@@ -276,19 +280,12 @@ func TestRepository_Location_Success(t *testing.T) {
 		(4, 'Canada', NULL), (5, NULL, NULL)`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	repo := &repositoryService{db: db}
-	data, err := repo.Location(context.Background())
+	repo := newExecRepo(t, db)
+	breakdown, err := repo.Location(context.Background())
 	if err != nil {
 		t.Fatalf("Location: %v", err)
 	}
-	m, ok := data.(map[string]any)
-	if !ok {
-		t.Fatalf("expected map, got %T", data)
-	}
-	countries, ok := m["countries"].([]dto.LocationCount)
-	if !ok {
-		t.Fatalf("expected []LocationCount, got %T", m["countries"])
-	}
+	countries := breakdown.Countries
 	// The NULL country row should be coalesced to "Unknown"; both USA and
 	// Canada should appear; USA must be first by count desc.
 	if len(countries) < 2 {
@@ -298,10 +295,7 @@ func TestRepository_Location_Success(t *testing.T) {
 		t.Errorf("top country = %+v, want USA/3", countries[0])
 	}
 
-	states, ok := m["states"].([]dto.StateCount)
-	if !ok {
-		t.Fatalf("expected []StateCount, got %T", m["states"])
-	}
+	states := breakdown.States
 	if len(states) != 2 {
 		t.Fatalf("expected 2 state rows (CA, NY), got %d: %+v", len(states), states)
 	}
@@ -405,14 +399,10 @@ func TestRepository_RoleCategories_Success(t *testing.T) {
 		(4, 'design'), (5, NULL)`).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	repo := &repositoryService{db: db}
-	data, err := repo.RoleCategories(context.Background())
+	repo := newExecRepo(t, db)
+	rows, err := repo.RoleCategories(context.Background())
 	if err != nil {
 		t.Fatalf("RoleCategories: %v", err)
-	}
-	rows, ok := data.([]dto.RoleCategoryCount)
-	if !ok {
-		t.Fatalf("expected []RoleCategoryCount, got %T", data)
 	}
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 category rows (engineering, design, other), got %d: %+v", len(rows), rows)
@@ -444,9 +434,12 @@ func TestRepository_GetPipelineCounts_SQL(t *testing.T) {
 		t.Fatal("no SQL captured")
 	}
 	mustContain(t, captured, "FROM job_pipeline_ledger")
-	mustContain(t, captured, "l.reason = 'fetch'")
+	// GORM renders bound parameters with the dialect's quoting; check for the
+	// value without quotes so the assertion is dialect-agnostic.
+	mustContain(t, captured, "l.reason =")
+	mustContain(t, captured, "fetch")
 	mustContain(t, captured, "j.job_post_id IS NULL")
-	mustContain(t, captured, "l.reason = 'error'")
+	mustContain(t, captured, "error")
 	mustContain(t, captured, "LEFT JOIN jobs j")
 }
 
@@ -484,7 +477,7 @@ func TestRepository_GetPipelineCounts_Success(t *testing.T) {
 	if err := db.Exec(`INSERT INTO jobs (job_post_id) VALUES ('j1')`).Error; err != nil {
 		t.Fatalf("seed jobs: %v", err)
 	}
-	repo := &repositoryService{db: db}
+	repo := newExecRepo(t, db)
 	counts, err := repo.GetPipelineCounts(context.Background())
 	if err != nil {
 		t.Fatalf("GetPipelineCounts: %v", err)
@@ -515,7 +508,7 @@ func TestRepository_ErrorWrapping_AsServiceError(t *testing.T) {
 	if err := sqlDB.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	repo := &repositoryService{db: db}
+	repo := &repositoryService{db: db, log: logger.NewNoop()}
 
 	type call struct {
 		name string

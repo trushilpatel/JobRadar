@@ -1,10 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { fetchTechStack } from '@/api/insights'
 import type { TechCount } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
 import { tooltipStyle } from './insightStyles'
-import { insightQueryKeys } from './queryKeys'
+import { useTechStack } from './hooks/useInsights'
 
 function TechContent({ data }: { data: TechCount[] }) {
   if (data.length === 0) return <InsightEmpty />
@@ -43,11 +41,7 @@ function TechContent({ data }: { data: TechCount[] }) {
 }
 
 export function TechStackPanel() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: insightQueryKeys.techStack(15),
-    queryFn: () => fetchTechStack(15),
-    staleTime: 30_000,
-  })
+  const { data, isLoading, isError } = useTechStack(15)
   return (
     <InsightCard title="Tech Stack Trends" subtitle="Top 15 technologies across all enriched jobs">
       {isLoading ? (

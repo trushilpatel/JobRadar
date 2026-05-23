@@ -1,8 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
-import { fetchLocation } from '@/api/insights'
 import type { LocationData } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
-import { insightQueryKeys } from './queryKeys'
+import { useLocation } from './hooks/useInsights'
 
 function LocationContent({ data }: { data: LocationData }) {
   const countries = data.countries
@@ -55,11 +53,7 @@ function LocationContent({ data }: { data: LocationData }) {
 }
 
 export function LocationPanel() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: insightQueryKeys.location(),
-    queryFn: fetchLocation,
-    staleTime: 30_000,
-  })
+  const { data, isLoading, isError } = useLocation()
   return (
     <InsightCard
       title="Location Breakdown"
