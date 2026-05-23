@@ -314,6 +314,23 @@ export interface RoleCategoryCount {
   count: number
 }
 
+// ── Adapter configs ─────────────────────────────────────────────────────────
+
+export interface AdapterConfig {
+  adapter_type: string
+  scan_interval_minutes: number
+  inter_company_delay_s: number
+  last_scheduled_at: string | null
+  updated_at: string
+}
+
+export interface EffectiveScanConfig {
+  adapter_type: string
+  effective_scan_interval_minutes: number
+  inter_company_delay_s: number
+  company_override: number | null
+}
+
 // ── Identity / multi-user ───────────────────────────────────────────────────
 
 export interface Identity {
