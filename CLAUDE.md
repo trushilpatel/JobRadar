@@ -12,20 +12,21 @@ Each binary lives in `backend/apps/<name>/` (wiring + worker loop only) and depe
 
 ## Database tables
 
-| Table                     | Role                                                                                                                                                         |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `companies`               | Tracked company catalog; operational config lives in `company_scan_settings`                                                                                 |
-| `company_scan_settings`   | Per-company scan config (admin-managed); rows missing here are skipped by workers                                                                            |
-| `company_scan_queue`      | Durable work queue for pending/in-progress scans; deduped by unique partial index                                                                            |
-| `company_scan_log`        | Per-run scan summary (fetched, new, duration, error)                                                                                                         |
-| `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` marks disappearance; `reason='retry'` carries `retry_count`/`next_attempt_at`, written via filter `UpdateRetryBatch` |
-| `jobs`                    | Operational feed — global rows; per-user status/notes live in `user_job_state`                                                                               |
-| `user_job_state`          | Per-user overlay: saved_at, applied_at, status, notes, dismissal reason/note                                                                                 |
-| `job_analytics`           | Append-only snapshot from analyzer; survives job dismissal                                                                                                   |
-| `job_application_tracker` | Application stage tracking; `user_id NOT NULL`                                                                                                               |
-| `users`                   | Registered users (id, email citext, display_name, status, timestamps)                                                                                        |
-| `roles`, `user_roles`     | RBAC0 catalog + join. Cascades: `user_id` CASCADE, `role_id` RESTRICT, `granted_by` SET NULL. Seeded by migration 043                                        |
-| `admin_audit_log`         | Append-only audit trail for admin mutations                                                                                                                  |
+| Table                     | Role                                                                                                                                                                               |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `companies`               | Tracked company catalog; operational config lives in `company_scan_settings`                                                                                                       |
+| `adapter_configs`         | Canonical adapter registry (PK `adapter_type`); `company_scan_settings` and `company_scan_queue` carry FK constraints to this table — never add raw adapter type strings elsewhere |
+| `company_scan_settings`   | Per-company scan config (admin-managed); `adapter_type` FK → `adapter_configs`; rows missing here are skipped by workers                                                           |
+| `company_scan_queue`      | Durable work queue for pending/in-progress scans; deduped by unique partial index; `adapter_type` FK → `adapter_configs`                                                           |
+| `company_scan_log`        | Per-run scan summary (fetched, new, duration, error)                                                                                                                               |
+| `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` marks disappearance; `reason='retry'` carries `retry_count`/`next_attempt_at`, written via filter `UpdateRetryBatch`                       |
+| `jobs`                    | Operational feed — global rows; per-user status/notes live in `user_job_state`                                                                                                     |
+| `user_job_state`          | Per-user overlay: saved_at, applied_at, status, notes, dismissal reason/note                                                                                                       |
+| `job_analytics`           | Append-only snapshot from analyzer; survives job dismissal                                                                                                                         |
+| `job_application_tracker` | Application stage tracking; `user_id NOT NULL`                                                                                                                                     |
+| `users`                   | Registered users (id, email citext, display_name, status, timestamps)                                                                                                              |
+| `roles`, `user_roles`     | RBAC0 catalog + join. Cascades: `user_id` CASCADE, `role_id` RESTRICT, `granted_by` SET NULL. Seeded by migration 043                                                              |
+| `admin_audit_log`         | Append-only audit trail for admin mutations                                                                                                                                        |
 
 ## Job status flow
 
@@ -52,7 +53,8 @@ All three phases shipped. Status doc: [`Designs/multi-user-rollout-plan.md`](Des
 - **RBAC0:** `roles` + `user_roles` join only, no permissions table. Source of truth is Postgres — never JWT custom claims.
 - **Route split:** `/api/*` uses `RequireIdentity` + `RateLimit`; `/admin/*` adds `RequireRole("admin")` + `AuditAdminMutation`.
 - **Job feed:** "new" = global feed + per-user overlay; other tabs = `user_job_state` INNER JOIN; cursor (keyset) pagination.
-- **Company slice:** split into public `CompanyService` and admin `CompanyAdminService` paths.
+- **Company slice:** split into public `CompanyService` and admin `CompanyAdminService` paths. List endpoint returns `CompanyAdminListView` (no `adapter_config`); detail endpoint returns full `CompanyAdminView` — never expose adapter credentials in paginated list responses.
+- **Cursor (keyset) pagination:** all list endpoints use `next_cursor` / `cursor` params, not `page` / `offset`. Frontend uses a `cursorHistory` stack for prev/next navigation.
 - **Frontend:** identity-aware Zustand store, role-gated admin nav (pipeline / companies / users / audit log / insights), 429 toast.
 
 Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_{READ,WRITE,ADMIN}_RPM`, `CACHE_TTL_USER_SECONDS`.
