@@ -83,6 +83,7 @@ The analyzer asserts `ContentFetcher` at runtime — no changes there when addin
 | `meta`                            | ✅               | ✅              | Sitemap listing + JSON-LD detail                                 |
 | `netflix`                         | ✅               | ✅              | Eightfold JSON API (`explore.jobs.netflix.net`)                  |
 | `uber`                            | ✅ (full-detail) | —               | Internal Next.js API (FullContent at scan)                       |
+| `apple`                           | ✅               | ✅              | React Router hydration scrape over listing + detail HTML pages   |
 | `workday`, `workable`, `chromedp` | Stub             | —               | HTML scrape fallback                                             |
 
 Per-adapter field coverage + URL formats: see the `.md` files linked at the bottom.
