@@ -79,12 +79,10 @@ func TestCompat_NewPipelineStore(t *testing.T) {
 }
 
 // compat.NewPipelineService must return a working PipelineService — exercises
-// the assembled chain via a known-good drainer call.
+// the assembled chain via TriggerRetry (NATS auto-retries, always returns 0).
 func TestCompat_NewPipelineService(t *testing.T) {
 	svc := dashboard.NewPipelineService(
 		&fakePipelineStore{stats: dto.PipelineDBStats{TotalCompanies: 1}},
-		&fakeLagReader{lags: map[string]int64{}},
-		&fakeDrainer{drained: 9},
 	)
 	if svc == nil {
 		t.Fatal("NewPipelineService returned nil")
@@ -93,19 +91,15 @@ func TestCompat_NewPipelineService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TriggerRetry: %v", err)
 	}
-	if got != 9 {
-		t.Errorf("drained = %d, want 9", got)
+	if got != 0 {
+		t.Errorf("drained = %d, want 0 (NATS, no drain needed)", got)
 	}
 }
 
 // compat.NewPipelineRestRouter must produce a non-nil router wrapping the
 // PipelineRestService.
 func TestCompat_NewPipelineRestRouter(t *testing.T) {
-	svc := services.NewPipelineService(
-		&fakePipelineStore{},
-		&fakeLagReader{lags: map[string]int64{}},
-		&fakeDrainer{},
-	)
+	svc := services.NewPipelineService(&fakePipelineStore{})
 	router := dashboard.NewPipelineRestRouter(svc)
 	if router == nil {
 		t.Fatal("NewPipelineRestRouter returned nil")

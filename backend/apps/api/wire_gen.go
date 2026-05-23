@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/trushilpatel/jobradar/common/config"
-	"github.com/trushilpatel/jobradar/common/kafka"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/service/application"
 	services3 "github.com/trushilpatel/jobradar/service/application/services"
@@ -103,15 +102,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	appListReader := provideApplicationListReader(applicationImplService)
 	userDashboardService := services4.NewUserDashboardService(userDashboardStore, appListReader)
 	pipelineStore := services4.NewPipelineStore(db)
-	lagReader, err := provideLagReader(cfg)
-	if err != nil {
-		return nil, err
-	}
-	retryDrainer, err := provideRetryDrainer(cfg)
-	if err != nil {
-		return nil, err
-	}
-	pipelineService := services4.NewPipelineService(pipelineStore, lagReader, retryDrainer)
+	pipelineService := services4.NewPipelineService(pipelineStore)
 	dashboardRestService := services4.NewDashboardRestService(dashboardService, userDashboardService, pipelineService)
 	dashboardRestRouter := services4.NewRestRouter(dashboardRestService)
 
@@ -163,32 +154,6 @@ func (a *applicationListReaderAdapter) ListActive(ctx context.Context) ([]servic
 func provideApplicationListReader(s services3.ApplicationService) services4.ApplicationListReader {
 	return &applicationListReaderAdapter{svc: s}
 }
-
-// provideLagReader returns a no-op lag reader. NATS JetStream handles retries
-// via BackOff/MaxDeliver on durable consumers — there are no separate retry
-// topics to monitor via consumer-group lag.
-func provideLagReader(_ *config.Config) (kafka.LagReader, error) {
-	return &noopLagReader{}, nil
-}
-
-// provideRetryDrainer returns a no-op drainer. NATS redelivers messages
-// automatically via consumer BackOff — there is no retry topic to drain.
-func provideRetryDrainer(_ *config.Config) (kafka.RetryDrainer, error) {
-	return &noopRetryDrainer{}, nil
-}
-
-// noopLagReader returns 0 for all consumer lag queries. NATS JetStream handles
-// retries via BackOff/MaxDeliver on durable consumers — there are no separate
-// retry topics to monitor via consumer-group lag.
-type noopLagReader struct{}
-
-func (*noopLagReader) GetLag(_ context.Context, _, _ string) (int64, error) { return 0, nil }
-
-// noopRetryDrainer is a no-op drain. NATS redelivers messages automatically via
-// consumer BackOff — there is no separate retry topic to drain back to main.
-type noopRetryDrainer struct{}
-
-func (*noopRetryDrainer) Drain(_ context.Context, _, _, _ string) (int64, error) { return 0, nil }
 
 // zeroJobCountReader is a placeholder JobCountReader that returns zeros.
 // Phase 2 moved per-user job counts to user_job_state; DashboardService.GetStats

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
@@ -18,6 +19,7 @@ import (
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/location"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // Engine crawls company careers pages, deduplicates jobs, and publishes new ones to NATS JetStream.
@@ -72,7 +74,7 @@ func NewEngine(
 //     completes (no requeue) so a corrupt company can't block the lane.
 func (e *Engine) RunForCompany(ctx context.Context, companyID string) {
 	ctx, span := tracing.Start(ctx, "crawler.engine.RunForCompany")
-	defer tracing.End(span, nil)
+	defer span.End()
 	settings, err := e.settings.Get(ctx, companyID)
 	if err != nil {
 		var sErr *apperr.ServiceError
@@ -82,31 +84,35 @@ func (e *Engine) RunForCompany(ctx context.Context, companyID string) {
 			)
 			return
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		e.log.Error("failed to load scan_settings", err, logger.Str(logger.FieldCompany, companyID))
 		return
 	}
 	if !settings.Active {
 		e.log.Warn("skipping inactive company",
 			logger.Str(logger.FieldCompany, companyID),
-			logger.Str("adapter_type", settings.AdapterType),
+			logger.Str(logger.FieldAdapterType, settings.AdapterType),
 		)
 		return
 	}
 	e.log.Debug("triggered scan",
 		logger.Str(logger.FieldCompany, companyID),
-		logger.Str("adapter_type", settings.AdapterType),
+		logger.Str(logger.FieldAdapterType, settings.AdapterType),
 	)
 	e.scanCompany(ctx, companyID, settings)
 }
 
 func (e *Engine) scanCompany(ctx context.Context, companyID string, settings *companymodel.CompanyScanSettings) {
 	ctx, span := tracing.Start(ctx, "crawler.engine.scanCompany")
-	defer tracing.End(span, nil)
+	defer span.End()
 	start := time.Now()
 	log := e.log.With(
 		logger.Str(logger.FieldCompany, companyID),
-		logger.Str("adapter_type", settings.AdapterType),
+		logger.Str(logger.FieldAdapterType, settings.AdapterType),
 	)
+	scanID := uuid.NewString()
+	log = log.With(logger.Str(logger.FieldScanID, scanID))
 
 	// Fetch known job IDs upfront — used for two purposes:
 	//   1. Passed to the adapter (via KnownJobsProvider) to skip detail enrichment
@@ -120,6 +126,8 @@ func (e *Engine) scanCompany(ctx context.Context, companyID string, settings *co
 
 	result, streamed, err := e.fetchJobs(ctx, companyID, settings.AdapterType, json.RawMessage(settings.AdapterConfig), knownIDs, log)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		log.Error("scan failed", err)
 		errMsg := err.Error()
 		e.recordResult(ctx, companyID, 0, 0, time.Since(start), &errMsg)
@@ -165,7 +173,7 @@ func (e *Engine) fetchJobs(ctx context.Context, companyID, adapterType string, a
 			idSet[id] = struct{}{}
 		}
 		setter.SetKnownJobIDs(idSet)
-		log.Debug("injected known job IDs into adapter", logger.Int("count", len(idSet)))
+		log.Debug("injected known job IDs into adapter", logger.Int(logger.FieldCount, len(idSet)))
 	}
 
 	// If the adapter supports live per-page seen checks, inject HasSeenBatch now.
@@ -199,7 +207,7 @@ func (e *Engine) fetchJobs(ctx context.Context, companyID, adapterType string, a
 	)
 	if ca, ok := adp.(ats.ConfigurableAdapter); ok && len(adapterConfig) > 0 {
 		log.Debug("adapter supports per-company config; using FetchJobsWithConfig",
-			logger.Int("config_bytes", len(adapterConfig)))
+			logger.Int(logger.FieldConfigBytes, len(adapterConfig)))
 		result, err = ca.FetchJobsWithConfig(ctx, companyID, adapterConfig)
 	} else {
 		result, err = adp.FetchJobs(ctx, companyID)
@@ -251,7 +259,7 @@ func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, c
 			metrics.CrawlerJobsNonUSADropped.WithLabelValues(adapterType).Inc()
 			log.Info("dropped non-USA job before publish",
 				logger.Str(logger.FieldJobID, job.ID),
-				logger.Str("location", job.Location),
+				logger.Str(logger.FieldLocation, job.Location),
 			)
 			continue
 		}
@@ -337,13 +345,13 @@ func (e *Engine) detectRemovedJobs(ctx context.Context, currentJobs []ats.FetchJ
 	}
 
 	if err := e.ledger.MarkRemovedBatch(ctx, removedIDs); err != nil {
-		log.Error("failed to mark removed jobs", err, logger.Int("count", len(removedIDs)))
+		log.Error("failed to mark removed jobs", err, logger.Int(logger.FieldCount, len(removedIDs)))
 		return
 	}
 
 	log.Info("marked removed jobs",
-		logger.Int("removed", len(removedIDs)),
-		logger.Int("still_active", len(previousIDs)-len(removedIDs)),
+		logger.Int(logger.FieldRemoved, len(removedIDs)),
+		logger.Int(logger.FieldStillActive, len(previousIDs)-len(removedIDs)),
 	)
 }
 

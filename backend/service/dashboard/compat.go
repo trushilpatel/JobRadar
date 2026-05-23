@@ -3,7 +3,6 @@ package dashboard
 import (
 	"gorm.io/gorm"
 
-	"github.com/trushilpatel/jobradar/common/kafka"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 	"github.com/trushilpatel/jobradar/service/dashboard/services"
 	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
@@ -46,8 +45,8 @@ func NewPipelineStore(db *gorm.DB) services.PipelineStore {
 }
 
 // NewPipelineService constructs a PipelineService.
-func NewPipelineService(store services.PipelineStore, lag kafka.LagReader, drainer kafka.RetryDrainer) services.PipelineService {
-	return services.NewPipelineService(store, lag, drainer)
+func NewPipelineService(store services.PipelineStore) services.PipelineService {
+	return services.NewPipelineService(store)
 }
 
 // PipelineRestRouter is a compatibility alias for services.PipelineRestRouter.
