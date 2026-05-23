@@ -258,7 +258,9 @@ describe('JobDetailPanel', () => {
       )
       const stickyBar = container.querySelector('div.sticky.bottom-0') as HTMLElement | null
       expect(stickyBar).not.toBeNull()
-      expect(stickyBar?.style.paddingBottom).toContain('env(safe-area-inset-bottom)')
+      // Padding is applied via Tailwind class; JSDOM does not compute class-based
+      // styles into element.style, so we assert the class attribute directly.
+      expect(stickyBar?.className).toContain('safe-area-inset-bottom')
     })
   })
 })
