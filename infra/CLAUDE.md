@@ -1,6 +1,8 @@
-# infra/ — Dockerfiles + ops configs + local k8s
+# infra/ — Dockerfiles + local k8s
 
-Dockerfiles for backend services and ops configs for Caddy, CrowdSec, Grafana, Loki, Prometheus, Promtail. The local k3d cluster is driven from `k8s/helm/` charts — this file documents the deploy workflow.
+Dockerfiles for backend services. The local k3d cluster is driven from `k8s/helm/` charts — this file documents the deploy workflow.
+
+k8s (k3d) is the only deployment target. There is no Docker Compose setup.
 
 ## Crawler image is pure Go
 
@@ -14,6 +16,7 @@ All ATS adapters (Greenhouse, Lever, Ashby, Apple, Microsoft, Netflix, Rippling,
 - **Storage class is `local-path`** in both Helm charts — the only class k3d provides. Never change it to `standard` (that's Docker Desktop)
 - **Images must be built and imported into k3d** before deploying — `make k8s-build` or `make k8s-build-{backend,crawler,console}`. Images imported into k3d are NOT available in Docker Desktop's Kubernetes and vice versa
 - Redis is **external (Upstash)** — not deployed in-cluster
+- NATS is **external (Synadia Cloud)** — not deployed in-cluster
 
 ## Deploy sequence
 
@@ -32,7 +35,7 @@ make k8s-restart-crawler                    # rolling restart crawler pod
 make k8s-logs-crawler
 ```
 
-## Trigger a Google scan manually
+## Trigger a scan manually
 
 ```bash
 curl -X POST http://localhost:30080/companies/<company-id>/scan

@@ -7,20 +7,20 @@ export GIT_SHA
         migrate scan-google db-truncate lint lint-go tsc \
         test test-short test-adapters \
         fmt \
-        docker-up \
         k8s-build k8s-build-backend k8s-build-crawler k8s-build-console \
         k8s-up k8s-down k8s-migrate k8s-status k8s-forward k8s-unforward \
-        k8s-obs-up k8s-obs-down k8s-obs-forward \
-        k8s-logs k8s-logs-nats k8s-logs-filter k8s-logs-analyzer k8s-logs-api k8s-logs-console k8s-logs-crawler k8s-logs-scheduler \
+        k8s-obs-up k8s-obs-down \
+        k8s-logs k8s-logs-nats k8s-logs-filter k8s-logs-enricher k8s-logs-api k8s-logs-console k8s-logs-crawler k8s-logs-scheduler \
         k8s-restart \
         k8s-bootstrap k8s-preflight k8s-nuke \
         install-hooks \
         help
 
-# ── Dev ──────────────────────────────────────────────────────────────────────
+# ── Dev (host) ────────────────────────────────────────────────────────────────
+# Runs the API + console on host against Supabase/Upstash (no local NATS needed).
+# For full pipeline workers use make k8s-up instead.
 
-dev: ## Start infra in Docker, then run console + API on host
-	$(MAKE) docker-up
+dev: ## Migrate then start console + API on host
 	cd backend && go run ./apps/migrate
 	$(MAKE) -j2 dev-console dev-backend
 
@@ -95,11 +95,6 @@ test-short: ## Run unit tests only — no real HTTP calls, fast
 
 test-adapters: ## Run all adapter integration tests (Greenhouse + Lever + Ashby hit real APIs)
 	cd backend && go test -v -run "Integration" ./apps/crawler/ats/greenhouse/... ./apps/crawler/ats/lever/... ./apps/crawler/ats/ashby/...
-
-# ── Docker (infra only — for local dev) ──────────────────────────────────────
-
-docker-up: ## Start infra only in Docker (NATS JetStream) — for use with make dev
-	docker compose --profile infra up -d
 
 # ── Kubernetes (local k3d) ────────────────────────────────────────────────────
 
@@ -223,8 +218,8 @@ k8s-logs-nats: ## Tail NATS logs
 k8s-logs-filter: ## Tail filter logs
 	kubectl logs -f -l app=jobradar,component=filter -n $(K8S_NS)
 
-k8s-logs-analyzer: ## Tail analyzer logs
-	kubectl logs -f -l app=jobradar,component=analyzer -n $(K8S_NS)
+k8s-logs-enricher: ## Tail enricher logs
+	kubectl logs -f -l app=jobradar,component=enricher -n $(K8S_NS)
 
 k8s-logs-api: ## Tail api logs
 	kubectl logs -f -l app=jobradar,component=api -n $(K8S_NS)
@@ -243,14 +238,6 @@ k8s-forward: ## Port-forward console :3000 and API :8080 (when cluster has no No
 	kubectl port-forward svc/jobradar-api     -n $(K8S_NS) 8080:8080 &
 	@echo "Console → http://localhost:3000"
 	@echo "API     → http://localhost:8080"
-
-k8s-obs-forward: ## Port-forward Grafana :3001, Jaeger :16686, Prometheus :9090
-	kubectl port-forward svc/obs-grafana                              -n $(K8S_NS) 3001:80    &
-	kubectl port-forward svc/obs-jaeger                               -n $(K8S_NS) 16686:16686 &
-	kubectl port-forward svc/obs-kube-prometheus-stack-prometheus     -n $(K8S_NS) 9090:9090   &
-	@echo "Grafana    → http://localhost:3001  (admin / admin)"
-	@echo "Jaeger     → http://localhost:16686"
-	@echo "Prometheus → http://localhost:9090"
 
 k8s-unforward: ## Stop all kubectl port-forward processes
 	@pkill -f "kubectl port-forward" || true

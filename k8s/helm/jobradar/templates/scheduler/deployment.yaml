@@ -37,7 +37,23 @@ spec:
               memory: "64Mi"
               cpu: "50m"
             limits:
-              memory: "256Mi"
+              memory: "128Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9103
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 9103
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
           securityContext:
             {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
       securityContext:

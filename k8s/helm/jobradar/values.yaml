@@ -14,10 +14,12 @@ images:
     repository: jobradar-console
     tag: local
     pullPolicy: IfNotPresent
-  redis:
-    repository: redis
-    tag: "7-alpine"
+  # nats image used only when nats.external: false (local testing without Synadia Cloud)
+  nats:
+    repository: nats
+    tag: "2.10-alpine"
     pullPolicy: IfNotPresent
+  # Redis is external (Upstash) — no in-cluster deployment
 
 api:
   nodePort: 30080
