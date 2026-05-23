@@ -13,6 +13,7 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/logger"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
@@ -86,7 +87,7 @@ func seedScanSettings(t *testing.T, db *gorm.DB, companyID, adapter string, acti
 func TestAdminRepo_Get_FoundWithoutSettings(t *testing.T) {
 	db, hist := newAdminTestDB(t)
 	seedAdminCompany(t, db, "stripe", "Stripe")
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	view, err := repo.Get(context.Background(), "stripe")
 	if err != nil {
@@ -104,7 +105,7 @@ func TestAdminRepo_Get_FoundWithSettings(t *testing.T) {
 	db, hist := newAdminTestDB(t)
 	seedAdminCompany(t, db, "stripe", "Stripe")
 	seedScanSettings(t, db, "stripe", companycommon.AdapterGreenhouse, true)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	view, err := repo.Get(context.Background(), "stripe")
 	if err != nil {
@@ -123,7 +124,7 @@ func TestAdminRepo_Get_FoundWithSettings(t *testing.T) {
 
 func TestAdminRepo_Get_NotFound(t *testing.T) {
 	db, hist := newAdminTestDB(t)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 	_, err := repo.Get(context.Background(), "missing")
 	if err == nil {
 		t.Fatal("expected NOT_FOUND, got nil")
@@ -136,7 +137,7 @@ func TestAdminRepo_Get_NotFound(t *testing.T) {
 
 func TestAdminRepo_Create_NoSettings(t *testing.T) {
 	db, hist := newAdminTestDB(t)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	web := "https://stripe.com"
 	careers := "https://stripe.com/jobs"
@@ -166,7 +167,7 @@ func TestAdminRepo_Create_NoSettings(t *testing.T) {
 
 func TestAdminRepo_Create_WithSettings(t *testing.T) {
 	db, hist := newAdminTestDB(t)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	adapter := companycommon.AdapterGreenhouse
 	cfg := datatypes.JSON([]byte(`{"board":"stripe"}`))
@@ -197,7 +198,7 @@ func TestAdminRepo_Create_WithSettings(t *testing.T) {
 func TestAdminRepo_Create_DuplicateID(t *testing.T) {
 	db, hist := newAdminTestDB(t)
 	seedAdminCompany(t, db, "stripe", "Stripe")
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	_, err := repo.Create(context.Background(),
 		companydto.CompanyPublicInput{ID: "stripe", Name: "Dup", Slug: "dup"},
@@ -214,7 +215,7 @@ func TestAdminRepo_Create_DuplicateID(t *testing.T) {
 func TestAdminRepo_UpdatePublic_Patch(t *testing.T) {
 	db, hist := newAdminTestDB(t)
 	seedAdminCompany(t, db, "stripe", "Stripe")
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	web := "https://stripe-new.com"
 	if err := repo.UpdatePublic(context.Background(), "stripe", companydto.CompanyPublicInput{Name: "Renamed", Website: &web}); err != nil {
@@ -231,7 +232,7 @@ func TestAdminRepo_UpdatePublic_Patch(t *testing.T) {
 
 func TestAdminRepo_UpdatePublic_NoFields(t *testing.T) {
 	db, hist := newAdminTestDB(t)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	err := repo.UpdatePublic(context.Background(), "anything", companydto.CompanyPublicInput{})
 	if err == nil {
@@ -245,7 +246,7 @@ func TestAdminRepo_UpdatePublic_NoFields(t *testing.T) {
 
 func TestAdminRepo_UpdatePublic_NotFound(t *testing.T) {
 	db, hist := newAdminTestDB(t)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 	err := repo.UpdatePublic(context.Background(), "missing", companydto.CompanyPublicInput{Name: "x"})
 	if err == nil {
 		t.Fatal("expected NOT_FOUND, got nil")
@@ -260,7 +261,7 @@ func TestAdminRepo_UpdateScanSettings_Patch(t *testing.T) {
 	db, hist := newAdminTestDB(t)
 	seedAdminCompany(t, db, "stripe", "Stripe")
 	seedScanSettings(t, db, "stripe", companycommon.AdapterGreenhouse, true)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	adapter := companycommon.AdapterLever
 	active := false
@@ -278,7 +279,7 @@ func TestAdminRepo_UpdateScanSettings_Patch(t *testing.T) {
 
 func TestAdminRepo_UpdateScanSettings_Empty(t *testing.T) {
 	db, hist := newAdminTestDB(t)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 	err := repo.UpdateScanSettings(context.Background(), "stripe", companydto.CompanyScanSettingsInput{})
 	if err == nil {
 		t.Fatal("expected BAD_REQUEST, got nil")
@@ -291,7 +292,7 @@ func TestAdminRepo_UpdateScanSettings_Empty(t *testing.T) {
 
 func TestAdminRepo_UpdateScanSettings_NotFound(t *testing.T) {
 	db, hist := newAdminTestDB(t)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	active := false
 	err := repo.UpdateScanSettings(context.Background(), "missing", companydto.CompanyScanSettingsInput{Active: &active})
@@ -307,7 +308,7 @@ func TestAdminRepo_UpdateScanSettings_NotFound(t *testing.T) {
 func TestAdminRepo_Delete_FoundAndMissing(t *testing.T) {
 	db, hist := newAdminTestDB(t)
 	seedAdminCompany(t, db, "stripe", "Stripe")
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	if err := repo.Delete(context.Background(), "stripe"); err != nil {
 		t.Fatalf("Delete: %v", err)
@@ -335,7 +336,7 @@ func TestAdminRepo_SetAllActive(t *testing.T) {
 	seedAdminCompany(t, db, "b", "B")
 	seedScanSettings(t, db, "a", companycommon.AdapterGreenhouse, true)
 	seedScanSettings(t, db, "b", companycommon.AdapterLever, true)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	if err := repo.SetAllActive(context.Background(), false); err != nil {
 		t.Fatalf("SetAllActive: %v", err)
@@ -360,7 +361,7 @@ func TestAdminRepo_GetByIDs_EmptyAndPopulated(t *testing.T) {
 	seedAdminCompany(t, db, "a", "A")
 	seedAdminCompany(t, db, "b", "B")
 	seedScanSettings(t, db, "a", companycommon.AdapterGreenhouse, true)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	// Empty input returns empty slice (not nil) — locked down by contract.
 	views, err := repo.GetByIDs(context.Background(), nil)
@@ -398,7 +399,7 @@ func TestAdminRepo_GetAll(t *testing.T) {
 	seedAdminCompany(t, db, "b", "B")
 	seedAdminCompany(t, db, "a", "A")
 	seedScanSettings(t, db, "a", companycommon.AdapterGreenhouse, true)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	views, err := repo.GetAll(context.Background())
 	if err != nil {
@@ -418,7 +419,7 @@ func TestAdminRepo_List_NoFilter(t *testing.T) {
 	seedAdminCompany(t, db, "a", "Alpha")
 	seedAdminCompany(t, db, "b", "Bravo")
 	seedScanSettings(t, db, "a", companycommon.AdapterGreenhouse, true)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	res, err := repo.List(context.Background(), companydto.CompanyFilter{}, 10)
 	if err != nil {
@@ -440,7 +441,7 @@ func TestAdminRepo_List_ActiveFilter(t *testing.T) {
 	seedScanSettings(t, db, "a", companycommon.AdapterGreenhouse, true)
 	seedScanSettings(t, db, "b", companycommon.AdapterLever, false)
 	// c has no scan_settings row.
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	// Active=true matches only company a.
 	active := true
@@ -468,7 +469,7 @@ func TestAdminRepo_List_HasSettingsFilter(t *testing.T) {
 	seedAdminCompany(t, db, "a", "Alpha")
 	seedAdminCompany(t, db, "b", "Bravo")
 	seedScanSettings(t, db, "a", companycommon.AdapterGreenhouse, true)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	hs := true
 	res, err := repo.List(context.Background(), companydto.CompanyFilter{HasSettings: &hs}, 10)
@@ -495,7 +496,7 @@ func TestAdminRepo_List_AdapterTypesFilter(t *testing.T) {
 	seedAdminCompany(t, db, "b", "Bravo")
 	seedScanSettings(t, db, "a", companycommon.AdapterGreenhouse, true)
 	seedScanSettings(t, db, "b", companycommon.AdapterLever, true)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	res, err := repo.List(context.Background(),
 		companydto.CompanyFilter{AdapterTypes: []string{companycommon.AdapterGreenhouse}}, 10)
@@ -535,7 +536,7 @@ func TestAdminRepo_List_ScanStatusBranches(t *testing.T) {
 	if err := db.Exec(`INSERT INTO company_scan_queue (id, company_id, status) VALUES (?, ?, ?)`, "q1", "a", "queued").Error; err != nil {
 		t.Fatalf("seed queue: %v", err)
 	}
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	cases := []struct {
 		status  string
@@ -566,7 +567,7 @@ func TestAdminRepo_List_SortBranches(t *testing.T) {
 	seedAdminCompany(t, db, "b", "Alpha")
 	seedScanSettings(t, db, "a", companycommon.AdapterGreenhouse, true)
 	seedScanSettings(t, db, "b", companycommon.AdapterLever, true)
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	cases := []struct {
 		sortBy  string
@@ -598,7 +599,7 @@ func TestAdminRepo_List_QueueStatusPopulated(t *testing.T) {
 	if err := db.Exec(`INSERT INTO company_scan_queue (id, company_id, status) VALUES (?, ?, ?)`, "q1", "a", "running").Error; err != nil {
 		t.Fatalf("seed queue: %v", err)
 	}
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 	res, err := repo.List(context.Background(), companydto.CompanyFilter{}, 10)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -612,7 +613,7 @@ func TestAdminRepo_List_ScanHistoryPopulated(t *testing.T) {
 	db, hist := newAdminTestDB(t)
 	seedAdminCompany(t, db, "a", "Alpha")
 	hist.out = map[string][]bool{"a": {true, false, true}}
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 	res, err := repo.List(context.Background(), companydto.CompanyFilter{}, 10)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -626,7 +627,7 @@ func TestAdminRepo_List_ScanHistoryErrorBubbles(t *testing.T) {
 	db, hist := newAdminTestDB(t)
 	seedAdminCompany(t, db, "a", "Alpha")
 	hist.err = errors.New("boom")
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 	_, err := repo.List(context.Background(), companydto.CompanyFilter{}, 10)
 	if err == nil {
 		t.Fatal("expected error from scan-history reader, got nil")
@@ -675,7 +676,7 @@ func TestAdminRepo_List_SearchFilter(t *testing.T) {
 		t.Fatalf("open dryrun: %v", err)
 	}
 	hist := &fakeScanHistory{}
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 
 	_, _ = repo.List(context.Background(), companydto.CompanyFilter{Search: "alpha"}, 10)
 
@@ -710,7 +711,7 @@ func TestAdminRepo_Get_ScanSettingsDBError(t *testing.T) {
 		t.Fatalf("drop table: %v", err)
 	}
 
-	repo := companysvc.NewAdminRepositoryService(db, hist)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
 	_, err := repo.Get(context.Background(), "stripe")
 	if err == nil {
 		t.Fatal("expected INTERNAL error, got nil")

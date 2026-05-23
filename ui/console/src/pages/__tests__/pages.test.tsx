@@ -73,6 +73,7 @@ import * as dashboardApi from '@/api/dashboard'
 import * as insightsApi from '@/api/insights'
 import * as jobsApi from '@/api/jobs'
 import * as adapterConfigsApi from '@/api/adapterConfigs'
+import * as adminCompaniesApi from '@/api/adminCompanies'
 import * as adminUsersApi from '@/api/adminUsers'
 import * as adminAuditApi from '@/api/adminAudit'
 
@@ -81,6 +82,7 @@ import { JobsPage } from '@/pages/JobsPage'
 import { InsightsPage } from '@/pages/InsightsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { AccountPage } from '@/pages/AccountPage'
+import { CompaniesPage } from '@/pages/CompaniesPage'
 import { AdminUsersPage } from '@/pages/admin/AdminUsersPage'
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage'
 
@@ -204,5 +206,19 @@ describe('AdminAuditPage', () => {
 
   it('renders without crashing', () => {
     expect(() => render(<AdminAuditPage />, { wrapper: makeWrapper() })).not.toThrow()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CompaniesPage
+// ─────────────────────────────────────────────────────────────────────────────
+describe('CompaniesPage', () => {
+  beforeEach(() => {
+    vi.mocked(adminCompaniesApi.fetchAdminCompanies).mockReturnValue(pending())
+    vi.mocked(adapterConfigsApi.getAdapterConfigs).mockReturnValue(pending())
+  })
+
+  it('renders without crashing', () => {
+    expect(() => render(<CompaniesPage />, { wrapper: makeWrapper() })).not.toThrow()
   })
 })

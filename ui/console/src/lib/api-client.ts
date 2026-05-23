@@ -44,7 +44,6 @@ function authHeader(): Record<string, string> {
 
 function buildUrl(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://')) return path
-  if (path.startsWith('/admin')) return path
   if (path.startsWith('/')) return `${BASE}${path}`
   return `${BASE}/${path}`
 }

@@ -34,7 +34,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	scanSettingsRepository := services.NewScanSettingsRepositoryService(db)
 	scanLogStoreForCompany := services2.NewLogStore(db)
 	scanHistoryReader := provideScanHistoryReader(scanLogStoreForCompany)
-	companyAdminRepositoryService := services.NewAdminRepositoryService(db, scanHistoryReader)
+	companyAdminRepositoryService := services.NewAdminRepositoryService(db, scanHistoryReader, log)
 	// nil cache: cache invalidation is a no-op in this wiring context; the
 	// multi-user setup in multiuser_setup.go passes a real cache to its own
 	// admin chain instance. nil log: no-op logger for this wiring path.

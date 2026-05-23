@@ -58,8 +58,11 @@ type adminRepositoryService struct {
 
 // NewAdminRepositoryService constructs the terminal CompanyAdminService.
 // A nil log silences all structured logging.
-func NewAdminRepositoryService(db *gorm.DB, scanHistoryReader ScanHistoryReader) CompanyAdminService {
-	return &adminRepositoryService{db: db, scanHistoryReader: scanHistoryReader, log: logger.NewNoop()}
+func NewAdminRepositoryService(db *gorm.DB, scanHistoryReader ScanHistoryReader, log logger.Logger) CompanyAdminService {
+	if log == nil {
+		log = logger.NewNoop()
+	}
+	return &adminRepositoryService{db: db, scanHistoryReader: scanHistoryReader, log: log}
 }
 
 // List returns admin views joined with scan_settings. Honours every filter
@@ -83,6 +86,7 @@ func (r *adminRepositoryService) List(ctx context.Context, filter companydto.Com
 	if err = r.db.WithContext(ctx).
 		Raw(`SELECT COUNT(*) FROM company_scan_settings WHERE active = true`).
 		Scan(&totalActive).Error; err != nil {
+		r.log.Warn("failed to count active scan settings", logger.Err(err))
 		return companydto.CompanyAdminListResult{}, apperr.ErrInternal.WithMessage("failed to count active scan settings")
 	}
 
@@ -99,6 +103,7 @@ func (r *adminRepositoryService) List(ctx context.Context, filter companydto.Com
 
 	historiesByID, err := r.scanHistoryReader.GetScanHistories(ctx, ids)
 	if err != nil {
+		r.log.Warn("failed to fetch scan histories", logger.Err(err))
 		return companydto.CompanyAdminListResult{}, apperr.ErrInternal.WithMessage("failed to fetch scan histories")
 	}
 
@@ -394,6 +399,7 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 	// rejects when the ORDER BY column is not in the SELECT list.
 	var total int64
 	if err := q.Session(&gorm.Session{}).Distinct("c.id").Count(&total).Error; err != nil {
+		r.log.Warn("failed to count companies", logger.Err(err))
 		return nil, 0, nil, apperr.ErrInternal.WithMessage("failed to count companies")
 	}
 
@@ -437,6 +443,7 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 		Order("c.id " + dir).
 		Limit(limit + 1)
 	if err := q2.Scan(&rows).Error; err != nil {
+		r.log.Warn("failed to fetch companies", logger.Err(err))
 		return nil, 0, nil, apperr.ErrInternal.WithMessage("failed to fetch companies")
 	}
 
@@ -486,6 +493,7 @@ func (r *adminRepositoryService) fetchSettingsForCompanies(ctx context.Context, 
 	if err := r.db.WithContext(ctx).
 		Where("company_id IN ?", ids).
 		Find(&settings).Error; err != nil {
+		r.log.Warn("failed to fetch scan settings", logger.Err(err))
 		return nil, apperr.ErrInternal.WithMessage("failed to fetch scan settings")
 	}
 	for i := range settings {
@@ -515,6 +523,7 @@ func (r *adminRepositoryService) fetchQueueStatusForCompanies(ctx context.Contex
 		Raw(`SELECT company_id, status FROM company_scan_queue WHERE company_id IN ? AND status IN ?`,
 			ids, []string{scancommon.QueueStatusQueued, scancommon.QueueStatusRunning}).
 		Scan(&rows).Error; err != nil {
+		r.log.Warn("failed to fetch queue status", logger.Err(err))
 		return nil, apperr.ErrInternal.WithMessage("failed to fetch queue status")
 	}
 	for _, row := range rows {
