@@ -68,6 +68,10 @@ export function useCompanies() {
   const totalActive = data?.total_active ?? 0
   const nextCursor = data?.next_cursor ?? null
 
+  const page = cursorHistory.length + 1
+  const itemsOnPage = companies.length
+  const itemsBeforePage = cursorHistory.length * limit
+
   const hasActiveFilters =
     search !== '' ||
     adapters.length > 0 ||
@@ -139,6 +143,9 @@ export function useCompanies() {
     hasPrev: cursorHistory.length > 0,
     goToNextPage,
     goToPrevPage,
+    page,
+    itemsOnPage,
+    itemsBeforePage,
 
     hasActiveFilters,
     resetFilters,
