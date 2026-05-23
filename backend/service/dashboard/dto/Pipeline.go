@@ -34,15 +34,16 @@ type PipelineStats struct {
 }
 
 // PipelineDBStats holds the DB-sourced counts for the pipeline strip.
+// GORM column scanning is handled internally by the repository via pipelineDBStatsRow.
 type PipelineDBStats struct {
-	TotalCompanies  int64 `gorm:"column:total_companies"`
-	ActiveCompanies int64 `gorm:"column:active_companies"`
-	Queued          int64 `gorm:"column:queued"`
-	Crawling        int64 `gorm:"column:crawling"`
-	NewJobs24h      int64 `gorm:"column:new_jobs_24h"`
-	Errors24h       int64 `gorm:"column:errors_24h"`
+	TotalCompanies  int64
+	ActiveCompanies int64
+	Queued          int64
+	Crawling        int64
+	NewJobs24h      int64
+	Errors24h       int64
 	// PipelinePending: jobs with reason='fetch' not yet in `jobs` — truly awaiting the filter worker.
-	PipelinePending int64 `gorm:"column:pipeline_pending"`
+	PipelinePending int64
 	// PipelineFiltered: jobs with reason='filtered' not yet in `jobs` — passed filter, awaiting enricher.
-	PipelineFiltered int64 `gorm:"column:pipeline_filtered"`
+	PipelineFiltered int64
 }

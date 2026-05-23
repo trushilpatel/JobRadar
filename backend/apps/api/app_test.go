@@ -49,7 +49,7 @@ func buildTestApp() *App {
 	appRest := appsvc.NewApplicationRestService(appValidation)
 	appH := appsvc.NewApplicationRestRouter(appRest)
 
-	dashRest := dashboardsvc.NewDashboardRestService(&fakeDashboardService{}, &fakeUserDashboardService{}, &fakePipelineService{})
+	dashRest := dashboardsvc.NewDashboardRestService(&fakeDashboardService{}, &fakeUserDashboardService{})
 	dashH := dashboardsvc.NewRestRouter(dashRest)
 
 	fakeInsights := &fakeInsightsService{}

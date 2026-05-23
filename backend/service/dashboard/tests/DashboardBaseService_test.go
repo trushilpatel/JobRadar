@@ -58,7 +58,7 @@ func TestDashboardBaseService_NilNextPanics(t *testing.T) {
 // argument and the return value (or error) unchanged.
 func TestDashboardBaseService_DelegatesAll(t *testing.T) {
 	rec := &recordingDashboardService{
-		stats:        &dto.StatsView{JobsNew: 42},
+		stats:        &dto.StatsView{JobsScannedToday: 42},
 		activityRows: []dto.ActivityView{{Date: "2026-04-13", Scanned: 1, NewJobs: 0}},
 	}
 	svc := newBaseDashboardWrapper(rec)
@@ -71,8 +71,8 @@ func TestDashboardBaseService_DelegatesAll(t *testing.T) {
 	if !rec.statsCalled {
 		t.Error("GetStats did not delegate to next")
 	}
-	if out == nil || out.JobsNew != 42 {
-		t.Errorf("stats = %+v, want JobsNew=42", out)
+	if out == nil || out.JobsScannedToday != 42 {
+		t.Errorf("stats = %+v, want JobsScannedToday=42", out)
 	}
 
 	// GetActivity — the days argument must propagate.

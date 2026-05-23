@@ -100,8 +100,6 @@ describe('DashboardPage', () => {
     vi.mocked(dashboardApi.fetchInterviews).mockReturnValue(pending())
     vi.mocked(dashboardApi.fetchVelocity).mockReturnValue(pending())
     vi.mocked(dashboardApi.fetchTechTrends).mockReturnValue(pending())
-    vi.mocked(dashboardApi.fetchDashboardStats).mockReturnValue(pending())
-    vi.mocked(dashboardApi.fetchDashboardActivity).mockReturnValue(pending())
     vi.mocked(dashboardApi.fetchPipelineStats).mockReturnValue(pending())
   })
 

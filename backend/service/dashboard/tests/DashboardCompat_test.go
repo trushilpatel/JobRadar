@@ -34,7 +34,6 @@ func TestCompat_NewService(t *testing.T) {
 	svc := dashboard.NewService(
 		&fakeScanLogReader{},
 		&fakeInsightsService{pipeline: insightsdto.PipelineCounts{}},
-		&fakeJobCountReader{},
 	)
 	if svc == nil {
 		t.Fatal("NewService returned nil")

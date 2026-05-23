@@ -112,7 +112,7 @@ function HeatRow({
 
 export function HeatmapPanel() {
   const {
-    data: sparse = [],
+    data: sparse,
     isLoading,
     isError,
   } = useQuery({
@@ -121,7 +121,7 @@ export function HeatmapPanel() {
     refetchInterval: 300_000,
   })
 
-  const weeks = buildWeekGrid(sparse)
+  const weeks = buildWeekGrid(sparse ?? [])
   const max = Math.max(...weeks.map((w) => w.count), 1)
   const firstHalf = weeks.slice(0, HALF)
   const secondHalf = weeks.slice(HALF)

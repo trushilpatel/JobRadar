@@ -1,6 +1,4 @@
 import type {
-  DashboardStats,
-  WeeklyDataPoint,
   ProgressStats,
   MarketStats,
   WeeklyCount,
@@ -11,41 +9,6 @@ import type {
   RetryTierCounts,
 } from '@/types'
 import { apiClient } from '@/lib/api-client'
-
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-interface DashboardStatsRaw {
-  jobs_scanned_today?: number
-  jobs_new?: number
-  jobs_saved?: number
-  jobs_applied?: number
-  pipeline_pending?: number
-  pipeline_errors?: number
-}
-
-export async function fetchDashboardStats(): Promise<DashboardStats> {
-  const raw = await apiClient.get<DashboardStatsRaw>('/dashboard/stats')
-  return {
-    scanned_today: raw.jobs_scanned_today ?? 0,
-    jobs_new: raw.jobs_new ?? 0,
-    saved: raw.jobs_saved ?? 0,
-    applied: raw.jobs_applied ?? 0,
-    pipeline_pending: raw.pipeline_pending ?? 0,
-    pipeline_errors: raw.pipeline_errors ?? 0,
-  }
-}
-
-export async function fetchDashboardActivity(days = 7): Promise<WeeklyDataPoint[]> {
-  const raw = await apiClient.get<Array<{ date: string; scanned: number; new_jobs: number }>>(
-    `/dashboard/activity?days=${days}`
-  )
-  return (raw ?? []).map((d) => ({
-    // Use noon UTC to avoid date-boundary timezone shifts
-    day: DAY_NAMES[new Date(d.date + 'T12:00:00Z').getDay()],
-    scanned: d.scanned,
-    relevant: d.new_jobs,
-  }))
-}
 
 export async function fetchProgress(): Promise<ProgressStats> {
   const data = await apiClient.get<Partial<ProgressStats> | null>('/dashboard/progress')

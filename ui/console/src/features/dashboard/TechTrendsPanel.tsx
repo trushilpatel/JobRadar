@@ -15,19 +15,15 @@ function TechSparkline({
 }) {
   const max = Math.max(...values, 1)
   return (
-    <div className="flex items-end gap-[3px]" style={{ height: '20px', flexShrink: 0 }}>
+    <div className="flex items-end gap-[3px] h-5 shrink-0">
       {values.map((v, i) => {
         const h = Math.max(2, Math.round((v / max) * 20))
         const isCurrent = i === values.length - 1
         return (
           <div
             key={i}
-            className="rounded-[2px]"
-            style={{
-              width: '22px',
-              height: `${h}px`,
-              background: isCurrent ? activeColor : dimColor,
-            }}
+            className="rounded-[2px] w-[22px]"
+            style={{ height: `${h}px`, background: isCurrent ? activeColor : dimColor }}
           />
         )
       })}
@@ -50,7 +46,7 @@ function TechRow({
 }) {
   return (
     <div className="flex items-center gap-2.5 py-[7px] border-b border-white/[0.05] last:border-0">
-      <span className="flex-1 text-[13px] font-medium text-white truncate">{row.tech}</span>
+      <span className="flex-1 min-w-0 text-[13px] font-medium text-white truncate">{row.tech}</span>
       <TechSparkline
         values={[row.q1, row.q2, row.q3, row.q4]}
         activeColor={activeColor}
@@ -82,7 +78,7 @@ function ColHeader({ deltaHeading }: { deltaHeading: string }) {
 }
 
 export function TechTrendsPanel() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: dashboardQueryKeys.techTrends(),
     queryFn: fetchTechTrends,
     refetchInterval: 300_000,
@@ -97,7 +93,11 @@ export function TechTrendsPanel() {
 
       {isLoading ? (
         <div className="h-40 animate-pulse bg-white/[0.03] rounded-lg" />
-      ) : !data ? null : (
+      ) : isError ? (
+        <p className="text-sm text-slate-500 py-4">Failed to load tech trends</p>
+      ) : !data ? (
+        <p className="text-sm text-slate-600 py-4">No tech data yet</p>
+      ) : (
         <div className="flex items-stretch gap-0">
           {/* Rising column */}
           <div className="flex-1 pr-6">
