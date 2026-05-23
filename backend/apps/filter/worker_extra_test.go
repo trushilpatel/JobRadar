@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
+	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 )
 
@@ -468,5 +470,174 @@ func TestProcessFetch_MalformedMixedWithGood(t *testing.T) {
 	}
 	if len(pub.recordsOnSubject("jobs.filtered.")) != 1 {
 		t.Errorf("expected good record on filtered subject, got %d", len(pub.recordsOnSubject("jobs.filtered.")))
+	}
+}
+
+// ── AC-6: ordering tests — ledger called before Ack ─────────────────────────
+
+// orderingLedger captures, for each UpdateSeenReasonBatch call, whether any of
+// the tracked messages had already been Acked at that moment. After all
+// processChunk calls we can also inspect calls and retryBatches like fakeLedger.
+type orderingLedger struct {
+	mu            sync.Mutex
+	calls         []ledgerCall
+	retryBatches  [][]jobsvc.RetryLedgerEntry
+	retryErr      error
+	errOnCall     int    // if > 0, return error on the Nth UpdateSeenReasonBatch call (1-based)
+	ackedAtLedger []bool // element i = was any tracked msg Acked at ledger call i?
+	tracked       []*js.TestMsgState
+}
+
+func newOrderingLedger(states ...*js.TestMsgState) *orderingLedger {
+	return &orderingLedger{tracked: states}
+}
+
+func (o *orderingLedger) UpdateSeenReasonBatch(_ context.Context, ids []string, reason string) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	callIdx := len(o.calls) + 1
+
+	// Snapshot acked state of all tracked messages at this instant.
+	anyAcked := false
+	for _, s := range o.tracked {
+		if s.Acked {
+			anyAcked = true
+			break
+		}
+	}
+	o.ackedAtLedger = append(o.ackedAtLedger, anyAcked)
+	o.calls = append(o.calls, ledgerCall{ids: append([]string(nil), ids...), reason: reason})
+
+	if o.errOnCall > 0 && callIdx == o.errOnCall {
+		return errors.New("injected ledger error")
+	}
+	return nil
+}
+
+func (o *orderingLedger) UpdateRetryBatch(_ context.Context, entries []jobsvc.RetryLedgerEntry) error {
+	if o.retryErr != nil {
+		return o.retryErr
+	}
+	dup := append([]jobsvc.RetryLedgerEntry(nil), entries...)
+	o.mu.Lock()
+	o.retryBatches = append(o.retryBatches, dup)
+	o.mu.Unlock()
+	return nil
+}
+
+// makeWorkerWithInterface builds a Worker accepting any FilterLedger implementation.
+// Use this when you need to pass an orderingLedger or other non-fakeLedger implementation.
+func makeWorkerWithInterface(scorer *fakeScorer, ledger FilterLedger, pub *fakePublisher) *Worker {
+	return &Worker{
+		scorer:          scorer,
+		ledger:          ledger,
+		publisher:       pub,
+		batchSize:       5,
+		flushTimeout:    30 * time.Second,
+		llmCallInterval: 5 * time.Second,
+		clock:           realClock{},
+		log:             logger.NewNoop(),
+	}
+}
+
+// TestProcessChunk_PassThrough_AcksAfterLedger asserts that for the pass-through
+// path (no title), UpdateSeenReasonBatch is invoked before any msg.Ack().
+func TestProcessChunk_PassThrough_AcksAfterLedger(t *testing.T) {
+	scorer := &fakeScorer{}
+	pub := &fakePublisher{}
+
+	item1, state1 := makeChunkItem(ats.RawJob{ID: "pt-order-1", Title: ""}, 1)
+	item2, state2 := makeChunkItem(ats.RawJob{ID: "pt-order-2", Title: ""}, 1)
+
+	ledger := newOrderingLedger(state1, state2)
+
+	w := makeWorkerWithInterface(scorer, ledger, pub)
+	w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-order", 0, 1)
+
+	// Ledger must have been called exactly once.
+	if len(ledger.calls) != 1 {
+		t.Fatalf("expected 1 ledger call, got %d", len(ledger.calls))
+	}
+	if ledger.calls[0].reason != jobcommon.SeenReasonFiltered {
+		t.Errorf("expected reason=%q, got %q", jobcommon.SeenReasonFiltered, ledger.calls[0].reason)
+	}
+
+	// At the time of the ledger call, no message should have been Acked yet.
+	if ledger.ackedAtLedger[0] {
+		t.Errorf("pass-through: msg was Acked BEFORE UpdateSeenReasonBatch — ordering bug not fixed")
+	}
+
+	// After processChunk returns, all messages must be Acked.
+	if !state1.Acked {
+		t.Errorf("expected item1 Acked after processChunk")
+	}
+	if !state2.Acked {
+		t.Errorf("expected item2 Acked after processChunk")
+	}
+}
+
+// TestProcessChunk_PassThrough_LedgerErrorStillAcks asserts that even when
+// UpdateSeenReasonBatch returns an error, all pass-through messages are Acked.
+func TestProcessChunk_PassThrough_LedgerErrorStillAcks(t *testing.T) {
+	scorer := &fakeScorer{}
+	pub := &fakePublisher{}
+
+	item1, state1 := makeChunkItem(ats.RawJob{ID: "pt-err-1", Title: ""}, 1)
+	item2, state2 := makeChunkItem(ats.RawJob{ID: "pt-err-2", Title: ""}, 1)
+
+	ledger := newOrderingLedger(state1, state2)
+	ledger.errOnCall = 1 // first call returns error
+
+	w := makeWorkerWithInterface(scorer, ledger, pub)
+	w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-err", 0, 1)
+
+	// Acks must happen even when ledger errors.
+	if !state1.Acked {
+		t.Errorf("expected item1 Acked even when ledger returns error")
+	}
+	if !state2.Acked {
+		t.Errorf("expected item2 Acked even when ledger returns error")
+	}
+}
+
+// TestProcessChunk_Scorable_AcksAfterLedger asserts that for a mixed-relevance
+// scorable batch, both UpdateSeenReasonBatch calls complete before any msg.Ack().
+func TestProcessChunk_Scorable_AcksAfterLedger(t *testing.T) {
+	// relevant=job-s-1, irrelevant=job-s-2
+	scorer := &fakeScorer{relevantIDs: []string{"job-s-1"}}
+	pub := &fakePublisher{}
+
+	item1, state1 := makeChunkItem(makeJob("job-s-1"), 1)
+	item2, state2 := makeChunkItem(makeJob("job-s-2"), 1)
+
+	ledger := newOrderingLedger(state1, state2)
+
+	w := makeWorkerWithInterface(scorer, ledger, pub)
+	w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-score-order", 0, 1)
+
+	// Expect 2 ledger calls: irrelevant first, then filtered.
+	if len(ledger.calls) != 2 {
+		t.Fatalf("expected 2 ledger calls, got %d: %+v", len(ledger.calls), ledger.calls)
+	}
+	if ledger.calls[0].reason != jobcommon.SeenReasonLLMIrrelevant {
+		t.Errorf("expected first call reason=%q, got %q", jobcommon.SeenReasonLLMIrrelevant, ledger.calls[0].reason)
+	}
+	if ledger.calls[1].reason != jobcommon.SeenReasonFiltered {
+		t.Errorf("expected second call reason=%q, got %q", jobcommon.SeenReasonFiltered, ledger.calls[1].reason)
+	}
+
+	// At the time of each ledger call, no message should have been Acked yet.
+	for i, anyAcked := range ledger.ackedAtLedger {
+		if anyAcked {
+			t.Errorf("scorable: msg was Acked BEFORE UpdateSeenReasonBatch call %d — ordering bug not fixed", i+1)
+		}
+	}
+
+	// After processChunk returns, all messages must be Acked.
+	if !state1.Acked {
+		t.Errorf("expected item1 (relevant) Acked after processChunk")
+	}
+	if !state2.Acked {
+		t.Errorf("expected item2 (irrelevant) Acked after processChunk")
 	}
 }
