@@ -27,7 +27,7 @@ alloy:
         memory: 256Mi
       limits:
         cpu: 500m
-        memory: 512Mi
+        memory: 384Mi
     # River config is mounted from our own ConfigMap (templates/alloy-config.yaml).
     # We disable the default in-chart configMap and reference ours by name.
     configMap:
