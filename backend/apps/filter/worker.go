@@ -319,17 +319,24 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 	}
 
 	if len(passThrough) > 0 {
+		// Phase 1: publish all pass-through jobs and collect IDs — no Ack yet.
 		passThroughIDs := make([]string, len(passThrough))
 		for i, it := range passThrough {
 			w.publishDetail(ctx, it.job.job)
 			passThroughIDs[i] = it.job.job.ID
-			_ = it.msg.Ack()
 		}
+		// Phase 2: record ledger state before any Ack so a crash between here
+		// and the Ack loop redelivers the messages; UpdateSeenReasonBatch is
+		// idempotent, so the second write on redeliver is a no-op.
 		if err := w.ledger.UpdateSeenReasonBatch(ctx, passThroughIDs, jobcommon.SeenReasonFiltered); err != nil {
 			w.log.Error("mark filtered (pass-through) failed", err,
 				logger.Str(logger.FieldFetchID, fetchID),
 				logger.Int(logger.FieldChunkIndex, chunkIndex),
 			)
+		}
+		// Phase 3: Ack only after the ledger write has been attempted.
+		for _, it := range passThrough {
+			_ = it.msg.Ack()
 		}
 		w.log.Info("chunk pass-through (no title)",
 			logger.Str(logger.FieldFetchID, fetchID),
@@ -433,6 +440,7 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		relevant[id] = true
 	}
 
+	// Phase 1: classify and publish relevant jobs — collect IDs, no Ack yet.
 	var irrelevantIDs []string
 	for _, item := range scorable {
 		if relevant[item.job.job.ID] {
@@ -440,9 +448,10 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		} else {
 			irrelevantIDs = append(irrelevantIDs, item.job.job.ID)
 		}
-		_ = item.msg.Ack()
 	}
 
+	// Phase 2: record ledger state for both buckets before any Ack.
+	// UpdateSeenReasonBatch is idempotent — safe to call again on NATS redeliver.
 	if len(irrelevantIDs) > 0 {
 		if err := w.ledger.UpdateSeenReasonBatch(ctx, irrelevantIDs, jobcommon.SeenReasonLLMIrrelevant); err != nil {
 			w.log.Error("mark irrelevant failed", err,
@@ -459,6 +468,11 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 				logger.Int(logger.FieldChunkIndex, chunkIndex),
 			)
 		}
+	}
+
+	// Phase 3: Ack all scorable messages only after both ledger writes have been attempted.
+	for _, item := range scorable {
+		_ = item.msg.Ack()
 	}
 
 	metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(relevantIDs)))
