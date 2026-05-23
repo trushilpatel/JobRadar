@@ -1,24 +1,11 @@
-import type { Company } from '@/types'
+import type { AdapterConfig, Company, EffectiveScanConfig } from '@/types'
 import { apiClient } from '@/lib/api-client'
 
-export interface AdapterConfig {
-  adapter_type: string
-  scan_interval_minutes: number
-  inter_company_delay_s: number
-  last_scheduled_at: string | null
-  updated_at: string
-}
+export type { AdapterConfig, EffectiveScanConfig }
 
 export interface UpdateAdapterConfigInput {
   scan_interval_minutes: number
   inter_company_delay_s: number
-}
-
-export interface EffectiveScanConfig {
-  adapter_type: string
-  effective_scan_interval_minutes: number
-  inter_company_delay_s: number
-  company_override: number | null
 }
 
 export async function getAdapterConfigs(): Promise<AdapterConfig[]> {
