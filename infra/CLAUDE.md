@@ -10,6 +10,22 @@ k8s (k3d) is the only deployment target. There is no Docker Compose setup.
 
 All ATS adapters (Greenhouse, Lever, Ashby, Apple, Microsoft, Netflix, Rippling, Uber, Google, Meta) work over HTTP / JSON / GraphQL / sitemap. Google uses HTTP + RE2 regex over server-rendered HTML (`backend/apps/crawler/ats/google/http.go`); Meta uses sitemap-driven listing + JSON-LD detail (`backend/apps/crawler/ats/meta/*.go`).
 
+Base image is `alpine:3.20` (CGO_ENABLED=0 binary has no glibc dependency; ~8 MB vs ~80 MB for debian). Non-root user UID 65532 (`jobradar`) matches the k8s `securityContext.runAsUser`.
+
+## Security hardening
+
+All pods run with `runAsNonRoot: true`. Worker pods (api, crawler, filter, enricher, scheduler, migrate) use the shared `jobradar.workerSecurityContext` helper (`readOnlyRootFilesystem: true`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, UID 65532).
+
+Console (nginx) also has `readOnlyRootFilesystem: true`. Nginx needs three writable paths at runtime — all three are mounted as in-memory `emptyDir` volumes:
+
+| Mount path         | sizeLimit |
+| ------------------ | --------- |
+| `/tmp`             | 16Mi      |
+| `/var/cache/nginx` | 16Mi      |
+| `/var/run`         | 4Mi       |
+
+Do not add writable host-path mounts. If a new workload needs temporary storage, use an in-memory `emptyDir` with an explicit `sizeLimit`.
+
 ## Local k8s prerequisites — always verify before deploying
 
 - **kubectl context must be `k3d-jobradar`**, never `docker-desktop`. Check: `kubectl config current-context`. Switch: `kubectl config use-context k3d-jobradar`
@@ -41,6 +57,22 @@ make k8s-logs-crawler
 curl -X POST http://localhost:30080/companies/<company-id>/scan
 make k8s-logs-crawler
 ```
+
+## Resource limits reference
+
+Tuned for a single-node k3d cluster on an 8 GB M1. Never raise limits without checking available headroom (`kubectl top nodes`).
+
+| Component | Req mem | Limit mem | Req CPU | Limit CPU |
+| --------- | ------- | --------- | ------- | --------- |
+| api       | 64Mi    | 128Mi     | 100m    | 500m      |
+| crawler   | 128Mi   | 256Mi     | 100m    | 300m      |
+| filter    | 32Mi    | 128Mi     | 100m    | 500m      |
+| enricher  | 32Mi    | 128Mi     | 100m    | 500m      |
+| scheduler | 64Mi    | 128Mi     | 50m     | 200m      |
+| console   | 32Mi    | 64Mi      | 25m     | 100m      |
+| migrate   | 32Mi    | 128Mi     | 50m     | —         |
+
+CPU limits are required on all workloads to prevent a runaway pod from starving k3d. The migrate job has no CPU limit intentionally (short-lived; bursty is acceptable).
 
 ## Common failure modes
 
