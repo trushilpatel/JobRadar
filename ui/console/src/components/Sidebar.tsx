@@ -10,6 +10,7 @@ import {
   LogOut,
   Users,
   ClipboardList,
+  Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/features/auth/store'
@@ -25,6 +26,7 @@ const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [
   { to: '/admin/users', label: 'Users', icon: <Users size={16} /> },
   { to: '/admin/audit', label: 'Audit Log', icon: <ClipboardList size={16} /> },
   { to: '/insights', label: 'Insights', icon: <BarChart2 size={16} /> },
+  { to: '/settings', label: 'Settings', icon: <Settings size={16} /> },
 ]
 
 function NavItem({
@@ -145,7 +147,9 @@ export function Sidebar() {
               className={({ isActive }) =>
                 cn(
                   'flex-1 flex items-center gap-2 rounded-lg px-1 py-1 -mx-1 transition-colors min-w-0',
-                  isActive ? 'text-violet-300' : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                  isActive
+                    ? 'text-violet-300'
+                    : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
                 )
               }
             >

@@ -66,7 +66,10 @@ export function CompaniesPage() {
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <CompaniesTable
           companies={c.companies}
-          total={c.total}
+          page={c.page}
+          itemsOnPage={c.itemsOnPage}
+          itemsBeforePage={c.itemsBeforePage}
+          knownTotal={c.total}
           loading={c.isLoading || c.isFetching}
           limit={c.limit}
           onLimitChange={c.setLimit}

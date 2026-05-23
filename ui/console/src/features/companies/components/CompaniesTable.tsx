@@ -6,7 +6,10 @@ import { buildCompanyColumns, type CompanyColumnActions } from './companies-colu
 
 interface CompaniesTableProps {
   companies: Company[]
-  total: number
+  page: number
+  itemsOnPage: number
+  itemsBeforePage: number
+  knownTotal?: number
   loading: boolean
   limit: number
   onLimitChange: (limit: number) => void
@@ -24,7 +27,10 @@ interface CompaniesTableProps {
 
 export function CompaniesTable({
   companies,
-  total,
+  page,
+  itemsOnPage,
+  itemsBeforePage,
+  knownTotal,
   loading,
   limit,
   onLimitChange,
@@ -64,7 +70,10 @@ export function CompaniesTable({
       <div className="border-t border-white/[0.07] shrink-0">
         <Pagination
           mode="cursor"
-          total={total}
+          page={page}
+          itemsOnPage={itemsOnPage}
+          itemsBeforePage={itemsBeforePage}
+          knownTotal={knownTotal}
           limit={limit}
           onLimitChange={onLimitChange}
           hasNext={!!nextCursor}
