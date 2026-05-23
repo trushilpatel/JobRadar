@@ -1,82 +1,57 @@
-import { useRef, useEffect } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { MapPin, Wifi } from 'lucide-react'
+import { MapPin, Wifi, Bookmark, BookmarkCheck, X } from 'lucide-react'
 import type { Job } from '@/types'
+import { JOB_STATUS } from '@/constants/jobStatus'
 import { DataTableColumnHeader } from '@/components/ui/data-table'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, cn } from '@/lib/utils'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { formatSalary } from '@/services/jobs.service'
 
 export interface JobTableActions {
-  selectedIds: Set<string>
-  filteredIds: string[]
-  onToggleSelect: (id: string, checked: boolean) => void
-  onSelectAll: (checked: boolean) => void
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-function IndeterminateCheckbox({
-  checked,
-  indeterminate,
-  onChange,
-  ariaLabel,
-}: {
-  checked: boolean
-  indeterminate: boolean
-  onChange: (checked: boolean) => void
-  ariaLabel: string
-}) {
-  const ref = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = indeterminate
-  }, [indeterminate])
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={checked}
-      onChange={(e) => onChange(e.target.checked)}
-      aria-label={ariaLabel}
-      className="accent-violet-500 cursor-pointer"
-    />
-  )
+  onToggleSave: (job: Job) => void
+  onDismiss: (job: Job) => void
 }
 
 export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknown>[] {
-  const { selectedIds, filteredIds, onToggleSelect, onSelectAll } = actions
-  const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id))
-  const someSelected = filteredIds.some((id) => selectedIds.has(id))
+  const { onToggleSave, onDismiss } = actions
 
   return [
+    // ── 1. Bookmark / save column ───────────────────────────────────────────
+    // Always-visible, one-click save toggle at the row's left edge. Replaces
+    // the old checkbox column; multi-select via checkbox is no longer offered.
     {
-      id: 'select',
-      size: 40,
+      id: 'bookmark',
+      size: 48,
       enableSorting: false,
-      header: () => (
-        <IndeterminateCheckbox
-          checked={allSelected}
-          indeterminate={someSelected && !allSelected}
-          onChange={onSelectAll}
-          ariaLabel="Select all jobs on this page"
-        />
-      ),
+      header: () => null,
       cell: ({ row }) => {
         const job = row.original
-        const company = job.company?.name ?? job.company_id ?? ''
-        const label = `Select ${job.title}${company ? ` at ${company}` : ''}`
+        const saved = job.status === JOB_STATUS.SAVED
         return (
-          <div onClick={(e) => e.stopPropagation()} className="min-h-[24px] min-w-[24px]">
-            <input
-              type="checkbox"
-              checked={selectedIds.has(job.id)}
-              onChange={(e) => onToggleSelect(job.id, e.target.checked)}
-              aria-label={label}
-              className="accent-violet-500 cursor-pointer"
-            />
-          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleSave(job)
+            }}
+            aria-label={saved ? `Remove ${job.title} from saved` : `Save ${job.title}`}
+            aria-pressed={saved}
+            title={saved ? 'Remove from saved' : 'Save'}
+            className={cn(
+              'p-1.5 rounded-md transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400',
+              saved
+                ? 'text-amber-400 hover:bg-amber-500/10'
+                : 'text-slate-500 hover:text-amber-300 hover:bg-white/[0.06]'
+            )}
+          >
+            {saved ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
+          </button>
         )
       },
     },
+
+    // ── 2. Company ─────────────────────────────────────────────────────────
     {
       id: 'company',
       size: 180,
@@ -85,13 +60,15 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       cell: ({ row }) => {
         const name = row.original.company?.name ?? row.original.company_id ?? ''
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <CompanyAvatar name={name} size="sm" />
             <span className="text-xs text-slate-300 truncate max-w-[120px]">{name}</span>
           </div>
         )
       },
     },
+
+    // ── 3. Title ───────────────────────────────────────────────────────────
     {
       accessorKey: 'title',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Title" />,
@@ -99,6 +76,8 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
         <span className="font-medium text-white text-sm">{getValue() as string}</span>
       ),
     },
+
+    // ── 4. Location ────────────────────────────────────────────────────────
     {
       id: 'location',
       size: 180,
@@ -118,9 +97,13 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
               <MapPin size={10} /> {j.location}
             </span>
           )
-        return <span className="text-xs text-slate-600">—</span>
+        // Empty cells render blank rather than an em-dash — per UX direction:
+        // absence of data should mean field disappears, not show a placeholder.
+        return null
       },
     },
+
+    // ── 5. Salary ──────────────────────────────────────────────────────────
     {
       id: 'salary',
       size: 140,
@@ -128,19 +111,46 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       header: () => <span className="text-slate-400">Salary</span>,
       cell: ({ row }) => {
         const salary = formatSalary(row.original.salary_range)
-        return salary ? (
-          <span className="text-xs text-amber-300">{salary}</span>
-        ) : (
-          <span className="text-xs text-slate-600">—</span>
-        )
+        return salary ? <span className="text-xs text-amber-300">{salary}</span> : null
       },
     },
+
+    // ── 6. Added ───────────────────────────────────────────────────────────
     {
       accessorKey: 'added_at',
       size: 100,
       header: ({ column }) => <DataTableColumnHeader column={column} title="Added" />,
       cell: ({ getValue }) => (
         <span className="text-xs text-slate-500">{formatRelativeTime(getValue() as string)}</span>
+      ),
+    },
+
+    // ── 7. Dismiss (hover-revealed) ────────────────────────────────────────
+    // Anchored to the row's right edge. Hidden by default, shown on row hover
+    // or when the row is focused via keyboard. Keyboard users hit `D` on the
+    // focused row instead.
+    {
+      id: 'dismiss',
+      size: 48,
+      enableSorting: false,
+      header: () => null,
+      cell: ({ row }) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDismiss(row.original)
+          }}
+          aria-label={`Dismiss ${row.original.title}`}
+          title="Dismiss"
+          className={cn(
+            'p-1.5 rounded-md transition-all text-slate-500 hover:text-red-400 hover:bg-red-500/10',
+            'opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100',
+            'focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400'
+          )}
+        >
+          <X size={14} />
+        </button>
       ),
     },
   ]

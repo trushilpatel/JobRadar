@@ -17,6 +17,7 @@ interface CompaniesTableProps {
   hasPrev: boolean
   onNext: () => void
   onPrev: () => void
+  onFirst?: () => void
   onRowClick: (c: Company) => void
   activeCompanyId?: string
   actions: CompanyColumnActions
@@ -38,6 +39,7 @@ export function CompaniesTable({
   hasPrev,
   onNext,
   onPrev,
+  onFirst,
   onRowClick,
   activeCompanyId,
   actions,
@@ -80,6 +82,7 @@ export function CompaniesTable({
           hasPrev={hasPrev}
           onNext={onNext}
           onPrev={onPrev}
+          onFirst={onFirst}
           loading={loading}
         />
       </div>

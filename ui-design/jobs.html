@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>JobRadar — Jobs (Reference Mockup)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { background: #0a0a0f; color: #e2e8f0; font-family: Inter, system-ui, sans-serif; font-size: 13px; -webkit-font-smoothing: antialiased; }
+  button { font-family: inherit; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.1); }
+  .kbd { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px; background: rgba(255,255,255,0.08); color: #cbd5e1; font-family:'JetBrains Mono', monospace; font-size:11px; border-radius:4px; }
+  .row-hover-actions { opacity: 0; transition: opacity 0.12s; }
+  tr:hover .row-hover-actions, tr.is-focused .row-hover-actions { opacity: 1; }
+  @keyframes slide-in-up { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .toast-anim { animation: slide-in-up 0.22s ease-out; }
+</style>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+<!-- ════════════════════════ SIDEBAR ════════════════════════ -->
+<aside class="shrink-0 flex flex-col h-full" style="width:192px; background:#0f0f18; border-right:1px solid rgba(255,255,255,0.06);">
+  <div class="flex items-center justify-between px-4 py-3.5" style="border-bottom:1px solid rgba(255,255,255,0.06);">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 rounded-md flex items-center justify-center" style="background:#7c3aed;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      </div>
+      <span class="text-[14px] text-slate-200">Job<strong class="text-white">Radar</strong></span>
+      <span class="text-[10px] text-slate-500">beta</span>
+    </div>
+    <button class="flex items-center justify-center w-6 h-6 rounded-md text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] transition-colors">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/><path d="m9 18-6-6 6-6"/></svg>
+    </button>
+  </div>
+
+  <nav class="flex-1 px-2 py-3 flex flex-col gap-0.5">
+    <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-slate-400 hover:text-white hover:bg-white/[0.05]">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+      Dashboard
+    </a>
+    <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors" style="background:rgba(124,58,237,0.2); color:#c4b5fd;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+      Jobs
+    </a>
+
+    <div class="mt-3 mb-1 px-3 text-[10px] font-medium tracking-[0.08em] text-slate-600 uppercase">Admin</div>
+
+    <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-slate-400 hover:text-white hover:bg-white/[0.05]">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Companies
+    </a>
+    <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-slate-400 hover:text-white hover:bg-white/[0.05]">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Users
+    </a>
+    <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-slate-400 hover:text-white hover:bg-white/[0.05]">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 12h6M9 16h6M9 8h6"/></svg>
+      Audit Log
+    </a>
+    <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-slate-400 hover:text-white hover:bg-white/[0.05]">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Insights
+    </a>
+    <a href="#" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-slate-400 hover:text-white hover:bg-white/[0.05]">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </a>
+  </nav>
+
+  <div class="flex items-center gap-2 px-3 py-2.5" style="border-top:1px solid rgba(255,255,255,0.06);">
+    <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold text-white shrink-0" style="background:#7c3aed;">T</div>
+    <span class="flex-1 text-[11px] text-slate-400 truncate">trushilpatel9898@g…</span>
+    <button class="flex items-center justify-center w-6 h-6 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors" title="Sign out">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    </button>
+  </div>
+</aside>
+
+<!-- ════════════════════════ MAIN ════════════════════════ -->
+<main class="flex-1 flex flex-col min-h-0">
+
+  <!-- ── Status tabs (Rejected removed) ── -->
+  <div class="flex items-end gap-0.5 px-6" style="border-bottom:1px solid rgba(255,255,255,0.07);">
+    <div class="flex items-center pb-2 mr-4 shrink-0">
+      <h1 class="text-lg font-semibold text-white">Jobs</h1>
+    </div>
+
+    <div class="flex h-auto items-end gap-0.5">
+      <button class="rounded-t-lg border-b-2 -mb-px px-4 py-2 text-sm font-medium transition-colors flex items-center" style="color:#c4b5fd; border-bottom-color:#8b5cf6; background:rgba(139,92,246,0.05);">
+        New <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:rgba(139,92,246,0.2); color:#c4b5fd;">6807</span>
+      </button>
+      <button class="rounded-t-lg border-b-2 -mb-px px-4 py-2 text-sm font-medium transition-colors text-slate-400 hover:text-white hover:bg-white/[0.03] flex items-center" style="border-bottom-color:transparent;">
+        Saved <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:rgba(255,255,255,0.08); color:#94a3b8;">54</span>
+      </button>
+      <button class="rounded-t-lg border-b-2 -mb-px px-4 py-2 text-sm font-medium transition-colors text-slate-400 hover:text-white hover:bg-white/[0.03] flex items-center" style="border-bottom-color:transparent;">
+        Applied <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:rgba(255,255,255,0.08); color:#94a3b8;">1</span>
+      </button>
+      <button class="rounded-t-lg border-b-2 -mb-px px-4 py-2 text-sm font-medium transition-colors text-slate-400 hover:text-white hover:bg-white/[0.03] flex items-center" style="border-bottom-color:transparent;">
+        Interviewing <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:rgba(255,255,255,0.08); color:#94a3b8;">0</span>
+      </button>
+      <button class="rounded-t-lg border-b-2 -mb-px px-4 py-2 text-sm font-medium transition-colors text-slate-400 hover:text-white hover:bg-white/[0.03] flex items-center" style="border-bottom-color:transparent;">
+        Offer <span class="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style="background:rgba(255,255,255,0.08); color:#94a3b8;">0</span>
+      </button>
+    </div>
+
+    <div class="flex items-center pb-2 ml-auto shrink-0 relative group">
+      <button onclick="toggleHelp()" aria-label="Keyboard shortcuts" class="flex items-center justify-center h-7 w-7 rounded-md text-slate-400 hover:text-white hover:bg-white/[0.05] transition-colors">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></svg>
+      </button>
+      <div class="absolute top-full right-0 mt-1.5 px-2.5 py-1.5 rounded-md text-[11px] text-slate-300 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-lg z-30" style="background:#1a1a28; border:1px solid rgba(255,255,255,0.1);">
+        Press <span class="font-mono">?</span> for shortcuts
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Filter bar ── -->
+  <div class="flex items-center gap-2 px-6 py-2.5 flex-wrap" style="border-bottom:1px solid rgba(255,255,255,0.07);">
+    <div class="relative">
+      <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="search" placeholder="Search…" class="pl-7 pr-3 py-1.5 text-xs rounded-lg w-44 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-violet-500" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);" />
+    </div>
+    <button class="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors text-slate-400 hover:bg-white/[0.06]" style="background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.08);">
+      <span>All companies</span>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="w-px h-4 mx-0.5" style="background:rgba(255,255,255,0.08);"></div>
+    <button class="px-2.5 py-1.5 text-xs rounded-lg border transition-colors text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]" style="background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.07);">0-2 yrs</button>
+    <button class="px-2.5 py-1.5 text-xs rounded-lg border transition-colors text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]" style="background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.07);">2-5 yrs</button>
+    <button class="px-2.5 py-1.5 text-xs rounded-lg border transition-colors text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]" style="background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.07);">5+ yrs</button>
+    <div class="w-px h-4 mx-0.5" style="background:rgba(255,255,255,0.08);"></div>
+    <button class="px-2.5 py-1.5 text-xs rounded-lg border transition-colors text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]" style="background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.07);">24h</button>
+    <button class="px-2.5 py-1.5 text-xs rounded-lg border transition-colors text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]" style="background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.07);">7d</button>
+    <button class="px-2.5 py-1.5 text-xs rounded-lg border transition-colors text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]" style="background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.07);">30d</button>
+    <div class="w-px h-4 mx-0.5" style="background:rgba(255,255,255,0.08);"></div>
+    <button class="px-2.5 py-1.5 text-xs rounded-lg border transition-colors text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]" style="background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.07);">Remote</button>
+    <button class="px-2.5 py-1.5 text-xs rounded-lg border transition-colors text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]" style="background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.07);">On-site</button>
+  </div>
+
+  <!-- ── Content: table + ALWAYS-OPEN detail panel ── -->
+  <div class="flex-1 flex min-h-0 overflow-hidden">
+    <div class="flex flex-1 min-w-0 overflow-hidden">
+      <div class="flex flex-col flex-1 overflow-hidden min-w-0">
+        <div class="flex-1 overflow-auto">
+          <table class="w-full caption-bottom text-sm" id="jobs-table">
+            <thead class="sticky top-0 z-[2]" style="background:#0a0a0f;">
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.07);">
+                <!-- NEW: no checkbox column. Bookmark column header is empty. -->
+                <th class="text-left align-middle" style="height:36px; width:48px;"></th>
+                <th class="text-left align-middle" style="height:36px; padding:0 12px; width:180px;">
+                  <button class="inline-flex items-center gap-1 text-slate-400 hover:text-white transition-colors text-xs">
+                    Company
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="opacity-40"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+                  </button>
+                </th>
+                <th class="text-left align-middle" style="height:36px; padding:0 12px;">
+                  <button class="inline-flex items-center gap-1 text-slate-400 hover:text-white transition-colors text-xs">
+                    Title
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="opacity-40"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+                  </button>
+                </th>
+                <th class="text-left align-middle text-slate-400 text-xs uppercase tracking-wider font-medium" style="height:36px; padding:0 12px; width:160px;">Location</th>
+                <th class="text-left align-middle text-slate-400 text-xs uppercase tracking-wider font-medium" style="height:36px; padding:0 12px; width:120px;">Salary</th>
+                <th class="text-left align-middle" style="height:36px; padding:0 12px; width:90px;">
+                  <button class="inline-flex items-center gap-1 text-white text-xs">
+                    Added
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                  </button>
+                </th>
+                <!-- Right padding column for hover-revealed X button -->
+                <th class="text-left align-middle" style="height:36px; width:48px;"></th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- V4 Pagination: range merges into the navigation cluster -->
+        <div class="shrink-0" style="border-top:1px solid rgba(255,255,255,0.07);">
+          <div class="flex items-center gap-3 px-4 py-2">
+            <div class="flex-1"></div>
+
+            <!-- Navigation cluster: [«] [‹] {range} [›] -->
+            <div class="flex items-center gap-1 shrink-0">
+              <button disabled title="First page (←←)" aria-label="First page" class="flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>
+              </button>
+              <button disabled title="Previous page (←)" aria-label="Previous page" class="flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <p class="px-2 py-1 text-xs text-slate-500 tabular-nums whitespace-nowrap" aria-live="polite" aria-label="Page 1">
+                1–19 of 6,807
+              </p>
+              <button title="Next page (→)" aria-label="Next page" class="flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            </div>
+
+            <div class="flex-1 flex justify-end">
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="text-xs text-slate-500">Rows</span>
+                <select class="text-xs text-slate-200 rounded-md px-2 py-1 outline-none cursor-pointer" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);">
+                  <option>20</option><option>50</option><option>100</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Always-open detail panel ── -->
+    <div class="w-1 cursor-col-resize shrink-0 hover:bg-violet-500/30 transition-colors" style="background:rgba(255,255,255,0.07);"></div>
+    <div id="detail" class="shrink-0 flex flex-col min-h-0 overflow-hidden" style="width:440px;">
+      <div role="region" aria-label="Job details" class="flex flex-col flex-1 min-h-0" style="background:#0d0d14;">
+
+        <!-- NEW HEADER: title left (wrappable), actions floating top-right -->
+        <div class="px-5 pt-4 pb-3" style="border-bottom:1px solid rgba(255,255,255,0.07);">
+          <div class="flex items-start gap-3">
+            <!-- Avatar -->
+            <div class="w-9 h-9 rounded-md flex items-center justify-center text-sm font-semibold text-white shrink-0" style="background:#7c3aed;">F</div>
+            <!-- Title block (takes most width, wraps as needed) -->
+            <div class="min-w-0 flex-1">
+              <p class="text-base font-semibold text-white leading-tight">Senior Software Engineer (Fintech Platform)</p>
+              <p class="text-sm text-slate-400 mt-0.5">Félix · added 5h ago</p>
+            </div>
+            <!-- Actions float top-right; stay anchored if title wraps -->
+            <div class="flex items-center gap-1 shrink-0">
+              <button class="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Dismiss" aria-label="Dismiss job" onclick="showDismissToast('Senior Software Engineer (Fintech Platform)', 'Félix')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+              </button>
+              <button class="p-1.5 text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors" aria-label="Close job details">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Meta pills -->
+          <div class="flex flex-wrap gap-2 mt-3">
+            <span class="text-xs text-slate-400 px-2.5 py-1 rounded-lg" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.07);">5+ yrs exp</span>
+            <span class="flex items-center gap-1 text-xs text-emerald-400 px-2.5 py-1 rounded-lg" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2);">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 20 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+              Remote
+            </span>
+            <span class="flex items-center gap-1 text-xs text-slate-400 px-2.5 py-1 rounded-lg" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.07);">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+              full time
+            </span>
+            <span class="flex items-center gap-1 text-xs text-blue-300 px-2.5 py-1 rounded-lg" style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.2);">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              Sponsors visa
+            </span>
+          </div>
+
+          <!-- Action row -->
+          <div class="flex items-center gap-2 flex-wrap mt-3">
+            <a href="#" class="flex items-center gap-1.5 text-xs text-slate-300 hover:text-violet-300 px-2.5 py-1.5 rounded-lg transition-colors" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Open posting
+            </a>
+            <button class="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-colors text-slate-300" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+              <span>New</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          <div>
+            <h3 class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Summary</h3>
+            <p class="text-sm text-slate-300 leading-relaxed">Architect and implement scalable backend microservices for a fintech platform's financial operations.</p>
+          </div>
+
+          <div>
+            <h3 class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Responsibilities</h3>
+            <ul class="list-disc list-inside space-y-1">
+              <li class="text-sm text-slate-300">Architect and implement scalable backend microservices</li>
+              <li class="text-sm text-slate-300">Develop and optimize systems for secure fund collection</li>
+              <li class="text-sm text-slate-300">Design and implement services for secure fund disbursement</li>
+              <li class="text-sm text-slate-300">Build and enhance systems for user onboarding, KYC, and compliance</li>
+              <li class="text-sm text-slate-300">Design and manage infrastructure for high-volume requests</li>
+              <li class="text-sm text-slate-300">Utilize GCP services to build distributed systems</li>
+              <li class="text-sm text-slate-300">Mentor junior developers and promote engineering best practices</li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Tech stack</h3>
+            <div class="flex flex-wrap gap-1.5" id="tech-stack"></div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Your notes</label>
+            <textarea rows="4" placeholder="Private notes about this job (only you can see these)…" class="w-full resize-y rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-violet-400" style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07);"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ════════════════════════ DISMISS TOAST (bottom-left) ════════════════════════ -->
+<div id="dismiss-toast" class="hidden fixed bottom-4 left-4 z-50" style="width:360px;">
+  <div class="toast-anim rounded-xl shadow-2xl overflow-hidden" style="background:#13131e; border:1px solid rgba(255,255,255,0.1);">
+    <div class="flex items-start gap-3 px-4 py-3">
+      <div class="flex items-center justify-center w-7 h-7 rounded-full shrink-0" style="background:rgba(16,185,129,0.15);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm text-white font-medium">Dismissed</p>
+        <p class="text-xs text-slate-400 truncate" id="toast-job-title">Senior Software Engineer at Stripe</p>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <button onclick="undoDismiss()" class="text-xs text-violet-300 hover:text-violet-200 font-medium px-2 py-1 rounded-md hover:bg-white/[0.06] transition-colors">Undo</button>
+        <button onclick="closeDismissToast()" class="p-1 text-slate-500 hover:text-white rounded-md hover:bg-white/[0.06] transition-colors">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="px-4 pb-3">
+      <label class="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 cursor-pointer transition-colors">
+        <input type="checkbox" class="w-3.5 h-3.5 rounded cursor-pointer" style="accent-color:#7c3aed;" />
+        <span>Don't show <span id="toast-company">Stripe</span> again</span>
+      </label>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════ KEYBOARD SHORTCUT SHEET ════════════════════════ -->
+<div id="help-backdrop" class="fixed inset-0 z-40 hidden" style="background:rgba(0,0,0,0.6);" onclick="toggleHelp()"></div>
+<div id="help-sheet" class="fixed top-0 right-0 h-full z-50 flex flex-col transform translate-x-full transition-transform duration-200" style="width:100%; max-width:28rem; background:#0d0d14; border-left:1px solid rgba(255,255,255,0.07);">
+  <div class="flex items-center justify-between px-5 py-4 shrink-0" style="border-bottom:1px solid rgba(255,255,255,0.07);">
+    <div>
+      <h2 class="text-base font-semibold text-white">Keyboard shortcuts</h2>
+      <p class="text-xs text-slate-500 mt-0.5">Press <span class="kbd">?</span> to toggle this panel.</p>
+    </div>
+    <button onclick="toggleHelp()" class="p-1.5 text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="flex-1 overflow-y-auto px-5 py-6 space-y-6" id="help-content"></div>
+</div>
+
+<script>
+const AVATAR_COLORS = ['#7c3aed','#2563eb','#059669','#d97706','#e11d48','#0891b2','#4f46e5','#0d9488']
+const avatarColor = (name) => {
+  if (!name) return AVATAR_COLORS[0]
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h)
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+
+const jobs = [
+  { co:'Félix',        title:'Senior Software Engineer (Fintech Platform)',                 loc:'remote',  city:null,                       sal:null,                added:'5h ago',  saved:false, focused:true  },
+  { co:'Work with us!',title:'Senior Software Engineer, Full Stack (Copy)',                 loc:'remote',  city:null,                       sal:'$170k – $255k',     added:'5h ago',  saved:false, focused:false },
+  { co:'Vantaca',      title:'Sr. Applied AI Engineer',                                     loc:'remote',  city:null,                       sal:null,                added:'6h ago',  saved:true,  focused:false },
+  { co:'Apple',        title:'Senior Software Engineer, Apple Services Engineering',        loc:null,      city:null,                       sal:null,                added:'7h ago',  saved:false, focused:false },
+  { co:'Apple',        title:'Senior iCloud Solutions Engineer, Apple Services Engineering',loc:null,      city:null,                       sal:null,                added:'7h ago',  saved:false, focused:false },
+  { co:'Apple',        title:'Senior Software Engineer, Apple Services Engineering',        loc:null,      city:null,                       sal:null,                added:'7h ago',  saved:false, focused:false },
+  { co:'Apple',        title:'Software Engineer, Infrastructure Services',                  loc:null,      city:null,                       sal:null,                added:'7h ago',  saved:false, focused:false },
+  { co:'Apple',        title:'Software Engineer, Apple Services Engineering',               loc:null,      city:null,                       sal:null,                added:'7h ago',  saved:false, focused:false },
+  { co:'Apple',        title:'Software Engineer, Core Services - Apple Services Engineering',loc:null,     city:null,                       sal:null,                added:'7h ago',  saved:false, focused:false },
+  { co:'Apple',        title:'Software Engineer, Apple Services Engineering',               loc:null,      city:null,                       sal:null,                added:'7h ago',  saved:false, focused:false },
+  { co:'Apple',        title:'Senior ML Data Engineer, MLO',                                loc:null,      city:null,                       sal:null,                added:'7h ago',  saved:false, focused:false },
+  { co:'Apple',        title:'Software Engineer, Infrastructure Services',                  loc:null,      city:null,                       sal:null,                added:'7h ago',  saved:false, focused:false },
+  { co:'OpenAI',       title:'Researcher, Computer Use - Agent Post-Training',              loc:'onsite',  city:'San Francisco',            sal:'$250k – $380k',     added:'9h ago',  saved:false, focused:false },
+  { co:'OpenAI',       title:'Software Engineer, Core Science',                             loc:'remote',  city:null,                       sal:'$293k – $385k',     added:'9h ago',  saved:false, focused:false },
+  { co:'OpenAI',       title:'Researcher, Artifacts - Agent Post-Training',                 loc:'remote',  city:null,                       sal:'$250k – $380k',     added:'9h ago',  saved:false, focused:false },
+  { co:'OpenAI',       title:'Software Engineer, ML Systems & Training Architecture',       loc:'onsite',  city:'San Francisco (OnSite)',   sal:'$295k – $380k',     added:'9h ago',  saved:false, focused:false },
+  { co:'OpenAI',       title:'Researcher, Connectors - Agent Post-Training',                loc:'remote',  city:null,                       sal:'$250k – $380k',     added:'9h ago',  saved:false, focused:false },
+]
+
+const TECH_STACK = ['React','JavaScript','CSS','Python','Flask','FastAPI','Redis','SQL','gRPC','GCP','Firestore','Cloud Storage','Pub/Sub','Google Artifact Registry','Cloud Run','BigQuery','Cloud Composer','Kubernetes','Terraform','NewRelic','PagerDuty']
+
+const tbody = document.getElementById('tbody')
+
+const locationCell = (j) => {
+  if (j.loc === 'remote') {
+    return `<span class="inline-flex items-center gap-1 text-xs text-emerald-400 px-2 py-0.5 rounded-md" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2);">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 20 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+      Remote
+    </span>`
+  }
+  if (j.city) {
+    return `<span class="inline-flex items-center gap-1 text-xs text-slate-400">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      ${j.city}
+    </span>`
+  }
+  return ''
+}
+
+const salaryCell = (j) => {
+  if (j.sal) return `<span class="text-xs text-amber-300">${j.sal}</span>`
+  return ''
+}
+
+const bookmarkSvgEmpty  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>`
+const bookmarkSvgFilled = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/><path d="m9 10 2 2 4-4" stroke="#0d0d14" stroke-width="2.5"/></svg>`
+
+const renderRows = () => {
+  tbody.innerHTML = ''
+  jobs.forEach((j, idx) => {
+    const isFocused = j.focused
+    const inlineBg = isFocused ? 'background:rgba(139,92,246,0.08);' : ''
+    const tr = document.createElement('tr')
+    tr.className = `cursor-pointer ${isFocused ? 'is-focused' : ''}`
+    tr.style.cssText = `border-bottom:1px solid rgba(255,255,255,0.07); height:48px; ${inlineBg}`
+    tr.onmouseenter = (e) => { if (!isFocused) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }
+    tr.onmouseleave = (e) => { if (!isFocused) e.currentTarget.style.background = '' }
+    const bookmarkColor = j.saved ? '#fbbf24' : '#64748b'
+    tr.innerHTML = `
+      <td class="align-middle" style="padding:0 4px 0 24px; width:48px;">
+        <button onclick="event.stopPropagation(); toggleSave(${idx})" aria-label="${j.saved ? 'Remove from saved' : 'Save'}" class="p-1.5 rounded-md hover:bg-white/[0.08] transition-colors" style="color:${bookmarkColor};">
+          ${j.saved ? bookmarkSvgFilled : bookmarkSvgEmpty}
+        </button>
+      </td>
+      <td class="align-middle" style="padding:0 12px; width:180px;">
+        <div class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded-md flex items-center justify-center text-xs font-semibold text-white shrink-0" style="background:${avatarColor(j.co)};">${j.co[0].toUpperCase()}</div>
+          <span class="text-xs text-slate-300 truncate" style="max-width:120px;">${j.co}</span>
+        </div>
+      </td>
+      <td class="align-middle" style="padding:0 12px;">
+        <span class="font-medium text-white text-sm">${j.title}</span>
+      </td>
+      <td class="align-middle" style="padding:0 12px; width:160px;">${locationCell(j)}</td>
+      <td class="align-middle" style="padding:0 12px; width:120px;">${salaryCell(j)}</td>
+      <td class="align-middle" style="padding:0 12px; width:90px;">
+        <span class="text-xs text-slate-500">${j.added}</span>
+      </td>
+      <td class="align-middle" style="padding:0 24px 0 4px; width:48px;">
+        <button onclick="event.stopPropagation(); dismissJob(${idx})" aria-label="Dismiss" title="Dismiss" class="row-hover-actions p-1.5 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </td>
+    `
+    tbody.appendChild(tr)
+  })
+}
+
+const toggleSave = (idx) => {
+  jobs[idx].saved = !jobs[idx].saved
+  renderRows()
+}
+
+let lastDismissed = null
+const dismissJob = (idx) => {
+  const j = jobs[idx]
+  lastDismissed = { idx, job: { ...j } }
+  showDismissToast(j.title, j.co)
+}
+
+const showDismissToast = (title, company) => {
+  document.getElementById('toast-job-title').textContent = `${title} at ${company}`
+  document.getElementById('toast-company').textContent = company
+  const t = document.getElementById('dismiss-toast')
+  t.classList.remove('hidden')
+  clearTimeout(window._toastTimer)
+  window._toastTimer = setTimeout(closeDismissToast, 8000)
+}
+
+const closeDismissToast = () => {
+  document.getElementById('dismiss-toast').classList.add('hidden')
+}
+
+const undoDismiss = () => {
+  closeDismissToast()
+}
+
+const renderTech = () => {
+  const root = document.getElementById('tech-stack')
+  root.innerHTML = TECH_STACK.map(t =>
+    `<span class="text-xs text-slate-300 px-2 py-0.5 rounded-md font-mono" style="background:rgba(255,255,255,0.07);">${t}</span>`
+  ).join('')
+}
+
+const SECTIONS = [
+  { title:'Navigation', rows:[
+    { keys:[['j'],['↓']], label:'Next row (preview updates)' },
+    { keys:[['k'],['↑']], label:'Previous row (preview updates)' },
+    { keys:[['⏎']],       label:'Open posting in new tab' },
+    { keys:[['esc']],     label:'Close detail panel / clear selection' },
+    { keys:[['←']],       label:'Previous page' },
+    { keys:[['→']],       label:'Next page' },
+    { keys:[['g','g']],   label:'Jump to top' },
+    { keys:[['⇧','G']],   label:'Jump to bottom' },
+  ]},
+  { title:'Tabs', rows:[
+    { keys:[['g','n']], label:'Go to New' },
+    { keys:[['g','s']], label:'Go to Saved' },
+    { keys:[['g','a']], label:'Go to Applied' },
+    { keys:[['g','i']], label:'Go to Interviewing' },
+    { keys:[['g','o']], label:'Go to Offer' },
+  ]},
+  { title:'Actions on focused row', rows:[
+    { keys:[['s']], label:'Toggle save (bookmark)' },
+    { keys:[['d']], label:'Dismiss' },
+    { keys:[['u']], label:'Undo last action' },
+    { keys:[['a']], label:'Mark as applied' },
+    { keys:[['i']], label:'Mark as interviewing' },
+    { keys:[['o']], label:'Mark as offer' },
+  ]},
+  { title:'Search / help', rows:[
+    { keys:[['/']],         label:'Focus search' },
+    { keys:[['⌘','K']],    label:'Command palette' },
+    { keys:[['?']],         label:'This help panel' },
+  ]},
+]
+
+const renderHelp = () => {
+  const root = document.getElementById('help-content')
+  root.innerHTML = SECTIONS.map((s, idx) => `
+    <section class="pt-4 first:pt-0" style="${idx > 0 ? 'border-top:1px solid rgba(30,41,59,1);' : ''}">
+      <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">${s.title}</h3>
+      <dl class="space-y-2">
+        ${s.rows.map(r => `
+          <div class="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-1">
+            <dt class="flex items-center gap-2">
+              ${r.keys.map(chord => `<span class="inline-flex items-center gap-1">${chord.map(k => `<span class="kbd">${k}</span>`).join('')}</span>`).join('')}
+            </dt>
+            <dd class="text-sm text-slate-300">${r.label}</dd>
+          </div>
+        `).join('')}
+      </dl>
+    </section>
+  `).join('')
+}
+
+const toggleHelp = () => {
+  const sheet = document.getElementById('help-sheet')
+  const backdrop = document.getElementById('help-backdrop')
+  const isOpen = !sheet.classList.contains('translate-x-full')
+  if (isOpen) { sheet.classList.add('translate-x-full'); backdrop.classList.add('hidden') }
+  else        { sheet.classList.remove('translate-x-full'); backdrop.classList.remove('hidden') }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === '?' && !e.target.matches('input,textarea')) { toggleHelp(); e.preventDefault() }
+  if (e.key === 'Escape') {
+    const sheet = document.getElementById('help-sheet')
+    if (!sheet.classList.contains('translate-x-full')) toggleHelp()
+  }
+})
+
+renderRows()
+renderTech()
+renderHelp()
+</script>
+</body>
+</html>

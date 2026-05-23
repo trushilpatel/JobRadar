@@ -77,6 +77,7 @@ export function CompaniesPage() {
           hasPrev={c.hasPrev}
           onNext={c.goToNextPage}
           onPrev={c.goToPrevPage}
+          onFirst={c.goToFirstPage}
           emptyMessage={
             c.hasActiveFilters ? EMPTY_MESSAGES.WITH_FILTERS : EMPTY_MESSAGES.WITHOUT_FILTERS
           }

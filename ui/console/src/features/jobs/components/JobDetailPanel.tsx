@@ -131,24 +131,29 @@ export function JobDetailPanel({
       className="flex flex-col flex-1 min-h-0 bg-[#0d0d14]"
     >
       <div className="px-5 pt-4 pb-3 border-b border-white/[0.07]">
-        <div
-          className={cn(
-            'flex items-center mb-3',
-            isRoute ? 'justify-between' : 'justify-end gap-1'
-          )}
-        >
-          {isRoute && (
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Back to jobs"
-              className="flex min-h-[44px] items-center gap-1 px-2 py-2 text-sm text-slate-300 hover:text-white rounded-lg hover:bg-white/[0.06] transition-colors"
-            >
-              <ChevronLeft size={18} />
-              Back
-            </button>
-          )}
-          <div className="flex items-center gap-1">
+        {isRoute && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Back to jobs"
+            className="mb-3 flex min-h-[44px] items-center gap-1 px-2 py-2 text-sm text-slate-300 hover:text-white rounded-lg hover:bg-white/[0.06] transition-colors"
+          >
+            <ChevronLeft size={18} />
+            Back
+          </button>
+        )}
+
+        {/* Header band: avatar + title (wrappable) on the left, actions anchored top-right. */}
+        <div className="flex items-start gap-3 mb-3">
+          <CompanyAvatar name={companyName} size="md" />
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-semibold text-white leading-tight">{job.title}</p>
+            <p className="text-sm text-slate-400 mt-0.5">
+              {companyName}
+              <span className="text-slate-600"> · added {formatRelativeTime(job.added_at)}</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => onDismiss(job)}
               className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -166,14 +171,6 @@ export function JobDetailPanel({
                 <X size={15} />
               </button>
             )}
-          </div>
-        </div>
-
-        <div className="flex items-start gap-3 mb-3">
-          <CompanyAvatar name={companyName} size="md" />
-          <div className="min-w-0">
-            <p className="text-base font-semibold text-white leading-tight">{job.title}</p>
-            <p className="text-sm text-slate-400 mt-0.5">{companyName}</p>
           </div>
         </div>
 
@@ -235,8 +232,6 @@ export function JobDetailPanel({
       </div>
 
       <div className={cn('flex-1 overflow-y-auto px-5 py-4 space-y-5', isRoute && 'pb-24')}>
-        <p className="text-xs text-slate-500">Added {formatRelativeTime(job.added_at)}</p>
-
         {(job.role_brief || job.llm_summary) && (
           <div>
             <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">

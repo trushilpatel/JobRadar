@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { Job, JobStatus } from '@/types'
 import { useJob } from '@/features/jobs/hooks/useJob'
 import { useJobActions } from '@/features/jobs/hooks/useJobActions'
 import { JobDetailPanel } from '@/features/jobs/components/JobDetailPanel'
-import { DismissModal, type DismissPayload } from '@/features/jobs/components/DismissModal'
+import { showDismissStripe } from '@/components/ui/dismiss-stripe'
+
+const HIDDEN_COMPANIES_CATEGORY = 'companies'
 
 export function MobileJobDetailRoute() {
   const { id } = useParams<{ id: string }>()
@@ -12,12 +14,9 @@ export function MobileJobDetailRoute() {
   const location = useLocation()
   const job = useJob(id)
   const actions = useJobActions()
-  const [dismissTarget, setDismissTarget] = useState<Job | null>(null)
 
   // Track whether the user arrived here from inside the app (so navigate(-1)
   // is safe) or via deep-link / refresh (so we must fall back to /jobs).
-  // react-router tags entries with a numeric `idx` on its location state —
-  // idx > 0 means we entered via an in-app push.
   const enteredViaInAppNavRef = useRef<boolean>(false)
   useEffect(() => {
     const idx = (location.state as { idx?: number } | null)?.idx ?? 0
@@ -32,21 +31,32 @@ export function MobileJobDetailRoute() {
     }
   }, [navigate])
 
-  function handleStatusChange(target: Job, status: Exclude<JobStatus, 'dismissed'>) {
-    actions.setStatus.mutate({ id: target.id, status })
-    safeBack()
-  }
+  const handleStatusChange = useCallback(
+    (target: Job, status: Exclude<JobStatus, 'dismissed'>) => {
+      actions.setStatus.mutate({ id: target.id, status })
+      safeBack()
+    },
+    [actions.setStatus, safeBack]
+  )
 
-  function handleDismissConfirm(payload: DismissPayload) {
-    if (!dismissTarget) return
-    actions.dismiss.mutate({
-      id: dismissTarget.id,
-      reason: payload.reason,
-      note: payload.note,
-    })
-    setDismissTarget(null)
-    safeBack()
-  }
+  // Mobile dismiss mirrors the desktop flow — no modal, no reason picker,
+  // optional "Don't show <Company> again" via DismissStripe.
+  const handleDismiss = useCallback(
+    (target: Job) => {
+      const companyName = target.company?.name ?? ''
+      actions.dismiss.mutate({ id: target.id, reason: 'user_dismissed' })
+      showDismissStripe({
+        message: 'Dismissed',
+        submessage: `${target.title}${companyName ? ` at ${companyName}` : ''}`,
+        onUndo: () => actions.undoLast(),
+        hideTarget: companyName
+          ? { category: HIDDEN_COMPANIES_CATEGORY, value: companyName, label: companyName }
+          : undefined,
+      })
+      safeBack()
+    },
+    [actions, safeBack]
+  )
 
   if (job.isLoading) {
     return (
@@ -59,10 +69,6 @@ export function MobileJobDetailRoute() {
   }
 
   if (job.isError || !job.data) {
-    // The api-client throws generic Error instances without a status field, so
-    // we can only distinguish broad categories from the message. 404-ish
-    // messages get a dedicated "not found" affordance; everything else gets
-    // Retry. See docs/superpowers/specs for the longer note.
     const msg = job.error instanceof Error ? job.error.message : ''
     const isNotFound = /404|not\s*found/i.test(msg)
     const isForbidden = /401|403|forbidden|unauthorized/i.test(msg)
@@ -107,21 +113,12 @@ export function MobileJobDetailRoute() {
   }
 
   return (
-    <>
-      <JobDetailPanel
-        job={job.data}
-        mode="route"
-        onClose={safeBack}
-        onStatusChange={handleStatusChange}
-        onDismiss={(target) => setDismissTarget(target)}
-      />
-      <DismissModal
-        key={dismissTarget?.id ?? ''}
-        open={!!dismissTarget}
-        jobTitle={dismissTarget?.title ?? ''}
-        onConfirm={handleDismissConfirm}
-        onCancel={() => setDismissTarget(null)}
-      />
-    </>
+    <JobDetailPanel
+      job={job.data}
+      mode="route"
+      onClose={safeBack}
+      onStatusChange={handleStatusChange}
+      onDismiss={handleDismiss}
+    />
   )
 }
