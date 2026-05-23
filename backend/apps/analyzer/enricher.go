@@ -41,13 +41,14 @@ func (w *Worker) processGroup(ctx context.Context, fetchLog logger.Logger, group
 		}
 	}
 
+	var spanErr error
 	groupCtx, span := tracing.Start(ctx, "analyzer.worker.processGroup")
 	span.SetAttributes(
 		attribute.Int("group.index", groupIdx),
 		attribute.Int("group.size", len(group)),
 		attribute.Int("group.retry_count_max", retryMax),
 	)
-	defer span.End()
+	defer tracing.End(span, &spanErr)
 
 	groupLog := fetchLog.With(
 		logger.Int(logger.FieldChunkIndex, groupIdx),
@@ -68,11 +69,12 @@ func (w *Worker) processGroup(ctx context.Context, fetchLog logger.Logger, group
 	}
 	groupLog.Info("LLM batch sent",
 		logger.Int(logger.FieldBatch, len(group)),
-		logger.Str("job_ids", strings.Join(jobIDs, ",")),
+		logger.Str(logger.FieldJobIDs, strings.Join(jobIDs, ",")),
 	)
 
 	inputs, err := w.buildEnrichInputs(group)
 	if err != nil {
+		spanErr = err
 		groupLog.Error("build enrich inputs failed", err)
 		stats.markRouteFailure()
 		return w.routeBatchFailure(groupCtx, groupLog, group, err)
@@ -86,6 +88,7 @@ func (w *Worker) processGroup(ctx context.Context, fetchLog logger.Logger, group
 	metrics.EnricherLLMDuration.Observe(time.Since(llmStart).Seconds())
 
 	if err != nil {
+		spanErr = err
 		enrichSpan.SetAttributes(attribute.String("outcome", "error"))
 		enrichSpan.RecordError(err)
 		enrichSpan.End()
@@ -100,8 +103,8 @@ func (w *Worker) processGroup(ctx context.Context, fetchLog logger.Logger, group
 
 	groupLog.Info("LLM batch returned",
 		logger.Int(logger.FieldBatch, len(group)),
-		logger.Int("result_count", len(results)),
-		logger.Dur("duration", time.Since(llmStart)),
+		logger.Int(logger.FieldResultCount, len(results)),
+		logger.Dur(logger.FieldDuration, time.Since(llmStart)),
 	)
 
 	return w.distributeResults(groupCtx, groupLog, group, results, stats)
@@ -196,22 +199,26 @@ func (w *Worker) routeMissingResult(ctx context.Context, fetchLog logger.Logger,
 func (w *Worker) processResult(ctx context.Context, fj fetchedJob, result *llmdto.JobPostEnrichResult, stats *groupOutcomeStats) {
 	jobLog := w.log.With(
 		logger.Str(logger.FieldJobID, fj.job.ID),
-		logger.Str("title", fj.job.Title),
+		logger.Str(logger.FieldTitle, fj.job.Title),
 	)
 
 	if !result.RoleMatch {
 		jobLog.Debug("job dropped: role mismatch")
 		w.markIrrelevant(ctx, fj.job.ID)
-		_ = fj.msg.Ack()
+		if aerr := fj.msg.Ack(); aerr != nil {
+			jobLog.Warn("msg ack failed", logger.Err(aerr))
+		}
 		metrics.EnricherJobsTotal.WithLabelValues("dropped").Inc()
 		stats.markDropped()
 		return
 	}
 
 	if reason := w.dropJob(result); reason != "" {
-		jobLog.Info("job dropped", logger.Str("drop_reason", reason))
+		jobLog.Info("job dropped", logger.Str(logger.FieldDropReason, reason))
 		w.markIrrelevant(ctx, fj.job.ID)
-		_ = fj.msg.Ack()
+		if aerr := fj.msg.Ack(); aerr != nil {
+			jobLog.Warn("msg ack failed", logger.Err(aerr))
+		}
 		metrics.EnricherJobsTotal.WithLabelValues("dropped").Inc()
 		stats.markDropped()
 		return
@@ -221,18 +228,22 @@ func (w *Worker) processResult(ctx context.Context, fj fetchedJob, result *llmdt
 	if err := w.pipeline.SaveEnrichedJob(ctx, input); err != nil {
 		jobLog.Error("save enriched job failed", err)
 		w.markError(ctx, fj.job.ID)
-		_ = fj.msg.Ack()
+		if aerr := fj.msg.Ack(); aerr != nil {
+			jobLog.Warn("msg ack failed", logger.Err(aerr))
+		}
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 		stats.markRouteFailure()
 		return
 	}
 
-	_ = fj.msg.Ack()
+	if aerr := fj.msg.Ack(); aerr != nil {
+		jobLog.Warn("msg ack failed", logger.Err(aerr))
+	}
 	metrics.EnricherJobsTotal.WithLabelValues("saved").Inc()
 	stats.markSaved()
 	jobLog.Debug("enriched and saved",
-		logger.Bool("role_match", result.RoleMatch),
-		logger.Int("tech_stack_count", len(result.TechStack)),
+		logger.Bool(logger.FieldRoleMatch, result.RoleMatch),
+		logger.Int(logger.FieldTechStackCount, len(result.TechStack)),
 	)
 }
 
@@ -295,7 +306,7 @@ func toEnrichedInput(job ats.RawJob, result *llmdto.JobPostEnrichResult) jobdto.
 func marshalContent(content ats.FetchJobContentResponse) (string, error) {
 	bytes, err := json.Marshal(content)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("json marshal FetchJobContentResponse: %w", err)
 	}
 	return string(bytes), nil
 }

@@ -77,7 +77,9 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.M
 	if err := json.Unmarshal(msg.Data(), &job); err != nil {
 		span.SetAttributes(attribute.String("outcome", "malformed"))
 		fetchLog.Warn("malformed message, terminating", logger.Err(err))
-		_ = msg.Term()
+		if terr := msg.Term(); terr != nil {
+			fetchLog.Warn("msg term failed", logger.Err(terr))
+		}
 		return fetchedJob{}, false
 	}
 
@@ -89,7 +91,7 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.M
 	retryCount := msg.DeliveryCount() - 1
 	jobLog := fetchLog.With(
 		logger.Str(logger.FieldJobID, job.ID),
-		logger.Str("adapter", job.Adapter),
+		logger.Str(logger.FieldAdapter, job.Adapter),
 		logger.Int(logger.FieldRetryCount, retryCount),
 	)
 	jobLog.Debug("fetching content")
@@ -99,12 +101,14 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.M
 	if job.LocationKnown && location.AnyNonUSA(analyzerMergedLocations(job)) {
 		span.SetAttributes(attribute.String("outcome", "non_usa_early"))
 		jobLog.Info("early reject: non-USA job (LocationKnown=true)",
-			logger.Str("location", job.Location),
-			logger.Bool("location_known", true),
+			logger.Str(logger.FieldLocation, job.Location),
+			logger.Bool(logger.FieldLocationKnown, true),
 		)
 		metrics.EnricherJobsTotal.WithLabelValues("non_usa").Inc()
 		w.markNonUSA(msgCtx, job.ID)
-		_ = msg.Ack()
+		if aerr := msg.Ack(); aerr != nil {
+			jobLog.Warn("msg ack failed", logger.Err(aerr))
+		}
 		return fetchedJob{}, false
 	}
 
@@ -155,18 +159,20 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.M
 		span.SetAttributes(attribute.String("outcome", "non_usa"))
 		jobLog.Info("rejecting non-USA job after location backfill",
 			logger.Str(logger.FieldJobID, job.ID),
-			logger.Str("location", job.Location),
-			logger.Str("country_code", content.CountryCode),
-			logger.Str("rejected_by", rejectedBy),
+			logger.Str(logger.FieldLocation, job.Location),
+			logger.Str(logger.FieldCountryCode, content.CountryCode),
+			logger.Str(logger.FieldRejectedBy, rejectedBy),
 		)
 		metrics.EnricherJobsTotal.WithLabelValues("non_usa").Inc()
 		w.markNonUSA(msgCtx, job.ID)
-		_ = msg.Ack()
+		if aerr := msg.Ack(); aerr != nil {
+			jobLog.Warn("msg ack failed", logger.Err(aerr))
+		}
 		return fetchedJob{}, false
 	}
 
 	span.SetAttributes(attribute.String("outcome", "ok"))
-	jobLog.Debug("content fetched", logger.Int("description_bytes", len(content.Description)))
+	jobLog.Debug("content fetched", logger.Int(logger.FieldDescriptionBytes, len(content.Description)))
 	return fetchedJob{
 		job:        job,
 		content:    content,
