@@ -121,7 +121,7 @@ func initInfra(ctx context.Context, cfg *config.Config, log logger.Logger) (*gor
 		return nil, nil, err
 	}
 
-	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.Ping(database) })
+	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.PoolReady(database) })
 
 	nc, njs, err := js.Connect(js.Config{URL: cfg.NATS.URL, CredsFile: cfg.NATS.CredsFile})
 	if err != nil {
