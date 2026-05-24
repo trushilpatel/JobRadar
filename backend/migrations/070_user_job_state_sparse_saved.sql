@@ -25,24 +25,26 @@ UPDATE user_job_state
  WHERE status = 'saved'
    AND saved_at IS NULL;
 
--- 2. Convert status='saved' to status=NULL. The new model treats saved as
---    orthogonal to workflow stage; saved_at carries the signal.
-UPDATE user_job_state
-   SET status = NULL
- WHERE status = 'saved';
-
--- 3. Drop the legacy partial indexes that filtered on status='saved' / status='applied'.
---    They would survive the conversion but be empty (for saved) or unnecessarily
---    narrow. The replacements below cover both columns directly.
+-- 2. Drop the legacy partial indexes BEFORE relaxing the schema so we don't
+--    leave stale indexes behind. They reference status='saved' / status='applied'.
 DROP INDEX IF EXISTS idx_user_job_state_saved;
 DROP INDEX IF EXISTS idx_user_job_state_applied;
 
--- 4. Drop NOT NULL and the legacy CHECK that still listed 'saved'.
+-- 3. Drop NOT NULL and the legacy CHECK BEFORE we try to write NULL into
+--    status — the constraint must be relaxed first or the UPDATE in step 4
+--    violates NOT NULL.
 ALTER TABLE user_job_state
     DROP CONSTRAINT IF EXISTS user_job_state_status_check;
 
 ALTER TABLE user_job_state
     ALTER COLUMN status DROP NOT NULL;
+
+-- 4. Convert status='saved' to status=NULL. The new model treats saved as
+--    orthogonal to workflow stage; saved_at carries the signal. This MUST
+--    come after the NOT NULL drop above.
+UPDATE user_job_state
+   SET status = NULL
+ WHERE status = 'saved';
 
 -- 5. Recreate the status CHECK without 'saved'. NULL is allowed.
 ALTER TABLE user_job_state
