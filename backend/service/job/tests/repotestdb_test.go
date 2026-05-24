@@ -38,6 +38,7 @@ func newJobTestDB(t *testing.T) *gorm.DB {
 		&companymodel.Company{},
 		&jobmodel.Job{},
 		&jobmodel.UserJobState{},
+		&jobmodel.UserJobCounters{},
 		&jobmodel.JobSeenLedger{},
 		&jobmodel.JobSnapshot{},
 		&jobmodel.JobTechTag{},

@@ -122,12 +122,21 @@ func (v *validationService) Dismiss(ctx context.Context, id string, reason, note
 
 // SetStatus validates the status value before delegating. "new" is
 // rejected because it is not a writable status (delete the row instead).
+// "saved" is rejected because saved is orthogonal to workflow status and
+// must go through the dedicated SetSaved path.
 func (v *validationService) SetStatus(ctx context.Context, id, status string) error {
+	if status == jobcommon.JobStatusSaved {
+		return errors.ValidationErrors{{
+			Field:   "status",
+			Code:    "INVALID_VALUE",
+			Message: "'saved' is not a workflow status; use the save endpoint",
+		}}
+	}
 	if status == jobcommon.JobStatusNew || !validJobStatuses[status] {
 		return errors.ValidationErrors{{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
-			Message: "status must be one of: saved, applied, interviewing, offer, dismissed, rejected",
+			Message: "status must be one of: applied, interviewing, offer, dismissed, rejected",
 		}}
 	}
 	return v.next.SetStatus(ctx, id, status)

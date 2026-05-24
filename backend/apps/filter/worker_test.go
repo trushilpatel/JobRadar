@@ -201,7 +201,7 @@ func TestProcessChunk_AllRelevant(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), makeBatch(
+	_ = w.processChunk(context.Background(), makeBatch(
 		makeJob("job-1"), makeJob("job-2"), makeJob("job-3"),
 	), "fetch-1", 0, 1)
 
@@ -225,7 +225,7 @@ func TestProcessChunk_PartialRelevant(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), makeBatch(
+	_ = w.processChunk(context.Background(), makeBatch(
 		makeJob("job-1"), makeJob("job-2"), makeJob("job-3"),
 	), "fetch-1", 0, 1)
 
@@ -273,7 +273,7 @@ func TestProcessChunk_ScorerError_RoutesToRetry(t *testing.T) {
 
 	item1, state1 := makeChunkItem(makeJob("job-1"), 1)
 	item2, state2 := makeChunkItem(makeJob("job-2"), 1)
-	w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-1", 0, 1)
 
 	if !state1.Naked || !state2.Naked {
 		t.Errorf("expected both jobs Nak'd: job-1 naked=%v, job-2 naked=%v", state1.Naked, state2.Naked)
@@ -316,7 +316,7 @@ func TestProcessChunk_ScorerError_ExhaustedGoesToDLQ(t *testing.T) {
 	w := makeWorker(scorer, ledger, pub)
 	item1, state1 := makeChunkItem(makeJob("job-1"), filterMaxRetries+1)
 	item2, state2 := makeChunkItem(makeJob("job-2"), filterMaxRetries+1)
-	w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-1", 0, 1)
 
 	if !state1.Termed || !state2.Termed {
 		t.Errorf("expected both jobs Term'd: job-1 termed=%v, job-2 termed=%v", state1.Termed, state2.Termed)
@@ -344,7 +344,7 @@ func TestProcessChunk_ValidationErrorGoesStraightToDLQ(t *testing.T) {
 	w := makeWorker(scorer, ledger, pub)
 	item1, state1 := makeChunkItem(makeJob("job-1"), 1)
 	item2, state2 := makeChunkItem(makeJob("job-2"), 1)
-	w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-1", 0, 1)
 
 	if !state1.Termed || !state2.Termed {
 		t.Errorf("expected both jobs Term'd for validation error")
@@ -369,7 +369,7 @@ func TestProcessChunk_MixedRetryCounts(t *testing.T) {
 	w := makeWorker(scorer, ledger, pub)
 	itemA, stateA := makeChunkItem(makeJob("job-a"), 1)                  // retryCount=0
 	itemB, stateB := makeChunkItem(makeJob("job-b"), filterMaxRetries+1) // retryCount=filterMaxRetries
-	w.processChunk(context.Background(), []chunkItem{itemA, itemB}, "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{itemA, itemB}, "fetch-1", 0, 1)
 
 	if !stateA.Naked {
 		t.Errorf("job-a: expected Nak'd (within budget), got acked=%v termed=%v", stateA.Acked, stateA.Termed)
@@ -402,7 +402,7 @@ func TestProcessChunk_UpdateRetryBatchFailure(t *testing.T) {
 
 	w := makeWorker(scorer, ledger, pub)
 	item, state := makeChunkItem(makeJob("job-1"), 1)
-	w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
 
 	if !state.Naked {
 		t.Errorf("expected job Nak'd even when ledger write fails")
@@ -415,7 +415,7 @@ func TestProcessChunk_EmptyBatch(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), makeBatch(), "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), makeBatch(), "fetch-1", 0, 1)
 
 	if scorer.calls != 0 {
 		t.Errorf("expected scorer not called on empty batch, got %d", scorer.calls)

@@ -147,13 +147,12 @@ func TestValidate_List_ExperienceRanges(t *testing.T) {
 	}
 }
 
-// TestValidate_SetStatus_AllValidStatuses asserts every writable status
-// passes. Catches a regression where adding a new constant doesn't make it
-// into the validator whitelist.
+// TestValidate_SetStatus_AllValidStatuses asserts every writable workflow
+// status passes. 'saved' and 'new' are NOT writable workflow statuses and
+// are rejected by the validator (saved goes through SetSaved instead).
 func TestValidate_SetStatus_AllValidStatuses(t *testing.T) {
 	v := newValidator()
 	allowed := []string{
-		jobcommon.JobStatusSaved,
 		jobcommon.JobStatusApplied,
 		jobcommon.JobStatusDismissed,
 		jobcommon.JobStatusInterviewing,
@@ -167,13 +166,31 @@ func TestValidate_SetStatus_AllValidStatuses(t *testing.T) {
 			}
 		})
 	}
-	rejected := []string{"", "garbage", "NEW", "Saved"}
+	rejected := []string{"", "garbage", "NEW", "Saved", jobcommon.JobStatusSaved, jobcommon.JobStatusNew}
 	for _, s := range rejected {
 		t.Run("reject "+s, func(t *testing.T) {
 			if err := v.SetStatus(context.Background(), "j1", s); err == nil {
 				t.Errorf("status=%q must be rejected", s)
 			}
 		})
+	}
+}
+
+// TestValidate_SetStatus_RejectsSaved — 'saved' is not a workflow status;
+// the validator rejects it so callers route through SetSaved instead.
+func TestValidate_SetStatus_RejectsSaved(t *testing.T) {
+	v := newValidator()
+	if err := v.SetStatus(context.Background(), "j1", jobcommon.JobStatusSaved); err == nil {
+		t.Fatal("'saved' must be rejected — use SetSaved instead")
+	}
+}
+
+// TestValidate_List_AcceptsSavedFilter — 'saved' IS a valid filter/tab key
+// (the impl routes it to GetJobsByStatus → saved_at IS NOT NULL).
+func TestValidate_List_AcceptsSavedFilter(t *testing.T) {
+	v := newValidator()
+	if _, err := v.List(context.Background(), jobdto.JobFilter{Status: jobcommon.JobStatusSaved}, "", 20); err != nil {
+		t.Fatalf("saved must be a valid list filter: %v", err)
 	}
 }
 

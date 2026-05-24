@@ -27,8 +27,10 @@ func TestUserJobStateRepo_Get_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get err = %v", err)
 	}
-	if got.Status != jobmodel.StatusSaved {
-		t.Errorf("status = %q, want saved", got.Status)
+	// Sparse model: Upsert with Status="saved" sets saved_at; it does NOT
+	// store 'saved' in the status column ('saved' is filter-only).
+	if got.Status != nil {
+		t.Errorf("status = %q, want nil (saved is orthogonal, not stored)", *got.Status)
 	}
 	if got.SavedAt == nil {
 		t.Errorf("SavedAt not populated")
@@ -85,10 +87,11 @@ func TestUserJobStateRepo_GetMany_KeyedByJobID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMany err = %v", err)
 	}
-	if out["j1"] == nil || out["j1"].Status != jobmodel.StatusSaved {
-		t.Errorf("j1 = %+v", out["j1"])
+	// Sparse model: "save" upserts saved_at; status stays NULL.
+	if out["j1"] == nil || out["j1"].SavedAt == nil {
+		t.Errorf("j1 should have saved_at set: %+v", out["j1"])
 	}
-	if out["j3"] == nil || out["j3"].Status != jobmodel.StatusApplied {
+	if out["j3"] == nil || out["j3"].StatusOrEmpty() != jobmodel.StatusApplied {
 		t.Errorf("j3 = %+v", out["j3"])
 	}
 	if out["j2"] != nil {
@@ -173,8 +176,8 @@ func TestUserJobStateRepo_Upsert_StatusFlipPreservesPriorTimestamps(t *testing.T
 	if second.AppliedAt == nil {
 		t.Errorf("applied_at nil after apply")
 	}
-	if second.Status != jobmodel.StatusApplied {
-		t.Errorf("status = %q, want applied", second.Status)
+	if second.StatusOrEmpty() != jobmodel.StatusApplied {
+		t.Errorf("status = %q, want applied", second.StatusOrEmpty())
 	}
 }
 
@@ -264,8 +267,8 @@ func TestUserJobStateRepo_UpsertBulkDismiss_NewRows(t *testing.T) {
 		t.Fatalf("len = %d, want 2", len(out))
 	}
 	for id, row := range out {
-		if row.Status != jobmodel.StatusDismissed {
-			t.Errorf("%s status = %q, want dismissed", id, row.Status)
+		if row.StatusOrEmpty() != jobmodel.StatusDismissed {
+			t.Errorf("%s status = %q, want dismissed", id, row.StatusOrEmpty())
 		}
 		if row.DismissedAt == nil {
 			t.Errorf("%s dismissed_at nil", id)
@@ -329,29 +332,49 @@ func TestUserJobStateRepo_Delete_NonExistent(t *testing.T) {
 	}
 }
 
-// TestUserJobStateRepo_CountsByUser groups rows by status. Statuses not
-// represented stay zero. Verifies every branch in the switch.
+// TestUserJobStateRepo_CountsByUser exercises the sparse model:
+//   - Saved is ORTHOGONAL — rows with saved_at != NULL count toward Saved
+//     regardless of workflow status. Saved is NEVER a stored status.
+//   - Workflow statuses (applied/interviewing/offer/rejected/dismissed)
+//     count via the status column.
 func TestUserJobStateRepo_CountsByUser(t *testing.T) {
 	t.Parallel()
 	db := newJobTestDB(t)
 	seedCompany(t, db, "c1", "Acme")
 	now := time.Now()
-	for i, st := range []string{
-		jobmodel.StatusSaved, jobmodel.StatusSaved, jobmodel.StatusSaved, // 3 saved
-		jobmodel.StatusApplied, jobmodel.StatusApplied, // 2 applied
-		jobmodel.StatusDismissed, // 1 dismissed
-		jobmodel.StatusInterviewing,
-		jobmodel.StatusOffer,
-		jobmodel.StatusRejected,
-	} {
+
+	// Local helper — workflow status as *string (sparse model).
+	statusPtr := func(s string) *string { return &s }
+
+	type seed struct {
+		status  *string
+		savedAt *time.Time
+	}
+	saved := &now
+	seeds := []seed{
+		// 3 saved-only rows (orthogonal — no workflow status)
+		{nil, saved}, {nil, saved}, {nil, saved},
+		// 2 applied
+		{statusPtr(jobmodel.StatusApplied), nil},
+		{statusPtr(jobmodel.StatusApplied), nil},
+		// 1 dismissed
+		{statusPtr(jobmodel.StatusDismissed), nil},
+		// 1 each of interviewing / offer / rejected
+		{statusPtr(jobmodel.StatusInterviewing), nil},
+		{statusPtr(jobmodel.StatusOffer), nil},
+		{statusPtr(jobmodel.StatusRejected), nil},
+	}
+
+	for i, s := range seeds {
 		jid := jobID(i)
 		seedJob(t, db, jid, "c1", "T", "p", now)
 		if err := db.Create(&jobmodel.UserJobState{
-			UserID: "u1", JobID: jid, Status: st,
+			UserID: "u1", JobID: jid, Status: s.status, SavedAt: s.savedAt,
 		}).Error; err != nil {
 			t.Fatalf("seed %d: %v", i, err)
 		}
 	}
+
 	repo := jobsvc.NewUserJobStateRepository(db)
 	counts, err := repo.CountsByUser(context.Background(), "u1")
 	if err != nil {
