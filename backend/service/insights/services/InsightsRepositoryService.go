@@ -74,16 +74,19 @@ func (s *repositoryService) Funnel(ctx context.Context) (_ []dto.FunnelStep, err
 		Dismissed int `gorm:"column:dismissed"`
 	}
 	// enriched = all-time total from job_analytics (append-only, survives dismissal).
-	// saved/applied/dismissed = current per-user-state distribution from user_job_state (source of truth post-migration 044).
-	// applied includes interviewing and offer — all stages beyond initial application.
+	// saved/applied/dismissed = current per-user-state distribution from user_job_state.
+	// Post-migration 070, saved is orthogonal to workflow status — saved_at IS NOT NULL
+	// is the source of truth, not status = 'saved'. The status column is nullable; only
+	// rows with status IS NOT NULL contribute to workflow stage counts.
+	// Applied includes interviewing and offer — all stages beyond initial application.
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT
 			(SELECT COUNT(*) FROM job_analytics)                                                       AS enriched,
-			COUNT(*) FILTER (WHERE status = ?)                                                         AS saved,
-			COUNT(*) FILTER (WHERE status IN (?, ?, ?))                                                AS applied,
-			COUNT(*) FILTER (WHERE status = ?)                                                         AS dismissed
+			COUNT(*) FILTER (WHERE saved_at IS NOT NULL)                                               AS saved,
+			COUNT(*) FILTER (WHERE status IS NOT NULL AND status IN (?, ?, ?))                         AS applied,
+			COUNT(*) FILTER (WHERE status IS NOT NULL AND status = ?)                                  AS dismissed
 		FROM user_job_state
-	`, jobcommon.JobStatusSaved,
+	`,
 		jobcommon.JobStatusApplied, jobcommon.JobStatusInterviewing, jobcommon.JobStatusOffer,
 		jobcommon.JobStatusDismissed).Scan(&result).Error
 	if err != nil {

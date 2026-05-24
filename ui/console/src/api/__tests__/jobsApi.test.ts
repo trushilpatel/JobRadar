@@ -236,16 +236,16 @@ describe('jobs API', () => {
   // ── setJobStatus ────────────────────────────────────────────────────────────
 
   describe('setJobStatus', () => {
-    it('calls PATCH /jobs/:id/status with correct body', async () => {
-      vi.mocked(apiClient.patch).mockResolvedValue(undefined)
-      await setJobStatus('job-1', JOB_STATUS.SAVED)
-      expect(apiClient.patch).toHaveBeenCalledWith('/jobs/job-1/status', { status: 'saved' })
-    })
-
     it('calls PATCH with applied status', async () => {
       vi.mocked(apiClient.patch).mockResolvedValue(undefined)
       await setJobStatus('job-2', JOB_STATUS.APPLIED)
       expect(apiClient.patch).toHaveBeenCalledWith('/jobs/job-2/status', { status: 'applied' })
+    })
+
+    it('calls PATCH with "new" to clear workflow status (saved_at preserved)', async () => {
+      vi.mocked(apiClient.patch).mockResolvedValue(undefined)
+      await setJobStatus('job-3', JOB_STATUS.NEW)
+      expect(apiClient.patch).toHaveBeenCalledWith('/jobs/job-3/status', { status: 'new' })
     })
   })
 

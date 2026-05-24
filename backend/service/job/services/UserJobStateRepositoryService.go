@@ -3,11 +3,13 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"gorm.io/gorm"
@@ -18,6 +20,11 @@ import (
 // user_job_state table. Every method takes userID explicitly; an empty
 // userID is rejected with ErrInternal.WithMessage("user id required") so
 // a forgotten ctx scoping never silently broadens a query to all users.
+//
+// Counter maintenance: every mutation updates user_job_counters atomically
+// in the same transaction. Reads short-circuit through the counter table;
+// when the counter row is missing, CountsByUser falls back to a GROUP BY
+// scan and seeds the counter row so subsequent reads are fast.
 type userJobStateRepository struct {
 	db *gorm.DB
 }
@@ -34,7 +41,7 @@ func errNoUser() error {
 }
 
 // Get returns the row for (userID, jobID), or nil + ErrNotFound if no row
-// exists (which means status is implicitly "new").
+// exists (which means the user has not interacted with this job).
 func (r *userJobStateRepository) Get(ctx context.Context, userID, jobID string) (_ *jobmodel.UserJobState, err error) {
 	ctx, span := tracing.Start(ctx, "job.userstate.Get")
 	defer tracing.End(span, &err)
@@ -50,7 +57,7 @@ func (r *userJobStateRepository) Get(ctx context.Context, userID, jobID string) 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, apperr.ErrNotFound.WithMessage("user_job_state not found")
 		}
-		return nil, err
+		return nil, fmt.Errorf("user_job_state get: %w", err)
 	}
 	return &row, nil
 }
@@ -72,7 +79,7 @@ func (r *userJobStateRepository) GetMany(ctx context.Context, userID string, job
 	if err = r.db.WithContext(ctx).
 		Where("user_id = ? AND job_id IN ?", userID, jobIDs).
 		Find(&rows).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("user_job_state get many: %w", err)
 	}
 	out := make(map[string]*jobmodel.UserJobState, len(rows))
 	for i := range rows {
@@ -81,10 +88,20 @@ func (r *userJobStateRepository) GetMany(ctx context.Context, userID string, job
 	return out, nil
 }
 
-// Upsert inserts or updates the row for (userID, jobID) using ON CONFLICT.
-// Status drives which timestamp column is set (saved_at / applied_at /
-// dismissed_at) — only the active-status timestamp is updated to NOW(),
-// the others retain their previous value.
+// Upsert inserts or updates the row for (userID, jobID) according to the
+// requested status. Semantics:
+//
+//   - state.Status == JobStatusSaved: set saved_at = NOW(); do NOT write to
+//     the status column. saved is orthogonal to the workflow status.
+//   - state.Status == JobStatusNew: clear the workflow status (status =
+//     NULL). Leaves saved_at unchanged.
+//   - state.Status is a workflow value (applied / dismissed / interviewing
+//     / offer / rejected): set status = X and the matching timestamp.
+//     Leaves saved_at unchanged.
+//
+// Counter maintenance runs in the same transaction. A read of the prior
+// row computes the delta; the new row is written; the counter row is
+// updated by delta.
 func (r *userJobStateRepository) Upsert(ctx context.Context, userID, jobID string, state dto.UpsertState) (err error) {
 	ctx, span := tracing.Start(ctx, "job.userstate.Upsert")
 	defer tracing.End(span, &err)
@@ -99,48 +116,168 @@ func (r *userJobStateRepository) Upsert(ctx context.Context, userID, jobID strin
 		return apperr.ErrBadRequest.WithMessage("status required")
 	}
 
-	now := time.Now()
-	row := jobmodel.UserJobState{
-		UserID:          userID,
-		JobID:           jobID,
-		Status:          state.Status,
-		Notes:           state.Notes,
-		DismissalReason: state.DismissalReason,
-		DismissalNote:   state.DismissalNote,
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		prior, err := loadPriorState(tx, userID, jobID)
+		if err != nil {
+			return err
+		}
+
+		now := time.Now()
+
+		// Decide which columns the upsert writes. saved is orthogonal to
+		// workflow status: JobStatusSaved touches saved_at only;
+		// JobStatusNew clears workflow status only; workflow values touch
+		// status + their timestamp.
+		row := jobmodel.UserJobState{
+			UserID:          userID,
+			JobID:           jobID,
+			Notes:           state.Notes,
+			DismissalReason: state.DismissalReason,
+			DismissalNote:   state.DismissalNote,
+		}
+
+		updateCols := []string{"updated_at"}
+		switch state.Status {
+		case jobcommon.JobStatusSaved:
+			// Orthogonal save — set saved_at, preserve any workflow status
+			// already on the row.
+			row.SavedAt = &now
+			if prior != nil {
+				row.Status = prior.Status
+			}
+			updateCols = append(updateCols, "saved_at")
+		case jobcommon.JobStatusNew:
+			// Clear workflow status; leave saved_at alone.
+			row.Status = nil
+			if prior != nil {
+				row.SavedAt = prior.SavedAt
+			}
+			updateCols = append(updateCols, "status")
+		case jobmodel.StatusApplied:
+			s := jobmodel.StatusApplied
+			row.Status = &s
+			row.AppliedAt = &now
+			if prior != nil {
+				row.SavedAt = prior.SavedAt
+			}
+			updateCols = append(updateCols, "status", "applied_at")
+		case jobmodel.StatusDismissed:
+			s := jobmodel.StatusDismissed
+			row.Status = &s
+			row.DismissedAt = &now
+			if prior != nil {
+				row.SavedAt = prior.SavedAt
+			}
+			updateCols = append(updateCols, "status", "dismissed_at", "dismissal_reason", "dismissal_note")
+		case jobmodel.StatusInterviewing, jobmodel.StatusOffer, jobmodel.StatusRejected:
+			s := state.Status
+			row.Status = &s
+			if prior != nil {
+				row.SavedAt = prior.SavedAt
+			}
+			updateCols = append(updateCols, "status")
+		default:
+			return apperr.ErrBadRequest.WithMessage("invalid status")
+		}
+		if state.Notes != nil {
+			updateCols = append(updateCols, "notes")
+		}
+
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}, {Name: "job_id"}},
+			DoUpdates: clause.AssignmentColumns(updateCols),
+		}).Create(&row).Error; err != nil {
+			return fmt.Errorf("user_job_state upsert: %w", err)
+		}
+
+		delta := counterDelta(priorSnapshot(prior), newSnapshot(prior, state.Status))
+		if !delta.zero() {
+			if err := applyCounterDelta(tx, userID, delta); err != nil {
+				return fmt.Errorf("user_job_counters update: %w", err)
+			}
+		}
+		return nil
+	})
+}
+
+// SetSaved is the orthogonal save/unsave path. saved=true sets saved_at to
+// NOW(); saved=false clears saved_at. The workflow status column is left
+// untouched. Idempotent — calling SetSaved(true) twice does not double-
+// increment the counter.
+func (r *userJobStateRepository) SetSaved(ctx context.Context, userID, jobID string, saved bool) (err error) {
+	ctx, span := tracing.Start(ctx, "job.userstate.SetSaved")
+	defer tracing.End(span, &err)
+
+	if userID == "" {
+		return errNoUser()
 	}
-	switch state.Status {
-	case jobmodel.StatusSaved:
-		row.SavedAt = &now
-	case jobmodel.StatusApplied:
-		row.AppliedAt = &now
-	case jobmodel.StatusDismissed:
-		row.DismissedAt = &now
+	if jobID == "" {
+		return apperr.ErrBadRequest.WithMessage("job id required")
 	}
 
-	// Build the column-set list explicitly so we never overwrite an
-	// already-populated timestamp column with NULL on a status flip.
-	updateCols := []string{"status", "updated_at"}
-	switch state.Status {
-	case jobmodel.StatusSaved:
-		updateCols = append(updateCols, "saved_at")
-	case jobmodel.StatusApplied:
-		updateCols = append(updateCols, "applied_at")
-	case jobmodel.StatusDismissed:
-		updateCols = append(updateCols, "dismissed_at", "dismissal_reason", "dismissal_note")
-	}
-	if state.Notes != nil {
-		updateCols = append(updateCols, "notes")
-	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		prior, err := loadPriorState(tx, userID, jobID)
+		if err != nil {
+			return err
+		}
 
-	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "user_id"}, {Name: "job_id"}},
-		DoUpdates: clause.AssignmentColumns(updateCols),
-	}).Create(&row).Error
+		wasSaved := prior != nil && prior.SavedAt != nil
+		// Idempotent — no-op when the requested state already matches.
+		if saved && wasSaved {
+			return nil
+		}
+		if !saved && prior == nil {
+			return nil
+		}
+
+		if saved {
+			now := time.Now()
+			row := jobmodel.UserJobState{
+				UserID:  userID,
+				JobID:   jobID,
+				SavedAt: &now,
+			}
+			if prior != nil {
+				row.Status = prior.Status
+			}
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "user_id"}, {Name: "job_id"}},
+				DoUpdates: clause.AssignmentColumns([]string{"saved_at", "updated_at"}),
+			}).Create(&row).Error; err != nil {
+				return fmt.Errorf("user_job_state set saved: %w", err)
+			}
+			if err := applyCounterDelta(tx, userID, counterChange{savedDelta: 1}); err != nil {
+				return fmt.Errorf("user_job_counters increment saved: %w", err)
+			}
+			return nil
+		}
+
+		// saved=false — clear saved_at. If the row has no other meaningful
+		// field, delete it entirely so the non_empty CHECK constraint is
+		// not violated and the row count stays sparse.
+		if rowIsMeaningfulWithoutSaved(prior) {
+			if err := tx.Model(&jobmodel.UserJobState{}).
+				Where("user_id = ? AND job_id = ?", userID, jobID).
+				Updates(map[string]any{"saved_at": nil, "updated_at": time.Now()}).Error; err != nil {
+				return fmt.Errorf("user_job_state clear saved: %w", err)
+			}
+		} else {
+			if err := tx.Where("user_id = ? AND job_id = ?", userID, jobID).
+				Delete(&jobmodel.UserJobState{}).Error; err != nil {
+				return fmt.Errorf("user_job_state delete empty: %w", err)
+			}
+		}
+		if err := applyCounterDelta(tx, userID, counterChange{savedDelta: -1}); err != nil {
+			return fmt.Errorf("user_job_counters decrement saved: %w", err)
+		}
+		return nil
+	})
 }
 
 // UpsertBulkDismiss writes (or updates) one row per jobID with
-// status='dismissed', the same reason+note, and dismissed_at=NOW(). All
-// rows are written in a single CreateInBatches call wrapped in ON CONFLICT.
+// status='dismissed', the same reason+note, and dismissed_at=NOW(). The
+// counter delta is computed from the prior state of each row so a job that
+// was already dismissed does not double-count.
 func (r *userJobStateRepository) UpsertBulkDismiss(ctx context.Context, userID string, jobIDs []string, reason, note string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.userstate.UpsertBulkDismiss")
 	defer tracing.End(span, &err)
@@ -151,34 +288,70 @@ func (r *userJobStateRepository) UpsertBulkDismiss(ctx context.Context, userID s
 	if len(jobIDs) == 0 {
 		return nil
 	}
-	now := time.Now()
-	var notePtr *string
-	if note != "" {
-		notePtr = &note
-	}
-	reasonPtr := &reason
 
-	rows := make([]jobmodel.UserJobState, len(jobIDs))
-	for i, id := range jobIDs {
-		rows[i] = jobmodel.UserJobState{
-			UserID:          userID,
-			JobID:           id,
-			Status:          jobmodel.StatusDismissed,
-			DismissedAt:     &now,
-			DismissalReason: reasonPtr,
-			DismissalNote:   notePtr,
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Read the prior state for every target row so the counter delta
+		// is exact (a job already-dismissed contributes 0, not +1).
+		var priorRows []jobmodel.UserJobState
+		if err := tx.Where("user_id = ? AND job_id IN ?", userID, jobIDs).
+			Find(&priorRows).Error; err != nil {
+			return fmt.Errorf("user_job_state bulk prior read: %w", err)
 		}
-	}
-	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "user_id"}, {Name: "job_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"status", "dismissed_at", "dismissal_reason", "dismissal_note", "updated_at",
-		}),
-	}).CreateInBatches(rows, 500).Error
+		priorByJob := make(map[string]*jobmodel.UserJobState, len(priorRows))
+		for i := range priorRows {
+			priorByJob[priorRows[i].JobID] = &priorRows[i]
+		}
+
+		now := time.Now()
+		dismissed := jobmodel.StatusDismissed
+		var notePtr *string
+		if note != "" {
+			notePtr = &note
+		}
+		reasonPtr := &reason
+
+		rows := make([]jobmodel.UserJobState, 0, len(jobIDs))
+		var total counterChange
+		for _, id := range jobIDs {
+			row := jobmodel.UserJobState{
+				UserID:          userID,
+				JobID:           id,
+				Status:          &dismissed,
+				DismissedAt:     &now,
+				DismissalReason: reasonPtr,
+				DismissalNote:   notePtr,
+			}
+			if prior, ok := priorByJob[id]; ok && prior != nil {
+				row.SavedAt = prior.SavedAt
+			}
+			rows = append(rows, row)
+			total = total.add(counterDelta(
+				priorSnapshot(priorByJob[id]),
+				newSnapshot(priorByJob[id], jobmodel.StatusDismissed),
+			))
+		}
+
+		if err := tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "user_id"}, {Name: "job_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"status", "dismissed_at", "dismissal_reason", "dismissal_note", "updated_at",
+			}),
+		}).CreateInBatches(rows, 500).Error; err != nil {
+			return fmt.Errorf("user_job_state bulk dismiss: %w", err)
+		}
+
+		if !total.zero() {
+			if err := applyCounterDelta(tx, userID, total); err != nil {
+				return fmt.Errorf("user_job_counters bulk dismiss: %w", err)
+			}
+		}
+		return nil
+	})
 }
 
-// Delete removes the row for (userID, jobID). Used to clear a job's per-
-// user state — equivalent to setting status back to "new".
+// Delete removes the row for (userID, jobID). The counter delta is the
+// negative of the prior row's contribution so saved/applied/etc. counts
+// stay in sync with the table.
 func (r *userJobStateRepository) Delete(ctx context.Context, userID, jobID string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.userstate.Delete")
 	defer tracing.End(span, &err)
@@ -186,14 +359,31 @@ func (r *userJobStateRepository) Delete(ctx context.Context, userID, jobID strin
 	if userID == "" {
 		return errNoUser()
 	}
-	return r.db.WithContext(ctx).
-		Where("user_id = ? AND job_id = ?", userID, jobID).
-		Delete(&jobmodel.UserJobState{}).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		prior, err := loadPriorState(tx, userID, jobID)
+		if err != nil {
+			return err
+		}
+		if prior == nil {
+			return nil // nothing to delete, no counter change
+		}
+		if err := tx.Where("user_id = ? AND job_id = ?", userID, jobID).
+			Delete(&jobmodel.UserJobState{}).Error; err != nil {
+			return fmt.Errorf("user_job_state delete: %w", err)
+		}
+		delta := counterChange{}.sub(priorSnapshot(prior))
+		if !delta.zero() {
+			if err := applyCounterDelta(tx, userID, delta); err != nil {
+				return fmt.Errorf("user_job_counters delete: %w", err)
+			}
+		}
+		return nil
+	})
 }
 
-// CountsByUser returns the number of rows in each saved/applied/dismissed
-// bucket for the given user. "New" is computed by the caller (it is the
-// absence of a row, not a stored value).
+// CountsByUser returns the cached per-user counts from user_job_counters.
+// Falls back to a GROUP BY recompute (and seeds the counter row) if no row
+// exists for the user yet.
 func (r *userJobStateRepository) CountsByUser(ctx context.Context, userID string) (_ dto.Counts, err error) {
 	ctx, span := tracing.Start(ctx, "job.userstate.CountsByUser")
 	defer tracing.End(span, &err)
@@ -201,40 +391,44 @@ func (r *userJobStateRepository) CountsByUser(ctx context.Context, userID string
 	if userID == "" {
 		return dto.Counts{}, errNoUser()
 	}
-	var rows []dto.CountsRow
+
+	var counter jobmodel.UserJobCounters
 	err = r.db.WithContext(ctx).
-		Raw(`SELECT status, COUNT(*) AS count
-		     FROM user_job_state
-		     WHERE user_id = ?
-		     GROUP BY status`, userID).
-		Scan(&rows).Error
+		Where("user_id = ?", userID).
+		First(&counter).Error
+	if err == nil {
+		return dto.Counts{
+			Saved:        counter.SavedCount,
+			Applied:      counter.AppliedCount,
+			Interviewing: counter.InterviewingCount,
+			Offer:        counter.OfferCount,
+			Rejected:     counter.RejectedCount,
+			Dismissed:    counter.DismissedCount,
+		}, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return dto.Counts{}, fmt.Errorf("user_job_counters read: %w", err)
+	}
+
+	// Fallback — recompute from user_job_state and seed the counter row so
+	// future reads are O(1).
+	counts, err := recomputeCounts(ctx, r.db, userID)
 	if err != nil {
 		return dto.Counts{}, err
 	}
-	out := dto.Counts{}
-	for _, r := range rows {
-		switch r.Status {
-		case jobmodel.StatusSaved:
-			out.Saved = r.Count
-		case jobmodel.StatusApplied:
-			out.Applied = r.Count
-		case jobmodel.StatusDismissed:
-			out.Dismissed = r.Count
-		case jobmodel.StatusInterviewing:
-			out.Interviewing = r.Count
-		case jobmodel.StatusOffer:
-			out.Offer = r.Count
-		case jobmodel.StatusRejected:
-			out.Rejected = r.Count
-		}
-	}
-	return out, nil
+	// Seeding failure is non-fatal — the counts are still correct for this
+	// call; the next call will retry the seed.
+	_ = seedCounter(ctx, r.db, userID, counts)
+	return counts, nil
 }
 
 // GetJobsByStatus returns up to limit jobs for userID with the requested status,
 // honouring all additional filter criteria in filter (search, companies, date,
 // experience range, remote/on-site). Drives from user_job_state so every page
 // is a full limit-sized result set. Cursor format matches GetJobs.
+//
+// Status "saved" joins on saved_at IS NOT NULL (orthogonal flag); other
+// workflow values join on ujs.status = ? AND ujs.status IS NOT NULL.
 func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID string, filter dto.JobFilter, cursor string, limit int) (_ []jobmodel.Job, _ string, err error) {
 	ctx, span := tracing.Start(ctx, "job.userstate.GetJobsByStatus")
 	defer tracing.End(span, &err)
@@ -250,8 +444,20 @@ func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID str
 
 	query := r.db.WithContext(ctx).
 		Model(&jobmodel.Job{}).
-		Joins("Company").
-		Joins("INNER JOIN user_job_state ujs ON ujs.job_id = jobs.id AND ujs.user_id = ? AND ujs.status = ?", userID, filter.Status)
+		Joins("Company")
+
+	switch filter.Status {
+	case jobcommon.JobStatusSaved:
+		query = query.Joins(
+			"INNER JOIN user_job_state ujs ON ujs.job_id = jobs.id AND ujs.user_id = ? AND ujs.saved_at IS NOT NULL",
+			userID,
+		)
+	default:
+		query = query.Joins(
+			"INNER JOIN user_job_state ujs ON ujs.job_id = jobs.id AND ujs.user_id = ? AND ujs.status = ? AND ujs.status IS NOT NULL",
+			userID, filter.Status,
+		)
+	}
 
 	query = applyCursorPredicate(query, p)
 
@@ -314,7 +520,7 @@ func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID str
 
 	var jobs []jobmodel.Job
 	if err = query.Order(sortOrderClause(filter.SortBy, filter.SortDir)).Limit(limit + 1).Find(&jobs).Error; err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("user_job_state get jobs by status: %w", err)
 	}
 
 	var next string
@@ -323,4 +529,289 @@ func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID str
 		jobs = jobs[:limit]
 	}
 	return jobs, next, nil
+}
+
+// -----------------------------------------------------------------------------
+// Counter machinery
+//
+// counterSnapshot represents the buckets a single row contributes to. The
+// snapshot is taken before and after a write; the delta drives the counter
+// table update. Saved is orthogonal to the workflow status, so a row can
+// contribute to multiple buckets simultaneously.
+// -----------------------------------------------------------------------------
+
+type counterSnapshot struct {
+	saved        bool
+	applied      bool
+	interviewing bool
+	offer        bool
+	rejected     bool
+	dismissed    bool
+}
+
+// priorSnapshot derives the bucket flags from an existing UserJobState row.
+// nil prior contributes nothing.
+func priorSnapshot(prior *jobmodel.UserJobState) counterSnapshot {
+	if prior == nil {
+		return counterSnapshot{}
+	}
+	s := counterSnapshot{saved: prior.SavedAt != nil}
+	switch prior.StatusOrEmpty() {
+	case jobmodel.StatusApplied:
+		s.applied = true
+	case jobmodel.StatusInterviewing:
+		s.interviewing = true
+	case jobmodel.StatusOffer:
+		s.offer = true
+	case jobmodel.StatusRejected:
+		s.rejected = true
+	case jobmodel.StatusDismissed:
+		s.dismissed = true
+	}
+	return s
+}
+
+// newSnapshot derives the bucket flags for the post-write row given the
+// prior row (for saved_at and workflow-status preservation) and the
+// requested status.
+func newSnapshot(prior *jobmodel.UserJobState, status string) counterSnapshot {
+	s := counterSnapshot{}
+	// Saved is preserved across status-only writes; freshly set on Save.
+	if status == jobcommon.JobStatusSaved {
+		s.saved = true
+	} else if prior != nil && prior.SavedAt != nil {
+		s.saved = true
+	}
+	switch status {
+	case jobcommon.JobStatusSaved:
+		// Workflow status is unchanged — inherit prior workflow bucket.
+		if prior != nil {
+			switch prior.StatusOrEmpty() {
+			case jobmodel.StatusApplied:
+				s.applied = true
+			case jobmodel.StatusInterviewing:
+				s.interviewing = true
+			case jobmodel.StatusOffer:
+				s.offer = true
+			case jobmodel.StatusRejected:
+				s.rejected = true
+			case jobmodel.StatusDismissed:
+				s.dismissed = true
+			}
+		}
+	case jobcommon.JobStatusNew:
+		// Clears workflow status — workflow bucket is empty.
+	case jobmodel.StatusApplied:
+		s.applied = true
+	case jobmodel.StatusInterviewing:
+		s.interviewing = true
+	case jobmodel.StatusOffer:
+		s.offer = true
+	case jobmodel.StatusRejected:
+		s.rejected = true
+	case jobmodel.StatusDismissed:
+		s.dismissed = true
+	}
+	return s
+}
+
+// counterChange holds the per-bucket delta to apply to user_job_counters.
+type counterChange struct {
+	savedDelta        int
+	appliedDelta      int
+	interviewingDelta int
+	offerDelta        int
+	rejectedDelta     int
+	dismissedDelta    int
+}
+
+func (c counterChange) zero() bool {
+	return c.savedDelta == 0 && c.appliedDelta == 0 && c.interviewingDelta == 0 &&
+		c.offerDelta == 0 && c.rejectedDelta == 0 && c.dismissedDelta == 0
+}
+
+func (c counterChange) add(o counterChange) counterChange {
+	c.savedDelta += o.savedDelta
+	c.appliedDelta += o.appliedDelta
+	c.interviewingDelta += o.interviewingDelta
+	c.offerDelta += o.offerDelta
+	c.rejectedDelta += o.rejectedDelta
+	c.dismissedDelta += o.dismissedDelta
+	return c
+}
+
+// sub subtracts a snapshot's contributions from the change. Used by Delete
+// to express "row contributed +1 to bucket X; removing it deltas -1".
+func (c counterChange) sub(s counterSnapshot) counterChange {
+	if s.saved {
+		c.savedDelta--
+	}
+	if s.applied {
+		c.appliedDelta--
+	}
+	if s.interviewing {
+		c.interviewingDelta--
+	}
+	if s.offer {
+		c.offerDelta--
+	}
+	if s.rejected {
+		c.rejectedDelta--
+	}
+	if s.dismissed {
+		c.dismissedDelta--
+	}
+	return c
+}
+
+// counterDelta computes the change required to go from `prior` to `next`.
+func counterDelta(prior, next counterSnapshot) counterChange {
+	c := counterChange{}
+	c.savedDelta += boolDelta(next.saved, prior.saved)
+	c.appliedDelta += boolDelta(next.applied, prior.applied)
+	c.interviewingDelta += boolDelta(next.interviewing, prior.interviewing)
+	c.offerDelta += boolDelta(next.offer, prior.offer)
+	c.rejectedDelta += boolDelta(next.rejected, prior.rejected)
+	c.dismissedDelta += boolDelta(next.dismissed, prior.dismissed)
+	return c
+}
+
+func boolDelta(next, prior bool) int {
+	switch {
+	case next && !prior:
+		return 1
+	case !next && prior:
+		return -1
+	default:
+		return 0
+	}
+}
+
+// applyCounterDelta applies a counter change to user_job_counters,
+// inserting a zero row first if none exists. All deltas are clamped at 0
+// to respect the CHECK (>= 0) constraint via MAX(col + delta, 0).
+func applyCounterDelta(tx *gorm.DB, userID string, delta counterChange) error {
+	// Ensure a row exists. ON CONFLICT DO NOTHING — first writer wins.
+	zero := jobmodel.UserJobCounters{UserID: userID}
+	if err := tx.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}},
+		DoNothing: true,
+	}).Create(&zero).Error; err != nil {
+		return fmt.Errorf("ensure counter row: %w", err)
+	}
+
+	// MAX(col + delta, 0) clamps each counter at zero so transient deltas
+	// can never violate the CHECK (>= 0) constraint. Both Postgres and
+	// sqlite implement MAX as a scalar function in this form.
+	res := tx.Exec(`
+		UPDATE user_job_counters
+		   SET saved_count        = MAX(saved_count + ?, 0),
+		       applied_count      = MAX(applied_count + ?, 0),
+		       interviewing_count = MAX(interviewing_count + ?, 0),
+		       offer_count        = MAX(offer_count + ?, 0),
+		       rejected_count     = MAX(rejected_count + ?, 0),
+		       dismissed_count    = MAX(dismissed_count + ?, 0),
+		       updated_at         = ?
+		 WHERE user_id = ?`,
+		delta.savedDelta, delta.appliedDelta, delta.interviewingDelta,
+		delta.offerDelta, delta.rejectedDelta, delta.dismissedDelta,
+		time.Now(), userID)
+	if res.Error != nil {
+		return fmt.Errorf("apply counter delta: %w", res.Error)
+	}
+	return nil
+}
+
+// loadPriorState reads the existing (userID, jobID) row for use in delta
+// computations. Returns nil + nil error when no row exists.
+func loadPriorState(tx *gorm.DB, userID, jobID string) (*jobmodel.UserJobState, error) {
+	var row jobmodel.UserJobState
+	err := tx.Where("user_id = ? AND job_id = ?", userID, jobID).First(&row).Error
+	if err == nil {
+		return &row, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return nil, fmt.Errorf("load prior state: %w", err)
+}
+
+// rowIsMeaningfulWithoutSaved decides whether clearing saved_at would
+// leave a meaningful row. The non_empty_check CHECK constraint requires at
+// least one populated field; drop the row when nothing else remains.
+func rowIsMeaningfulWithoutSaved(s *jobmodel.UserJobState) bool {
+	if s == nil {
+		return false
+	}
+	if s.Status != nil {
+		return true
+	}
+	if s.AppliedAt != nil || s.DismissedAt != nil {
+		return true
+	}
+	if s.Notes != nil || s.DismissalReason != nil || s.DismissalNote != nil {
+		return true
+	}
+	return false
+}
+
+// recomputeCounts scans user_job_state and returns the per-bucket totals.
+// Used by CountsByUser as a fallback when no counter row exists yet.
+func recomputeCounts(ctx context.Context, db *gorm.DB, userID string) (dto.Counts, error) {
+	var saved int64
+	if err := db.WithContext(ctx).
+		Model(&jobmodel.UserJobState{}).
+		Where("user_id = ? AND saved_at IS NOT NULL", userID).
+		Count(&saved).Error; err != nil {
+		return dto.Counts{}, fmt.Errorf("counts recompute saved: %w", err)
+	}
+
+	var rows []dto.CountsRow
+	if err := db.WithContext(ctx).
+		Raw(`SELECT status, COUNT(*) AS count
+		     FROM user_job_state
+		     WHERE user_id = ? AND status IS NOT NULL
+		     GROUP BY status`, userID).
+		Scan(&rows).Error; err != nil {
+		return dto.Counts{}, fmt.Errorf("counts recompute workflow: %w", err)
+	}
+	out := dto.Counts{Saved: saved}
+	for _, r := range rows {
+		switch r.Status {
+		case jobmodel.StatusApplied:
+			out.Applied = r.Count
+		case jobmodel.StatusDismissed:
+			out.Dismissed = r.Count
+		case jobmodel.StatusInterviewing:
+			out.Interviewing = r.Count
+		case jobmodel.StatusOffer:
+			out.Offer = r.Count
+		case jobmodel.StatusRejected:
+			out.Rejected = r.Count
+		}
+	}
+	return out, nil
+}
+
+// seedCounter inserts a counter row for userID with the supplied counts.
+// ON CONFLICT updates the existing row to the recomputed values (re-seeding
+// is the rare path; we want consistency, not first-writer-wins).
+func seedCounter(ctx context.Context, db *gorm.DB, userID string, c dto.Counts) error {
+	row := jobmodel.UserJobCounters{
+		UserID:            userID,
+		SavedCount:        c.Saved,
+		AppliedCount:      c.Applied,
+		InterviewingCount: c.Interviewing,
+		OfferCount:        c.Offer,
+		RejectedCount:     c.Rejected,
+		DismissedCount:    c.Dismissed,
+		UpdatedAt:         time.Now(),
+	}
+	return db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"saved_count", "applied_count", "interviewing_count",
+			"offer_count", "rejected_count", "dismissed_count", "updated_at",
+		}),
+	}).Create(&row).Error
 }

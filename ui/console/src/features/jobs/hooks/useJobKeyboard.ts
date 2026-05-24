@@ -3,7 +3,7 @@ import { useHotkeys } from 'react-hotkeys-hook'
 import type { JobStatus } from '@/types'
 import type { TabKey } from '@/constants/jobStatus'
 
-type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new'>
+type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new' | 'saved'>
 
 export interface UseJobKeyboardArgs {
   /** Master toggle — when false, no shortcuts fire. */
@@ -29,12 +29,13 @@ export interface UseJobKeyboardArgs {
   // ── Tabs ───────────────────────────────────────────────────────────────────
   onGoToTab: (tab: TabKey) => void
 
-  // ── Status / dismiss / undo ────────────────────────────────────────────────
+  // ── Status / save / dismiss / undo ─────────────────────────────────────────
   /**
-   * Note: plain `r` maps to status=rejected; this is intentional Vim-style
-   * mnemonic alongside s/a/i/o. To reset filters, use Cmd/Ctrl+Shift+R.
+   * Workflow-status keys (a/i/o/r). To reset filters, use Cmd/Ctrl+Shift+R.
    */
   onSetStatus: (status: SettableStatus) => void
+  /** Toggle the orthogonal saved flag on the focused row (bound to `s`). */
+  onToggleSave: () => void
   onDismiss: () => void
   onUndo: () => void
 
@@ -129,7 +130,8 @@ export function useJobKeyboard(args: UseJobKeyboardArgs) {
   useHotkeys('g>r', () => args.onGoToTab('rejected'), opts, [args.onGoToTab])
 
   // ── Status keys on focused row ───────────────────────────────────────────
-  useHotkeys('s', () => args.onSetStatus('saved'), opts, [args.onSetStatus])
+  // `s` is special: it toggles the orthogonal saved flag, not a workflow status.
+  useHotkeys('s', () => args.onToggleSave(), opts, [args.onToggleSave])
   useHotkeys('a', () => args.onSetStatus('applied'), opts, [args.onSetStatus])
   useHotkeys('i', () => args.onSetStatus('interviewing'), opts, [args.onSetStatus])
   useHotkeys('o', () => args.onSetStatus('offer'), opts, [args.onSetStatus])

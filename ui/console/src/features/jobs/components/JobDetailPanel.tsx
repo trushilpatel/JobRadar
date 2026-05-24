@@ -9,6 +9,7 @@ import {
   ShieldAlert,
   Globe,
   BadgeCheck,
+  Bookmark,
   ChevronLeft,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -27,7 +28,12 @@ export type JobDetailMode = 'pane' | 'route'
 interface JobDetailPanelProps {
   job: Job
   onClose: () => void
-  onStatusChange: (job: Job, status: Exclude<JobStatus, 'dismissed'>) => void
+  onStatusChange: (job: Job, status: Exclude<JobStatus, 'dismissed' | 'saved'>) => void
+  /**
+   * Toggle the bookmark/saved flag. ORTHOGONAL to status — a saved job stays
+   * in its current workflow stage. Bookmarking has its own dedicated icon.
+   */
+  onToggleSave: (job: Job) => void
   onDismiss: (job: Job) => void
   mode?: JobDetailMode
 }
@@ -41,9 +47,11 @@ export function JobDetailPanel({
   job,
   onClose,
   onStatusChange,
+  onToggleSave,
   onDismiss,
   mode = 'pane',
 }: JobDetailPanelProps) {
+  const isSaved = job.user_state?.saved_at != null
   const salary = formatSalary(job.salary_range)
   const techStack: string[] = Array.isArray(job.tech_stack) ? job.tech_stack : []
   const companyName = job.company?.name ?? job.company_id ?? ''
@@ -155,6 +163,21 @@ export function JobDetailPanel({
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => onToggleSave(job)}
+              className={cn(
+                'p-1.5 rounded-lg transition-colors',
+                isSaved
+                  ? 'text-amber-400 hover:bg-amber-500/10'
+                  : 'text-slate-400 hover:text-amber-300 hover:bg-white/[0.06]'
+              )}
+              title={isSaved ? 'Remove from saved' : 'Save'}
+              aria-label={isSaved ? 'Remove from saved' : 'Save job'}
+              aria-pressed={isSaved}
+            >
+              <Bookmark size={14} fill={isSaved ? 'currentColor' : 'none'} />
+            </button>
             <button
               onClick={() => onDismiss(job)}
               className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -317,10 +340,17 @@ export function JobDetailPanel({
         <div className="sticky bottom-0 flex gap-2 border-t border-white/[0.08] bg-[#0d0d14] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
-            onClick={() => onStatusChange(job, JOB_STATUS.SAVED)}
-            className="flex-1 min-h-[44px] rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500"
+            onClick={() => onToggleSave(job)}
+            aria-pressed={isSaved}
+            className={cn(
+              'flex-1 min-h-[44px] rounded-lg px-4 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5',
+              isSaved
+                ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+                : 'bg-violet-600 text-white hover:bg-violet-500'
+            )}
           >
-            Save
+            <Bookmark size={14} fill={isSaved ? 'currentColor' : 'none'} />
+            {isSaved ? 'Saved' : 'Save'}
           </button>
           <button
             type="button"

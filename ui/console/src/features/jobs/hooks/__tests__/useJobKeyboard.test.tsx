@@ -15,6 +15,7 @@ function makeArgs(): UseJobKeyboardArgs {
     onNextPage: vi.fn(),
     onGoToTab: vi.fn(),
     onSetStatus: vi.fn(),
+    onToggleSave: vi.fn(),
     onDismiss: vi.fn(),
     onUndo: vi.fn(),
     onFocusSearch: vi.fn(),
@@ -124,17 +125,23 @@ describe('useJobKeyboard', () => {
     expect(onFirstPage).toHaveBeenCalledTimes(1)
   })
 
-  // ── Status keys ───────────────────────────────────────────────────────────
+  // ── Status keys (workflow only) ───────────────────────────────────────────
   it.each([
-    ['s', 'saved'],
     ['a', 'applied'],
     ['i', 'interviewing'],
     ['o', 'offer'],
     ['r', 'rejected'],
-  ] as const)('"%s" sets status to %s', (key, status) => {
+  ] as const)('"%s" sets workflow status to %s', (key, status) => {
     renderHook(() => useJobKeyboard(args))
     fireKey({ key })
     expect(args.onSetStatus).toHaveBeenCalledWith(status)
+  })
+
+  it('"s" toggles save (orthogonal flag) — never sets workflow status', () => {
+    renderHook(() => useJobKeyboard(args))
+    fireKey({ key: 's' })
+    expect(args.onToggleSave).toHaveBeenCalledTimes(1)
+    expect(args.onSetStatus).not.toHaveBeenCalled()
   })
 
   it('d calls onDismiss, u calls onUndo', () => {

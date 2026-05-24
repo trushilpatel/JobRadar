@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import { createElement, type ReactNode } from 'react'
 import { JobDetailPanel } from '../JobDetailPanel'
 import type { Job } from '@/types'
@@ -46,7 +47,9 @@ function wrap(ui: ReactNode) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: 0 }, mutations: { retry: 0 } },
   })
-  return createElement(QueryClientProvider, { client: qc }, ui)
+  // Wrap in MemoryRouter — JobDetailPanel renders JobResumeSection which
+  // uses react-router hooks (Link).
+  return createElement(MemoryRouter, null, createElement(QueryClientProvider, { client: qc }, ui))
 }
 
 beforeEach(() => {
@@ -62,6 +65,7 @@ describe('JobDetailPanel', () => {
           job={SAMPLE_JOB}
           onClose={() => {}}
           onStatusChange={() => {}}
+          onToggleSave={() => {}}
           onDismiss={() => {}}
         />
       )
@@ -78,6 +82,7 @@ describe('JobDetailPanel', () => {
           job={SAMPLE_JOB}
           onClose={() => {}}
           onStatusChange={() => {}}
+          onToggleSave={() => {}}
           onDismiss={() => {}}
         />
       )
@@ -93,6 +98,7 @@ describe('JobDetailPanel', () => {
           job={SAMPLE_JOB}
           onClose={onClose}
           onStatusChange={() => {}}
+          onToggleSave={() => {}}
           onDismiss={() => {}}
           mode="pane"
         />
@@ -110,6 +116,7 @@ describe('JobDetailPanel', () => {
           job={SAMPLE_JOB}
           onClose={onClose}
           onStatusChange={() => {}}
+          onToggleSave={() => {}}
           onDismiss={() => {}}
           mode="route"
         />
@@ -126,6 +133,7 @@ describe('JobDetailPanel', () => {
           job={SAMPLE_JOB}
           onClose={() => {}}
           onStatusChange={() => {}}
+          onToggleSave={() => {}}
           onDismiss={() => {}}
           mode="route"
         />
@@ -136,21 +144,25 @@ describe('JobDetailPanel', () => {
     expect(screen.getAllByRole('button', { name: /dismiss/i }).length).toBeGreaterThan(0)
   })
 
-  it('clicking Save in route mode calls onStatusChange with saved', async () => {
+  it('clicking Save in route mode calls onToggleSave (orthogonal flag, not status)', async () => {
     const onStatusChange = vi.fn()
+    const onToggleSave = vi.fn()
     render(
       wrap(
         <JobDetailPanel
           job={SAMPLE_JOB}
           onClose={() => {}}
           onStatusChange={onStatusChange}
+          onToggleSave={onToggleSave}
           onDismiss={() => {}}
           mode="route"
         />
       )
     )
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
-    expect(onStatusChange).toHaveBeenCalledWith(SAMPLE_JOB, JOB_STATUS.SAVED)
+    expect(onToggleSave).toHaveBeenCalledWith(SAMPLE_JOB)
+    // Workflow status untouched — saved is its own concept.
+    expect(onStatusChange).not.toHaveBeenCalled()
   })
 
   describe('mobile route mode reaches all statuses', () => {
@@ -161,13 +173,16 @@ describe('JobDetailPanel', () => {
             job={SAMPLE_JOB}
             onClose={() => {}}
             onStatusChange={() => {}}
+            onToggleSave={() => {}}
             onDismiss={() => {}}
             mode="route"
           />
         )
       )
       // Radix Select trigger is a button labelled with the current value.
-      expect(screen.getByRole('combobox')).toBeInTheDocument()
+      // JobResumeSection also renders a combobox in route mode (resume
+      // picker), so we expect at least one — the StatusSelect — to exist.
+      expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0)
     })
   })
 
@@ -179,6 +194,7 @@ describe('JobDetailPanel', () => {
             job={{ ...SAMPLE_JOB, notes: 'pre-existing note' } as Job}
             onClose={() => {}}
             onStatusChange={() => {}}
+            onToggleSave={() => {}}
             onDismiss={() => {}}
           />
         )
@@ -194,6 +210,7 @@ describe('JobDetailPanel', () => {
             job={SAMPLE_JOB}
             onClose={() => {}}
             onStatusChange={() => {}}
+            onToggleSave={() => {}}
             onDismiss={() => {}}
           />
         )
@@ -214,6 +231,7 @@ describe('JobDetailPanel', () => {
             job={{ ...SAMPLE_JOB, notes: 'same' } as Job}
             onClose={() => {}}
             onStatusChange={() => {}}
+            onToggleSave={() => {}}
             onDismiss={() => {}}
           />
         )
@@ -232,6 +250,7 @@ describe('JobDetailPanel', () => {
             job={SAMPLE_JOB}
             onClose={() => {}}
             onStatusChange={() => {}}
+            onToggleSave={() => {}}
             onDismiss={() => {}}
           />
         )
@@ -251,6 +270,7 @@ describe('JobDetailPanel', () => {
             job={SAMPLE_JOB}
             onClose={() => {}}
             onStatusChange={() => {}}
+            onToggleSave={() => {}}
             onDismiss={() => {}}
             mode="route"
           />

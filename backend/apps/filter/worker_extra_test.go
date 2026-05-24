@@ -173,7 +173,7 @@ func TestProcessChunk_PassThrough_NoTitle(t *testing.T) {
 	item1, _ := makeChunkItem(ats.RawJob{ID: "no-title-1", Title: ""}, 1)
 	item2, _ := makeChunkItem(ats.RawJob{ID: "no-title-2", Title: ""}, 1)
 	chunk := []chunkItem{item1, item2}
-	w.processChunk(context.Background(), chunk, "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), chunk, "fetch-1", 0, 1)
 
 	if scorer.calls != 0 {
 		t.Errorf("scorer should not be called for titleless chunk, got %d calls", scorer.calls)
@@ -202,7 +202,7 @@ func TestProcessChunk_PassThroughMixed(t *testing.T) {
 	item1, _ := makeChunkItem(ats.RawJob{ID: "no-title-x", Title: ""}, 1)
 	item2, _ := makeChunkItem(ats.RawJob{ID: "titled-1", Title: "Engineer"}, 1)
 	chunk := []chunkItem{item1, item2}
-	w.processChunk(context.Background(), chunk, "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), chunk, "fetch-1", 0, 1)
 
 	if scorer.calls != 1 {
 		t.Errorf("expected scorer called once (for titled job), got %d", scorer.calls)
@@ -234,7 +234,7 @@ func TestProcessChunk_LLMExhaustedLogsAndRetries(t *testing.T) {
 	w.clock = &fakeClock{now: now}
 
 	item, state := makeChunkItem(makeJob("job-1"), 1)
-	w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
 
 	// Exhausted is treated as a transient error → retry via Nak.
 	if !state.Naked {
@@ -256,7 +256,7 @@ func TestProcessChunk_LLMExhaustedZeroRetryAfter(t *testing.T) {
 	w.clock = &fakeClock{now: time.Now()}
 
 	item, state := makeChunkItem(makeJob("job-1"), 1)
-	w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
 
 	if !state.Naked {
 		t.Errorf("expected job Nak'd")
@@ -311,7 +311,7 @@ func TestProcessChunk_DLQPublishFailure(t *testing.T) {
 		clock:     &fakeClock{now: time.Now()},
 		log:       logger.NewNoop(),
 	}
-	w.processChunk(context.Background(), makeBatchWithRetryCount(3, makeJob("job-1")), "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), makeBatchWithRetryCount(3, makeJob("job-1")), "fetch-1", 0, 1)
 
 	// DLQ publish failed → job not in outcome.DLQed; UpdateSeenReasonBatch must not be invoked.
 	for _, c := range ledger.calls {
@@ -339,7 +339,7 @@ func TestProcessChunk_PublishDetailFailureLogged(t *testing.T) {
 		clock:     &fakeClock{now: time.Now()},
 		log:       logger.NewNoop(),
 	}
-	w.processChunk(context.Background(), makeBatch(makeJob("job-1")), "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), makeBatch(makeJob("job-1")), "fetch-1", 0, 1)
 
 	// Despite the publish failure, no irrelevant ledger call should be made for a relevant job.
 	for _, c := range ledger.calls {
@@ -363,7 +363,7 @@ func TestProcessChunk_PassThroughPublishFailure(t *testing.T) {
 		log:       logger.NewNoop(),
 	}
 	item, _ := makeChunkItem(ats.RawJob{ID: "no-title", Title: ""}, 1)
-	w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
 	// No assertion beyond "didn't panic".
 }
 
@@ -373,7 +373,7 @@ func TestProcessChunk_AllIrrelevant(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), makeBatch(makeJob("a"), makeJob("b")), "f", 0, 1)
+	_ = w.processChunk(context.Background(), makeBatch(makeJob("a"), makeJob("b")), "f", 0, 1)
 
 	if len(pub.recordsOnSubject("jobs.filtered.")) != 0 {
 		t.Errorf("expected no filtered publishes, got some")
@@ -552,7 +552,7 @@ func TestProcessChunk_PassThrough_AcksAfterLedger(t *testing.T) {
 	ledger := newOrderingLedger(state1, state2)
 
 	w := makeWorkerWithInterface(scorer, ledger, pub)
-	w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-order", 0, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-order", 0, 1)
 
 	// Ledger must have been called exactly once.
 	if len(ledger.calls) != 1 {
@@ -589,7 +589,7 @@ func TestProcessChunk_PassThrough_LedgerErrorStillAcks(t *testing.T) {
 	ledger.errOnCall = 1 // first call returns error
 
 	w := makeWorkerWithInterface(scorer, ledger, pub)
-	w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-err", 0, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-err", 0, 1)
 
 	// Acks must happen even when ledger errors.
 	if !state1.Acked {
@@ -613,7 +613,7 @@ func TestProcessChunk_Scorable_AcksAfterLedger(t *testing.T) {
 	ledger := newOrderingLedger(state1, state2)
 
 	w := makeWorkerWithInterface(scorer, ledger, pub)
-	w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-score-order", 0, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-score-order", 0, 1)
 
 	// Expect 2 ledger calls: irrelevant first, then filtered.
 	if len(ledger.calls) != 2 {

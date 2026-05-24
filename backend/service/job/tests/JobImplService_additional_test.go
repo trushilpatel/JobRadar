@@ -54,10 +54,11 @@ func TestImpl_Get_OverlayPopulatedWithTimestamps(t *testing.T) {
 	notes := "did something"
 	dr := jobcommon.DismissalReasonNotRelevant
 	dn := "stale"
+	applied := jobmodel.StatusApplied
 	state := &fakeUserState{getResult: &jobmodel.UserJobState{
 		UserID:          "u1",
 		JobID:           "j1",
-		Status:          jobmodel.StatusApplied,
+		Status:          &applied,
 		Notes:           &notes,
 		DismissalReason: &dr,
 		DismissalNote:   &dn,
@@ -174,10 +175,10 @@ func TestImpl_BulkDismiss_StoreError_Propagates(t *testing.T) {
 	}
 }
 
-// TestImpl_SetSaved_StoreError_Propagates — when Upsert fails, SetSaved
-// surfaces the error and skips the cache invalidation.
+// TestImpl_SetSaved_StoreError_Propagates — when the repo SetSaved call
+// fails, the impl surfaces the error and skips the cache invalidation.
 func TestImpl_SetSaved_StoreError_Propagates(t *testing.T) {
-	state := &fakeUserState{upsertErr: stderrors.New("upsert fail")}
+	state := &fakeUserState{setSavedErr: stderrors.New("setsaved fail")}
 	svc := jobsvc.NewImplService(&fakeJobReader{}, state, fakeSnapshot{}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil, nil)
 	if err := svc.SetSaved(ctxAs("u1"), "j1", true); err == nil {
 		t.Fatal("expected error to propagate")
@@ -280,13 +281,13 @@ func TestImpl_GetCounts_CountsByUserError_Propagates(t *testing.T) {
 	}
 }
 
-// TestImpl_SetSaved_FalseStoreError_Propagates — when saved=false and Delete
-// fails, the impl surfaces the error.
+// TestImpl_SetSaved_FalseStoreError_Propagates — when saved=false and the
+// repo SetSaved call fails, the impl surfaces the error.
 func TestImpl_SetSaved_FalseStoreError_Propagates(t *testing.T) {
-	state := &fakeUserState{deleteErr: stderrors.New("delete fail")}
+	state := &fakeUserState{setSavedErr: stderrors.New("setsaved fail")}
 	svc := jobsvc.NewImplService(&fakeJobReader{}, state, fakeSnapshot{}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil, nil)
 	if err := svc.SetSaved(ctxAs("u1"), "j1", false); err == nil {
-		t.Fatal("expected delete error to propagate")
+		t.Fatal("expected error to propagate")
 	}
 }
 

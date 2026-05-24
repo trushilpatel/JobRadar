@@ -141,6 +141,9 @@ type UserJobStateRepository interface {
 	// Drives from user_job_state so every page is a full limit-sized result set.
 	GetJobsByStatus(ctx context.Context, userID string, filter dto.JobFilter, cursor string, limit int) ([]jobmodel.Job, string, error)
 	Upsert(ctx context.Context, userID, jobID string, state dto.UpsertState) error
+	// SetSaved is the orthogonal save/unsave path. Idempotent. Never touches
+	// the workflow status column; saved_at IS NOT NULL is the source of truth.
+	SetSaved(ctx context.Context, userID, jobID string, saved bool) error
 	UpsertBulkDismiss(ctx context.Context, userID string, jobIDs []string, reason, note string) error
 	Delete(ctx context.Context, userID, jobID string) error
 	CountsByUser(ctx context.Context, userID string) (dto.Counts, error)

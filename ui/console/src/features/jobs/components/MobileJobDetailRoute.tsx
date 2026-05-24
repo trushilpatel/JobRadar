@@ -32,11 +32,22 @@ export function MobileJobDetailRoute() {
   }, [navigate])
 
   const handleStatusChange = useCallback(
-    (target: Job, status: Exclude<JobStatus, 'dismissed'>) => {
+    (target: Job, status: Exclude<JobStatus, 'dismissed' | 'saved'>) => {
       actions.setStatus.mutate({ id: target.id, status })
       safeBack()
     },
     [actions.setStatus, safeBack]
+  )
+
+  // Toggle the orthogonal saved flag without leaving the panel — saving a
+  // job doesn't move it out of its workflow stage. Stays on the detail view
+  // so the user can take another action.
+  const handleToggleSave = useCallback(
+    (target: Job) => {
+      const currentlySaved = target.user_state?.saved_at != null
+      actions.setSaved.mutate({ id: target.id, saved: !currentlySaved })
+    },
+    [actions.setSaved]
   )
 
   // Mobile dismiss mirrors the desktop flow — no modal, no reason picker,
@@ -118,6 +129,7 @@ export function MobileJobDetailRoute() {
       mode="route"
       onClose={safeBack}
       onStatusChange={handleStatusChange}
+      onToggleSave={handleToggleSave}
       onDismiss={handleDismiss}
     />
   )

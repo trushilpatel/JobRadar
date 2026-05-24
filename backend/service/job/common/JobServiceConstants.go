@@ -1,11 +1,17 @@
 package common
 
-// JobStatus values for the per-user UserJobState.status column. Mirrors the
-// CHECK constraint on user_job_state.status. Note: "new" is intentionally
-// NOT a valid stored status — absence of a row implies "new".
+// JobStatus values for the per-user job status. Workflow values (applied /
+// dismissed / interviewing / offer / rejected) mirror the CHECK constraint
+// on user_job_state.status. JobStatusNew and JobStatusSaved are NOT stored:
+//
+//   - JobStatusNew is synthetic — absence of a workflow status; only
+//     returned via the overlay or accepted as a filter/tab key.
+//   - JobStatusSaved is a filter/tab key — `saved_at IS NOT NULL` is the
+//     source of truth for the saved flag; it is orthogonal to the workflow
+//     status column.
 const (
-	JobStatusNew          = "new" // synthetic — never written, only returned via overlay
-	JobStatusSaved        = "saved"
+	JobStatusNew          = "new"   // synthetic — never written; overlay/filter only
+	JobStatusSaved        = "saved" // filter/tab key — never written to status column; saved_at IS NOT NULL is the source of truth
 	JobStatusApplied      = "applied"
 	JobStatusDismissed    = "dismissed"
 	JobStatusInterviewing = "interviewing"

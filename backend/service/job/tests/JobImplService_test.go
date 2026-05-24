@@ -81,6 +81,11 @@ type fakeUserState struct {
 	countsResult jobdto.Counts
 	countsErr    error
 	upsertErr    error
+	// SetSaved fields
+	setSavedCalls    int
+	lastSetSavedID   string
+	lastSetSavedBool bool
+	setSavedErr      error
 	// GetJobsByStatus fields
 	statusJobs       []jobmodel.Job
 	statusNext       string
@@ -88,6 +93,9 @@ type fakeUserState struct {
 	statusCalls      int
 	lastStatusStatus string
 }
+
+// strPtr returns a pointer to s. Helper for *string status fixtures.
+func strPtr(s string) *string { return &s }
 
 func (f *fakeUserState) Get(_ context.Context, userID, jobID string) (*jobmodel.UserJobState, error) {
 	if userID == "" {
@@ -139,6 +147,15 @@ func (f *fakeUserState) CountsByUser(_ context.Context, userID string) (jobdto.C
 		return jobdto.Counts{}, apperr.ErrInternal.WithMessage("user id required")
 	}
 	return f.countsResult, f.countsErr
+}
+func (f *fakeUserState) SetSaved(_ context.Context, userID, jobID string, saved bool) error {
+	if userID == "" {
+		return apperr.ErrInternal.WithMessage("user id required")
+	}
+	f.setSavedCalls++
+	f.lastSetSavedID = jobID
+	f.lastSetSavedBool = saved
+	return f.setSavedErr
 }
 
 func (f *fakeUserState) GetJobsByStatus(_ context.Context, userID string, filter jobdto.JobFilter, _ string, _ int) ([]jobmodel.Job, string, error) {
@@ -201,8 +218,10 @@ func ctxAs(userID string) context.Context {
 func TestImpl_List_OverlayMerge(t *testing.T) {
 	now := time.Now()
 	jobs := []jobmodel.Job{{ID: "j1"}, {ID: "j2"}, {ID: "j3"}}
+	// In the sparse model, saved is orthogonal — SavedAt != nil signals "saved";
+	// the Status workflow column remains NULL for a save-only row.
 	overlay := map[string]*jobmodel.UserJobState{
-		"j2": {UserID: "u1", JobID: "j2", Status: jobmodel.StatusSaved, SavedAt: &now},
+		"j2": {UserID: "u1", JobID: "j2", SavedAt: &now},
 	}
 	reader := &fakeJobReader{jobs: jobs}
 	state := &fakeUserState{manyResult: overlay}
@@ -218,8 +237,9 @@ func TestImpl_List_OverlayMerge(t *testing.T) {
 	if res.Items[0].UserState.Status != jobcommon.JobStatusNew {
 		t.Errorf("j1 should overlay to new, got %q", res.Items[0].UserState.Status)
 	}
-	if res.Items[1].UserState.Status != jobmodel.StatusSaved {
-		t.Errorf("j2 should overlay to saved, got %q", res.Items[1].UserState.Status)
+	// Saved is orthogonal: a save-only row keeps view.Status="new" but populates SavedAt.
+	if res.Items[1].UserState.SavedAt == nil {
+		t.Errorf("j2 SavedAt should be populated, got nil")
 	}
 }
 
@@ -294,14 +314,22 @@ func TestImpl_SetSaved_RequiresUserID(t *testing.T) {
 	}
 }
 
-func TestImpl_SetSaved_DeletesWhenFalse(t *testing.T) {
+func TestImpl_SetSaved_RoutesThroughSetSaved(t *testing.T) {
+	// SetSaved now delegates to the dedicated repo SetSaved path instead of
+	// Upsert+Delete; saved is orthogonal to workflow status.
 	state := &fakeUserState{}
 	svc := newSvc(&fakeJobReader{}, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
 	if err := svc.SetSaved(ctxAs("u1"), "j1", false); err != nil {
 		t.Fatalf("SetSaved err = %v", err)
 	}
-	if state.deleteCalls != 1 {
-		t.Errorf("expected Delete to be called, got %d", state.deleteCalls)
+	if state.setSavedCalls != 1 {
+		t.Errorf("expected repo.SetSaved called once, got %d", state.setSavedCalls)
+	}
+	if state.lastSetSavedBool != false {
+		t.Errorf("lastSetSavedBool = %v, want false", state.lastSetSavedBool)
+	}
+	if state.deleteCalls != 0 || state.upsertCalls != 0 {
+		t.Errorf("legacy paths invoked — delete=%d upsert=%d", state.deleteCalls, state.upsertCalls)
 	}
 }
 
@@ -381,35 +409,38 @@ func TestImpl_GetCounts_CacheHit(t *testing.T) {
 }
 
 func TestImpl_SetStatus_InvalidatesCountsCache(t *testing.T) {
-	state := &fakeUserState{countsResult: jobdto.Counts{Saved: 1}}
+	state := &fakeUserState{countsResult: jobdto.Counts{Applied: 1}}
 	c := cache.NewMemoryCache()
 	svc := newSvc(&fakeJobReader{}, state, &fakeAppWriter{}, &fakeLedgerWriter{}, c)
 
 	if _, err := svc.GetCounts(ctxAs("u1")); err != nil {
 		t.Fatalf("prime err = %v", err)
 	}
-	state.countsResult = jobdto.Counts{Saved: 5}
-	if err := svc.SetStatus(ctxAs("u1"), "j1", jobmodel.StatusSaved); err != nil {
+	state.countsResult = jobdto.Counts{Applied: 5}
+	if err := svc.SetStatus(ctxAs("u1"), "j1", jobmodel.StatusApplied); err != nil {
 		t.Fatalf("SetStatus err = %v", err)
 	}
 	got, err := svc.GetCounts(ctxAs("u1"))
 	if err != nil {
 		t.Fatalf("GetCounts err = %v", err)
 	}
-	if got.Saved != 5 {
-		t.Errorf("after invalidation got = %d, want 5", got.Saved)
+	if got.Applied != 5 {
+		t.Errorf("after invalidation got = %d, want 5", got.Applied)
 	}
 }
 
 func TestList_SavedTab_RoutesToGetJobsByStatus(t *testing.T) {
-	savedStatus := jobcommon.JobStatusSaved
+	now := time.Now()
 	reader := &fakeJobReader{}
+	// Saved overlay rows carry SavedAt != nil and a NULL workflow status — the
+	// view projects this to "new" + SavedAt populated; the saved tab routing
+	// itself is verified by statusCalls/lastStatusStatus.
 	state := &fakeUserState{
 		statusJobs: []jobmodel.Job{
 			{ID: "j1", Title: "Engineer", AddedAt: time.Now()},
 		},
 		manyResult: map[string]*jobmodel.UserJobState{
-			"j1": {JobID: "j1", Status: savedStatus},
+			"j1": {JobID: "j1", SavedAt: &now},
 		},
 	}
 	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
@@ -428,8 +459,11 @@ func TestList_SavedTab_RoutesToGetJobsByStatus(t *testing.T) {
 	if state.lastStatusStatus != "saved" {
 		t.Errorf("expected status=saved, got %q", state.lastStatusStatus)
 	}
-	if len(result.Items) != 1 || result.Items[0].UserState.Status != "saved" {
-		t.Errorf("expected 1 item with status=saved, got %+v", result.Items)
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item from saved tab, got %+v", result.Items)
+	}
+	if result.Items[0].UserState.SavedAt == nil {
+		t.Errorf("expected SavedAt populated on saved-tab view, got nil")
 	}
 }
 
@@ -454,15 +488,14 @@ func TestList_NewTab_UsesGlobalFeed(t *testing.T) {
 }
 
 func TestList_AppliedTab_SetsStatusOnAllViews(t *testing.T) {
-	appliedStatus := jobcommon.JobStatusApplied
 	state := &fakeUserState{
 		statusJobs: []jobmodel.Job{
 			{ID: "j1", Title: "SWE", AddedAt: time.Now()},
 			{ID: "j2", Title: "SRE", AddedAt: time.Now().Add(-time.Hour)},
 		},
 		manyResult: map[string]*jobmodel.UserJobState{
-			"j1": {JobID: "j1", Status: appliedStatus},
-			"j2": {JobID: "j2", Status: appliedStatus},
+			"j1": {JobID: "j1", Status: strPtr(jobcommon.JobStatusApplied)},
+			"j2": {JobID: "j2", Status: strPtr(jobcommon.JobStatusApplied)},
 		},
 	}
 	svc := newSvc(&fakeJobReader{}, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
@@ -527,10 +560,13 @@ func TestImpl_List_StatusRouting(t *testing.T) {
 // new-tab merge skips it. Pages may have fewer items than the limit, but the
 // next_cursor advances. Frontend pagination must tolerate sparse pages.
 func TestImpl_List_NewTab_FiltersOutNonNewOverlay(t *testing.T) {
+	now := time.Now()
 	jobs := []jobmodel.Job{{ID: "j1"}, {ID: "j2"}, {ID: "j3"}}
 	overlay := map[string]*jobmodel.UserJobState{
-		"j1": {UserID: "u1", JobID: "j1", Status: jobmodel.StatusSaved},
-		"j2": {UserID: "u1", JobID: "j2", Status: jobmodel.StatusDismissed},
+		// j1: saved-only — saved is orthogonal but still excludes from new tab.
+		"j1": {UserID: "u1", JobID: "j1", SavedAt: &now},
+		// j2: dismissed workflow status — excluded from new tab.
+		"j2": {UserID: "u1", JobID: "j2", Status: strPtr(jobmodel.StatusDismissed)},
 		// j3 has no overlay → implicitly "new"
 	}
 	reader := &fakeJobReader{jobs: jobs}
@@ -553,10 +589,11 @@ func TestImpl_List_NewTab_FiltersOutNonNewOverlay(t *testing.T) {
 // is returned regardless of overlay. This is the contract that powers admin
 // or unfiltered views; tested to lock it in.
 func TestImpl_List_NoStatus_NoOverlayFilter(t *testing.T) {
+	now := time.Now()
 	jobs := []jobmodel.Job{{ID: "j1"}, {ID: "j2"}, {ID: "j3"}}
 	overlay := map[string]*jobmodel.UserJobState{
-		"j1": {UserID: "u1", JobID: "j1", Status: jobmodel.StatusSaved},
-		"j2": {UserID: "u1", JobID: "j2", Status: jobmodel.StatusDismissed},
+		"j1": {UserID: "u1", JobID: "j1", SavedAt: &now},
+		"j2": {UserID: "u1", JobID: "j2", Status: strPtr(jobmodel.StatusDismissed)},
 	}
 	reader := &fakeJobReader{jobs: jobs}
 	state := &fakeUserState{manyResult: overlay}
@@ -750,7 +787,7 @@ func TestImpl_MutationsRequireUserID(t *testing.T) {
 		call func() error
 	}{
 		{name: "SetSaved", call: func() error { return svc.SetSaved(ctx, "j1", true) }},
-		{name: "SetStatus", call: func() error { return svc.SetStatus(ctx, "j1", "saved") }},
+		{name: "SetStatus", call: func() error { return svc.SetStatus(ctx, "j1", "applied") }},
 		{name: "SetNotes", call: func() error { return svc.SetNotes(ctx, "j1", "n") }},
 		{name: "Dismiss", call: func() error { return svc.Dismiss(ctx, "j1", "user_dismissed", "") }},
 		{name: "BulkDismiss", call: func() error { return svc.BulkDismiss(ctx, []string{"j1"}, "user_not_relevant", "") }},
@@ -769,7 +806,7 @@ func TestImpl_MutationsRequireUserID(t *testing.T) {
 
 func TestImpl_SetNotes_ExistingRowPreservesStatus(t *testing.T) {
 	state := &fakeUserState{
-		getResult: &jobmodel.UserJobState{Status: jobmodel.StatusApplied},
+		getResult: &jobmodel.UserJobState{Status: strPtr(jobmodel.StatusApplied)},
 	}
 	svc := newSvc(&fakeJobReader{}, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
 	if err := svc.SetNotes(ctxAs("u1"), "j1", "my note"); err != nil {
@@ -831,7 +868,7 @@ func TestImpl_SetNotes_FirstNote_InvalidatesCountsCache(t *testing.T) {
 // we should not pay a wasted DELETE on every keystroke.
 func TestImpl_SetNotes_ExistingRow_DoesNotInvalidateCountsCache(t *testing.T) {
 	state := &fakeUserState{
-		getResult:    &jobmodel.UserJobState{Status: jobmodel.StatusApplied},
+		getResult:    &jobmodel.UserJobState{Status: strPtr(jobmodel.StatusApplied)},
 		countsResult: jobdto.Counts{Applied: 1},
 	}
 	c := cache.NewMemoryCache()
