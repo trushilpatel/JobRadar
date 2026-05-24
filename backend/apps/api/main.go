@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/apps/api/middleware"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/db"
@@ -33,6 +34,11 @@ const (
 func main() {
 	cfg := config.Load()
 	log := logger.Init("api")
+
+	// Surface unmapped errors that fall through to the 500 path. Without this,
+	// handler.HandleError silently returns "internal server error" with no log
+	// line — diagnosing a 500 in production then requires reading code.
+	handler.SetLogger(log)
 
 	if err := cfg.Auth.Validate(); err != nil {
 		log.Error("auth config invalid", err)

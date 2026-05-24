@@ -689,7 +689,7 @@ func boolDelta(next, prior bool) int {
 
 // applyCounterDelta applies a counter change to user_job_counters,
 // inserting a zero row first if none exists. All deltas are clamped at 0
-// to respect the CHECK (>= 0) constraint via MAX(col + delta, 0).
+// to respect the CHECK (>= 0) constraint via GREATEST(col + delta, 0).
 func applyCounterDelta(tx *gorm.DB, userID string, delta counterChange) error {
 	// Ensure a row exists. ON CONFLICT DO NOTHING — first writer wins.
 	zero := jobmodel.UserJobCounters{UserID: userID}
@@ -700,17 +700,19 @@ func applyCounterDelta(tx *gorm.DB, userID string, delta counterChange) error {
 		return fmt.Errorf("ensure counter row: %w", err)
 	}
 
-	// MAX(col + delta, 0) clamps each counter at zero so transient deltas
-	// can never violate the CHECK (>= 0) constraint. Both Postgres and
-	// sqlite implement MAX as a scalar function in this form.
+	// GREATEST(col + delta, 0) is the Postgres scalar two-arg max — clamps
+	// each counter at zero so a transient over-decrement can never violate
+	// the CHECK (>= 0) constraint. SQLite has no GREATEST builtin; the
+	// SQLite-backed test helper registers an equivalent scalar via a
+	// ConnectHook so this single SQL works in both engines.
 	res := tx.Exec(`
 		UPDATE user_job_counters
-		   SET saved_count        = MAX(saved_count + ?, 0),
-		       applied_count      = MAX(applied_count + ?, 0),
-		       interviewing_count = MAX(interviewing_count + ?, 0),
-		       offer_count        = MAX(offer_count + ?, 0),
-		       rejected_count     = MAX(rejected_count + ?, 0),
-		       dismissed_count    = MAX(dismissed_count + ?, 0),
+		   SET saved_count        = GREATEST(saved_count + ?, 0),
+		       applied_count      = GREATEST(applied_count + ?, 0),
+		       interviewing_count = GREATEST(interviewing_count + ?, 0),
+		       offer_count        = GREATEST(offer_count + ?, 0),
+		       rejected_count     = GREATEST(rejected_count + ?, 0),
+		       dismissed_count    = GREATEST(dismissed_count + ?, 0),
 		       updated_at         = ?
 		 WHERE user_id = ?`,
 		delta.savedDelta, delta.appliedDelta, delta.interviewingDelta,

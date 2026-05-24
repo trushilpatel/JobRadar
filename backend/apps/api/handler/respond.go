@@ -7,7 +7,25 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/api/response"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
+
+// pkgLogger is the logger used by HandleError when an unmapped error falls
+// through to the 500 path. Defaults to a noop so test binaries that never
+// call SetLogger stay silent; main.go installs the process logger at boot.
+var pkgLogger logger.Logger = logger.NewNoop()
+
+// SetLogger installs the logger used by HandleError for unmapped 500s. Call
+// once during process init from main.go before any request is served. Safe
+// to omit — the default noop logger silences output, which is the right
+// behaviour for unit tests.
+func SetLogger(l logger.Logger) {
+	if l == nil {
+		pkgLogger = logger.NewNoop()
+		return
+	}
+	pkgLogger = l
+}
 
 // Respond writes a JSON envelope response with a typed data payload.
 func Respond[T any](w http.ResponseWriter, status int, data T) {
@@ -67,5 +85,10 @@ func HandleError(w http.ResponseWriter, err error) {
 		RespondError(w, sErr.Status, sErr.Code, sErr.PublicMessage())
 		return
 	}
+	// Unmapped error → generic 500. Log the underlying cause so the next
+	// mystery 500 in production is one grep away, not a code reading session.
+	// The public response stays opaque ("internal server error") — the log
+	// line is the operator-facing diagnostic.
+	pkgLogger.Error("handler: unmapped error returned 500", err)
 	RespondError(w, http.StatusInternalServerError, "INTERNAL", "internal server error")
 }
