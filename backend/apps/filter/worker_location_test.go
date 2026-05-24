@@ -68,7 +68,7 @@ func TestProcessChunk_NonUSALocation_RejectedBeforeLLM(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), chunkOf(
+	_ = w.processChunk(context.Background(), chunkOf(
 		makeJobKnownAt("us-1", "Software Engineer", "San Francisco, CA"),
 		makeJobKnownAt("uk-1", "Software Engineer", "London, United Kingdom"),
 		makeJobKnownAt("in-1", "Software Engineer", "Bangalore, India"),
@@ -122,7 +122,7 @@ func TestProcessChunk_AllNonUSA_SkipsLLMEntirely(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), chunkOf(
+	_ = w.processChunk(context.Background(), chunkOf(
 		makeJobKnownAt("uk-1", "SWE", "London"),
 		makeJobKnownAt("ca-1", "SWE", "Toronto, Canada"),
 		makeJobKnownAt("de-1", "SWE", "Berlin, Germany"),
@@ -153,7 +153,7 @@ func TestProcessChunk_UnknownLocation_ReachesLLM(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), chunkOf(
+	_ = w.processChunk(context.Background(), chunkOf(
 		makeJobAt("u-1", "SWE", ""),
 		makeJobAt("u-2", "SWE", "Remote"),
 		makeJobAt("u-3", "SWE", "Worldwide"),
@@ -181,7 +181,7 @@ func TestProcessChunk_MultiLocationWithUSA_NotRejected(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), chunkOf(
+	_ = w.processChunk(context.Background(), chunkOf(
 		makeJobKnownAt("m-1", "SWE", "London, UK / New York, NY"),
 	), "fetch-1", 0, 1)
 
@@ -207,7 +207,7 @@ func TestProcessChunk_NonUSAWithoutTitle_RejectedNotPassedThrough(t *testing.T) 
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), chunkOf(
+	_ = w.processChunk(context.Background(), chunkOf(
 		makeJobKnownAt("uk-x", "", "London, UK"),
 	), "fetch-1", 0, 1)
 
@@ -231,7 +231,7 @@ func TestProcessChunk_NoTitleUnknownLocation_PassesThrough(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), chunkOf(
+	_ = w.processChunk(context.Background(), chunkOf(
 		makeJobAt("pt-1", "", "Remote"),
 	), "fetch-1", 0, 1)
 
@@ -260,7 +260,7 @@ func TestProcessChunk_LocationKnownFalse_BypassesNonUSAGate(t *testing.T) {
 
 	w := makeWorker(scorer, ledger, pub)
 	// LocationKnown=false (zero value via makeJobAt) + an explicitly non-USA string.
-	w.processChunk(context.Background(), chunkOf(
+	_ = w.processChunk(context.Background(), chunkOf(
 		makeJobAt("wd-1", "Software Engineer", "London, United Kingdom"),
 	), "fetch-1", 0, 1)
 
@@ -289,7 +289,7 @@ func TestProcessChunk_AllLocations_AnyUSAWins(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), chunkOf(
+	_ = w.processChunk(context.Background(), chunkOf(
 		makeJobKnownMultiAt("mixed-1", "SWE", "London, UK", "New York, NY"),
 	), "fetch-1", 0, 1)
 
@@ -311,7 +311,7 @@ func TestProcessChunk_AllLocations_AllNonUSA_Rejected(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	w.processChunk(context.Background(), chunkOf(
+	_ = w.processChunk(context.Background(), chunkOf(
 		makeJobKnownMultiAt("multi-uk-1", "SWE", "London, UK", "Berlin, Germany"),
 	), "fetch-1", 0, 1)
 

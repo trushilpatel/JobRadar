@@ -153,7 +153,14 @@ func (s *implService) List(ctx context.Context, filter dto.JobFilter, cursor str
 		st := overlay[j.ID]
 		view := dto.JobView{Job: j, UserState: toUserStateView(st)}
 		// Apply status filter after merge — cached page is user-agnostic.
-		if filter.Status != "" && view.UserState.Status != filter.Status {
+		// The "new" tab also excludes rows with saved_at set: saved is
+		// orthogonal to workflow status but still removes the job from
+		// the new feed (the user has interacted with it).
+		if filter.Status == jobcommon.JobStatusNew {
+			if st != nil && (st.Status != nil || st.SavedAt != nil) {
+				continue
+			}
+		} else if filter.Status != "" && view.UserState.Status != filter.Status {
 			continue
 		}
 		views = append(views, view)
@@ -233,8 +240,9 @@ func (s *implService) Get(ctx context.Context, id string) (_ *dto.JobView, err e
 	return &view, nil
 }
 
-// SetSaved upserts the user_job_state row to status='saved' or deletes
-// the row when saved=false (returning the job to the implicit "new" state).
+// SetSaved toggles the orthogonal saved flag on user_job_state. It does
+// NOT touch the workflow status column — a job can be saved while also
+// applied/interviewing/etc. Idempotent at the repository layer.
 func (s *implService) SetSaved(ctx context.Context, id string, saved bool) (err error) {
 	ctx, span := tracing.Start(ctx, "job.impl.SetSaved")
 	defer tracing.End(span, &err)
@@ -244,25 +252,24 @@ func (s *implService) SetSaved(ctx context.Context, id string, saved bool) (err 
 		return apperr.ErrInternal.WithMessage("user id required")
 	}
 
+	if err = s.userState.SetSaved(ctx, userID, id, saved); err != nil {
+		return err
+	}
 	if saved {
-		if err = s.userState.Upsert(ctx, userID, id, dto.UpsertState{Status: jobmodel.StatusSaved}); err != nil {
-			return err
-		}
+		// Best-effort snapshot action update — analytics history is
+		// orthogonal to per-user state. Failures here never block the save.
 		if err = s.snapshot.UpdateSnapshotAction(ctx, id, jobmodel.StatusSaved); err != nil {
 			s.logger.Warn("snapshot action update failed", "err", err.Error())
-		}
-	} else {
-		if err = s.userState.Delete(ctx, userID, id); err != nil {
-			return err
 		}
 	}
 	s.invalidateUserCounts(ctx, userID)
 	return nil
 }
 
-// SetStatus upserts the per-user state to the given status. For 'applied'
-// the application-tracker side write is best-effort; for 'dismissed' the
-// caller should prefer Dismiss (which also routes the dismissal reason).
+// SetStatus upserts the per-user workflow status (applied / interviewing /
+// offer / rejected / dismissed). 'saved' is rejected — saved is orthogonal
+// to workflow status and must go through SetSaved; the validation layer
+// catches this earlier, but the impl guards as defence in depth.
 func (s *implService) SetStatus(ctx context.Context, id, status string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.impl.SetStatus")
 	defer tracing.End(span, &err)
@@ -270,6 +277,9 @@ func (s *implService) SetStatus(ctx context.Context, id, status string) (err err
 	userID := identity.UserIDFrom(ctx)
 	if userID == "" {
 		return apperr.ErrInternal.WithMessage("user id required")
+	}
+	if status == jobcommon.JobStatusSaved {
+		return apperr.ErrBadRequest.WithMessage("use SetSaved for save/unsave")
 	}
 
 	if err = s.userState.Upsert(ctx, userID, id, dto.UpsertState{Status: status}); err != nil {
@@ -286,10 +296,6 @@ func (s *implService) SetStatus(ctx context.Context, id, status string) (err err
 		if err = s.appWriter.InsertAppliedApplication(ctx, id); err != nil {
 			s.logger.Warn("applied application insert failed", "err", err.Error())
 		}
-	case jobmodel.StatusSaved:
-		if err = s.snapshot.UpdateSnapshotAction(ctx, id, jobmodel.StatusSaved); err != nil {
-			s.logger.Warn("snapshot action update failed", "err", err.Error())
-		}
 	case jobmodel.StatusDismissed:
 		if err = s.snapshot.UpdateSnapshotAction(ctx, id, jobmodel.StatusDismissed); err != nil {
 			s.logger.Warn("snapshot action update failed", "err", err.Error())
@@ -298,9 +304,13 @@ func (s *implService) SetStatus(ctx context.Context, id, status string) (err err
 	return nil
 }
 
-// SetNotes upserts the per-user notes column. Status is preserved if a
-// row already exists; when no row exists yet, status defaults to 'saved'
-// so notes have a parent state.
+// SetNotes upserts the per-user notes column. Behaviour:
+//
+//   - Existing row with a workflow status: preserve the status, write notes.
+//   - Existing row without a workflow status (only saved/notes): pass
+//     JobStatusNew so Upsert leaves the status column NULL.
+//   - No existing row: implicit save — pass JobStatusSaved so the new row
+//     carries a saved_at and the non_empty CHECK constraint is satisfied.
 func (s *implService) SetNotes(ctx context.Context, id, notes string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.impl.SetNotes")
 	defer tracing.End(span, &err)
@@ -311,21 +321,28 @@ func (s *implService) SetNotes(ctx context.Context, id, notes string) (err error
 	}
 
 	existing, _ := s.userState.Get(ctx, userID, id)
-	status := jobmodel.StatusSaved
-	if existing != nil {
-		status = existing.Status
+	var upsertStatus string
+	switch {
+	case existing == nil:
+		// First touch — implicitly save so a saved_at anchors the row.
+		upsertStatus = jobcommon.JobStatusSaved
+	case existing.Status != nil:
+		upsertStatus = *existing.Status
+	default:
+		// Row exists with NULL status (saved-only or notes-only). Use the
+		// JobStatusNew sentinel so Upsert preserves the NULL status.
+		upsertStatus = jobcommon.JobStatusNew
 	}
 	notesPtr := &notes
 	if err = s.userState.Upsert(ctx, userID, id, dto.UpsertState{
-		Status: status,
+		Status: upsertStatus,
 		Notes:  notesPtr,
 	}); err != nil {
 		return err
 	}
 	// First note on an unseen job creates a saved row, which shifts the
-	// counts ("new" → "saved"). Re-edits of an existing note leave status
-	// alone, so the delete is wasted there — but counts are tiny and the
-	// TTL bounds staleness either way; correctness beats the saved DEL.
+	// counts ("new" → "saved"). Re-edits of an existing row leave status
+	// alone, so we skip the invalidation there.
 	if existing == nil {
 		s.invalidateUserCounts(ctx, userID)
 	}
@@ -457,13 +474,20 @@ func (s *implService) invalidateUserCounts(ctx context.Context, userID string) {
 }
 
 // toUserStateView projects a UserJobState row into the UI-facing read
-// shape. A nil row maps to status="new" with no timestamps populated.
+// shape. A nil row, or a row with a NULL workflow status, maps to
+// status="new". saved_at is orthogonal to the workflow status — a row
+// with saved_at != NULL and status NULL still appears as "new" in the
+// status field but populates SavedAt on the view.
 func toUserStateView(s *jobmodel.UserJobState) dto.UserJobStateView {
 	if s == nil {
 		return dto.UserJobStateView{Status: jobcommon.JobStatusNew}
 	}
+	status := jobcommon.JobStatusNew
+	if s.Status != nil {
+		status = *s.Status
+	}
 	v := dto.UserJobStateView{
-		Status:          s.Status,
+		Status:          status,
 		Notes:           s.Notes,
 		DismissalReason: s.DismissalReason,
 		DismissalNote:   s.DismissalNote,

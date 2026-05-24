@@ -175,7 +175,8 @@ func TestRepository_Funnel_SuccessShape(t *testing.T) {
 	if err := db.Exec(`CREATE TABLE job_analytics (id INTEGER PRIMARY KEY)`).Error; err != nil {
 		t.Fatalf("create job_analytics: %v", err)
 	}
-	if err := db.Exec(`CREATE TABLE user_job_state (id INTEGER PRIMARY KEY, status TEXT)`).Error; err != nil {
+	// Sparse model: status nullable, saved_at as orthogonal flag column.
+	if err := db.Exec(`CREATE TABLE user_job_state (id INTEGER PRIMARY KEY, status TEXT, saved_at TIMESTAMP)`).Error; err != nil {
 		t.Fatalf("create user_job_state: %v", err)
 	}
 	repo := newExecRepo(t, db)
@@ -207,18 +208,21 @@ func TestRepository_Funnel_CountsFromUserJobState(t *testing.T) {
 	if err := db.Exec(`CREATE TABLE job_analytics (id INTEGER PRIMARY KEY)`).Error; err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := db.Exec(`CREATE TABLE user_job_state (id INTEGER PRIMARY KEY, status TEXT)`).Error; err != nil {
+	// Sparse model: status nullable, saved_at as orthogonal flag column.
+	if err := db.Exec(`CREATE TABLE user_job_state (id INTEGER PRIMARY KEY, status TEXT, saved_at TIMESTAMP)`).Error; err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	// 2 enriched, 3 saved, 1 applied + 1 interviewing + 1 offer = 3 applied, 2 dismissed.
+	// 2 enriched, 3 saved (rows with saved_at, no workflow status),
+	// 1 applied + 1 interviewing + 1 offer = 3 applied, 2 dismissed.
+	// Status is NULL for saved-only and "new" rows (sparse model).
 	if err := db.Exec(`INSERT INTO job_analytics (id) VALUES (1), (2)`).Error; err != nil {
 		t.Fatalf("seed analytics: %v", err)
 	}
-	if err := db.Exec(`INSERT INTO user_job_state (id, status) VALUES
-		(1, 'saved'), (2, 'saved'), (3, 'saved'),
-		(4, 'applied'), (5, 'interviewing'), (6, 'offer'),
-		(7, 'dismissed'), (8, 'dismissed'),
-		(9, 'new')`).Error; err != nil {
+	if err := db.Exec(`INSERT INTO user_job_state (id, status, saved_at) VALUES
+		(1, NULL, '2024-01-01 00:00:00'), (2, NULL, '2024-01-01 00:00:00'), (3, NULL, '2024-01-01 00:00:00'),
+		(4, 'applied', NULL), (5, 'interviewing', NULL), (6, 'offer', NULL),
+		(7, 'dismissed', NULL), (8, 'dismissed', NULL),
+		(9, NULL, NULL)`).Error; err != nil {
 		t.Fatalf("seed user_job_state: %v", err)
 	}
 	repo := newExecRepo(t, db)
