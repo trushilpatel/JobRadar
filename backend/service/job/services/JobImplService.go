@@ -153,11 +153,12 @@ func (s *implService) List(ctx context.Context, filter dto.JobFilter, cursor str
 		st := overlay[j.ID]
 		view := dto.JobView{Job: j, UserState: toUserStateView(st)}
 		// Apply status filter after merge — cached page is user-agnostic.
-		// The "new" tab also excludes rows with saved_at set: saved is
-		// orthogonal to workflow status but still removes the job from
-		// the new feed (the user has interacted with it).
+		// "new" means "no workflow status" — saved is orthogonal and does
+		// NOT eject the job from the new feed. A saved-only row therefore
+		// appears in BOTH the new tab and the saved tab; bookmarking a job
+		// is a pure marker that never moves it between workflow tabs.
 		if filter.Status == jobcommon.JobStatusNew {
-			if st != nil && (st.Status != nil || st.SavedAt != nil) {
+			if st != nil && st.Status != nil {
 				continue
 			}
 		} else if filter.Status != "" && view.UserState.Status != filter.Status {
@@ -445,10 +446,13 @@ func (s *implService) GetCounts(ctx context.Context) (_ dto.Counts, err error) {
 		if err != nil {
 			return dto.Counts{}, err
 		}
-		// Derive the "new" count: total jobs minus the sum of all explicit
-		// per-user statuses. Non-fatal — if CountAll fails, New stays 0.
+		// Derive the "new" count: total jobs minus the sum of workflow
+		// statuses. Saved is orthogonal (a saved-only job still appears in
+		// the new tab) so it is NOT subtracted here — otherwise a bookmark
+		// would silently lower the new-tab badge. Non-fatal — if CountAll
+		// fails, New stays 0.
 		if total, terr := s.jobs.CountAll(ctx); terr == nil {
-			sumNonNew := counts.Saved + counts.Applied + counts.Dismissed +
+			sumNonNew := counts.Applied + counts.Dismissed +
 				counts.Interviewing + counts.Offer + counts.Rejected
 			if total > sumNonNew {
 				counts.New = total - sumNonNew

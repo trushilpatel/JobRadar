@@ -555,19 +555,19 @@ func TestImpl_List_StatusRouting(t *testing.T) {
 	}
 }
 
-// TestImpl_List_NewTab_FiltersOutNonNewOverlay confirms the documented sparse-
-// pages behaviour: when a job has a non-new overlay (saved/applied/etc.), the
-// new-tab merge skips it. Pages may have fewer items than the limit, but the
-// next_cursor advances. Frontend pagination must tolerate sparse pages.
-func TestImpl_List_NewTab_FiltersOutNonNewOverlay(t *testing.T) {
+// TestImpl_List_NewTab_FiltersOutWorkflowOverlay confirms the new-tab merge
+// excludes ONLY rows with a workflow status (applied/dismissed/etc.). Saved is
+// orthogonal — a saved-only row stays in the new tab AND simultaneously appears
+// in the saved tab. Bookmarking a job must never silently move it out of new.
+func TestImpl_List_NewTab_FiltersOutWorkflowOverlay(t *testing.T) {
 	now := time.Now()
 	jobs := []jobmodel.Job{{ID: "j1"}, {ID: "j2"}, {ID: "j3"}}
 	overlay := map[string]*jobmodel.UserJobState{
-		// j1: saved-only — saved is orthogonal but still excludes from new tab.
+		// j1: saved-only — orthogonal flag, must STAY on the new tab.
 		"j1": {UserID: "u1", JobID: "j1", SavedAt: &now},
 		// j2: dismissed workflow status — excluded from new tab.
 		"j2": {UserID: "u1", JobID: "j2", Status: strPtr(jobmodel.StatusDismissed)},
-		// j3 has no overlay → implicitly "new"
+		// j3: no overlay → implicitly "new".
 	}
 	reader := &fakeJobReader{jobs: jobs}
 	state := &fakeUserState{manyResult: overlay}
@@ -577,11 +577,26 @@ func TestImpl_List_NewTab_FiltersOutNonNewOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List err = %v", err)
 	}
-	if len(res.Items) != 1 || res.Items[0].ID != "j3" {
-		t.Fatalf("want only j3 on new tab, got %+v", res.Items)
+	if len(res.Items) != 2 {
+		t.Fatalf("want 2 items on new tab (j1 saved-only + j3 untouched), got %d: %+v",
+			len(res.Items), res.Items)
 	}
-	if res.Items[0].UserState.Status != jobcommon.JobStatusNew {
-		t.Errorf("j3 status = %q, want new", res.Items[0].UserState.Status)
+	got := map[string]bool{}
+	for _, it := range res.Items {
+		got[it.ID] = true
+		if it.UserState.Status != jobcommon.JobStatusNew {
+			t.Errorf("%s status = %q, want new", it.ID, it.UserState.Status)
+		}
+	}
+	if !got["j1"] || !got["j3"] {
+		t.Fatalf("missing expected ids j1, j3 in result: %+v", res.Items)
+	}
+	// j1 must surface saved_at populated so the bookmark icon stays filled
+	// on the new tab.
+	for _, it := range res.Items {
+		if it.ID == "j1" && it.UserState.SavedAt == nil {
+			t.Error("j1 SavedAt should be populated on new tab (orthogonal flag)")
+		}
 	}
 }
 
@@ -904,24 +919,45 @@ func TestImpl_GetCounts_DerivesNew(t *testing.T) {
 			{ID: "j6"}, {ID: "j7"}, {ID: "j8"}, {ID: "j9"}, {ID: "j10"},
 		}, // CountAll = 10
 	}
+	// Saved is orthogonal — must NOT subtract from New. The sum is over
+	// workflow statuses only: applied + dismissed + interviewing + offer + rejected = 5.
 	state := &fakeUserState{countsResult: jobdto.Counts{
 		Saved: 2, Applied: 1, Dismissed: 3, Interviewing: 1, Offer: 0, Rejected: 0,
-	}} // sum = 7
+	}}
 	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
 	got, err := svc.GetCounts(ctxAs("u1"))
 	if err != nil {
 		t.Fatalf("GetCounts: %v", err)
 	}
-	if got.New != 3 {
-		t.Errorf("New = %d, want 3 (10 - 7)", got.New)
+	if got.New != 5 {
+		t.Errorf("New = %d, want 5 (10 - 5 workflow; saved is orthogonal)", got.New)
 	}
 }
 
-// TestImpl_GetCounts_CountAllUnderflow — when sum(others) > total, New must
-// stay 0 (never go negative). Defensive guard against snapshot/state drift.
+// TestImpl_GetCounts_SavedDoesNotShrinkNew — bookmarking jobs must never
+// lower the new-tab badge. With only Saved populated (no workflow status),
+// New must equal total.
+func TestImpl_GetCounts_SavedDoesNotShrinkNew(t *testing.T) {
+	reader := &fakeJobReader{jobs: []jobmodel.Job{
+		{ID: "j1"}, {ID: "j2"}, {ID: "j3"}, {ID: "j4"}, {ID: "j5"},
+	}} // CountAll = 5
+	state := &fakeUserState{countsResult: jobdto.Counts{Saved: 5}}
+	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
+	got, err := svc.GetCounts(ctxAs("u1"))
+	if err != nil {
+		t.Fatalf("GetCounts: %v", err)
+	}
+	if got.New != 5 {
+		t.Errorf("New = %d, want 5 (saved is orthogonal — must not subtract)", got.New)
+	}
+}
+
+// TestImpl_GetCounts_CountAllUnderflow — when sum(workflow statuses) > total,
+// New must stay 0 (never go negative). Defensive guard against snapshot/state
+// drift between user_job_state and the global jobs table.
 func TestImpl_GetCounts_CountAllUnderflow(t *testing.T) {
 	reader := &fakeJobReader{jobs: []jobmodel.Job{{ID: "j1"}}} // CountAll = 1
-	state := &fakeUserState{countsResult: jobdto.Counts{Saved: 5}}
+	state := &fakeUserState{countsResult: jobdto.Counts{Applied: 3, Dismissed: 2}}
 	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
 	got, err := svc.GetCounts(ctxAs("u1"))
 	if err != nil {
