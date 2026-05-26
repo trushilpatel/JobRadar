@@ -582,9 +582,11 @@ func TestProcessChunk_PassThrough_AcksAfterLedger(t *testing.T) {
 	}
 }
 
-// TestProcessChunk_PassThrough_LedgerErrorStillAcks asserts that even when
-// UpdateSeenReasonBatch returns an error, all pass-through messages are Acked.
-func TestProcessChunk_PassThrough_LedgerErrorStillAcks(t *testing.T) {
+// TestProcessChunk_PassThrough_LedgerErrorNaks asserts that when
+// UpdateSeenReasonBatch returns a (non-missing) error, the chunk's messages are
+// Nak'd — not Acked. Acking on a failed ledger UPDATE would leave the ledger
+// row stuck at 'fetch' ("Awaiting Filter") indefinitely.
+func TestProcessChunk_PassThrough_LedgerErrorNaks(t *testing.T) {
 	scorer := &fakeScorer{}
 	pub := &fakePublisher{}
 
@@ -597,12 +599,11 @@ func TestProcessChunk_PassThrough_LedgerErrorStillAcks(t *testing.T) {
 	w := makeWorkerWithInterface(scorer, ledger, pub)
 	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-err", 0, 1)
 
-	// Acks must happen even when ledger errors.
-	if !state1.Acked {
-		t.Errorf("expected item1 Acked even when ledger returns error")
+	if state1.Acked || state2.Acked {
+		t.Errorf("expected no Acks when ledger returns error; got acked1=%v acked2=%v", state1.Acked, state2.Acked)
 	}
-	if !state2.Acked {
-		t.Errorf("expected item2 Acked even when ledger returns error")
+	if !state1.Naked || !state2.Naked {
+		t.Errorf("expected both items Nak'd when ledger returns error; got naked1=%v naked2=%v", state1.Naked, state2.Naked)
 	}
 }
 

@@ -216,6 +216,7 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 				logger.Int(logger.FieldChunkIndex, i),
 			)
 			if serr := w.clock.Sleep(fetchCtx, w.llmCallInterval); serr != nil {
+				w.nakRemainingChunks(chunks[i:], fetchID, "shutdown during inter-chunk sleep")
 				return serr
 			}
 		}
@@ -257,11 +258,37 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 		}()
 
 		if fetchCtx.Err() != nil {
+			w.nakRemainingChunks(chunks[i+1:], fetchID, "shutdown between chunks")
 			return nil
 		}
 	}
 
 	return nil
+}
+
+// nakRemainingChunks Naks every message in the given chunks so NATS redelivers
+// them immediately instead of waiting for AckWait. Called when processFetch is
+// abandoning unprocessed chunks because the worker is shutting down.
+func (w *Worker) nakRemainingChunks(chunks [][]chunkItem, fetchID, why string) {
+	total := 0
+	for _, ch := range chunks {
+		total += len(ch)
+	}
+	if total == 0 {
+		return
+	}
+	w.log.Warn("naking unprocessed chunks for redelivery",
+		logger.Str(logger.FieldFetchID, fetchID),
+		logger.Int(logger.FieldRecords, total),
+		logger.Str(logger.FieldReason, why),
+	)
+	for _, ch := range chunks {
+		for _, it := range ch {
+			if nerr := it.msg.Nak(); nerr != nil {
+				w.log.Warn("msg nak failed", logger.Err(nerr), logger.Str(logger.FieldJobID, it.job.job.ID))
+			}
+		}
+	}
 }
 
 // processChunk owns one chunk end-to-end: ScoreBatch → publish relevant /
@@ -513,13 +540,13 @@ func (w *Worker) publishPartition(ctx context.Context, items []chunkItem) (publi
 	return published, failed
 }
 
-// markSeenOrNak records reason for every item's job ID via UpdateSeenReasonBatch,
-// then Acks the items. If the ledger reports ErrLedgerRowMissing (the
-// crawler→filter race), the chunk's messages are Nak'd instead of Acked so NATS
-// redelivers after the crawler INSERT commits — this is what prevents a phantom
-// ledger row from ever being created. Any other ledger error is logged and the
-// messages are still Acked (consistent with the prior best-effort behaviour;
-// the row is recoverable via cleanup).
+// markSeenOrNak records reason for every item's job ID via UpdateSeenReasonBatch.
+// On success the chunk's messages are Acked. On ANY ledger error the messages
+// are Nak'd so NATS redelivers and the UPDATE is re-attempted on the next
+// delivery — Acking on a failed UPDATE would leave the row stuck at the prior
+// reason (the phantom 'fetch' / "Awaiting Filter" bug). ErrLedgerRowMissing is
+// reported separately (crawler→filter race) for metrics, but takes the same
+// Nak path as any other failure.
 func (w *Worker) markSeenOrNak(ctx context.Context, items []chunkItem, reason, fetchID string, chunkIndex int) {
 	if len(items) == 0 {
 		return
@@ -529,13 +556,21 @@ func (w *Worker) markSeenOrNak(ctx context.Context, items []chunkItem, reason, f
 		ids[i] = it.job.job.ID
 	}
 	err := w.ledger.UpdateSeenReasonBatch(ctx, ids, reason)
-	if err != nil && stderrors.Is(err, domainerr.ErrLedgerRowMissing) {
-		metrics.FilterLedgerMissing.WithLabelValues(reason).Inc()
-		w.log.Warn("ledger row missing — naking chunk for redelivery (crawler race)",
-			logger.Str(logger.FieldFetchID, fetchID),
-			logger.Int(logger.FieldChunkIndex, chunkIndex),
-			logger.Str(logger.FieldReason, reason),
-		)
+	if err != nil {
+		if stderrors.Is(err, domainerr.ErrLedgerRowMissing) {
+			metrics.FilterLedgerMissing.WithLabelValues(reason).Inc()
+			w.log.Warn("ledger row missing — naking chunk for redelivery (crawler race)",
+				logger.Str(logger.FieldFetchID, fetchID),
+				logger.Int(logger.FieldChunkIndex, chunkIndex),
+				logger.Str(logger.FieldReason, reason),
+			)
+		} else {
+			w.log.Error("mark seen batch failed — naking chunk for redelivery", err,
+				logger.Str(logger.FieldFetchID, fetchID),
+				logger.Int(logger.FieldChunkIndex, chunkIndex),
+				logger.Str(logger.FieldReason, reason),
+			)
+		}
 		for _, it := range items {
 			if nerr := it.msg.Nak(); nerr != nil {
 				w.log.Warn("msg nak failed", logger.Err(nerr), logger.Str(logger.FieldJobID, it.job.job.ID))
@@ -543,14 +578,6 @@ func (w *Worker) markSeenOrNak(ctx context.Context, items []chunkItem, reason, f
 		}
 		return
 	}
-	if err != nil {
-		w.log.Error("mark seen batch failed", err,
-			logger.Str(logger.FieldFetchID, fetchID),
-			logger.Int(logger.FieldChunkIndex, chunkIndex),
-			logger.Str(logger.FieldReason, reason),
-		)
-	}
-	// Ack after the ledger write has been attempted (idempotent on redeliver).
 	for _, it := range items {
 		if aerr := it.msg.Ack(); aerr != nil {
 			w.log.Warn("msg ack failed", logger.Err(aerr))
