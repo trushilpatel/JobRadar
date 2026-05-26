@@ -13,6 +13,6 @@ data:
   LOG_LEVEL: {{ .Values.scheduler.logLevel | quote }}
   LOG_FORMAT: {{ .Values.scheduler.logFormat | quote }}
   METRICS_ADDR: {{ .Values.scheduler.metricsAddr | quote }}
-  JAEGER_ENDPOINT: {{ .Values.scheduler.jaegerEndpoint | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.scheduler.otelEndpoint | quote }}
   DB_SSLMODE: {{ .Values.scheduler.dbSslmode | quote }}
   DB_PORT: {{ .Values.scheduler.dbPort | quote }}

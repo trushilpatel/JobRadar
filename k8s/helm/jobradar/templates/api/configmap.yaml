@@ -10,7 +10,7 @@ data:
   METRICS_ADDR: {{ .Values.api.metricsAddr | quote }}
   LOG_LEVEL: {{ .Values.api.logLevel | quote }}
   LOG_FORMAT: {{ .Values.api.logFormat | quote }}
-  JAEGER_ENDPOINT: {{ .Values.api.jaegerEndpoint | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.api.otelEndpoint | quote }}
   DB_SSLMODE: {{ .Values.api.dbSslmode | quote }}
   DB_PORT: {{ .Values.api.dbPort | quote }}
   RATE_LIMIT_READ_RPM: {{ .Values.api.rateLimitReadRpm | quote }}

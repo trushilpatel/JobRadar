@@ -177,8 +177,8 @@ func (c SchedulerConfig) Validate() error {
 }
 
 type ObservabilityConfig struct {
-	MetricsAddr    string
-	JaegerEndpoint string
+	MetricsAddr  string
+	OTelEndpoint string
 }
 
 type RedisConfig struct {
@@ -312,8 +312,8 @@ func Load() *Config {
 			CheckIntervalSeconds: getEnvInt("SCHEDULER_CHECK_INTERVAL_SECONDS", 60),
 		},
 		Observability: ObservabilityConfig{
-			MetricsAddr:    getEnv("METRICS_ADDR", "127.0.0.1:9100"),
-			JaegerEndpoint: getEnv("JAEGER_ENDPOINT", "http://localhost:4318"),
+			MetricsAddr:  getEnv("METRICS_ADDR", "127.0.0.1:9100"),
+			OTelEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 		},
 		Auth: AuthConfig{
 			SupabaseProjectURL:  getEnv("SUPABASE_PROJECT_URL", ""),

@@ -45,7 +45,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	shutdown := tracing.Init("jobradar-api", cfg.Observability.JaegerEndpoint, log)
+	shutdown := tracing.Init("jobradar-api", cfg.Observability.OTelEndpoint, log)
 	defer shutdown()
 
 	database, err := db.Open(cfg.DB, 10)
