@@ -77,6 +77,19 @@ func (e *ServiceError) WithExternal(msg string) *ServiceError {
 	return &ServiceError{Code: e.Code, Status: e.Status, InternalMessage: e.InternalMessage, ExternalMessage: msg}
 }
 
+// Is reports whether target is the same logical sentinel as e, comparing by
+// Code. This lets callers use errors.Is(err, ErrLedgerRowMissing) even when the
+// returned error was produced via WithMessage/WithExternal (which yield a new
+// pointer with the same Code). Matching by Code is intentional: the Code is the
+// stable machine-readable identity of the error; the messages are detail.
+func (e *ServiceError) Is(target error) bool {
+	t, ok := target.(*ServiceError)
+	if !ok {
+		return false
+	}
+	return e.Code == t.Code
+}
+
 func genericMessageFor(code string) string {
 	switch code {
 	case "NOT_FOUND":
@@ -93,6 +106,12 @@ func genericMessageFor(code string) string {
 		return "rate limited"
 	case "LLM_EXHAUSTED":
 		return "service temporarily unavailable"
+	case "LEDGER_ROW_MISSING":
+		return "resource not found"
+	case "QUEUE_ROW_MISSING":
+		return "resource not found"
+	case "JOB_DUPLICATE":
+		return "resource already exists"
 	default:
 		return "error"
 	}
@@ -108,6 +127,28 @@ var (
 	ErrLLMLocalQuotaExceeded  = &ServiceError{Code: "LLM_LOCAL_QUOTA", Status: 429, InternalMessage: "llm: local quota exceeded"}
 	ErrLLMProviderRateLimited = &ServiceError{Code: "LLM_PROVIDER_429", Status: 429, InternalMessage: "llm: provider rate limited"}
 	ErrLLMAllExhausted        = &ServiceError{Code: "LLM_EXHAUSTED", Status: 503, InternalMessage: "llm: all slots exhausted"}
+
+	// ErrLedgerRowMissing is returned by JobSeenLedger UPDATE operations when no
+	// ledger row matched (RowsAffected fell short of the expected count). It
+	// signals the crawler→filter race (message consumed before the ledger INSERT
+	// committed) or a row cleaned out by maintenance. Callers decide: the filter
+	// Naks the source message (NATS redelivers, by which time the INSERT lands);
+	// the analyzer logs+metrics and proceeds (a cleaned-out row is non-fatal at
+	// that stage). Status 409 (conflict) — never serialised to a user-facing API.
+	ErrLedgerRowMissing = &ServiceError{Code: "LEDGER_ROW_MISSING", Status: 409, InternalMessage: "ledger row missing"}
+
+	// ErrQueueRowMissing is returned by ScanQueue UPDATE operations (Complete,
+	// Remove, UpdateHeartbeat) when no queue row matched. The admin Remove path
+	// maps it to HTTP 404 via HandleError (Status 404). The crawler treats a
+	// missing-row heartbeat as a reassignment signal and aborts the scan.
+	ErrQueueRowMissing = &ServiceError{Code: "QUEUE_ROW_MISSING", Status: 404, InternalMessage: "scan queue row missing"}
+
+	// ErrJobAlreadyExists is returned by InsertJob when the ON CONFLICT DO NOTHING
+	// clause matched an existing job_post_id (RowsAffected == 0). It is an
+	// internal control-flow signal for idempotent inserts — the enricher treats
+	// it as non-fatal — and is never serialised to a user-facing API. Status 200
+	// reflects "no error from the client's perspective".
+	ErrJobAlreadyExists = &ServiceError{Code: "JOB_DUPLICATE", Status: 200, InternalMessage: "job already exists for job_post_id"}
 )
 
 // LLMSlotStatus is the public shape of slot state at exhaustion time.

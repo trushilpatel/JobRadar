@@ -79,6 +79,7 @@ const (
 	FieldCheckInterval       = "check_interval"
 	FieldStuckTimeout        = "stuck_timeout"
 	FieldJitter              = "jitter"
+	FieldReason              = "reason"
 	FieldPurged              = "purged"
 	FieldSkippedNoSettings   = "skipped_no_settings"
 	FieldStillActive         = "still_active"

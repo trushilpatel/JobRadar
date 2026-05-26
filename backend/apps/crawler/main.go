@@ -54,7 +54,7 @@ func main() {
 	engine, rawQueue := buildEngine(database, publisher, cfg, log)
 
 	stuckTimeout := time.Duration(cfg.Crawler.StuckTimeoutSeconds) * time.Second
-	if err := rawQueue.ResetStuck(ctx, stuckTimeout); err != nil {
+	if _, err := rawQueue.ResetStuck(ctx, stuckTimeout); err != nil {
 		log.Error("failed to reset stuck queue items on startup", err)
 	}
 
@@ -65,7 +65,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := rawQueue.ResetStuck(ctx, stuckTimeout); err != nil {
+				if _, err := rawQueue.ResetStuck(ctx, stuckTimeout); err != nil {
 					log.Error("failed to reset stuck queue items", err)
 				}
 			case <-ctx.Done():

@@ -19,6 +19,7 @@ import (
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
@@ -968,4 +969,73 @@ func counterValue(c prometheus.Counter) float64 {
 		return *m.Counter.Value
 	}
 	return 0
+}
+
+func ledgerMissingCount(reason string) float64 {
+	return counterValue(metrics.EnricherLedgerMissing.WithLabelValues(reason))
+}
+
+// TestMarkError_LedgerMissing_NonFatal (#24) — MarkLedgerError returning
+// ErrLedgerRowMissing is tolerated: the worker does not panic, and
+// enricher_ledger_missing_total increments. Same tolerance for irrelevant /
+// non-USA via the shared helper.
+func TestMarkError_LedgerMissing_NonFatal(t *testing.T) {
+	pipeline := &fakePipelineService{markErr: domainerr.ErrLedgerRowMissing.WithMessage("gone")}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+
+	before := ledgerMissingCount(jobcommon.SeenReasonError)
+	w.markError(context.Background(), "job-missing") // must not panic
+	after := ledgerMissingCount(jobcommon.SeenReasonError)
+	if after-before != 1 {
+		t.Errorf("expected enricher_ledger_missing_total{error} +1, got +%v", after-before)
+	}
+
+	beforeIrr := ledgerMissingCount(jobcommon.SeenReasonLLMIrrelevant)
+	w.markIrrelevant(context.Background(), "job-missing")
+	if ledgerMissingCount(jobcommon.SeenReasonLLMIrrelevant)-beforeIrr != 1 {
+		t.Errorf("expected enricher_ledger_missing_total{llm_irrelevant} +1")
+	}
+
+	beforeNonUSA := ledgerMissingCount(jobcommon.SeenReasonNonUSA)
+	w.markNonUSA(context.Background(), "job-missing")
+	if ledgerMissingCount(jobcommon.SeenReasonNonUSA)-beforeNonUSA != 1 {
+		t.Errorf("expected enricher_ledger_missing_total{non_usa_location} +1")
+	}
+}
+
+// TestMarkError_OtherLedgerError_LoggedNotMetric — a non-missing-row error is
+// logged at ERROR and does NOT increment the missing-row metric.
+func TestMarkError_OtherLedgerError_LoggedNotMetric(t *testing.T) {
+	pipeline := &fakePipelineService{markErr: stderrors.New("db down")}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+
+	before := ledgerMissingCount(jobcommon.SeenReasonError)
+	w.markError(context.Background(), "job-x")
+	if ledgerMissingCount(jobcommon.SeenReasonError)-before != 0 {
+		t.Errorf("a generic ledger error must not increment the missing-row metric")
+	}
+}
+
+// TestMarkLedgerRetryWithRetry_LedgerMissing_NoSecondAttempt (#25) — when the
+// first UpdateRetryBatch returns ErrLedgerRowMissing, the inline retry is NOT
+// attempted (the row is permanently gone).
+func TestMarkLedgerRetryWithRetry_LedgerMissing_NoSecondAttempt(t *testing.T) {
+	ledger := &fakeLedger{failureQueue: []error{domainerr.ErrLedgerRowMissing.WithMessage("gone")}}
+	w := makeWorker(&fakeScorer{}, &fakePipelineService{}, &fakePublisher{}, ledger)
+
+	before := ledgerMissingCount(jobcommon.SeenReasonRetry)
+	err := w.markLedgerRetryWithRetry(context.Background(), jobsvc.RetryLedgerEntry{JobID: "job-gone", RetryCount: 1})
+	if !stderrors.Is(err, domainerr.ErrLedgerRowMissing) {
+		t.Fatalf("expected ErrLedgerRowMissing returned, got %v", err)
+	}
+	// failureQueue consumed exactly once → no second UpdateRetryBatch call.
+	if len(ledger.failureQueue) != 0 {
+		t.Errorf("expected the single queued failure to be consumed once")
+	}
+	if len(ledger.retryBatches) != 0 {
+		t.Errorf("expected NO successful retry batch (second attempt skipped), got %d", len(ledger.retryBatches))
+	}
+	if ledgerMissingCount(jobcommon.SeenReasonRetry)-before != 1 {
+		t.Errorf("expected enricher_ledger_missing_total{retry} +1")
+	}
 }

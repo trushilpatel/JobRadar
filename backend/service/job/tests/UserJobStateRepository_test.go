@@ -367,7 +367,7 @@ func TestUserJobStateRepo_CountsByUser(t *testing.T) {
 
 	for i, s := range seeds {
 		jid := jobID(i)
-		seedJob(t, db, jid, "c1", "T", "p", now)
+		seedJob(t, db, jid, "c1", "T", "p"+jid, now)
 		if err := db.Create(&jobmodel.UserJobState{
 			UserID: "u1", JobID: jid, Status: s.status, SavedAt: s.savedAt,
 		}).Error; err != nil {

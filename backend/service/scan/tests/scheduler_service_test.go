@@ -38,9 +38,9 @@ func (f *schedulerFakeQueue) ClaimNext(context.Context, string) (*dto.ScanQueueI
 }
 func (f *schedulerFakeQueue) Complete(context.Context, string) error { return nil }
 func (f *schedulerFakeQueue) Remove(context.Context, string) error   { return nil }
-func (f *schedulerFakeQueue) ResetStuck(_ context.Context, d time.Duration) error {
+func (f *schedulerFakeQueue) ResetStuck(_ context.Context, d time.Duration) (int, error) {
 	f.resetStuckArg = d
-	return f.err
+	return 0, f.err
 }
 func (f *schedulerFakeQueue) PurgeInactive(context.Context) (int, error) {
 	return f.purgeCount, f.err

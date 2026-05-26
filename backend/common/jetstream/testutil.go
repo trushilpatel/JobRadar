@@ -17,10 +17,13 @@ func NewTestMsg(data []byte, deliveryCount int) (*Msg, *TestMsgState) {
 }
 
 // TestMsgState records which disposition was called on a test message.
+// NakErr, when set, is returned by Nak() so tests can exercise the Nak-failure
+// path; the Naked flag is still set so the call is observable.
 type TestMsgState struct {
 	Acked  bool
 	Naked  bool
 	Termed bool
+	NakErr error
 }
 
 type testMsg struct {
@@ -35,10 +38,10 @@ func (m *testMsg) Headers() nats.Header              { return nil }
 func (m *testMsg) Reply() string                     { return "" }
 func (m *testMsg) Ack() error                        { m.state.Acked = true; return nil }
 func (m *testMsg) DoubleAck(_ context.Context) error { m.state.Acked = true; return nil }
-func (m *testMsg) Nak() error                        { m.state.Naked = true; return nil }
+func (m *testMsg) Nak() error                        { m.state.Naked = true; return m.state.NakErr }
 func (m *testMsg) NakWithDelay(_ time.Duration) error {
 	m.state.Naked = true
-	return nil
+	return m.state.NakErr
 }
 func (m *testMsg) InProgress() error             { return nil }
 func (m *testMsg) Term() error                   { m.state.Termed = true; return nil }

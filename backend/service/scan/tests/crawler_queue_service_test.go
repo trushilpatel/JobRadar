@@ -20,6 +20,7 @@ type crawlerQueueFakeStore struct {
 	claimAdapterArg  string
 	completeIDArg    string
 	resetStuckArg    time.Duration
+	resetStuckCount  int
 	heartbeatIDArg   string
 	heartbeatCallCnt int
 }
@@ -38,9 +39,9 @@ func (f *crawlerQueueFakeStore) Complete(_ context.Context, id string) error {
 	return f.err
 }
 func (f *crawlerQueueFakeStore) Remove(context.Context, string) error { return nil }
-func (f *crawlerQueueFakeStore) ResetStuck(_ context.Context, d time.Duration) error {
+func (f *crawlerQueueFakeStore) ResetStuck(_ context.Context, d time.Duration) (int, error) {
 	f.resetStuckArg = d
-	return f.err
+	return f.resetStuckCount, f.err
 }
 func (f *crawlerQueueFakeStore) PurgeInactive(context.Context) (int, error) { return 0, nil }
 func (f *crawlerQueueFakeStore) UpdateHeartbeat(_ context.Context, id string) error {
@@ -137,11 +138,15 @@ func TestCrawlerQueueService_Complete_StoreError(t *testing.T) {
 }
 
 func TestCrawlerQueueService_ResetStuck_OK(t *testing.T) {
-	store := &crawlerQueueFakeStore{}
+	store := &crawlerQueueFakeStore{resetStuckCount: 3}
 	s := svc.NewCrawlerQueueService(store)
 
-	if err := s.ResetStuck(context.Background(), 2*time.Minute); err != nil {
+	n, err := s.ResetStuck(context.Background(), 2*time.Minute)
+	if err != nil {
 		t.Fatalf("ResetStuck() error = %v", err)
+	}
+	if n != 3 {
+		t.Errorf("expected count 3 passed through, got %d", n)
 	}
 	if store.resetStuckArg != 2*time.Minute {
 		t.Errorf("expected 2m, got %v", store.resetStuckArg)
@@ -153,7 +158,7 @@ func TestCrawlerQueueService_ResetStuck_StoreError(t *testing.T) {
 	store := &crawlerQueueFakeStore{err: underlying}
 	s := svc.NewCrawlerQueueService(store)
 
-	err := s.ResetStuck(context.Background(), time.Second)
+	_, err := s.ResetStuck(context.Background(), time.Second)
 	if err == nil {
 		t.Fatal("expected error")
 	}

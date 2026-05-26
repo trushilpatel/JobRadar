@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/logger"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
@@ -231,6 +232,69 @@ func TestSaveEnrichedJob_NullableFields_EmptyStrings(t *testing.T) {
 	}
 	if j.RoleBrief != nil {
 		t.Errorf("RoleBrief should be nil for empty string, got %v", j.RoleBrief)
+	}
+}
+
+// TestSaveEnrichedJob_DuplicateInsert_SkipsSnapshotStillUpdatesLedger (#9) — a
+// replay whose job_post_id already exists is non-fatal: snapshot/tech-tag
+// writes are skipped, the ledger still advances to 'saved', and the call
+// returns nil so the enricher worker Acks.
+func TestSaveEnrichedJob_DuplicateInsert_SkipsSnapshotStillUpdatesLedger(t *testing.T) {
+	jobs := &pipelineJobWriter{insertErr: domainerrs.ErrJobAlreadyExists.WithMessage("dup")}
+	ledger := &pipelineLedgerStore{}
+	snapshot := &pipelineSnapshotWriter{}
+	tags := &countingTechTagWriter{}
+
+	svc := jobsvc.NewPipelineService(jobs, ledger, snapshot, tags, logger.NewNoop())
+
+	if err := svc.SaveEnrichedJob(context.Background(), makeInput()); err != nil {
+		t.Fatalf("SaveEnrichedJob() on duplicate should return nil, got %v", err)
+	}
+	if snapshot.insertCalled {
+		t.Error("expected InsertSnapshot NOT to be called on duplicate insert")
+	}
+	if tags.calls != 0 {
+		t.Errorf("expected InsertTechTags NOT to be called on duplicate, got %d calls", tags.calls)
+	}
+	if ledger.updateReasonVal != jobcommon.SeenReasonSaved {
+		t.Errorf("ledger reason = %q, want %q", ledger.updateReasonVal, jobcommon.SeenReasonSaved)
+	}
+	if ledger.updateReasonJobID != "greenhouse-123" {
+		t.Errorf("ledger job id = %q, want greenhouse-123", ledger.updateReasonJobID)
+	}
+}
+
+// TestSaveEnrichedJob_LedgerMissing_NonFatal (#10) — when the post-insert
+// ledger UPDATE reports the row missing (cleaned out by maintenance), the job
+// is already persisted so the call returns nil rather than erroring the worker.
+func TestSaveEnrichedJob_LedgerMissing_NonFatal(t *testing.T) {
+	jobs := &pipelineJobWriter{}
+	ledger := &pipelineLedgerStore{updateReasonErr: domainerrs.ErrLedgerRowMissing.WithMessage("gone")}
+	snapshot := &pipelineSnapshotWriter{}
+
+	svc := jobsvc.NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{}, logger.NewNoop())
+
+	if err := svc.SaveEnrichedJob(context.Background(), makeInput()); err != nil {
+		t.Fatalf("SaveEnrichedJob() with missing ledger row should return nil, got %v", err)
+	}
+	// The job itself was still inserted and the snapshot still written.
+	if jobs.inserted == nil {
+		t.Error("expected job to be inserted")
+	}
+	if !snapshot.insertCalled {
+		t.Error("expected snapshot to be written on the happy insert path")
+	}
+}
+
+// TestSaveEnrichedJob_LedgerOtherError_ReturnsError — a non-missing-row ledger
+// failure still bubbles up so the worker can retry.
+func TestSaveEnrichedJob_LedgerOtherError_ReturnsError(t *testing.T) {
+	jobs := &pipelineJobWriter{}
+	ledger := &pipelineLedgerStore{updateReasonErr: errors.New("db down")}
+	svc := jobsvc.NewPipelineService(jobs, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{}, logger.NewNoop())
+
+	if err := svc.SaveEnrichedJob(context.Background(), makeInput()); err == nil {
+		t.Fatal("expected error when ledger update fails with a non-missing-row error")
 	}
 }
 

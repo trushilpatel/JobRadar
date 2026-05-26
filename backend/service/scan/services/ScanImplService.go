@@ -42,7 +42,7 @@ func (s *schedulerService) EnqueueDue(ctx context.Context, intervalMinutes int) 
 func (s *schedulerService) ResetStuck(ctx context.Context, staleDur time.Duration) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.service.ResetStuck")
 	defer tracing.End(span, &err)
-	if err := s.queue.ResetStuck(ctx, staleDur); err != nil {
+	if _, err := s.queue.ResetStuck(ctx, staleDur); err != nil {
 		return apperr.ErrInternal.WithMessage("failed to reset stuck queue entries")
 	}
 	return nil

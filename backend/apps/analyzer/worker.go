@@ -18,6 +18,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 )
@@ -352,6 +353,17 @@ func (w *Worker) markLedgerRetryWithRetry(ctx context.Context, entry jobsvc.Retr
 	if err == nil {
 		return nil
 	}
+	// A missing ledger row is permanent, not transient — retrying the UPDATE
+	// won't make the row appear. Record the metric and return without the second
+	// attempt. NATS remains authoritative for retry scheduling.
+	if stderrors.Is(err, domainerr.ErrLedgerRowMissing) {
+		metrics.EnricherLedgerMissing.WithLabelValues(jobcommon.SeenReasonRetry).Inc()
+		w.log.Warn("ledger row missing on retry update — skipping second attempt",
+			logger.Str(logger.FieldJobID, entry.JobID),
+			logger.Str(logger.FieldReason, jobcommon.SeenReasonRetry),
+		)
+		return err
+	}
 	if sleepErr := w.clock.Sleep(ctx, 100*time.Millisecond); sleepErr != nil {
 		return err
 	}
@@ -386,25 +398,41 @@ func (w *Worker) sendToDLQ(ctx context.Context, jobLog logger.Logger, fj fetched
 	return true
 }
 
+// ledgerMissingTolerated reports whether err is ErrLedgerRowMissing. At the
+// enricher stage a missing ledger row (cleaned out by a maintenance migration,
+// or never written) is non-fatal: it logs WARN, increments a metric, and the
+// worker proceeds rather than crashing. Any other error is logged at ERROR.
+func (w *Worker) ledgerMissingTolerated(err error, jobID, reason string) {
+	if err == nil {
+		return
+	}
+	if stderrors.Is(err, domainerr.ErrLedgerRowMissing) {
+		metrics.EnricherLedgerMissing.WithLabelValues(reason).Inc()
+		w.log.Warn("ledger row missing — continuing (non-fatal at enricher stage)",
+			logger.Str(logger.FieldJobID, jobID),
+			logger.Str(logger.FieldReason, reason),
+		)
+		return
+	}
+	w.log.Error("failed to mark ledger in seen_ledger", err,
+		logger.Str(logger.FieldJobID, jobID),
+		logger.Str(logger.FieldReason, reason),
+	)
+}
+
 // markError updates the ledger so failed jobs aren't re-processed endlessly.
 func (w *Worker) markError(ctx context.Context, jobID string) {
-	if err := w.pipeline.MarkLedgerError(ctx, jobID); err != nil {
-		w.log.Error("failed to mark error in seen_ledger", err, logger.Str(logger.FieldJobID, jobID))
-	}
+	w.ledgerMissingTolerated(w.pipeline.MarkLedgerError(ctx, jobID), jobID, jobcommon.SeenReasonError)
 }
 
 // markIrrelevant marks a job as llm_irrelevant so it is skipped cleanly without
 // counting as an error.
 func (w *Worker) markIrrelevant(ctx context.Context, jobID string) {
-	if err := w.pipeline.MarkLedgerIrrelevant(ctx, jobID); err != nil {
-		w.log.Error("failed to mark irrelevant in seen_ledger", err, logger.Str(logger.FieldJobID, jobID))
-	}
+	w.ledgerMissingTolerated(w.pipeline.MarkLedgerIrrelevant(ctx, jobID), jobID, jobcommon.SeenReasonLLMIrrelevant)
 }
 
 // markNonUSA marks a job as non_usa_location so it is skipped cleanly without
 // counting as an error.
 func (w *Worker) markNonUSA(ctx context.Context, jobID string) {
-	if err := w.pipeline.MarkLedgerNonUSA(ctx, jobID); err != nil {
-		w.log.Error("failed to mark non_usa in seen_ledger", err, logger.Str(logger.FieldJobID, jobID))
-	}
+	w.ledgerMissingTolerated(w.pipeline.MarkLedgerNonUSA(ctx, jobID), jobID, jobcommon.SeenReasonNonUSA)
 }

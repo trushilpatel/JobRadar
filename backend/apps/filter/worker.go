@@ -331,33 +331,19 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 	}
 
 	if len(passThrough) > 0 {
-		// Phase 1: publish all pass-through jobs and collect IDs — no Ack yet.
-		passThroughIDs := make([]string, len(passThrough))
-		for i, it := range passThrough {
-			w.publishDetail(ctx, it.job.job)
-			passThroughIDs[i] = it.job.job.ID
-		}
-		// Phase 2: record ledger state before any Ack so a crash between here
-		// and the Ack loop redelivers the messages; UpdateSeenReasonBatch is
-		// idempotent, so the second write on redeliver is a no-op.
-		if err := w.ledger.UpdateSeenReasonBatch(ctx, passThroughIDs, jobcommon.SeenReasonFiltered); err != nil {
-			w.log.Error("mark filtered (pass-through) failed", err,
-				logger.Str(logger.FieldFetchID, fetchID),
-				logger.Int(logger.FieldChunkIndex, chunkIndex),
-			)
-		}
-		// Phase 3: Ack only after the ledger write has been attempted.
-		for _, it := range passThrough {
-			if aerr := it.msg.Ack(); aerr != nil {
-				w.log.Warn("msg ack failed", logger.Err(aerr))
-			}
-		}
+		// Partition into published-OK and publish-failed BEFORE any ledger write.
+		// Publish-failed jobs are Nak'd (NATS redelivers) with no ledger write —
+		// the row stays at its prior reason and flows through on redelivery.
+		publishedItems, _ := w.publishPartition(ctx, passThrough)
+		// Mark only the published bucket 'filtered'; Nak (don't Ack) any whose
+		// ledger row is missing so NATS redelivers after the crawler INSERT lands.
+		w.markSeenOrNak(ctx, publishedItems, jobcommon.SeenReasonFiltered, fetchID, chunkIndex)
 		w.log.Info("chunk pass-through (no title)",
 			logger.Str(logger.FieldFetchID, fetchID),
 			logger.Int(logger.FieldChunkIndex, chunkIndex),
 			logger.Int(logger.FieldPassThroughCount, len(passThrough)),
 		)
-		metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(passThrough)))
+		metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(publishedItems)))
 	}
 
 	if len(scorable) == 0 {
@@ -457,51 +443,33 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		relevant[id] = true
 	}
 
-	// Phase 1: classify and publish relevant jobs — collect IDs, no Ack yet.
-	var irrelevantIDs []string
+	// Classify into relevant vs irrelevant.
+	var relevantItems, irrelevantItems []chunkItem
 	for _, item := range scorable {
 		if relevant[item.job.job.ID] {
-			w.publishDetail(ctx, item.job.job)
+			relevantItems = append(relevantItems, item)
 		} else {
-			irrelevantIDs = append(irrelevantIDs, item.job.job.ID)
+			irrelevantItems = append(irrelevantItems, item)
 		}
 	}
 
-	// Phase 2: record ledger state for both buckets before any Ack.
-	// UpdateSeenReasonBatch is idempotent — safe to call again on NATS redeliver.
-	if len(irrelevantIDs) > 0 {
-		if err := w.ledger.UpdateSeenReasonBatch(ctx, irrelevantIDs, jobcommon.SeenReasonLLMIrrelevant); err != nil {
-			w.log.Error("mark irrelevant failed", err,
-				logger.Str(logger.FieldFetchID, fetchID),
-				logger.Int(logger.FieldChunkIndex, chunkIndex),
-			)
-		}
-	}
+	// Relevant: publish first, then mark only the published bucket 'filtered'.
+	// Publish-failed jobs are Nak'd with no ledger write (NATS redelivers).
+	publishedItems, _ := w.publishPartition(ctx, relevantItems)
+	w.markSeenOrNak(ctx, publishedItems, jobcommon.SeenReasonFiltered, fetchID, chunkIndex)
 
-	if len(relevantIDs) > 0 {
-		if err := w.ledger.UpdateSeenReasonBatch(ctx, relevantIDs, jobcommon.SeenReasonFiltered); err != nil {
-			w.log.Error("mark filtered (relevant) failed", err,
-				logger.Str(logger.FieldFetchID, fetchID),
-				logger.Int(logger.FieldChunkIndex, chunkIndex),
-			)
-		}
-	}
+	// Irrelevant: no publish; mark 'llm_irrelevant'. A missing ledger row Naks
+	// (crawler→filter race) so NATS redelivers once the INSERT lands.
+	w.markSeenOrNak(ctx, irrelevantItems, jobcommon.SeenReasonLLMIrrelevant, fetchID, chunkIndex)
 
-	// Phase 3: Ack all scorable messages only after both ledger writes have been attempted.
-	for _, item := range scorable {
-		if aerr := item.msg.Ack(); aerr != nil {
-			w.log.Warn("msg ack failed", logger.Err(aerr))
-		}
-	}
-
-	metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(relevantIDs)))
-	metrics.FilterJobsTotal.WithLabelValues("irrelevant").Add(float64(len(irrelevantIDs)))
+	metrics.FilterJobsTotal.WithLabelValues("relevant").Add(float64(len(publishedItems)))
+	metrics.FilterJobsTotal.WithLabelValues("irrelevant").Add(float64(len(irrelevantItems)))
 
 	outcome := "mixed"
 	switch {
-	case len(relevantIDs) == 0:
+	case len(relevantItems) == 0:
 		outcome = "irrelevant"
-	case len(irrelevantIDs) == 0:
+	case len(irrelevantItems) == 0:
 		outcome = "relevant"
 	}
 	scoreSpan.SetAttributes(attribute.String("outcome", outcome))
@@ -513,10 +481,81 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 		logger.Int(logger.FieldChunkIndex, chunkIndex),
 		logger.Int(logger.FieldChunkCount, chunkCount),
 		logger.Int(logger.FieldBatch, len(scorable)),
-		logger.Int(logger.FieldRelevant, len(relevantIDs)),
-		logger.Int(logger.FieldIrrelevant, len(irrelevantIDs)),
+		logger.Int(logger.FieldRelevant, len(relevantItems)),
+		logger.Int(logger.FieldIrrelevant, len(irrelevantItems)),
 	)
 	return nil
+}
+
+// publishPartition publishes each item's job to its filtered subject and splits
+// the items into published-OK and publish-failed buckets. Publish-failed jobs
+// are Nak'd immediately (NATS redelivers after AckWait) and are NOT given a
+// ledger write — the row stays at its prior reason. A new metric tracks the
+// failure for alerting.
+func (w *Worker) publishPartition(ctx context.Context, items []chunkItem) (published, failed []chunkItem) {
+	for _, it := range items {
+		if err := w.publishDetail(ctx, it.job.job); err != nil {
+			metrics.FilterPublishFailures.WithLabelValues("filtered").Inc()
+			if nerr := it.msg.Nak(); nerr != nil {
+				// Broker state diverged — Term so the message is not stuck. The
+				// next scan re-discovers the job (the ledger row stayed put).
+				w.log.Warn("nak after publish failure failed; terming", logger.Err(nerr),
+					logger.Str(logger.FieldJobID, it.job.job.ID))
+				if terr := it.msg.Term(); terr != nil {
+					w.log.Warn("msg term failed", logger.Err(terr))
+				}
+			}
+			failed = append(failed, it)
+			continue
+		}
+		published = append(published, it)
+	}
+	return published, failed
+}
+
+// markSeenOrNak records reason for every item's job ID via UpdateSeenReasonBatch,
+// then Acks the items. If the ledger reports ErrLedgerRowMissing (the
+// crawler→filter race), the chunk's messages are Nak'd instead of Acked so NATS
+// redelivers after the crawler INSERT commits — this is what prevents a phantom
+// ledger row from ever being created. Any other ledger error is logged and the
+// messages are still Acked (consistent with the prior best-effort behaviour;
+// the row is recoverable via cleanup).
+func (w *Worker) markSeenOrNak(ctx context.Context, items []chunkItem, reason, fetchID string, chunkIndex int) {
+	if len(items) == 0 {
+		return
+	}
+	ids := make([]string, len(items))
+	for i, it := range items {
+		ids[i] = it.job.job.ID
+	}
+	err := w.ledger.UpdateSeenReasonBatch(ctx, ids, reason)
+	if err != nil && stderrors.Is(err, domainerr.ErrLedgerRowMissing) {
+		metrics.FilterLedgerMissing.WithLabelValues(reason).Inc()
+		w.log.Warn("ledger row missing — naking chunk for redelivery (crawler race)",
+			logger.Str(logger.FieldFetchID, fetchID),
+			logger.Int(logger.FieldChunkIndex, chunkIndex),
+			logger.Str(logger.FieldReason, reason),
+		)
+		for _, it := range items {
+			if nerr := it.msg.Nak(); nerr != nil {
+				w.log.Warn("msg nak failed", logger.Err(nerr), logger.Str(logger.FieldJobID, it.job.job.ID))
+			}
+		}
+		return
+	}
+	if err != nil {
+		w.log.Error("mark seen batch failed", err,
+			logger.Str(logger.FieldFetchID, fetchID),
+			logger.Int(logger.FieldChunkIndex, chunkIndex),
+			logger.Str(logger.FieldReason, reason),
+		)
+	}
+	// Ack after the ledger write has been attempted (idempotent on redeliver).
+	for _, it := range items {
+		if aerr := it.msg.Ack(); aerr != nil {
+			w.log.Warn("msg ack failed", logger.Err(aerr))
+		}
+	}
 }
 
 // routeFailedChunk routes each job in a failed chunk to retry (Nak) or DLQ (Term).
@@ -542,18 +581,32 @@ func (w *Worker) routeFailedChunk(ctx context.Context, chunk []chunkItem, scoreE
 			continue
 		}
 
+		newCount := retryCount + 1
+		nextAt := w.clock.Now().Add(filterBackOff[retryCount])
+
 		// Within retry budget: Nak so NATS redelivers via BackOff schedule.
 		if nerr := item.msg.Nak(); nerr != nil {
-			w.log.Warn("nak failed",
+			// Nak failed — the broker's view of this message has diverged, so we
+			// can't rely on redelivery. Term it explicitly to release the message
+			// AND still record the retry ledger row so the next pipeline pass
+			// (a future scan re-discovering the job) is the recovery mechanism,
+			// rather than silently dropping the job.
+			w.log.Warn("nak failed; terming and recording retry ledger row",
 				logger.Err(nerr),
 				logger.Str(logger.FieldJobID, item.job.job.ID),
 			)
 			metrics.FilterRetryPublishFailures.WithLabelValues("nak").Inc()
+			if terr := item.msg.Term(); terr != nil {
+				w.log.Warn("msg term failed", logger.Err(terr))
+			}
+			outcome.Retried = append(outcome.Retried, jobsvc.RetryLedgerEntry{
+				JobID:         item.job.job.ID,
+				RetryCount:    newCount,
+				NextAttemptAt: nextAt,
+			})
 			continue
 		}
 
-		newCount := retryCount + 1
-		nextAt := w.clock.Now().Add(filterBackOff[retryCount])
 		outcome.Retried = append(outcome.Retried, jobsvc.RetryLedgerEntry{
 			JobID:         item.job.job.ID,
 			RetryCount:    newCount,
@@ -592,16 +645,22 @@ func (w *Worker) publishToDLQ(ctx context.Context, item chunkItem, scoreErr erro
 	return true
 }
 
-func (w *Worker) publishDetail(ctx context.Context, job ats.RawJob) {
+// publishDetail publishes the job to its filtered subject. It returns an error
+// on marshal or publish failure so the caller can keep ledger + NATS state
+// consistent: a publish-failed job is Nak'd (NATS redelivers) and is NOT marked
+// 'filtered' in the ledger.
+func (w *Worker) publishDetail(ctx context.Context, job ats.RawJob) error {
 	payload, err := json.Marshal(job)
 	if err != nil {
 		w.log.Error("marshal failed", err, logger.Str(logger.FieldJobID, job.ID))
-		return
+		return fmt.Errorf("marshal job %s: %w", job.ID, err)
 	}
 	subject := fmt.Sprintf(js.SubjectJobsFilteredFmt, job.Adapter)
 	if err := w.publisher.Publish(ctx, subject, payload); err != nil {
 		w.log.Error("publish failed", err, logger.Str(logger.FieldJobID, job.ID))
+		return fmt.Errorf("publish job %s: %w", job.ID, err)
 	}
+	return nil
 }
 
 // formatSlotStatuses renders per-slot exhaustion detail for log output.

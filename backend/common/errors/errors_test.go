@@ -2,6 +2,7 @@ package errors_test
 
 import (
 	stderrors "errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -148,6 +149,9 @@ func TestSentinels_AllSet(t *testing.T) {
 		{domainerrs.ErrLLMLocalQuotaExceeded, "LLM_LOCAL_QUOTA", 429},
 		{domainerrs.ErrLLMProviderRateLimited, "LLM_PROVIDER_429", 429},
 		{domainerrs.ErrLLMAllExhausted, "LLM_EXHAUSTED", 503},
+		{domainerrs.ErrLedgerRowMissing, "LEDGER_ROW_MISSING", 409},
+		{domainerrs.ErrQueueRowMissing, "QUEUE_ROW_MISSING", 404},
+		{domainerrs.ErrJobAlreadyExists, "JOB_DUPLICATE", 200},
 	}
 	for _, c := range cases {
 		t.Run(c.code, func(t *testing.T) {
@@ -171,6 +175,83 @@ func TestLLMAllExhaustedError_ErrorAndUnwrap(t *testing.T) {
 	}
 	if !stderrors.Is(e, domainerrs.ErrLLMAllExhausted) {
 		t.Fatalf("errors.Is should match sentinel via Unwrap")
+	}
+}
+
+func TestErrLedgerRowMissing_IsAndCode(t *testing.T) {
+	if domainerrs.ErrLedgerRowMissing.Code != "LEDGER_ROW_MISSING" {
+		t.Fatalf("unexpected code: %q", domainerrs.ErrLedgerRowMissing.Code)
+	}
+	if domainerrs.ErrLedgerRowMissing.Status != 409 {
+		t.Fatalf("unexpected status: %d", domainerrs.ErrLedgerRowMissing.Status)
+	}
+	if !stderrors.Is(domainerrs.ErrLedgerRowMissing, domainerrs.ErrLedgerRowMissing) {
+		t.Fatalf("sentinel must match itself via errors.Is")
+	}
+	// WithMessage yields a new pointer but must still match via the Code-based Is.
+	wrapped := domainerrs.ErrLedgerRowMissing.WithMessage("2 of 3 rows missing")
+	if !stderrors.Is(wrapped, domainerrs.ErrLedgerRowMissing) {
+		t.Fatalf("WithMessage copy must match sentinel via errors.Is")
+	}
+	// Wrapped via fmt.Errorf %w must also match.
+	chained := fmt.Errorf("update batch: %w", domainerrs.ErrLedgerRowMissing)
+	if !stderrors.Is(chained, domainerrs.ErrLedgerRowMissing) {
+		t.Fatalf("fmt.Errorf %%w chain must match sentinel via errors.Is")
+	}
+	// Must NOT match a different-code sentinel.
+	if stderrors.Is(domainerrs.ErrLedgerRowMissing, domainerrs.ErrInternal) {
+		t.Fatalf("distinct-code sentinels must not match each other")
+	}
+}
+
+func TestErrJobAlreadyExists_IsAndCode(t *testing.T) {
+	if domainerrs.ErrJobAlreadyExists.Code != "JOB_DUPLICATE" {
+		t.Fatalf("unexpected code: %q", domainerrs.ErrJobAlreadyExists.Code)
+	}
+	if domainerrs.ErrJobAlreadyExists.Status != 200 {
+		t.Fatalf("unexpected status: %d", domainerrs.ErrJobAlreadyExists.Status)
+	}
+	wrapped := domainerrs.ErrJobAlreadyExists.WithMessage("job_post_id=abc")
+	if !stderrors.Is(wrapped, domainerrs.ErrJobAlreadyExists) {
+		t.Fatalf("WithMessage copy must match sentinel via errors.Is")
+	}
+	if stderrors.Is(domainerrs.ErrJobAlreadyExists, domainerrs.ErrLedgerRowMissing) {
+		t.Fatalf("distinct-code sentinels must not match each other")
+	}
+}
+
+func TestErrQueueRowMissing_IsAndCode(t *testing.T) {
+	if domainerrs.ErrQueueRowMissing.Code != "QUEUE_ROW_MISSING" {
+		t.Fatalf("unexpected code: %q", domainerrs.ErrQueueRowMissing.Code)
+	}
+	// Status 404 so the admin Remove path renders HTTP 404 via HandleError.
+	if domainerrs.ErrQueueRowMissing.Status != 404 {
+		t.Fatalf("unexpected status: %d", domainerrs.ErrQueueRowMissing.Status)
+	}
+	wrapped := domainerrs.ErrQueueRowMissing.WithMessage("queue_id=7")
+	if !stderrors.Is(wrapped, domainerrs.ErrQueueRowMissing) {
+		t.Fatalf("WithMessage copy must match sentinel via errors.Is")
+	}
+}
+
+func TestServiceError_Is_NonServiceErrorTarget(t *testing.T) {
+	if domainerrs.ErrInternal.Is(stderrors.New("plain")) {
+		t.Fatalf("ServiceError.Is must return false for a non-ServiceError target")
+	}
+}
+
+func TestPublicMessage_NewSentinelCodes(t *testing.T) {
+	cases := map[string]string{
+		"LEDGER_ROW_MISSING": "resource not found",
+		"QUEUE_ROW_MISSING":  "resource not found",
+		"JOB_DUPLICATE":      "resource already exists",
+	}
+	for code, want := range cases {
+		t.Run(code, func(t *testing.T) {
+			if got := (&domainerrs.ServiceError{Code: code}).PublicMessage(); got != want {
+				t.Fatalf("code %q: expected %q, got %q", code, want, got)
+			}
+		})
 	}
 }
 

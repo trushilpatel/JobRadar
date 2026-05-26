@@ -64,7 +64,7 @@ func TestJobStore_GetJobs_SortByTitle_Pagination(t *testing.T) {
 	t0 := time.Now()
 	titles := []string{"A", "B", "C", "D", "E"}
 	for i, ti := range titles {
-		seedJob(t, db, jobID(i), "c1", ti, "p", t0)
+		seedJob(t, db, jobID(i), "c1", ti, "p"+jobID(i), t0)
 	}
 	store := jobsvc.NewJobStore(db)
 	filter := jobdto.JobFilter{SortBy: "title", SortDir: "asc"}
@@ -278,7 +278,7 @@ func TestJobStore_GetJobs_DefaultSortAscCursor(t *testing.T) {
 	seedCompany(t, db, "c1", "Acme")
 	t0 := time.Now()
 	for i := 0; i < 4; i++ {
-		seedJob(t, db, jobID(i), "c1", "T", "p", t0.Add(time.Duration(i)*time.Minute))
+		seedJob(t, db, jobID(i), "c1", "T", "p"+jobID(i), t0.Add(time.Duration(i)*time.Minute))
 	}
 	store := jobsvc.NewJobStore(db)
 	filter := jobdto.JobFilter{SortDir: "asc"}
