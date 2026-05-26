@@ -27,7 +27,7 @@ api:
   devToken: ""          # Set locally to enable dev auth bypass. Leave empty in production.
   logLevel: info
   logFormat: json
-  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
   rateLimitReadRpm: "300"
@@ -55,7 +55,7 @@ filter:
   logLevel: info
   logFormat: json
   metricsAddr: ":9101"
-  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
 
@@ -77,7 +77,7 @@ enricher:
   logLevel: info
   logFormat: json
   metricsAddr: ":9101"
-  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
 
@@ -92,7 +92,7 @@ crawler:
   logLevel: info
   logFormat: json
   metricsAddr: ":9102"
-  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
 
@@ -103,7 +103,7 @@ scheduler:
   logLevel: info
   logFormat: json
   metricsAddr: ":9103"
-  jaegerEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
 

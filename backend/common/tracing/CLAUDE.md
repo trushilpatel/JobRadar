@@ -5,11 +5,11 @@
 Call `tracing.Init(serviceName, endpoint)` once in `main()` after loading config. Returns a shutdown function — always defer it.
 
 ```go
-shutdown := tracing.Init("crawler", cfg.Observability.JaegerEndpoint)
+shutdown := tracing.Init("crawler", cfg.Observability.OTelEndpoint)
 defer shutdown()
 ```
 
-`endpoint` is the OTLP HTTP endpoint (e.g. `http://jaeger:4318`). Sets the global OTel tracer provider and W3C propagator.
+`endpoint` is the OTLP HTTP endpoint (e.g. `http://obs-alloy.jobradar-local.svc.cluster.local:4318` — Grafana Alloy in-cluster, which forwards to Grafana Cloud Tempo). Sets the global OTel tracer provider and W3C propagator.
 
 ## Spans
 
@@ -28,23 +28,23 @@ func (s *jobStore) GetJobByID(ctx context.Context, id string) (_ *jobmodel.Job, 
 
 **Naming convention:** `{package}.{type}.{Method}` — e.g. `job.store.GetJobs`, `scan.crawlerservice.RecordScanResult`.
 
-## Kafka propagation
+## NATS propagation
 
-Inject the W3C traceparent into Kafka headers before publishing, extract after consuming. This links spans across service boundaries in Jaeger.
+Inject the W3C traceparent into NATS headers before publishing, extract after consuming. This links spans across service boundaries in Grafana Cloud Tempo.
 
 ```go
 // publish
-headers = tracing.InjectKafka(ctx, headers)
-producer.Publish(ctx, topic, key, value, headers)
+headers = tracing.InjectNATS(ctx, headers)
+producer.Publish(ctx, subject, payload, headers)
 
 // consume
-ctx = tracing.ExtractKafka(ctx, record.Headers)
+ctx = tracing.ExtractNATS(ctx, msg.Header)
 ```
 
 ## Configuration
 
-| Env var           | Default                 |
-| ----------------- | ----------------------- |
-| `JAEGER_ENDPOINT` | `http://localhost:4318` |
+| Env var                       | Default                 |
+| ----------------------------- | ----------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` |
 
 The package is a no-op if `Init` is not called — the global OTel provider stays as the default no-op provider.

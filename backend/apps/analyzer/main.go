@@ -23,7 +23,7 @@ func main() {
 	cfg := config.Load()
 	log := logger.Init("enricher")
 
-	shutdown := tracing.Init("jobradar-enricher", cfg.Observability.JaegerEndpoint, log)
+	shutdown := tracing.Init("jobradar-enricher", cfg.Observability.OTelEndpoint, log)
 	defer shutdown()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

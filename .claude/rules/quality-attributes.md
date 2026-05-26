@@ -78,7 +78,7 @@ Components are designed to be used in multiple contexts without modification.
 
 The system exposes enough information to diagnose problems and understand behaviour.
 
-- OTel traces with W3C propagation through Kafka headers — spans link across service boundaries in Jaeger
+- OTel traces with W3C propagation through NATS headers — spans link across service boundaries in Grafana Cloud Tempo
 - Structured logging with field key constants (`logger.FieldJobID`, `logger.FieldCompany`, etc.) — Loki-queryable
 - Per-fetch UUID baked into log context (`fetchLog := log.With(...)`) — trace one job through all workers
 - `job_pipeline_ledger` + `company_scan_log` — full audit trail; nothing happens without a record

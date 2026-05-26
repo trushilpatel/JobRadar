@@ -19,6 +19,6 @@ data:
   LOG_LEVEL: {{ .Values.crawler.logLevel | quote }}
   LOG_FORMAT: {{ .Values.crawler.logFormat | quote }}
   METRICS_ADDR: {{ .Values.crawler.metricsAddr | quote }}
-  JAEGER_ENDPOINT: {{ .Values.crawler.jaegerEndpoint | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.crawler.otelEndpoint | quote }}
   DB_SSLMODE: {{ .Values.crawler.dbSslmode | quote }}
   DB_PORT: {{ .Values.crawler.dbPort | quote }}
