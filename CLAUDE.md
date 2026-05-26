@@ -12,21 +12,21 @@ Each binary lives in `backend/apps/<name>/` (wiring + worker loop only) and depe
 
 ## Database tables
 
-| Table                     | Role                                                                                                                                                                               |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `companies`               | Tracked company catalog; operational config lives in `company_scan_settings`                                                                                                       |
-| `adapter_configs`         | Canonical adapter registry (PK `adapter_type`); `company_scan_settings` and `company_scan_queue` carry FK constraints to this table — never add raw adapter type strings elsewhere |
-| `company_scan_settings`   | Per-company scan config (admin-managed); `adapter_type` FK → `adapter_configs`; rows missing here are skipped by workers                                                           |
-| `company_scan_queue`      | Durable work queue for pending/in-progress scans; deduped by unique partial index; `adapter_type` FK → `adapter_configs`                                                           |
-| `company_scan_log`        | Per-run scan summary (fetched, new, duration, error)                                                                                                                               |
-| `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` marks disappearance; `reason='retry'` carries `retry_count`/`next_attempt_at`, written via filter `UpdateRetryBatch`                       |
-| `jobs`                    | Operational feed — global rows; per-user status/notes live in `user_job_state`                                                                                                     |
-| `user_job_state`          | Per-user overlay: saved_at, applied_at, status, notes, dismissal reason/note                                                                                                       |
-| `job_analytics`           | Append-only snapshot from analyzer; survives job dismissal                                                                                                                         |
-| `job_application_tracker` | Application stage tracking; `user_id NOT NULL`                                                                                                                                     |
-| `users`                   | Registered users (id, email citext, display_name, status, timestamps)                                                                                                              |
-| `roles`, `user_roles`     | RBAC0 catalog + join. Cascades: `user_id` CASCADE, `role_id` RESTRICT, `granted_by` SET NULL. Seeded by migration 043                                                              |
-| `admin_audit_log`         | Append-only audit trail for admin mutations                                                                                                                                        |
+| Table                     | Role                                                                                                                                                                                                                                                            |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `companies`               | Tracked company catalog; operational config lives in `company_scan_settings`                                                                                                                                                                                    |
+| `adapter_configs`         | Canonical adapter registry (PK `adapter_type`); `company_scan_settings` and `company_scan_queue` carry FK constraints to this table — never add raw adapter type strings elsewhere                                                                              |
+| `company_scan_settings`   | Per-company scan config (admin-managed); `adapter_type` FK → `adapter_configs`; rows missing here are skipped by workers                                                                                                                                        |
+| `company_scan_queue`      | Durable work queue for pending/in-progress scans; deduped by unique partial index; `adapter_type` FK → `adapter_configs`                                                                                                                                        |
+| `company_scan_log`        | Per-run scan summary (fetched, new, duration, error)                                                                                                                                                                                                            |
+| `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` marks disappearance; `reason='retry'` carries `retry_count`/`next_attempt_at`, written via filter `UpdateRetryBatch`. UPDATE ops return `ErrLedgerRowMissing` on 0/partial rows — never silent nil (migrations 071/073) |
+| `jobs`                    | Operational feed — global rows; per-user status/notes live in `user_job_state`. `job_post_id` is **UNIQUE** (`uq_jobs_job_post_id`, migration 071); `InsertJob` is idempotent (`ON CONFLICT DO NOTHING` → `ErrJobAlreadyExists`)                                |
+| `user_job_state`          | Per-user overlay: saved_at, applied_at, status, notes, dismissal reason/note                                                                                                                                                                                    |
+| `job_analytics`           | Append-only snapshot from analyzer; survives job dismissal                                                                                                                                                                                                      |
+| `job_application_tracker` | Application stage tracking; `user_id NOT NULL`                                                                                                                                                                                                                  |
+| `users`                   | Registered users (id, email citext, display_name, status, timestamps)                                                                                                                                                                                           |
+| `roles`, `user_roles`     | RBAC0 catalog + join. Cascades: `user_id` CASCADE, `role_id` RESTRICT, `granted_by` SET NULL. Seeded by migration 043                                                                                                                                           |
+| `admin_audit_log`         | Append-only audit trail for admin mutations                                                                                                                                                                                                                     |
 
 ## Job status flow
 
@@ -69,6 +69,7 @@ Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_{READ,WRITE,A
 - Typed values (status, stage, reason) use constants from the owning service's `common/` package — never raw strings
 - Insights: `job_analytics` for historical / time-series; `user_job_state.status` for current per-user aggregations
 - Filter batch failures mark jobs `error` in `job_pipeline_ledger` — never re-queue to NATS
+- Ledger/queue UPDATE store methods check `RowsAffected` and return a sentinel (`ErrLedgerRowMissing` / `ErrQueueRowMissing`) when 0/partial rows match — never silently return nil. Workers act on it: filter Naks for redelivery (closes the crawler-INSERT vs filter-UPDATE race), analyzer treats it as non-fatal. The crawler writes the `fetch` ledger row **before** publishing to NATS so the row exists before the message can be consumed
 - All logging goes through `platform/logger.Logger` — never stdlib `log`; field keys come from `platform/logger/fields.go` only
 - Crawler image (`infra/Dockerfile.crawler`) is **pure Go** — no Node, no Chromium, no Playwright. Do not add browser deps
 - Each service domain follows the decorator chain — see `backend/service/CLAUDE.md`

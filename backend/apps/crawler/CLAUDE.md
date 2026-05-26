@@ -29,9 +29,13 @@ One sub-package per platform. Each implements the `Adapter` interface (list jobs
 ## Queue mechanics
 
 - `ClaimNext` uses `FOR UPDATE SKIP LOCKED` — safe for concurrent crawler instances
-- `UpdateHeartbeat` ticks every `HEARTBEAT_INTERVAL_SECONDS` to keep the row alive
-- `ResetStuck` reclaims rows whose heartbeat expired (previous crash recovery)
-- `Complete` marks the row done after a successful scan
+- `UpdateHeartbeat` ticks every `HEARTBEAT_INTERVAL_SECONDS` to keep the row alive. It returns `ErrQueueRowMissing` if the row is gone (a concurrent `ResetStuck` reassigned it) — the crawler treats that as a **reassignment signal, aborts the current scan, skips `Complete`, and increments `crawler_scan_aborted_reassigned_total`**. This prevents two workers double-scanning the same company.
+- `ResetStuck` reclaims rows whose heartbeat expired (previous crash recovery); returns the reset count for observability
+- `Complete`/`Remove` mark/delete the row; both return `ErrQueueRowMissing` on 0 rows rather than silently no-op'ing
+
+## Publish ordering (closes the filter phantom-row race)
+
+`publishNewJobs` writes the `reason='fetch'` ledger rows via `MarkSeenBatch` **BEFORE** publishing to `jobs.raw.*`, so the ledger row always exists before the filter can consume the message. (The reverse order let a fast filter UPDATE-against-a-missing-row, silently no-op, and Ack — leaving a phantom `fetch` row.) If an individual publish fails, the row stays at `reason='fetch'`, `crawler_publish_failures_total{adapter}` increments, and the next scan re-discovers it via `HasSeenBatch`. Do not move `MarkSeenBatch` back after the publish loop.
 
 ## Rules
 

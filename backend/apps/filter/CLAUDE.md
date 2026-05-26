@@ -17,10 +17,14 @@ Design spec: `docs/superpowers/specs/2026-04-22-filter-simplification-design.md`
 1. `Consumer.FetchBatch` pulls messages from the `JOBS_RAW` stream (accumulated up to `FILTER_FLUSH_TIMEOUT_SECONDS`)
 2. The fetch is split into chunks of exactly `FILTER_BATCH_SIZE` jobs (order-preserving)
 3. Chunks are processed **serially**. Between consecutive `ScoreBatch` calls the worker sleeps `FILTER_LLM_CALL_INTERVAL_SECONDS` (default `5s`), ctx-aware via the injected `clock`
-4. Each chunk's messages are acked via `Msg.Ack()` after `processChunk` returns — success or routed-failure
-5. Relevant → publish to `jobs.filtered.<adapter>` (NATS JetStream `JOBS_FILTERED` stream)
+4. A chunk's messages are acked via `Msg.Ack()` only after the ledger write for that bucket succeeds. If `UpdateSeenReasonBatch`/`UpdateRetryBatch` returns `ErrLedgerRowMissing` (the crawler INSERT hasn't committed yet — see the race note below), the affected messages are **Nak'd** instead of Acked, so NATS redelivers them once the row exists. `filter_ledger_missing_total` increments.
+5. Relevant → `publishDetail` publishes to `jobs.filtered.<adapter>` (`JOBS_FILTERED` stream) and **returns an error**. Only jobs that published OK get `UpdateSeenReasonBatch('filtered')` + Ack; a publish failure Naks the message with **no ledger write** (`filter_publish_failures_total` increments) so it redelivers — the ledger never says `filtered` for a job that isn't in `JOBS_FILTERED`.
 6. Irrelevant → mark `reason='llm_irrelevant'` in ledger via `UpdateSeenReasonBatch`
-7. `ScoreBatch` error → `routeFailedChunk` routes to retry tier or DLQ (`jobs.dlq`). Retried jobs get `UpdateRetryBatch` (sets `reason='retry'`, `retry_count`, `next_attempt_at`); DLQ'd jobs get `UpdateSeenReasonBatch('error')`
+7. `ScoreBatch` error → `routeFailedChunk` routes to retry tier or DLQ (`jobs.dlq`). Retried jobs get `UpdateRetryBatch` (sets `reason='retry'`, `retry_count`, `next_attempt_at`); DLQ'd jobs get `UpdateSeenReasonBatch('error')`. If a Nak itself fails, the job is still recorded as `retry` and the message Term'd (never silently dropped).
+
+## Crawler → filter race (why missing rows happen)
+
+The crawler writes the `reason='fetch'` ledger row **before** publishing to NATS, so by the time the filter consumes a message the row normally exists. If a redelivery or a slow commit means the row isn't there yet, the filter's ledger UPDATE returns `ErrLedgerRowMissing` and the filter Naks rather than Acking — this is what prevents the old phantom-`fetch` bug (where a silent-nil UPDATE + Ack left a row stuck at `fetch` forever). Never "fix" a missing-row by Acking anyway.
 
 ## Error handling rules
 
@@ -39,7 +43,7 @@ Design spec: `docs/superpowers/specs/2026-04-22-filter-simplification-design.md`
 ## Observability
 
 - **Spans:** `filter.worker.processFetch` → `filter.worker.processChunk` → (`filter.worker.scoreBatch` | `filter.worker.routeFailed`) → `filter.worker.commit`. Started/ended via `platform/tracing`.
-- **Metrics** (in `platform/metrics`): `filter_chunk_duration_seconds`, `filter_retry_publishes_total`, `filter_retry_publish_failures_total`, `filter_dlq_publishes_total`, `filter_commit_failures_total`, `filter_chunks_per_fetch`. Existing `FilterLLMDuration` and `FilterJobsTotal{relevant|irrelevant|error}` retained (former now labeled per-chunk).
+- **Metrics** (in `platform/metrics`): `filter_chunk_duration_seconds`, `filter_retry_publishes_total`, `filter_retry_publish_failures_total`, `filter_dlq_publishes_total`, `filter_commit_failures_total`, `filter_chunks_per_fetch`, `filter_publish_failures_total{subject}` (publish to `jobs.filtered.*` failed → Nak), `filter_ledger_missing_total{reason}` (ledger UPDATE hit `ErrLedgerRowMissing` → Nak for redelivery). Existing `FilterLLMDuration` and `FilterJobsTotal{relevant|irrelevant|error}` retained (former now labeled per-chunk).
 - **Logs:** `processFetch` mints a UUID `fetch_id` attached via `log.With(...)` so every descendant line carries it. Additional field constants: `chunk_index`, `chunk_count`, `retry_count`, `retry_tier`, `next_attempt_at`, `partition`, `offset`.
 
 ## LLM dependency

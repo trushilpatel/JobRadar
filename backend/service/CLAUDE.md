@@ -146,3 +146,4 @@ router  := NewRestRouter(handler)
 - All responses use `handler.Respond`, `handler.RespondPaged`, or `handler.HandleError` — never raw `json.NewEncoder`
 - No HTTP types (`http.Request`, `http.ResponseWriter`) outside `RestService` and `RestRouter`
 - GORM structs live in `RepositoryService` only — never referenced by Impl, Validation, or REST layers
+- A store UPDATE/DELETE that targets specific rows must check `result.RowsAffected` and return a sentinel (e.g. `ErrLedgerRowMissing`, `ErrQueueRowMissing`, `ErrNotFound`) when it matched fewer rows than expected — never return nil for a write that silently did nothing. GORM's `Update`/`Exec` return nil error on zero rows; a swallowed no-op here is what caused the phantom-`fetch` ledger bug. Idempotent inserts use `clause.OnConflict{DoNothing}` and surface the conflict (`ErrJobAlreadyExists`) when the caller needs to know.

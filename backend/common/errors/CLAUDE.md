@@ -15,6 +15,18 @@ domain.ErrBadRequest // Code: BAD_REQUEST, Status: 400
 domain.ErrInternal   // Code: INTERNAL,    Status: 500
 ```
 
+### Pipeline sentinels (internal — not user-facing)
+
+Returned by store/worker layers so callers can branch on a specific failure instead of a swallowed nil. Compared via `errors.Is` (a Code-based `ServiceError.Is` makes this work even after `.WithMessage()`):
+
+```go
+ErrLedgerRowMissing  // Code: LEDGER_ROW_MISSING, Status: 409 — JobSeenLedger UPDATE matched 0/partial rows
+ErrQueueRowMissing   // Code: QUEUE_ROW_MISSING,  Status: 404 — ScanQueue Complete/Remove/UpdateHeartbeat matched 0 rows
+ErrJobAlreadyExists  // Code: JOB_DUPLICATE,      Status: 200 — InsertJob hit ON CONFLICT (job_post_id); not a client error
+```
+
+`ErrLedgerRowMissing` is the contract that closes the crawler/filter phantom-row race: the filter Naks on it (NATS redelivers), the analyzer logs it non-fatally. `ErrQueueRowMissing` from `UpdateHeartbeat` signals the crawler its queue row was reassigned (abort the scan). `ErrJobAlreadyExists` is Status 200 because a duplicate insert is the expected idempotent outcome, not a failure.
+
 ## Pattern
 
 Services return typed errors by calling `.WithMessage()` on a sentinel:
