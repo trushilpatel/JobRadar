@@ -1,7 +1,11 @@
 {
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash",
+      "Edit",
+      "Write",
+      "Read",
       "Skill(update-config)",
       "Skill(update-config:*)",
       "WebFetch(domain:docs.getbifrost.ai)",
@@ -25,10 +29,21 @@
       "Bash(mkdir -p /Users/trushil/Projects/JobRadar/.claude/skills/next-actions)",
       "Bash(mkdir -p /Users/trushil/.claude/skills/next-actions)"
     ],
+    "deny": [
+      "Bash(git push origin main*)",
+      "Bash(git push origin HEAD:main*)",
+      "Bash(git push * main*)",
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~/*)",
+      "Bash(git commit --no-verify*)",
+      "Bash(git commit *--no-verify*)"
+    ],
     "additionalDirectories": [
       "/tmp",
       "/Users/trushil/.claude/skills",
-      "/Users/trushil/.claude/skills/production-team-loop"
+      "/Users/trushil/.claude/skills/production-team-loop",
+      "/Users/trushil/Projects/JobRadar"
     ]
-  }
+  },
+  "skipDangerousModePermissionPrompt": true
 }
