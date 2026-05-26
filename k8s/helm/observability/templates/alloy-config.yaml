@@ -72,6 +72,10 @@ data:
         target_label = "cluster"
         replacement  = "k3d-jobradar"
       }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_node_name"]
+        target_label  = "node"
+      }
     }
 
     loki.source.kubernetes "pods" {

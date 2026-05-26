@@ -186,29 +186,7 @@ enricher:
 
 > `natsUrl` and `nats.external` are already set to Synadia Cloud defaults in `values.yaml` — no override needed.
 
----
-
-**Grafana Cloud credentials (observability chart)**
-
-```
-# File to edit (gitignored — copy from the example first):
-k8s/helm/observability/values.local.yaml
-
-# Example to copy from:
-k8s/helm/observability/values.local.yaml.example
-```
-
-Fill in Grafana Cloud details (URL, username, API key) from your Grafana Cloud stack.
-
----
-
-**Observability audit sync (Supabase → Loki)**
-
-```bash
-kubectl create secret generic supabase-audit-sync-secret \
-  --from-literal=SUPABASE_DB_URL="postgres://postgres:PASSWORD@HOST.supabase.co:5432/postgres" \
-  -n jobradar-local
-```
+> Grafana Cloud credentials and the supabase-audit-sync secret are covered in [Step 5 — Deploy observability](#5-deploy-observability--grafana-cloud-optional) below.
 
 ### 3. Build and import images
 
@@ -229,13 +207,110 @@ k3d image import jobradar-supabase-audit-sync:local -c jobradar
 make k8s-up             # helm install jobradar chart (namespace → migrate → workers → api → console)
 ```
 
-### 5. Deploy observability (optional)
+### 5. Deploy observability — Grafana Cloud (optional)
+
+JobRadar ships **metrics → Mimir**, **logs → Loki**, and **traces → Tempo** to a Grafana Cloud stack via an in-cluster **Grafana Alloy** DaemonSet (chart: [`k8s/helm/observability/`](k8s/helm/observability/)). No self-hosted Prometheus / Loki / Grafana / Jaeger exists — Grafana Cloud is the only destination.
 
 ```bash
-make k8s-obs-up         # helm install observability chart (Grafana Alloy + audit-sync, ships to Grafana Cloud)
+make k8s-obs-up         # deploys: Alloy DaemonSet + supabase-audit-sync sidecar
 ```
 
-Requires Grafana Cloud credentials in `k8s/helm/observability/values.local.yaml` (gitignored — see `values.local.yaml.example`).
+#### Bootstrapping on a new machine
+
+Everything except the credentials file is in git. To bring observability up on a fresh clone:
+
+```bash
+# 1. Verify kube context
+kubectl config use-context k3d-jobradar
+
+# 2. Create the gitignored credentials file
+cat > k8s/helm/observability/values.local.yaml <<'EOF'
+grafanaCloud:
+  prom:
+    url: "https://prometheus-prod-XX-prod-XX-XXXX.grafana.net/api/prom/push"
+    user: "<prom_instance_id>"      # numeric, from Connections → Hosted Prometheus
+    token: "glc_<your-token>"
+  loki:
+    url: "https://logs-prod-XXX.grafana.net/loki/api/v1/push"
+    user: "<loki_instance_id>"      # numeric, from Connections → Hosted Loki
+    token: "glc_<your-token>"
+  tempo:
+    url: "https://otlp-gateway-prod-XX.grafana.net/otlp"
+    user: "<stack_id>"              # ⚠️ STACK ID — NOT the Tempo wizard's "User" field
+    token: "glc_<your-token>"
+EOF
+
+# 3. Deploy
+make k8s-obs-up
+```
+
+**Getting the values** — sign in to grafana.com → your stack → **Connections** → click each of "Hosted Prometheus metrics", "Hosted Loki logs", "OpenTelemetry / OTLP". Each page shows the URL and the numeric Instance ID / Username.
+
+**Getting the token** — easiest path is a single token with all three write scopes:
+
+1. Cloud portal → **Cloud access policies** → **Create access policy**
+2. Name `jobradar-alloy`, realm = your stack, scopes: tick `metrics:write`, `logs:write`, `traces:write`
+3. **Add token** → copy the `glc_...` string (shown once)
+4. Use the same token in all three `token:` fields above
+
+**⚠️ Tempo username gotcha** — the OTLP gateway authenticates with the **stack ID** (visible in the token's metadata as `stack-NNNNNNN-...`), NOT the "User" number the Tempo wizard shows in its query/Explore section. Get it wrong and you'll see `HTTP 401 Unauthenticated` in `kubectl logs -n jobradar-local -l app.kubernetes.io/name=alloy`. Sanity check from your laptop: `curl -u "<stack_id>:<token>" -X POST <tempo_url>/v1/traces` → expect `HTTP 400` (auth OK, body invalid), not `HTTP 401`.
+
+#### Per-node identification
+
+Alloy runs as a **DaemonSet** — one pod per node — and tails only the pods on its own node. Every log line is automatically labelled with the node it came from:
+
+| Label       | Value                     |
+| ----------- | ------------------------- |
+| `cluster`   | `k3d-jobradar`            |
+| `namespace` | `jobradar-local`          |
+| `node`      | The Kubernetes node name  |
+| `pod`       | The source pod name       |
+| `container` | The source container name |
+
+In Grafana Cloud → Explore (Loki datasource), filter by node directly:
+
+```logql
+{cluster="k3d-jobradar", node="k3d-jobradar-server-0"}        # one node only
+{cluster="k3d-jobradar"} | json | node="k3d-jobradar-agent-1" # cross-cluster query
+```
+
+For multi-node clusters, this gives you instant per-node visibility without any per-app code changes. New nodes auto-join: Kubernetes schedules an Alloy pod onto each new node, which reads the same `grafana-cloud-credentials` Secret and starts shipping immediately.
+
+> Per-node metrics: currently Alloy scrapes services via cluster DNS (single-replica setup). If you scale a worker to multiple replicas across nodes, switch the scrape targets in [`alloy-config.yaml`](k8s/helm/observability/templates/alloy-config.yaml) from Service DNS to Kubernetes pod discovery with a `spec.nodeName = $HOSTNAME` filter — the logs section already uses that pattern; copy it.
+
+#### Sharing credentials across team / machines
+
+`values.local.yaml` is gitignored. Recommended ways to share:
+
+| Approach                                                                                  | When                                         |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------- |
+| Paste the 12-line YAML into 1Password / Bitwarden as a secure note                        | Solo dev or 2-person team                    |
+| `sealed-secrets` (encrypted Secret committed to git, only cluster controller can decrypt) | Small team without external secret stores    |
+| External Secrets Operator + AWS / GCP Secret Manager                                      | Multiple environments (dev / staging / prod) |
+
+#### Rotating tokens
+
+If a token leaks (e.g., pasted into chat / Slack), rotate via Cloud portal → **Cloud access policies** → `jobradar-alloy` → **Tokens** → **Rotate**. Update the three `token:` fields in `values.local.yaml`, then:
+
+```bash
+make k8s-obs-up                                              # re-applies the secret
+kubectl rollout restart daemonset/obs-alloy -n jobradar-local
+```
+
+#### Supabase audit sync (optional sidecar)
+
+The chart also deploys `supabase-audit-sync` — a tiny Go daemon that polls the Supabase auth audit table and pushes rows into Loki. It needs a separate image build + a DB-URL secret:
+
+```bash
+docker build -t jobradar-supabase-audit-sync:local ./infra/observability/supabase-audit-sync/
+k3d image import jobradar-supabase-audit-sync:local -c jobradar
+kubectl create secret generic supabase-audit-sync-secret \
+  --from-literal=SUPABASE_DB_URL="postgres://postgres:PASSWORD@HOST.supabase.co:5432/postgres" \
+  -n jobradar-local
+kubectl rollout restart deployment/supabase-audit-sync -n jobradar-local
+```
+
+This is independent of the three observability pillars above — skip it if you don't need auth-audit-log shipping.
 
 ### Access
 
