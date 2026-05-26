@@ -25,7 +25,7 @@ func main() {
 	cfg := config.Load()
 	log := logger.Init("filter")
 
-	shutdown := tracing.Init("jobradar-filter", cfg.Observability.JaegerEndpoint, log)
+	shutdown := tracing.Init("jobradar-filter", cfg.Observability.OTelEndpoint, log)
 	defer shutdown()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

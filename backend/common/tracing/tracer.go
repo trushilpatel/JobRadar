@@ -14,7 +14,7 @@ import (
 )
 
 // Init bootstraps the global OTel tracer provider and W3C propagator.
-// endpoint is the OTLP HTTP endpoint, e.g. "http://jaeger:4318".
+// endpoint is the OTLP HTTP endpoint, e.g. "http://obs-alloy.jobradar-local.svc.cluster.local:4318".
 // If endpoint is empty, a no-op tracer is used and no export errors occur.
 // Export failures are logged as structured warnings via log — never fatal.
 // Returns a shutdown function that flushes pending spans — call with defer.

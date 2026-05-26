@@ -243,7 +243,7 @@ func clearConfigEnv(t *testing.T) {
 		"GOOGLE_SCRAPER_MIN_DELAY", "GOOGLE_SCRAPER_MAX_DELAY",
 		"GOOGLE_SCRAPER_TIMEOUT_MS", "GOOGLE_SCRAPER_MAX_PAGES",
 		"SCAN_INTERVAL_MINUTES", "SCHEDULER_STUCK_TIMEOUT_MINUTES", "SCHEDULER_CHECK_INTERVAL_SECONDS",
-		"METRICS_ADDR", "JAEGER_ENDPOINT",
+		"METRICS_ADDR", "OTEL_EXPORTER_OTLP_ENDPOINT",
 		"SUPABASE_PROJECT_URL", "SUPABASE_JWKS_URL", "SUPABASE_JWT_SECRET",
 		"JWT_CLOCK_SKEW_SECONDS", "JWKS_CACHE_TTL_SECONDS",
 		"API_MAX_BODY_BYTES", "DEV_TOKEN",
@@ -303,7 +303,7 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 	if cfg.Scheduler.ScanIntervalMinutes != 1440 || cfg.Scheduler.StuckTimeoutMinutes != 30 || cfg.Scheduler.CheckIntervalSeconds != 60 {
 		t.Errorf("Scheduler defaults wrong: %+v", cfg.Scheduler)
 	}
-	if cfg.Observability.MetricsAddr != "127.0.0.1:9100" || cfg.Observability.JaegerEndpoint != "http://localhost:4318" {
+	if cfg.Observability.MetricsAddr != "127.0.0.1:9100" || cfg.Observability.OTelEndpoint != "http://localhost:4318" {
 		t.Errorf("Observability defaults wrong: %+v", cfg.Observability)
 	}
 	if cfg.Auth.ClockSkewSeconds != 60 || cfg.Auth.JWKSCacheTTLSeconds != 600 {
@@ -365,7 +365,7 @@ func TestLoad_OverridesApplied(t *testing.T) {
 	t.Setenv("SCHEDULER_STUCK_TIMEOUT_MINUTES", "22")
 	t.Setenv("SCHEDULER_CHECK_INTERVAL_SECONDS", "33")
 	t.Setenv("METRICS_ADDR", ":9999")
-	t.Setenv("JAEGER_ENDPOINT", "http://otel:4318")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel:4318")
 	t.Setenv("SUPABASE_PROJECT_URL", "https://x.supabase.co")
 	t.Setenv("SUPABASE_JWT_SECRET", "secret")
 	t.Setenv("JWT_CLOCK_SKEW_SECONDS", "30")

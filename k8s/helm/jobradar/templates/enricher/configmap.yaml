@@ -26,6 +26,6 @@ data:
   LOG_LEVEL: {{ .Values.enricher.logLevel | quote }}
   LOG_FORMAT: {{ .Values.enricher.logFormat | quote }}
   METRICS_ADDR: {{ .Values.enricher.metricsAddr | quote }}
-  JAEGER_ENDPOINT: {{ .Values.enricher.jaegerEndpoint | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.enricher.otelEndpoint | quote }}
   DB_SSLMODE: {{ .Values.enricher.dbSslmode | quote }}
   DB_PORT: {{ .Values.enricher.dbPort | quote }}

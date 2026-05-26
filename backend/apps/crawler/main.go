@@ -40,7 +40,7 @@ func main() {
 	cfg := config.Load()
 	log := logger.Init("crawler")
 
-	stopTracing := tracing.Init("jobradar-crawler", cfg.Observability.JaegerEndpoint, log)
+	stopTracing := tracing.Init("jobradar-crawler", cfg.Observability.OTelEndpoint, log)
 	defer stopTracing()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

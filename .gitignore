@@ -62,6 +62,4 @@ values.local.yaml
 
 # Helm chart dependencies (downloaded, not committed)
 k8s/helm/observability/charts/*.tgz
-k8s/helm/observability/charts/jaeger/
-k8s/helm/observability/charts/kube-prometheus-stack/
-k8s/helm/observability/charts/loki-stack/
+k8s/helm/observability/charts/alloy/

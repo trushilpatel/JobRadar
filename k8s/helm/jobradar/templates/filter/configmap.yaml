@@ -21,6 +21,6 @@ data:
   LOG_LEVEL: {{ .Values.filter.logLevel | quote }}
   LOG_FORMAT: {{ .Values.filter.logFormat | quote }}
   METRICS_ADDR: {{ .Values.filter.metricsAddr | quote }}
-  JAEGER_ENDPOINT: {{ .Values.filter.jaegerEndpoint | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.filter.otelEndpoint | quote }}
   DB_SSLMODE: {{ .Values.filter.dbSslmode | quote }}
   DB_PORT: {{ .Values.filter.dbPort | quote }}
