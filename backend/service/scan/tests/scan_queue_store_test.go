@@ -2,13 +2,179 @@ package scan
 
 import (
 	"context"
+	"database/sql"
+	stderrors "errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	sqlite3 "github.com/mattn/go-sqlite3"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
+
+	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 	svc "github.com/trushilpatel/jobradar/service/scan/services"
 )
+
+// scanQueueTestDriver names a sqlite3 driver registered once per test binary
+// that exposes NOW() as a scalar function. UpdateHeartbeat uses SET
+// heartbeat_at = NOW(), which Postgres provides natively but sqlite does not.
+const scanQueueTestDriver = "sqlite3_scanqueue_test"
+
+var registerScanQueueDriver sync.Once
+
+func ensureScanQueueDriver() {
+	registerScanQueueDriver.Do(func() {
+		sql.Register(scanQueueTestDriver, &sqlite3.SQLiteDriver{
+			ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+				return conn.RegisterFunc("now", func() string {
+					return time.Now().UTC().Format("2006-01-02 15:04:05")
+				}, true)
+			},
+		})
+	})
+}
+
+// newScanQueueExecDB returns a real (executing) in-memory sqlite DB with a
+// minimal company_scan_queue table. Complete/Remove/UpdateHeartbeat use plain
+// DELETE/UPDATE ... WHERE id = ? statements that sqlite executes faithfully, so
+// these can be round-tripped (unlike ResetStuck/ClaimNext, which use
+// Postgres-only INTERVAL/RETURNING/FOR UPDATE syntax — covered by DryRun above
+// and the integration tier). There is no GORM model for the queue table (it is
+// raw-SQL only), so the schema is declared here explicitly.
+func newScanQueueExecDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	ensureScanQueueDriver()
+	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: scanQueueTestDriver, DSN: ":memory:"}), &gorm.Config{Logger: gormlogger.Discard})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.Exec(`
+		CREATE TABLE company_scan_queue (
+			id TEXT PRIMARY KEY,
+			company_id TEXT,
+			adapter_type TEXT,
+			status TEXT,
+			source TEXT,
+			priority INTEGER DEFAULT 0,
+			queued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			started_at TIMESTAMP,
+			heartbeat_at TIMESTAMP
+		)
+	`).Error; err != nil {
+		t.Fatalf("create company_scan_queue: %v", err)
+	}
+	return db
+}
+
+func seedQueueRow(t *testing.T, db *gorm.DB, id, status string) {
+	t.Helper()
+	if err := db.Exec(
+		`INSERT INTO company_scan_queue (id, company_id, adapter_type, status, source) VALUES (?, 'c1', 'greenhouse', ?, 'manual')`,
+		id, status,
+	).Error; err != nil {
+		t.Fatalf("seed queue row %s: %v", id, err)
+	}
+}
+
+// TestScanQueue_Complete_MissingRow_ReturnsErrQueueRowMissing (#11).
+func TestScanQueue_Complete_MissingRow_ReturnsErrQueueRowMissing(t *testing.T) {
+	t.Parallel()
+	db := newScanQueueExecDB(t)
+	store := svc.NewQueueStore(db)
+
+	err := store.Complete(context.Background(), "ghost")
+	if !stderrors.Is(err, domainerrs.ErrQueueRowMissing) {
+		t.Fatalf("want ErrQueueRowMissing, got %v", err)
+	}
+}
+
+// TestScanQueue_Complete_PresentRow_ReturnsNil — happy path round-trip.
+func TestScanQueue_Complete_PresentRow_ReturnsNil(t *testing.T) {
+	t.Parallel()
+	db := newScanQueueExecDB(t)
+	seedQueueRow(t, db, "q1", "running")
+	store := svc.NewQueueStore(db)
+
+	if err := store.Complete(context.Background(), "q1"); err != nil {
+		t.Fatalf("Complete present row err = %v", err)
+	}
+}
+
+// TestScanQueue_UpdateHeartbeat_MissingRow_ReturnsErrQueueRowMissing (#12).
+func TestScanQueue_UpdateHeartbeat_MissingRow_ReturnsErrQueueRowMissing(t *testing.T) {
+	t.Parallel()
+	db := newScanQueueExecDB(t)
+	store := svc.NewQueueStore(db)
+
+	err := store.UpdateHeartbeat(context.Background(), "ghost")
+	if !stderrors.Is(err, domainerrs.ErrQueueRowMissing) {
+		t.Fatalf("want ErrQueueRowMissing, got %v", err)
+	}
+}
+
+// TestScanQueue_UpdateHeartbeat_PresentRow_ReturnsNil.
+func TestScanQueue_UpdateHeartbeat_PresentRow_ReturnsNil(t *testing.T) {
+	t.Parallel()
+	db := newScanQueueExecDB(t)
+	seedQueueRow(t, db, "q1", "running")
+	store := svc.NewQueueStore(db)
+
+	if err := store.UpdateHeartbeat(context.Background(), "q1"); err != nil {
+		t.Fatalf("UpdateHeartbeat present row err = %v", err)
+	}
+}
+
+// TestScanQueue_Remove_MissingRow_ReturnsErrQueueRowMissing (#13) — a running
+// row is not removable, so Remove reports the row missing (queued-only guard).
+func TestScanQueue_Remove_MissingRow_ReturnsErrQueueRowMissing(t *testing.T) {
+	t.Parallel()
+	db := newScanQueueExecDB(t)
+	seedQueueRow(t, db, "q-running", "running")
+	store := svc.NewQueueStore(db)
+
+	// Absent id → missing.
+	if err := store.Remove(context.Background(), "ghost"); !stderrors.Is(err, domainerrs.ErrQueueRowMissing) {
+		t.Fatalf("absent id: want ErrQueueRowMissing, got %v", err)
+	}
+	// Running row → not queued, so the queued-only DELETE matches 0 rows.
+	if err := store.Remove(context.Background(), "q-running"); !stderrors.Is(err, domainerrs.ErrQueueRowMissing) {
+		t.Fatalf("running row: want ErrQueueRowMissing, got %v", err)
+	}
+}
+
+// TestScanQueue_Remove_QueuedRow_ReturnsNil.
+func TestScanQueue_Remove_QueuedRow_ReturnsNil(t *testing.T) {
+	t.Parallel()
+	db := newScanQueueExecDB(t)
+	seedQueueRow(t, db, "q1", "queued")
+	store := svc.NewQueueStore(db)
+
+	if err := store.Remove(context.Background(), "q1"); err != nil {
+		t.Fatalf("Remove queued row err = %v", err)
+	}
+}
+
+// TestScanQueue_ResetStuck_ReturnsRowsResetCount (#14) — ResetStuck uses
+// Postgres-only INTERVAL arithmetic, so the executing count path is verified in
+// the integration tier. Here we assert the DryRun signature returns (count, nil)
+// without error so the new return shape is exercised.
+func TestScanQueue_ResetStuck_ReturnsRowsResetCount(t *testing.T) {
+	t.Parallel()
+	db, _ := newScanDryRunDB(t)
+	store := svc.NewQueueStore(db)
+
+	n, err := store.ResetStuck(context.Background(), 90*time.Second)
+	if err != nil {
+		t.Fatalf("ResetStuck err = %v", err)
+	}
+	if n != 0 {
+		t.Errorf("DryRun ResetStuck count = %d, want 0 (no execution)", n)
+	}
+}
 
 // The scanQueueStore methods are all backed by Postgres-specific SQL
 // (INTERVAL '1 second', ON CONFLICT DO NOTHING, RETURNING, FOR UPDATE SKIP
@@ -146,7 +312,7 @@ func TestScanQueueStore_ResetStuck_EmitsHeartbeatWindow(t *testing.T) {
 	db, cap := newScanDryRunDB(t)
 	store := svc.NewQueueStore(db)
 
-	if err := store.ResetStuck(context.Background(), 90*time.Second); err != nil {
+	if _, err := store.ResetStuck(context.Background(), 90*time.Second); err != nil {
 		t.Fatalf("ResetStuck() error = %v", err)
 	}
 

@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
+	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
@@ -42,11 +44,20 @@ type fakeLedger struct {
 	calls        []ledgerCall
 	retryBatches [][]jobsvc.RetryLedgerEntry
 	retryErr     error
+	// seenErr, when set, is returned by UpdateSeenReasonBatch (used to inject
+	// ErrLedgerRowMissing). seenErrForReason takes precedence when its key matches.
+	seenErr          error
+	seenErrForReason map[string]error
 }
 
 func (f *fakeLedger) UpdateSeenReasonBatch(_ context.Context, ids []string, reason string) error {
 	f.calls = append(f.calls, ledgerCall{ids: append([]string(nil), ids...), reason: reason})
-	return nil
+	if f.seenErrForReason != nil {
+		if err, ok := f.seenErrForReason[reason]; ok {
+			return err
+		}
+	}
+	return f.seenErr
 }
 
 func (f *fakeLedger) UpdateRetryBatch(_ context.Context, entries []jobsvc.RetryLedgerEntry) error {
@@ -68,9 +79,21 @@ type fakePublisher struct {
 	payloads [][]byte
 	records  []publishedRecord
 	err      error
+	// failOn fails the publish for jobs whose JSON `id` field matches a key.
+	// Used to exercise the per-job publish-failure partition.
+	failOn map[string]error
 }
 
 func (f *fakePublisher) Publish(_ context.Context, subject string, value []byte) error {
+	if f.failOn != nil {
+		var raw map[string]any
+		_ = json.Unmarshal(value, &raw)
+		if id, ok := raw["id"].(string); ok {
+			if e, exists := f.failOn[id]; exists {
+				return e
+			}
+		}
+	}
 	if f.err != nil {
 		return f.err
 	}
@@ -242,21 +265,146 @@ func TestProcessChunk_PartialRelevant(t *testing.T) {
 		}
 	}
 	if len(ledger.calls) != 2 {
-		t.Fatalf("expected 2 ledger calls (irrelevant + filtered), got %d", len(ledger.calls))
+		t.Fatalf("expected 2 ledger calls (filtered + irrelevant), got %d", len(ledger.calls))
 	}
-	irrelevantCall := ledger.calls[0]
+	// New ordering: relevant jobs are published and marked 'filtered' first, then
+	// irrelevant jobs are marked 'llm_irrelevant'.
+	filteredCall := ledger.calls[0]
+	if filteredCall.reason != jobcommon.SeenReasonFiltered {
+		t.Errorf("expected reason %q, got %q", jobcommon.SeenReasonFiltered, filteredCall.reason)
+	}
+	if len(filteredCall.ids) != 2 {
+		t.Errorf("expected 2 filtered IDs, got %v", filteredCall.ids)
+	}
+	irrelevantCall := ledger.calls[1]
 	if irrelevantCall.reason != jobcommon.SeenReasonLLMIrrelevant {
 		t.Errorf("expected reason %q, got %q", jobcommon.SeenReasonLLMIrrelevant, irrelevantCall.reason)
 	}
 	if len(irrelevantCall.ids) != 1 || irrelevantCall.ids[0] != "job-2" {
 		t.Errorf("expected irrelevant IDs [job-2], got %v", irrelevantCall.ids)
 	}
-	filteredCall := ledger.calls[1]
-	if filteredCall.reason != jobcommon.SeenReasonFiltered {
-		t.Errorf("expected reason %q, got %q", jobcommon.SeenReasonFiltered, filteredCall.reason)
+}
+
+// TestProcessChunk_PublishDetailFails_NaksMessage_NoLedgerWrite (#19) — a
+// publish failure for a relevant job Naks the message, does NOT mark it
+// 'filtered', and increments filter_publish_failures_total.
+func TestProcessChunk_PublishDetailFails_NaksMessage_NoLedgerWrite(t *testing.T) {
+	scorer := &fakeScorer{relevantIDs: []string{"job-1"}}
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{failOn: map[string]error{"job-1": errors.New("broker down")}}
+
+	item1, state1 := makeChunkItem(makeJob("job-1"), 1)
+
+	w := makeWorker(scorer, ledger, pub)
+	before := promtestutil.ToFloat64(metrics.FilterPublishFailures.WithLabelValues("filtered"))
+	_ = w.processChunk(context.Background(), []chunkItem{item1}, "fetch-pubfail", 0, 1)
+	after := promtestutil.ToFloat64(metrics.FilterPublishFailures.WithLabelValues("filtered"))
+
+	if !state1.Naked {
+		t.Errorf("expected publish-failed job to be Nak'd")
 	}
-	if len(filteredCall.ids) != 2 {
-		t.Errorf("expected 2 filtered IDs, got %v", filteredCall.ids)
+	if state1.Acked {
+		t.Errorf("publish-failed job must NOT be Acked")
+	}
+	// No 'filtered' ledger write for the failed job.
+	for _, c := range ledger.calls {
+		if c.reason == jobcommon.SeenReasonFiltered {
+			t.Errorf("publish-failed job must not be marked 'filtered'; got call %+v", c)
+		}
+	}
+	if after-before != 1 {
+		t.Errorf("expected filter_publish_failures_total +1, got +%v", after-before)
+	}
+}
+
+// TestProcessChunk_LedgerRowMissing_NaksMessage (#20) — when
+// UpdateSeenReasonBatch returns ErrLedgerRowMissing (crawler→filter race), all
+// affected messages are Nak'd (not Acked) and filter_ledger_missing_total
+// increments.
+func TestProcessChunk_LedgerRowMissing_NaksMessage(t *testing.T) {
+	scorer := &fakeScorer{relevantIDs: []string{"job-1", "job-2"}}
+	ledger := &fakeLedger{seenErr: domainerr.ErrLedgerRowMissing.WithMessage("race")}
+	pub := &fakePublisher{}
+
+	item1, state1 := makeChunkItem(makeJob("job-1"), 1)
+	item2, state2 := makeChunkItem(makeJob("job-2"), 1)
+
+	w := makeWorker(scorer, ledger, pub)
+	before := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(jobcommon.SeenReasonFiltered))
+	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-missing", 0, 1)
+	after := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(jobcommon.SeenReasonFiltered))
+
+	if !state1.Naked || !state2.Naked {
+		t.Errorf("expected both messages Nak'd on missing ledger row: j1=%v j2=%v", state1.Naked, state2.Naked)
+	}
+	if state1.Acked || state2.Acked {
+		t.Errorf("messages must NOT be Acked when ledger row missing")
+	}
+	if after-before != 1 {
+		t.Errorf("expected filter_ledger_missing_total +1, got +%v", after-before)
+	}
+}
+
+// TestRouteFailedChunk_NakFails_StillRecordsRetry_AndTerms (#21) — when Nak
+// fails, the message is Term'd AND the retry ledger entry is still recorded.
+func TestRouteFailedChunk_NakFails_StillRecordsRetry_AndTerms(t *testing.T) {
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
+
+	item, state := makeChunkItem(makeJob("job-nak-fail"), 1) // retryCount=0 → within budget
+	state.NakErr = errors.New("nak broker error")
+
+	outcome := w.routeFailedChunk(context.Background(), []chunkItem{item}, errors.New("transient score error"))
+
+	if !state.Naked {
+		t.Errorf("expected Nak to have been attempted")
+	}
+	if !state.Termed {
+		t.Errorf("expected Term after Nak failure")
+	}
+	if len(outcome.Retried) != 1 || outcome.Retried[0].JobID != "job-nak-fail" {
+		t.Errorf("expected retry ledger entry recorded despite Nak failure, got %+v", outcome.Retried)
+	}
+}
+
+// TestProcessChunk_AllRelevant_OneFailsPublish (#22) — 3 relevant jobs, 1
+// publish fails: the 2 published get marked 'filtered' and Acked; the failed
+// one is Nak'd with no ledger write.
+func TestProcessChunk_AllRelevant_OneFailsPublish(t *testing.T) {
+	scorer := &fakeScorer{relevantIDs: []string{"job-1", "job-2", "job-3"}}
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{failOn: map[string]error{"job-2": errors.New("transient")}}
+
+	item1, state1 := makeChunkItem(makeJob("job-1"), 1)
+	item2, state2 := makeChunkItem(makeJob("job-2"), 1)
+	item3, state3 := makeChunkItem(makeJob("job-3"), 1)
+
+	w := makeWorker(scorer, ledger, pub)
+	_ = w.processChunk(context.Background(), []chunkItem{item1, item2, item3}, "fetch-mixedpub", 0, 1)
+
+	// job-2 Nak'd, not Acked; job-1 + job-3 Acked.
+	if state2.Acked || !state2.Naked {
+		t.Errorf("job-2 (publish failed) should be Nak'd, not Acked: acked=%v naked=%v", state2.Acked, state2.Naked)
+	}
+	if !state1.Acked || !state3.Acked {
+		t.Errorf("job-1 + job-3 should be Acked: j1=%v j3=%v", state1.Acked, state3.Acked)
+	}
+	// Exactly one 'filtered' ledger call covering only the 2 published IDs.
+	var filtered *ledgerCall
+	for i := range ledger.calls {
+		if ledger.calls[i].reason == jobcommon.SeenReasonFiltered {
+			filtered = &ledger.calls[i]
+		}
+	}
+	if filtered == nil {
+		t.Fatal("expected a 'filtered' ledger call")
+	}
+	if len(filtered.ids) != 2 {
+		t.Errorf("expected 2 filtered IDs (job-1, job-3), got %v", filtered.ids)
+	}
+	for _, id := range filtered.ids {
+		if id == "job-2" {
+			t.Errorf("job-2 must not be marked 'filtered' (its publish failed)")
+		}
 	}
 }
 

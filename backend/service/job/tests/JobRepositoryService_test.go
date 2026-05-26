@@ -229,20 +229,35 @@ func TestJobStore_InsertJob_HappyPath(t *testing.T) {
 	}
 }
 
-// TestJobStore_InsertJob_DuplicatePK_Errors — PK violation surfaces an error.
-func TestJobStore_InsertJob_DuplicatePK_Errors(t *testing.T) {
+// TestJobStore_InsertJob_DuplicateJobPostID_ReturnsErrJobAlreadyExists — a
+// replay with the same job_post_id (even a different id) is idempotent: the
+// second insert is a no-op via ON CONFLICT DO NOTHING and returns the typed
+// sentinel so the enricher can skip dependent writes. Exactly one row remains.
+func TestJobStore_InsertJob_DuplicateJobPostID_ReturnsErrJobAlreadyExists(t *testing.T) {
 	t.Parallel()
 	db := newJobTestDB(t)
 	seedCompany(t, db, "c1", "Acme")
 	store := jobsvc.NewJobStore(db)
-	row := &jobmodel.Job{
-		ID: "j-dup", JobPostID: "post", CompanyID: "c1", Title: "T", URL: "u", AddedAt: time.Now(),
+	first := &jobmodel.Job{
+		ID: "j-dup-1", JobPostID: "post", CompanyID: "c1", Title: "T1", URL: "u1", AddedAt: time.Now(),
 	}
-	if err := store.InsertJob(context.Background(), row); err != nil {
+	if err := store.InsertJob(context.Background(), first); err != nil {
 		t.Fatalf("first insert: %v", err)
 	}
-	if err := store.InsertJob(context.Background(), row); err == nil {
-		t.Fatal("expected PK conflict error on duplicate insert")
+	// Different primary key, same job_post_id — the conflict target.
+	second := &jobmodel.Job{
+		ID: "j-dup-2", JobPostID: "post", CompanyID: "c1", Title: "T2", URL: "u2", AddedAt: time.Now(),
+	}
+	err := store.InsertJob(context.Background(), second)
+	if !errors.Is(err, apperr.ErrJobAlreadyExists) {
+		t.Fatalf("want ErrJobAlreadyExists, got %v", err)
+	}
+	var count int64
+	if err := db.Model(&jobmodel.Job{}).Where("job_post_id = ?", "post").Count(&count).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("row count for job_post_id=post = %d, want 1", count)
 	}
 }
 
@@ -354,7 +369,7 @@ func TestJobStore_GetJobs_LimitClampedToDefault(t *testing.T) {
 	seedCompany(t, db, "c1", "Acme")
 	t0 := time.Now()
 	for i := 0; i < 25; i++ {
-		seedJob(t, db, jobID(i), "c1", "T", "p", t0.Add(time.Duration(i)*time.Second))
+		seedJob(t, db, jobID(i), "c1", "T", "p"+jobID(i), t0.Add(time.Duration(i)*time.Second))
 	}
 	store := jobsvc.NewJobStore(db)
 	jobs, next, err := store.GetJobs(context.Background(), dummyFilter(), "", 0)
@@ -376,7 +391,7 @@ func TestJobStore_GetJobs_LimitClampedTo100(t *testing.T) {
 	seedCompany(t, db, "c1", "Acme")
 	t0 := time.Now()
 	for i := 0; i < 110; i++ {
-		seedJob(t, db, jobID(i), "c1", "T", "p", t0.Add(time.Duration(i)*time.Second))
+		seedJob(t, db, jobID(i), "c1", "T", "p"+jobID(i), t0.Add(time.Duration(i)*time.Second))
 	}
 	store := jobsvc.NewJobStore(db)
 	jobs, _, err := store.GetJobs(context.Background(), dummyFilter(), "", 200)
@@ -397,7 +412,7 @@ func TestJobStore_GetJobs_CursorPagination(t *testing.T) {
 	t0 := time.Now()
 	for i := 0; i < 10; i++ {
 		// Stagger added_at so the keyset cursor is deterministic.
-		seedJob(t, db, jobID(i), "c1", "T", "p", t0.Add(time.Duration(i)*time.Minute))
+		seedJob(t, db, jobID(i), "c1", "T", "p"+jobID(i), t0.Add(time.Duration(i)*time.Minute))
 	}
 	store := jobsvc.NewJobStore(db)
 
@@ -447,8 +462,8 @@ func TestJobStore_GetJobs_BadCursor_TreatedAsFirstPage(t *testing.T) {
 	db := newJobTestDB(t)
 	seedCompany(t, db, "c1", "Acme")
 	t0 := time.Now()
-	seedJob(t, db, "j1", "c1", "T", "p", t0)
-	seedJob(t, db, "j2", "c1", "T", "p", t0)
+	seedJob(t, db, "j1", "c1", "T", "p1", t0)
+	seedJob(t, db, "j2", "c1", "T", "p2", t0)
 	store := jobsvc.NewJobStore(db)
 
 	jobs, _, err := store.GetJobs(context.Background(), dummyFilter(), "!!garbage-cursor!!", 10)

@@ -15,8 +15,12 @@ type CrawlerQueueService interface {
 	// enforcing the inter-company delay from adapter_configs. Returns nil, nil if
 	// the queue is empty or the delay has not yet elapsed.
 	ClaimNext(ctx context.Context, adapterType string) (*dto.ScanQueueItem, error)
+	// Complete returns ErrQueueRowMissing when the row was already removed/reassigned.
 	Complete(ctx context.Context, id string) error
-	ResetStuck(ctx context.Context, staleDur time.Duration) error
+	// ResetStuck returns the number of rows reclaimed.
+	ResetStuck(ctx context.Context, staleDur time.Duration) (int, error)
+	// UpdateHeartbeat returns ErrQueueRowMissing when the row was reassigned by
+	// ResetStuck — the crawler must abort the in-flight scan.
 	UpdateHeartbeat(ctx context.Context, id string) error
 }
 
@@ -48,13 +52,14 @@ func (s *crawlerQueueService) Complete(ctx context.Context, id string) (err erro
 	return nil
 }
 
-func (s *crawlerQueueService) ResetStuck(ctx context.Context, staleDur time.Duration) (err error) {
+func (s *crawlerQueueService) ResetStuck(ctx context.Context, staleDur time.Duration) (rowsReset int, err error) {
 	ctx, span := tracing.Start(ctx, "scan.crawlerqueue.ResetStuck")
 	defer tracing.End(span, &err)
-	if err := s.store.ResetStuck(ctx, staleDur); err != nil {
-		return fmt.Errorf("reset stuck queue items: %w", err)
+	n, err := s.store.ResetStuck(ctx, staleDur)
+	if err != nil {
+		return 0, fmt.Errorf("reset stuck queue items: %w", err)
 	}
-	return nil
+	return n, nil
 }
 
 func (s *crawlerQueueService) UpdateHeartbeat(ctx context.Context, id string) (err error) {

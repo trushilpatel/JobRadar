@@ -269,27 +269,38 @@ func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, c
 		return 0
 	}
 
-	// Publish first, collect IDs that made it to NATS.
-	// MarkSeenBatch runs only after — if the process crashes between publish and mark,
-	// the next scan re-publishes those jobs. NATS dedup (Duplicates window) handles them.
-	var publishedIDs []string
-	for _, job := range filteredJobs {
-		if err := e.publish(ctx, toRawJob(job, companyID, adapterType)); err != nil {
-			log.Error("publish failed", err, logger.Str(logger.FieldJobID, job.ID))
-			continue
-		}
-		publishedIDs = append(publishedIDs, job.ID)
+	// Insert ledger rows (reason='fetch') BEFORE publishing so the row always
+	// exists by the time the filter can consume the message. This closes the
+	// crawler→filter race where a fast consumer would UPDATE-against-empty and
+	// either silently no-op or create a phantom row. MarkSeenBatch uses ON
+	// CONFLICT DO NOTHING, so a repeat scan that already inserted these rows is
+	// a cheap no-op.
+	filteredIDs := make([]string, len(filteredJobs))
+	for i, job := range filteredJobs {
+		filteredIDs[i] = job.ID
 	}
-	if len(publishedIDs) == 0 {
+	if err := e.ledger.MarkSeenBatch(ctx, filteredIDs, companyID, jobcommon.SeenReasonFetch); err != nil {
+		// Could not record the ledger rows — do NOT publish, or the filter would
+		// race a missing row. The next scan re-discovers these jobs.
+		log.Error("batch mark seen failed before publish (skipping publish; recovered next scan)", err,
+			logger.Int(logger.FieldCount, len(filteredIDs)))
 		return 0
 	}
 
-	if err := e.ledger.MarkSeenBatch(ctx, publishedIDs, companyID, jobcommon.SeenReasonFetch); err != nil {
-		// Jobs are in NATS but not marked seen — next scan will re-publish them.
-		// NATS JetStream dedup (Duplicates window + MsgID) ensures idempotent delivery.
-		log.Error("batch mark seen failed (jobs published, will be re-sent on next scan)", err)
+	// Publish each job. The ledger row is already 'fetch'. A publish failure
+	// leaves the row at 'fetch'; the next scan sees it via HasSeenBatch and
+	// skips it — operators query stuck 'fetch' rows via the cleanup migration.
+	var publishedCount int
+	for _, job := range filteredJobs {
+		if err := e.publish(ctx, toRawJob(job, companyID, adapterType)); err != nil {
+			metrics.CrawlerPublishFailures.WithLabelValues(adapterType).Inc()
+			log.Error("publish failed (ledger row stays at 'fetch'; recovered next scan)", err,
+				logger.Str(logger.FieldJobID, job.ID))
+			continue
+		}
+		publishedCount++
 	}
-	return len(publishedIDs)
+	return publishedCount
 }
 
 // toRawJob converts a FetchJobsItem into the RawJob message payload.

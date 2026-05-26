@@ -37,6 +37,12 @@ Stage 2 — serial: group successful (job, content) into chunks of ENRICHER_LLM_
 - Keeps `reason='retry'` semantically consistent: LLM-layer failure only
 - Transitions: `retry → llm_irrelevant | retry | error`
 
+## Ledger-row-missing tolerance
+
+`markError`/`markIrrelevant`/`markNonUSA` (and `markLedgerRetryWithRetry`) call ledger UPDATEs that now return `ErrLedgerRowMissing` when the row is absent (e.g. cleaned by a maintenance migration). At the **analyzer** stage this is **non-fatal** — log WARN, increment `enricher_ledger_missing_total{reason}`, and continue (do NOT Nak/retry; the job is already enriched, a missing ledger row is only an observability gap). This differs from the **filter**, which Naks on the same sentinel because there the missing row means a genuine crawler/filter race. `markLedgerRetryWithRetry` skips its second attempt on `ErrLedgerRowMissing` (the row is gone, not transient).
+
+Duplicate inserts: `SaveEnrichedJob` tolerates `ErrJobAlreadyExists` from `InsertJob` (the `jobs.job_post_id` unique index) — it skips the snapshot/tech-tag writes, still marks the ledger `saved`, increments `enricher_jobs_duplicate_total`, and returns nil.
+
 ## Configuration
 
 | Env var                          | Default | Notes                                    |

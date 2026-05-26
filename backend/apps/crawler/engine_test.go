@@ -8,12 +8,14 @@ import (
 	"sync"
 	"testing"
 
+	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/google"
 	atstypes "github.com/trushilpatel/jobradar/apps/crawler/ats/types"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	scandto "github.com/trushilpatel/jobradar/service/scan/dto"
@@ -52,6 +54,20 @@ type fakeLedger struct {
 	// markSeenErrForReason allows injecting a per-reason error: if set and the
 	// call's reason matches a key, that error is returned for that call.
 	markSeenErrForReason map[string]error
+	// order, when set, records "mark_seen" / "publish" events across both the
+	// ledger and publisher fakes so tests can assert call ordering.
+	order   *[]string
+	orderMu *sync.Mutex
+}
+
+// recordOrder appends an event to the shared order log under its mutex.
+func recordOrder(order *[]string, mu *sync.Mutex, event string) {
+	if order == nil {
+		return
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	*order = append(*order, event)
 }
 
 func (f *fakeLedger) HasSeenBatch(_ context.Context, ids []string) (map[string]bool, error) {
@@ -76,6 +92,9 @@ func (f *fakeLedger) MarkSeenBatch(_ context.Context, ids []string, companyID, r
 	f.markSeenLastReason = reason
 	f.markSeenLastCompany = companyID
 	f.markSeenReasons = append(f.markSeenReasons, reason)
+	if reason == jobcommon.SeenReasonFetch {
+		recordOrder(f.order, f.orderMu, "mark_seen")
+	}
 	if f.markSeenErrForReason != nil {
 		if err, ok := f.markSeenErrForReason[reason]; ok {
 			return err
@@ -126,11 +145,16 @@ type fakePublisher struct {
 	// failOn allows the publisher to fail for specific job IDs (matched by
 	// JSON field `"id":"<value>"`).
 	failOn map[string]error
+	// order, when set, records "publish" events so ordering tests can assert
+	// that MarkSeenBatch ran before any publish.
+	order   *[]string
+	orderMu *sync.Mutex
 }
 
 func (f *fakePublisher) doPublish(subject string, payload []byte) error {
 	f.called = true
 	f.subject = subject
+	recordOrder(f.order, f.orderMu, "publish")
 	if f.failOn != nil {
 		var raw map[string]any
 		_ = json.Unmarshal(payload, &raw)
@@ -547,8 +571,10 @@ func TestPublishNewJobs_HasSeenError(t *testing.T) {
 }
 
 // TestPublishNewJobs_ContinuesPastPublishFailure verifies that a single job
-// publish failure does not abort the batch — the next job still ships, and
-// only successfully-published IDs make it into MarkSeenBatch.
+// publish failure does not abort the batch — the next job still ships. With
+// the mark-seen-first ordering, ALL new IDs are recorded in the ledger
+// (reason='fetch') before any publish, so a failed publish leaves its row at
+// 'fetch' for the next scan to recover.
 func TestPublishNewJobs_ContinuesPastPublishFailure(t *testing.T) {
 	jobs := []ats.FetchJobsItem{{ID: "g-1"}, {ID: "g-2"}, {ID: "g-3"}}
 	ledger := &fakeLedger{seenMap: map[string]bool{}}
@@ -562,15 +588,16 @@ func TestPublishNewJobs_ContinuesPastPublishFailure(t *testing.T) {
 	if len(ledger.markSeenCalls) != 1 {
 		t.Fatalf("expected one MarkSeenBatch call, got %d", len(ledger.markSeenCalls))
 	}
+	// Mark-seen-first: every new job is recorded before publish, including g-2.
 	got := ledger.markSeenCalls[0]
-	if len(got) != 2 || got[0] != "g-1" || got[1] != "g-3" {
-		t.Errorf("MarkSeenBatch IDs: got %v, want [g-1 g-3]", got)
+	if len(got) != 3 || got[0] != "g-1" || got[1] != "g-2" || got[2] != "g-3" {
+		t.Errorf("MarkSeenBatch IDs: got %v, want [g-1 g-2 g-3]", got)
 	}
 }
 
-// TestPublishNewJobs_AllPublishesFail verifies that when every publish
-// fails, the engine does not call MarkSeenBatch — the next scan will
-// retry these jobs verbatim.
+// TestPublishNewJobs_AllPublishesFail verifies that when every publish fails,
+// the ledger rows still exist at reason='fetch' (recorded before publish), and
+// the returned count is 0. The next scan re-publishes via HasSeenBatch.
 func TestPublishNewJobs_AllPublishesFail(t *testing.T) {
 	jobs := []ats.FetchJobsItem{{ID: "g-1"}, {ID: "g-2"}}
 	ledger := &fakeLedger{seenMap: map[string]bool{}}
@@ -581,25 +608,116 @@ func TestPublishNewJobs_AllPublishesFail(t *testing.T) {
 	if n != 0 {
 		t.Errorf("expected 0 when all publishes fail, got %d", n)
 	}
-	if len(ledger.markSeenCalls) != 0 {
-		t.Errorf("MarkSeenBatch must not be called when no publish succeeded; got %v", ledger.markSeenCalls)
+	// The ledger rows are written before publish, so the call IS made.
+	if len(ledger.markSeenCalls) != 1 {
+		t.Fatalf("expected one MarkSeenBatch (mark-seen-first), got %d", len(ledger.markSeenCalls))
+	}
+	if ledger.markSeenLastReason != jobcommon.SeenReasonFetch {
+		t.Errorf("MarkSeenBatch reason: got %q, want fetch", ledger.markSeenLastReason)
 	}
 }
 
-// TestPublishNewJobs_MarkSeenErrorDoesNotFail verifies the engine treats a
-// MarkSeenBatch failure as a soft error — jobs are in Kafka, the next scan
-// will republish, the downstream filter dedupes by ID.
-func TestPublishNewJobs_MarkSeenErrorDoesNotFail(t *testing.T) {
+// TestPublishNewJobs_MarkSeenFails_SkipsPublish verifies that if the pre-publish
+// ledger write fails, the engine does NOT publish — publishing without a ledger
+// row would re-open the crawler→filter race. The next scan re-discovers the job.
+func TestPublishNewJobs_MarkSeenFails_SkipsPublish(t *testing.T) {
 	jobs := []ats.FetchJobsItem{{ID: "g-1"}}
 	ledger := &fakeLedger{seenMap: map[string]bool{}, markSeenErr: errors.New("ledger flaky")}
 	pub := &fakePublisher{}
 	e := newTestEngine(&fakeSettingsReader{}, ledger, &fakeRecorder{}, pub)
 
 	n := e.publishNewJobs(context.Background(), jobs, "co", "greenhouse", logger.NewNoop())
-	// Engine returns the number of published IDs even when the post-publish
-	// mark-seen call fails — the publish itself succeeded.
+	if n != 0 {
+		t.Errorf("expected 0 when pre-publish ledger write fails, got %d", n)
+	}
+	if pub.called {
+		t.Error("publisher must not be called when the pre-publish ledger write failed")
+	}
+}
+
+// TestPublishNewJobs_LedgerInsertBeforePublish (#15) — asserts MarkSeenBatch
+// (reason='fetch') happens before any publish, closing the crawler→filter race.
+func TestPublishNewJobs_LedgerInsertBeforePublish(t *testing.T) {
+	var order []string
+	mu := &sync.Mutex{}
+	jobs := []ats.FetchJobsItem{{ID: "g-1"}, {ID: "g-2"}}
+	ledger := &fakeLedger{seenMap: map[string]bool{}, order: &order, orderMu: mu}
+	pub := &fakePublisher{order: &order, orderMu: mu}
+	e := newTestEngine(&fakeSettingsReader{}, ledger, &fakeRecorder{}, pub)
+
+	n := e.publishNewJobs(context.Background(), jobs, "co", "greenhouse", logger.NewNoop())
+	if n != 2 {
+		t.Fatalf("expected 2 published, got %d", n)
+	}
+	if len(order) == 0 || order[0] != "mark_seen" {
+		t.Fatalf("expected first event to be mark_seen, got %v", order)
+	}
+	for i, ev := range order {
+		if ev == "publish" {
+			continue
+		}
+		if ev == "mark_seen" && i != 0 {
+			t.Fatalf("mark_seen must be the only pre-publish event; order=%v", order)
+		}
+	}
+	// Every publish must come after the single mark_seen.
+	firstPublish := -1
+	for i, ev := range order {
+		if ev == "publish" {
+			firstPublish = i
+			break
+		}
+	}
+	if firstPublish <= 0 {
+		t.Fatalf("expected publishes to follow mark_seen; order=%v", order)
+	}
+}
+
+// TestPublishNewJobs_PublishFailure_LedgerRemainsAtFetch (#16) — a per-job
+// publish failure increments crawler_publish_failures_total and leaves the
+// ledger row at reason='fetch' (it was written before publish).
+func TestPublishNewJobs_PublishFailure_LedgerRemainsAtFetch(t *testing.T) {
+	jobs := []ats.FetchJobsItem{{ID: "g-1"}, {ID: "g-2"}}
+	ledger := &fakeLedger{seenMap: map[string]bool{}}
+	pub := &fakePublisher{failOn: map[string]error{"g-2": errors.New("transient")}}
+	e := newTestEngine(&fakeSettingsReader{}, ledger, &fakeRecorder{}, pub)
+
+	before := promtestutil.ToFloat64(metrics.CrawlerPublishFailures.WithLabelValues("greenhouse"))
+	n := e.publishNewJobs(context.Background(), jobs, "co", "greenhouse", logger.NewNoop())
+	after := promtestutil.ToFloat64(metrics.CrawlerPublishFailures.WithLabelValues("greenhouse"))
+
 	if n != 1 {
-		t.Errorf("expected 1 (jobs reached Kafka), got %d", n)
+		t.Errorf("expected 1 published (g-1), got %d", n)
+	}
+	if after-before != 1 {
+		t.Errorf("expected crawler_publish_failures_total +1, got +%v", after-before)
+	}
+	// The ledger was written (reason='fetch') for both before publish.
+	if len(ledger.markSeenCalls) != 1 || len(ledger.markSeenCalls[0]) != 2 {
+		t.Errorf("expected one MarkSeenBatch with both IDs, got %v", ledger.markSeenCalls)
+	}
+	if ledger.markSeenLastReason != jobcommon.SeenReasonFetch {
+		t.Errorf("MarkSeenBatch reason: got %q, want fetch", ledger.markSeenLastReason)
+	}
+}
+
+// TestPublishNewJobs_NoNewJobs_NoLedgerWrite (#17) — when all jobs are already
+// in the ledger, there is no ledger insert and no publish.
+func TestPublishNewJobs_NoNewJobs_NoLedgerWrite(t *testing.T) {
+	jobs := []ats.FetchJobsItem{{ID: "g-1"}, {ID: "g-2"}}
+	ledger := &fakeLedger{seenMap: map[string]bool{"g-1": true, "g-2": true}}
+	pub := &fakePublisher{}
+	e := newTestEngine(&fakeSettingsReader{}, ledger, &fakeRecorder{}, pub)
+
+	n := e.publishNewJobs(context.Background(), jobs, "co", "greenhouse", logger.NewNoop())
+	if n != 0 {
+		t.Errorf("expected 0 new, got %d", n)
+	}
+	if len(ledger.markSeenCalls) != 0 {
+		t.Errorf("MarkSeenBatch must not be called when no new jobs; got %v", ledger.markSeenCalls)
+	}
+	if pub.called {
+		t.Error("publisher must not be called when no new jobs")
 	}
 }
 

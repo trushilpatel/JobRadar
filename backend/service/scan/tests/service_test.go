@@ -49,9 +49,9 @@ func (f *fakeQueueStore) Remove(_ context.Context, _ string) error {
 	f.removeCalled = true
 	return f.err
 }
-func (f *fakeQueueStore) ResetStuck(_ context.Context, _ time.Duration) error {
+func (f *fakeQueueStore) ResetStuck(_ context.Context, _ time.Duration) (int, error) {
 	f.resetStuckCalled = true
-	return f.err
+	return 0, f.err
 }
 func (f *fakeQueueStore) PurgeInactive(_ context.Context) (int, error)      { return 0, f.err }
 func (f *fakeQueueStore) UpdateHeartbeat(_ context.Context, _ string) error { return f.err }

@@ -88,6 +88,12 @@ func newJobTestDB(t *testing.T) *gorm.DB {
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	// Mirror migration 071: jobs.job_post_id is uniquely indexed in production.
+	// InsertJob relies on ON CONFLICT (job_post_id) DO NOTHING — sqlite only
+	// honours that conflict target if a matching unique index exists.
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_jobs_job_post_id ON jobs(job_post_id)`).Error; err != nil {
+		t.Fatalf("create unique index: %v", err)
+	}
 	return db
 }
 

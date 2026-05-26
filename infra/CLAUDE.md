@@ -58,6 +58,18 @@ curl -X POST http://localhost:30080/companies/<company-id>/scan
 make k8s-logs-crawler
 ```
 
+## Change the LLM models (filter / enricher)
+
+LLM slot config lives in `k8s/helm/jobradar/files/llm-slots.yaml` (filter slots + enricher slots), mounted as configmap `jobradar-llm-slots`. It is **not** baked into the image, so changing it needs a Helm sync, not a rebuild:
+
+```bash
+# edit k8s/helm/jobradar/files/llm-slots.yaml
+make k8s-up                                  # helm upgrade — regenerates the configmap
+kubectl rollout restart deployment/jobradar-filter -n jobradar-local    # pod must restart to remount
+```
+
+Models are pinned to a preview-access key — most GA models return 404 or `limit:0` → 429. Before switching to a model, verify it returns HTTP 200 from **inside the cluster** (same egress as the workers): `kubectl run gemtest --rm -i --image=curlimages/curl -- sh -c 'curl ... :generateContent?key=...'`. A local-machine curl is unreliable here. See the `LLM model configuration` memory for the current pinned models and known-good alternatives.
+
 ## Resource limits reference
 
 Tuned for a single-node k3d cluster on an 8 GB M1. Never raise limits without checking available headroom (`kubectl top nodes`).

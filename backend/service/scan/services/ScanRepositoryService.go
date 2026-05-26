@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"time"
 
@@ -54,19 +55,25 @@ type ScanQueueStore interface {
 	ClaimNext(ctx context.Context, adapterType string) (*dto.ScanQueueItem, error)
 
 	// Complete removes the queue entry. Call after scan succeeds or fails.
+	// Returns ErrQueueRowMissing when no row matched (already removed/reassigned).
 	Complete(ctx context.Context, id string) error
 
-	// Remove deletes a queued entry by ID. No-ops if entry is running or missing.
+	// Remove deletes a queued entry by ID. Returns ErrQueueRowMissing when no
+	// queued row matched (entry running or already gone) — the admin API maps
+	// this to HTTP 404.
 	Remove(ctx context.Context, id string) error
 
 	// ResetStuck resets running rows whose heartbeat (or started_at if no heartbeat yet) is older than staleDur.
-	ResetStuck(ctx context.Context, staleDur time.Duration) error
+	// Returns the number of rows reclaimed (purely additive observability — zero is not an error).
+	ResetStuck(ctx context.Context, staleDur time.Duration) (int, error)
 
 	// PurgeInactive deletes all queued (not running) entries whose company
 	// is inactive. Returns the number of rows removed.
 	PurgeInactive(ctx context.Context) (int, error)
 
 	// UpdateHeartbeat refreshes the heartbeat timestamp for an in-progress row.
+	// Returns ErrQueueRowMissing when no row matched — signals the row was
+	// reassigned by ResetStuck and the crawler must abort the scan.
 	UpdateHeartbeat(ctx context.Context, id string) error
 
 	// ListQueue returns queue entries matching filter, ordered by priority DESC, queued_at ASC.
@@ -286,30 +293,55 @@ func (s *scanQueueStore) PurgeInactive(ctx context.Context) (_ int, err error) {
 func (s *scanQueueStore) Complete(ctx context.Context, id string) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.Complete")
 	defer tracing.End(span, &err)
-	return s.db.WithContext(ctx).Exec(`DELETE FROM company_scan_queue WHERE id = ?`, id).Error
+	res := s.db.WithContext(ctx).Exec(`DELETE FROM company_scan_queue WHERE id = ?`, id)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return errors.ErrQueueRowMissing.WithMessage("Complete: no scan queue row for id=" + id)
+	}
+	return nil
 }
 
 func (s *scanQueueStore) Remove(ctx context.Context, id string) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.Remove")
 	defer tracing.End(span, &err)
-	return s.db.WithContext(ctx).Exec(`DELETE FROM company_scan_queue WHERE id = ? AND status = 'queued'`, id).Error
+	res := s.db.WithContext(ctx).Exec(`DELETE FROM company_scan_queue WHERE id = ? AND status = 'queued'`, id)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return errors.ErrQueueRowMissing.WithMessage("Remove: no queued scan queue row for id=" + id)
+	}
+	return nil
 }
 
-func (s *scanQueueStore) ResetStuck(ctx context.Context, staleDur time.Duration) (err error) {
+func (s *scanQueueStore) ResetStuck(ctx context.Context, staleDur time.Duration) (rowsReset int, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.ResetStuck")
 	defer tracing.End(span, &err)
-	return s.db.WithContext(ctx).Exec(`
+	res := s.db.WithContext(ctx).Exec(`
 		UPDATE company_scan_queue
 		SET status = 'queued', started_at = NULL, heartbeat_at = NULL
 		WHERE status = 'running'
 		  AND COALESCE(heartbeat_at, started_at) < NOW() - INTERVAL '1 second' * ?
-	`, int(staleDur.Seconds())).Error
+	`, int(staleDur.Seconds()))
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return int(res.RowsAffected), nil
 }
 
 func (s *scanQueueStore) UpdateHeartbeat(ctx context.Context, id string) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.UpdateHeartbeat")
 	defer tracing.End(span, &err)
-	return s.db.WithContext(ctx).Exec(`UPDATE company_scan_queue SET heartbeat_at = NOW() WHERE id = ?`, id).Error
+	res := s.db.WithContext(ctx).Exec(`UPDATE company_scan_queue SET heartbeat_at = NOW() WHERE id = ?`, id)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return errors.ErrQueueRowMissing.WithMessage("UpdateHeartbeat: no scan queue row for id=" + id)
+	}
+	return nil
 }
 
 func (s *scanQueueStore) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ []dto.ScanQueueItem, err error) {
@@ -638,7 +670,7 @@ func (s *repositoryService) EnqueueDue(ctx context.Context, intervalMinutes int)
 func (s *repositoryService) ResetStuck(ctx context.Context, staleDur time.Duration) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.repository.ResetStuck")
 	defer tracing.End(span, &err)
-	if err := s.queue.ResetStuck(ctx, staleDur); err != nil {
+	if _, err := s.queue.ResetStuck(ctx, staleDur); err != nil {
 		return errors.ErrInternal.WithMessage("failed to reset stuck queue entries")
 	}
 	return nil
@@ -711,6 +743,11 @@ func (s *repositoryService) RemoveFromQueue(ctx context.Context, entryID string)
 	ctx, span := tracing.Start(ctx, "scan.repository.RemoveFromQueue")
 	defer tracing.End(span, &err)
 	if err := s.queue.Remove(ctx, entryID); err != nil {
+		// Propagate ErrQueueRowMissing so the admin API renders 404; wrap any
+		// other store failure as a 500.
+		if stderrors.Is(err, errors.ErrQueueRowMissing) {
+			return errors.ErrQueueRowMissing.WithMessage("remove queue entry: " + err.Error())
+		}
 		return errors.ErrInternal.WithMessage("failed to remove queue entry")
 	}
 	return nil

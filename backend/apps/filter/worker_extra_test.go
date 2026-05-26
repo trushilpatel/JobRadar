@@ -9,11 +9,17 @@ import (
 	"testing"
 	"time"
 
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
+
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
+	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 )
@@ -600,8 +606,10 @@ func TestProcessChunk_PassThrough_LedgerErrorStillAcks(t *testing.T) {
 	}
 }
 
-// TestProcessChunk_Scorable_AcksAfterLedger asserts that for a mixed-relevance
-// scorable batch, both UpdateSeenReasonBatch calls complete before any msg.Ack().
+// TestProcessChunk_Scorable_AcksAfterLedger asserts the per-bucket ordering:
+// each bucket's UpdateSeenReasonBatch completes before that bucket's msg.Ack().
+// With the published-OK partition, the relevant bucket (publish → mark filtered
+// → ack) is processed before the irrelevant bucket (mark llm_irrelevant → ack).
 func TestProcessChunk_Scorable_AcksAfterLedger(t *testing.T) {
 	// relevant=job-s-1, irrelevant=job-s-2
 	scorer := &fakeScorer{relevantIDs: []string{"job-s-1"}}
@@ -615,22 +623,21 @@ func TestProcessChunk_Scorable_AcksAfterLedger(t *testing.T) {
 	w := makeWorkerWithInterface(scorer, ledger, pub)
 	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-score-order", 0, 1)
 
-	// Expect 2 ledger calls: irrelevant first, then filtered.
+	// Expect 2 ledger calls: filtered (relevant) first, then llm_irrelevant.
 	if len(ledger.calls) != 2 {
 		t.Fatalf("expected 2 ledger calls, got %d: %+v", len(ledger.calls), ledger.calls)
 	}
-	if ledger.calls[0].reason != jobcommon.SeenReasonLLMIrrelevant {
-		t.Errorf("expected first call reason=%q, got %q", jobcommon.SeenReasonLLMIrrelevant, ledger.calls[0].reason)
+	if ledger.calls[0].reason != jobcommon.SeenReasonFiltered {
+		t.Errorf("expected first call reason=%q, got %q", jobcommon.SeenReasonFiltered, ledger.calls[0].reason)
 	}
-	if ledger.calls[1].reason != jobcommon.SeenReasonFiltered {
-		t.Errorf("expected second call reason=%q, got %q", jobcommon.SeenReasonFiltered, ledger.calls[1].reason)
+	if ledger.calls[1].reason != jobcommon.SeenReasonLLMIrrelevant {
+		t.Errorf("expected second call reason=%q, got %q", jobcommon.SeenReasonLLMIrrelevant, ledger.calls[1].reason)
 	}
 
-	// At the time of each ledger call, no message should have been Acked yet.
-	for i, anyAcked := range ledger.ackedAtLedger {
-		if anyAcked {
-			t.Errorf("scorable: msg was Acked BEFORE UpdateSeenReasonBatch call %d — ordering bug not fixed", i+1)
-		}
+	// Crash-safety invariant: at the first (relevant) ledger call, no message is
+	// Acked yet — the ledger write always precedes the bucket's Ack.
+	if ledger.ackedAtLedger[0] {
+		t.Errorf("scorable: a msg was Acked BEFORE the first UpdateSeenReasonBatch call — ordering bug")
 	}
 
 	// After processChunk returns, all messages must be Acked.
@@ -639,5 +646,88 @@ func TestProcessChunk_Scorable_AcksAfterLedger(t *testing.T) {
 	}
 	if !state2.Acked {
 		t.Errorf("expected item2 (irrelevant) Acked after processChunk")
+	}
+}
+
+// ── integration-style: crawler→filter race against the real sqlite ledger ─────
+
+// newFilterLedgerDB returns an in-memory sqlite DB with the ledger + companies
+// tables migrated, backing a real jobsvc.NewSeenLedgerStore. This lets the race
+// test drive the actual RowsAffected → ErrLedgerRowMissing path instead of a
+// hand-rolled fake.
+func newFilterLedgerDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
+		t.Fatalf("enable fks: %v", err)
+	}
+	if err := db.AutoMigrate(&companymodel.Company{}, &jobmodel.JobSeenLedger{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := db.Create(&companymodel.Company{ID: "co-race", Name: "Race Co", Slug: "race-co"}).Error; err != nil {
+		t.Fatalf("seed company: %v", err)
+	}
+	return db
+}
+
+// TestFilter_CrawlerRaceScenario_NoPhantomRow (#23) — simulates the
+// crawler→filter race: a message arrives whose ledger row has not yet been
+// INSERTed. The filter must Nak (not Ack) and must NOT create a phantom ledger
+// row. After the crawler INSERT lands, replaying the message transitions the
+// row to 'filtered' normally.
+func TestFilter_CrawlerRaceScenario_NoPhantomRow(t *testing.T) {
+	db := newFilterLedgerDB(t)
+	store := jobsvc.NewSeenLedgerStore(db)
+	scorer := &fakeScorer{relevantIDs: []string{"race-1"}}
+	pub := &fakePublisher{}
+
+	w := &Worker{
+		scorer:          scorer,
+		ledger:          store,
+		publisher:       pub,
+		batchSize:       5,
+		flushTimeout:    30 * time.Second,
+		llmCallInterval: 5 * time.Second,
+		clock:           realClock{},
+		log:             logger.NewNoop(),
+	}
+
+	// Phase 1 — ledger row does NOT exist yet (publish raced ahead of INSERT).
+	item, state := makeChunkItem(ats.RawJob{ID: "race-1", Adapter: "greenhouse", Title: "Engineer"}, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-race", 0, 1)
+
+	if !state.Naked {
+		t.Errorf("expected message Nak'd when ledger row missing")
+	}
+	if state.Acked {
+		t.Errorf("message must NOT be Acked when ledger row missing")
+	}
+	var phantom int64
+	if err := db.Model(&jobmodel.JobSeenLedger{}).Where("job_id = ?", "race-1").Count(&phantom).Error; err != nil {
+		t.Fatalf("count phantom: %v", err)
+	}
+	if phantom != 0 {
+		t.Fatalf("filter created a phantom ledger row for race-1; want 0, got %d", phantom)
+	}
+
+	// Phase 2 — crawler INSERT lands (reason='fetch'), then the message replays.
+	if err := store.MarkSeenBatch(context.Background(), []string{"race-1"}, "co-race", jobcommon.SeenReasonFetch); err != nil {
+		t.Fatalf("crawler MarkSeenBatch: %v", err)
+	}
+	item2, state2 := makeChunkItem(ats.RawJob{ID: "race-1", Adapter: "greenhouse", Title: "Engineer"}, 2)
+	_ = w.processChunk(context.Background(), []chunkItem{item2}, "fetch-race", 0, 1)
+
+	if !state2.Acked {
+		t.Errorf("expected replayed message Acked once the ledger row exists")
+	}
+	var got jobmodel.JobSeenLedger
+	if err := db.Where("job_id = ?", "race-1").First(&got).Error; err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if got.Reason != jobcommon.SeenReasonFiltered {
+		t.Errorf("after replay, reason = %q, want filtered", got.Reason)
 	}
 }

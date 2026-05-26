@@ -3,11 +3,14 @@ package services
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
@@ -50,6 +53,17 @@ func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.Enriche
 	}
 
 	if err := p.jobs.InsertJob(ctx, row); err != nil {
+		// Duplicate job_post_id (a crawler→filter→enricher replay). The
+		// authoritative row already exists, so skip the snapshot + tech-tag
+		// writes (they key off row.ID, a UUID that was never persisted) and
+		// still advance the ledger to 'saved' so it reflects terminal state.
+		if stderrors.Is(err, domainerrs.ErrJobAlreadyExists) {
+			metrics.EnricherJobsDuplicate.WithLabelValues(input.Raw.Adapter).Inc()
+			p.logger.Info("enriched job already exists; skipping snapshot + tech-tags",
+				logger.Str(logger.FieldJobID, input.Raw.ID),
+				logger.Str(logger.FieldAdapter, input.Raw.Adapter))
+			return p.markSavedTolerant(ctx, input.Raw.ID)
+		}
 		return fmt.Errorf("insert job: %w", err)
 	}
 
@@ -78,10 +92,25 @@ func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.Enriche
 		}
 	}
 
-	if err := p.ledger.UpdateSeenReason(ctx, input.Raw.ID, jobcommon.SeenReasonSaved); err != nil {
+	return p.markSavedTolerant(ctx, input.Raw.ID)
+}
+
+// markSavedTolerant advances the ledger row for jobID to 'saved'. A missing
+// ledger row (cleaned out by a maintenance migration, or never written because
+// the row predates the ledger) is non-fatal at this terminal stage: the job is
+// already persisted, so we log WARN, increment a metric, and return nil rather
+// than crashing the enricher worker.
+func (p *pipelineService) markSavedTolerant(ctx context.Context, jobID string) error {
+	if err := p.ledger.UpdateSeenReason(ctx, jobID, jobcommon.SeenReasonSaved); err != nil {
+		if stderrors.Is(err, domainerrs.ErrLedgerRowMissing) {
+			metrics.EnricherLedgerMissing.WithLabelValues(jobcommon.SeenReasonSaved).Inc()
+			p.logger.Warn("ledger row missing on save; continuing",
+				logger.Str(logger.FieldJobID, jobID),
+				logger.Str(logger.FieldReason, jobcommon.SeenReasonSaved))
+			return nil
+		}
 		return fmt.Errorf("mark ledger seen: %w", err)
 	}
-
 	return nil
 }
 

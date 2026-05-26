@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
@@ -93,9 +94,17 @@ func (s *seenLedgerStore) MarkSeenBatch(ctx context.Context, jobIDs []string, co
 func (s *seenLedgerStore) UpdateSeenReason(ctx context.Context, jobID, reason string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.UpdateSeenReason")
 	defer tracing.End(span, &err)
-	return s.db.WithContext(ctx).Model(&jobmodel.JobSeenLedger{}).
+	res := s.db.WithContext(ctx).Model(&jobmodel.JobSeenLedger{}).
 		Where("job_id = ?", jobID).
-		Update("reason", reason).Error
+		Update("reason", reason)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domainerrs.ErrLedgerRowMissing.WithMessage(
+			fmt.Sprintf("UpdateSeenReason: no ledger row for job_id=%s (reason=%s)", jobID, reason))
+	}
+	return nil
 }
 
 func (s *seenLedgerStore) UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason string) (err error) {
@@ -104,9 +113,18 @@ func (s *seenLedgerStore) UpdateSeenReasonBatch(ctx context.Context, jobIDs []st
 	if len(jobIDs) == 0 {
 		return nil
 	}
-	return s.db.WithContext(ctx).Model(&jobmodel.JobSeenLedger{}).
+	res := s.db.WithContext(ctx).Model(&jobmodel.JobSeenLedger{}).
 		Where("job_id IN ?", jobIDs).
-		Update("reason", reason).Error
+		Update("reason", reason)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected < int64(len(jobIDs)) {
+		return domainerrs.ErrLedgerRowMissing.WithMessage(
+			fmt.Sprintf("UpdateSeenReasonBatch: %d of %d ledger rows missing (reason=%s)",
+				int64(len(jobIDs))-res.RowsAffected, len(jobIDs), reason))
+	}
+	return nil
 }
 
 func (s *seenLedgerStore) UpdateRetryBatch(ctx context.Context, entries []RetryLedgerEntry) (err error) {
@@ -130,7 +148,16 @@ func (s *seenLedgerStore) UpdateRetryBatch(ctx context.Context, entries []RetryL
 		"AS v(job_id, retry_count, next_attempt_at) " +
 		"WHERE l.job_id = v.job_id"
 
-	return s.db.WithContext(ctx).Exec(query, args...).Error
+	res := s.db.WithContext(ctx).Exec(query, args...)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected < int64(len(entries)) {
+		return domainerrs.ErrLedgerRowMissing.WithMessage(
+			fmt.Sprintf("UpdateRetryBatch: %d of %d ledger rows missing",
+				int64(len(entries))-res.RowsAffected, len(entries)))
+	}
+	return nil
 }
 
 func (s *seenLedgerStore) MarkRemovedBatch(ctx context.Context, jobIDs []string) (err error) {

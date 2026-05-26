@@ -2,8 +2,10 @@ package services_test
 
 import (
 	"context"
+	stderrors "errors"
 	"testing"
 
+	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	"gorm.io/gorm"
@@ -158,6 +160,70 @@ func TestSeenLedger_UpdateSeenReason(t *testing.T) {
 	}
 	if got.Reason != "user_dismissed" {
 		t.Errorf("reason = %q, want user_dismissed", got.Reason)
+	}
+}
+
+// TestSeenLedger_UpdateSeenReason_MissingRow_ReturnsErrLedgerRowMissing — no
+// row for the job_id (the crawler→filter race) surfaces the sentinel so the
+// caller can Nak rather than silently no-op.
+func TestSeenLedger_UpdateSeenReason_MissingRow_ReturnsErrLedgerRowMissing(t *testing.T) {
+	t.Parallel()
+	db := newJobTestDB(t)
+	store := jobsvc.NewSeenLedgerStore(db)
+
+	err := store.UpdateSeenReason(context.Background(), "ghost", "filtered")
+	if !stderrors.Is(err, domainerrs.ErrLedgerRowMissing) {
+		t.Fatalf("want ErrLedgerRowMissing, got %v", err)
+	}
+}
+
+// TestSeenLedger_UpdateSeenReasonBatch_AllMissing_ReturnsSentinel.
+func TestSeenLedger_UpdateSeenReasonBatch_AllMissing_ReturnsSentinel(t *testing.T) {
+	t.Parallel()
+	db := newJobTestDB(t)
+	store := jobsvc.NewSeenLedgerStore(db)
+
+	err := store.UpdateSeenReasonBatch(context.Background(), []string{"g1", "g2", "g3"}, "filtered")
+	if !stderrors.Is(err, domainerrs.ErrLedgerRowMissing) {
+		t.Fatalf("want ErrLedgerRowMissing, got %v", err)
+	}
+}
+
+// TestSeenLedger_UpdateSeenReasonBatch_PartialMatch_ReturnsSentinel — only 1 of
+// 3 rows present; the partial batch is treated as a miss.
+func TestSeenLedger_UpdateSeenReasonBatch_PartialMatch_ReturnsSentinel(t *testing.T) {
+	t.Parallel()
+	db := newJobTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedLedger(t, db, "p1", "c1", "fetch")
+	store := jobsvc.NewSeenLedgerStore(db)
+
+	err := store.UpdateSeenReasonBatch(context.Background(), []string{"p1", "p2", "p3"}, "filtered")
+	if !stderrors.Is(err, domainerrs.ErrLedgerRowMissing) {
+		t.Fatalf("want ErrLedgerRowMissing, got %v", err)
+	}
+	// The present row should still have been updated before the sentinel returned.
+	var got jobmodel.JobSeenLedger
+	if err := db.Where("job_id = ?", "p1").First(&got).Error; err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if got.Reason != "filtered" {
+		t.Errorf("present row reason = %q, want filtered", got.Reason)
+	}
+}
+
+// TestSeenLedger_UpdateSeenReasonBatch_AllPresent_ReturnsNil.
+func TestSeenLedger_UpdateSeenReasonBatch_AllPresent_ReturnsNil(t *testing.T) {
+	t.Parallel()
+	db := newJobTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedLedger(t, db, "p1", "c1", "fetch")
+	seedLedger(t, db, "p2", "c1", "fetch")
+	seedLedger(t, db, "p3", "c1", "fetch")
+	store := jobsvc.NewSeenLedgerStore(db)
+
+	if err := store.UpdateSeenReasonBatch(context.Background(), []string{"p1", "p2", "p3"}, "filtered"); err != nil {
+		t.Fatalf("all-present batch should succeed: %v", err)
 	}
 }
 

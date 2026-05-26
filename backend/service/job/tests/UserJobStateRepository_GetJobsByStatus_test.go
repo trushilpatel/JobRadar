@@ -61,7 +61,7 @@ func TestUserJobStateRepo_GetJobsByStatus_Pagination(t *testing.T) {
 	t0 := time.Now()
 	for i := 0; i < 4; i++ {
 		jid := jobID(i)
-		seedJob(t, db, jid, "c1", "T", "p", t0.Add(time.Duration(i)*time.Minute))
+		seedJob(t, db, jid, "c1", "T", "p"+jid, t0.Add(time.Duration(i)*time.Minute))
 	}
 	repo := jobsvc.NewUserJobStateRepository(db)
 	for i := 0; i < 4; i++ {

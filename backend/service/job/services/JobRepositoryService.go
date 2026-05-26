@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 
+	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // jobStore is the GORM-backed implementation of JobReader + JobWriter.
@@ -330,10 +332,24 @@ func (s *jobStore) GetJobPostIDs(ctx context.Context, ids []string) (jobPostIDs 
 	return jobPostIDs, err
 }
 
+// InsertJob is idempotent on job_post_id. A replay of the same job_post_id
+// (crawler→filter→enricher re-discovery) is a no-op via ON CONFLICT DO NOTHING,
+// and returns ErrJobAlreadyExists so callers can skip dependent writes (snapshot
+// + tech-tags) that would key off a UUID that was never persisted.
 func (s *jobStore) InsertJob(ctx context.Context, job *jobmodel.Job) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.InsertJob")
 	defer tracing.End(span, &err)
-	return s.db.WithContext(ctx).Create(job).Error
+	res := s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "job_post_id"}}, DoNothing: true}).
+		Create(job)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domainerrs.ErrJobAlreadyExists.WithMessage(
+			"InsertJob: job_post_id already exists: " + job.JobPostID)
+	}
+	return nil
 }
 
 func (s *jobStore) DeleteJob(ctx context.Context, id string) (err error) {

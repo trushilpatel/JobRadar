@@ -43,6 +43,23 @@ var CrawlerJobsNonUSADropped = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Help: "Total non-USA jobs dropped at the crawler (LocationKnown=true gate) by adapter.",
 }, []string{"adapter"})
 
+// CrawlerPublishFailures counts per-job NATS publish failures in the crawler.
+// The ledger row stays at reason='fetch' (recovered by the next scan); this
+// counter is the alert surface for a job that was marked seen but never
+// published.
+var CrawlerPublishFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "crawler_publish_failures_total",
+	Help: "Per-job NATS publish failures in the crawler by adapter (ledger row stays at 'fetch').",
+}, []string{"adapter"})
+
+// CrawlerScanAbortedReassigned counts scans the crawler abandons because its
+// queue row was reassigned by the scheduler's ResetStuck (UpdateHeartbeat
+// reported the row missing). Aborting prevents double-publishing.
+var CrawlerScanAbortedReassigned = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "crawler_scan_aborted_reassigned_total",
+	Help: "Scans aborted because the queue row was reassigned (heartbeat row missing).",
+})
+
 // ── Filter ────────────────────────────────────────────────────────────────────
 
 var FilterJobsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -87,6 +104,22 @@ var FilterChunksPerFetch = prometheus.NewHistogram(prometheus.HistogramOpts{
 	Help:    "Fan-out size (chunks) per Kafka fetch.",
 	Buckets: []float64{1, 2, 4, 8, 16, 32, 64},
 })
+
+// FilterPublishFailures counts detail-subject publish failures in the filter.
+// On failure the job is Nak'd (NATS redelivers) and no ledger write occurs.
+var FilterPublishFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "filter_publish_failures_total",
+	Help: "Filter detail-publish failures by subject (job Nak'd, no ledger write).",
+}, []string{"subject"})
+
+// FilterLedgerMissing counts ledger UPDATE operations in the filter that
+// reported ErrLedgerRowMissing (the crawler→filter race). The chunk is Nak'd so
+// NATS redelivers once the crawler INSERT has committed. Labelled by the reason
+// the filter tried to set the row to.
+var FilterLedgerMissing = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "filter_ledger_missing_total",
+	Help: "Filter ledger UPDATEs that hit a missing row by target reason (chunk Nak'd).",
+}, []string{"reason"})
 
 // ── Enricher ──────────────────────────────────────────────────────────────────
 
@@ -138,6 +171,23 @@ var EnricherGroupsPerFetch = prometheus.NewHistogram(prometheus.HistogramOpts{
 	Buckets: []float64{1, 2, 4, 8, 16, 32, 64},
 })
 
+// EnricherLedgerMissing counts ledger UPDATE operations in the enricher
+// (analyzer) that hit a missing row. Non-fatal at this stage — the row may have
+// been cleaned out by a maintenance migration — so the worker logs WARN and
+// proceeds. Labelled by the reason the enricher tried to set the row to.
+var EnricherLedgerMissing = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "enricher_ledger_missing_total",
+	Help: "Enricher ledger UPDATEs that hit a missing row by target reason (non-fatal).",
+}, []string{"reason"})
+
+// EnricherJobsDuplicate counts enriched jobs whose InsertJob hit ON CONFLICT
+// DO NOTHING (the job_post_id row already existed). The enricher still advances
+// the ledger to 'saved' and skips snapshot + tech-tag writes.
+var EnricherJobsDuplicate = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "enricher_jobs_duplicate_total",
+	Help: "Enriched jobs skipped as duplicate (job_post_id already present) by adapter.",
+}, []string{"adapter"})
+
 // ── Scheduler ─────────────────────────────────────────────────────────────────
 
 var SchedulerCompaniesEnqueuedTotal = prometheus.NewCounter(prometheus.CounterOpts{
@@ -177,6 +227,8 @@ func init() {
 		CrawlerJobsFetchedTotal,
 		CrawlerScanDuration,
 		CrawlerJobsNonUSADropped,
+		CrawlerPublishFailures,
+		CrawlerScanAbortedReassigned,
 		FilterJobsTotal,
 		FilterLLMDuration,
 		FilterChunkDuration,
@@ -185,6 +237,8 @@ func init() {
 		FilterDLQPublishesTotal,
 		FilterCommitFailuresTotal,
 		FilterChunksPerFetch,
+		FilterPublishFailures,
+		FilterLedgerMissing,
 		EnricherJobsTotal,
 		EnricherLLMDuration,
 		EnricherGroupDuration,
@@ -194,6 +248,8 @@ func init() {
 		EnricherDLQPublishesTotal,
 		EnricherCommitFailuresTotal,
 		EnricherGroupsPerFetch,
+		EnricherLedgerMissing,
+		EnricherJobsDuplicate,
 		SchedulerCompaniesEnqueuedTotal,
 		SchedulerRunDuration,
 		SchedulerErrorsTotal,
