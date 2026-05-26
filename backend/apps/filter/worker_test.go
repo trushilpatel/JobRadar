@@ -649,7 +649,10 @@ func TestProcessFetch_ScoreBatchFailureNaksAll(t *testing.T) {
 	}
 }
 
-// Ctx cancellation mid-sleep: second chunk not started.
+// Ctx cancellation mid-sleep: second chunk not started, and the unprocessed
+// chunks are Nak'd so NATS redelivers them immediately rather than waiting for
+// AckWait to expire (preventing the "Awaiting Filter" stuck-row symptom across
+// pod restarts).
 func TestProcessFetch_CtxCancelMidSleep(t *testing.T) {
 	scorer := &fakeScorer{relevantIDs: nil}
 	ledger := &fakeLedger{}
@@ -657,7 +660,7 @@ func TestProcessFetch_CtxCancelMidSleep(t *testing.T) {
 	clk := &fakeClock{now: time.Now(), sleepErr: context.Canceled}
 
 	w := makeWorkerWithClock(scorer, ledger, pub, clk, 1)
-	msgs, _ := makeTestMsgs(t, []struct {
+	msgs, states := makeTestMsgs(t, []struct {
 		id            string
 		deliveryCount int
 	}{
@@ -671,6 +674,19 @@ func TestProcessFetch_CtxCancelMidSleep(t *testing.T) {
 	// First chunk processed before sleep; second aborts.
 	if scorer.calls != 1 {
 		t.Errorf("expected 1 scorer call before cancel, got %d", scorer.calls)
+	}
+	// First message was Ack'd as part of chunk 0; chunks 1 and 2 must be Nak'd
+	// (not silently abandoned) so JetStream redelivers them immediately.
+	if !states[0].Acked {
+		t.Errorf("msg 0: expected Ack'd after successful first-chunk processing")
+	}
+	for i := 1; i < len(states); i++ {
+		if !states[i].Naked {
+			t.Errorf("msg %d: expected Nak'd on shutdown so NATS redelivers", i)
+		}
+		if states[i].Acked {
+			t.Errorf("msg %d: must not be Acked on shutdown", i)
+		}
 	}
 }
 
