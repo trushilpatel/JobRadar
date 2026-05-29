@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
-const url = import.meta.env.VITE_SUPABASE_URL
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const env = import.meta.env as Record<string, unknown>
+const url = env.VITE_SUPABASE_URL
+const anonKey = env.VITE_SUPABASE_ANON_KEY
 
-if (!url || !anonKey) {
+if (typeof url !== 'string' || !url || typeof anonKey !== 'string' || !anonKey) {
   throw new Error(
     'Missing Supabase env vars: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are required'
   )

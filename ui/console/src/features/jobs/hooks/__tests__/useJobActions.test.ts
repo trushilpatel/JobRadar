@@ -477,7 +477,7 @@ describe('useJobActions', () => {
         const cached = lastQc!.getQueryData<{ pages: jobsApi.JobsPage[] }>(
           jobQueryKeys.list({ status: JOB_STATUS.NEW }, 20)
         )
-        expect(cached?.pages[0].items[0].status).toBe(JOB_STATUS.APPLIED)
+        expect(cached?.pages[0]?.items[0]?.status).toBe(JOB_STATUS.APPLIED)
       })
 
       // Resolve and tidy up so the test exits cleanly.
@@ -504,7 +504,7 @@ describe('useJobActions', () => {
       const cached = lastQc!.getQueryData<{ pages: jobsApi.JobsPage[] }>(
         jobQueryKeys.list({ status: JOB_STATUS.NEW }, 20)
       )
-      expect(cached?.pages[0].items[0].status).toBe(JOB_STATUS.NEW)
+      expect(cached?.pages[0]?.items[0]?.status).toBe(JOB_STATUS.NEW)
     })
   })
 

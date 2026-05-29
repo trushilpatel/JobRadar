@@ -15,14 +15,19 @@ export class ApiValidationError extends Error {
 
   // Returns a Record<field, message> for easy field lookup in forms
   fieldErrors(): Record<string, string> {
-    return Object.fromEntries(this.fields.map(f => [f.field, f.message]))
+    return Object.fromEntries(this.fields.map((f) => [f.field, f.message]))
   }
+}
+
+interface ApiErrorBody {
+  errors?: ValidationFieldError[]
+  error?: { message?: string }
 }
 
 // Parses a non-ok response into either ApiValidationError or a plain Error
 export async function parseApiError(res: Response, fallback: string): Promise<Error> {
   try {
-    const body = await res.json()
+    const body = (await res.json()) as ApiErrorBody
     if (Array.isArray(body.errors) && body.errors.length > 0) {
       return new ApiValidationError(body.errors)
     }

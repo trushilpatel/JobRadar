@@ -51,7 +51,7 @@ describe('adminCompanies API', () => {
     it('calls the correct endpoint with default cursor and limit', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockListResult)
       await fetchAdminCompanies()
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('/admin/companies')
       expect(url).not.toContain('cursor=')
       expect(url).toContain('limit=50')
@@ -60,7 +60,7 @@ describe('adminCompanies API', () => {
     it('appends cursor and limit params when cursor is non-empty', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockListResult)
       await fetchAdminCompanies({}, 'cursor-abc', 25)
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('cursor=cursor-abc')
       expect(url).toContain('limit=25')
     })
@@ -68,35 +68,35 @@ describe('adminCompanies API', () => {
     it('appends search param when provided', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockListResult)
       await fetchAdminCompanies({ search: 'stripe' })
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('search=stripe')
     })
 
     it('appends active param when set to true', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockListResult)
       await fetchAdminCompanies({ active: true })
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('active=true')
     })
 
     it('appends active param when set to false', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockListResult)
       await fetchAdminCompanies({ active: false })
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('active=false')
     })
 
     it('omits active param when not set', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockListResult)
       await fetchAdminCompanies({})
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).not.toContain('active=')
     })
 
     it('appends multiple adapter_types params', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockListResult)
       await fetchAdminCompanies({ adapterTypes: ['greenhouse', 'lever'] })
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('adapter_types=greenhouse')
       expect(url).toContain('adapter_types=lever')
     })
@@ -104,7 +104,7 @@ describe('adminCompanies API', () => {
     it('appends sort_by and sort_dir when provided', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockListResult)
       await fetchAdminCompanies({ sortBy: 'name', sortDir: 'asc' })
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('sort_by=name')
       expect(url).toContain('sort_dir=asc')
     })
@@ -112,7 +112,7 @@ describe('adminCompanies API', () => {
     it('appends scan_status when provided', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockListResult)
       await fetchAdminCompanies({ scanStatus: 'error' })
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('scan_status=error')
     })
 
@@ -121,7 +121,7 @@ describe('adminCompanies API', () => {
       const result = await fetchAdminCompanies()
       expect(result.total).toBe(1)
       expect(result.data).toHaveLength(1)
-      expect(result.data[0].id).toBe('stripe')
+      expect(result.data[0]?.id).toBe('stripe')
     })
 
     it('propagates rejection when apiClient.get rejects', async () => {
@@ -177,7 +177,7 @@ describe('adminCompanies API', () => {
         website: 'https://jobs.gem.com/inception',
         scan_settings: { adapter_type: 'gem', active: true },
       })
-      const [, body] = vi.mocked(apiClient.post).mock.calls[0]
+      const [, body] = vi.mocked(apiClient.post).mock.calls[0]!
       expect(body).toMatchObject({ id: 'inception', slug: 'inception' })
     })
 
@@ -189,7 +189,7 @@ describe('adminCompanies API', () => {
         website: 'https://jobs.gem.com/lumalabs-ai',
         scan_settings: { adapter_type: 'gem', active: true },
       })
-      const [, body] = vi.mocked(apiClient.post).mock.calls[0]
+      const [, body] = vi.mocked(apiClient.post).mock.calls[0]!
       expect(body).toMatchObject({ id: 'lumalabs-ai', slug: 'lumalabs-ai' })
     })
   })
@@ -208,7 +208,7 @@ describe('adminCompanies API', () => {
     it('URL-encodes the company id', async () => {
       vi.mocked(apiClient.patch).mockResolvedValue(undefined)
       await updateAdminCompany('my company', { name: 'My Company' })
-      const [url] = vi.mocked(apiClient.patch).mock.calls[0]
+      const [url] = vi.mocked(apiClient.patch).mock.calls[0]!
       expect(url).toContain('my%20company')
     })
 
@@ -233,7 +233,7 @@ describe('adminCompanies API', () => {
     it('URL-encodes special characters in id', async () => {
       vi.mocked(apiClient.delete).mockResolvedValue(undefined)
       await deleteAdminCompany('my company')
-      const [url] = vi.mocked(apiClient.delete).mock.calls[0]
+      const [url] = vi.mocked(apiClient.delete).mock.calls[0]!
       expect(url).toContain('my%20company')
     })
   })
@@ -269,7 +269,7 @@ describe('adminCompanies API', () => {
     it('URL-encodes id with special characters', async () => {
       vi.mocked(apiClient.patch).mockResolvedValue(undefined)
       await updateAdminCompanyScanSettings('my company', { active: true })
-      const [url] = vi.mocked(apiClient.patch).mock.calls[0]
+      const [url] = vi.mocked(apiClient.patch).mock.calls[0]!
       expect(url).toContain('my%20company')
     })
   })

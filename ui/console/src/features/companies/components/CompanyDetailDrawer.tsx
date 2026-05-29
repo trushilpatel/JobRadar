@@ -55,7 +55,7 @@ export function CompanyDetailDrawer({
       .slice(0, 10)
       .reverse()
       .map<HistoryPoint>((r) => (r.error ? 'err' : 'ok'))
-    const padding: HistoryPoint[] = Array(Math.max(0, 10 - runs.length)).fill('idle')
+    const padding: HistoryPoint[] = Array<HistoryPoint>(Math.max(0, 10 - runs.length)).fill('idle')
     return [...padding, ...runs]
   })()
 

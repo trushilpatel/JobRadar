@@ -34,7 +34,7 @@ export function MarketPanel() {
 
       {isLoading ? (
         <div className="flex gap-4 animate-pulse">
-          {[...Array(2)].map((_, i) => (
+          {Array.from({ length: 2 }).map((_, i) => (
             <div key={i} className="flex-1 h-14 bg-white/[0.04] rounded-lg" />
           ))}
         </div>

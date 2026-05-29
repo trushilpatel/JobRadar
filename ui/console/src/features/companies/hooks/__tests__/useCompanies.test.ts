@@ -65,10 +65,10 @@ describe('useCompanies', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
     expect(result.current.companies).toHaveLength(1)
-    expect(result.current.companies[0].id).toBe('stripe')
-    expect(result.current.companies[0].name).toBe('Stripe')
-    expect(result.current.companies[0].adapter_type).toBe('greenhouse')
-    expect(result.current.companies[0].active).toBe(true)
+    expect(result.current.companies[0]?.id).toBe('stripe')
+    expect(result.current.companies[0]?.name).toBe('Stripe')
+    expect(result.current.companies[0]?.adapter_type).toBe('greenhouse')
+    expect(result.current.companies[0]?.active).toBe(true)
   })
 
   it('initial cursor is empty (first page)', () => {

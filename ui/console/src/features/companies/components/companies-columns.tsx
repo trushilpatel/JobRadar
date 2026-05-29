@@ -105,8 +105,10 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
         const history: HistoryPoint[] = (c.scan_history ?? []).map((ok) => (ok ? 'ok' : 'err'))
 
         // Pad to HISTORY_SLOTS with idle on the left.
-        const padded: HistoryPoint[] = Array(Math.max(0, HISTORY_SLOTS - history.length))
-          .fill('idle' as HistoryPoint)
+        const padded: HistoryPoint[] = Array<HistoryPoint>(
+          Math.max(0, HISTORY_SLOTS - history.length)
+        )
+          .fill('idle')
           .concat(history)
 
         // Override the rightmost slot if currently running.

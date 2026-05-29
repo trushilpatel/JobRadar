@@ -101,8 +101,8 @@ describe('useJobs', () => {
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.jobs).toHaveLength(1)
-    expect(result.current.jobs[0].id).toBe('j1')
-    expect(result.current.jobs[0].title).toBe('Software Engineer')
+    expect(result.current.jobs[0]?.id).toBe('j1')
+    expect(result.current.jobs[0]?.title).toBe('Software Engineer')
   })
 
   it('starts in loading state', () => {

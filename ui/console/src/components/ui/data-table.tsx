@@ -138,11 +138,13 @@ export function DataTable<TData>({
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       const next = Math.min(currentIdx + 1, rows.length - 1)
-      onRowClick(rows[next].original)
+      const row = rows[next]
+      if (row) onRowClick(row.original)
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       const prev = Math.max(currentIdx - 1, 0)
-      onRowClick(rows[prev].original)
+      const row = rows[prev]
+      if (row) onRowClick(row.original)
     }
   }
 

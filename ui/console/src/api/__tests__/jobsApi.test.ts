@@ -124,7 +124,7 @@ describe('jobs API', () => {
       const page: JobsPage = { items: [], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)
       await fetchJobs({ status: JOB_STATUS.SAVED }, '', 20)
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('status=saved')
     })
 
@@ -132,7 +132,7 @@ describe('jobs API', () => {
       const page: JobsPage = { items: [], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)
       await fetchJobs(baseFilters, '', 50)
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('limit=50')
     })
 
@@ -140,7 +140,7 @@ describe('jobs API', () => {
       const page: JobsPage = { items: [], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)
       await fetchJobs(baseFilters, 'abc123', 20)
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('cursor=abc123')
     })
 
@@ -148,7 +148,7 @@ describe('jobs API', () => {
       const page: JobsPage = { items: [], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)
       await fetchJobs(baseFilters, '', 20)
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).not.toContain('cursor=')
     })
 
@@ -156,7 +156,7 @@ describe('jobs API', () => {
       const page: JobsPage = { items: [], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)
       await fetchJobs({ ...baseFilters, search: 'react' }, '', 20)
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('search=react')
     })
 
@@ -164,7 +164,7 @@ describe('jobs API', () => {
       const page: JobsPage = { items: [], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)
       await fetchJobs({ ...baseFilters, remote: true }, '', 20)
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('remote=true')
     })
 
@@ -172,7 +172,7 @@ describe('jobs API', () => {
       const page: JobsPage = { items: [], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)
       await fetchJobs({ ...baseFilters, onSite: true }, '', 20)
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('on_site=true')
     })
 
@@ -195,7 +195,7 @@ describe('jobs API', () => {
       const page: JobsPage = { items: [rawWithState as never], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)
       const result = await fetchJobs(baseFilters, '', 20)
-      expect(result.items[0].status).toBe(JOB_STATUS.SAVED)
+      expect(result.items[0]?.status).toBe(JOB_STATUS.SAVED)
     })
 
     it('normalizes job: defaults status to "new" when user_state is absent', async () => {
@@ -203,14 +203,14 @@ describe('jobs API', () => {
       const page: JobsPage = { items: [rawNoState as never], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)
       const result = await fetchJobs(baseFilters, '', 20)
-      expect(result.items[0].status).toBe(JOB_STATUS.NEW)
+      expect(result.items[0]?.status).toBe(JOB_STATUS.NEW)
     })
 
     it('includes days_added param when daysAdded is set', async () => {
       const page: JobsPage = { items: [], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)
       await fetchJobs({ ...baseFilters, daysAdded: 7 }, '', 20)
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('days_added=7')
     })
 
@@ -218,7 +218,7 @@ describe('jobs API', () => {
       const page: JobsPage = { items: [], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)
       await fetchJobs({ ...baseFilters, sortBy: 'added_at', sortDir: 'desc' }, '', 20)
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('sort_by=added_at')
       expect(url).toContain('sort_dir=desc')
     })
@@ -227,7 +227,7 @@ describe('jobs API', () => {
       const page: JobsPage = { items: [], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)
       await fetchJobs({ ...baseFilters, companies: ['Acme', 'Stripe'] }, '', 20)
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('companies=Acme')
       expect(url).toContain('companies=Stripe')
     })
@@ -307,7 +307,7 @@ describe('jobs API', () => {
     it('defaults note to empty string when not provided', async () => {
       vi.mocked(apiClient.delete).mockResolvedValue(undefined)
       await dismissJob('job-2', 'user_not_relevant')
-      const call = vi.mocked(apiClient.delete).mock.calls[0]
+      const call = vi.mocked(apiClient.delete).mock.calls[0]!
       expect((call[1] as { note: string }).note).toBe('')
     })
   })

@@ -3,18 +3,25 @@ import type { SalaryRange } from '@/types'
 // ── Avatar color ──────────────────────────────────────────────────────────────
 
 const AVATAR_COLORS = [
-  'bg-violet-600', 'bg-blue-600', 'bg-emerald-600',
-  'bg-amber-600',  'bg-rose-600', 'bg-cyan-600',
-  'bg-indigo-600', 'bg-teal-600',
-]
+  'bg-violet-600',
+  'bg-blue-600',
+  'bg-emerald-600',
+  'bg-amber-600',
+  'bg-rose-600',
+  'bg-cyan-600',
+  'bg-indigo-600',
+  'bg-teal-600',
+] as const
+
+const FALLBACK_COLOR = AVATAR_COLORS[0]
 
 export function avatarColor(name: string): string {
-  if (!name) return AVATAR_COLORS[0]
+  if (!name) return FALLBACK_COLOR
   let hash = 0
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash)
   }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length] ?? FALLBACK_COLOR
 }
 
 // ── Salary formatting ─────────────────────────────────────────────────────────
@@ -40,8 +47,7 @@ export function formatSalary(salary: SalaryRange | null | undefined): string | n
   // Resolve ISO code → symbol so we never render "USD137k" or "$ USD126k".
   const rawCurrency = (salary.currency ?? '').toUpperCase()
   const symbol = CURRENCY_SYMBOLS[rawCurrency] ?? (salary.currency || '$')
-  const fmt = (n: number) =>
-    n >= 1000 ? `${symbol}${Math.round(n / 1000)}k` : `${symbol}${n}`
+  const fmt = (n: number) => (n >= 1000 ? `${symbol}${Math.round(n / 1000)}k` : `${symbol}${n}`)
   if (salary.min && salary.max) return `${fmt(salary.min)} – ${fmt(salary.max)}`
   if (salary.min) return `${fmt(salary.min)}+`
   if (salary.max) return `up to ${fmt(salary.max)}`

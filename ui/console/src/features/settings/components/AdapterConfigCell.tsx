@@ -38,6 +38,7 @@ export function AdapterConfigCell({ value, min, max, unit, onSave }: AdapterConf
       const timer = setTimeout(() => setState('display'), 800)
       return () => clearTimeout(timer)
     }
+    return undefined
   }, [state])
 
   function beginEdit() {
@@ -90,7 +91,10 @@ export function AdapterConfigCell({ value, min, max, unit, onSave }: AdapterConf
     return (
       <div className="flex items-center gap-1.5 text-sm text-white/70">
         <Loader2 size={13} className="animate-spin text-violet-400" />
-        <span>{draft}{unit ? ` ${unit}` : ''}</span>
+        <span>
+          {draft}
+          {unit ? ` ${unit}` : ''}
+        </span>
       </div>
     )
   }

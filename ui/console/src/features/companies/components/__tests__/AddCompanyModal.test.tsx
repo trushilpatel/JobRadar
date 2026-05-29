@@ -306,7 +306,7 @@ describe('AddCompanyModal', () => {
     })
 
     render(<AddCompanyModal {...baseProps} onCreated={onCreated} />)
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'gem' } })
+    fireEvent.change(screen.getAllByRole('combobox')[0]!, { target: { value: 'gem' } })
     await user.type(screen.getByPlaceholderText('stripe'), 'inception')
     await user.type(screen.getByPlaceholderText('Stripe'), 'Inception')
     await user.click(screen.getByRole('button', { name: /add company/i }))

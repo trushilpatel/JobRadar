@@ -33,7 +33,7 @@ function colorIndex(count: number, max: number): number {
 }
 
 function monthLabel(weekStart: string): string {
-  return MONTHS[new Date(weekStart + 'T12:00:00Z').getMonth()]
+  return MONTHS[new Date(weekStart + 'T12:00:00Z').getMonth()] ?? ''
 }
 
 function formatWeekLabel(weekStart: string, count: number): string {
@@ -129,7 +129,7 @@ export function HeatmapPanel() {
   // The last labeled column in firstHalf is at col 24 (largest multiple of 4
   // within [0, HALF-1]=25). Compare it with secondHalf[0] to suppress the
   // duplicate month label that appears when both rows start in the same month.
-  const lastLabelMonthInFirst = firstHalf.length >= 25 ? monthLabel(firstHalf[24].weekStart) : ''
+  const lastLabelMonthInFirst = firstHalf[24] ? monthLabel(firstHalf[24].weekStart) : ''
 
   return (
     <TooltipPrimitive.Provider delayDuration={120}>

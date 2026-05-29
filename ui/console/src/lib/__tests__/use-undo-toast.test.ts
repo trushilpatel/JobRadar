@@ -28,7 +28,7 @@ describe('useUndoToast', () => {
       result.current('Moved to Saved', undo)
     })
     expect(toast).toHaveBeenCalledTimes(1)
-    const [message, options] = vi.mocked(toast).mock.calls[0]
+    const [message, options] = vi.mocked(toast).mock.calls[0]!
     expect(message).toBe('Moved to Saved')
     expect(options).toMatchObject({
       duration: 5000,
@@ -45,7 +45,7 @@ describe('useUndoToast', () => {
     act(() => {
       result.current('Dismissed', () => {}, { duration: 8000 })
     })
-    const [, options] = vi.mocked(toast).mock.calls[0]
+    const [, options] = vi.mocked(toast).mock.calls[0]!
     expect(options).toMatchObject({ duration: 8000 })
   })
 })

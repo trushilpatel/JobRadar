@@ -49,7 +49,7 @@ describe('companies API', () => {
 
       await fetchScanStats('my company')
 
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('my%20company')
     })
 
@@ -77,7 +77,7 @@ describe('companies API', () => {
 
       await fetchCompanyAnalytics('my company')
 
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('my%20company')
     })
 
@@ -104,7 +104,7 @@ describe('companies API', () => {
 
       await triggerScan('my company')
 
-      const [url] = vi.mocked(apiClient.post).mock.calls[0]
+      const [url] = vi.mocked(apiClient.post).mock.calls[0]!
       expect(url).toContain('my%20company')
     })
 
