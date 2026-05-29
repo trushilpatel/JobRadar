@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { Keyboard } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { Job, JobStatus } from '@/types'
@@ -352,8 +353,8 @@ export function JobsPage() {
           <>
             <ResizeHandle width={panelWidth} onChange={setPanelWidth} min={300} max={720} />
             <div
-              style={{ width: panelWidth }}
-              className="shrink-0 flex flex-col min-h-0 border-l border-white/[0.07] overflow-hidden"
+              style={{ '--panel-width': `${panelWidth}px` } as CSSProperties}
+              className="shrink-0 flex flex-col min-h-0 border-l border-white/[0.07] overflow-hidden [width:var(--panel-width)]"
             >
               <JobDetailPanel
                 job={openJob}

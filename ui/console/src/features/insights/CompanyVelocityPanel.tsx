@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { CompanyVelocityInsight } from '@/types'
 import { cn } from '@/lib/utils/utils'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
@@ -13,19 +14,20 @@ function Sparkline({ row }: { row: CompanyVelocityInsight }) {
   const bars = [row.week_3, row.week_2, row.week_1, row.week_current]
   const max = Math.max(...bars, 1)
   return (
-    <div className="flex items-end gap-[2px]" style={{ height: '20px' }}>
+    <div className="flex items-end gap-[2px] h-[20px]">
       {bars.map((v, i) => {
         const h = Math.max(3, Math.round((v / max) * 20))
         const isCurrent = i === bars.length - 1
         return (
           <div
             key={i}
-            className="rounded-[2px]"
-            style={{
-              width: '7px',
-              height: `${h}px`,
-              background: isCurrent ? '#1d9e75' : '#1c3c34',
-            }}
+            style={
+              {
+                '--bar-h': `${h}px`,
+                '--bar-bg': isCurrent ? '#1d9e75' : '#1c3c34',
+              } as CSSProperties
+            }
+            className="w-[7px] rounded-[2px] [height:var(--bar-h)] [background:var(--bar-bg)]"
           />
         )
       })}

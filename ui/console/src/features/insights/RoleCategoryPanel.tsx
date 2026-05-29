@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { RoleCategoryCount } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
 import { useRoleCategories } from './hooks/useInsights'
@@ -22,11 +23,13 @@ function RoleContent({ data }: { data: RoleCategoryCount[] }) {
           <span className="w-20 shrink-0 text-xs text-slate-300 capitalize">{category}</span>
           <div className="flex-1 bg-white/[0.04] rounded-full h-2 overflow-hidden">
             <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${(count / max) * 100}%`,
-                backgroundColor: ROLE_COLORS[category] ?? '#475569',
-              }}
+              style={
+                {
+                  '--bar-pct': `${(count / max) * 100}%`,
+                  '--bar-color': ROLE_COLORS[category] ?? '#475569',
+                } as CSSProperties
+              }
+              className="h-full rounded-full transition-all [width:var(--bar-pct)] [background-color:var(--bar-color)]"
             />
           </div>
           <span className="w-8 text-right text-xs text-slate-400 shrink-0">{count}</span>
