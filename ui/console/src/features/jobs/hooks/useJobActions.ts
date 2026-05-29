@@ -11,7 +11,7 @@ import {
 import type { Job, JobStatus } from '@/types'
 import { JOB_STATUS } from '@/config/constants/jobStatus'
 import { useUndoToast } from '@/lib/hooks/use-undo-toast'
-import { isJobListKey } from '../queryKeys'
+import { isJobListKey, jobMutationInvalidationRoots } from '../queryKeys'
 
 /**
  * Statuses settable via the workflow `setStatus` mutation. Excludes:
@@ -120,11 +120,11 @@ async function runWithLimit<T, R>(
  * jobs list + counts + dashboard + insights.
  */
 function invalidateUserData(queryClient: QueryClient): Promise<unknown> {
-  return Promise.all([
-    queryClient.invalidateQueries({ queryKey: ['jobs'] }),
-    queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
-    queryClient.invalidateQueries({ queryKey: ['insights'] }),
-  ])
+  return Promise.all(
+    Object.values(jobMutationInvalidationRoots).map((key) =>
+      queryClient.invalidateQueries({ queryKey: key })
+    )
+  )
 }
 
 interface Snapshots {

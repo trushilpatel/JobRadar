@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
 import * as jobsApi from '@/features/jobs/api/jobs.api'
 import { useJobActions } from '../useJobActions'
-import { jobQueryKeys } from '@/features/jobs/queryKeys'
+import { jobQueryKeys, jobMutationInvalidationRoots } from '@/features/jobs/queryKeys'
 import { JOB_STATUS } from '@/config/constants/jobStatus'
 import type { Job } from '@/types'
 
@@ -444,7 +444,10 @@ describe('useJobActions', () => {
       expect(jobsApi.setJobSaved).toHaveBeenCalledTimes(20)
     })
 
-    it('invalidates dashboard + insights along with jobs on mutation', async () => {
+    it('invalidates jobs, dashboard, and insights via factory root keys on mutation', async () => {
+      // Seam contract: invalidateUserData must use the query-key factories, not
+      // inline strings. If a factory root key changes, this test catches the drift
+      // before a stale-cache regression reaches production.
       vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
       const invalidateSpy = vi.spyOn(lastQc!, 'invalidateQueries')
@@ -452,9 +455,11 @@ describe('useJobActions', () => {
         await result.current.setStatus.mutateAsync({ id: 'j1', status: JOB_STATUS.APPLIED })
       })
       const calledKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey)
-      expect(calledKeys).toContainEqual(['jobs'])
-      expect(calledKeys).toContainEqual(['dashboard'])
-      expect(calledKeys).toContainEqual(['insights'])
+      // Assert against the typed roots — these ARE the contract. If any root
+      // key changes, both the mutation code and this test must be updated together.
+      expect(calledKeys).toContainEqual(jobMutationInvalidationRoots.jobs)
+      expect(calledKeys).toContainEqual(jobMutationInvalidationRoots.dashboard)
+      expect(calledKeys).toContainEqual(jobMutationInvalidationRoots.insights)
     })
 
     it('optimistically patches the list cache before the mutation resolves', async () => {

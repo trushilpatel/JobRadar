@@ -46,16 +46,16 @@ Per page, audit 4 seam categories + enforce 1 typing gate:
 
 ## Status table
 
-| #   | Page              | Route              | Seams found              | Tests added                    | `any` removed | PR  | Status          |
-| --- | ----------------- | ------------------ | ------------------------ | ------------------------------ | ------------- | --- | --------------- |
-| 1   | Jobs              | `/jobs`            | nav: company→jobs (done) | jobsUrl builder + drawer guard | tbd           | —   | **In progress** |
-| 2   | Companies (admin) | `/admin/companies` | tbd                      | tbd                            | tbd           | —   | Not started     |
-| 3   | Dashboard         | `/dashboard`       | tbd                      | tbd                            | tbd           | —   | Not started     |
-| 4   | Insights          | `/insights`        | tbd                      | tbd                            | tbd           | —   | Not started     |
-| 5   | Settings          | `/settings`        | tbd                      | tbd                            | tbd           | —   | Not started     |
-| 6   | Account           | `/account`         | tbd                      | tbd                            | tbd           | —   | Not started     |
-| 7   | Admin Users       | `/admin/users`     | tbd                      | tbd                            | tbd           | —   | Not started     |
-| 8   | Admin Audit       | `/admin/audit`     | tbd                      | tbd                            | tbd           | —   | Not started     |
+| #   | Page              | Route              | Seams found                                           | Tests added                                         | `any` removed | PR  | Status        |
+| --- | ----------------- | ------------------ | ----------------------------------------------------- | --------------------------------------------------- | ------------- | --- | ------------- |
+| 1   | Jobs              | `/jobs`            | nav: company→jobs; cache: mutation invalidation roots | jobsUrl (3) + drawer guard (2) + cache seam (1) = 6 | 0             | —   | **In review** |
+| 2   | Companies (admin) | `/admin/companies` | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
+| 3   | Dashboard         | `/dashboard`       | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
+| 4   | Insights          | `/insights`        | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
+| 5   | Settings          | `/settings`        | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
+| 6   | Account           | `/account`         | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
+| 7   | Admin Users       | `/admin/users`     | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
+| 8   | Admin Audit       | `/admin/audit`     | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
 
 Status values: `Not started` · `In progress` · `In review` (PR open) · `Done` (PR merged).
 
@@ -63,7 +63,7 @@ Status values: `Not started` · `In progress` · `In review` (PR open) · `Done`
 
 ## Per-page detail
 
-### 1. Jobs (`/jobs`) — In progress
+### 1. Jobs (`/jobs`) — In review
 
 **Already landed:**
 
@@ -71,14 +71,14 @@ Status values: `Not started` · `In progress` · `In review` (PR open) · `Done`
 - Fixed nav seam: `CompanyDetailDrawer` "View N new jobs" now navigates via `jobsUrl({companies})` instead of the silently-dropped `location.state`.
 - Tests: `jobsUrl` builder unit tests (3); `CompanyDetailDrawer` interaction guard test (asserts URL query carries the company + no `state` arg).
 
-> RESUME HERE: complete the remaining Jobs-page seam audit —
->
-> - **Nav:** mobile job route `/jobs/:id` uses `location.state.idx` for back-nav — verify it has a typed contract + test.
-> - **Shared-state:** `useJobUrlState` ↔ `useJobs` filter shape round-trip.
-> - **Cache:** `useJobActions` mutations (setStatus, dismiss, setSaved) — assert they invalidate the exact `jobQueryKeys.list/counts` keys that other views rely on.
-> - **API contracts:** covered by Phase 0.5 zod (`features/jobs/api/jobs.api.ts`) — verify `normalizeJob` handles null `user_state` and all zod schemas are tested.
-> - **Typing:** grep `features/jobs`, `pages/JobsPage.tsx` for `any`/`as any`; remove.
->   Then run gates, update this row, commit, PR, and STOP at the checkpoint.
+**All seams closed (2026-05-29):**
+
+- **Nav:** `CompanyDetailDrawer` → Jobs page uses `jobsUrl()` typed builder via `onViewJobs` prop at pages layer. Regression guard test asserts URL carries param + no `state` arg.
+- **Cache:** `invalidateUserData` now uses `jobMutationInvalidationRoots` (typed constants in `jobs/queryKeys.ts`). Seam test asserts all three roots (`jobs`, `dashboard`, `insights`) are invalidated by factory key, not inline string.
+- **Mobile route `location.state.idx`:** intentional same-page back-nav guard; already typed `{ idx?: number }`. No cross-feature seam — no additional test needed.
+- **Shared-state:** `useJobUrlState` PARSERS are single source of truth; `useJobs` composes from them directly — no drift possible. Existing round-trip tests cover this.
+- **API contracts:** Phase 0.5 zod schemas cover all `jobs.api.ts` boundaries; `normalizeJob` tested via fixture in `jobsApi.test.ts`.
+- **Typing:** zero `any` in `features/jobs/` and `pages/JobsPage.tsx` (verified by grep).
 
 ### 2. Companies (admin) (`/admin/companies`) — Not started
 

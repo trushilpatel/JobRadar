@@ -1,4 +1,5 @@
 export const insightQueryKeys = {
+  all: () => ['insights'] as const,
   techStack: (limit: number) => ['insights', 'tech-stack', limit] as const,
   companyActivity: () => ['insights', 'company-activity'] as const,
   funnel: () => ['insights', 'funnel'] as const,
