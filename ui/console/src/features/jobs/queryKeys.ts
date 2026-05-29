@@ -16,6 +16,21 @@ export const jobQueryKeys = {
 }
 
 /**
+ * Root keys of OTHER features whose caches must be busted when a per-user
+ * job mutation lands. Defined here so the invalidation contract is a single
+ * source of truth — change these and both the mutation code and the seam test
+ * stay in sync automatically.
+ *
+ * These are the namespace roots that TanStack Query uses to invalidate all
+ * sub-keys (e.g. ['dashboard', 'progress'], ['insights', 'funnel'], …).
+ */
+export const jobMutationInvalidationRoots = {
+  jobs: ['jobs'] as const,
+  dashboard: ['dashboard'] as const,
+  insights: ['insights'] as const,
+}
+
+/**
  * True when a TanStack query key belongs to the jobs LIST cache (excludes
  * counts / companies / detail / any other future namespaced sub-key). Used
  * by mutation `onMutate` snapshots and by undo's `lookupStatus`.
