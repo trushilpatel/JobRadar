@@ -7,6 +7,8 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
   globalIgnores(['dist']),
+
+  // ── Core rules ─────────────────────────────────────────────────────────────
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -38,9 +40,9 @@ export default defineConfig([
       '@typescript-eslint/no-unsafe-argument': 'error',
     },
   },
+
+  // ── Type-unsafe rules off in tests ─────────────────────────────────────────
   {
-    // Test files legitimately narrow typed mocks via `as unknown as X`; the
-    // no-unsafe-* family fights that pattern with no safety benefit in tests.
     files: ['**/__tests__/**', '**/*.test.{ts,tsx}', 'src/test/**'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
@@ -48,6 +50,72 @@ export default defineConfig([
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
+    },
+  },
+
+  // ── Layer boundary rules (WARN → error in Arch PR10) ─────────────────────
+  // Enforces the 6-layer unidirectional architecture from ARCHITECTURE.md.
+  // Uses no-restricted-imports (built-in, no resolver needed) so @/ path aliases
+  // are matched as-written against the import specifier string.
+  //
+  // Rule 1: lib/ + components/ cannot import from feature / page / app layers.
+  {
+    files: ['src/lib/**/*.{ts,tsx}', 'src/components/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'warn',
+        {
+          patterns: [
+            {
+              group: ['@/features/**', '@/pages/**', '@/app/**'],
+              message:
+                'Shared layers (lib/, components/) cannot import from feature, page, or app layers. See ARCHITECTURE.md.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // Rule 2: Cross-feature imports forbidden.
+  // Inside a feature slice, use relative imports for own-feature files.
+  // @/features/** from within features/ always means a different feature.
+  {
+    files: ['src/features/**/*.{ts,tsx}'],
+    ignores: ['src/features/**/__tests__/**', 'src/features/**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'warn',
+        {
+          patterns: [
+            {
+              group: ['@/features/**'],
+              message:
+                'Cross-feature imports are forbidden. Use relative imports within a feature; compose at the page level instead. See ARCHITECTURE.md.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // Rule 3: Pages + app must use feature barrels (@/features/X), not internals.
+  // Pattern @/features/*/* matches one segment past the domain (internals).
+  {
+    files: ['src/pages/**/*.{ts,tsx}', 'src/app/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'warn',
+        {
+          patterns: [
+            {
+              group: ['@/features/*/*', '@/features/*/**'],
+              message:
+                'Import from the feature barrel (@/features/X), not internals (@/features/X/Y). See ARCHITECTURE.md.',
+            },
+          ],
+        },
+      ],
     },
   },
 ])
