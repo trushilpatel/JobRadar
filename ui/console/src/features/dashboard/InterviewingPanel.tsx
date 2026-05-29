@@ -2,9 +2,9 @@ import * as Select from '@radix-ui/react-select'
 import { ChevronDown, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchInterviews, updateApplicationStage } from '@/api/dashboard'
+import { fetchInterviews, updateApplicationStage } from './api/dashboard.api'
 import type { InterviewRow } from '@/types'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import { dashboardQueryKeys } from './queryKeys'
 
 const STAGES = [

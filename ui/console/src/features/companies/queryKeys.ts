@@ -1,4 +1,4 @@
-import type { AdminCompanyFilters } from '@/api/adminCompanies'
+import type { AdminCompanyFilters } from './api/adminCompanies.api'
 
 export const companyQueryKeys = {
   adminCompaniesBase: () => ['admin-companies'] as const,

@@ -4,13 +4,13 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 // ── Mock dependencies ─────────────────────────────────────────────────────────
-vi.mock('@/api/adapterConfigs')
+vi.mock('@/features/settings/api/adapterConfigs.api')
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 // ── Lazy imports after mocks are registered ───────────────────────────────────
-import * as adapterConfigsApi from '@/api/adapterConfigs'
+import * as adapterConfigsApi from '@/features/settings/api/adapterConfigs.api'
 import { SettingsPage } from '@/pages/SettingsPage'
-import type { AdapterConfig } from '@/api/adapterConfigs'
+import type { AdapterConfig } from '@/features/settings/api/adapterConfigs.api'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function pending(): Promise<never> {

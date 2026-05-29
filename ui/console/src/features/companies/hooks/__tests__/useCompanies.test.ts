@@ -2,13 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
-import * as adminApi from '@/api/adminCompanies'
+import * as adminApi from '@/features/companies/api/adminCompanies.api'
 import { useCompanies } from '../useCompanies'
-import type { AdminCompanyListResult, ScanSettingsView } from '@/api/adminCompanies'
+import type {
+  AdminCompanyListResult,
+  ScanSettingsView,
+} from '@/features/companies/api/adminCompanies.api'
 
-vi.mock('@/api/adminCompanies')
+vi.mock('@/features/companies/api/adminCompanies.api')
 // Mock useDebouncedValue so tests don't need real timers
-vi.mock('@/lib/use-debounced-value', () => ({
+vi.mock('@/lib/hooks/use-debounced-value', () => ({
   useDebouncedValue: (value: unknown) => value,
 }))
 

@@ -1,7 +1,7 @@
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
-import { updateAdapterConfig } from '@/api/adapterConfigs'
-import type { AdapterConfig, UpdateAdapterConfigInput } from '@/api/adapterConfigs'
+import { updateAdapterConfig } from '../api/adapterConfigs.api'
+import type { AdapterConfig, UpdateAdapterConfigInput } from '../api/adapterConfigs.api'
 
 export function useAdapterConfigActions() {
   const qc = useQueryClient()
@@ -10,17 +10,18 @@ export function useAdapterConfigActions() {
     const previous = qc.getQueryData<AdapterConfig[]>(['adapter-configs'])
 
     // Optimistic update
-    qc.setQueryData<AdapterConfig[]>(['adapter-configs'], (old) =>
-      old?.map((cfg) =>
-        cfg.adapter_type === adapterType ? { ...cfg, ...data } : cfg
-      ) ?? []
+    qc.setQueryData<AdapterConfig[]>(
+      ['adapter-configs'],
+      (old) =>
+        old?.map((cfg) => (cfg.adapter_type === adapterType ? { ...cfg, ...data } : cfg)) ?? []
     )
 
     try {
       const updated = await updateAdapterConfig(adapterType, data)
       // Replace with server response
-      qc.setQueryData<AdapterConfig[]>(['adapter-configs'], (old) =>
-        old?.map((cfg) => (cfg.adapter_type === adapterType ? updated : cfg)) ?? []
+      qc.setQueryData<AdapterConfig[]>(
+        ['adapter-configs'],
+        (old) => old?.map((cfg) => (cfg.adapter_type === adapterType ? updated : cfg)) ?? []
       )
       toast.success(`${adapterType} config updated`)
     } catch (err) {

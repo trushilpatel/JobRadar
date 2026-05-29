@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchProgress } from '@/api/dashboard'
+import { fetchProgress } from './api/dashboard.api'
 import { dashboardQueryKeys } from './queryKeys'
 import { StatCol } from './components/StatCol'
 

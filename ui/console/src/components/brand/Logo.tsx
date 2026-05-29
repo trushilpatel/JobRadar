@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 
 interface LogoProps {
   className?: string
@@ -8,7 +8,10 @@ interface LogoLockupProps extends LogoProps {
   size?: 'sm' | 'md' | 'lg'
 }
 
-const lockupSizes: Record<NonNullable<LogoLockupProps['size']>, { mark: string; text: string; gap: string }> = {
+const lockupSizes: Record<
+  NonNullable<LogoLockupProps['size']>,
+  { mark: string; text: string; gap: string }
+> = {
   sm: { mark: 'h-4 w-4', text: 'text-sm', gap: 'gap-1.5' },
   md: { mark: 'h-5 w-5', text: 'text-base', gap: 'gap-2' },
   lg: { mark: 'h-7 w-7', text: 'text-2xl', gap: 'gap-2.5' },
@@ -62,7 +65,11 @@ export function LogoSweepingMark({ className }: LogoProps) {
       <circle cx="24" cy="24" r="11" strokeWidth="1.75" opacity="0.45" />
       <g
         className="motion-safe:animate-spin"
-        style={{ transformOrigin: '24px 24px', transformBox: 'fill-box', animationDuration: '3.6s' }}
+        style={{
+          transformOrigin: '24px 24px',
+          transformBox: 'fill-box',
+          animationDuration: '3.6s',
+        }}
       >
         <line x1="24" y1="24" x2="38" y2="14" strokeWidth="1.75" />
         <circle cx="38" cy="14" r="3" fill="currentColor" stroke="none" />

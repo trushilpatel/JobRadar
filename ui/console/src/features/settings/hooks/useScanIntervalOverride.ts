@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
-import { updateScanIntervalOverride } from '@/api/adapterConfigs'
+import { updateScanIntervalOverride } from '../api/adapterConfigs.api'
 
 export function useScanIntervalOverride(companyId: string) {
   const qc = useQueryClient()

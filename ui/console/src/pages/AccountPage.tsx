@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useAuthStore } from '@/features/auth/store'
-import { updateMe, deleteMe } from '@/api/me'
-import { supabase } from '@/lib/supabase'
+import { updateMe, deleteMe } from '@/features/auth'
+import { supabase } from '@/lib/core/supabase'
 
 export function AccountPage() {
   const identity = useAuthStore((s) => s.identity)
@@ -99,8 +99,8 @@ export function AccountPage() {
                   Delete account?
                 </Dialog.Title>
                 <Dialog.Description className="text-sm text-slate-400 mb-6">
-                  Your account, job state, and applications will be permanently deleted. This
-                  action cannot be undone.
+                  Your account, job state, and applications will be permanently deleted. This action
+                  cannot be undone.
                 </Dialog.Description>
                 <div className="flex justify-end gap-3">
                   <Dialog.Close asChild>

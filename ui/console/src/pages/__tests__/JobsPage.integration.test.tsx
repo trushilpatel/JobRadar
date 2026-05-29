@@ -15,7 +15,7 @@ import { NuqsTestingAdapter } from 'nuqs/adapters/testing'
 import type { ReactNode } from 'react'
 
 // ── Module mocks ─────────────────────────────────────────────────────────────
-vi.mock('@/api/jobs')
+vi.mock('@/features/jobs/api/jobs.api')
 vi.mock('sonner', () => {
   const toast = vi.fn() as unknown as ((msg: string, opts?: unknown) => void) & {
     success: ReturnType<typeof vi.fn>
@@ -42,16 +42,16 @@ vi.mock('@/features/auth/store', () => ({
     })
   ),
 }))
-vi.mock('@/lib/use-media-query', () => ({
+vi.mock('@/lib/hooks/use-media-query', () => ({
   useIsMobile: () => false,
   useIsDesktop: () => true,
 }))
 
-import * as jobsApi from '@/api/jobs'
+import * as jobsApi from '@/features/jobs/api/jobs.api'
 import { toast } from 'sonner'
 import { JobsPage } from '@/pages/JobsPage'
 import { JOB_STATUS } from '@/constants/jobStatus'
-import { hiddenItems } from '@/lib/hidden-items'
+import { hiddenItems } from '@/lib/hooks/hidden-items'
 import type { Job } from '@/types'
 
 function makeJob(id: string, overrides: Partial<Job> = {}): Job {

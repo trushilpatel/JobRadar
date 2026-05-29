@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
-import * as companiesApi from '@/api/companies'
+import * as companiesApi from '@/features/companies/api/companies.api'
 import { useCompanyAnalytics } from '../useCompanyAnalytics'
 import type { CompanyAnalytics } from '@/types'
 
-vi.mock('@/api/companies')
+vi.mock('@/features/companies/api/companies.api')
 
 const mockAnalytics: CompanyAnalytics = {
   monthly: [

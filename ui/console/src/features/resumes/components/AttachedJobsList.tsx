@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ExternalLink, Edit3 } from 'lucide-react'
-import { cn, formatRelativeTime } from '@/lib/utils'
+import { cn, formatRelativeTime } from '@/lib/utils/utils'
 import { routes } from '@/lib/routes'
 import { ResumeStateBadge } from '@/features/resumes/components/ResumeStateBadge'
 import { getMockJob } from '@/features/resumes/mockData'

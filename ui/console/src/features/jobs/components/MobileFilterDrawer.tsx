@@ -7,7 +7,7 @@ import {
   DrawerTitle,
 } from '@/components/ui/drawer'
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import type { DateFilter, LocationFilter } from '@/features/jobs/hooks/useJobs'
 
 export interface MobileFilterDrawerProps {

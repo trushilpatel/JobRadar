@@ -3,13 +3,13 @@ import { renderHook, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
 import { toast } from 'sonner'
-import * as adminApi from '@/api/adminCompanies'
-import * as companiesApi from '@/api/companies'
+import * as adminApi from '@/features/companies/api/adminCompanies.api'
+import * as companiesApi from '@/features/companies/api/companies.api'
 import { useCompanyActions } from '../useCompanyActions'
 import type { Company } from '@/types'
 
-vi.mock('@/api/adminCompanies')
-vi.mock('@/api/companies')
+vi.mock('@/features/companies/api/adminCompanies.api')
+vi.mock('@/features/companies/api/companies.api')
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),

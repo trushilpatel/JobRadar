@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { StatusPill, type StatusKind } from '@/components/ui/status-pill'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
 import { DataTableColumnHeader } from '@/components/ui/data-table'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 
 const HISTORY_SLOTS = 10
 

@@ -1,7 +1,7 @@
-import { apiClient } from '@/lib/api-client'
-import * as insightsApi from '@/api/insights'
+import { apiClient } from '@/lib/core/api-client'
+import * as insightsApi from '@/features/insights/api/insights.api'
 
-vi.mock('@/lib/api-client')
+vi.mock('@/lib/core/api-client')
 
 describe('insights API normalization', () => {
   beforeEach(() => {

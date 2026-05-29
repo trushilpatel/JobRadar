@@ -1,4 +1,4 @@
-import type { JobFilters } from '@/api/jobs'
+import type { JobFilters } from './api/jobs.api'
 
 /**
  * Centralised query-key factory for the jobs feature. Always import from here

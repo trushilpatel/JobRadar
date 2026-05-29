@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Check, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { hiddenItems } from '@/lib/hidden-items'
+import { cn } from '@/lib/utils/utils'
+import { hiddenItems } from '@/lib/hooks/hidden-items'
 
 /**
  * "DismissStripe" — Sonner-based toast template for destructive dismiss flows.

@@ -1,5 +1,5 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import type { RetryTierCounts } from '@/types'
 import { useRetryTier } from '../hooks/useRetryTier'
 
@@ -40,7 +40,9 @@ export function RetryStage({ label, worker, counts }: RetryStageProps) {
               )}
             >
               {label.split(' ').map((word, i) => (
-                <span key={i} className="block">{word}</span>
+                <span key={i} className="block">
+                  {word}
+                </span>
               ))}
             </span>
           </div>

@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { RequireAdmin } from '../RequireAdmin'
 import { useAuthStore } from '../store'
 
-vi.mock('@/lib/supabase', () => ({
+vi.mock('@/lib/core/supabase', () => ({
   supabase: {
     auth: {
       getSession: vi.fn().mockResolvedValue({ data: { session: null } }),

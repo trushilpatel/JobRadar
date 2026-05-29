@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, ChevronsLeft, MoreHorizontal } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 
 /**
  * Unified pagination primitive used across the app.

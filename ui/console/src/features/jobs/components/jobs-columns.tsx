@@ -2,18 +2,20 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { MapPin, Wifi, Bookmark, X, Paperclip } from 'lucide-react'
 import type { Job } from '@/types'
 import { DataTableColumnHeader } from '@/components/ui/data-table'
-import { formatRelativeTime, cn } from '@/lib/utils'
+import { formatRelativeTime, cn, formatSalary } from '@/lib/utils/utils'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
-import { formatSalary } from '@/services/jobs.service'
-import { getMockAttachmentForJob } from '@/features/resumes/mockData'
 
 export interface JobTableActions {
   onToggleSave: (job: Job) => void
   onDismiss: (job: Job) => void
+  /** Optional callback used by the pages layer to inject cross-feature data
+   *  (e.g. resume attachment state) without creating a cross-feature import
+   *  inside the jobs feature. Returns the attachment state string or null. */
+  getAttachmentState?: (jobId: string) => string | null
 }
 
 export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknown>[] {
-  const { onToggleSave, onDismiss } = actions
+  const { onToggleSave, onDismiss, getAttachmentState } = actions
 
   return [
     // ── 1. Bookmark / save column ───────────────────────────────────────────
@@ -80,15 +82,17 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       cell: ({ row, getValue }) => {
         // Mockup paperclip indicator — shown when a resume is attached to
         // this job (any state). Real impl will read from user_job_state /
-        // resume_job_attachments via a join, not from mock data.
-        const attachment = getMockAttachmentForJob(row.original.id)
+        // resume_job_attachments via a join. Attachment state is injected
+        // via getAttachmentState by the pages layer to avoid a cross-feature
+        // import inside features/jobs.
+        const attachmentState = getAttachmentState?.(row.original.id) ?? null
         return (
           <div className="flex items-center gap-1.5 min-w-0">
-            {attachment && (
+            {attachmentState && (
               <Paperclip
                 size={11}
                 className="text-violet-400 shrink-0"
-                aria-label={`Resume attached (${attachment.state})`}
+                aria-label={`Resume attached (${attachmentState})`}
               />
             )}
             <span className="font-medium text-white text-sm truncate">{getValue() as string}</span>

@@ -1,4 +1,4 @@
-import type { AdminCompany, ScanSettingsView } from '@/api/adminCompanies'
+import type { AdminCompany, ScanSettingsView } from '../api/adminCompanies.api'
 import type { Company } from '@/types'
 
 function deriveLastScanStatus(

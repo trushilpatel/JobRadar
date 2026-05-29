@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
-import { fetchHeatmap } from '@/api/dashboard'
+import { fetchHeatmap } from './api/dashboard.api'
 import type { WeeklyCount } from '@/types'
 import { dashboardQueryKeys } from './queryKeys'
 

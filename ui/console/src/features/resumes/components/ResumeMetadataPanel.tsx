@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import type { Resume } from '@/features/resumes/types'
 
 const AXIS_TONE: Record<string, string> = {

@@ -2,13 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
-import * as jobsApi from '@/api/jobs'
+import * as jobsApi from '@/features/jobs/api/jobs.api'
 import { useJobActions } from '../useJobActions'
 import { jobQueryKeys } from '@/features/jobs/queryKeys'
 import { JOB_STATUS } from '@/constants/jobStatus'
 import type { Job } from '@/types'
 
-vi.mock('@/api/jobs')
+vi.mock('@/features/jobs/api/jobs.api')
 vi.mock('sonner', () => {
   const toast = vi.fn() as unknown as ((msg: string, opts?: unknown) => void) & {
     success: ReturnType<typeof vi.fn>

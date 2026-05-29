@@ -3,11 +3,11 @@ import { renderHook, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
 import { toast } from 'sonner'
-import * as adapterConfigsApi from '@/api/adapterConfigs'
+import * as adapterConfigsApi from '@/features/settings/api/adapterConfigs.api'
 import { useAdapterConfigActions } from '../useAdapterConfigActions'
-import type { AdapterConfig } from '@/api/adapterConfigs'
+import type { AdapterConfig } from '@/features/settings/api/adapterConfigs.api'
 
-vi.mock('@/api/adapterConfigs')
+vi.mock('@/features/settings/api/adapterConfigs.api')
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),

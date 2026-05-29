@@ -1,12 +1,12 @@
 import { useState, useCallback } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { formatRelativeTime } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
+import { formatRelativeTime } from '@/lib/utils/utils'
 import { useAdapterConfigs } from '../hooks/useAdapterConfigs'
 import { useAdapterConfigActions } from '../hooks/useAdapterConfigActions'
 import { AdapterConfigCell } from './AdapterConfigCell'
-import type { AdapterConfig, UpdateAdapterConfigInput } from '@/api/adapterConfigs'
+import type { AdapterConfig, UpdateAdapterConfigInput } from '../api/adapterConfigs.api'
 
 const ADAPTER_COLORS: Record<string, string> = {
   greenhouse: 'bg-emerald-400',

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import { useScanIntervalOverride } from '../hooks/useScanIntervalOverride'
 
 interface ScanIntervalOverrideModalProps {
@@ -21,9 +21,7 @@ export function ScanIntervalOverrideModal({
   adapterDefault,
   currentOverride,
 }: ScanIntervalOverrideModalProps) {
-  const [value, setValue] = useState(
-    currentOverride !== null ? String(currentOverride) : ''
-  )
+  const [value, setValue] = useState(currentOverride !== null ? String(currentOverride) : '')
   const [error, setError] = useState('')
   const { setOverride, loading } = useScanIntervalOverride(companyId)
 
@@ -105,9 +103,7 @@ export function ScanIntervalOverrideModal({
                   autoFocus
                 />
               </div>
-              <p className="text-[11px] text-slate-500">
-                Adapter default: {adapterDefault} min
-              </p>
+              <p className="text-[11px] text-slate-500">Adapter default: {adapterDefault} min</p>
               {error && <p className="text-xs text-red-400">{error}</p>}
             </div>
 

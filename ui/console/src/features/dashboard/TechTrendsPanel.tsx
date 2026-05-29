@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchTechTrends } from '@/api/dashboard'
+import { fetchTechTrends } from './api/dashboard.api'
 import type { TechTrendRow } from '@/types'
 import { dashboardQueryKeys } from './queryKeys'
 

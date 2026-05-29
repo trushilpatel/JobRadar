@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchAuditLog, type AuditFilter } from '@/api/adminAudit'
-import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { fetchAuditLog, type AuditFilter } from '@/features/auth'
+import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 import { Pagination } from '@/components/ui/pagination'
 
 export function AdminAuditPage() {

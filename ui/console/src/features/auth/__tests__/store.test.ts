@@ -13,7 +13,7 @@ const onAuthStateChange = vi.fn((cb: (event: string, session: unknown) => Promis
   return { data: { subscription: { unsubscribe: vi.fn() } } }
 })
 
-vi.mock('@/lib/supabase', () => ({
+vi.mock('@/lib/core/supabase', () => ({
   supabase: {
     auth: {
       getSession: (...args: unknown[]) => getSession(...args),
@@ -28,7 +28,7 @@ vi.mock('@/lib/supabase', () => ({
 // ── fetchMe mock ───────────────────────────────────────────────────────────────
 const fetchMeMock = vi.fn()
 
-vi.mock('@/api/me', () => ({
+vi.mock('@/features/auth/api/me.api', () => ({
   fetchMe: (...args: unknown[]) => fetchMeMock(...args),
 }))
 

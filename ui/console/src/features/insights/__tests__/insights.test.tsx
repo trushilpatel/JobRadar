@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import * as insightsApi from '@/api/insights'
+import * as insightsApi from '@/features/insights/api/insights.api'
 
 import { TechStackPanel } from '../TechStackPanel'
 import { CompanyVelocityPanel } from '../CompanyVelocityPanel'
@@ -10,7 +10,7 @@ import { SponsorshipTrendPanel } from '../SponsorshipTrendPanel'
 import { CompanyActivityPanel } from '../CompanyActivityPanel'
 import { LocationPanel } from '../LocationPanel'
 
-vi.mock('@/api/insights')
+vi.mock('@/features/insights/api/insights.api')
 
 // Recharts uses ResizeObserver which is not available in jsdom
 class MockResizeObserver {

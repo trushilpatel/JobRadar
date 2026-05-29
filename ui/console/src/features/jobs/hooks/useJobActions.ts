@@ -1,10 +1,16 @@
 import { useCallback, useRef } from 'react'
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { setJobStatus, setJobSaved, dismissJob, bulkDismissJobs, type JobsPage } from '@/api/jobs'
+import {
+  setJobStatus,
+  setJobSaved,
+  dismissJob,
+  bulkDismissJobs,
+  type JobsPage,
+} from '../api/jobs.api'
 import type { Job, JobStatus } from '@/types'
 import { JOB_STATUS } from '@/constants/jobStatus'
-import { useUndoToast } from '@/lib/use-undo-toast'
+import { useUndoToast } from '@/lib/hooks/use-undo-toast'
 import { isJobListKey } from '@/features/jobs/queryKeys'
 
 /**

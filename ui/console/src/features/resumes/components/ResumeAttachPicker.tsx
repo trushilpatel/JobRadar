@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Paperclip, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import { routes } from '@/lib/routes'
 import { useResumes } from '@/features/resumes/hooks/useResumes'
 

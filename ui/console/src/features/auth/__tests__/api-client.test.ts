@@ -5,7 +5,7 @@ const refreshSession = vi.fn()
 const signOut = vi.fn()
 const toastWarning = vi.fn()
 
-vi.mock('@/lib/supabase', () => ({
+vi.mock('@/lib/core/supabase', () => ({
   supabase: {
     auth: {
       getSession: (...args: unknown[]) => getSession(...args),
@@ -63,13 +63,13 @@ afterEach(() => {
 
 describe('apiClient', () => {
   it('attaches bearer header when session present', async () => {
-    const { sessionRef } = await import('@/lib/session-ref')
+    const { sessionRef } = await import('@/lib/core/session-ref')
     sessionRef.set({ access_token: 'tok-123' } as never)
 
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { hello: 'world' } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const { apiClient } = await import('@/lib/api-client')
+    const { apiClient } = await import('@/lib/core/api-client')
     const result = await apiClient.get<{ hello: string }>('/ping')
 
     expect(result).toEqual({ hello: 'world' })
@@ -94,7 +94,7 @@ describe('apiClient', () => {
       .mockResolvedValueOnce(jsonResponse(200, { data: { ok: true } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const { apiClient } = await import('@/lib/api-client')
+    const { apiClient } = await import('@/lib/core/api-client')
     const result = await apiClient.get<{ ok: boolean }>('/secure')
 
     expect(result).toEqual({ ok: true })
@@ -103,7 +103,7 @@ describe('apiClient', () => {
   })
 
   it('dedupes concurrent refresh calls', async () => {
-    const { sessionRef } = await import('@/lib/session-ref')
+    const { sessionRef } = await import('@/lib/core/session-ref')
     sessionRef.set({ access_token: 'stale' } as never)
 
     const refreshHandle: { resolve: (() => void) | null } = { resolve: null }
@@ -127,7 +127,7 @@ describe('apiClient', () => {
     })
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const { apiClient, __testing } = await import('@/lib/api-client')
+    const { apiClient, __testing } = await import('@/lib/core/api-client')
     __testing.resetPendingRefresh()
 
     const p1 = apiClient.get<{ ok: boolean }>('/a')
@@ -159,7 +159,7 @@ describe('apiClient', () => {
       .mockResolvedValue(jsonResponse(401, { error: { message: 'expired' } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const { apiClient, __testing } = await import('@/lib/api-client')
+    const { apiClient, __testing } = await import('@/lib/core/api-client')
     __testing.resetPendingRefresh()
 
     await expect(apiClient.get('/secure')).rejects.toThrow()
@@ -174,7 +174,7 @@ describe('apiClient', () => {
       .mockResolvedValue(jsonResponse(403, { error: { message: 'forbidden' } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const { apiClient, __testing } = await import('@/lib/api-client')
+    const { apiClient, __testing } = await import('@/lib/core/api-client')
     __testing.resetPendingRefresh()
 
     await expect(apiClient.get('/secure')).rejects.toThrow('forbidden')
@@ -186,13 +186,13 @@ describe('apiClient', () => {
     // authHeader() reads from sessionRef (written by onAuthStateChange), not getSession().
     // Calling getSession() from authHeader() races with Supabase's internal autoRefreshToken timer
     // and can burn the refresh token. sessionRef avoids acquiring the Supabase internal lock.
-    const { sessionRef } = await import('@/lib/session-ref')
+    const { sessionRef } = await import('@/lib/core/session-ref')
     sessionRef.set({ access_token: 'valid-token' } as never)
 
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { ok: true } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const { apiClient, __testing } = await import('@/lib/api-client')
+    const { apiClient, __testing } = await import('@/lib/core/api-client')
     __testing.resetPendingRefresh()
     await apiClient.get('/secure')
 
@@ -214,7 +214,7 @@ describe('apiClient', () => {
     const fetchMock = vi.fn().mockResolvedValue(res)
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const { apiClient, __testing } = await import('@/lib/api-client')
+    const { apiClient, __testing } = await import('@/lib/core/api-client')
     __testing.resetPendingRefresh()
 
     await expect(apiClient.get('/fast-endpoint')).rejects.toThrow()

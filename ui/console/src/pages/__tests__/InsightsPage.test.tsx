@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 
 // ── Mock all insight API functions ────────────────────────────────────────────
-vi.mock('@/api/insights')
+vi.mock('@/features/insights/api/insights.api')
 
 // ── ResizeObserver stub required for Recharts ─────────────────────────────────
 class MockResizeObserver {
@@ -16,7 +16,7 @@ class MockResizeObserver {
 global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
 
 // ── Lazy imports after mocks are registered ───────────────────────────────────
-import * as insightsApi from '@/api/insights'
+import * as insightsApi from '@/features/insights/api/insights.api'
 import { InsightsPage } from '@/pages/InsightsPage'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
