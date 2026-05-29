@@ -1,12 +1,15 @@
 import { useCallback, useMemo } from 'react'
 import {
+  createSerializer,
   parseAsArrayOf,
   parseAsInteger,
   parseAsString,
   parseAsStringLiteral,
   useQueryStates,
+  type inferParserType,
 } from 'nuqs'
 import { JOB_STATUS, TAB_KEYS, type TabKey } from '@/config/constants/jobStatus'
+import { routes } from '@/config/routes'
 
 export type LocationFilter = 'any' | 'remote' | 'onsite'
 export type DateFilter = 'all' | '24h' | '7d' | '30d'
@@ -39,6 +42,23 @@ const PARSERS = {
    */
   page: parseAsInteger.withDefault(0),
   limit: parseAsInteger.withDefault(DEFAULT_LIMIT),
+}
+
+const serializeJobsParams = createSerializer(PARSERS)
+
+/**
+ * Build a link to the jobs page with filters pre-applied, derived from the
+ * SAME parser map the page hydrates from. This is the only sanctioned way to
+ * deep-link into a filtered jobs view.
+ *
+ * Do NOT pass filters via router `location.state` — the jobs page reads filter
+ * state exclusively from the URL query string (nuqs/useJobUrlState), so any
+ * `state` payload is silently dropped and the page renders unfiltered.
+ *
+ * Default values are omitted (clearOnDefault), so `jobsUrl({})` is `/jobs`.
+ */
+export function jobsUrl(filters: Partial<inferParserType<typeof PARSERS>>): string {
+  return serializeJobsParams(routes.jobs(), filters)
 }
 
 // History-mode policy:
