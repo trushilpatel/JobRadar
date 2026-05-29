@@ -19,6 +19,7 @@ backend/migrate
 .env
 .env.*
 !.env.example
+.factory.env
 
 # IDE
 .vscode/
