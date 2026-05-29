@@ -272,9 +272,6 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 	if cfg.DB.Host != "localhost" || cfg.DB.Port != "5432" || cfg.DB.User != "postgres" || cfg.DB.Password != "postgres" || cfg.DB.Name != "jobradar" || cfg.DB.SSLMode != "disable" {
 		t.Errorf("DB defaults wrong: %+v", cfg.DB)
 	}
-	if cfg.Kafka.Brokers != "localhost:9092" || cfg.Kafka.User != "" || cfg.Kafka.Password != "" {
-		t.Errorf("Kafka defaults wrong: %+v", cfg.Kafka)
-	}
 	if cfg.Redis.URL != "redis://localhost:6379/0" {
 		t.Errorf("Redis defaults wrong: %+v", cfg.Redis)
 	}
@@ -332,9 +329,6 @@ func TestLoad_OverridesApplied(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "p")
 	t.Setenv("DB_NAME", "d")
 	t.Setenv("DB_SSLMODE", "require")
-	t.Setenv("KAFKA_BROKERS", "kafka:1")
-	t.Setenv("KAFKA_USER", "kuser")
-	t.Setenv("KAFKA_PASSWORD", "kpw")
 	t.Setenv("REDIS_URL", "rediss://default:secret@redis.example:6380/5")
 	t.Setenv("LLM_COOLDOWN_BASE_SECONDS", "10")
 	t.Setenv("LLM_COOLDOWN_MAX_SECONDS", "100")
@@ -386,9 +380,6 @@ func TestLoad_OverridesApplied(t *testing.T) {
 
 	if cfg.DB.Host != "db.example" || cfg.DB.Port != "6543" || cfg.DB.SSLMode != "require" {
 		t.Errorf("DB overrides wrong: %+v", cfg.DB)
-	}
-	if cfg.Kafka.User != "kuser" || cfg.Kafka.Password != "kpw" {
-		t.Errorf("Kafka overrides wrong: %+v", cfg.Kafka)
 	}
 	if cfg.Redis.URL != "rediss://default:secret@redis.example:6380/5" {
 		t.Errorf("REDIS_URL override wrong: %q", cfg.Redis.URL)

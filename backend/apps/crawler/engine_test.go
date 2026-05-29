@@ -474,7 +474,7 @@ func TestPublish_MarshalsAndSendsToRawSubject(t *testing.T) {
 	}
 }
 
-// TestPublish_PropagatesPublisherError verifies publish surfaces the kafka
+// TestPublish_PropagatesPublisherError verifies publish surfaces the NATS
 // publisher's error verbatim — wrappers higher up rely on the underlying
 // error to drive retries / metrics.
 func TestPublish_PropagatesPublisherError(t *testing.T) {
