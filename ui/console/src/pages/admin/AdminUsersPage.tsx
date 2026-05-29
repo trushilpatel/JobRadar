@@ -12,6 +12,7 @@ import {
   setUserRoles,
   setUserStatus,
   deleteAdminUser,
+  authQueryKeys,
   type AdminUser,
   type AdminUserFilter,
 } from '@/features/auth'
@@ -56,7 +57,7 @@ function DeleteDialog({
     mutationFn: () => deleteAdminUser(user.id),
     onSuccess: () => {
       toast.success(`Deleted ${user.email}`)
-      qc.invalidateQueries({ queryKey: ['admin-users'] })
+      qc.invalidateQueries({ queryKey: authQueryKeys.adminUsersBase() })
       onOpenChange(false)
     },
     onError: () => toast.error('Failed to delete user'),
@@ -107,7 +108,7 @@ function UserRow({ user, selfId }: { user: AdminUser; selfId: string | undefined
       return setUserRoles(user.id, newRoles)
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-users'] })
+      qc.invalidateQueries({ queryKey: authQueryKeys.adminUsersBase() })
       toast.success(
         user.roles.includes('admin')
           ? `Admin revoked for ${user.email}`
@@ -120,7 +121,7 @@ function UserRow({ user, selfId }: { user: AdminUser; selfId: string | undefined
   const { mutate: toggleStatus, isPending: togglingStatus } = useMutation({
     mutationFn: () => setUserStatus(user.id, user.status === 'active' ? 'suspended' : 'active'),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-users'] })
+      qc.invalidateQueries({ queryKey: authQueryKeys.adminUsersBase() })
       toast.success(
         user.status === 'active' ? `${user.email} suspended` : `${user.email} reinstated`
       )
@@ -237,7 +238,7 @@ export function AdminUsersPage() {
   }
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-users', filter, page, limit],
+    queryKey: authQueryKeys.adminUsers(filter, page, limit),
     queryFn: () => fetchAdminUsers(filter, page, limit),
     staleTime: 30_000,
   })

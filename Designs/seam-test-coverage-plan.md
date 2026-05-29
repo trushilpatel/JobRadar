@@ -46,16 +46,16 @@ Per page, audit 4 seam categories + enforce 1 typing gate:
 
 ## Status table
 
-| #   | Page              | Route              | Seams found                                                       | Tests added                                         | `any` removed | PR  | Status        |
-| --- | ----------------- | ------------------ | ----------------------------------------------------------------- | --------------------------------------------------- | ------------- | --- | ------------- |
-| 1   | Jobs              | `/jobs`            | nav: company→jobs; cache: mutation invalidation roots             | jobsUrl (3) + drawer guard (2) + cache seam (1) = 6 | 0             | —   | **In review** |
-| 2   | Companies (admin) | `/admin/companies` | cache: mutation invalidation keys (adminCompaniesBase, scanQueue) | cache seam (4)                                      | 0             | —   | **In review** |
-| 3   | Dashboard         | `/dashboard`       | tbd                                                               | tbd                                                 | tbd           | —   | Not started   |
-| 4   | Insights          | `/insights`        | tbd                                                               | tbd                                                 | tbd           | —   | Not started   |
-| 5   | Settings          | `/settings`        | tbd                                                               | tbd                                                 | tbd           | —   | Not started   |
-| 6   | Account           | `/account`         | tbd                                                               | tbd                                                 | tbd           | —   | Not started   |
-| 7   | Admin Users       | `/admin/users`     | tbd                                                               | tbd                                                 | tbd           | —   | Not started   |
-| 8   | Admin Audit       | `/admin/audit`     | tbd                                                               | tbd                                                 | tbd           | —   | Not started   |
+| #   | Page              | Route              | Seams found                                                                               | Tests added                                         | `any` removed | PR  | Status   |
+| --- | ----------------- | ------------------ | ----------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------- | --- | -------- |
+| 1   | Jobs              | `/jobs`            | nav: company→jobs; cache: mutation invalidation roots                                     | jobsUrl (3) + drawer guard (2) + cache seam (1) = 6 | 0             | —   | **Done** |
+| 2   | Companies (admin) | `/admin/companies` | cache: mutation invalidation keys (adminCompaniesBase, scanQueue)                         | cache seam (4)                                      | 0             | —   | **Done** |
+| 3   | Dashboard         | `/dashboard`       | nav: MarketPanel used location.state (bug!); cache: InterviewingPanel mutation untested   | nav fix + cache seam (6 tests)                      | 0             | —   | **Done** |
+| 4   | Insights          | `/insights`        | none (read-only, no cross-feature nav)                                                    | 0                                                   | 0             | —   | **Done** |
+| 5   | Settings          | `/settings`        | cache: adapterConfigs inline keys + key mismatch; cross-feature invalidation root missing | cache seam (7 tests)                                | 0             | —   | **Done** |
+| 6   | Account           | `/account`         | none — Zustand identity, no TanStack Query cache, no cross-feature nav                    | 0                                                   | 0             | —   | **Done** |
+| 7   | Admin Users       | `/admin/users`     | cache: inline ['admin-users'] strings; auth feature missing queryKeys.ts entirely         | authQueryKeys factory + cache seam (4 tests)        | 0             | —   | **Done** |
+| 8   | Admin Audit       | `/admin/audit`     | none (read-only)                                                                          | 0                                                   | 0             | —   | **Done** |
 
 Status values: `Not started` · `In progress` · `In review` (PR open) · `Done` (PR merged).
 
@@ -98,13 +98,41 @@ _To fill during the page's run._
 
 _To fill during the page's run._
 
-### 5. Settings (`/settings`) — Not started
+### 5. Settings (`/settings`) — In review
 
-_To fill during the page's run._
+**Seams audited (2026-05-29):**
 
-### 6. Account (`/account`) — Not started
+- **Nav:** SettingsPage has no cross-feature navigation. No gap.
+- **Shared-state:** No nuqs URL state. `useAdapterConfigs` uses TanStack Query with a single query key. No shared-state seam.
+- **Cache seams found (3 separate issues):**
+  1. `useAdapterConfigActions.updateConfig` — all `setQueryData` and rollback calls used inline `['adapter-configs']` instead of `settingsQueryKeys.adapterConfigs()`. Fixed: now uses factory key. Cache seam test added (2 tests: success path + rollback path both read/write via factory key).
+  2. `useAdapterConfigs` — `useQuery` used inline `['adapter-configs']` for its `queryKey`. Fixed: now uses `settingsQueryKeys.adapterConfigs()`.
+  3. `useScanIntervalOverride.setOverride` — used 3 inline strings: `['companies']`, `['company', companyId]`, `['company-scan-config', companyId]`. Also had a **key mismatch**: `settingsQueryKeys.companyScanConfig(id)` returned `['scan-config', id]` but the hook invalidated `['company-scan-config', companyId]` — these never matched. Fixed: `settingsQueryKeys.companyScanConfig` now returns `['company-scan-config', id]`. The `['companies']` and `['company', companyId]` stubs were replaced by `scanIntervalOverrideMutationInvalidationRoots.adminCompanies` (typed cross-feature root constant in `queryKeys.ts`). Cache seam tests added (3 tests: adminCompanies root invalidated, companyScanConfig factory key invalidated, cross-feature contract assertion that the root value matches `['admin-companies']`).
+- **API contracts:** Phase 0.5 zod schemas cover `adapterConfigs.api.ts`. No gap.
+- **Typing:** zero `any` in `features/settings/` and `pages/SettingsPage.tsx`.
 
-_To fill during the page's run._
+**New exports in `features/settings/index.ts`:** `settingsQueryKeys`, `scanIntervalOverrideMutationInvalidationRoots`.
+
+**Files changed:**
+
+- `src/features/settings/queryKeys.ts` — fixed key mismatch + added `scanIntervalOverrideMutationInvalidationRoots`
+- `src/features/settings/hooks/useAdapterConfigActions.ts` — factory keys
+- `src/features/settings/hooks/useAdapterConfigs.ts` — factory key
+- `src/features/settings/hooks/useScanIntervalOverride.ts` — factory keys + typed cross-feature root
+- `src/features/settings/index.ts` — new exports
+- `src/features/settings/hooks/__tests__/useAdapterConfigActions.test.ts` — 2 cache seam tests + existing tests updated to use factory key
+- `src/features/settings/hooks/__tests__/useScanIntervalOverride.test.ts` — 3 cache seam tests added
+
+### 6. Account (`/account`) — In review
+
+**Seams audited (2026-05-29):**
+
+- **Nav:** AccountPage has no cross-feature navigation.
+- **Shared-state:** Identity is Zustand-only (`useAuthStore`). No TanStack Query server state. No shared-state seam.
+- **Cache:** `updateMe` and `deleteMe` are plain async functions, not `useMutation`. No `invalidateQueries` involved. After `updateMe`, `refreshIdentity()` refreshes the Zustand store directly — no TanStack Query cache to invalidate. No cache seam.
+- **API contracts:** `me.api.ts` uses zod schema for `fetchMe`. `updateMe` and `deleteMe` are fire-and-forget PATCH/DELETE — no response body parsed. No gap.
+- **Typing:** zero `any` in `pages/AccountPage.tsx`, `features/auth/api/me.api.ts`, `features/auth/store.ts`.
+- **Conclusion:** AccountPage has no open seams. No tests needed.
 
 ### 7. Admin Users (`/admin/users`) — Not started
 
@@ -120,3 +148,4 @@ _To fill during the page's run._
 
 - **2026-05-28** — Scope set; fixture-based API-contract approach chosen. Plan + skill live at `Designs/seam-test-coverage-plan.md` and `.claude/skills/seam-test-coverage/`. Resumes/Apply-Queue deferred.
 - **2026-05-29** — Architecture migration (PRs 1–10) complete. Boundary rules are now CI errors. `api/` moved into feature slices. Skill and plan re-applied on top of current main.
+- **2026-05-29** — Settings + Account pages complete. Key finding: `useScanIntervalOverride` had a factory key mismatch (`['scan-config', id]` in the factory vs `['company-scan-config', companyId]` in the hook) — would have silently never invalidated the intended query. Fixed by aligning the factory key and adding a typed `scanIntervalOverrideMutationInvalidationRoots` constant to avoid cross-feature string imports. Account page has no TanStack Query mutations — identity mutations are Zustand-only — no seams.

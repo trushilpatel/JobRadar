@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import * as adapterConfigsApi from '@/features/settings/api/adapterConfigs.api'
 import { useAdapterConfigActions } from '../useAdapterConfigActions'
 import type { AdapterConfig } from '@/features/settings/api/adapterConfigs.api'
+import { settingsQueryKeys } from '@/features/settings/queryKeys'
 
 vi.mock('@/features/settings/api/adapterConfigs.api')
 vi.mock('sonner', () => ({
@@ -45,7 +46,7 @@ function makeClient(initialData?: AdapterConfig[]) {
     defaultOptions: { queries: { retry: 0, gcTime: 5_000, staleTime: Infinity } },
   })
   if (initialData) {
-    qc.setQueryData<AdapterConfig[]>(['adapter-configs'], initialData)
+    qc.setQueryData<AdapterConfig[]>(settingsQueryKeys.adapterConfigs(), initialData)
   }
   const wrapper = ({ children }: { children: React.ReactNode }) =>
     createElement(QueryClientProvider, { client: qc }, children)
@@ -112,7 +113,7 @@ describe('useAdapterConfigActions', () => {
       })
 
       // Optimistic update should have been applied immediately
-      const cached = qc.getQueryData<AdapterConfig[]>(['adapter-configs'])
+      const cached = qc.getQueryData<AdapterConfig[]>(settingsQueryKeys.adapterConfigs())
       const cachedConfig = cached?.find((c) => c.adapter_type === 'greenhouse')
       expect(cachedConfig?.scan_interval_minutes).toBe(720)
 
@@ -140,7 +141,7 @@ describe('useAdapterConfigActions', () => {
         })
       })
 
-      const cached = qc.getQueryData<AdapterConfig[]>(['adapter-configs'])
+      const cached = qc.getQueryData<AdapterConfig[]>(settingsQueryKeys.adapterConfigs())
       const cachedConfig = cached?.find((c) => c.adapter_type === 'greenhouse')
       expect(cachedConfig?.scan_interval_minutes).toBe(480)
       expect(cachedConfig?.inter_company_delay_s).toBe(10)
@@ -208,7 +209,7 @@ describe('useAdapterConfigActions', () => {
       })
 
       // Cache should be rolled back to original values
-      const cached = qc.getQueryData<AdapterConfig[]>(['adapter-configs'])
+      const cached = qc.getQueryData<AdapterConfig[]>(settingsQueryKeys.adapterConfigs())
       const cachedConfig = cached?.find((c) => c.adapter_type === 'greenhouse')
       expect(cachedConfig?.scan_interval_minutes).toBe(1440)
       expect(cachedConfig?.inter_company_delay_s).toBe(3)
@@ -251,6 +252,69 @@ describe('useAdapterConfigActions', () => {
     })
   })
 
+  // ── cache seam: optimistic update and rollback use factory keys ─────────────
+
+  describe('cache seam — factory key usage', () => {
+    it('reads and writes cache via settingsQueryKeys.adapterConfigs() factory key', async () => {
+      const serverResponse: AdapterConfig = { ...mockConfig, scan_interval_minutes: 360 }
+      vi.mocked(adapterConfigsApi.updateAdapterConfig).mockResolvedValue(serverResponse)
+
+      const qc = new QueryClient({
+        defaultOptions: { queries: { retry: 0, gcTime: 5_000, staleTime: Infinity } },
+      })
+      // Seed cache using the factory key — if the hook uses a different key, the
+      // optimistic update will see no existing data (undefined) and the rollback
+      // will also be a no-op, leaving the cache empty after an error.
+      qc.setQueryData<AdapterConfig[]>(settingsQueryKeys.adapterConfigs(), [mockConfig])
+
+      const wrapper = ({ children }: { children: React.ReactNode }) =>
+        createElement(QueryClientProvider, { client: qc }, children)
+
+      const { result } = renderHook(() => useAdapterConfigActions(), { wrapper })
+
+      await act(async () => {
+        await result.current.updateConfig('greenhouse', {
+          scan_interval_minutes: 360,
+          inter_company_delay_s: 3,
+        })
+      })
+
+      // The hook must read/write via the factory key so the update is visible
+      const cached = qc.getQueryData<AdapterConfig[]>(settingsQueryKeys.adapterConfigs())
+      const cachedConfig = cached?.find((c) => c.adapter_type === 'greenhouse')
+      expect(cachedConfig?.scan_interval_minutes).toBe(360)
+    })
+
+    it('rollback writes back to settingsQueryKeys.adapterConfigs() factory key on error', async () => {
+      vi.mocked(adapterConfigsApi.updateAdapterConfig).mockRejectedValue(new Error('Server error'))
+
+      const qc = new QueryClient({
+        defaultOptions: { queries: { retry: 0, gcTime: 5_000, staleTime: Infinity } },
+      })
+      qc.setQueryData<AdapterConfig[]>(settingsQueryKeys.adapterConfigs(), [mockConfig])
+
+      const wrapper = ({ children }: { children: React.ReactNode }) =>
+        createElement(QueryClientProvider, { client: qc }, children)
+
+      const { result } = renderHook(() => useAdapterConfigActions(), { wrapper })
+
+      await act(async () => {
+        try {
+          await result.current.updateConfig('greenhouse', {
+            scan_interval_minutes: 720,
+            inter_company_delay_s: 5,
+          })
+        } catch {
+          // expected
+        }
+      })
+
+      // After rollback the factory key should still hold the original data
+      const cached = qc.getQueryData<AdapterConfig[]>(settingsQueryKeys.adapterConfigs())
+      expect(cached?.find((c) => c.adapter_type === 'greenhouse')?.scan_interval_minutes).toBe(1440)
+    })
+  })
+
   // ── multiple adapters in cache ───────────────────────────────────────────────
 
   describe('multiple adapters in cache', () => {
@@ -268,7 +332,7 @@ describe('useAdapterConfigActions', () => {
         })
       })
 
-      const cached = qc.getQueryData<AdapterConfig[]>(['adapter-configs'])
+      const cached = qc.getQueryData<AdapterConfig[]>(settingsQueryKeys.adapterConfigs())
       expect(cached?.find((c) => c.adapter_type === 'greenhouse')?.scan_interval_minutes).toBe(360)
       // Lever config should be unchanged
       expect(cached?.find((c) => c.adapter_type === 'lever')?.scan_interval_minutes).toBe(720)
@@ -291,7 +355,7 @@ describe('useAdapterConfigActions', () => {
         }
       })
 
-      const cached = qc.getQueryData<AdapterConfig[]>(['adapter-configs'])
+      const cached = qc.getQueryData<AdapterConfig[]>(settingsQueryKeys.adapterConfigs())
       // Greenhouse rolled back
       expect(cached?.find((c) => c.adapter_type === 'greenhouse')?.scan_interval_minutes).toBe(1440)
       // Lever untouched

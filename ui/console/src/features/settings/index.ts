@@ -4,6 +4,7 @@ export { ScanIntervalOverrideModal } from './components/ScanIntervalOverrideModa
 export { useAdapterConfigs } from './hooks/useAdapterConfigs'
 export { useAdapterConfigActions } from './hooks/useAdapterConfigActions'
 export { useScanIntervalOverride } from './hooks/useScanIntervalOverride'
+export { settingsQueryKeys, scanIntervalOverrideMutationInvalidationRoots } from './queryKeys'
 export {
   getAdapterConfigs,
   updateAdapterConfig,

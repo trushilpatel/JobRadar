@@ -12,6 +12,7 @@
 interface JobsParams {
   job?: string
   tab?: string
+  since?: '24h' | '7d' | '30d' | 'all'
 }
 
 interface ResumeEditParams {

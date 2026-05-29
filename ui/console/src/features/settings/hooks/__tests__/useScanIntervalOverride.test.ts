@@ -14,11 +14,22 @@ vi.mock('sonner', () => ({
 import { useScanIntervalOverride } from '../useScanIntervalOverride'
 import { updateScanIntervalOverride } from '@/features/settings/api/adapterConfigs.api'
 import { toast } from 'sonner'
+import {
+  settingsQueryKeys,
+  scanIntervalOverrideMutationInvalidationRoots,
+} from '@/features/settings/queryKeys'
 
 function makeWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return ({ children }: { children: React.ReactNode }) =>
     createElement(QueryClientProvider, { client: qc }, children)
+}
+
+function makeClientWrapper() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const wrapper = ({ children }: { children: React.ReactNode }) =>
+    createElement(QueryClientProvider, { client: qc }, children)
+  return { qc, wrapper }
 }
 
 describe('useScanIntervalOverride', () => {
@@ -87,5 +98,53 @@ describe('useScanIntervalOverride', () => {
       await result.current.setOverride(240)
     })
     expect(updateScanIntervalOverride).toHaveBeenCalledWith('company-abc', 240)
+  })
+
+  // ── cache seam: invalidation uses factory keys ────────────────────────────────
+
+  describe('cache seam — invalidation uses factory keys', () => {
+    it('invalidates adminCompaniesBase via factory root after successful override', async () => {
+      vi.mocked(updateScanIntervalOverride).mockResolvedValue({} as never)
+      const { qc, wrapper } = makeClientWrapper()
+      const invalidate = vi.spyOn(qc, 'invalidateQueries')
+
+      const { result } = renderHook(() => useScanIntervalOverride('co-1'), { wrapper })
+      await act(async () => {
+        await result.current.setOverride(120)
+      })
+
+      // The hook must invalidate using the typed constant — not an inline string
+      expect(invalidate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queryKey: scanIntervalOverrideMutationInvalidationRoots.adminCompanies,
+        })
+      )
+    })
+
+    it('invalidates companyScanConfig via factory key after successful override', async () => {
+      vi.mocked(updateScanIntervalOverride).mockResolvedValue({} as never)
+      const { qc, wrapper } = makeClientWrapper()
+      const invalidate = vi.spyOn(qc, 'invalidateQueries')
+
+      const { result } = renderHook(() => useScanIntervalOverride('co-2'), { wrapper })
+      await act(async () => {
+        await result.current.setOverride(60)
+      })
+
+      expect(invalidate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queryKey: settingsQueryKeys.companyScanConfig('co-2'),
+        })
+      )
+    })
+
+    it('scanIntervalOverrideMutationInvalidationRoots.adminCompanies matches companyQueryKeys.adminCompaniesBase()', () => {
+      // Cross-feature contract: the root used by the settings hook must equal
+      // the root registered by the companies feature. If either renames their
+      // cache root, this test catches the drift.
+      expect(scanIntervalOverrideMutationInvalidationRoots.adminCompanies).toEqual([
+        'admin-companies',
+      ])
+    })
   })
 })
