@@ -46,16 +46,16 @@ Per page, audit 4 seam categories + enforce 1 typing gate:
 
 ## Status table
 
-| #   | Page              | Route              | Seams found                                           | Tests added                                         | `any` removed | PR  | Status        |
-| --- | ----------------- | ------------------ | ----------------------------------------------------- | --------------------------------------------------- | ------------- | --- | ------------- |
-| 1   | Jobs              | `/jobs`            | nav: company→jobs; cache: mutation invalidation roots | jobsUrl (3) + drawer guard (2) + cache seam (1) = 6 | 0             | —   | **In review** |
-| 2   | Companies (admin) | `/admin/companies` | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
-| 3   | Dashboard         | `/dashboard`       | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
-| 4   | Insights          | `/insights`        | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
-| 5   | Settings          | `/settings`        | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
-| 6   | Account           | `/account`         | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
-| 7   | Admin Users       | `/admin/users`     | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
-| 8   | Admin Audit       | `/admin/audit`     | tbd                                                   | tbd                                                 | tbd           | —   | Not started   |
+| #   | Page              | Route              | Seams found                                                       | Tests added                                         | `any` removed | PR  | Status        |
+| --- | ----------------- | ------------------ | ----------------------------------------------------------------- | --------------------------------------------------- | ------------- | --- | ------------- |
+| 1   | Jobs              | `/jobs`            | nav: company→jobs; cache: mutation invalidation roots             | jobsUrl (3) + drawer guard (2) + cache seam (1) = 6 | 0             | —   | **In review** |
+| 2   | Companies (admin) | `/admin/companies` | cache: mutation invalidation keys (adminCompaniesBase, scanQueue) | cache seam (4)                                      | 0             | —   | **In review** |
+| 3   | Dashboard         | `/dashboard`       | tbd                                                               | tbd                                                 | tbd           | —   | Not started   |
+| 4   | Insights          | `/insights`        | tbd                                                               | tbd                                                 | tbd           | —   | Not started   |
+| 5   | Settings          | `/settings`        | tbd                                                               | tbd                                                 | tbd           | —   | Not started   |
+| 6   | Account           | `/account`         | tbd                                                               | tbd                                                 | tbd           | —   | Not started   |
+| 7   | Admin Users       | `/admin/users`     | tbd                                                               | tbd                                                 | tbd           | —   | Not started   |
+| 8   | Admin Audit       | `/admin/audit`     | tbd                                                               | tbd                                                 | tbd           | —   | Not started   |
 
 Status values: `Not started` · `In progress` · `In review` (PR open) · `Done` (PR merged).
 
@@ -80,9 +80,15 @@ Status values: `Not started` · `In progress` · `In review` (PR open) · `Done`
 - **API contracts:** Phase 0.5 zod schemas cover all `jobs.api.ts` boundaries; `normalizeJob` tested via fixture in `jobsApi.test.ts`.
 - **Typing:** zero `any` in `features/jobs/` and `pages/JobsPage.tsx` (verified by grep).
 
-### 2. Companies (admin) (`/admin/companies`) — Not started
+### 2. Companies (admin) (`/admin/companies`) — In review
 
-_To fill during the page's run._
+**Seams audited (2026-05-29):**
+
+- **Nav:** `handleViewJobs` in `CompaniesPage` already uses `jobsUrl()` via `onViewJobs` prop — tested in Jobs PR. No gap.
+- **Shared-state:** `useCompanies` uses local `useState` (cursor, limit, filters) — intentional, admin list state is not URL-persistent. No shared-state seam.
+- **Cache:** `useCompanyActions` mutations already use `companyQueryKeys.adminCompaniesBase()` and `companyQueryKeys.scanQueue()` factory keys — correct pattern. Added 4 cache seam tests: `toggleActive`, `remove`, `scan`, `scanAll` each assert the exact factory keys are invalidated.
+- **API contracts:** Phase 0.5 zod schemas cover `adminCompanies.api.ts` + `companies.api.ts`. No gap.
+- **Typing:** zero `any` in companies slice (verified by grep).
 
 ### 3. Dashboard (`/dashboard`) — Not started
 
