@@ -26,7 +26,7 @@ Current slots file: [`k8s/helm/jobradar/files/llm-slots.yaml`](../../../k8s/helm
 ```go
 cfg := config.Load()
 cfg.DB.DSN()               // formatted PostgreSQL DSN
-cfg.Kafka.Brokers          // string
+cfg.NATS.URL               // string
 cfg.Filter.BatchSize       // int
 cfg.Enricher.MaxExpYears   // int (DISCARD_JOB_WITH_EXP_GT)
 ```

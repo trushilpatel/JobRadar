@@ -132,7 +132,7 @@ type parsedJob struct {
 }
 
 // FetchJobs walks every listing page (paginating via &page=N), parses listing
-// cards, and publishes thin items to Kafka. Detail-page fetching and LLM
+// cards, and publishes thin items to NATS JetStream. Detail-page fetching and LLM
 // enrichment are handled downstream by the analyzer.
 //
 // Pacing:

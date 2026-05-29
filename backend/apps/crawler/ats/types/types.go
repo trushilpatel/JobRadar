@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// RawJob is the Kafka message published to job_listings.raw.
+// RawJob is the NATS JetStream message published to jobs.raw.<adapter>.
 // Set by the scan engine after FetchJobs returns — never by the adapter itself.
 type RawJob struct {
 	ID            string          `json:"id"`         // e.g. "greenhouse-12345"
@@ -24,7 +24,7 @@ type RawJob struct {
 }
 
 // FetchJobsItem is one job from a company's listing page.
-// Minimal — only what's needed to dedup and publish to Kafka.
+// Minimal — only what's needed to dedup and publish to NATS JetStream.
 type FetchJobsItem struct {
 	ID             string
 	Title          string
@@ -90,7 +90,7 @@ type URLProvider interface {
 // StreamPublisher is an optional interface for adapters that can publish jobs
 // incrementally instead of returning everything at once. The engine calls
 // SetStreamPublish before FetchJobs with a function that immediately publishes
-// a batch of jobs to Kafka. The adapter calls it after each page is scraped so
+// a batch of jobs to NATS JetStream. The adapter calls it after each page is scraped so
 // jobs enter the pipeline without waiting for the full scan to complete.
 type StreamPublisher interface {
 	SetStreamPublish(fn func([]FetchJobsItem))

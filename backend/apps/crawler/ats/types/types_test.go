@@ -29,7 +29,7 @@ func TestStripHTML_RemovesTagsAndCollapses(t *testing.T) {
 
 // TestRawJob_FullContentOmitEmpty verifies that a RawJob with nil FullContent
 // does NOT include "full_content" in its JSON serialization.
-// This is critical for backward compatibility: existing Kafka consumers that
+// This is critical for backward compatibility: existing NATS JetStream consumers that
 // do not know about FullContent must not see a new field in the message.
 func TestRawJob_FullContentOmitEmpty(t *testing.T) {
 	job := RawJob{
