@@ -1,11 +1,11 @@
 import * as Select from '@radix-ui/react-select'
 import { ChevronDown, Check } from 'lucide-react'
-import { toast } from 'sonner'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchInterviews, updateApplicationStage } from '../api/dashboard.api'
+import { useQuery } from '@tanstack/react-query'
+import { fetchInterviews } from '../api/dashboard.api'
 import type { InterviewRow } from '@/types'
 import { cn } from '@/lib/utils/utils'
 import { dashboardQueryKeys } from '../queryKeys'
+import { useInterviewStage } from '../hooks/useInterviewStage'
 
 const STAGES = [
   {
@@ -92,7 +92,6 @@ function StageSelect({
 }
 
 export function InterviewingPanel() {
-  const queryClient = useQueryClient()
   const {
     data: rows,
     isLoading,
@@ -102,14 +101,7 @@ export function InterviewingPanel() {
     queryFn: fetchInterviews,
     refetchInterval: 30_000,
   })
-  const mutation = useMutation({
-    mutationFn: ({ id, stage }: { id: number; stage: string }) => updateApplicationStage(id, stage),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.interviews() })
-      queryClient.invalidateQueries({ queryKey: dashboardQueryKeys.progress() })
-    },
-    onError: () => toast.error('Failed to update stage'),
-  })
+  const mutation = useInterviewStage()
 
   return (
     <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-5">

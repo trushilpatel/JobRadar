@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { fetchMarket } from '../api/dashboard.api'
 import { dashboardQueryKeys } from '../queryKeys'
+import { routes } from '@/config/routes'
 import { StatCol } from './StatCol'
 
 export function MarketPanel() {
@@ -18,7 +19,7 @@ export function MarketPanel() {
       : `${data.weekly_delta} this week`
     : '—'
 
-  const handleNavClick = () => navigate('/jobs', { state: { dateFilter: '24h' } })
+  const handleNavClick = () => navigate(routes.jobs({ since: '24h' }))
   const handleNavKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
