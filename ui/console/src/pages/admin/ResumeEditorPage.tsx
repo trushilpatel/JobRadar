@@ -4,6 +4,7 @@ import { ChevronLeft, CheckCircle2, FileEdit } from 'lucide-react'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils/utils'
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { routes } from '@/config/routes'
 import {
   useResume,
@@ -101,23 +102,25 @@ export function ResumeEditorPage() {
       </div>
 
       {/* Body */}
-      <div
-        className={cn(
-          'flex-1 min-h-0 overflow-hidden p-4',
-          splitView ? 'grid grid-cols-1 lg:grid-cols-2 gap-4' : 'w-full'
-        )}
-      >
-        {activeVersion && (
-          <ResumeContentPane
-            content={activeVersion.content_text}
-            className="h-full"
-            onSave={() => {
-              /* mockup */
-            }}
-          />
-        )}
-        {splitView && job && <JobContextPanel job={job} />}
-      </div>
+      <ErrorBoundary>
+        <div
+          className={cn(
+            'flex-1 min-h-0 overflow-hidden p-4',
+            splitView ? 'grid grid-cols-1 lg:grid-cols-2 gap-4' : 'w-full'
+          )}
+        >
+          {activeVersion && (
+            <ResumeContentPane
+              content={activeVersion.content_text}
+              className="h-full"
+              onSave={() => {
+                /* mockup */
+              }}
+            />
+          )}
+          {splitView && job && <JobContextPanel job={job} />}
+        </div>
+      </ErrorBoundary>
     </div>
   )
 }

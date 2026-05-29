@@ -1,3 +1,4 @@
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import {
   PipelineFunnelPanel,
   RoleCategoryPanel,
@@ -20,14 +21,28 @@ export function InsightsPage() {
 
       <div className="flex-1 overflow-auto px-6 py-5 space-y-5">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <PipelineFunnelPanel />
-          <RoleCategoryPanel />
+          <ErrorBoundary>
+            <PipelineFunnelPanel />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <RoleCategoryPanel />
+          </ErrorBoundary>
         </div>
-        <CompanyVelocityPanel />
-        <LocationPanel />
-        <SponsorshipTrendPanel />
-        <TechStackPanel />
-        <CompanyActivityPanel />
+        <ErrorBoundary>
+          <CompanyVelocityPanel />
+        </ErrorBoundary>
+        <ErrorBoundary>
+          <LocationPanel />
+        </ErrorBoundary>
+        <ErrorBoundary>
+          <SponsorshipTrendPanel />
+        </ErrorBoundary>
+        <ErrorBoundary>
+          <TechStackPanel />
+        </ErrorBoundary>
+        <ErrorBoundary>
+          <CompanyActivityPanel />
+        </ErrorBoundary>
       </div>
     </div>
   )

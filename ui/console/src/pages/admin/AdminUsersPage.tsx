@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Shield, ShieldOff, Trash2 } from 'lucide-react'
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { cn } from '@/lib/utils/utils'
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 import { Pagination } from '@/components/ui/pagination'
@@ -278,34 +279,36 @@ export function AdminUsersPage() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
-            Loading…
-          </div>
-        ) : users.length === 0 ? (
-          <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
-            No users found.
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/[0.07] text-xs text-slate-500 text-left">
-                <th className="px-4 py-2 font-medium">Email</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Roles</th>
-                <th className="px-4 py-2 font-medium">Joined</th>
-                <th className="px-4 py-2 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <UserRow key={u.id} user={u} selfId={selfId} />
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <ErrorBoundary>
+        <div className="flex-1 overflow-auto">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
+              Loading…
+            </div>
+          ) : users.length === 0 ? (
+            <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
+              No users found.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/[0.07] text-xs text-slate-500 text-left">
+                  <th className="px-4 py-2 font-medium">Email</th>
+                  <th className="px-4 py-2 font-medium">Status</th>
+                  <th className="px-4 py-2 font-medium">Roles</th>
+                  <th className="px-4 py-2 font-medium">Joined</th>
+                  <th className="px-4 py-2 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <UserRow key={u.id} user={u} selfId={selfId} />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </ErrorBoundary>
 
       <div className="border-t border-white/[0.07] shrink-0">
         <Pagination

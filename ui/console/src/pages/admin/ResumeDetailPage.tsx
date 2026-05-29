@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft, Edit3, Archive, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { routes } from '@/config/routes'
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import {
   useResume,
   ResumeMetadataPanel,
@@ -73,65 +74,71 @@ export function ResumeDetailPage() {
         </div>
 
         {/* Top row: metadata (2/3) + storage info (1/3) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-          <div className="lg:col-span-2">
-            <ResumeMetadataPanel resume={resume} />
-          </div>
-          <div className="rounded-xl border border-white/[0.06] bg-[#141420] p-5">
-            <div className="text-[11px] text-slate-500 uppercase tracking-wide mb-2">Storage</div>
-            <div className="text-xs text-slate-300 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Active version</span>
-                <span className="text-white tabular-nums">v{activeVersion?.version_number}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Format</span>
-                <span className="text-white uppercase">{activeVersion?.file_format}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Path</span>
-                <code className="text-[10px] text-slate-300 bg-black/30 px-1.5 py-0.5 rounded truncate max-w-[180px]">
-                  {activeVersion?.file_path ?? '—'}
-                </code>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Versions kept</span>
-                <span className="text-white tabular-nums">{versions.length} / 20</span>
+        <ErrorBoundary>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            <div className="lg:col-span-2">
+              <ResumeMetadataPanel resume={resume} />
+            </div>
+            <div className="rounded-xl border border-white/[0.06] bg-[#141420] p-5">
+              <div className="text-[11px] text-slate-500 uppercase tracking-wide mb-2">Storage</div>
+              <div className="text-xs text-slate-300 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Active version</span>
+                  <span className="text-white tabular-nums">v{activeVersion?.version_number}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Format</span>
+                  <span className="text-white uppercase">{activeVersion?.file_format}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Path</span>
+                  <code className="text-[10px] text-slate-300 bg-black/30 px-1.5 py-0.5 rounded truncate max-w-[180px]">
+                    {activeVersion?.file_path ?? '—'}
+                  </code>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Versions kept</span>
+                  <span className="text-white tabular-nums">{versions.length} / 20</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </ErrorBoundary>
 
         {/* Main: content (2/3) + versions (1/3) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-          <div className="lg:col-span-2 min-w-0">
-            {activeVersion ? (
-              <ResumeContentPane content={activeVersion.content_text} readOnly />
-            ) : (
-              <div className="text-sm text-slate-400">No version selected.</div>
-            )}
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-white">Version history</h3>
-              <span className="text-[10px] text-slate-500">{versions.length} total</span>
+        <ErrorBoundary>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            <div className="lg:col-span-2 min-w-0">
+              {activeVersion ? (
+                <ResumeContentPane content={activeVersion.content_text} readOnly />
+              ) : (
+                <div className="text-sm text-slate-400">No version selected.</div>
+              )}
             </div>
-            <ResumeVersionList
-              versions={versions}
-              activeId={resume.active_version_id}
-              selectedId={activeVersionId}
-              onSelect={setSelectedVersionId}
-            />
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-white">Version history</h3>
+                <span className="text-[10px] text-slate-500">{versions.length} total</span>
+              </div>
+              <ResumeVersionList
+                versions={versions}
+                activeId={resume.active_version_id}
+                selectedId={activeVersionId}
+                onSelect={setSelectedVersionId}
+              />
+            </div>
           </div>
-        </div>
+        </ErrorBoundary>
 
         {/* Attached jobs */}
-        <div>
-          <h3 className="text-sm font-semibold text-white mb-3">
-            Attached jobs ({attachments.length})
-          </h3>
-          <AttachedJobsList resumeId={resume.id} attachments={attachments} />
-        </div>
+        <ErrorBoundary>
+          <div>
+            <h3 className="text-sm font-semibold text-white mb-3">
+              Attached jobs ({attachments.length})
+            </h3>
+            <AttachedJobsList resumeId={resume.id} attachments={attachments} />
+          </div>
+        </ErrorBoundary>
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { Keyboard } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { Job, JobStatus } from '@/types'
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { ResizeHandle } from '@/components/ui/resize-handle'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { TabKey } from '@/config/constants/jobStatus'
@@ -310,67 +311,69 @@ export function JobsPage() {
       />
 
       {/* Content: table + always-open detail panel */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div ref={tableScrollRef} className="flex flex-1 min-w-0 overflow-hidden">
-          <JobsTable
-            jobs={visibleJobs}
-            loading={jobs.isLoading || jobs.isFetchingNextPage}
-            isError={jobs.isError}
-            onRetry={() => void jobs.refetch()}
-            tab={jobs.tab}
-            page={jobs.page}
-            limit={jobs.limit}
-            itemsOnPage={jobs.itemsOnPage}
-            itemsBeforePage={jobs.itemsBeforePage}
-            hasNextPage={jobs.hasNextPage}
-            hasPrevPage={jobs.hasPrevPage}
-            knownTotal={activeFilterCount === 0 ? jobs.counts[jobs.tab as TabKey] : undefined}
-            hasActiveFilters={activeFilterCount > 0}
-            activeJobId={jobs.openJobId ?? null}
-            focusedIndex={focus.focusedIndex}
-            onRowClick={(job) => {
-              focus.setFocusedJobId(job.id)
-              if (isMobile) {
-                navigate(`/jobs/${job.id}`)
-              } else {
-                setPanelClosedByUser(false)
-                jobs.setOpenJobId(job.id)
-              }
-            }}
-            onToggleSave={handleToggleSave}
-            onDismiss={handleDismiss}
-            getAttachmentState={(jobId) => getMockAttachmentForJob(jobId)?.state ?? null}
-            onNextPage={jobs.goToNextPage}
-            onPrevPage={jobs.goToPrevPage}
-            onFirstPage={jobs.goToFirstPage}
-            onLimitChange={jobs.setLimit}
-            sorting={jobs.sorting}
-            onSortingChange={jobs.handleSortingChange}
-          />
-        </div>
+      <ErrorBoundary>
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          <div ref={tableScrollRef} className="flex flex-1 min-w-0 overflow-hidden">
+            <JobsTable
+              jobs={visibleJobs}
+              loading={jobs.isLoading || jobs.isFetchingNextPage}
+              isError={jobs.isError}
+              onRetry={() => void jobs.refetch()}
+              tab={jobs.tab}
+              page={jobs.page}
+              limit={jobs.limit}
+              itemsOnPage={jobs.itemsOnPage}
+              itemsBeforePage={jobs.itemsBeforePage}
+              hasNextPage={jobs.hasNextPage}
+              hasPrevPage={jobs.hasPrevPage}
+              knownTotal={activeFilterCount === 0 ? jobs.counts[jobs.tab as TabKey] : undefined}
+              hasActiveFilters={activeFilterCount > 0}
+              activeJobId={jobs.openJobId ?? null}
+              focusedIndex={focus.focusedIndex}
+              onRowClick={(job) => {
+                focus.setFocusedJobId(job.id)
+                if (isMobile) {
+                  navigate(`/jobs/${job.id}`)
+                } else {
+                  setPanelClosedByUser(false)
+                  jobs.setOpenJobId(job.id)
+                }
+              }}
+              onToggleSave={handleToggleSave}
+              onDismiss={handleDismiss}
+              getAttachmentState={(jobId) => getMockAttachmentForJob(jobId)?.state ?? null}
+              onNextPage={jobs.goToNextPage}
+              onPrevPage={jobs.goToPrevPage}
+              onFirstPage={jobs.goToFirstPage}
+              onLimitChange={jobs.setLimit}
+              sorting={jobs.sorting}
+              onSortingChange={jobs.handleSortingChange}
+            />
+          </div>
 
-        {!isMobile && openJob && !panelClosedByUser && (
-          <>
-            <ResizeHandle width={panelWidth} onChange={setPanelWidth} min={300} max={720} />
-            <div
-              style={{ '--panel-width': `${panelWidth}px` } as CSSProperties}
-              className="shrink-0 flex flex-col min-h-0 border-l border-white/[0.07] overflow-hidden [width:var(--panel-width)]"
-            >
-              <JobDetailPanel
-                job={openJob}
-                onClose={() => {
-                  setPanelClosedByUser(true)
-                  jobs.setOpenJobId(null)
-                }}
-                onStatusChange={handleStatusChange}
-                onToggleSave={handleToggleSave}
-                onDismiss={handleDismiss}
-                resumeSection={<JobResumeSection jobId={openJob.id} />}
-              />
-            </div>
-          </>
-        )}
-      </div>
+          {!isMobile && openJob && !panelClosedByUser && (
+            <>
+              <ResizeHandle width={panelWidth} onChange={setPanelWidth} min={300} max={720} />
+              <div
+                style={{ '--panel-width': `${panelWidth}px` } as CSSProperties}
+                className="shrink-0 flex flex-col min-h-0 border-l border-white/[0.07] overflow-hidden [width:var(--panel-width)]"
+              >
+                <JobDetailPanel
+                  job={openJob}
+                  onClose={() => {
+                    setPanelClosedByUser(true)
+                    jobs.setOpenJobId(null)
+                  }}
+                  onStatusChange={handleStatusChange}
+                  onToggleSave={handleToggleSave}
+                  onDismiss={handleDismiss}
+                  resumeSection={<JobResumeSection jobId={openJob.id} />}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </ErrorBoundary>
 
       <JobCommandPalette
         open={paletteOpen}
