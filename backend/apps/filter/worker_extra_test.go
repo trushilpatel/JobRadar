@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -17,6 +18,7 @@ import (
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
@@ -730,5 +732,200 @@ func TestFilter_CrawlerRaceScenario_NoPhantomRow(t *testing.T) {
 	}
 	if got.Reason != jobcommon.SeenReasonFiltered {
 		t.Errorf("after replay, reason = %q, want filtered", got.Reason)
+	}
+}
+
+// ── mergedLocations tests ────────────────────────────────────────────────────
+
+func TestMergedLocations(t *testing.T) {
+	tests := []struct {
+		name     string
+		job      ats.RawJob
+		wantLen  int
+		wantNil  bool
+		contains string // non-empty: assert result[0] == this value
+	}{
+		{
+			name: "AllLocations populated — returned directly",
+			job: ats.RawJob{
+				Location:     "New York, NY",
+				AllLocations: []string{"New York, NY", "London, UK"},
+			},
+			wantLen:  2,
+			contains: "New York, NY",
+		},
+		{
+			name: "AllLocations nil, Location set — wrapped in single-element slice",
+			job: ats.RawJob{
+				Location:     "San Francisco, CA",
+				AllLocations: nil,
+			},
+			wantLen:  1,
+			contains: "San Francisco, CA",
+		},
+		{
+			name: "AllLocations empty slice, Location set — wrapped in single-element slice",
+			job: ats.RawJob{
+				Location:     "Austin, TX",
+				AllLocations: []string{},
+			},
+			wantLen:  1,
+			contains: "Austin, TX",
+		},
+		{
+			name:    "Both AllLocations and Location empty — returns nil",
+			job:     ats.RawJob{},
+			wantNil: true,
+		},
+		{
+			name: "AllLocations populated, Location also set — AllLocations takes precedence",
+			job: ats.RawJob{
+				Location:     "Remote",
+				AllLocations: []string{"Boston, MA"},
+			},
+			wantLen:  1,
+			contains: "Boston, MA",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mergedLocations(tc.job)
+			if tc.wantNil {
+				if got != nil {
+					t.Errorf("expected nil, got %v", got)
+				}
+				return
+			}
+			if len(got) != tc.wantLen {
+				t.Errorf("expected len=%d, got len=%d (%v)", tc.wantLen, len(got), got)
+				return
+			}
+			if tc.contains != "" && got[0] != tc.contains {
+				t.Errorf("expected got[0]=%q, got %q", tc.contains, got[0])
+			}
+		})
+	}
+}
+
+// ── observability metric tests for ledger failure paths ──────────────────────
+
+// TestProcessChunk_DLQLedgerFailure_IncrementsCommitFailures verifies that when
+// UpdateSeenReasonBatch for DLQ'd jobs returns an error, FilterCommitFailuresTotal
+// increments (P1 alertability requirement).
+func TestProcessChunk_DLQLedgerFailure_IncrementsCommitFailures(t *testing.T) {
+	scorer := &fakeScorer{err: context.DeadlineExceeded}
+	ledger := &fakeLedger{
+		seenErrForReason: map[string]error{
+			jobcommon.SeenReasonError: errors.New("db write failed"),
+		},
+	}
+	pub := &fakePublisher{}
+
+	w := makeWorker(scorer, ledger, pub)
+	before := promtestutil.ToFloat64(metrics.FilterCommitFailuresTotal)
+
+	// Exhaust the retry budget so the job goes straight to DLQ ledger write.
+	_ = w.processChunk(context.Background(),
+		makeBatchWithRetryCount(filterMaxRetries, makeJob("dlq-ledger-fail")),
+		"fetch-dlq-ledger", 0, 1,
+	)
+
+	after := promtestutil.ToFloat64(metrics.FilterCommitFailuresTotal)
+	if after-before != 1 {
+		t.Errorf("expected FilterCommitFailuresTotal +1 on DLQ ledger failure, got +%v", after-before)
+	}
+}
+
+// TestProcessChunk_RetryBatchLedgerFailure_IncrementsCommitFailures verifies that
+// when UpdateRetryBatch returns an error, FilterCommitFailuresTotal increments.
+func TestProcessChunk_RetryBatchLedgerFailure_IncrementsCommitFailures(t *testing.T) {
+	scorer := &fakeScorer{err: context.DeadlineExceeded}
+	ledger := &fakeLedger{retryErr: errors.New("db retry write failed")}
+	pub := &fakePublisher{}
+
+	w := makeWorker(scorer, ledger, pub)
+	before := promtestutil.ToFloat64(metrics.FilterCommitFailuresTotal)
+
+	// retryCount=0 so the job goes to UpdateRetryBatch (not DLQ).
+	item, state := makeChunkItem(makeJob("retry-ledger-fail"), 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-retry-ledger", 0, 1)
+
+	after := promtestutil.ToFloat64(metrics.FilterCommitFailuresTotal)
+	if after-before != 1 {
+		t.Errorf("expected FilterCommitFailuresTotal +1 on UpdateRetryBatch failure, got +%v", after-before)
+	}
+	// Message is still Nak'd (NATS redelivers) even when ledger write fails.
+	if !state.Naked {
+		t.Errorf("expected job Nak'd even when UpdateRetryBatch fails")
+	}
+}
+
+// TestProcessChunk_NonUSA_LedgerError_NaksNotAcks verifies Task 1 fix:
+// when UpdateSeenReasonBatch for non-USA items fails, messages are Nak'd
+// (not Acked as the old inline code did).
+func TestProcessChunk_NonUSA_LedgerError_NaksNotAcks(t *testing.T) {
+	scorer := &fakeScorer{}
+	ledger := &fakeLedger{
+		seenErrForReason: map[string]error{
+			jobcommon.SeenReasonNonUSA: errors.New("db down"),
+		},
+	}
+	pub := &fakePublisher{}
+
+	w := makeWorker(scorer, ledger, pub)
+
+	item, state := makeChunkItem(ats.RawJob{
+		ID:            "uk-fail",
+		Title:         "SWE",
+		Location:      "London, UK",
+		LocationKnown: true,
+		AllLocations:  []string{"London, UK"},
+	}, 1)
+
+	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-nonusa-err", 0, 1)
+
+	if state.Acked {
+		t.Errorf("non-USA item must NOT be Acked when ledger write fails (phantom fetch bug)")
+	}
+	if !state.Naked {
+		t.Errorf("non-USA item must be Nak'd when ledger write fails so NATS redelivers")
+	}
+}
+
+// TestProcessChunk_NonUSA_LedgerRowMissing_NaksAndIncrementsMissing verifies that
+// ErrLedgerRowMissing on the non-USA path increments filter_ledger_missing_total
+// and Naks (not Acks) the affected messages.
+func TestProcessChunk_NonUSA_LedgerRowMissing_NaksAndIncrementsMissing(t *testing.T) {
+	scorer := &fakeScorer{}
+	ledger := &fakeLedger{
+		seenErrForReason: map[string]error{
+			jobcommon.SeenReasonNonUSA: domainerr.ErrLedgerRowMissing.WithMessage("race"),
+		},
+	}
+	pub := &fakePublisher{}
+
+	w := makeWorker(scorer, ledger, pub)
+	before := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(jobcommon.SeenReasonNonUSA))
+
+	item, state := makeChunkItem(ats.RawJob{
+		ID:            "uk-missing",
+		Title:         "SWE",
+		Location:      "London, UK",
+		LocationKnown: true,
+		AllLocations:  []string{"London, UK"},
+	}, 1)
+
+	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-nonusa-missing", 0, 1)
+
+	after := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(jobcommon.SeenReasonNonUSA))
+	if after-before != 1 {
+		t.Errorf("expected filter_ledger_missing_total{non_usa_location} +1, got +%v", after-before)
+	}
+	if state.Acked {
+		t.Errorf("must NOT Ack when ledger row missing")
+	}
+	if !state.Naked {
+		t.Errorf("must Nak when ledger row missing")
 	}
 }

@@ -334,22 +334,10 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 	}
 
 	if len(nonUSAItems) > 0 {
-		ids := make([]string, len(nonUSAItems))
-		for i, it := range nonUSAItems {
-			ids[i] = it.job.job.ID
-		}
-		if err := w.ledger.UpdateSeenReasonBatch(ctx, ids, jobcommon.SeenReasonNonUSA); err != nil {
-			w.log.Error("mark non_usa_location batch failed", err,
-				logger.Str(logger.FieldFetchID, fetchID),
-				logger.Int(logger.FieldChunkIndex, chunkIndex),
-			)
-		}
+		// markSeenOrNak handles ledger write + Ack-on-success / Nak-on-error,
+		// preventing the bug where a ledger failure still Acked the messages.
+		w.markSeenOrNak(ctx, nonUSAItems, jobcommon.SeenReasonNonUSA, fetchID, chunkIndex)
 		metrics.FilterJobsTotal.WithLabelValues("non_usa").Add(float64(len(nonUSAItems)))
-		for _, it := range nonUSAItems {
-			if aerr := it.msg.Ack(); aerr != nil {
-				w.log.Warn("msg ack failed", logger.Err(aerr))
-			}
-		}
 		w.log.Info("chunk non-USA rejected",
 			logger.Str(logger.FieldFetchID, fetchID),
 			logger.Int(logger.FieldChunkIndex, chunkIndex),
@@ -427,6 +415,7 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 					logger.Str(logger.FieldFetchID, fetchID),
 					logger.Int(logger.FieldChunkIndex, chunkIndex),
 				)
+				metrics.FilterCommitFailuresTotal.Inc()
 			}
 			metrics.FilterJobsTotal.WithLabelValues("error").Add(float64(len(outcome.DLQed)))
 
@@ -444,6 +433,7 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 					logger.Int(logger.FieldChunkIndex, chunkIndex),
 					logger.Int(logger.FieldEntriesCount, len(outcome.Retried)),
 				)
+				metrics.FilterCommitFailuresTotal.Inc()
 			}
 		}
 
