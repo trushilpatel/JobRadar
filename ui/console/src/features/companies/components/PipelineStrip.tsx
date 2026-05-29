@@ -29,7 +29,9 @@ function Stage({
         )}
       >
         {label.split(' ').map((word, i) => (
-          <span key={i} className="block">{word}</span>
+          <span key={i} className="block">
+            {word}
+          </span>
         ))}
       </span>
     </div>
@@ -43,7 +45,7 @@ function Arrow() {
 function Skeleton() {
   return (
     <div className="flex items-center gap-2 animate-pulse">
-      {[...Array(9)].map((_, i) => (
+      {Array.from({ length: 9 }, (_, i) => (
         <div key={i} className="flex items-center gap-1">
           <div className="w-14 h-8 bg-white/[0.04] rounded" />
           {i < 8 && <div className="w-4 h-3 bg-white/[0.02] rounded" />}

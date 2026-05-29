@@ -119,7 +119,7 @@ export function InterviewingPanel() {
 
       {isLoading ? (
         <div className="space-y-3 animate-pulse">
-          {[...Array(3)].map((_, i) => (
+          {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="h-10 bg-white/[0.04] rounded-lg" />
           ))}
         </div>

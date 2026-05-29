@@ -43,7 +43,7 @@ describe('adapterConfigs API', () => {
       vi.mocked(apiClient.get).mockResolvedValue([mockAdapterConfig])
       const result = await getAdapterConfigs()
       expect(result).toHaveLength(1)
-      expect(result[0].adapter_type).toBe('greenhouse')
+      expect(result[0]?.adapter_type).toBe('greenhouse')
     })
 
     it('normalizes null response to empty array', async () => {
@@ -79,7 +79,7 @@ describe('adapterConfigs API', () => {
         scan_interval_minutes: 1440,
         inter_company_delay_s: 0,
       })
-      const [url] = vi.mocked(apiClient.patch).mock.calls[0]
+      const [url] = vi.mocked(apiClient.patch).mock.calls[0]!
       expect(url).toContain('my%20adapter')
     })
 
@@ -125,7 +125,7 @@ describe('adapterConfigs API', () => {
     it('URL-encodes the company id', async () => {
       vi.mocked(apiClient.patch).mockResolvedValue(undefined)
       await updateScanIntervalOverride('my company', 1440)
-      const [url] = vi.mocked(apiClient.patch).mock.calls[0]
+      const [url] = vi.mocked(apiClient.patch).mock.calls[0]!
       expect(url).toContain('my%20company')
     })
 
@@ -147,7 +147,7 @@ describe('adapterConfigs API', () => {
     it('URL-encodes the company id', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(mockEffectiveScanConfig)
       await getCompanyScanConfig('my company')
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('my%20company')
     })
 

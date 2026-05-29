@@ -60,7 +60,7 @@ export function VelocityPanel() {
 
       {isLoading ? (
         <div className="space-y-3 mt-2 animate-pulse">
-          {[...Array(5)].map((_, i) => (
+          {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-8 bg-white/[0.04] rounded-lg" />
           ))}
         </div>

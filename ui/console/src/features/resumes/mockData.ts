@@ -482,29 +482,30 @@ export function lifecycleStatusFor(jobId: string): JobLifecycleStatus | undefine
 export function buildApplyQueue(): ApplyQueueItem[] {
   const allAttachments = [...MOCK_ATTACHMENTS, ...EXTRA_ATTACHMENTS]
 
-  const attached: ApplyQueueItem[] = allAttachments.map((att) => {
-    const resume = MOCK_RESUMES.find((r) => r.id === att.resume_id)!
+  const attached: ApplyQueueItem[] = allAttachments.flatMap((att) => {
+    const resume = MOCK_RESUMES.find((r) => r.id === att.resume_id)
+    const job = MOCK_JOBS[att.job_id]
+    if (!resume || !job) return []
     const versions = MOCK_VERSIONS[att.resume_id] ?? []
     const ver = versions.find((v) => v.id === att.version_id)
-    return {
-      attachment: att,
-      job: MOCK_JOBS[att.job_id],
-      resume: {
-        id: resume.id,
-        name: resume.name,
-        version_number: ver?.version_number ?? 1,
+    return [
+      {
+        attachment: att,
+        job,
+        resume: {
+          id: resume.id,
+          name: resume.name,
+          version_number: ver?.version_number ?? 1,
+        },
       },
-    }
+    ]
   })
 
-  const unattachedSaved: ApplyQueueItem[] = MOCK_UNATTACHED_JOB_IDS.filter((id) => {
+  const unattachedSaved: ApplyQueueItem[] = MOCK_UNATTACHED_JOB_IDS.flatMap((id) => {
     const job = MOCK_JOBS[id]
-    return job && job.lifecycle_status === 'saved'
-  }).map((id) => ({
-    attachment: null,
-    job: MOCK_JOBS[id],
-    resume: null,
-  }))
+    if (!job || job.lifecycle_status !== 'saved') return []
+    return [{ attachment: null, job, resume: null }]
+  })
 
   return [...attached, ...unattachedSaved]
 }

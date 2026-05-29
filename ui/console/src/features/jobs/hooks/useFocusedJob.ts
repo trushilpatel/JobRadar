@@ -55,7 +55,7 @@ export function useFocusedJob(jobs: Job[], options?: UseFocusedJobOptions): UseF
   if (prevHadJobs !== currentlyHasJobs) {
     setPrevHadJobs(currentlyHasJobs)
     if (currentlyHasJobs && focusedJobId === null) {
-      setFocusedJobId(jobs[0].id)
+      setFocusedJobId(jobs[0]?.id ?? null)
     } else if (!currentlyHasJobs && focusedJobId !== null) {
       setFocusedJobId(null)
     }
@@ -91,7 +91,7 @@ export function useFocusedJob(jobs: Job[], options?: UseFocusedJobOptions): UseF
     setFocusedJobId((prev) => {
       const curIdx = prev ? jobs.findIndex((j) => j.id === prev) : -1
       const nextIdx = Math.min(curIdx + 1, jobs.length - 1)
-      return jobs[nextIdx].id
+      return jobs[nextIdx]?.id ?? prev
     })
   }, [jobs])
 
@@ -100,18 +100,18 @@ export function useFocusedJob(jobs: Job[], options?: UseFocusedJobOptions): UseF
     setFocusedJobId((prev) => {
       const curIdx = prev ? jobs.findIndex((j) => j.id === prev) : 0
       const prevIdx = Math.max(curIdx - 1, 0)
-      return jobs[prevIdx].id
+      return jobs[prevIdx]?.id ?? prev
     })
   }, [jobs])
 
   const focusFirst = useCallback(() => {
     if (jobs.length === 0) return
-    setFocusedJobId(jobs[0].id)
+    setFocusedJobId(jobs[0]?.id ?? null)
   }, [jobs])
 
   const focusLast = useCallback(() => {
     if (jobs.length === 0) return
-    setFocusedJobId(jobs[jobs.length - 1].id)
+    setFocusedJobId(jobs[jobs.length - 1]?.id ?? null)
   }, [jobs])
 
   const setFocusedJobIdSafe = useCallback(

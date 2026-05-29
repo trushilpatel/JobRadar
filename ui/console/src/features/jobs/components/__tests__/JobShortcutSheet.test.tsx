@@ -45,7 +45,7 @@ describe('JobShortcutSheet', () => {
     // Sheet's built-in close button has aria-label "Close" via shadcn
     const closeButtons = screen.queryAllByRole('button', { name: /close/i })
     if (closeButtons.length > 0) {
-      closeButtons[0].click()
+      closeButtons[0]?.click()
       expect(onOpenChange).toHaveBeenCalledWith(false)
     } else {
       // Some shadcn sheet versions don't expose a visible close button via role;

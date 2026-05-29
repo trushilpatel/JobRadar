@@ -52,8 +52,8 @@ describe('useAdapterConfigs', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(result.current.data).toHaveLength(2)
-    expect(result.current.data?.[0].adapter_type).toBe('greenhouse')
-    expect(result.current.data?.[1].inter_company_delay_s).toBe(30)
+    expect(result.current.data?.[0]?.adapter_type).toBe('greenhouse')
+    expect(result.current.data?.[1]?.inter_company_delay_s).toBe(30)
   })
 
   it('returns correct shape with all required fields', async () => {

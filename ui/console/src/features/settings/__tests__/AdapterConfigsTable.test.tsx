@@ -151,7 +151,7 @@ describe('AdapterConfigsTable', () => {
 
     // Click the first editable cell (greenhouse scan interval value)
     const editButtons = screen.getAllByTitle('Click to edit')
-    fireEvent.click(editButtons[0])
+    fireEvent.click(editButtons[0]!)
 
     // Change the value and press Enter
     const input = screen.getByRole('spinbutton')
@@ -175,7 +175,7 @@ describe('AdapterConfigsTable', () => {
 
     // Open modal
     const editButtons = screen.getAllByTitle('Click to edit')
-    fireEvent.click(editButtons[0])
+    fireEvent.click(editButtons[0]!)
     const input = screen.getByRole('spinbutton')
     fireEvent.change(input, { target: { value: '720' } })
     fireEvent.keyDown(input, { key: 'Enter' })
@@ -205,7 +205,7 @@ describe('AdapterConfigsTable', () => {
 
     // Open modal by editing the scan interval cell for greenhouse
     const editButtons = screen.getAllByTitle('Click to edit')
-    fireEvent.click(editButtons[0])
+    fireEvent.click(editButtons[0]!)
     const input = screen.getByRole('spinbutton')
     fireEvent.change(input, { target: { value: '720' } })
     fireEvent.keyDown(input, { key: 'Enter' })

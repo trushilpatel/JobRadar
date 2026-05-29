@@ -89,13 +89,15 @@ async function runWithLimit<T, R>(
   limit: number,
   fn: (item: T) => Promise<R>
 ): Promise<PromiseSettledResult<R>[]> {
-  const results: PromiseSettledResult<R>[] = new Array(items.length)
+  const results: PromiseSettledResult<R>[] = new Array<PromiseSettledResult<R>>(items.length)
   let cursor = 0
   async function worker() {
     while (cursor < items.length) {
       const i = cursor++
+      const item = items[i]
+      if (item === undefined) continue
       try {
-        const v = await fn(items[i])
+        const v = await fn(item)
         results[i] = { status: 'fulfilled', value: v }
       } catch (err) {
         results[i] = { status: 'rejected', reason: err }
@@ -396,7 +398,7 @@ export function useJobActions() {
     mutationFn: async (ids: string[]) => {
       const items = ids.map((id) => ({ id, priorSaved: lookupSaved(id) }))
       const results = await runWithLimit(ids, BULK_CONCURRENCY, (id) => setJobSaved(id, true))
-      const succeeded = items.filter((_, i) => results[i].status === 'fulfilled')
+      const succeeded = items.filter((_, i) => results[i]?.status === 'fulfilled')
       const failed = results.length - succeeded.length
       return { succeeded, failed, total: results.length }
     },
@@ -418,7 +420,7 @@ export function useJobActions() {
       const results = await runWithLimit(ids, BULK_CONCURRENCY, (id) =>
         setJobStatus(id, JOB_STATUS.APPLIED)
       )
-      const succeeded = items.filter((_, i) => results[i].status === 'fulfilled')
+      const succeeded = items.filter((_, i) => results[i]?.status === 'fulfilled')
       const failed = results.length - succeeded.length
       return { succeeded, failed, total: results.length }
     },

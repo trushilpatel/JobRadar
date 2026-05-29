@@ -75,7 +75,7 @@ export function Sidebar() {
   const isAdmin = useAuthStore((s) => s.isAdmin)
   const signOut = useAuthStore((s) => s.signOut)
   const email = session?.user?.email ?? ''
-  const initials = email ? email[0].toUpperCase() : '?'
+  const initials = email ? email[0]?.toUpperCase() : '?'
 
   return (
     <div

@@ -256,7 +256,7 @@ describe('VelocityPanel', () => {
 
   it('renders normal velocity tag as dash', async () => {
     vi.mocked(dashboardApi.fetchVelocity).mockResolvedValue([
-      { ...sampleRows[0], velocity_tag: 'normal', multiplier: 1 },
+      { ...sampleRows[0]!, velocity_tag: 'normal', multiplier: 1 },
     ])
     render(<VelocityPanel />, { wrapper: makeWrapper() })
     await waitFor(() => expect(screen.getByText('Acme')).toBeInTheDocument())
@@ -328,7 +328,7 @@ describe('TechTrendsPanel', () => {
   it('renders "New" label for is_new tech rows', async () => {
     vi.mocked(dashboardApi.fetchTechTrends).mockResolvedValue({
       ...sampleTrends,
-      rising: [{ ...sampleTrends.rising[0], is_new: true }],
+      rising: [{ ...sampleTrends.rising[0]!, is_new: true }],
     })
     render(<TechTrendsPanel />, { wrapper: makeWrapper() })
     await waitFor(() => expect(screen.getByText('New')).toBeInTheDocument())

@@ -74,7 +74,7 @@ describe('apiClient', () => {
 
     expect(result).toEqual({ hello: 'world' })
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    const init = fetchMock.mock.calls[0][1] as RequestInit
+    const init = fetchMock.mock.calls[0]![1] as RequestInit
     const headers = init.headers as Headers
     expect(headers.get('Authorization')).toBe('Bearer tok-123')
   })
@@ -198,7 +198,7 @@ describe('apiClient', () => {
 
     expect(refreshSession).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    const init = fetchMock.mock.calls[0][1] as RequestInit
+    const init = fetchMock.mock.calls[0]![1] as RequestInit
     expect((init.headers as Headers).get('Authorization')).toBe('Bearer valid-token')
   })
 
