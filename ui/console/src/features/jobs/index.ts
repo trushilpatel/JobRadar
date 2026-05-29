@@ -1,14 +1,26 @@
-export { useJobs } from '@/features/jobs/hooks/useJobs'
-export { useJobActions } from '@/features/jobs/hooks/useJobActions'
-export { useJobKeyboard } from '@/features/jobs/hooks/useJobKeyboard'
-export { useFocusedJob } from '@/features/jobs/hooks/useFocusedJob'
-export { useJobUrlState } from '@/features/jobs/hooks/useJobUrlState'
-export { JobsTable } from '@/features/jobs/components/JobsTable'
-export { JobDetailPanel } from '@/features/jobs/components/JobDetailPanel'
-export { JobFilters } from '@/features/jobs/components/JobFilters'
-export { JobStatusTabs } from '@/features/jobs/components/JobStatusTabs'
-export { JobCommandPalette } from '@/features/jobs/components/JobCommandPalette'
-export { JobShortcutSheet } from '@/features/jobs/components/JobShortcutSheet'
-export { MobileFilterDrawer } from '@/features/jobs/components/MobileFilterDrawer'
-export { MobileJobDetailRoute } from '@/features/jobs/components/MobileJobDetailRoute'
-export type { TabKey, DateFilter, LocationFilter } from '@/features/jobs/hooks/useJobs'
+export { useJobs } from './hooks/useJobs'
+export { useJobActions } from './hooks/useJobActions'
+export { useJobKeyboard } from './hooks/useJobKeyboard'
+export { useFocusedJob } from './hooks/useFocusedJob'
+export { useJobUrlState } from './hooks/useJobUrlState'
+export { JobsTable } from './components/JobsTable'
+export { JobDetailPanel } from './components/JobDetailPanel'
+export { JobFilters } from './components/JobFilters'
+export { JobStatusTabs } from './components/JobStatusTabs'
+export { JobCommandPalette } from './components/JobCommandPalette'
+export { JobShortcutSheet } from './components/JobShortcutSheet'
+export { MobileFilterDrawer } from './components/MobileFilterDrawer'
+export { MobileJobDetailRoute } from './components/MobileJobDetailRoute'
+export type { TabKey, DateFilter, LocationFilter } from './hooks/useJobs'
+export {
+  fetchJobs,
+  fetchJob,
+  fetchJobCounts,
+  fetchJobCompanies,
+  setJobStatus,
+  setJobSaved,
+  setJobNotes,
+  dismissJob,
+  bulkDismissJobs,
+} from './api/jobs.api'
+export type { JobsPage, JobCounts, JobFilters as JobApiFilters } from './api/jobs.api'

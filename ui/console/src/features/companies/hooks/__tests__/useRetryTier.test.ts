@@ -3,11 +3,11 @@ import { renderHook, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
 import { toast } from 'sonner'
-import * as dashboardApi from '@/features/dashboard/api/dashboard.api'
+import * as pipelineApi from '@/lib/api/pipeline'
 import { useRetryTier } from '../useRetryTier'
-import { companyQueryKeys } from '@/features/companies/queryKeys'
+import { companyQueryKeys } from '../../queryKeys'
 
-vi.mock('@/features/dashboard/api/dashboard.api')
+vi.mock('@/lib/api/pipeline')
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
@@ -32,7 +32,7 @@ describe('useRetryTier', () => {
   })
 
   it('calls triggerRetry with the correct worker and tier', async () => {
-    vi.mocked(dashboardApi.triggerRetry).mockResolvedValue({ drained: 3 })
+    vi.mocked(pipelineApi.triggerRetry).mockResolvedValue({ drained: 3 })
     const { wrapper } = makeWrapper()
 
     const { result } = renderHook(() => useRetryTier(), { wrapper })
@@ -41,11 +41,11 @@ describe('useRetryTier', () => {
       await result.current.mutateAsync({ worker: 'filter', tier: '1m' })
     })
 
-    expect(dashboardApi.triggerRetry).toHaveBeenCalledWith('filter', '1m')
+    expect(pipelineApi.triggerRetry).toHaveBeenCalledWith('filter', '1m')
   })
 
   it('shows success toast with drained count after successful retry', async () => {
-    vi.mocked(dashboardApi.triggerRetry).mockResolvedValue({ drained: 3 })
+    vi.mocked(pipelineApi.triggerRetry).mockResolvedValue({ drained: 3 })
     const { wrapper } = makeWrapper()
 
     const { result } = renderHook(() => useRetryTier(), { wrapper })
@@ -58,7 +58,7 @@ describe('useRetryTier', () => {
   })
 
   it('shows singular "job" when drained is 1', async () => {
-    vi.mocked(dashboardApi.triggerRetry).mockResolvedValue({ drained: 1 })
+    vi.mocked(pipelineApi.triggerRetry).mockResolvedValue({ drained: 1 })
     const { wrapper } = makeWrapper()
 
     const { result } = renderHook(() => useRetryTier(), { wrapper })
@@ -71,7 +71,7 @@ describe('useRetryTier', () => {
   })
 
   it('invalidates pipelineStats query key after success', async () => {
-    vi.mocked(dashboardApi.triggerRetry).mockResolvedValue({ drained: 2 })
+    vi.mocked(pipelineApi.triggerRetry).mockResolvedValue({ drained: 2 })
     const { qc, wrapper } = makeWrapper()
     const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
 
@@ -87,7 +87,7 @@ describe('useRetryTier', () => {
   })
 
   it('shows error toast when triggerRetry rejects', async () => {
-    vi.mocked(dashboardApi.triggerRetry).mockRejectedValue(new Error('Server unavailable'))
+    vi.mocked(pipelineApi.triggerRetry).mockRejectedValue(new Error('Server unavailable'))
     const { wrapper } = makeWrapper()
 
     const { result } = renderHook(() => useRetryTier(), { wrapper })

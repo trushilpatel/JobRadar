@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { JobsTable } from '../JobsTable'
-import { JOB_STATUS } from '@/constants/jobStatus'
+import { JOB_STATUS } from '@/config/constants/jobStatus'
 import type { Job } from '@/types'
 
 // Mock sub-components that pull in complex deps (TanStack Table, avatars, etc.)

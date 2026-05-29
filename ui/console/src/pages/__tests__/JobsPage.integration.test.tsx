@@ -47,10 +47,10 @@ vi.mock('@/lib/hooks/use-media-query', () => ({
   useIsDesktop: () => true,
 }))
 
-import * as jobsApi from '@/features/jobs/api/jobs.api'
+import * as jobsApi from '@/features/jobs'
 import { toast } from 'sonner'
 import { JobsPage } from '@/pages/JobsPage'
-import { JOB_STATUS } from '@/constants/jobStatus'
+import { JOB_STATUS } from '@/config/constants/jobStatus'
 import { hiddenItems } from '@/lib/hooks/hidden-items'
 import type { Job } from '@/types'
 

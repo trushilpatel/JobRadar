@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
-import { fetchHeatmap } from './api/dashboard.api'
+import { fetchHeatmap } from '../api/dashboard.api'
 import type { WeeklyCount } from '@/types'
-import { dashboardQueryKeys } from './queryKeys'
+import { dashboardQueryKeys } from '../queryKeys'
 
 const HEAT_COLORS = ['#1c1c1e', '#085041', '#0f6e56', '#1d9e75', '#5dcaa5']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

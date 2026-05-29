@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import * as Dialog from '@radix-ui/react-dialog'
-import { useAuthStore } from '@/features/auth/store'
-import { updateMe, deleteMe } from '@/features/auth'
+import { useAuthStore, updateMe, deleteMe } from '@/features/auth'
 import { supabase } from '@/lib/core/supabase'
 
 export function AccountPage() {

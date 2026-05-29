@@ -3,17 +3,17 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { fetchJobs, fetchJobCounts, fetchJobCompanies, type JobFilters } from '../api/jobs.api'
 import type { SortingState } from '@/components/ui/data-table'
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
-import { jobQueryKeys } from '@/features/jobs/queryKeys'
-import { type TabKey } from '@/constants/jobStatus'
+import { jobQueryKeys } from '../queryKeys'
+import { type TabKey } from '@/config/constants/jobStatus'
 import {
   useJobUrlState,
   type DateFilter,
   type LocationFilter,
   type SortDir,
-} from '@/features/jobs/hooks/useJobUrlState'
+} from './useJobUrlState'
 
-export type { TabKey } from '@/constants/jobStatus'
-export type { DateFilter, LocationFilter } from '@/features/jobs/hooks/useJobUrlState'
+export type { TabKey } from '@/config/constants/jobStatus'
+export type { DateFilter, LocationFilter } from './useJobUrlState'
 
 export function useJobs() {
   const urlState = useJobUrlState()

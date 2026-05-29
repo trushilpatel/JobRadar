@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { Job, JobStatus } from '@/types'
-import { useJob } from '@/features/jobs/hooks/useJob'
-import { useJobActions } from '@/features/jobs/hooks/useJobActions'
-import { JobDetailPanel } from '@/features/jobs/components/JobDetailPanel'
+import { useJob } from '../hooks/useJob'
+import { useJobActions } from '../hooks/useJobActions'
+import { JobDetailPanel } from './JobDetailPanel'
 import { showDismissStripe } from '@/components/ui/dismiss-stripe'
 
 const HIDDEN_COMPANIES_CATEGORY = 'companies'

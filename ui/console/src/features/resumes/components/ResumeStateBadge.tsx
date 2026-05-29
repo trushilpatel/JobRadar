@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils/utils'
-import type { ResumeAttachmentState } from '@/features/resumes/types'
+import type { ResumeAttachmentState } from '../types'
 
 const STATE_STYLE: Record<ResumeAttachmentState, string> = {
   draft: 'bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/20',

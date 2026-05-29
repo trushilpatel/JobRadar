@@ -6,7 +6,7 @@ import { Shield, ShieldOff, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 import { Pagination } from '@/components/ui/pagination'
-import { useAuthStore } from '@/features/auth/store'
+import { useAuthStore } from '@/features/auth'
 import {
   fetchAdminUsers,
   setUserRoles,

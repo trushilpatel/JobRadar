@@ -3,12 +3,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import * as dashboardApi from '@/features/dashboard/api/dashboard.api'
 
-import { ProgressPanel } from '../ProgressPanel'
-import { MarketPanel } from '../MarketPanel'
-import { HeatmapPanel } from '../HeatmapPanel'
-import { InterviewingPanel } from '../InterviewingPanel'
-import { VelocityPanel } from '../VelocityPanel'
-import { TechTrendsPanel } from '../TechTrendsPanel'
+import { ProgressPanel } from '../components/ProgressPanel'
+import { MarketPanel } from '../components/MarketPanel'
+import { HeatmapPanel } from '../components/HeatmapPanel'
+import { InterviewingPanel } from '../components/InterviewingPanel'
+import { VelocityPanel } from '../components/VelocityPanel'
+import { TechTrendsPanel } from '../components/TechTrendsPanel'
 
 vi.mock('@/features/dashboard/api/dashboard.api')
 

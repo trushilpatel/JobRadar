@@ -14,9 +14,9 @@ import type { Company } from '@/types'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
 import { cn, formatRelativeTime } from '@/lib/utils/utils'
-import { routes } from '@/lib/routes'
-import { useCompanyScanStats } from '@/features/companies/hooks/useCompanyScanStats'
-import { useCompanyAnalytics } from '@/features/companies/hooks/useCompanyAnalytics'
+import { routes } from '@/config/routes'
+import { useCompanyScanStats } from '../hooks/useCompanyScanStats'
+import { useCompanyAnalytics } from '../hooks/useCompanyAnalytics'
 
 interface CompanyDetailDrawerProps {
   company: Company

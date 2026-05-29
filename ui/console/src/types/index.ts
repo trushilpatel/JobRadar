@@ -68,7 +68,7 @@ export const ADAPTER_TYPES = [
 export type AdapterType = (typeof ADAPTER_TYPES)[number]
 
 // Job status constants (mirrors model/constants.go)
-import type { JobStatus } from '@/constants/jobStatus'
+import type { JobStatus } from '@/config/constants/jobStatus'
 export type { JobStatus }
 export type EmployType = 'full_time' | 'part_time' | 'contract' | 'internship'
 export type ApplicationStage =

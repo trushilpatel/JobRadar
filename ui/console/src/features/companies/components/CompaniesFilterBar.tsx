@@ -17,8 +17,8 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { cn } from '@/lib/utils/utils'
 import { SegmentedSwitch } from '@/components/ui/segmented-switch'
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
-import type { ActiveFilter, ScanStatusFilter } from '@/features/companies/constants'
-import { SCAN_STATUS_FILTER, ACTIVE_FILTER } from '@/features/companies/constants'
+import type { ActiveFilter, ScanStatusFilter } from '../constants'
+import { SCAN_STATUS_FILTER, ACTIVE_FILTER } from '../constants'
 
 interface CompaniesFilterBarProps {
   search: string

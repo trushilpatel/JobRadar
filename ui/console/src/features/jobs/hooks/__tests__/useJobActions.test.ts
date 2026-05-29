@@ -5,7 +5,7 @@ import { createElement } from 'react'
 import * as jobsApi from '@/features/jobs/api/jobs.api'
 import { useJobActions } from '../useJobActions'
 import { jobQueryKeys } from '@/features/jobs/queryKeys'
-import { JOB_STATUS } from '@/constants/jobStatus'
+import { JOB_STATUS } from '@/config/constants/jobStatus'
 import type { Job } from '@/types'
 
 vi.mock('@/features/jobs/api/jobs.api')

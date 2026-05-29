@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef } from 'react'
 import { DataTable, type SortingState } from '@/components/ui/data-table'
 import { Pagination } from '@/components/ui/pagination'
 import type { Job } from '@/types'
-import type { TabKey } from '@/features/jobs/hooks/useJobs'
-import { buildJobColumns } from '@/features/jobs/components/jobs-columns'
+import type { TabKey } from '../hooks/useJobs'
+import { buildJobColumns } from './jobs-columns'
 import { cn } from '@/lib/utils/utils'
 
 interface JobsTableProps {

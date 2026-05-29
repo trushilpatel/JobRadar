@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import type { Job, JobStatus } from '@/types'
 import { ResizeHandle } from '@/components/ui/resize-handle'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import type { TabKey } from '@/constants/jobStatus'
+import type { TabKey } from '@/config/constants/jobStatus'
 import {
   useJobs,
   useJobActions,
@@ -18,7 +18,7 @@ import {
   JobShortcutSheet,
 } from '@/features/jobs'
 import { JobResumeSection } from '@/pages/jobs/JobResumeSection'
-import { getMockAttachmentForJob } from '@/features/resumes/mockData'
+import { getMockAttachmentForJob } from '@/features/resumes'
 import { useIsMobile } from '@/lib/hooks/use-media-query'
 import { useHiddenItems } from '@/lib/hooks/hidden-items'
 import { showDismissStripe } from '@/components/ui/dismiss-stripe'

@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils/utils'
-import { routes, type ApplyQueueFilter } from '@/lib/routes'
-import { useApplyQueue } from '@/features/resumes/hooks/useApplyQueue'
-import { ApplyQueueTable } from '@/features/resumes/components/ApplyQueueTable'
+import { routes, type ApplyQueueFilter } from '@/config/routes'
+import { useApplyQueue, ApplyQueueTable } from '@/features/resumes'
 
 const FILTER_TABS: { key: ApplyQueueFilter; label: string }[] = [
   { key: 'all', label: 'All' },

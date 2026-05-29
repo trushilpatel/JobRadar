@@ -1,5 +1,5 @@
 import { ExternalLink, MapPin, Briefcase, DollarSign } from 'lucide-react'
-import type { ApplyQueueItem } from '@/features/resumes/types'
+import type { ApplyQueueItem } from '../types'
 
 interface Props {
   job: ApplyQueueItem['job']

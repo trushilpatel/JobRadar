@@ -6,7 +6,7 @@ import {
   parseAsStringLiteral,
   useQueryStates,
 } from 'nuqs'
-import { JOB_STATUS, TAB_KEYS, type TabKey } from '@/constants/jobStatus'
+import { JOB_STATUS, TAB_KEYS, type TabKey } from '@/config/constants/jobStatus'
 
 export type LocationFilter = 'any' | 'remote' | 'onsite'
 export type DateFilter = 'all' | '24h' | '7d' | '30d'

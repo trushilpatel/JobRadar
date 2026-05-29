@@ -4,3 +4,14 @@ export { ScanIntervalOverrideModal } from './components/ScanIntervalOverrideModa
 export { useAdapterConfigs } from './hooks/useAdapterConfigs'
 export { useAdapterConfigActions } from './hooks/useAdapterConfigActions'
 export { useScanIntervalOverride } from './hooks/useScanIntervalOverride'
+export {
+  getAdapterConfigs,
+  updateAdapterConfig,
+  updateScanIntervalOverride,
+  getCompanyScanConfig,
+} from './api/adapterConfigs.api'
+export type {
+  AdapterConfig,
+  EffectiveScanConfig,
+  UpdateAdapterConfigInput,
+} from './api/adapterConfigs.api'

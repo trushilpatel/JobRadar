@@ -1,10 +1,12 @@
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
-import { ProgressPanel } from '@/features/dashboard/ProgressPanel'
-import { MarketPanel } from '@/features/dashboard/MarketPanel'
-import { HeatmapPanel } from '@/features/dashboard/HeatmapPanel'
-import { InterviewingPanel } from '@/features/dashboard/InterviewingPanel'
-import { VelocityPanel } from '@/features/dashboard/VelocityPanel'
-import { TechTrendsPanel } from '@/features/dashboard/TechTrendsPanel'
+import {
+  ProgressPanel,
+  MarketPanel,
+  HeatmapPanel,
+  InterviewingPanel,
+  VelocityPanel,
+  TechTrendsPanel,
+} from '@/features/dashboard'
 
 export function DashboardPage() {
   return (

@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, Timer } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
-import { companyQueryKeys } from '@/features/companies/queryKeys'
+import { companyQueryKeys } from '../queryKeys'
 import { PipelineStrip } from './PipelineStrip'
 
 interface CompaniesHeaderProps {

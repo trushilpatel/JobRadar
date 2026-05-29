@@ -3,8 +3,8 @@ import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
 import { useIsMobile } from '@/lib/hooks/use-media-query'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import type { TabKey } from '@/features/jobs/hooks/useJobs'
-import { JOB_STATUS, TAB_KEYS } from '@/constants/jobStatus'
+import type { TabKey } from '../hooks/useJobs'
+import { JOB_STATUS, TAB_KEYS } from '@/config/constants/jobStatus'
 
 const TAB_LABELS: Record<(typeof TAB_KEYS)[number], string> = {
   [JOB_STATUS.NEW]: 'New',

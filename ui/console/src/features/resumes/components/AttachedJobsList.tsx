@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
 import { ExternalLink, Edit3 } from 'lucide-react'
 import { cn, formatRelativeTime } from '@/lib/utils/utils'
-import { routes } from '@/lib/routes'
-import { ResumeStateBadge } from '@/features/resumes/components/ResumeStateBadge'
-import { getMockJob } from '@/features/resumes/mockData'
-import type { ResumeJobAttachment } from '@/features/resumes/types'
+import { routes } from '@/config/routes'
+import { ResumeStateBadge } from './ResumeStateBadge'
+import { getMockJob } from '../mockData'
+import type { ResumeJobAttachment } from '../types'
 
 interface Props {
   resumeId: string

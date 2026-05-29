@@ -3,8 +3,8 @@ import { Search, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
 import { useIsMobile } from '@/lib/hooks/use-media-query'
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
-import { MobileFilterDrawer } from '@/features/jobs/components/MobileFilterDrawer'
-import type { DateFilter, LocationFilter } from '@/features/jobs/hooks/useJobs'
+import { MobileFilterDrawer } from './MobileFilterDrawer'
+import type { DateFilter, LocationFilter } from '../hooks/useJobs'
 
 function FilterPill({
   active,

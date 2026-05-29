@@ -8,7 +8,7 @@ import {
   setAllAdminCompaniesActive,
 } from '../api/adminCompanies.api'
 import { triggerScan, triggerScanAll } from '../api/companies.api'
-import { companyQueryKeys } from '@/features/companies/queryKeys'
+import { companyQueryKeys } from '../queryKeys'
 
 export function useCompanyActions() {
   const qc = useQueryClient()

@@ -9,9 +9,9 @@ import {
   type JobsPage,
 } from '../api/jobs.api'
 import type { Job, JobStatus } from '@/types'
-import { JOB_STATUS } from '@/constants/jobStatus'
+import { JOB_STATUS } from '@/config/constants/jobStatus'
 import { useUndoToast } from '@/lib/hooks/use-undo-toast'
-import { isJobListKey } from '@/features/jobs/queryKeys'
+import { isJobListKey } from '../queryKeys'
 
 /**
  * Statuses settable via the workflow `setStatus` mutation. Excludes:

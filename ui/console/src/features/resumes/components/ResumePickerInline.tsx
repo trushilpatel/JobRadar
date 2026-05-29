@@ -3,9 +3,9 @@ import { ChevronDown, FileText, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils/utils'
-import { routes } from '@/lib/routes'
-import { useResumes } from '@/features/resumes/hooks/useResumes'
-import { useResume } from '@/features/resumes/hooks/useResume'
+import { routes } from '@/config/routes'
+import { useResumes } from '../hooks/useResumes'
+import { useResume } from '../hooks/useResume'
 
 interface Props {
   // The job we're attaching to. Reserved for future hooks (e.g. fetching

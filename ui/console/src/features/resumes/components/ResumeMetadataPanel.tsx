@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils/utils'
-import type { Resume } from '@/features/resumes/types'
+import type { Resume } from '../types'
 
 const AXIS_TONE: Record<string, string> = {
   role: 'bg-violet-500/10 text-violet-300 ring-violet-500/20',

@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import type { JobStatus } from '@/types'
-import type { TabKey } from '@/constants/jobStatus'
+import type { TabKey } from '@/config/constants/jobStatus'
 
 type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new' | 'saved'>
 
