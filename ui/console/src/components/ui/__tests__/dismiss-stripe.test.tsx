@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { Toaster } from 'sonner'
 import { showDismissStripe } from '@/components/ui/dismiss-stripe'
-import { hiddenItems } from '@/lib/hidden-items'
+import { hiddenItems } from '@/lib/hooks/hidden-items'
 
 function renderToaster() {
   return render(<Toaster />)

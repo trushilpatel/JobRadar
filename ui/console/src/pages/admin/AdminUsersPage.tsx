@@ -3,8 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Shield, ShieldOff, Trash2 } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { cn } from '@/lib/utils/utils'
+import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 import { Pagination } from '@/components/ui/pagination'
 import { useAuthStore } from '@/features/auth/store'
 import {
@@ -14,16 +14,14 @@ import {
   deleteAdminUser,
   type AdminUser,
   type AdminUserFilter,
-} from '@/api/adminUsers'
+} from '@/features/auth'
 
 function StatusBadge({ status }: { status: 'active' | 'suspended' }) {
   return (
     <span
       className={cn(
         'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
-        status === 'active'
-          ? 'bg-emerald-900/30 text-emerald-400'
-          : 'bg-red-900/30 text-red-400'
+        status === 'active' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-red-900/30 text-red-400'
       )}
     >
       {status}
@@ -36,9 +34,7 @@ function RoleBadge({ role }: { role: string }) {
     <span
       className={cn(
         'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium',
-        role === 'admin'
-          ? 'bg-violet-900/30 text-violet-300'
-          : 'bg-white/[0.05] text-slate-400'
+        role === 'admin' ? 'bg-violet-900/30 text-violet-300' : 'bg-white/[0.05] text-slate-400'
       )}
     >
       {role}
@@ -112,17 +108,22 @@ function UserRow({ user, selfId }: { user: AdminUser; selfId: string | undefined
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
-      toast.success(user.roles.includes('admin') ? `Admin revoked for ${user.email}` : `Admin granted to ${user.email}`)
+      toast.success(
+        user.roles.includes('admin')
+          ? `Admin revoked for ${user.email}`
+          : `Admin granted to ${user.email}`
+      )
     },
     onError: () => toast.error('Failed to update roles'),
   })
 
   const { mutate: toggleStatus, isPending: togglingStatus } = useMutation({
-    mutationFn: () =>
-      setUserStatus(user.id, user.status === 'active' ? 'suspended' : 'active'),
+    mutationFn: () => setUserStatus(user.id, user.status === 'active' ? 'suspended' : 'active'),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
-      toast.success(user.status === 'active' ? `${user.email} suspended` : `${user.email} reinstated`)
+      toast.success(
+        user.status === 'active' ? `${user.email} suspended` : `${user.email} reinstated`
+      )
     },
     onError: () => toast.error('Failed to update status'),
   })
@@ -137,7 +138,9 @@ function UserRow({ user, selfId }: { user: AdminUser; selfId: string | undefined
           <div className="flex items-center gap-2">
             <div className="text-sm text-white">{user.email}</div>
             {isSelf && (
-              <span className="text-xs text-slate-500 bg-white/[0.05] px-1.5 py-0.5 rounded">you</span>
+              <span className="text-xs text-slate-500 bg-white/[0.05] px-1.5 py-0.5 rounded">
+                you
+              </span>
             )}
           </div>
           {user.display_name && (

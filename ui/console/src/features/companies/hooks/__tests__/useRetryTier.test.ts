@@ -3,11 +3,11 @@ import { renderHook, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
 import { toast } from 'sonner'
-import * as dashboardApi from '@/api/dashboard'
+import * as dashboardApi from '@/features/dashboard/api/dashboard.api'
 import { useRetryTier } from '../useRetryTier'
 import { companyQueryKeys } from '@/features/companies/queryKeys'
 
-vi.mock('@/api/dashboard')
+vi.mock('@/features/dashboard/api/dashboard.api')
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),

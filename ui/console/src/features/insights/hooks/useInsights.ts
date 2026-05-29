@@ -8,7 +8,7 @@ import {
   fetchSponsorshipTrend,
   fetchVelocity,
   fetchRoleCategories,
-} from '@/api/insights'
+} from '../api/insights.api'
 
 export function useTechStack(limit = 15) {
   return useQuery({

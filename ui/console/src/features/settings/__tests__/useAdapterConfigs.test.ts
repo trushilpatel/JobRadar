@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
 import { useAdapterConfigs } from '../hooks/useAdapterConfigs'
-import type { AdapterConfig } from '@/api/adapterConfigs'
+import type { AdapterConfig } from '@/features/settings/api/adapterConfigs.api'
 
 const mockConfigs: AdapterConfig[] = [
   {
@@ -22,11 +22,11 @@ const mockConfigs: AdapterConfig[] = [
   },
 ]
 
-vi.mock('@/api/adapterConfigs', () => ({
+vi.mock('../api/adapterConfigs.api', () => ({
   getAdapterConfigs: vi.fn(),
 }))
 
-import { getAdapterConfigs } from '@/api/adapterConfigs'
+import { getAdapterConfigs } from '@/features/settings/api/adapterConfigs.api'
 const mockGetAdapterConfigs = vi.mocked(getAdapterConfigs)
 
 function makeWrapper() {

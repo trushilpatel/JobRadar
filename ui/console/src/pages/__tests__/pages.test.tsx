@@ -6,15 +6,15 @@ import { MemoryRouter } from 'react-router-dom'
 import { NuqsTestingAdapter } from 'nuqs/adapters/testing'
 
 // ── Mock all API modules so no real fetch calls are made ─────────────────────
-vi.mock('@/api/dashboard')
-vi.mock('@/api/insights')
-vi.mock('@/api/jobs')
-vi.mock('@/api/companies')
-vi.mock('@/api/adminCompanies')
-vi.mock('@/api/adminAudit')
-vi.mock('@/api/adminUsers')
-vi.mock('@/api/me')
-vi.mock('@/api/adapterConfigs')
+vi.mock('@/features/dashboard/api/dashboard.api')
+vi.mock('@/features/insights/api/insights.api')
+vi.mock('@/features/jobs/api/jobs.api')
+vi.mock('@/features/companies/api/companies.api')
+vi.mock('@/features/companies/api/adminCompanies.api')
+vi.mock('@/features/auth/api/adminAudit.api')
+vi.mock('@/features/auth/api/adminUsers.api')
+vi.mock('@/features/auth/api/me.api')
+vi.mock('@/features/settings/api/adapterConfigs.api')
 
 // ── Mock auth store so pages don't try to fetch identity ─────────────────────
 vi.mock('@/features/auth/store', () => ({
@@ -38,7 +38,7 @@ vi.mock('@/features/auth/store', () => ({
 }))
 
 // ── Mock supabase so AccountPage doesn't blow up ──────────────────────────────
-vi.mock('@/lib/supabase', () => ({
+vi.mock('@/lib/core/supabase', () => ({
   supabase: {
     auth: {
       signOut: vi.fn().mockResolvedValue({ error: null }),
@@ -69,13 +69,13 @@ function makeWrapper(initialEntries = ['/']) {
 }
 
 // ── Lazy imports (after mocks are registered) ─────────────────────────────────
-import * as dashboardApi from '@/api/dashboard'
-import * as insightsApi from '@/api/insights'
-import * as jobsApi from '@/api/jobs'
-import * as adapterConfigsApi from '@/api/adapterConfigs'
-import * as adminCompaniesApi from '@/api/adminCompanies'
-import * as adminUsersApi from '@/api/adminUsers'
-import * as adminAuditApi from '@/api/adminAudit'
+import * as dashboardApi from '@/features/dashboard/api/dashboard.api'
+import * as insightsApi from '@/features/insights/api/insights.api'
+import * as jobsApi from '@/features/jobs/api/jobs.api'
+import * as adapterConfigsApi from '@/features/settings/api/adapterConfigs.api'
+import * as adminCompaniesApi from '@/features/companies/api/adminCompanies.api'
+import * as adminUsersApi from '@/features/auth/api/adminUsers.api'
+import * as adminAuditApi from '@/features/auth/api/adminAudit.api'
 
 import { DashboardPage } from '@/pages/DashboardPage'
 import { JobsPage } from '@/pages/JobsPage'

@@ -16,12 +16,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { Job, JobStatus } from '@/types'
 import { JOB_STATUS } from '@/constants/jobStatus'
-import { formatRelativeTime, cn } from '@/lib/utils'
-import { formatSalary } from '@/services/jobs.service'
+import { formatRelativeTime, cn, formatSalary } from '@/lib/utils/utils'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { StatusSelect } from '@/features/jobs/components/StatusSelect'
-import { setJobNotes } from '@/api/jobs'
-import { JobResumeSection } from '@/features/jobs/components/JobResumeSection'
+import { setJobNotes } from '../api/jobs.api'
 
 export type JobDetailMode = 'pane' | 'route'
 
@@ -36,6 +34,10 @@ interface JobDetailPanelProps {
   onToggleSave: (job: Job) => void
   onDismiss: (job: Job) => void
   mode?: JobDetailMode
+  /** Optional slot rendered between tech stack and notes. Pages layer injects
+   *  cross-feature content (e.g. JobResumeSection) here so this component
+   *  stays within the features/jobs boundary. */
+  resumeSection?: React.ReactNode
 }
 
 const NOTES_MAX = 5000
@@ -50,6 +52,7 @@ export function JobDetailPanel({
   onToggleSave,
   onDismiss,
   mode = 'pane',
+  resumeSection,
 }: JobDetailPanelProps) {
   const isSaved = job.user_state?.saved_at != null
   const salary = formatSalary(job.salary_range)
@@ -300,7 +303,7 @@ export function JobDetailPanel({
           </div>
         )}
 
-        <JobResumeSection jobId={job.id} />
+        {resumeSection}
 
         <div>
           <label

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { getAdapterConfigs } from '@/api/adapterConfigs'
-import type { AdapterConfig } from '@/api/adapterConfigs'
+import { getAdapterConfigs } from '../api/adapterConfigs.api'
+import type { AdapterConfig } from '../api/adapterConfigs.api'
 
 export function useAdapterConfigs() {
   return useQuery<AdapterConfig[]>({

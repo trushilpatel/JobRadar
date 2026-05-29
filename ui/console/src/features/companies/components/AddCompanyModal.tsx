@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X, ExternalLink } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import { ADAPTER_TYPES } from '@/types'
 import type { Company } from '@/types'
 import {
   createAdminCompany,
   updateAdminCompany,
   updateAdminCompanyScanSettings,
-} from '@/api/adminCompanies'
-import { ApiValidationError } from '@/lib/api-error'
+} from '../api/adminCompanies.api'
+import { ApiValidationError } from '@/lib/core/api-error'
 
 interface Props {
   open: boolean

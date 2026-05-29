@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { FileText, Paperclip, CheckCircle2 } from 'lucide-react'
-import { cn, formatRelativeTime } from '@/lib/utils'
+import { cn, formatRelativeTime } from '@/lib/utils/utils'
 import { routes } from '@/lib/routes'
 import type { Resume } from '@/features/resumes/types'
 

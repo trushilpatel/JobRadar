@@ -4,7 +4,7 @@ import { Pagination } from '@/components/ui/pagination'
 import type { Job } from '@/types'
 import type { TabKey } from '@/features/jobs/hooks/useJobs'
 import { buildJobColumns } from '@/features/jobs/components/jobs-columns'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 
 interface JobsTableProps {
   jobs: Job[]
@@ -26,6 +26,10 @@ interface JobsTableProps {
   onRowClick: (job: Job) => void
   onToggleSave: (job: Job) => void
   onDismiss: (job: Job) => void
+  /** Optional callback injected by the pages layer to provide cross-feature
+   *  data (e.g. resume attachment state) without creating a cross-feature
+   *  import inside features/jobs. */
+  getAttachmentState?: (jobId: string) => string | null
   onNextPage: () => void
   onPrevPage: () => void
   onFirstPage?: () => void
@@ -62,6 +66,7 @@ export function JobsTable({
   onRowClick,
   onToggleSave,
   onDismiss,
+  getAttachmentState,
   onNextPage,
   onPrevPage,
   onFirstPage,
@@ -70,8 +75,8 @@ export function JobsTable({
   onSortingChange,
 }: JobsTableProps) {
   const columns = useMemo(
-    () => buildJobColumns({ onToggleSave, onDismiss }),
-    [onToggleSave, onDismiss]
+    () => buildJobColumns({ onToggleSave, onDismiss, getAttachmentState }),
+    [onToggleSave, onDismiss, getAttachmentState]
   )
 
   // Scroll the focused row into view whenever the focused index changes.

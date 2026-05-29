@@ -1,6 +1,6 @@
 import * as Select from '@radix-ui/react-select'
 import { Check, ChevronDown } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import { SELECT_STATUSES, type SelectStatus } from '@/constants/jobStatus'
 import type { JobStatus } from '@/types'
 

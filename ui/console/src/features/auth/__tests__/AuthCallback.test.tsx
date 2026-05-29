@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 const exchangeCodeForSession = vi.fn()
 const getSession = vi.fn()
 
-vi.mock('@/lib/supabase', () => ({
+vi.mock('@/lib/core/supabase', () => ({
   supabase: {
     auth: {
       exchangeCodeForSession: (...args: unknown[]) => exchangeCodeForSession(...args),

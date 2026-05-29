@@ -17,8 +17,10 @@ import {
   JobCommandPalette,
   JobShortcutSheet,
 } from '@/features/jobs'
-import { useIsMobile } from '@/lib/use-media-query'
-import { useHiddenItems } from '@/lib/hidden-items'
+import { JobResumeSection } from '@/pages/jobs/JobResumeSection'
+import { getMockAttachmentForJob } from '@/features/resumes/mockData'
+import { useIsMobile } from '@/lib/hooks/use-media-query'
+import { useHiddenItems } from '@/lib/hooks/hidden-items'
 import { showDismissStripe } from '@/components/ui/dismiss-stripe'
 
 type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new' | 'saved'>
@@ -336,6 +338,7 @@ export function JobsPage() {
             }}
             onToggleSave={handleToggleSave}
             onDismiss={handleDismiss}
+            getAttachmentState={(jobId) => getMockAttachmentForJob(jobId)?.state ?? null}
             onNextPage={jobs.goToNextPage}
             onPrevPage={jobs.goToPrevPage}
             onFirstPage={jobs.goToFirstPage}
@@ -361,6 +364,7 @@ export function JobsPage() {
                 onStatusChange={handleStatusChange}
                 onToggleSave={handleToggleSave}
                 onDismiss={handleDismiss}
+                resumeSection={<JobResumeSection jobId={openJob.id} />}
               />
             </div>
           </>

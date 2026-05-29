@@ -18,7 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Pagination } from '@/components/ui/pagination'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 
 // ── DataTable ────────────────────────────────────────────────────────────────
 

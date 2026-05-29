@@ -4,11 +4,13 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { RequireAuth } from '../RequireAuth'
 import { useAuthStore } from '../store'
 
-vi.mock('@/lib/supabase', () => ({
+vi.mock('@/lib/core/supabase', () => ({
   supabase: {
     auth: {
       getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
-      onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
+      onAuthStateChange: vi
+        .fn()
+        .mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
       signInWithOAuth: vi.fn(),
       signOut: vi.fn(),
     },

@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import { RESUME_LIMIT_PER_USER } from '@/features/resumes/types'
 
 interface Props {

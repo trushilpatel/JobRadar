@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/core/supabase'
 
 type State = 'pending' | 'success' | 'error'
 

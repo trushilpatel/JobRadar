@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { fetchJobs, fetchJobCounts, fetchJobCompanies, type JobFilters } from '@/api/jobs'
+import { fetchJobs, fetchJobCounts, fetchJobCompanies, type JobFilters } from '../api/jobs.api'
 import type { SortingState } from '@/components/ui/data-table'
-import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 import { jobQueryKeys } from '@/features/jobs/queryKeys'
 import { type TabKey } from '@/constants/jobStatus'
 import {

@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import * as adminApi from '@/api/adminCompanies'
-import { ApiValidationError } from '@/lib/api-error'
+import * as adminApi from '@/features/companies/api/adminCompanies.api'
+import { ApiValidationError } from '@/lib/core/api-error'
 import { AddCompanyModal } from '../AddCompanyModal'
 import type { Company } from '@/types'
 
-vi.mock('@/api/adminCompanies')
+vi.mock('@/features/companies/api/adminCompanies.api')
 
 // Radix Dialog uses a Portal — make sure it renders into the document body
 // which jsdom handles automatically, but we need a container for queries.

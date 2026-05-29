@@ -4,12 +4,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { withNuqsTestingAdapter } from 'nuqs/adapters/testing'
-import * as jobsApi from '@/api/jobs'
+import * as jobsApi from '@/features/jobs/api/jobs.api'
 import { useJobs } from '../useJobs'
 import { JOB_STATUS } from '@/constants/jobStatus'
 import type { Job } from '@/types'
 
-vi.mock('@/api/jobs')
+vi.mock('@/features/jobs/api/jobs.api')
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 

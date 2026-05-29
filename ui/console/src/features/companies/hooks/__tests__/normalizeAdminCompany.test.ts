@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { normalizeAdminCompany } from '../normalizeAdminCompany'
-import type { AdminCompany, ScanSettingsView } from '@/api/adminCompanies'
+import type { AdminCompany, ScanSettingsView } from '@/features/companies/api/adminCompanies.api'
 
 const BASE_SETTINGS: ScanSettingsView = {
   company_id: 'stripe',
@@ -38,7 +38,11 @@ describe('normalizeAdminCompany', () => {
   it('derives last_scan_status as ok when last_scan_at is set and no errors', () => {
     const company: AdminCompany = {
       ...BASE_COMPANY,
-      scan_settings: { ...BASE_SETTINGS, last_scan_at: '2024-06-01T12:00:00Z', consecutive_errors: 0 },
+      scan_settings: {
+        ...BASE_SETTINGS,
+        last_scan_at: '2024-06-01T12:00:00Z',
+        consecutive_errors: 0,
+      },
     }
     expect(normalizeAdminCompany(company).last_scan_status).toBe('ok')
   })
@@ -46,7 +50,11 @@ describe('normalizeAdminCompany', () => {
   it('derives last_scan_status as error when consecutive_errors > 0', () => {
     const company: AdminCompany = {
       ...BASE_COMPANY,
-      scan_settings: { ...BASE_SETTINGS, last_scan_at: '2024-06-01T12:00:00Z', consecutive_errors: 2 },
+      scan_settings: {
+        ...BASE_SETTINGS,
+        last_scan_at: '2024-06-01T12:00:00Z',
+        consecutive_errors: 2,
+      },
     }
     expect(normalizeAdminCompany(company).last_scan_status).toBe('error')
   })

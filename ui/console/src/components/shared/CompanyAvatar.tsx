@@ -1,5 +1,4 @@
-import { cn } from '@/lib/utils'
-import { avatarColor } from '@/services/jobs.service'
+import { cn, avatarColor } from '@/lib/utils/utils'
 
 interface CompanyAvatarProps {
   name: string

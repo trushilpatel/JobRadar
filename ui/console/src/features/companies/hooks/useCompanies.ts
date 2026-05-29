@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchAdminCompanies } from '@/api/adminCompanies'
+import { fetchAdminCompanies } from '../api/adminCompanies.api'
 import type { SortingState } from '@/components/ui/data-table'
 import { SCAN_STATUS_FILTER, ACTIVE_FILTER, STORAGE_KEYS } from '@/features/companies/constants'
 import type { ScanStatusFilter, ActiveFilter } from '@/features/companies/constants'
 import { companyQueryKeys } from '@/features/companies/queryKeys'
 import { normalizeAdminCompany } from './normalizeAdminCompany'
-import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 
 export type { ActiveFilter, ScanStatusFilter }
 

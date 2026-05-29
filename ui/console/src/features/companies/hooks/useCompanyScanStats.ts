@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ScanStats } from '@/types'
-import { fetchScanStats } from '@/api/companies'
+import { fetchScanStats } from '../api/companies.api'
 import { companyQueryKeys } from '@/features/companies/queryKeys'
 
 export function useCompanyScanStats(companyId: string) {

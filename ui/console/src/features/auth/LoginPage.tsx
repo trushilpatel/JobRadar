@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from './store'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import { LogoLockup } from '@/components/brand/Logo'
 
 export function LoginPage() {
@@ -45,7 +45,9 @@ export function LoginPage() {
           <div className="text-center">
             <p className="text-sm text-neutral-300">Sign-in link sent to</p>
             <p className="mt-1 text-sm font-medium text-white">{email}</p>
-            <p className="mt-3 text-xs text-neutral-500">Check your inbox and click the link to continue.</p>
+            <p className="mt-3 text-xs text-neutral-500">
+              Check your inbox and click the link to continue.
+            </p>
             <button
               type="button"
               onClick={() => setSent(false)}

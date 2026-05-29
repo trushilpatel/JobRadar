@@ -1,5 +1,5 @@
 import type { FunnelStep } from '@/types'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
 import { useFunnel } from './hooks/useInsights'
 

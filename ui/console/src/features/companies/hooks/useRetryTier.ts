@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { triggerRetry } from '@/api/dashboard'
+import { triggerRetry } from '@/features/dashboard/api/dashboard.api'
 import { companyQueryKeys } from '@/features/companies/queryKeys'
 
 export function useRetryTier() {

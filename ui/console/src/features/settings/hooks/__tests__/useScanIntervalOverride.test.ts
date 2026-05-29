@@ -3,7 +3,7 @@ import { renderHook, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createElement } from 'react'
 
-vi.mock('@/api/adapterConfigs', () => ({
+vi.mock('@/features/settings/api/adapterConfigs.api', () => ({
   updateScanIntervalOverride: vi.fn(),
 }))
 
@@ -12,7 +12,7 @@ vi.mock('sonner', () => ({
 }))
 
 import { useScanIntervalOverride } from '../useScanIntervalOverride'
-import { updateScanIntervalOverride } from '@/api/adapterConfigs'
+import { updateScanIntervalOverride } from '@/features/settings/api/adapterConfigs.api'
 import { toast } from 'sonner'
 
 function makeWrapper() {

@@ -1,5 +1,5 @@
 import { AlertCircle } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import { usePipelineStats } from '../hooks/usePipelineStats'
 import { RetryStage } from './RetryStage'
 

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchJob } from '@/api/jobs'
+import { fetchJob } from '../api/jobs.api'
 import { jobQueryKeys } from '@/features/jobs/queryKeys'
 
 export function useJob(id: string | undefined) {

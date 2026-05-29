@@ -6,7 +6,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Kbd, KbdGroup } from '@/components/ui/kbd'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 
 export interface JobShortcutSheetProps {
   open: boolean

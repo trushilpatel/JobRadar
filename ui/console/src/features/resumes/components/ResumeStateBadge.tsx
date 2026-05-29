@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils/utils'
 import type { ResumeAttachmentState } from '@/features/resumes/types'
 
 const STATE_STYLE: Record<ResumeAttachmentState, string> = {

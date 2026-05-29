@@ -6,8 +6,8 @@ import {
   deleteAdminCompany,
   updateAdminCompanyScanSettings,
   setAllAdminCompaniesActive,
-} from '@/api/adminCompanies'
-import { triggerScan, triggerScanAll } from '@/api/companies'
+} from '../api/adminCompanies.api'
+import { triggerScan, triggerScanAll } from '../api/companies.api'
 import { companyQueryKeys } from '@/features/companies/queryKeys'
 
 export function useCompanyActions() {

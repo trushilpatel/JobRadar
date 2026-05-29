@@ -7,9 +7,9 @@ import { createElement, type ReactNode } from 'react'
 import { JobDetailPanel } from '../JobDetailPanel'
 import type { Job } from '@/types'
 import { JOB_STATUS } from '@/constants/jobStatus'
-import * as jobsApi from '@/api/jobs'
+import * as jobsApi from '@/features/jobs/api/jobs.api'
 
-vi.mock('@/api/jobs')
+vi.mock('@/features/jobs/api/jobs.api')
 vi.mock('sonner', () => {
   const toast = vi.fn() as unknown as ((msg: string, opts?: unknown) => void) & {
     success: ReturnType<typeof vi.fn>
@@ -47,8 +47,8 @@ function wrap(ui: ReactNode) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: 0 }, mutations: { retry: 0 } },
   })
-  // Wrap in MemoryRouter — JobDetailPanel renders JobResumeSection which
-  // uses react-router hooks (Link).
+  // Wrap in MemoryRouter — any injected resumeSection slot may use
+  // react-router hooks (Link).
   return createElement(MemoryRouter, null, createElement(QueryClientProvider, { client: qc }, ui))
 }
 
@@ -180,8 +180,7 @@ describe('JobDetailPanel', () => {
         )
       )
       // Radix Select trigger is a button labelled with the current value.
-      // JobResumeSection also renders a combobox in route mode (resume
-      // picker), so we expect at least one — the StatusSelect — to exist.
+      // StatusSelect renders a combobox — expect at least one to exist.
       expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0)
     })
   })
