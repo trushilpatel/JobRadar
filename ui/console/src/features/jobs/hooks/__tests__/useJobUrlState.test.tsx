@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { withNuqsTestingAdapter } from 'nuqs/adapters/testing'
-import { useJobUrlState } from '@/features/jobs/hooks/useJobUrlState'
+import { useJobUrlState, jobsUrl } from '@/features/jobs/hooks/useJobUrlState'
 
 function makeWrapper(initialSearch = '', onUrlUpdate?: (e: { queryString: string }) => void) {
   return withNuqsTestingAdapter({
@@ -135,5 +135,25 @@ describe('useJobUrlState', () => {
       await result.current.setPage(-3)
     })
     expect(result.current.page).toBe(0)
+  })
+})
+
+describe('jobsUrl', () => {
+  it('builds a /jobs URL carrying the company filter in the query string', () => {
+    const url = jobsUrl({ companies: ['Stripe'] })
+    expect(url.startsWith('/jobs')).toBe(true)
+    const params = new URL(`http://x${url}`).searchParams
+    expect(params.getAll('companies')).toEqual(['Stripe'])
+  })
+
+  it('round-trips a company name that needs URL encoding', () => {
+    const url = jobsUrl({ companies: ['Acme Corp'] })
+    const params = new URL(`http://x${url}`).searchParams
+    expect(params.getAll('companies')).toEqual(['Acme Corp'])
+  })
+
+  it('omits default values so an unfiltered link stays clean', () => {
+    // No filters → bare /jobs with no query string (clearOnDefault).
+    expect(jobsUrl({})).toBe('/jobs')
   })
 })
