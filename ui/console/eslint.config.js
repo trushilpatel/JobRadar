@@ -53,17 +53,18 @@ export default defineConfig([
     },
   },
 
-  // ── Layer boundary rules (WARN → error in Arch PR10) ─────────────────────
+  // ── Layer boundary rules (ERRORS — Arch PR10) ───────────────────────────
   // Enforces the 6-layer unidirectional architecture from ARCHITECTURE.md.
   // Uses no-restricted-imports (built-in, no resolver needed) so @/ path aliases
   // are matched as-written against the import specifier string.
+  // All rules are errors — a violation fails CI before any human reviews the code.
   //
   // Rule 1: lib/ + components/ cannot import from feature / page / app layers.
   {
     files: ['src/lib/**/*.{ts,tsx}', 'src/components/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
-        'warn',
+        'error',
         {
           patterns: [
             {
@@ -85,7 +86,7 @@ export default defineConfig([
     ignores: ['src/features/**/__tests__/**', 'src/features/**/*.test.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
-        'warn',
+        'error',
         {
           patterns: [
             {
@@ -105,7 +106,7 @@ export default defineConfig([
     files: ['src/pages/**/*.{ts,tsx}', 'src/app/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
-        'warn',
+        'error',
         {
           patterns: [
             {

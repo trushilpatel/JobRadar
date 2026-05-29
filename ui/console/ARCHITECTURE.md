@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-05-28
 **Full design spec:** `docs/superpowers/specs/2026-05-28-frontend-architecture-design.md`
-**Status:** Migration in progress — see `Designs/seam-test-coverage-plan.md` for phased delivery
+**Status:** Complete — boundary rules enforced as CI errors as of 2026-05-29
 
 ---
 
