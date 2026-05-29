@@ -47,11 +47,19 @@ describe('getAdapterConfigs', () => {
   })
 })
 
+const validAdapterConfig = {
+  adapter_type: 'greenhouse',
+  scan_interval_minutes: 60,
+  inter_company_delay_s: 2,
+  last_scheduled_at: null,
+  updated_at: '2026-01-01T00:00:00Z',
+}
+
 describe('updateAdapterConfig', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('encodes adapter_type with special characters', async () => {
-    vi.mocked(apiClient.patch).mockResolvedValue({})
+    vi.mocked(apiClient.patch).mockResolvedValue(validAdapterConfig)
     await updateAdapterConfig('type/with-slash', {
       scan_interval_minutes: 60,
       inter_company_delay_s: 2,
@@ -63,18 +71,29 @@ describe('updateAdapterConfig', () => {
   })
 
   it('sends the correct data payload', async () => {
-    vi.mocked(apiClient.patch).mockResolvedValue({})
+    vi.mocked(apiClient.patch).mockResolvedValue(validAdapterConfig)
     const data = { scan_interval_minutes: 120, inter_company_delay_s: 5 }
     await updateAdapterConfig('greenhouse', data)
     expect(apiClient.patch).toHaveBeenCalledWith(expect.any(String), data)
   })
 })
 
+const validCompany = {
+  id: 'company-1',
+  name: 'Test Company',
+  url: 'https://example.com',
+  adapter_type: 'greenhouse',
+  active: true,
+  created_at: '2024-01-01T00:00:00Z',
+  last_scan_at: null,
+  last_scan_status: null,
+}
+
 describe('updateScanIntervalOverride', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('sends null for clearing override', async () => {
-    vi.mocked(apiClient.patch).mockResolvedValue({})
+    vi.mocked(apiClient.patch).mockResolvedValue(validCompany)
     await updateScanIntervalOverride('company-1', null)
     expect(apiClient.patch).toHaveBeenCalledWith(expect.stringContaining('company-1'), {
       scan_interval_minutes_override: null,
@@ -82,7 +101,7 @@ describe('updateScanIntervalOverride', () => {
   })
 
   it('sends numeric value for setting override', async () => {
-    vi.mocked(apiClient.patch).mockResolvedValue({})
+    vi.mocked(apiClient.patch).mockResolvedValue(validCompany)
     await updateScanIntervalOverride('company-1', 120)
     expect(apiClient.patch).toHaveBeenCalledWith(expect.any(String), {
       scan_interval_minutes_override: 120,
@@ -90,7 +109,7 @@ describe('updateScanIntervalOverride', () => {
   })
 
   it('URL-encodes the company ID', async () => {
-    vi.mocked(apiClient.patch).mockResolvedValue({})
+    vi.mocked(apiClient.patch).mockResolvedValue(validCompany)
     await updateScanIntervalOverride('my company', 60)
     expect(apiClient.patch).toHaveBeenCalledWith(
       expect.stringContaining('my%20company'),
@@ -115,7 +134,12 @@ describe('getCompanyScanConfig', () => {
   })
 
   it('URL-encodes the company ID', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({})
+    vi.mocked(apiClient.get).mockResolvedValue({
+      adapter_type: 'greenhouse',
+      effective_scan_interval_minutes: 60,
+      inter_company_delay_s: 2,
+      company_override: null,
+    })
     await getCompanyScanConfig('my company')
     expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('my%20company'))
   })

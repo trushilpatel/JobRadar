@@ -1,38 +1,45 @@
+import { z } from 'zod'
 import { apiClient } from '@/lib/api-client'
 import type { ADAPTER_TYPES } from '@/types'
 
-export interface ScanSettingsView {
-  company_id: string
-  adapter_type: string
-  adapter_config: Record<string, unknown> | null
-  scan_interval_override: number | null
-  active: boolean
-  last_scan_at: string | null
-  last_success_at: string | null
-  last_error_at: string | null
-  last_error_message: string | null
-  consecutive_errors: number
-  created_at: string
-  updated_at: string
-}
+const ScanSettingsViewSchema = z
+  .object({
+    company_id: z.string(),
+    adapter_type: z.string(),
+    adapter_config: z.record(z.string(), z.unknown()).nullable(),
+    scan_interval_override: z.number().nullable(),
+    active: z.boolean(),
+    last_scan_at: z.string().nullable(),
+    last_success_at: z.string().nullable(),
+    last_error_at: z.string().nullable(),
+    last_error_message: z.string().nullable(),
+    consecutive_errors: z.number(),
+    created_at: z.string(),
+    updated_at: z.string(),
+  })
+  .passthrough()
 
-export interface AdminCompany {
-  id: string
-  name: string
-  website: string
-  created_at: string
-  scan_settings: ScanSettingsView | null
-  queue_status?: string
-  scan_history?: boolean[]
-}
+const AdminCompanySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  website: z.string(),
+  created_at: z.string(),
+  scan_settings: ScanSettingsViewSchema.nullable(),
+  queue_status: z.string().optional(),
+  scan_history: z.array(z.boolean()).optional(),
+})
 
-export interface AdminCompanyListResult {
-  data: AdminCompany[]
-  total: number
-  total_active: number
-  limit: number
-  next_cursor: string | null
-}
+const AdminCompanyListResultSchema = z.object({
+  data: z.array(AdminCompanySchema),
+  total: z.number(),
+  total_active: z.number(),
+  limit: z.number(),
+  next_cursor: z.string().nullable(),
+})
+
+export type ScanSettingsView = z.infer<typeof ScanSettingsViewSchema>
+export type AdminCompany = z.infer<typeof AdminCompanySchema>
+export type AdminCompanyListResult = z.infer<typeof AdminCompanyListResultSchema>
 
 export interface ScanSettingsInput {
   adapter_type?: string
@@ -68,7 +75,8 @@ export async function fetchAdminCompanies(
   if (filters.sortBy) p.set('sort_by', filters.sortBy)
   if (filters.sortDir) p.set('sort_dir', filters.sortDir)
   if (filters.scanStatus) p.set('scan_status', filters.scanStatus)
-  return apiClient.get<AdminCompanyListResult>(`/admin/companies?${p}`)
+  const raw = await apiClient.get<unknown>(`/admin/companies?${p}`)
+  return AdminCompanyListResultSchema.parse(raw)
 }
 
 export async function createAdminCompany(data: {
@@ -82,7 +90,8 @@ export async function createAdminCompany(data: {
   // unless an explicit slug was supplied via .slug — keeps the modal payload
   // contract minimal while satisfying CompanyPublicInput validation.
   const payload = { slug: data.id, ...data }
-  return apiClient.post<AdminCompany>('/admin/companies', payload)
+  const raw = await apiClient.post<unknown>('/admin/companies', payload)
+  return AdminCompanySchema.parse(raw)
 }
 
 export async function updateAdminCompany(
