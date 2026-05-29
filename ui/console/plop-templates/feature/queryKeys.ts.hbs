@@ -1,0 +1,5 @@
+export const {{camelCase name}}QueryKeys = {
+  all: () => ['{{name}}'] as const,
+  list: () => ['{{name}}', 'list'] as const,
+  detail: (id: string) => ['{{name}}', 'detail', id] as const,
+}

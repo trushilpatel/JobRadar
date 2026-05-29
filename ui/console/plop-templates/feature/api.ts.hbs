@@ -1,0 +1,18 @@
+import { z } from 'zod'
+import { apiClient } from '@/lib/core/api-client'
+
+// ── Schemas (source of truth — TS types derived via z.infer) ──────────────────
+
+export const {{pascalCase name}}Schema = z.object({
+  id: z.string(),
+  // TODO: add fields matching the backend response shape
+})
+
+export type {{pascalCase name}} = z.infer<typeof {{pascalCase name}}Schema>
+
+// ── API functions ──────────────────────────────────────────────────────────────
+
+export async function fetch{{pascalCase name}}(id: string): Promise<{{pascalCase name}}> {
+  const raw = await apiClient.get<unknown>(`/{{name}}/${id}`)
+  return {{pascalCase name}}Schema.parse(raw)
+}
