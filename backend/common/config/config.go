@@ -12,7 +12,6 @@ import (
 
 type Config struct {
 	DB            DatabaseConfig
-	Kafka         KafkaConfig
 	NATS          NATSConfig
 	Redis         RedisConfig
 	Cooldown      CooldownConfig
@@ -100,12 +99,6 @@ func (c DatabaseConfig) DSN() string {
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s statement_cache_capacity=0 default_query_exec_mode=simple_protocol",
 		c.Host, c.Port, c.User, c.Password, c.Name, c.SSLMode,
 	)
-}
-
-type KafkaConfig struct {
-	Brokers  string
-	User     string
-	Password string
 }
 
 type NATSConfig struct {
@@ -253,11 +246,6 @@ func Load() *Config {
 			Password: getEnv("DB_PASSWORD", "postgres"),
 			Name:     getEnv("DB_NAME", "jobradar"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
-		},
-		Kafka: KafkaConfig{
-			Brokers:  getEnv("KAFKA_BROKERS", "localhost:9092"),
-			User:     getEnv("KAFKA_USER", ""),
-			Password: getEnv("KAFKA_PASSWORD", ""),
 		},
 		NATS: NATSConfig{
 			URL:       getEnv("NATS_URL", "nats://localhost:4222"),

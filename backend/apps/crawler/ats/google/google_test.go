@@ -563,7 +563,7 @@ func TestFetchJobs_StopsAtMaxPages(t *testing.T) {
 
 // TestFetchJobs_SeenCheckerSkipsKnownJobs verifies the seen-check filters
 // previously-known cards before publishing — a regression here would re-spam
-// Kafka with already-tracked jobs on every scan.
+// NATS JetStream with already-tracked jobs on every scan.
 func TestFetchJobs_SeenCheckerSkipsKnownJobs(t *testing.T) {
 	page := makeListingPage(2,
 		parsedJob{ID: "google-100", Title: "SWE A", Org: "X", Location: "MV"},
@@ -626,7 +626,7 @@ func TestFetchJobs_SeenCheckerErrorContinuesPagination(t *testing.T) {
 	})
 
 	// Should not return an error — failure to check is treated as
-	// "everything seen" so we don't blast Kafka.
+	// "everything seen" so we don't blast NATS JetStream.
 	resp, err := g.FetchJobs(context.Background(), "google")
 	if err != nil {
 		t.Fatalf("FetchJobs returned error on seen-check failure: %v", err)

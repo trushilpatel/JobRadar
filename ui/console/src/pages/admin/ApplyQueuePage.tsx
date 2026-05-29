@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { cn } from '@/lib/utils/utils'
 import { routes, type ApplyQueueFilter } from '@/config/routes'
 import { useApplyQueue, ApplyQueueTable } from '@/features/resumes'
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 
 const FILTER_TABS: { key: ApplyQueueFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -64,11 +65,13 @@ export function ApplyQueuePage() {
           ))}
         </div>
 
-        <ApplyQueueTable
-          items={data ?? []}
-          isLoading={isLoading}
-          emptyMessage={EMPTY_BY_TAB[filter]}
-        />
+        <ErrorBoundary>
+          <ApplyQueueTable
+            items={data ?? []}
+            isLoading={isLoading}
+            emptyMessage={EMPTY_BY_TAB[filter]}
+          />
+        </ErrorBoundary>
       </div>
     </div>
   )

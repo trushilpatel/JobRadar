@@ -4,6 +4,7 @@ import (
 	"context"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	auditmodel "github.com/trushilpatel/jobradar/service/audit/models"
 	"gorm.io/gorm"
 )
@@ -22,7 +23,10 @@ func NewRepositoryService(db *gorm.DB) Service {
 // Append inserts a single audit row. The row's ID is allowed to be empty —
 // the DB default (`gen_random_uuid()`) populates it. Created_at is treated
 // the same way: zero ⇒ `now()` from the column default.
-func (r *repositoryService) Append(ctx context.Context, entry auditmodel.Entry) error {
+func (r *repositoryService) Append(ctx context.Context, entry auditmodel.Entry) (err error) {
+	ctx, span := tracing.Start(ctx, "audit.repo.Append")
+	defer tracing.End(span, &err)
+
 	if entry.Action == "" {
 		return domainerrs.ErrBadRequest.WithMessage("action required")
 	}
@@ -36,7 +40,10 @@ func (r *repositoryService) Append(ctx context.Context, entry auditmodel.Entry) 
 // Total is the unfiltered-by-pagination count so the caller can render a
 // page indicator. ActorEmail is populated via a LEFT JOIN on the users table
 // so callers receive a human-readable identifier without a second round-trip.
-func (r *repositoryService) List(ctx context.Context, filter ListFilter) ([]auditmodel.Entry, int64, error) {
+func (r *repositoryService) List(ctx context.Context, filter ListFilter) (_ []auditmodel.Entry, _ int64, err error) {
+	ctx, span := tracing.Start(ctx, "audit.repo.List")
+	defer tracing.End(span, &err)
+
 	// Build the reusable base query so conditions are applied identically
 	// to both the COUNT and the data fetch.
 	base := r.db.WithContext(ctx).Table("admin_audit_log")
@@ -62,7 +69,7 @@ func (r *repositoryService) List(ctx context.Context, filter ListFilter) ([]audi
 	}
 
 	var rows []auditmodel.Entry
-	err := base.
+	err = base.
 		Select("admin_audit_log.*, u.email AS actor_email").
 		Joins("LEFT JOIN users u ON u.id = admin_audit_log.actor_user_id").
 		Order("admin_audit_log.created_at DESC").

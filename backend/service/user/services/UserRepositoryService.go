@@ -7,6 +7,7 @@ import (
 	"time"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	rolemodel "github.com/trushilpatel/jobradar/service/role/models"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	"gorm.io/gorm"
@@ -28,7 +29,10 @@ func NewRepositoryService(db *gorm.DB) Service {
 	return &repositoryService{db: db}
 }
 
-func (r *repositoryService) Get(ctx context.Context, id string) (*usermodel.User, error) {
+func (r *repositoryService) Get(ctx context.Context, id string) (_ *usermodel.User, err error) {
+	ctx, span := tracing.Start(ctx, "user.repo.Get")
+	defer tracing.End(span, &err)
+
 	var u usermodel.User
 	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&u).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -39,7 +43,10 @@ func (r *repositoryService) Get(ctx context.Context, id string) (*usermodel.User
 	return &u, nil
 }
 
-func (r *repositoryService) GetByEmail(ctx context.Context, email string) (*usermodel.User, error) {
+func (r *repositoryService) GetByEmail(ctx context.Context, email string) (_ *usermodel.User, err error) {
+	ctx, span := tracing.Start(ctx, "user.repo.GetByEmail")
+	defer tracing.End(span, &err)
+
 	var u usermodel.User
 	if err := r.db.WithContext(ctx).Where("email = ?", strings.ToLower(strings.TrimSpace(email))).First(&u).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -54,7 +61,10 @@ func (r *repositoryService) GetByEmail(ctx context.Context, email string) (*user
 // best-effort grants the baseline `user` role. Concurrent first-login
 // requests for the same JWT subject converge on a single row because the
 // id column is the conflict target.
-func (r *repositoryService) Provision(ctx context.Context, id, email string) (*usermodel.User, error) {
+func (r *repositoryService) Provision(ctx context.Context, id, email string) (_ *usermodel.User, err error) {
+	ctx, span := tracing.Start(ctx, "user.repo.Provision")
+	defer tracing.End(span, &err)
+
 	now := time.Now().UTC()
 	row := usermodel.User{
 		ID:        id,
@@ -88,7 +98,10 @@ func (r *repositoryService) Provision(ctx context.Context, id, email string) (*u
 
 // UpdateProfile sets display_name + updated_at. Empty-string display name is
 // stored as NULL so callers can clear the value.
-func (r *repositoryService) UpdateProfile(ctx context.Context, id string, displayName string) error {
+func (r *repositoryService) UpdateProfile(ctx context.Context, id string, displayName string) (err error) {
+	ctx, span := tracing.Start(ctx, "user.repo.UpdateProfile")
+	defer tracing.End(span, &err)
+
 	now := time.Now().UTC()
 	updates := map[string]any{
 		"updated_at": now,
@@ -112,7 +125,10 @@ func (r *repositoryService) UpdateProfile(ctx context.Context, id string, displa
 // Delete removes the user row. CASCADE on user_roles, user_job_state, and the
 // future per-user tables takes care of dependent rows; the repo does not
 // orchestrate that itself.
-func (r *repositoryService) Delete(ctx context.Context, id string) error {
+func (r *repositoryService) Delete(ctx context.Context, id string) (err error) {
+	ctx, span := tracing.Start(ctx, "user.repo.Delete")
+	defer tracing.End(span, &err)
+
 	res := r.db.WithContext(ctx).Where("id = ?", id).Delete(&usermodel.User{})
 	if res.Error != nil {
 		return domainerrs.ErrInternal.WithMessage("user repo: delete: " + res.Error.Error())

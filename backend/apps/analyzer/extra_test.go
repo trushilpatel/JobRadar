@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,50 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 )
+
+// capturingLogger records log calls so tests can assert that errors are not
+// silently swallowed.
+type capturingLogger struct {
+	mu     sync.Mutex
+	errors []string
+	warns  []string
+}
+
+func (l *capturingLogger) Debug(_ string, _ ...logger.Field) {}
+func (l *capturingLogger) Info(_ string, _ ...logger.Field)  {}
+func (l *capturingLogger) Warn(msg string, _ ...logger.Field) {
+	l.mu.Lock()
+	l.warns = append(l.warns, msg)
+	l.mu.Unlock()
+}
+func (l *capturingLogger) Error(msg string, _ error, _ ...logger.Field) {
+	l.mu.Lock()
+	l.errors = append(l.errors, msg)
+	l.mu.Unlock()
+}
+func (l *capturingLogger) With(_ ...logger.Field) logger.Logger { return l }
+
+func (l *capturingLogger) hasError(substr string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, e := range l.errors {
+		if strings.Contains(e, substr) {
+			return true
+		}
+	}
+	return false
+}
+
+func (l *capturingLogger) hasWarn(substr string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, w := range l.warns {
+		if strings.Contains(w, substr) {
+			return true
+		}
+	}
+	return false
+}
 
 // ── NewWorker default sanitization ────────────────────────────────────────────
 
@@ -466,4 +511,63 @@ func TestProcessFetch_SaveSuccessAcksMsg(t *testing.T) {
 // fullContent is a tiny helper to build a FullJobContent with a description.
 func fullContent(desc string) *atstypes.FullJobContent {
 	return &atstypes.FullJobContent{Description: desc}
+}
+
+// ── sendToDLQ — NATS error path assertions ────────────────────────────────────
+
+// TestSendToDLQ_NATSPublishError_ErrorLogged verifies that when the NATS
+// publisher returns an error the failure is logged at ERROR level (not
+// silently swallowed) and the message is NOT Termed so NATS can redeliver.
+func TestSendToDLQ_NATSPublishError_ErrorLogged(t *testing.T) {
+	log := &capturingLogger{}
+	publisher := &fakePublisher{err: stderrors.New("nats: connection refused")}
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, publisher, &fakeLedger{})
+
+	fj, state := makeTestFetchedJob(t, baseRawJob(), 2)
+	ok := w.sendToDLQ(context.Background(), log, fj, "exhausted", stderrors.New("LLM failed"))
+	if ok {
+		t.Errorf("expected sendToDLQ=false when NATS publish fails")
+	}
+	if state.Termed {
+		t.Errorf("msg must NOT be Termed if DLQ publish failed (NATS should redeliver); got %+v", state)
+	}
+	if len(pipeline.markCalls) != 0 {
+		t.Errorf("markError must not run when DLQ publish fails; got %v", pipeline.markCalls)
+	}
+	if !log.hasError("publish DLQ failed") {
+		t.Errorf("expected 'publish DLQ failed' logged at ERROR level; got errors=%v", log.errors)
+	}
+}
+
+// TestSendToDLQ_SuccessPath_JobTermedAndLogged verifies the happy path:
+// successful DLQ publish Terms the message, marks the ledger, and logs a WARN.
+func TestSendToDLQ_SuccessPath_JobTermedAndLogged(t *testing.T) {
+	log := &capturingLogger{}
+	publisher := &fakePublisher{}
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, publisher, &fakeLedger{})
+
+	fj, state := makeTestFetchedJob(t, baseRawJob(), 3)
+	before := dlqCount("exhausted")
+	origErr := stderrors.New("LLM failed after max retries")
+	ok := w.sendToDLQ(context.Background(), log, fj, "exhausted", origErr)
+	if !ok {
+		t.Fatalf("expected sendToDLQ=true on successful publish")
+	}
+	if !state.Termed {
+		t.Errorf("msg must be Termed after successful DLQ publish; got %+v", state)
+	}
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != fj.job.ID {
+		t.Errorf("expected markError for job %q; got %v", fj.job.ID, pipeline.markCalls)
+	}
+	if got := dlqCount("exhausted") - before; got != 1 {
+		t.Errorf("expected enricher_dlq_publishes_total{exhausted} +1; got +%v", got)
+	}
+	if pubs := publisher.messagesOnSubject(js.SubjectJobsDLQ); len(pubs) != 1 {
+		t.Errorf("expected 1 DLQ publish; got %d", len(pubs))
+	}
+	if !log.hasWarn("moved to DLQ") {
+		t.Errorf("expected 'moved to DLQ' logged at WARN level; got warns=%v", log.warns)
+	}
 }

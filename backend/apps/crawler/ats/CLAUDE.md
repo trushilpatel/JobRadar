@@ -5,7 +5,7 @@
 ```
 job_listing_crawler
   └─ Registry(company.adapter_type) → Adapter.FetchJobs()
-       └─ FetchJobsItem[] → RawJob (published to job_listings.raw)
+       └─ FetchJobsItem[] → RawJob (published to jobs.raw.<adapter>)
             └─ item.FullContent != nil → RawJob.FullContent set  (full-detail adapters)
 
 job_post_analyzer
@@ -18,10 +18,10 @@ job_post_analyzer
 
 Two phases with distinct types:
 
-| Phase  | Interface        | Input         | Output                                 |
-| ------ | ---------------- | ------------- | -------------------------------------- |
-| Scan   | `Adapter`        | `company.url` | `FetchJobsResponse` → `RawJob` (Kafka) |
-| Enrich | `ContentFetcher` | `RawJob.URL`  | `FetchJobContentResponse` (→ LLM)      |
+| Phase  | Interface        | Input         | Output                                          |
+| ------ | ---------------- | ------------- | ----------------------------------------------- |
+| Scan   | `Adapter`        | `company.url` | `FetchJobsResponse` → `RawJob` (NATS JetStream) |
+| Enrich | `ContentFetcher` | `RawJob.URL`  | `FetchJobContentResponse` (→ LLM)               |
 
 Full-detail adapters (e.g. custom company scrapers) collapse both phases — they populate `FetchJobsItem.FullContent` at scan time and the analyzer skips the fetch step entirely.
 
@@ -43,7 +43,7 @@ Adding a new downstream field never requires touching HTTP/decode logic — only
 
 Kept separate from the DB model `jobmodel.Job`:
 
-- `RawJob` — published to `job_listings.raw`; `FullContent` is `omitempty` so thin-adapter consumers are unaffected
+- `RawJob` — published to `jobs.raw.<adapter>` (NATS JetStream); `FullContent` is `omitempty` so thin-adapter consumers are unaffected
 - `FetchJobsItem` / `FetchJobsResponse` — minimal listing data for dedup + publish
 - `FullJobContent` — full details at scan time (full-detail adapters); when set, analyzer skips HTTP fetch
 - `FetchJobContentResponse` — union of all fields across platforms; empty string for unsupported fields

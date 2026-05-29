@@ -3,6 +3,7 @@ import { Upload, Plus, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { routes } from '@/config/routes'
 import { useResumes, ResumeCard, ResumeStorageMeter } from '@/features/resumes'
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { RESUME_LIMIT_PER_USER } from '@/features/resumes'
 
 export function ResumeLibraryPage() {
@@ -51,17 +52,19 @@ export function ResumeLibraryPage() {
         )}
 
         {/* Grid */}
-        {isLoading ? (
-          <div className="text-sm text-slate-400">Loading…</div>
-        ) : resumes.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {resumes.map((r) => (
-              <ResumeCard key={r.id} resume={r} />
-            ))}
-          </div>
-        )}
+        <ErrorBoundary>
+          {isLoading ? (
+            <div className="text-sm text-slate-400">Loading…</div>
+          ) : resumes.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {resumes.map((r) => (
+                <ResumeCard key={r.id} resume={r} />
+              ))}
+            </div>
+          )}
+        </ErrorBoundary>
 
         {/* Footer hint linking to Apply Queue — the other surface that uses resumes */}
         <div className="pt-2">

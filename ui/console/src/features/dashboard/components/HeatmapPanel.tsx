@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import { fetchHeatmap } from '../api/dashboard.api'
@@ -62,18 +63,14 @@ function HeatRow({
   return (
     <div className="space-y-1">
       {/* Month labels */}
-      <div className="grid" style={{ gridTemplateColumns: `repeat(${HALF}, 1fr)`, gap: '3px' }}>
+      <div className="grid grid-cols-[repeat(26,1fr)] gap-[3px]">
         {slice.map((w, col) => {
           const label =
             col % 4 === 0 && !(col === 0 && monthLabel(w.weekStart) === prevLastLabelMonth)
               ? monthLabel(w.weekStart)
               : ''
           return (
-            <div
-              key={col}
-              className="text-[10px] text-slate-600 text-center leading-none"
-              style={{ minWidth: 0 }}
-            >
+            <div key={col} className="text-[10px] text-slate-600 text-center leading-none min-w-0">
               {label}
             </div>
           )
@@ -81,15 +78,15 @@ function HeatRow({
       </div>
 
       {/* Cells */}
-      <div className="grid" style={{ gridTemplateColumns: `repeat(${HALF}, 1fr)`, gap: '3px' }}>
+      <div className="grid grid-cols-[repeat(26,1fr)] gap-[3px]">
         {slice.map((w, col) => {
           const ci = colorIndex(w.count, max)
           return (
             <TooltipPrimitive.Root key={offset + col}>
               <TooltipPrimitive.Trigger asChild>
                 <div
-                  className="rounded-[3px] cursor-pointer transition-opacity hover:opacity-75"
-                  style={{ background: HEAT_COLORS[ci], aspectRatio: '1' }}
+                  style={{ '--cell-bg': HEAT_COLORS[ci] } as CSSProperties}
+                  className="rounded-[3px] cursor-pointer transition-opacity hover:opacity-75 aspect-square [background:var(--cell-bg)]"
                 />
               </TooltipPrimitive.Trigger>
               <TooltipPrimitive.Portal>
@@ -161,8 +158,8 @@ export function HeatmapPanel() {
                 {HEAT_COLORS.map((c, i) => (
                   <span
                     key={i}
-                    className="w-[14px] h-[14px] rounded-[3px] inline-block"
-                    style={{ background: c }}
+                    style={{ '--cell-bg': c } as CSSProperties}
+                    className="w-[14px] h-[14px] rounded-[3px] inline-block [background:var(--cell-bg)]"
                   />
                 ))}
               </div>

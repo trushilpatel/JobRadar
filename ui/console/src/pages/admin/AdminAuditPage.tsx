@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchAuditLog, type AuditFilter } from '@/features/auth'
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 import { Pagination } from '@/components/ui/pagination'
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 
 export function AdminAuditPage() {
   const [actorInput, setActorInput] = useState('')
@@ -61,57 +62,59 @@ export function AdminAuditPage() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
-            Loading…
-          </div>
-        ) : entries.length === 0 ? (
-          <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
-            No entries found.
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/[0.07] text-xs text-slate-500 text-left">
-                <th className="px-4 py-2 font-medium">Time</th>
-                <th className="px-4 py-2 font-medium">Actor</th>
-                <th className="px-4 py-2 font-medium">Action</th>
-                <th className="px-4 py-2 font-medium">Target</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((e) => (
-                <tr
-                  key={e.id}
-                  className="border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors"
-                >
-                  <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">
-                    {new Date(e.created_at).toLocaleString()}
-                  </td>
-                  <td
-                    className="px-4 py-2.5 text-xs text-slate-400 truncate max-w-[200px]"
-                    title={e.actor_user_id ?? undefined}
-                  >
-                    {e.actor_email ?? e.actor_user_id ?? '—'}
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-violet-300 font-medium">{e.action}</td>
-                  <td
-                    className="px-4 py-2.5 text-xs text-slate-500"
-                    title={e.target_id ?? undefined}
-                  >
-                    {e.target_type
-                      ? e.target_id
-                        ? `${e.target_type} · ${e.target_id.slice(0, 8)}…`
-                        : e.target_type
-                      : '—'}
-                  </td>
+      <ErrorBoundary>
+        <div className="flex-1 overflow-auto">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
+              Loading…
+            </div>
+          ) : entries.length === 0 ? (
+            <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
+              No entries found.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/[0.07] text-xs text-slate-500 text-left">
+                  <th className="px-4 py-2 font-medium">Time</th>
+                  <th className="px-4 py-2 font-medium">Actor</th>
+                  <th className="px-4 py-2 font-medium">Action</th>
+                  <th className="px-4 py-2 font-medium">Target</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {entries.map((e) => (
+                  <tr
+                    key={e.id}
+                    className="border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors"
+                  >
+                    <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">
+                      {new Date(e.created_at).toLocaleString()}
+                    </td>
+                    <td
+                      className="px-4 py-2.5 text-xs text-slate-400 truncate max-w-[200px]"
+                      title={e.actor_user_id ?? undefined}
+                    >
+                      {e.actor_email ?? e.actor_user_id ?? '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-violet-300 font-medium">{e.action}</td>
+                    <td
+                      className="px-4 py-2.5 text-xs text-slate-500"
+                      title={e.target_id ?? undefined}
+                    >
+                      {e.target_type
+                        ? e.target_id
+                          ? `${e.target_type} · ${e.target_id.slice(0, 8)}…`
+                          : e.target_type
+                        : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </ErrorBoundary>
 
       <div className="border-t border-white/[0.07] shrink-0">
         <Pagination

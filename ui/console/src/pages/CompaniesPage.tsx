@@ -2,6 +2,7 @@ import { useState, useCallback, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Company } from '@/types'
 import { ADAPTER_TYPES } from '@/types'
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { EMPTY_MESSAGES } from '@/features/companies'
 import { jobsUrl } from '@/features/jobs'
 import { ResizeHandle } from '@/components/ui/resize-handle'
@@ -70,59 +71,61 @@ export function CompaniesPage() {
         onAddClick={() => setAddOpen(true)}
       />
 
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        <CompaniesTable
-          companies={c.companies}
-          page={c.page}
-          itemsOnPage={c.itemsOnPage}
-          itemsBeforePage={c.itemsBeforePage}
-          knownTotal={c.total}
-          loading={c.isLoading || c.isFetching}
-          limit={c.limit}
-          onLimitChange={c.setLimit}
-          nextCursor={c.nextCursor}
-          hasPrev={c.hasPrev}
-          onNext={c.goToNextPage}
-          onPrev={c.goToPrevPage}
-          onFirst={c.goToFirstPage}
-          emptyMessage={
-            c.hasActiveFilters ? EMPTY_MESSAGES.WITH_FILTERS : EMPTY_MESSAGES.WITHOUT_FILTERS
-          }
-          activeCompanyId={drawerCompany?.id}
-          onRowClick={setDrawerCompany}
-          sorting={c.sorting}
-          onSortingChange={c.handleSortingChange}
-          actions={{
-            onScan: actions.scan,
-            onEdit: setEditCompany,
-            onDelete: (id) => setDeleteTarget(c.companies.find((co) => co.id === id) ?? null),
-            onToggleActive: actions.toggleActive,
-            scanning: actions.scanning,
-          }}
-        />
+      <ErrorBoundary>
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          <CompaniesTable
+            companies={c.companies}
+            page={c.page}
+            itemsOnPage={c.itemsOnPage}
+            itemsBeforePage={c.itemsBeforePage}
+            knownTotal={c.total}
+            loading={c.isLoading || c.isFetching}
+            limit={c.limit}
+            onLimitChange={c.setLimit}
+            nextCursor={c.nextCursor}
+            hasPrev={c.hasPrev}
+            onNext={c.goToNextPage}
+            onPrev={c.goToPrevPage}
+            onFirst={c.goToFirstPage}
+            emptyMessage={
+              c.hasActiveFilters ? EMPTY_MESSAGES.WITH_FILTERS : EMPTY_MESSAGES.WITHOUT_FILTERS
+            }
+            activeCompanyId={drawerCompany?.id}
+            onRowClick={setDrawerCompany}
+            sorting={c.sorting}
+            onSortingChange={c.handleSortingChange}
+            actions={{
+              onScan: actions.scan,
+              onEdit: setEditCompany,
+              onDelete: (id) => setDeleteTarget(c.companies.find((co) => co.id === id) ?? null),
+              onToggleActive: actions.toggleActive,
+              scanning: actions.scanning,
+            }}
+          />
 
-        {drawerCompany && (
-          <>
-            <ResizeHandle width={panelWidth} onChange={setPanelWidth} />
-            <aside
-              style={{ ['--panel-width' as string]: `${panelWidth}px` } as CSSProperties}
-              className="shrink-0 min-h-0 border-l border-white/[0.07] overflow-hidden [width:var(--panel-width)]"
-            >
-              <CompanyDetailDrawer
-                company={drawerCompany}
-                onClose={() => setDrawerCompany(null)}
-                onScan={actions.scan}
-                onEdit={setEditCompany}
-                onDelete={(id) => {
-                  actions.remove(id)
-                  setDrawerCompany(null)
-                }}
-                onViewJobs={handleViewJobs}
-              />
-            </aside>
-          </>
-        )}
-      </div>
+          {drawerCompany && (
+            <>
+              <ResizeHandle width={panelWidth} onChange={setPanelWidth} />
+              <aside
+                style={{ ['--panel-width' as string]: `${panelWidth}px` } as CSSProperties}
+                className="shrink-0 min-h-0 border-l border-white/[0.07] overflow-hidden [width:var(--panel-width)]"
+              >
+                <CompanyDetailDrawer
+                  company={drawerCompany}
+                  onClose={() => setDrawerCompany(null)}
+                  onScan={actions.scan}
+                  onEdit={setEditCompany}
+                  onDelete={(id) => {
+                    actions.remove(id)
+                    setDrawerCompany(null)
+                  }}
+                  onViewJobs={handleViewJobs}
+                />
+              </aside>
+            </>
+          )}
+        </div>
+      </ErrorBoundary>
 
       <AddCompanyModal
         open={addOpen}

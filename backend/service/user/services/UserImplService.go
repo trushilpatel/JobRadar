@@ -4,6 +4,7 @@ import (
 	"context"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/platform/supabaseadmin"
 )
 
@@ -35,7 +36,10 @@ func NewImplService(next Service, supabase supabaseadmin.Client) Service {
 // users row referencing a now-orphaned auth identity. A nil supabase client
 // is a programmer error — we panic at construction in production wiring,
 // but tolerate it here so unit tests can exercise the DB-only path.
-func (s *implService) Delete(ctx context.Context, id string) error {
+func (s *implService) Delete(ctx context.Context, id string) (err error) {
+	ctx, span := tracing.Start(ctx, "user.impl.Delete")
+	defer tracing.End(span, &err)
+
 	if id == "" {
 		return domainerrs.ErrBadRequest.WithMessage("user id required")
 	}

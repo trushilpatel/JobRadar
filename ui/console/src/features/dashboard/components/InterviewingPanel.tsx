@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import * as Select from '@radix-ui/react-select'
 import { ChevronDown, Check } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -75,8 +76,8 @@ function StageSelect({
                 className="flex items-center gap-2 px-3 py-2 text-[11px] text-slate-300 rounded cursor-pointer hover:bg-white/[0.05] focus:bg-white/[0.05] focus:outline-none data-[state=checked]:text-white data-[state=checked]:bg-white/[0.06]"
               >
                 <span
-                  className="w-[6px] h-[6px] rounded-full shrink-0"
-                  style={{ background: opt.dotColor }}
+                  style={{ '--dot-bg': opt.dotColor } as CSSProperties}
+                  className="w-[6px] h-[6px] rounded-full shrink-0 [background:var(--dot-bg)]"
                 />
                 <Select.ItemText>{opt.label}</Select.ItemText>
                 <Select.ItemIndicator className="ml-auto">

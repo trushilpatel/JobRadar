@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { FunnelStep } from '@/types'
 import { cn } from '@/lib/utils/utils'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
@@ -37,8 +38,11 @@ function FunnelContent({ data }: { data: FunnelStep[] }) {
             </div>
             <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
               <div
-                className={cn('h-full rounded-full transition-all', COLORS[stage])}
-                style={{ width: `${Math.max(pct, count > 0 ? 2 : 0)}%` }}
+                style={{ '--bar-pct': `${Math.max(pct, count > 0 ? 2 : 0)}%` } as CSSProperties}
+                className={cn(
+                  'h-full rounded-full transition-all [width:var(--bar-pct)]',
+                  COLORS[stage]
+                )}
               />
             </div>
           </div>

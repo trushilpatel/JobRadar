@@ -8,6 +8,7 @@ import (
 	"time"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
@@ -26,12 +27,21 @@ import (
 // when the counter row is missing, CountsByUser falls back to a GROUP BY
 // scan and seeds the counter row so subsequent reads are fast.
 type userJobStateRepository struct {
-	db *gorm.DB
+	db  *gorm.DB
+	log logger.Logger
 }
 
 // NewUserJobStateRepository constructs a UserJobStateRepository.
-func NewUserJobStateRepository(db *gorm.DB) UserJobStateRepository {
-	return &userJobStateRepository{db: db}
+// An optional logger may be passed as the second argument; when absent a
+// no-op logger is used so existing callers (tests, wire_gen.go) are unaffected.
+func NewUserJobStateRepository(db *gorm.DB, log ...logger.Logger) UserJobStateRepository {
+	var l logger.Logger
+	if len(log) > 0 && log[0] != nil {
+		l = log[0]
+	} else {
+		l = logger.NewNoop()
+	}
+	return &userJobStateRepository{db: db, log: l}
 }
 
 // errNoUser is the canonical guard error for empty userID. Same error
@@ -418,7 +428,9 @@ func (r *userJobStateRepository) CountsByUser(ctx context.Context, userID string
 	}
 	// Seeding failure is non-fatal — the counts are still correct for this
 	// call; the next call will retry the seed.
-	_ = seedCounter(ctx, r.db, userID, counts)
+	if err := seedCounter(ctx, r.db, userID, counts); err != nil {
+		r.log.Warn("user job state counter seed failed", logger.Err(err), logger.Str(logger.FieldUserID, userID))
+	}
 	return counts, nil
 }
 

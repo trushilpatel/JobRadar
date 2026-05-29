@@ -1,3 +1,4 @@
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { AdapterConfigsTable } from '@/features/settings'
 
 export function SettingsPage() {
@@ -16,7 +17,9 @@ export function SettingsPage() {
               using that adapter unless a company-level override is set.
             </p>
           </div>
-          <AdapterConfigsTable />
+          <ErrorBoundary>
+            <AdapterConfigsTable />
+          </ErrorBoundary>
         </section>
       </div>
     </div>
