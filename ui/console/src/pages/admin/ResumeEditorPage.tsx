@@ -4,13 +4,15 @@ import { ChevronLeft, CheckCircle2, FileEdit } from 'lucide-react'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils/utils'
-import { routes } from '@/lib/routes'
-import { useResume } from '@/features/resumes/hooks/useResume'
-import { ResumeContentPane } from '@/features/resumes/components/ResumeContentPane'
-import { JobContextPanel } from '@/features/resumes/components/JobContextPanel'
-import { ResumeStateBadge } from '@/features/resumes/components/ResumeStateBadge'
-import { getMockJob } from '@/features/resumes/mockData'
-import { resumeQueryKeys } from '@/features/resumes/queryKeys'
+import { routes } from '@/config/routes'
+import {
+  useResume,
+  ResumeContentPane,
+  JobContextPanel,
+  ResumeStateBadge,
+  getMockJob,
+  resumeQueryKeys,
+} from '@/features/resumes'
 
 export function ResumeEditorPage() {
   const { id } = useParams<{ id: string }>()

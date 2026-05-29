@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchProgress } from './api/dashboard.api'
-import { dashboardQueryKeys } from './queryKeys'
-import { StatCol } from './components/StatCol'
+import { fetchProgress } from '../api/dashboard.api'
+import { dashboardQueryKeys } from '../queryKeys'
+import { StatCol } from './StatCol'
 
 export function ProgressPanel() {
   const { data, isLoading, isError } = useQuery({

@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { createElement, type ReactNode } from 'react'
 import { JobDetailPanel } from '../JobDetailPanel'
 import type { Job } from '@/types'
-import { JOB_STATUS } from '@/constants/jobStatus'
+import { JOB_STATUS } from '@/config/constants/jobStatus'
 import * as jobsApi from '@/features/jobs/api/jobs.api'
 
 vi.mock('@/features/jobs/api/jobs.api')

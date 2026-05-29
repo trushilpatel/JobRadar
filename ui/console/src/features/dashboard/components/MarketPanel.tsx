@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { fetchMarket } from './api/dashboard.api'
-import { dashboardQueryKeys } from './queryKeys'
-import { StatCol } from './components/StatCol'
+import { fetchMarket } from '../api/dashboard.api'
+import { dashboardQueryKeys } from '../queryKeys'
+import { StatCol } from './StatCol'
 
 export function MarketPanel() {
   const navigate = useNavigate()

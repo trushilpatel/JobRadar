@@ -4,8 +4,8 @@ import { toast } from 'sonner'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Paperclip, X } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
-import { routes } from '@/lib/routes'
-import { useResumes } from '@/features/resumes/hooks/useResumes'
+import { routes } from '@/config/routes'
+import { useResumes } from '../hooks/useResumes'
 
 interface Props {
   // The job to attach a resume to.

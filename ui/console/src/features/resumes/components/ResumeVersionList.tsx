@@ -1,5 +1,5 @@
 import { cn, formatRelativeTime } from '@/lib/utils/utils'
-import type { ResumeVersion } from '@/features/resumes/types'
+import type { ResumeVersion } from '../types'
 
 interface Props {
   versions: ResumeVersion[]

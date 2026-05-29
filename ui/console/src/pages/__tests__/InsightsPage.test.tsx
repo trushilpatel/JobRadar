@@ -16,7 +16,7 @@ class MockResizeObserver {
 global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
 
 // ── Lazy imports after mocks are registered ───────────────────────────────────
-import * as insightsApi from '@/features/insights/api/insights.api'
+import * as insightsApi from '@/features/insights'
 import { InsightsPage } from '@/pages/InsightsPage'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

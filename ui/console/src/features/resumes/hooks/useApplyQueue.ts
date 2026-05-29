@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { resumeQueryKeys } from '@/features/resumes/queryKeys'
-import { buildApplyQueue } from '@/features/resumes/mockData'
-import type { ApplyQueueItem } from '@/features/resumes/types'
-import type { ApplyQueueFilter } from '@/lib/routes'
+import { resumeQueryKeys } from '../queryKeys'
+import { buildApplyQueue } from '../mockData'
+import type { ApplyQueueItem } from '../types'
+import type { ApplyQueueFilter } from '@/config/routes'
 
 // Mockup hook — would call GET /admin/apply-queue?filter=... once backend
 // exists. Filter rules match the spec in Designs/resume-feature-spec.md §1:

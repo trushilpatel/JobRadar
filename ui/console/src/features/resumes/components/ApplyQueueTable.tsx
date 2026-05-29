@@ -3,11 +3,11 @@ import { ExternalLink, Edit3, Send, Paperclip } from 'lucide-react'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn, formatRelativeTime } from '@/lib/utils/utils'
-import { routes } from '@/lib/routes'
-import { resumeQueryKeys } from '@/features/resumes/queryKeys'
-import { ResumeStateBadge } from '@/features/resumes/components/ResumeStateBadge'
-import { ResumePickerInline } from '@/features/resumes/components/ResumePickerInline'
-import type { ApplyQueueItem } from '@/features/resumes/types'
+import { routes } from '@/config/routes'
+import { resumeQueryKeys } from '../queryKeys'
+import { ResumeStateBadge } from './ResumeStateBadge'
+import { ResumePickerInline } from './ResumePickerInline'
+import type { ApplyQueueItem } from '../types'
 
 interface Props {
   items: ApplyQueueItem[]

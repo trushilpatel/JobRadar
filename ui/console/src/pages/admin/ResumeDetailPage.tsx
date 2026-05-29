@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft, Edit3, Archive, Download } from 'lucide-react'
 import { toast } from 'sonner'
-import { routes } from '@/lib/routes'
-import { useResume } from '@/features/resumes/hooks/useResume'
-import { ResumeMetadataPanel } from '@/features/resumes/components/ResumeMetadataPanel'
-import { ResumeVersionList } from '@/features/resumes/components/ResumeVersionList'
-import { ResumeContentPane } from '@/features/resumes/components/ResumeContentPane'
-import { AttachedJobsList } from '@/features/resumes/components/AttachedJobsList'
+import { routes } from '@/config/routes'
+import {
+  useResume,
+  ResumeMetadataPanel,
+  ResumeVersionList,
+  ResumeContentPane,
+  AttachedJobsList,
+} from '@/features/resumes'
 
 export function ResumeDetailPage() {
   const { id } = useParams<{ id: string }>()

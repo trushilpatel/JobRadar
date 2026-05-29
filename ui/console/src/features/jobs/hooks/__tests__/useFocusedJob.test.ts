@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useFocusedJob } from '@/features/jobs/hooks/useFocusedJob'
-import { JOB_STATUS } from '@/constants/jobStatus'
+import { JOB_STATUS } from '@/config/constants/jobStatus'
 import type { Job } from '@/types'
 
 function makeJob(id: string): Job {

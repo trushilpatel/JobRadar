@@ -9,8 +9,8 @@ import {
   CommandShortcut,
 } from '@/components/ui/command'
 import type { Job } from '@/types'
-import type { TabKey } from '@/features/jobs/hooks/useJobs'
-import { JOB_STATUS } from '@/constants/jobStatus'
+import type { TabKey } from '../hooks/useJobs'
+import { JOB_STATUS } from '@/config/constants/jobStatus'
 
 export interface JobCommandPaletteProps {
   open: boolean

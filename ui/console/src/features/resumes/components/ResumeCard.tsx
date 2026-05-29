@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
 import { FileText, Paperclip, CheckCircle2 } from 'lucide-react'
 import { cn, formatRelativeTime } from '@/lib/utils/utils'
-import { routes } from '@/lib/routes'
-import type { Resume } from '@/features/resumes/types'
+import { routes } from '@/config/routes'
+import type { Resume } from '../types'
 
 const AXIS_TONE: Record<string, string> = {
   role: 'bg-violet-500/10 text-violet-300',

@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from 'react'
 import type { Company } from '@/types'
 import { ADAPTER_TYPES } from '@/types'
-import { EMPTY_MESSAGES } from '@/features/companies/constants'
+import { EMPTY_MESSAGES } from '@/features/companies'
 import { ResizeHandle } from '@/components/ui/resize-handle'
 import {
   AlertDialog,

@@ -8,9 +8,9 @@ vi.mock('@/features/settings/api/adapterConfigs.api')
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 // ── Lazy imports after mocks are registered ───────────────────────────────────
-import * as adapterConfigsApi from '@/features/settings/api/adapterConfigs.api'
+import * as adapterConfigsApi from '@/features/settings'
 import { SettingsPage } from '@/pages/SettingsPage'
-import type { AdapterConfig } from '@/features/settings/api/adapterConfigs.api'
+import type { AdapterConfig } from '@/features/settings'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function pending(): Promise<never> {

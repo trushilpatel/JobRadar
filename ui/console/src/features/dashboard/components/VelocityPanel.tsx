@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchVelocity } from './api/dashboard.api'
+import { fetchVelocity } from '../api/dashboard.api'
 import type { CompanyVelocityRow } from '@/types'
 import { cn } from '@/lib/utils/utils'
-import { dashboardQueryKeys } from './queryKeys'
+import { dashboardQueryKeys } from '../queryKeys'
 
 const BADGE: Record<string, string> = {
   spike: 'bg-amber-500/15 text-amber-400',

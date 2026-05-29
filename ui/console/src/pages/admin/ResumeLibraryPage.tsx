@@ -1,11 +1,9 @@
 import { Link } from 'react-router-dom'
 import { Upload, Plus, FileText } from 'lucide-react'
 import { toast } from 'sonner'
-import { routes } from '@/lib/routes'
-import { useResumes } from '@/features/resumes/hooks/useResumes'
-import { ResumeCard } from '@/features/resumes/components/ResumeCard'
-import { ResumeStorageMeter } from '@/features/resumes/components/ResumeStorageMeter'
-import { RESUME_LIMIT_PER_USER } from '@/features/resumes/types'
+import { routes } from '@/config/routes'
+import { useResumes, ResumeCard, ResumeStorageMeter } from '@/features/resumes'
+import { RESUME_LIMIT_PER_USER } from '@/features/resumes'
 
 export function ResumeLibraryPage() {
   const { data, isLoading } = useResumes()

@@ -11,7 +11,7 @@ import {
   bulkDismissJobs,
 } from '@/features/jobs/api/jobs.api'
 import type { JobFilters, JobsPage, JobCounts } from '@/features/jobs/api/jobs.api'
-import { JOB_STATUS } from '@/constants/jobStatus'
+import { JOB_STATUS } from '@/config/constants/jobStatus'
 
 vi.mock('@/lib/core/api-client')
 

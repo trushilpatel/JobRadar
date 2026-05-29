@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Job, JobApplication } from '@/types'
 import { apiClient } from '@/lib/core/api-client'
-import { JOB_STATUS, type JobStatus, type PatchableStatus } from '@/constants/jobStatus'
+import { JOB_STATUS, type JobStatus, type PatchableStatus } from '@/config/constants/jobStatus'
 
 // ── Zod schemas (response shapes only) ─────────────────────────────────────
 

@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { withNuqsTestingAdapter } from 'nuqs/adapters/testing'
 import * as jobsApi from '@/features/jobs/api/jobs.api'
 import { useJobs } from '../useJobs'
-import { JOB_STATUS } from '@/constants/jobStatus'
+import { JOB_STATUS } from '@/config/constants/jobStatus'
 import type { Job } from '@/types'
 
 vi.mock('@/features/jobs/api/jobs.api')

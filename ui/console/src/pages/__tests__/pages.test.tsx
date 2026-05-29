@@ -69,13 +69,15 @@ function makeWrapper(initialEntries = ['/']) {
 }
 
 // ── Lazy imports (after mocks are registered) ─────────────────────────────────
-import * as dashboardApi from '@/features/dashboard/api/dashboard.api'
-import * as insightsApi from '@/features/insights/api/insights.api'
-import * as jobsApi from '@/features/jobs/api/jobs.api'
-import * as adapterConfigsApi from '@/features/settings/api/adapterConfigs.api'
-import * as adminCompaniesApi from '@/features/companies/api/adminCompanies.api'
-import * as adminUsersApi from '@/features/auth/api/adminUsers.api'
-import * as adminAuditApi from '@/features/auth/api/adminAudit.api'
+// Import from feature barrels — the barrel re-exports from the mocked sub-modules
+// so vi.mocked() references resolve to the same mocked functions.
+import * as dashboardApi from '@/features/dashboard'
+import * as insightsApi from '@/features/insights'
+import * as jobsApi from '@/features/jobs'
+import * as adapterConfigsApi from '@/features/settings'
+import * as adminCompaniesApi from '@/features/companies'
+import * as adminUsersApi from '@/features/auth'
+import * as adminAuditApi from '@/features/auth'
 
 import { DashboardPage } from '@/pages/DashboardPage'
 import { JobsPage } from '@/pages/JobsPage'

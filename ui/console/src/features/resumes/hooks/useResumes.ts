@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { resumeQueryKeys } from '@/features/resumes/queryKeys'
-import { MOCK_RESUMES } from '@/features/resumes/mockData'
-import type { Resume } from '@/features/resumes/types'
+import { resumeQueryKeys } from '../queryKeys'
+import { MOCK_RESUMES } from '../mockData'
+import type { Resume } from '../types'
 
 // Mockup hook — returns stub list. Will be replaced with `fetchResumes()`
 // against /admin/resumes once the backend slice lands.

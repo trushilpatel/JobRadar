@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchTechTrends } from './api/dashboard.api'
+import { fetchTechTrends } from '../api/dashboard.api'
 import type { TechTrendRow } from '@/types'
-import { dashboardQueryKeys } from './queryKeys'
+import { dashboardQueryKeys } from '../queryKeys'
 
 // Sparkline for a tech row — 4 quarter bars
 function TechSparkline({

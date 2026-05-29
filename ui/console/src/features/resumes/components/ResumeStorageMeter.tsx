@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils/utils'
-import { RESUME_LIMIT_PER_USER } from '@/features/resumes/types'
+import { RESUME_LIMIT_PER_USER } from '../types'
 
 interface Props {
   count: number

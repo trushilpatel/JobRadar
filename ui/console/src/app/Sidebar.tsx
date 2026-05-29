@@ -15,8 +15,8 @@ import {
   Send,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
-import { routes } from '@/lib/routes'
-import { useAuthStore } from '@/features/auth/store'
+import { routes } from '@/config/routes'
+import { useAuthStore } from '@/features/auth'
 import { LogoLockup } from '@/components/brand/Logo'
 
 const userNav: { to: string; label: string; icon: React.ReactNode }[] = [

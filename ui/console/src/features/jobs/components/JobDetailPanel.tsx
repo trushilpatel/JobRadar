@@ -15,10 +15,10 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { Job, JobStatus } from '@/types'
-import { JOB_STATUS } from '@/constants/jobStatus'
+import { JOB_STATUS } from '@/config/constants/jobStatus'
 import { formatRelativeTime, cn, formatSalary } from '@/lib/utils/utils'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
-import { StatusSelect } from '@/features/jobs/components/StatusSelect'
+import { StatusSelect } from './StatusSelect'
 import { setJobNotes } from '../api/jobs.api'
 
 export type JobDetailMode = 'pane' | 'route'

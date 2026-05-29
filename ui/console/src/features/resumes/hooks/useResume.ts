@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { resumeQueryKeys } from '@/features/resumes/queryKeys'
-import { MOCK_ATTACHMENTS, MOCK_RESUMES, MOCK_VERSIONS } from '@/features/resumes/mockData'
-import type { Resume, ResumeJobAttachment, ResumeVersion } from '@/features/resumes/types'
+import { resumeQueryKeys } from '../queryKeys'
+import { MOCK_ATTACHMENTS, MOCK_RESUMES, MOCK_VERSIONS } from '../mockData'
+import type { Resume, ResumeJobAttachment, ResumeVersion } from '../types'
 
 interface ResumeDetailResult {
   resume: Resume | null
