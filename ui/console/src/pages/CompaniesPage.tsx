@@ -1,7 +1,9 @@
-import { useState, type CSSProperties } from 'react'
+import { useState, useCallback, type CSSProperties } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { Company } from '@/types'
 import { ADAPTER_TYPES } from '@/types'
 import { EMPTY_MESSAGES } from '@/features/companies'
+import { jobsUrl } from '@/features/jobs'
 import { ResizeHandle } from '@/components/ui/resize-handle'
 import {
   AlertDialog,
@@ -32,6 +34,11 @@ export function CompaniesPage() {
   const [drawerCompany, setDrawerCompany] = useState<Company | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Company | null>(null)
   const [panelWidth, setPanelWidth] = useState(480)
+  const navigate = useNavigate()
+  const handleViewJobs = useCallback(
+    (companyName: string) => navigate(jobsUrl({ companies: [companyName] })),
+    [navigate]
+  )
   const [adapterOptions, setAdapterOptions] = useState<string[]>([...ADAPTER_TYPES])
 
   const bulkAllActive = c.companies.length > 0 && c.companies.every((co) => co.active)
@@ -110,6 +117,7 @@ export function CompaniesPage() {
                   actions.remove(id)
                   setDrawerCompany(null)
                 }}
+                onViewJobs={handleViewJobs}
               />
             </aside>
           </>

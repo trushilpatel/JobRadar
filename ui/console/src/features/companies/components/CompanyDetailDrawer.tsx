@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X, Trash2, RefreshCw, Pencil, ChevronDown, ChevronUp } from 'lucide-react'
 import {
@@ -14,7 +13,6 @@ import type { Company } from '@/types'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
 import { cn, formatRelativeTime } from '@/lib/utils/utils'
-import { routes } from '@/config/routes'
 import { useCompanyScanStats } from '../hooks/useCompanyScanStats'
 import { useCompanyAnalytics } from '../hooks/useCompanyAnalytics'
 
@@ -24,6 +22,7 @@ interface CompanyDetailDrawerProps {
   onScan: (c: Company) => void
   onEdit: (c: Company) => void
   onDelete: (id: string) => void
+  onViewJobs?: (companyName: string) => void
 }
 
 export function CompanyDetailDrawer({
@@ -32,11 +31,11 @@ export function CompanyDetailDrawer({
   onScan,
   onEdit,
   onDelete,
+  onViewJobs,
 }: CompanyDetailDrawerProps) {
   const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set())
   const [logsOpen, setLogsOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-  const navigate = useNavigate()
 
   const { data: stats, isLoading } = useCompanyScanStats(company.id)
   const { data: analytics, isError: analyticsError } = useCompanyAnalytics(company.id)
@@ -230,7 +229,7 @@ export function CompanyDetailDrawer({
           {stats && stats.total_new > 0 && (
             <button
               type="button"
-              onClick={() => navigate(routes.jobs(), { state: { companies: [company.name] } })}
+              onClick={() => onViewJobs?.(company.name)}
               className="mt-2 w-full flex items-center justify-between px-3 py-2 border border-white/[0.07] rounded-lg text-xs text-slate-300 hover:text-white hover:border-white/20 transition-colors"
             >
               <span>View {stats.total_new} new jobs</span>
