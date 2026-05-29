@@ -1,20 +1,24 @@
+import { z } from 'zod'
 import { apiClient } from '@/lib/api-client'
 
-export interface AdminUser {
-  id: string
-  email: string
-  display_name: string | null
-  status: 'active' | 'suspended'
-  created_at: string
-  roles: string[]
-}
+const AdminUserSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  display_name: z.string().nullable(),
+  status: z.enum(['active', 'suspended']),
+  created_at: z.string(),
+  roles: z.array(z.string()),
+})
 
-export interface AdminUserListResult {
-  data: AdminUser[]
-  total: number
-  page: number
-  limit: number
-}
+const AdminUserListResultSchema = z.object({
+  data: z.array(AdminUserSchema),
+  total: z.number(),
+  page: z.number(),
+  limit: z.number(),
+})
+
+export type AdminUser = z.infer<typeof AdminUserSchema>
+export type AdminUserListResult = z.infer<typeof AdminUserListResultSchema>
 
 export interface AdminUserFilter {
   status?: 'active' | 'suspended' | ''
@@ -31,7 +35,8 @@ export async function fetchAdminUsers(
   params.set('limit', String(limit))
   if (filter.status) params.set('status', filter.status)
   if (filter.email) params.set('email', filter.email)
-  return apiClient.get<AdminUserListResult>(`/admin/users?${params}`)
+  const raw = await apiClient.get<unknown>(`/admin/users?${params}`)
+  return AdminUserListResultSchema.parse(raw)
 }
 
 export async function setUserRoles(userId: string, roleIds: string[]): Promise<void> {

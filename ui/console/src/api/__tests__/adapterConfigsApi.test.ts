@@ -6,7 +6,7 @@ import {
   updateScanIntervalOverride,
   getCompanyScanConfig,
 } from '@/api/adapterConfigs'
-import type { AdapterConfig, EffectiveScanConfig } from '@/types'
+import type { AdapterConfig, EffectiveScanConfig, Company } from '@/types'
 
 vi.mock('@/lib/api-client')
 
@@ -23,6 +23,17 @@ const mockEffectiveScanConfig: EffectiveScanConfig = {
   effective_scan_interval_minutes: 720,
   inter_company_delay_s: 3,
   company_override: 720,
+}
+
+const mockCompany: Company = {
+  id: 'stripe',
+  name: 'Stripe',
+  url: 'https://stripe.com/jobs',
+  adapter_type: 'greenhouse',
+  active: true,
+  created_at: '2024-01-01T00:00:00Z',
+  last_scan_at: null,
+  last_scan_status: null,
 }
 
 describe('adapterConfigs API', () => {
@@ -105,7 +116,7 @@ describe('adapterConfigs API', () => {
 
   describe('updateScanIntervalOverride', () => {
     it('calls PATCH /admin/companies/:id/scan-interval-override', async () => {
-      vi.mocked(apiClient.patch).mockResolvedValue(undefined)
+      vi.mocked(apiClient.patch).mockResolvedValue(mockCompany)
       await updateScanIntervalOverride('stripe', 720)
       expect(apiClient.patch).toHaveBeenCalledWith(
         '/admin/companies/stripe/scan-interval-override',
@@ -114,7 +125,7 @@ describe('adapterConfigs API', () => {
     })
 
     it('sends null to clear the override', async () => {
-      vi.mocked(apiClient.patch).mockResolvedValue(undefined)
+      vi.mocked(apiClient.patch).mockResolvedValue(mockCompany)
       await updateScanIntervalOverride('stripe', null)
       expect(apiClient.patch).toHaveBeenCalledWith(
         '/admin/companies/stripe/scan-interval-override',
@@ -123,7 +134,7 @@ describe('adapterConfigs API', () => {
     })
 
     it('URL-encodes the company id', async () => {
-      vi.mocked(apiClient.patch).mockResolvedValue(undefined)
+      vi.mocked(apiClient.patch).mockResolvedValue(mockCompany)
       await updateScanIntervalOverride('my company', 1440)
       const [url] = vi.mocked(apiClient.patch).mock.calls[0]!
       expect(url).toContain('my%20company')
