@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import * as adminApi from '@/features/companies/api/adminCompanies.api'
 import * as companiesApi from '@/features/companies/api/companies.api'
 import { useCompanyActions } from '../useCompanyActions'
+import { companyQueryKeys } from '@/features/companies/queryKeys'
 import type { Company } from '@/types'
 
 vi.mock('@/features/companies/api/adminCompanies.api')
@@ -28,10 +29,13 @@ const mockCompany: Company = {
   last_scan_status: null,
 }
 
+let lastQc: QueryClient | null = null
+
 function makeWrapper() {
-  const qc = new QueryClient({
+  lastQc = new QueryClient({
     defaultOptions: { queries: { retry: 0, gcTime: 0 } },
   })
+  const qc = lastQc
   return ({ children }: { children: React.ReactNode }) =>
     createElement(QueryClientProvider, { client: qc }, children)
 }
@@ -302,6 +306,56 @@ describe('useCompanyActions', () => {
       })
 
       expect(toast.success).toHaveBeenCalledWith('Stripe updated')
+    })
+  })
+
+  // ── cache seam — invalidation contracts ────────────────────────────────────
+
+  describe('cache invalidation contracts', () => {
+    it('invalidates adminCompaniesBase after toggleActive', async () => {
+      vi.mocked(adminApi.updateAdminCompanyScanSettings).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useCompanyActions(), { wrapper: makeWrapper() })
+      const spy = vi.spyOn(lastQc!, 'invalidateQueries')
+      await act(async () => {
+        await result.current.toggleActive(mockCompany)
+      })
+      const keys = spy.mock.calls.map((c) => c[0]?.queryKey)
+      expect(keys).toContainEqual(companyQueryKeys.adminCompaniesBase())
+    })
+
+    it('invalidates adminCompaniesBase after remove', async () => {
+      vi.mocked(adminApi.deleteAdminCompany).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useCompanyActions(), { wrapper: makeWrapper() })
+      const spy = vi.spyOn(lastQc!, 'invalidateQueries')
+      await act(async () => {
+        await result.current.remove('stripe')
+      })
+      const keys = spy.mock.calls.map((c) => c[0]?.queryKey)
+      expect(keys).toContainEqual(companyQueryKeys.adminCompaniesBase())
+    })
+
+    it('invalidates both adminCompaniesBase and scanQueue after scan', async () => {
+      vi.mocked(companiesApi.triggerScan).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useCompanyActions(), { wrapper: makeWrapper() })
+      const spy = vi.spyOn(lastQc!, 'invalidateQueries')
+      await act(async () => {
+        await result.current.scan(mockCompany)
+      })
+      const keys = spy.mock.calls.map((c) => c[0]?.queryKey)
+      expect(keys).toContainEqual(companyQueryKeys.adminCompaniesBase())
+      expect(keys).toContainEqual(companyQueryKeys.scanQueue())
+    })
+
+    it('invalidates both adminCompaniesBase and scanQueue after scanAll', async () => {
+      vi.mocked(companiesApi.triggerScanAll).mockResolvedValue({ queued: 3 })
+      const { result } = renderHook(() => useCompanyActions(), { wrapper: makeWrapper() })
+      const spy = vi.spyOn(lastQc!, 'invalidateQueries')
+      await act(async () => {
+        await result.current.scanAll()
+      })
+      const keys = spy.mock.calls.map((c) => c[0]?.queryKey)
+      expect(keys).toContainEqual(companyQueryKeys.adminCompaniesBase())
+      expect(keys).toContainEqual(companyQueryKeys.scanQueue())
     })
   })
 
