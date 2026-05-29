@@ -64,7 +64,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 
 	// ── Job ──────────────────────────────────────────────────────────────────
 	jobStore := jobsvc.NewJobStore(db)
-	userJobStateRepository := jobsvc.NewUserJobStateRepository(db)
+	userJobStateRepository := jobsvc.NewUserJobStateRepository(db, log)
 	snapshotWriter := jobsvc.NewSnapshotStore(db)
 	applicationWriter := provideJobApplicationWriter(db)
 	seenLedgerStore := jobsvc.NewSeenLedgerStore(db)
