@@ -15,7 +15,7 @@ type UserDashboardStore interface {
 	GetMarketStats(ctx context.Context) (dto.MarketStats, error)
 	GetWeeklyHiringActivity(ctx context.Context, weeks int) ([]dto.WeeklyCount, error)
 	GetCompanyVelocityDetailed(ctx context.Context, limit int) ([]dto.CompanyVelocityRow, error)
-	GetTechStackQuarterlyAdoption(ctx context.Context) ([]dto.TechAdoptionRow, error)
+	GetTechStackMonthlyAdoption(ctx context.Context) ([]dto.TechAdoptionRow, error)
 }
 
 type userDashboardRepository struct {
@@ -149,42 +149,32 @@ func (s *userDashboardRepository) GetCompanyVelocityDetailed(ctx context.Context
 	return results, err
 }
 
-func (s *userDashboardRepository) GetTechStackQuarterlyAdoption(ctx context.Context) (results []dto.TechAdoptionRow, err error) {
-	ctx, span := tracing.Start(ctx, "dashboard.store.GetTechStackQuarterlyAdoption")
+func (s *userDashboardRepository) GetTechStackMonthlyAdoption(ctx context.Context) (results []dto.TechAdoptionRow, err error) {
+	ctx, span := tracing.Start(ctx, "dashboard.store.GetTechStackMonthlyAdoption")
 	defer tracing.End(span, &err)
 	err = s.db.WithContext(ctx).Raw(`
-		WITH quarterly_counts AS (
-			SELECT
-				tech,
-				COUNT(*) FILTER (
-					WHERE tagged_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '9 months')
-					  AND tagged_at <  DATE_TRUNC('quarter', NOW() - INTERVAL '6 months')
-				) AS q1,
-				COUNT(*) FILTER (
-					WHERE tagged_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '6 months')
-					  AND tagged_at <  DATE_TRUNC('quarter', NOW() - INTERVAL '3 months')
-				) AS q2,
-				COUNT(*) FILTER (
-					WHERE tagged_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '3 months')
-					  AND tagged_at <  DATE_TRUNC('quarter', NOW())
-				) AS q3,
-				COUNT(*) FILTER (
-					WHERE tagged_at >= DATE_TRUNC('quarter', NOW())
-				) AS q4,
-				COUNT(DISTINCT job_id) FILTER (
-					WHERE tagged_at >= DATE_TRUNC('quarter', NOW())
-				) AS total_jobs_this_q
+		WITH total AS (
+			SELECT COUNT(DISTINCT job_id)::int AS n
 			FROM job_tech_tags
-			WHERE tagged_at >= DATE_TRUNC('quarter', NOW() - INTERVAL '9 months')
+			WHERE tagged_at >= DATE_TRUNC('month', NOW())
+		),
+		monthly AS (
+			SELECT tech,
+				COUNT(*) FILTER (WHERE tagged_at >= DATE_TRUNC('month', NOW() - INTERVAL '3 months')
+				                   AND tagged_at <  DATE_TRUNC('month', NOW() - INTERVAL '2 months')) AS m1,
+				COUNT(*) FILTER (WHERE tagged_at >= DATE_TRUNC('month', NOW() - INTERVAL '2 months')
+				                   AND tagged_at <  DATE_TRUNC('month', NOW() - INTERVAL '1 month'))  AS m2,
+				COUNT(*) FILTER (WHERE tagged_at >= DATE_TRUNC('month', NOW() - INTERVAL '1 month')
+				                   AND tagged_at <  DATE_TRUNC('month', NOW()))                        AS m3,
+				COUNT(*) FILTER (WHERE tagged_at >= DATE_TRUNC('month', NOW()))                        AS m4
+			FROM job_tech_tags
+			WHERE tagged_at >= DATE_TRUNC('month', NOW() - INTERVAL '3 months')
 			GROUP BY tech
 		)
-		SELECT
-			qc.tech,
-			qc.q1, qc.q2, qc.q3, qc.q4,
-			COALESCE(SUM(qc.total_jobs_this_q) OVER (), 0)::bigint AS total_jobs
-		FROM quarterly_counts qc
-		WHERE qc.q4 > 0
-		ORDER BY qc.q4 DESC
+		SELECT m.tech, m.m1, m.m2, m.m3, m.m4, t.n AS total_jobs
+		FROM monthly m, total t
+		WHERE m.m4 > 0
+		ORDER BY m.m4 DESC
 	`).Scan(&results).Error
 	return results, err
 }

@@ -76,9 +76,9 @@ func TestUserDashboardStore_GetCompanyVelocityDetailed_DBError(t *testing.T) {
 	}
 }
 
-func TestUserDashboardStore_GetTechStackQuarterlyAdoption_DBError(t *testing.T) {
+func TestUserDashboardStore_GetTechStackMonthlyAdoption_DBError(t *testing.T) {
 	store := services.NewUserDashboardStore(closedDashboardDB(t))
-	if _, err := store.GetTechStackQuarterlyAdoption(context.Background()); err == nil {
+	if _, err := store.GetTechStackMonthlyAdoption(context.Background()); err == nil {
 		t.Fatal("expected DB error, got nil")
 	}
 }

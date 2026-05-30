@@ -53,7 +53,7 @@ func (f *fakeUserDashboardStore) GetCompanyVelocityDetailed(_ context.Context, l
 	f.velocityLimit = limit
 	return f.velocity, f.velocityErr
 }
-func (f *fakeUserDashboardStore) GetTechStackQuarterlyAdoption(_ context.Context) ([]dto.TechAdoptionRow, error) {
+func (f *fakeUserDashboardStore) GetTechStackMonthlyAdoption(_ context.Context) ([]dto.TechAdoptionRow, error) {
 	return f.tech, f.techErr
 }
 
@@ -446,11 +446,11 @@ func TestUserDashboard_GetTechTrends_Empty(t *testing.T) {
 
 // TotalJobs == 0 must short-circuit per-row classification — every row is
 // skipped so Rising/NewEntrants are nil (zero-length). This guards against a
-// divide-by-zero in the Q4 percent computation.
+// divide-by-zero in the M4 percent computation.
 func TestUserDashboard_GetTechTrends_ZeroTotal(t *testing.T) {
 	svc := services.NewUserDashboardService(
 		&fakeUserDashboardStore{tech: []dto.TechAdoptionRow{
-			{Tech: "Go", Q4: 1, TotalJobs: 0},
+			{Tech: "Go", M4: 1, TotalJobs: 0},
 		}},
 		&fakeApplicationListReader{},
 	)
@@ -466,18 +466,18 @@ func TestUserDashboard_GetTechTrends_ZeroTotal(t *testing.T) {
 	}
 }
 
-// Rising = q4% > 5% AND ((q3 > 0 AND growth > 15%) OR q3 = 0 (new entrant flag)).
+// Rising = m4% >= 2% AND m4 >= 10 AND ((m3 > 0 AND growth > 15%) OR m3 = 0 (new entrant flag)).
 // This covers both Rising-with-growth and Rising-via-IsNew branches.
 func TestUserDashboard_GetTechTrends_RisingAndNew(t *testing.T) {
 	rows := []dto.TechAdoptionRow{
-		// Q4=20, Q3=10, total=100 → q4%=20, growth=100% (>15%) → Rising (with GrowthPct populated)
-		{Tech: "Go", Q1: 5, Q2: 5, Q3: 10, Q4: 20, TotalJobs: 100},
-		// Q4=10, Q3=0, total=100 → q4%=10, q3=0 → Rising via IsNew=true
-		{Tech: "Rust", Q1: 0, Q2: 0, Q3: 0, Q4: 10, TotalJobs: 100},
-		// Q4=5, total=100 → q4%=5 (NOT >5) → skipped
-		{Tech: "Skip", Q1: 0, Q2: 0, Q3: 0, Q4: 5, TotalJobs: 100},
-		// q4%=20, q2%=0 (Q2=0) → NewEntrant
-		{Tech: "Zig", Q1: 0, Q2: 0, Q3: 1, Q4: 20, TotalJobs: 100},
+		// M4=20, M3=10, total=100 → m4%=20, growth=100% (>15%) → Rising (with GrowthPct populated)
+		{Tech: "Go", M1: 5, M2: 5, M3: 10, M4: 20, TotalJobs: 100},
+		// M4=10, M3=0, total=100 → m4%=10, m3=0 → Rising via IsNew=true
+		{Tech: "Rust", M1: 0, M2: 0, M3: 0, M4: 10, TotalJobs: 100},
+		// M4=5, total=100 → m4%=5 passes pct gate (>=2%) but M4=5 < 10 floor → skipped
+		{Tech: "Skip", M1: 0, M2: 0, M3: 0, M4: 5, TotalJobs: 100},
+		// m4%=20, m2%=0 (M2=0) → NewEntrant
+		{Tech: "Zig", M1: 0, M2: 0, M3: 1, M4: 20, TotalJobs: 100},
 	}
 	svc := services.NewUserDashboardService(
 		&fakeUserDashboardStore{tech: rows},
@@ -491,7 +491,7 @@ func TestUserDashboard_GetTechTrends_RisingAndNew(t *testing.T) {
 	if got.TotalJobs != 100 {
 		t.Errorf("total = %d, want 100 (from first row)", got.TotalJobs)
 	}
-	// Both Go and Rust qualify as Rising. Zig also qualifies (Q3>0 → growth check; growth = (20-1)/1 = 19 → >15%).
+	// Both Go and Rust qualify as Rising. Zig also qualifies (M3>0 → growth check; growth = (20-1)/1 = 19 → >15%).
 	if len(got.Rising) != 3 {
 		t.Errorf("rising len = %d, want 3; got = %+v", len(got.Rising), got.Rising)
 	}
@@ -507,7 +507,7 @@ func TestUserDashboard_GetTechTrends_RisingAndNew(t *testing.T) {
 		t.Fatal("Rust missing from Rising")
 	}
 	if !rust.IsNew {
-		t.Error("Rust.IsNew = false, want true (Q3=0 path)")
+		t.Error("Rust.IsNew = false, want true (M3=0 path)")
 	}
 	if rust.GrowthPct != 0 {
 		t.Errorf("Rust.GrowthPct = %v, want 0 for IsNew row", rust.GrowthPct)
@@ -525,7 +525,7 @@ func TestUserDashboard_GetTechTrends_RisingAndNew(t *testing.T) {
 		t.Fatal("Go missing from Rising")
 	}
 	if goRow.IsNew {
-		t.Error("Go.IsNew = true, want false (Q3>0 path)")
+		t.Error("Go.IsNew = true, want false (M3>0 path)")
 	}
 	if goRow.GrowthPct != 100.0 {
 		t.Errorf("Go.GrowthPct = %v, want 100.0", goRow.GrowthPct)
@@ -535,19 +535,19 @@ func TestUserDashboard_GetTechTrends_RisingAndNew(t *testing.T) {
 		t.Errorf("Go.AdoptionPct = %v, want 20.0", goRow.AdoptionPct)
 	}
 
-	// NewEntrants: Zig and Rust qualify (q4%=20, q2%<1). Go has q2=5 → q2%=5 → excluded.
+	// NewEntrants: Zig and Rust qualify (m4%=20, m2%<1). Go has m2=5 → m2%=5 → excluded.
 	if len(got.NewEntrants) != 2 {
 		t.Errorf("new_entrants len = %d, want 2; got = %+v", len(got.NewEntrants), got.NewEntrants)
 	}
 }
 
-// Growth <=15% must NOT be added to Rising even when q4%>5 and q3>0 —
+// Growth <=15% must NOT be added to Rising even when m4%>=2% and m4>=10 and m3>0 —
 // guards the "growth threshold not met" branch.
 func TestUserDashboard_GetTechTrends_BelowGrowthThreshold(t *testing.T) {
 	rows := []dto.TechAdoptionRow{
-		// Q4=10, Q3=10, total=100 → q4%=10, growth=0% (not >15%), q3>0 → excluded
-		// q2%=10 — also fails new-entrant check (q2% >= 1)
-		{Tech: "Stable", Q1: 10, Q2: 10, Q3: 10, Q4: 10, TotalJobs: 100},
+		// M4=10, M3=10, total=100 → m4%=10, growth=0% (not >15%), m3>0 → excluded
+		// m2%=10 — also fails new-entrant check (m2% >= 1)
+		{Tech: "Stable", M1: 10, M2: 10, M3: 10, M4: 10, TotalJobs: 100},
 	}
 	svc := services.NewUserDashboardService(
 		&fakeUserDashboardStore{tech: rows},
@@ -559,7 +559,7 @@ func TestUserDashboard_GetTechTrends_BelowGrowthThreshold(t *testing.T) {
 		t.Errorf("rising = %+v, want empty (growth=0%% < 15%%)", got.Rising)
 	}
 	if len(got.NewEntrants) != 0 {
-		t.Errorf("new_entrants = %+v, want empty (q2%% = 10 not <1)", got.NewEntrants)
+		t.Errorf("new_entrants = %+v, want empty (m2%% = 10 not <1)", got.NewEntrants)
 	}
 }
 
@@ -570,10 +570,10 @@ func TestUserDashboard_GetTechTrends_CapAt10(t *testing.T) {
 	for i := range rows {
 		rows[i] = dto.TechAdoptionRow{
 			Tech:      "tech-" + string(rune('a'+i)),
-			Q1:        0,
-			Q2:        0,
-			Q3:        0,
-			Q4:        20,
+			M1:        0,
+			M2:        0,
+			M3:        0,
+			M4:        20,
 			TotalJobs: 100,
 		}
 	}
@@ -588,6 +588,117 @@ func TestUserDashboard_GetTechTrends_CapAt10(t *testing.T) {
 	}
 	if len(got.NewEntrants) != 10 {
 		t.Errorf("new_entrants len = %d, want capped at 10", len(got.NewEntrants))
+	}
+}
+
+// AC-3: both conditions must hold — m4_count/total_jobs >= 2% AND m4_count >= 10.
+// The impl reads TotalJobs from the first row; each scenario uses a separate store call
+// so the denominator is controlled per-scenario.
+func TestUserDashboard_GetTechTrends_AbsoluteFloor(t *testing.T) {
+	t.Run("floor only fails: pct>=2% but M4<10 excluded", func(t *testing.T) {
+		// TotalJobs=100; TooFew: pct=2/100*100=2% (passes pct) but M4=2 < 10 floor
+		rows := []dto.TechAdoptionRow{
+			{Tech: "TooFew", M1: 0, M2: 0, M3: 0, M4: 2, TotalJobs: 100},
+			{Tech: "Enough", M1: 0, M2: 0, M3: 0, M4: 15, TotalJobs: 100},
+		}
+		svc := services.NewUserDashboardService(&fakeUserDashboardStore{tech: rows}, &fakeApplicationListReader{})
+		got, err := svc.GetTechTrends(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, row := range got.Rising {
+			if row.Tech == "TooFew" {
+				t.Error("TooFew should be excluded (M4=2 < 10 floor)")
+			}
+		}
+		found := false
+		for _, row := range got.Rising {
+			if row.Tech == "Enough" {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("Enough should be in Rising (M4=15 >= 10, m4%=15 >= 2)")
+		}
+	})
+
+	t.Run("pct only fails: M4>=10 but pct<2% excluded", func(t *testing.T) {
+		// TotalJobs=2000; LowPct: pct=10/2000*100=0.5% < 2% (fails pct gate); M4=10 >=10
+		// BigEnough: pct=50/2000*100=2.5% >=2% and M4=50 >=10 → both gates pass
+		rows := []dto.TechAdoptionRow{
+			{Tech: "LowPct", M1: 0, M2: 0, M3: 0, M4: 10, TotalJobs: 2000},
+			{Tech: "BigEnough", M1: 0, M2: 0, M3: 0, M4: 50, TotalJobs: 2000},
+		}
+		svc := services.NewUserDashboardService(&fakeUserDashboardStore{tech: rows}, &fakeApplicationListReader{})
+		got, err := svc.GetTechTrends(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, row := range got.Rising {
+			if row.Tech == "LowPct" {
+				t.Error("LowPct should be excluded (m4%=0.5 < 2% pct gate)")
+			}
+		}
+		found := false
+		for _, row := range got.Rising {
+			if row.Tech == "BigEnough" {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("BigEnough should be in Rising (M4=50 >= 10, m4%=2.5 >= 2)")
+		}
+	})
+}
+
+// AC-4: Rising list sorted by growth_pct * log(m4+1) descending before cap at 10.
+// IsNew rows (growth_pct=0) always rank below non-new rows; among themselves by log(m4+1).
+func TestUserDashboard_GetTechTrends_MomentumSort(t *testing.T) {
+	rows := []dto.TechAdoptionRow{
+		// IsNew: M3=0, M4=20 — growth=0, momentum=log(21)≈3.04
+		{Tech: "NewA", M1: 0, M2: 0, M3: 0, M4: 20, TotalJobs: 100},
+		// Growth: M3=10, M4=30 → growth=200%, momentum=200*log(31)≈679
+		{Tech: "HighGrowth", M1: 0, M2: 0, M3: 10, M4: 30, TotalJobs: 100},
+		// IsNew: M3=0, M4=15 — growth=0, momentum=log(16)≈2.77
+		{Tech: "NewB", M1: 0, M2: 0, M3: 0, M4: 15, TotalJobs: 100},
+		// Growth: M3=10, M4=20 → growth=100%, momentum=100*log(21)≈304
+		{Tech: "LowGrowth", M1: 0, M2: 0, M3: 10, M4: 20, TotalJobs: 100},
+	}
+	svc := services.NewUserDashboardService(
+		&fakeUserDashboardStore{tech: rows},
+		&fakeApplicationListReader{},
+	)
+
+	got, err := svc.GetTechTrends(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	rising := got.Rising
+	if len(rising) < 4 {
+		t.Fatalf("expected 4 rising rows, got %d: %+v", len(rising), rising)
+	}
+
+	// Non-new rows must come before IsNew rows.
+	// HighGrowth and LowGrowth must rank above NewA and NewB.
+	names := make([]string, len(rising))
+	for i, r := range rising {
+		names[i] = r.Tech
+	}
+
+	// First two must be non-IsNew (HighGrowth then LowGrowth).
+	if rising[0].Tech != "HighGrowth" {
+		t.Errorf("rising[0] = %q, want HighGrowth (highest momentum)", rising[0].Tech)
+	}
+	if rising[1].Tech != "LowGrowth" {
+		t.Errorf("rising[1] = %q, want LowGrowth", rising[1].Tech)
+	}
+	// IsNew rows follow, NewA (M4=20) before NewB (M4=15) by log(m4+1).
+	if rising[2].Tech != "NewA" {
+		t.Errorf("rising[2] = %q, want NewA (M4=20 > NewB M4=15)", rising[2].Tech)
+	}
+	if rising[3].Tech != "NewB" {
+		t.Errorf("rising[3] = %q, want NewB", rising[3].Tech)
 	}
 }
 

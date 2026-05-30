@@ -67,10 +67,10 @@ const VelocityResponseSchema = z.array(CompanyVelocityRowSchema).nullable()
 
 const TechTrendRowSchema = z.object({
   tech: z.string(),
-  q1: z.number(),
-  q2: z.number(),
-  q3: z.number(),
-  q4: z.number(),
+  m1: z.number(),
+  m2: z.number(),
+  m3: z.number(),
+  m4: z.number(),
   growth_pct: z.number(),
   adoption_pct: z.number(),
   is_new: z.boolean(),
