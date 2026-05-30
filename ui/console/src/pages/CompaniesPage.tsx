@@ -79,7 +79,7 @@ export function CompaniesPage() {
             itemsOnPage={c.itemsOnPage}
             itemsBeforePage={c.itemsBeforePage}
             knownTotal={c.total}
-            loading={c.isLoading || c.isFetching}
+            loading={c.isLoading}
             limit={c.limit}
             onLimitChange={c.setLimit}
             nextCursor={c.nextCursor}
