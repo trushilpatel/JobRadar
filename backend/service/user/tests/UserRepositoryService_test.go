@@ -9,6 +9,7 @@ import (
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	rolemodel "github.com/trushilpatel/jobradar/service/role/models"
+	userdto "github.com/trushilpatel/jobradar/service/user/dto"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
 	"gorm.io/driver/sqlite"
@@ -539,7 +540,7 @@ func TestPatchConfig_CreatesNewRow(t *testing.T) {
 	db := newUserTestDB(t)
 	repo := usersvc.NewRepositoryService(db)
 
-	cfg, err := repo.PatchConfig(context.Background(), "u1", usermodel.UserConfig{ShowKeyboardShortcuts: true})
+	cfg, err := repo.PatchConfig(context.Background(), "u1", userdto.UserConfig{ShowKeyboardShortcuts: true})
 	if err != nil {
 		t.Fatalf("PatchConfig: %v", err)
 	}
@@ -570,7 +571,7 @@ func TestPatchConfig_UpdatesExistingRow(t *testing.T) {
 	repo := usersvc.NewRepositoryService(db)
 
 	// First call creates the row.
-	if _, err := repo.PatchConfig(context.Background(), "u1", usermodel.UserConfig{ShowKeyboardShortcuts: false}); err != nil {
+	if _, err := repo.PatchConfig(context.Background(), "u1", userdto.UserConfig{ShowKeyboardShortcuts: false}); err != nil {
 		t.Fatalf("PatchConfig (first): %v", err)
 	}
 	// Verify row count after the first call.
@@ -602,7 +603,7 @@ func TestPatchConfig_UpdatesExistingRow(t *testing.T) {
 func TestPatchConfig_DBError(t *testing.T) {
 	t.Parallel()
 	repo := usersvc.NewRepositoryService(closedUserDB(t))
-	_, err := repo.PatchConfig(context.Background(), "u1", usermodel.UserConfig{ShowKeyboardShortcuts: true})
+	_, err := repo.PatchConfig(context.Background(), "u1", userdto.UserConfig{ShowKeyboardShortcuts: true})
 	if err == nil {
 		t.Fatal("expected DB error")
 	}

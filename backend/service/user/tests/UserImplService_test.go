@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	userdto "github.com/trushilpatel/jobradar/service/user/dto"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
 )
@@ -46,10 +47,10 @@ func (f *fakeUserRepo) Delete(_ context.Context, _ string) error {
 	f.deleteCalled = true
 	return f.deleteReturnErr
 }
-func (f *fakeUserRepo) GetConfig(_ context.Context, _ string) (*usermodel.UserConfig, error) {
-	return &usermodel.UserConfig{}, nil
+func (f *fakeUserRepo) GetConfig(_ context.Context, _ string) (*userdto.UserConfig, error) {
+	return &userdto.UserConfig{}, nil
 }
-func (f *fakeUserRepo) PatchConfig(_ context.Context, _ string, partial usermodel.UserConfig) (*usermodel.UserConfig, error) {
+func (f *fakeUserRepo) PatchConfig(_ context.Context, _ string, partial userdto.UserConfig) (*userdto.UserConfig, error) {
 	return &partial, nil
 }
 

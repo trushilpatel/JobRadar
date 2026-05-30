@@ -10,6 +10,7 @@ import (
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	rolemodel "github.com/trushilpatel/jobradar/service/role/models"
+	userdto "github.com/trushilpatel/jobradar/service/user/dto"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -126,18 +127,18 @@ func (r *repositoryService) UpdateProfile(ctx context.Context, id string, displa
 // GetConfig loads the UserConfig for the given user. When no row exists in
 // user_preferences the caller is a new user — return a zero-value UserConfig
 // so the response always contains valid defaults rather than an error.
-func (r *repositoryService) GetConfig(ctx context.Context, userID string) (_ *usermodel.UserConfig, err error) {
+func (r *repositoryService) GetConfig(ctx context.Context, userID string) (_ *userdto.UserConfig, err error) {
 	ctx, span := tracing.Start(ctx, "user.repo.GetConfig")
 	defer tracing.End(span, &err)
 
 	var pref usermodel.UserPreference
 	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).First(&pref).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return &usermodel.UserConfig{}, nil
+			return &userdto.UserConfig{}, nil
 		}
 		return nil, domainerrs.ErrInternal.WithMessage("user repo: get config: " + err.Error())
 	}
-	var cfg usermodel.UserConfig
+	var cfg userdto.UserConfig
 	if err := json.Unmarshal(pref.Data, &cfg); err != nil {
 		return nil, domainerrs.ErrInternal.WithMessage("user repo: get config: unmarshal: " + err.Error())
 	}
@@ -148,7 +149,7 @@ func (r *repositoryService) GetConfig(ctx context.Context, userID string) (_ *us
 // merge (`||`). For new users an INSERT is executed; for existing users the
 // JSONB columns are merged so only the supplied fields are overwritten.
 // After the upsert GetConfig is called to return the full merged result.
-func (r *repositoryService) PatchConfig(ctx context.Context, userID string, partial usermodel.UserConfig) (_ *usermodel.UserConfig, err error) {
+func (r *repositoryService) PatchConfig(ctx context.Context, userID string, partial userdto.UserConfig) (_ *userdto.UserConfig, err error) {
 	ctx, span := tracing.Start(ctx, "user.repo.PatchConfig")
 	defer tracing.End(span, &err)
 

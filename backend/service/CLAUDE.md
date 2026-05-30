@@ -118,6 +118,7 @@ router  := NewRestRouter(handler)
 - `RepositoryService` has no `next` field and does not embed `BaseService`
 - `RestService` has `next {Domain}Service` but does not implement the domain interface
 - `RestRouter` owns `Register(r chi.Router)` — never appears on `RestService`
+- Every struct in `models/` must be a GORM model: it must have a `TableName()` method and GORM struct tags. Plain domain types (DTOs, config structs, value objects) belong in `dto/` — placing them in `models/` forces non-repository layers to import the models package, violating the GORM isolation rule
 
 ---
 
