@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"math"
+	"sort"
 
 	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/identity"
@@ -148,11 +149,11 @@ func classifyVelocity(current, w1, w2, w3 int) (float64, string) {
 	return multiplier, tag
 }
 
-// GetTechTrends returns quarterly tech job-count trends classified into Rising and New Entrant lists.
+// GetTechTrends returns monthly tech job-count trends classified into Rising and New Entrant lists.
 func (s *userDashboardImplService) GetTechTrends(ctx context.Context) (_ *dto.TechTrends, err error) {
 	ctx, span := tracing.Start(ctx, "dashboard.userdashboard.GetTechTrends")
 	defer tracing.End(span, &err)
-	rows, err := s.store.GetTechStackQuarterlyAdoption(ctx)
+	rows, err := s.store.GetTechStackMonthlyAdoption(ctx)
 	if err != nil {
 		return nil, errors.ErrInternal.WithMessage("failed to fetch tech trends")
 	}
@@ -169,22 +170,23 @@ func (s *userDashboardImplService) GetTechTrends(ctx context.Context) (_ *dto.Te
 			continue
 		}
 
-		q4Pct := float64(r.Q4) / float64(totalJobs) * 100
-		q2Pct := float64(r.Q2) / float64(totalJobs) * 100
+		m4Pct := float64(r.M4) / float64(totalJobs) * 100
+		m2Pct := float64(r.M2) / float64(totalJobs) * 100
 
 		row := dto.TechTrendRow{
 			Tech:        r.Tech,
-			Q1:          r.Q1,
-			Q2:          r.Q2,
-			Q3:          r.Q3,
-			Q4:          r.Q4,
-			AdoptionPct: math.Round(q4Pct*10) / 10,
+			M1:          r.M1,
+			M2:          r.M2,
+			M3:          r.M3,
+			M4:          r.M4,
+			AdoptionPct: math.Round(m4Pct*10) / 10,
 		}
 
-		// Rising: appears in >5% of this quarter's jobs and either grew >15% QoQ or is brand-new this quarter.
-		if q4Pct > 5 {
-			if r.Q3 > 0 {
-				growth := float64(r.Q4-r.Q3) / float64(r.Q3)
+		// Rising: appears in >=2% of this month's jobs AND m4 >= 10, and either
+		// grew >15% MoM or is brand-new this month (M3=0).
+		if m4Pct >= 2.0 && r.M4 >= 10 {
+			if r.M3 > 0 {
+				growth := float64(r.M4-r.M3) / float64(r.M3)
 				if growth > 0.15 {
 					row.GrowthPct = math.Round(growth*1000) / 10
 					rising = append(rising, row)
@@ -195,13 +197,25 @@ func (s *userDashboardImplService) GetTechTrends(ctx context.Context) (_ *dto.Te
 			}
 		}
 
-		// New entrant: >5% of this quarter's jobs, was <1% two quarters ago
-		if q4Pct > 5 && q2Pct < 1 {
+		// New entrant: >=2% of this month's jobs AND m4>=10, was <1% two months ago.
+		if m4Pct >= 2.0 && r.M4 >= 10 && m2Pct < 1.0 {
 			newEntrants = append(newEntrants, row)
 		}
 	}
 
-	// Cap at 10 per list (rows already ordered by q4 DESC from query)
+	// Sort Rising by momentum score (growth_pct * log(m4+1)) descending.
+	// IsNew rows have growth_pct=0 so they always rank below non-new rows.
+	// Among IsNew rows they are ordered by log(m4+1) descending.
+	sort.Slice(rising, func(i, j int) bool {
+		scoreI := rising[i].GrowthPct * math.Log(float64(rising[i].M4)+1)
+		scoreJ := rising[j].GrowthPct * math.Log(float64(rising[j].M4)+1)
+		if scoreI != scoreJ {
+			return scoreI > scoreJ
+		}
+		return math.Log(float64(rising[i].M4)+1) > math.Log(float64(rising[j].M4)+1)
+	})
+
+	// Cap at 10 per list.
 	if len(rising) > 10 {
 		rising = rising[:10]
 	}

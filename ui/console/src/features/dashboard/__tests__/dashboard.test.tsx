@@ -272,10 +272,10 @@ describe('TechTrendsPanel', () => {
     rising: [
       {
         tech: 'Go',
-        q1: 10,
-        q2: 15,
-        q3: 20,
-        q4: 30,
+        m1: 10,
+        m2: 15,
+        m3: 20,
+        m4: 30,
         growth_pct: 50,
         adoption_pct: 12,
         is_new: false,
@@ -284,10 +284,10 @@ describe('TechTrendsPanel', () => {
     new_entrants: [
       {
         tech: 'Rust',
-        q1: 0,
-        q2: 1,
-        q3: 3,
-        q4: 8,
+        m1: 0,
+        m2: 1,
+        m3: 3,
+        m4: 8,
         growth_pct: 0,
         adoption_pct: 8,
         is_new: true,
@@ -328,7 +328,7 @@ describe('TechTrendsPanel', () => {
   it('renders "New" label for is_new tech rows', async () => {
     vi.mocked(dashboardApi.fetchTechTrends).mockResolvedValue({
       ...sampleTrends,
-      rising: [{ ...sampleTrends.rising[0]!, is_new: true }],
+      rising: [{ ...sampleTrends.rising[0]!, is_new: true, growth_pct: 0 }],
     })
     render(<TechTrendsPanel />, { wrapper: makeWrapper() })
     await waitFor(() => expect(screen.getByText('New')).toBeInTheDocument())
@@ -351,5 +351,38 @@ describe('TechTrendsPanel', () => {
     render(<TechTrendsPanel />, { wrapper: makeWrapper() })
     // After loading resolves, no skeleton, no content — panel shows header text only
     await waitFor(() => expect(document.querySelector('.animate-pulse')).not.toBeInTheDocument())
+  })
+
+  it('renders subtitle "by job demand" (AC-7)', async () => {
+    vi.mocked(dashboardApi.fetchTechTrends).mockResolvedValue(sampleTrends)
+    render(<TechTrendsPanel />, { wrapper: makeWrapper() })
+    await waitFor(() =>
+      expect(screen.getByText(/tech stack trends — by job demand/i)).toBeInTheDocument()
+    )
+  })
+
+  it('renders monthly column headers M1..M4 (AC-8)', async () => {
+    vi.mocked(dashboardApi.fetchTechTrends).mockResolvedValue(sampleTrends)
+    render(<TechTrendsPanel />, { wrapper: makeWrapper() })
+    await waitFor(() => expect(screen.getAllByText('M1').length).toBeGreaterThan(0))
+    expect(screen.getAllByText('M2').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('M3').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('M4').length).toBeGreaterThan(0)
+  })
+
+  it('renders Rising subtext with monthly thresholds (AC-9)', async () => {
+    vi.mocked(dashboardApi.fetchTechTrends).mockResolvedValue(sampleTrends)
+    render(<TechTrendsPanel />, { wrapper: makeWrapper() })
+    await waitFor(() =>
+      expect(screen.getByText(/≥2% of jobs · ≥10 jobs · grew/)).toBeInTheDocument()
+    )
+  })
+
+  it('renders New Entrants subtext with monthly lookback (AC-10)', async () => {
+    vi.mocked(dashboardApi.fetchTechTrends).mockResolvedValue(sampleTrends)
+    render(<TechTrendsPanel />, { wrapper: makeWrapper() })
+    await waitFor(() =>
+      expect(screen.getByText(/≥2% of jobs · ≥10 jobs · was/)).toBeInTheDocument()
+    )
   })
 })

@@ -224,10 +224,10 @@ export interface CompanyVelocityRow {
 
 export interface TechTrendRow {
   tech: string
-  q1: number
-  q2: number
-  q3: number
-  q4: number
+  m1: number
+  m2: number
+  m3: number
+  m4: number
   growth_pct: number
   adoption_pct: number
   is_new: boolean
