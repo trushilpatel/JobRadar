@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { Job, JobApplication } from '@/types'
 import { apiClient } from '@/lib/core/api-client'
+import { parseItemsResilient } from '@/lib/core/resilient-parse'
 import { JOB_STATUS, type JobStatus, type PatchableStatus } from '@/config/constants/jobStatus'
 
 // ── Zod schemas (response shapes only) ─────────────────────────────────────
@@ -70,16 +71,38 @@ const JobRawSchema = z.object({
 
 type JobRaw = z.infer<typeof JobRawSchema>
 
-// Raw schema for validation only — items are normalized to Job[] before returning.
-const JobsPageRawSchema = z.object({
+// Strict per-item + page schemas. Exported for the contract test, which
+// strict-parses real recorded payloads against them so backend serialization
+// drift fails CI. Runtime parsing (fetchJobs) is resilient, not strict.
+export { JobRawSchema }
+export const JobsPageRawSchema = z.object({
   items: z.array(JobRawSchema),
   next_cursor: z.string(),
 })
+
+// Resilient envelope for runtime: never throws. `items` is parsed per-item by
+// parseItemsResilient (drift drops the bad row, not the page); a missing/odd
+// next_cursor falls back to "" (no more pages).
+const JobsPageEnvelopeSchema = z
+  .object({
+    items: z.array(z.unknown()).catch([]),
+    next_cursor: z.string().catch(''),
+  })
+  .catch({ items: [], next_cursor: '' })
 
 // The exported type reflects the normalized shape consumers receive.
 export interface JobsPage {
   items: Job[]
   next_cursor: string
+}
+
+// parseJobsPage is the resilient runtime parser: validate the envelope leniently,
+// then each item independently — a single drifted job is logged and skipped
+// rather than throwing and blanking the feed.
+function parseJobsPage(raw: unknown): JobsPage {
+  const env = JobsPageEnvelopeSchema.parse(raw)
+  const items = parseItemsResilient(JobRawSchema, env.items, 'jobs').map(normalizeJob)
+  return { items, next_cursor: env.next_cursor }
 }
 
 const JobCountsSchema = z.object({
@@ -166,8 +189,7 @@ export async function fetchJobs(
   if (filters.sortDir) p.set('sort_dir', filters.sortDir)
 
   const raw = await apiClient.get<unknown>(`/jobs?${p}`, signal ? { signal } : undefined)
-  const page = JobsPageRawSchema.parse(raw)
-  return { next_cursor: page.next_cursor, items: page.items.map(normalizeJob) }
+  return parseJobsPage(raw)
 }
 
 // GET /jobs/:id

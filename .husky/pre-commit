@@ -11,7 +11,7 @@ info() { printf "${YELLOW}→${NC} %s\n" "$1"; }
 
 FAILED=0
 
-# ── Block direct commits to main ─────────────────────────────────────────────
+# ── Block direct commits to main (serial, instant) ───────────────────────────
 CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
 if [ "$CURRENT_BRANCH" = "main" ]; then
   fail "Direct commits to 'main' are not allowed."
@@ -19,7 +19,10 @@ if [ "$CURRENT_BRANCH" = "main" ]; then
   exit 1
 fi
 
-# ── Format staged files (gofmt + prettier) ───────────────────────────────────
+# ── Format staged files — SERIAL, must precede the parallel phase ─────────────
+# lint-staged rewrites staged files in place (gofmt -w, prettier --write). Every
+# check below READS those files, so formatting cannot overlap them without a
+# read-mid-rewrite race. Everything after this point is read-only.
 info "Formatting staged files..."
 if ./node_modules/.bin/lint-staged; then
   pass "Formatting"
@@ -28,57 +31,73 @@ else
   FAILED=1
 fi
 
-# ── Backend: Go lint + unit tests ────────────────────────────────────────────
-if git diff --cached --name-only | grep -q '^backend/'; then
-  info "Backend changed — running Go lint (changed files only)..."
-  if command -v golangci-lint >/dev/null 2>&1; then
-    if (cd backend && golangci-lint run --config ../.github/.golangci.yml --new-from-rev=HEAD --timeout 2m); then
-      pass "Go lint"
-    else
-      fail "Go lint failed"
-      FAILED=1
-    fi
-  else
-    info "golangci-lint not found — skipping (install via: brew install golangci-lint)"
-  fi
+# ── Parallel phase ────────────────────────────────────────────────────────────
+# The remaining checks are independent and read-only, so they run concurrently —
+# wall-clock is ~the slowest check, not their sum. Each job buffers output to a
+# temp log; only FAILED jobs print their log, so parallel output stays readable.
+# NOTE (8GB M1): `go test -race` + `tsc` + vitest are the memory-heavy ones; if
+# this ever swaps, run fewer concurrently here.
+JOBDIR=$(mktemp -d)
+trap 'rm -rf "$JOBDIR"' EXIT
+JOBS=""
 
-  info "Backend changed — running Go unit tests (race detector)..."
-  if (cd backend && go test -race -short -count=1 ./...); then
-    pass "Go unit tests"
+launch() { # launch <name> <command-string>
+  _name="$1"
+  _cmd="$2"
+  (
+    sh -c "$_cmd" >"$JOBDIR/$_name.log" 2>&1
+    echo $? >"$JOBDIR/$_name.done"
+  ) &
+  JOBS="$JOBS $_name"
+}
+
+CHANGED=$(git diff --cached --name-only)
+
+if printf '%s\n' "$CHANGED" | grep -q '^backend/'; then
+  if command -v golangci-lint >/dev/null 2>&1; then
+    launch "go-lint" "cd backend && golangci-lint run --config ../.github/.golangci.yml --new-from-rev=HEAD --timeout 2m"
   else
-    fail "Go unit tests failed"
-    FAILED=1
+    info "golangci-lint not found — skipping (brew install golangci-lint)"
   fi
+  launch "go-test" "cd backend && go test -race -short -count=1 ./..."
 else
   info "No backend changes — skipping Go lint and tests"
 fi
 
-# ── Frontend: lint + type-check ───────────────────────────────────────────────
-if git diff --cached --name-only | grep -q '^ui/'; then
-  info "Frontend changed — running ESLint..."
-  if (cd ui/console && npm run lint --silent); then
-    pass "ESLint"
-  else
-    fail "ESLint failed"
-    FAILED=1
-  fi
-
-  info "Frontend changed — running TypeScript check..."
-  if (cd ui/console && npx tsc --noEmit); then
-    pass "TypeScript"
-  else
-    fail "TypeScript check failed"
-    FAILED=1
-  fi
+if printf '%s\n' "$CHANGED" | grep -q '^ui/'; then
+  launch "eslint" "cd ui/console && npm run lint --silent"
+  launch "tsc" "cd ui/console && ./node_modules/.bin/tsc --noEmit"
+  # Contract drift guard: strict-parses recorded real payloads against the
+  # frontend schemas (the *Contract.test.ts files). Fails if backend
+  # serialization drifts from the schema — caught here, never in production.
+  launch "contract" "cd ui/console && ./node_modules/.bin/vitest run Contract --silent --passWithNoTests"
 else
-  info "No frontend changes — skipping lint and tsc"
+  info "No frontend changes — skipping ESLint, tsc, contract tests"
 fi
+
+# Wait for every background check, then report in launch order.
+wait
+FAILED_JOBS=""
+for name in $JOBS; do
+  if [ "$(cat "$JOBDIR/$name.done" 2>/dev/null)" = "0" ]; then
+    pass "$name"
+  else
+    fail "$name"
+    FAILED=1
+    FAILED_JOBS="$FAILED_JOBS $name"
+  fi
+done
+
+# Print the output of failed checks only (keeps the happy path quiet).
+for name in $FAILED_JOBS; do
+  printf "\n${RED}----- %s output -----${NC}\n" "$name"
+  cat "$JOBDIR/$name.log"
+done
 
 # ── Result ────────────────────────────────────────────────────────────────────
 echo ""
 if [ "$FAILED" -eq 1 ]; then
-  printf "${RED}Pre-commit checks failed. Fix errors above and try again.${NC}\n"
-  printf "Emergency bypass: ${YELLOW}git commit --no-verify${NC}\n"
+  printf "${RED}Pre-commit checks failed. Fix the errors above and recommit.${NC}\n"
   exit 1
 fi
 
