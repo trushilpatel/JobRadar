@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -120,6 +121,52 @@ func (r *repositoryService) UpdateProfile(ctx context.Context, id string, displa
 		return domainerrs.ErrNotFound.WithMessage("user not found")
 	}
 	return nil
+}
+
+// GetConfig loads the UserConfig for the given user. When no row exists in
+// user_preferences the caller is a new user — return a zero-value UserConfig
+// so the response always contains valid defaults rather than an error.
+func (r *repositoryService) GetConfig(ctx context.Context, userID string) (_ *usermodel.UserConfig, err error) {
+	ctx, span := tracing.Start(ctx, "user.repo.GetConfig")
+	defer tracing.End(span, &err)
+
+	var pref usermodel.UserPreference
+	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).First(&pref).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &usermodel.UserConfig{}, nil
+		}
+		return nil, domainerrs.ErrInternal.WithMessage("user repo: get config: " + err.Error())
+	}
+	var cfg usermodel.UserConfig
+	if err := json.Unmarshal(pref.Data, &cfg); err != nil {
+		return nil, domainerrs.ErrInternal.WithMessage("user repo: get config: unmarshal: " + err.Error())
+	}
+	return &cfg, nil
+}
+
+// PatchConfig merges partial into the stored UserConfig using a Postgres JSONB
+// merge (`||`). For new users an INSERT is executed; for existing users the
+// JSONB columns are merged so only the supplied fields are overwritten.
+// After the upsert GetConfig is called to return the full merged result.
+func (r *repositoryService) PatchConfig(ctx context.Context, userID string, partial usermodel.UserConfig) (_ *usermodel.UserConfig, err error) {
+	ctx, span := tracing.Start(ctx, "user.repo.PatchConfig")
+	defer tracing.End(span, &err)
+
+	data, marshalErr := json.Marshal(partial)
+	if marshalErr != nil {
+		return nil, domainerrs.ErrInternal.WithMessage("user repo: patch config: marshal: " + marshalErr.Error())
+	}
+
+	sql := `INSERT INTO user_preferences (user_id, data, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT (user_id) DO UPDATE
+		SET data = user_preferences.data || EXCLUDED.data,
+		    updated_at = CURRENT_TIMESTAMP`
+	if execErr := r.db.WithContext(ctx).Exec(sql, userID, data).Error; execErr != nil {
+		return nil, domainerrs.ErrInternal.WithMessage("user repo: patch config: " + execErr.Error())
+	}
+
+	return r.GetConfig(ctx, userID)
 }
 
 // Delete removes the user row. CASCADE on user_roles, user_job_state, and the

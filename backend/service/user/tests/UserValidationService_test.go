@@ -35,6 +35,12 @@ func (p *passthroughRepo) UpdateProfile(_ context.Context, _, name string) error
 	return nil
 }
 func (p *passthroughRepo) Delete(_ context.Context, _ string) error { return nil }
+func (p *passthroughRepo) GetConfig(_ context.Context, _ string) (*usermodel.UserConfig, error) {
+	return &usermodel.UserConfig{}, nil
+}
+func (p *passthroughRepo) PatchConfig(_ context.Context, _ string, partial usermodel.UserConfig) (*usermodel.UserConfig, error) {
+	return &partial, nil
+}
 
 func TestValidation_UpdateProfile_RejectsEmpty(t *testing.T) {
 	t.Parallel()

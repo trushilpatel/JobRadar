@@ -45,6 +45,12 @@ func (c *countingRepo) Delete(_ context.Context, _ string) error {
 	c.deleteCalls++
 	return c.deleteErr
 }
+func (c *countingRepo) GetConfig(_ context.Context, _ string) (*usermodel.UserConfig, error) {
+	return &usermodel.UserConfig{}, nil
+}
+func (c *countingRepo) PatchConfig(_ context.Context, _ string, partial usermodel.UserConfig) (*usermodel.UserConfig, error) {
+	return &partial, nil
+}
 
 const cacheTTL = 30 * time.Second
 
@@ -268,3 +274,9 @@ func (e *errorRepo) Provision(_ context.Context, _, _ string) (*usermodel.User, 
 }
 func (e *errorRepo) UpdateProfile(_ context.Context, _, _ string) error { return e.err }
 func (e *errorRepo) Delete(_ context.Context, _ string) error           { return e.err }
+func (e *errorRepo) GetConfig(_ context.Context, _ string) (*usermodel.UserConfig, error) {
+	return nil, e.err
+}
+func (e *errorRepo) PatchConfig(_ context.Context, _ string, _ usermodel.UserConfig) (*usermodel.UserConfig, error) {
+	return nil, e.err
+}

@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import type { JobStatus } from '@/types'
 import type { TabKey } from '@/config/constants/jobStatus'
+import { JOBS_TOKENS } from '@/config/tokens/jobs.tokens'
 
 type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new' | 'saved'>
 
@@ -88,11 +89,18 @@ export function useJobKeyboard(args: UseJobKeyboardArgs) {
   const safeOpts = { ...BASE_OPTS, enabled: () => enabled && !isInPopover() }
 
   // ── Navigation ───────────────────────────────────────────────────────────
-  useHotkeys('j, down', () => args.onFocusNext(), opts, [args.onFocusNext])
-  useHotkeys('k, up', () => args.onFocusPrev(), opts, [args.onFocusPrev])
-  useHotkeys('enter', () => args.onOpenPreview(), opts, [args.onOpenPreview])
+  // Primary key from token + secondary alias (down/up) for accessibility
+  useHotkeys(`${JOBS_TOKENS['jobs.nav.next'].shortcut}, down`, () => args.onFocusNext(), opts, [
+    args.onFocusNext,
+  ])
+  useHotkeys(`${JOBS_TOKENS['jobs.nav.prev'].shortcut}, up`, () => args.onFocusPrev(), opts, [
+    args.onFocusPrev,
+  ])
+  useHotkeys(JOBS_TOKENS['jobs.nav.open-preview'].shortcut, () => args.onOpenPreview(), opts, [
+    args.onOpenPreview,
+  ])
   useHotkeys('meta+enter, ctrl+enter', () => args.onOpenUrl(), opts, [args.onOpenUrl])
-  useHotkeys('escape', () => args.onEscape(), opts, [args.onEscape])
+  useHotkeys(JOBS_TOKENS['jobs.nav.escape'].shortcut, () => args.onEscape(), opts, [args.onEscape])
 
   // `←` — single press: prev page. Double press within 200ms: jump to first
   // page (if `onFirstPage` is wired). No debounce — single press fires
@@ -100,7 +108,7 @@ export function useJobKeyboard(args: UseJobKeyboardArgs) {
   // enough that the user sees only the final state.
   const lastLeftRef = useRef(0)
   useHotkeys(
-    'left',
+    JOBS_TOKENS['jobs.nav.prev-page'].shortcut,
     () => {
       const now = performance.now()
       const elapsed = now - lastLeftRef.current
@@ -115,35 +123,79 @@ export function useJobKeyboard(args: UseJobKeyboardArgs) {
     safeOpts,
     [args.onPrevPage, args.onFirstPage]
   )
-  useHotkeys('right', () => args.onNextPage(), safeOpts, [args.onNextPage])
+  useHotkeys(JOBS_TOKENS['jobs.nav.next-page'].shortcut, () => args.onNextPage(), safeOpts, [
+    args.onNextPage,
+  ])
 
   // ── Chord navigation ─────────────────────────────────────────────────────
-  useHotkeys('g>g', () => args.onFocusFirst(), opts, [args.onFocusFirst])
-  useHotkeys('shift+g', () => args.onFocusLast(), opts, [args.onFocusLast])
+  useHotkeys(JOBS_TOKENS['jobs.nav.first-row'].shortcut, () => args.onFocusFirst(), opts, [
+    args.onFocusFirst,
+  ])
+  useHotkeys(JOBS_TOKENS['jobs.nav.last-row'].shortcut, () => args.onFocusLast(), opts, [
+    args.onFocusLast,
+  ])
 
   // ── Tab jumps via `g <key>` chord ────────────────────────────────────────
-  useHotkeys('g>n', () => args.onGoToTab('new'), opts, [args.onGoToTab])
-  useHotkeys('g>s', () => args.onGoToTab('saved'), opts, [args.onGoToTab])
-  useHotkeys('g>a', () => args.onGoToTab('applied'), opts, [args.onGoToTab])
-  useHotkeys('g>i', () => args.onGoToTab('interviewing'), opts, [args.onGoToTab])
-  useHotkeys('g>o', () => args.onGoToTab('offer'), opts, [args.onGoToTab])
-  useHotkeys('g>r', () => args.onGoToTab('rejected'), opts, [args.onGoToTab])
+  useHotkeys(JOBS_TOKENS['jobs.tab.go-new'].shortcut, () => args.onGoToTab('new'), opts, [
+    args.onGoToTab,
+  ])
+  useHotkeys(JOBS_TOKENS['jobs.tab.go-saved'].shortcut, () => args.onGoToTab('saved'), opts, [
+    args.onGoToTab,
+  ])
+  useHotkeys(JOBS_TOKENS['jobs.tab.go-applied'].shortcut, () => args.onGoToTab('applied'), opts, [
+    args.onGoToTab,
+  ])
+  useHotkeys(
+    JOBS_TOKENS['jobs.tab.go-interviewing'].shortcut,
+    () => args.onGoToTab('interviewing'),
+    opts,
+    [args.onGoToTab]
+  )
+  useHotkeys(JOBS_TOKENS['jobs.tab.go-offer'].shortcut, () => args.onGoToTab('offer'), opts, [
+    args.onGoToTab,
+  ])
+  useHotkeys(JOBS_TOKENS['jobs.tab.go-rejected'].shortcut, () => args.onGoToTab('rejected'), opts, [
+    args.onGoToTab,
+  ])
 
   // ── Status keys on focused row ───────────────────────────────────────────
   // `s` is special: it toggles the orthogonal saved flag, not a workflow status.
-  useHotkeys('s', () => args.onToggleSave(), opts, [args.onToggleSave])
-  useHotkeys('a', () => args.onSetStatus('applied'), opts, [args.onSetStatus])
-  useHotkeys('i', () => args.onSetStatus('interviewing'), opts, [args.onSetStatus])
-  useHotkeys('o', () => args.onSetStatus('offer'), opts, [args.onSetStatus])
-  useHotkeys('r', () => args.onSetStatus('rejected'), opts, [args.onSetStatus])
-  useHotkeys('d', () => args.onDismiss(), opts, [args.onDismiss])
-  useHotkeys('u', () => args.onUndo(), opts, [args.onUndo])
+  useHotkeys(JOBS_TOKENS['jobs.save'].shortcut, () => args.onToggleSave(), opts, [
+    args.onToggleSave,
+  ])
+  useHotkeys(JOBS_TOKENS['jobs.apply'].shortcut, () => args.onSetStatus('applied'), opts, [
+    args.onSetStatus,
+  ])
+  useHotkeys(
+    JOBS_TOKENS['jobs.interviewing'].shortcut,
+    () => args.onSetStatus('interviewing'),
+    opts,
+    [args.onSetStatus]
+  )
+  useHotkeys(JOBS_TOKENS['jobs.offer'].shortcut, () => args.onSetStatus('offer'), opts, [
+    args.onSetStatus,
+  ])
+  useHotkeys(JOBS_TOKENS['jobs.rejected'].shortcut, () => args.onSetStatus('rejected'), opts, [
+    args.onSetStatus,
+  ])
+  useHotkeys(JOBS_TOKENS['jobs.dismiss'].shortcut, () => args.onDismiss(), opts, [args.onDismiss])
+  useHotkeys(JOBS_TOKENS['jobs.undo'].shortcut, () => args.onUndo(), opts, [args.onUndo])
 
   // ── Search / palette / help ──────────────────────────────────────────────
-  useHotkeys('/', () => args.onFocusSearch(), { ...opts, useKey: true }, [args.onFocusSearch])
+  useHotkeys(
+    JOBS_TOKENS['jobs.nav.focus-search'].shortcut,
+    () => args.onFocusSearch(),
+    { ...opts, useKey: true },
+    [args.onFocusSearch]
+  )
   useHotkeys('meta+k, ctrl+k', () => args.onOpenPalette(), opts, [args.onOpenPalette])
   useHotkeys('meta+shift+r, ctrl+shift+r', () => args.onResetFilters(), opts, [args.onResetFilters])
-  useHotkeys('?', () => args.onOpenHelp(), { ...opts, useKey: true }, [args.onOpenHelp])
+  useHotkeys(
+    JOBS_TOKENS['jobs.nav.open-help'].shortcut,
+    () => args.onOpenHelp(),
+    { ...opts, useKey: true },
+    [args.onOpenHelp]
+  )
   // Cross-layout fallback — physical Slash + Shift always reaches the help
   // sheet even on layouts where `?` would require AltGr.
   useHotkeys('shift+slash', () => args.onOpenHelp(), opts, [args.onOpenHelp])

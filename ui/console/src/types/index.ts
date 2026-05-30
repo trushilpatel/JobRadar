@@ -340,3 +340,7 @@ export interface Identity {
   status: 'active' | 'suspended'
   roles: string[]
 }
+
+export interface UserConfig {
+  show_keyboard_shortcuts: boolean
+}
