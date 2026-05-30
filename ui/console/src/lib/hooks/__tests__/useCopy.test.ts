@@ -3,13 +3,18 @@ import { renderHook } from '@testing-library/react'
 import { useCopy } from '@/lib/hooks/useCopy'
 
 describe('useCopy', () => {
-  it('returns the copy string for a nav key', () => {
+  it('returns copy for a nav key', () => {
     const { result } = renderHook(() => useCopy('nav.dashboard'))
     expect(result.current).toBe('Dashboard')
   })
 
-  it('returns the copy string for a jobs key', () => {
-    const { result } = renderHook(() => useCopy('jobs.save'))
-    expect(result.current).toBe('Save')
+  it('returns copy for a job tab key', () => {
+    const { result } = renderHook(() => useCopy('jobs.tab.saved'))
+    expect(result.current).toBe('Saved')
+  })
+
+  it('returns the search placeholder copy', () => {
+    const { result } = renderHook(() => useCopy('jobs.search.placeholder'))
+    expect(result.current).toBe('Search jobs…')
   })
 })

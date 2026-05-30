@@ -1,7 +1,7 @@
 # migrations/ — Database migrations
 
 Uses goose. Every file needs `-- +goose Up` and `-- +goose Down` sections.
-Run: `go run ./apps/migrate` or `make migrate`. Currently at migration **073** (`073_cleanup_post_deploy_phantom_fetch_rows_v2.sql`). Note: `069` exists in the repo and is applied to the DB but is absent from older snapshots — the sequence has no other gaps.
+Run: `go run ./apps/migrate` or `make migrate`. Currently at migration **075** (`075_user_preferences.sql`). Note: `069` exists in the repo and is applied to the DB but is absent from older snapshots — the sequence has no other gaps.
 
 ## Deploy-ordering-sensitive migrations
 

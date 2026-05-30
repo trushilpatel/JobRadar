@@ -5,7 +5,7 @@ import { useIsMobile } from '@/lib/hooks/use-media-query'
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
 import { MobileFilterDrawer } from './MobileFilterDrawer'
 import type { DateFilter, LocationFilter } from '../hooks/useJobs'
-import { JOBS_TOKENS } from '@/config/tokens/jobs.tokens'
+import { COPY } from '@/config/copy'
 
 function FilterPill({
   active,
@@ -121,7 +121,7 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
               type="search"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder={JOBS_TOKENS['jobs.search.placeholder'].copy}
+              placeholder={COPY['jobs.search.placeholder']}
               className="w-full min-h-[44px] pl-7 pr-3 py-1.5 text-sm bg-white/5 border border-white/10 rounded-lg placeholder-slate-500 focus:outline-none focus:border-violet-500 text-slate-200"
             />
           </div>
@@ -170,7 +170,7 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
           type="search"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search…"
+          placeholder={COPY['jobs.search.placeholder']}
           className="pl-7 pr-3 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg placeholder-slate-500 focus:outline-none focus:border-violet-500 w-44 text-slate-200"
         />
       </div>

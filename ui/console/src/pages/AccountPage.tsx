@@ -2,10 +2,70 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useAuthStore, updateMe, deleteMe } from '@/features/auth'
+import { JOB_COMMANDS, type JobCommandId } from '@/features/jobs'
 import { supabase } from '@/lib/core/supabase'
+import { formatKeys } from '@/lib/commands/formatKeys'
+import type { CommandCategory, KeySpec } from '@/lib/commands/types'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
+import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { Switch } from '@/components/ui/switch'
 import { useUserConfig, usePatchUserConfig } from '@/lib/hooks/useUserConfig'
+
+const SHORTCUT_CATEGORIES: { category: CommandCategory; title: string }[] = [
+  { category: 'navigation', title: 'Navigation' },
+  { category: 'tabs', title: 'Tabs' },
+  { category: 'status', title: 'Status' },
+  { category: 'search', title: 'Search' },
+]
+
+/** Registry-derived keyboard reference table (same source as the help sheet). */
+function ShortcutReference() {
+  const ids = Object.keys(JOB_COMMANDS) as JobCommandId[]
+  return (
+    <div className="mt-4 space-y-5">
+      {SHORTCUT_CATEGORIES.map(({ category, title }) => {
+        const rows = ids.filter((id) => JOB_COMMANDS[id].category === category)
+        if (rows.length === 0) return null
+        return (
+          <div key={category}>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {title}
+            </h3>
+            <dl className="space-y-1.5">
+              {rows.map((id) => {
+                const def = JOB_COMMANDS[id]
+                const keys: readonly KeySpec[] = def.keys
+                return (
+                  <div key={id} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1">
+                    <dd className="text-sm text-slate-300">{def.label}</dd>
+                    <dt className="flex items-center gap-2 justify-self-end">
+                      {keys.length === 0 ? (
+                        <span className="text-xs text-slate-600">—</span>
+                      ) : (
+                        keys.map((spec, si) => (
+                          <span key={si} className="flex items-center gap-1">
+                            {si > 0 && <span className="text-xs text-slate-600">/</span>}
+                            {formatKeys(spec).map((group, gi) => (
+                              <KbdGroup key={gi}>
+                                {group.map((glyph, ki) => (
+                                  <Kbd key={`${gi}-${ki}`}>{glyph}</Kbd>
+                                ))}
+                              </KbdGroup>
+                            ))}
+                          </span>
+                        ))
+                      )}
+                    </dt>
+                  </div>
+                )
+              })}
+            </dl>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 export function AccountPage() {
   const identity = useAuthStore((s) => s.identity)
@@ -107,6 +167,7 @@ export function AccountPage() {
                 disabled={patchConfig.isPending || configLoading}
               />
             </div>
+            <ShortcutReference />
           </section>
         </ErrorBoundary>
 

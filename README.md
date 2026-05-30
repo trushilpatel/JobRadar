@@ -284,7 +284,7 @@ For multi-node clusters, this gives you instant per-node visibility without any 
 
 | Approach                                                                                  | When                                         |
 | ----------------------------------------------------------------------------------------- | -------------------------------------------- |
-| Paste the 12-line YAML into 1Password / Bitwarden as a secure note                        | Solo dev or 2-person team                    |
+| Paste the 12-line YAML into 1Password / Bitwarden as a secure note                        | Small team sharing a vault                   |
 | `sealed-secrets` (encrypted Secret committed to git, only cluster controller can decrypt) | Small team without external secret stores    |
 | External Secrets Operator + AWS / GCP Secret Manager                                      | Multiple environments (dev / staging / prod) |
 

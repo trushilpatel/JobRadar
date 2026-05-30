@@ -1,5 +1,5 @@
-import { TOKENS, type TokenKey } from '@/config/tokens'
+import { COPY, type CopyKey } from '@/config/copy'
 
-export function useCopy(key: TokenKey): string {
-  return TOKENS[key].copy
+export function useCopy(key: CopyKey): string {
+  return COPY[key]
 }

@@ -8,9 +8,12 @@ import {
   CommandList,
   CommandShortcut,
 } from '@/components/ui/command'
+import { Kbd, KbdGroup } from '@/components/ui/kbd'
+import { formatKeys } from '@/lib/commands/formatKeys'
+import type { CommandCategory } from '@/lib/commands/types'
 import type { Job } from '@/types'
 import type { TabKey } from '../hooks/useJobs'
-import { JOB_STATUS } from '@/config/constants/jobStatus'
+import { JOB_COMMANDS, type JobCommandId } from '../commands/jobCommands'
 
 export interface JobCommandPaletteProps {
   open: boolean
@@ -22,14 +25,56 @@ export interface JobCommandPaletteProps {
   onOpenHelp?: () => void
 }
 
-const TAB_ENTRIES: { tab: TabKey; label: string; shortcut: string }[] = [
-  { tab: JOB_STATUS.NEW, label: 'Go to New', shortcut: 'g n' },
-  { tab: JOB_STATUS.SAVED, label: 'Go to Saved', shortcut: 'g s' },
-  { tab: JOB_STATUS.APPLIED, label: 'Go to Applied', shortcut: 'g a' },
-  { tab: JOB_STATUS.INTERVIEWING, label: 'Go to Interviewing', shortcut: 'g i' },
-  { tab: JOB_STATUS.OFFER, label: 'Go to Offer', shortcut: 'g o' },
-  { tab: JOB_STATUS.REJECTED, label: 'Go to Rejected', shortcut: 'g r' },
+const CATEGORY_HEADINGS: Record<CommandCategory, string> = {
+  navigation: 'Navigation',
+  tabs: 'Navigate',
+  status: 'Status',
+  search: 'Actions',
+}
+
+const TAB_FOR_COMMAND: Partial<Record<JobCommandId, TabKey>> = {
+  'jobs.tab.go-new': 'new',
+  'jobs.tab.go-saved': 'saved',
+  'jobs.tab.go-applied': 'applied',
+  'jobs.tab.go-interviewing': 'interviewing',
+  'jobs.tab.go-offer': 'offer',
+  'jobs.tab.go-rejected': 'rejected',
+}
+
+// The actionable subset of commands the palette surfaces, in render order.
+// Each maps to a prop callback resolved at select time; labels + key glyphs
+// derive from the registry so they never drift.
+const SURFACED: JobCommandId[] = [
+  'jobs.tab.go-new',
+  'jobs.tab.go-saved',
+  'jobs.tab.go-applied',
+  'jobs.tab.go-interviewing',
+  'jobs.tab.go-offer',
+  'jobs.tab.go-rejected',
+  'jobs.nav.reset-filters',
+  'jobs.nav.open-help',
 ]
+
+const PALETTE_CATEGORIES: CommandCategory[] = ['tabs', 'search']
+
+function CommandKeys({ keys }: { keys: readonly string[] }) {
+  const primary = keys[0]
+  if (!primary) return null
+  const groups = formatKeys(primary)
+  return (
+    <CommandShortcut>
+      <span className="inline-flex items-center gap-1">
+        {groups.map((group, gi) => (
+          <KbdGroup key={gi}>
+            {group.map((glyph, ki) => (
+              <Kbd key={`${gi}-${ki}`}>{glyph}</Kbd>
+            ))}
+          </KbdGroup>
+        ))}
+      </span>
+    </CommandShortcut>
+  )
+}
 
 export function JobCommandPalette({
   open,
@@ -48,31 +93,38 @@ export function JobCommandPalette({
     [onOpenChange]
   )
 
+  // Resolve the callback a palette row should invoke for a given command id.
+  const callbackFor = (id: JobCommandId): (() => void) | undefined => {
+    const tab = TAB_FOR_COMMAND[id]
+    if (tab) return onGoToTab ? () => onGoToTab(tab) : undefined
+    if (id === 'jobs.nav.reset-filters') return onResetFilters
+    if (id === 'jobs.nav.open-help') return onOpenHelp
+    return undefined
+  }
+
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
       <CommandInput placeholder="Type a command or search jobs…" />
       <CommandList>
         <CommandEmpty>No results.</CommandEmpty>
 
-        <CommandGroup heading="Navigate">
-          {TAB_ENTRIES.map((entry) => (
-            <CommandItem key={entry.tab} onSelect={runAndClose(() => onGoToTab?.(entry.tab))}>
-              {entry.label}
-              <CommandShortcut>{entry.shortcut}</CommandShortcut>
-            </CommandItem>
-          ))}
-        </CommandGroup>
-
-        <CommandGroup heading="Actions">
-          <CommandItem onSelect={runAndClose(() => onResetFilters?.())}>
-            Reset filters
-            <CommandShortcut>⌘⇧R</CommandShortcut>
-          </CommandItem>
-          <CommandItem onSelect={runAndClose(() => onOpenHelp?.())}>
-            Show keyboard shortcuts
-            <CommandShortcut>?</CommandShortcut>
-          </CommandItem>
-        </CommandGroup>
+        {PALETTE_CATEGORIES.map((category) => {
+          const rows = SURFACED.filter((id) => JOB_COMMANDS[id].category === category)
+          if (rows.length === 0) return null
+          return (
+            <CommandGroup key={category} heading={CATEGORY_HEADINGS[category]}>
+              {rows.map((id) => {
+                const def = JOB_COMMANDS[id]
+                return (
+                  <CommandItem key={id} onSelect={runAndClose(callbackFor(id))}>
+                    {def.label}
+                    <CommandKeys keys={def.keys} />
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          )
+        })}
 
         {recentJobs.length > 0 && (
           <CommandGroup heading="Jobs in view">

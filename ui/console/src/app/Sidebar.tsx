@@ -16,35 +16,35 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
 import { routes } from '@/config/routes'
-import { TOKENS } from '@/config/tokens'
+import { COPY } from '@/config/copy'
 import { useAuthStore } from '@/features/auth'
 import { LogoLockup } from '@/components/brand/Logo'
 
 const userNav: { to: string; label: string; icon: React.ReactNode }[] = [
   {
     to: routes.dashboard(),
-    label: TOKENS['nav.dashboard'].copy,
+    label: COPY['nav.dashboard'],
     icon: <LayoutDashboard size={16} />,
   },
-  { to: routes.jobs(), label: TOKENS['nav.jobs'].copy, icon: <Briefcase size={16} /> },
+  { to: routes.jobs(), label: COPY['nav.jobs'], icon: <Briefcase size={16} /> },
 ]
 
 const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [
   {
     to: routes.adminCompanies(),
-    label: TOKENS['nav.companies'].copy,
+    label: COPY['nav.companies'],
     icon: <Building2 size={16} />,
   },
-  { to: routes.adminUsers(), label: TOKENS['nav.users'].copy, icon: <Users size={16} /> },
-  { to: routes.resumeLibrary(), label: TOKENS['nav.resumes'].copy, icon: <FileText size={16} /> },
-  { to: routes.applyQueue(), label: TOKENS['nav.apply-queue'].copy, icon: <Send size={16} /> },
+  { to: routes.adminUsers(), label: COPY['nav.users'], icon: <Users size={16} /> },
+  { to: routes.resumeLibrary(), label: COPY['nav.resumes'], icon: <FileText size={16} /> },
+  { to: routes.applyQueue(), label: COPY['nav.apply-queue'], icon: <Send size={16} /> },
   {
     to: routes.adminAudit(),
-    label: TOKENS['nav.audit-log'].copy,
+    label: COPY['nav.audit-log'],
     icon: <ClipboardList size={16} />,
   },
-  { to: routes.insights(), label: TOKENS['nav.insights'].copy, icon: <BarChart2 size={16} /> },
-  { to: routes.settings(), label: TOKENS['nav.settings'].copy, icon: <Settings size={16} /> },
+  { to: routes.insights(), label: COPY['nav.insights'], icon: <BarChart2 size={16} /> },
+  { to: routes.settings(), label: COPY['nav.settings'], icon: <Settings size={16} /> },
 ]
 
 function NavItem({

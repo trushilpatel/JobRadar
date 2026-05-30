@@ -38,6 +38,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import * as useUserConfigModule from '@/lib/hooks/useUserConfig'
 import { AccountPage } from '@/pages/AccountPage'
+import { JOB_COMMANDS } from '@/features/jobs'
 
 function makeWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: 0, gcTime: 0 } } })
@@ -117,5 +118,19 @@ describe('AccountPage', () => {
     render(<AccountPage />, { wrapper: makeWrapper() })
     const switchEl = screen.getByRole('switch')
     expect(switchEl).toBeDisabled()
+  })
+
+  it('renders the registry-derived shortcut reference table', () => {
+    mockUserConfig(false)
+    render(<AccountPage />, { wrapper: makeWrapper() })
+    expect(screen.getByText(JOB_COMMANDS['jobs.save'].label)).toBeInTheDocument()
+    expect(screen.getByText(JOB_COMMANDS['jobs.nav.next'].label)).toBeInTheDocument()
+    expect(screen.getByText(JOB_COMMANDS['jobs.tab.go-new'].label)).toBeInTheDocument()
+  })
+
+  it('renders the reference table even when config is loading (static registry)', () => {
+    mockUserConfig(false, false, true)
+    render(<AccountPage />, { wrapper: makeWrapper() })
+    expect(screen.getByText(JOB_COMMANDS['jobs.dismiss'].label)).toBeInTheDocument()
   })
 })
