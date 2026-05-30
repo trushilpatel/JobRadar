@@ -4,11 +4,16 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { useAuthStore, updateMe, deleteMe } from '@/features/auth'
 import { supabase } from '@/lib/core/supabase'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
+import { Switch } from '@/components/ui/switch'
+import { useUserConfig, usePatchUserConfig } from '@/lib/hooks/useUserConfig'
 
 export function AccountPage() {
   const identity = useAuthStore((s) => s.identity)
   const refreshIdentity = useAuthStore((s) => s.refreshIdentity)
   const signOut = useAuthStore((s) => s.signOut)
+
+  const { data: userConfig, isLoading: configLoading } = useUserConfig()
+  const patchConfig = usePatchUserConfig()
 
   const [displayName, setDisplayName] = useState(identity?.display_name ?? '')
   const [saving, setSaving] = useState(false)
@@ -79,6 +84,29 @@ export function AccountPage() {
                 {saving ? 'Saving…' : 'Save'}
               </button>
             </form>
+          </section>
+        </ErrorBoundary>
+
+        {/* Keyboard shortcuts */}
+        <ErrorBoundary>
+          <section>
+            <h2 className="text-sm font-semibold text-white mb-4">Keyboard shortcuts</h2>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-300">Show keyboard shortcut hints</p>
+                <p className="text-xs text-slate-500">
+                  Display shortcut keys inside action buttons
+                </p>
+              </div>
+              <Switch
+                id="show-keyboard-shortcuts"
+                checked={userConfig?.show_keyboard_shortcuts ?? false}
+                onCheckedChange={(checked) =>
+                  patchConfig.mutate({ show_keyboard_shortcuts: checked })
+                }
+                disabled={patchConfig.isPending || configLoading}
+              />
+            </div>
           </section>
         </ErrorBoundary>
 

@@ -16,22 +16,35 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
 import { routes } from '@/config/routes'
+import { TOKENS } from '@/config/tokens'
 import { useAuthStore } from '@/features/auth'
 import { LogoLockup } from '@/components/brand/Logo'
 
 const userNav: { to: string; label: string; icon: React.ReactNode }[] = [
-  { to: routes.dashboard(), label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
-  { to: routes.jobs(), label: 'Jobs', icon: <Briefcase size={16} /> },
+  {
+    to: routes.dashboard(),
+    label: TOKENS['nav.dashboard'].copy,
+    icon: <LayoutDashboard size={16} />,
+  },
+  { to: routes.jobs(), label: TOKENS['nav.jobs'].copy, icon: <Briefcase size={16} /> },
 ]
 
 const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [
-  { to: routes.adminCompanies(), label: 'Companies', icon: <Building2 size={16} /> },
-  { to: routes.adminUsers(), label: 'Users', icon: <Users size={16} /> },
-  { to: routes.resumeLibrary(), label: 'Resumes', icon: <FileText size={16} /> },
-  { to: routes.applyQueue(), label: 'Apply Queue', icon: <Send size={16} /> },
-  { to: routes.adminAudit(), label: 'Audit Log', icon: <ClipboardList size={16} /> },
-  { to: routes.insights(), label: 'Insights', icon: <BarChart2 size={16} /> },
-  { to: routes.settings(), label: 'Settings', icon: <Settings size={16} /> },
+  {
+    to: routes.adminCompanies(),
+    label: TOKENS['nav.companies'].copy,
+    icon: <Building2 size={16} />,
+  },
+  { to: routes.adminUsers(), label: TOKENS['nav.users'].copy, icon: <Users size={16} /> },
+  { to: routes.resumeLibrary(), label: TOKENS['nav.resumes'].copy, icon: <FileText size={16} /> },
+  { to: routes.applyQueue(), label: TOKENS['nav.apply-queue'].copy, icon: <Send size={16} /> },
+  {
+    to: routes.adminAudit(),
+    label: TOKENS['nav.audit-log'].copy,
+    icon: <ClipboardList size={16} />,
+  },
+  { to: routes.insights(), label: TOKENS['nav.insights'].copy, icon: <BarChart2 size={16} /> },
+  { to: routes.settings(), label: TOKENS['nav.settings'].copy, icon: <Settings size={16} /> },
 ]
 
 function NavItem({

@@ -46,6 +46,12 @@ func (f *fakeUserRepo) Delete(_ context.Context, _ string) error {
 	f.deleteCalled = true
 	return f.deleteReturnErr
 }
+func (f *fakeUserRepo) GetConfig(_ context.Context, _ string) (*usermodel.UserConfig, error) {
+	return &usermodel.UserConfig{}, nil
+}
+func (f *fakeUserRepo) PatchConfig(_ context.Context, _ string, partial usermodel.UserConfig) (*usermodel.UserConfig, error) {
+	return &partial, nil
+}
 
 // fakeSupabase records DeleteUser calls and can be primed to return an error.
 type fakeSupabase struct {

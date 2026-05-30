@@ -20,11 +20,15 @@ import (
 // We don't reuse the test fakes from sibling files because each test file
 // needs slightly different observability hooks.
 type stubService struct {
-	updatedID   string
-	updatedName string
-	updatedErr  error
-	deletedID   string
-	deletedErr  error
+	updatedID      string
+	updatedName    string
+	updatedErr     error
+	deletedID      string
+	deletedErr     error
+	configGet      *usermodel.UserConfig
+	configGetErr   error
+	configPatch    *usermodel.UserConfig
+	configPatchErr error
 }
 
 func (s *stubService) Get(_ context.Context, _ string) (*usermodel.User, error) {
@@ -44,6 +48,24 @@ func (s *stubService) UpdateProfile(_ context.Context, id, name string) error {
 func (s *stubService) Delete(_ context.Context, id string) error {
 	s.deletedID = id
 	return s.deletedErr
+}
+func (s *stubService) GetConfig(_ context.Context, _ string) (*usermodel.UserConfig, error) {
+	if s.configGetErr != nil {
+		return nil, s.configGetErr
+	}
+	if s.configGet != nil {
+		return s.configGet, nil
+	}
+	return &usermodel.UserConfig{}, nil
+}
+func (s *stubService) PatchConfig(_ context.Context, _ string, partial usermodel.UserConfig) (*usermodel.UserConfig, error) {
+	if s.configPatchErr != nil {
+		return nil, s.configPatchErr
+	}
+	if s.configPatch != nil {
+		return s.configPatch, nil
+	}
+	return &partial, nil
 }
 
 // newTestRouter wires the user RestRouter behind an injectable identity
@@ -245,4 +267,155 @@ func TestGetMeNilRolesBecomesEmptyArray(t *testing.T) {
 // call site.
 func errBadRequest(msg string) error {
 	return domainerrs.ErrBadRequest.WithMessage(msg)
+}
+
+// ---------- GET /me/config ----------
+
+// A user with no stored preferences must receive the zero-value defaults —
+// show_keyboard_shortcuts = false.
+func TestGetMyConfigReturnsDefault(t *testing.T) {
+	t.Parallel()
+	svc := &stubService{} // configGet is nil → returns &UserConfig{}
+	ident := identity.Identity{UserID: "u1", Email: "a@b.com", Status: "active"}
+	srv := httptest.NewServer(newTestRouter(svc, ident))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/me/config")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var body struct {
+		Data usermodel.UserConfig `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Data.ShowKeyboardShortcuts {
+		t.Errorf("show_keyboard_shortcuts = true, want false (default)")
+	}
+}
+
+// A user with stored preferences must have them returned verbatim.
+func TestGetMyConfigReturnsExistingConfig(t *testing.T) {
+	t.Parallel()
+	svc := &stubService{
+		configGet: &usermodel.UserConfig{ShowKeyboardShortcuts: true},
+	}
+	ident := identity.Identity{UserID: "u1", Email: "a@b.com", Status: "active"}
+	srv := httptest.NewServer(newTestRouter(svc, ident))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/me/config")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var body struct {
+		Data usermodel.UserConfig `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !body.Data.ShowKeyboardShortcuts {
+		t.Errorf("show_keyboard_shortcuts = false, want true")
+	}
+}
+
+// ---------- PATCH /me/config ----------
+
+// A well-formed PATCH body must be forwarded to the service PatchConfig and
+// the merged result returned to the caller.
+func TestPatchMyConfigCallsServiceWithBody(t *testing.T) {
+	t.Parallel()
+	svc := &stubService{
+		configPatch: &usermodel.UserConfig{ShowKeyboardShortcuts: true},
+	}
+	ident := identity.Identity{UserID: "u1", Email: "a@b.com", Status: "active"}
+	srv := httptest.NewServer(newTestRouter(svc, ident))
+	defer srv.Close()
+
+	body := strings.NewReader(`{"show_keyboard_shortcuts":true}`)
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/me/config", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var out struct {
+		Data usermodel.UserConfig `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !out.Data.ShowKeyboardShortcuts {
+		t.Errorf("show_keyboard_shortcuts = false, want true")
+	}
+}
+
+// A malformed JSON body must return 400 immediately without calling the
+// service.
+func TestPatchMyConfigRejectsMalformedBody(t *testing.T) {
+	t.Parallel()
+	svc := &stubService{}
+	ident := identity.Identity{UserID: "u1"}
+	srv := httptest.NewServer(newTestRouter(svc, ident))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/me/config", strings.NewReader("not json {{{"))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// A service error on PATCH /me/config must be surfaced as the appropriate
+// HTTP status via HandleError.
+func TestPatchMyConfigServiceError(t *testing.T) {
+	t.Parallel()
+	svc := &stubService{configPatchErr: errBadRequest("cannot update")}
+	ident := identity.Identity{UserID: "u1"}
+	srv := httptest.NewServer(newTestRouter(svc, ident))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/me/config", strings.NewReader(`{"show_keyboard_shortcuts":false}`))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// A service error on GET /me/config must be surfaced via HandleError.
+func TestGetMyConfigServiceError(t *testing.T) {
+	t.Parallel()
+	svc := &stubService{configGetErr: errBadRequest("config unavailable")}
+	ident := identity.Identity{UserID: "u1"}
+	srv := httptest.NewServer(newTestRouter(svc, ident))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/me/config")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
 }

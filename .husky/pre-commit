@@ -54,9 +54,9 @@ else
 fi
 
 # ── Frontend: lint + type-check ───────────────────────────────────────────────
-if git diff --cached --name-only | grep -q '^frontend/'; then
+if git diff --cached --name-only | grep -q '^ui/'; then
   info "Frontend changed — running ESLint..."
-  if (cd frontend && npm run lint --silent); then
+  if (cd ui/console && npm run lint --silent); then
     pass "ESLint"
   else
     fail "ESLint failed"
@@ -64,7 +64,7 @@ if git diff --cached --name-only | grep -q '^frontend/'; then
   fi
 
   info "Frontend changed — running TypeScript check..."
-  if (cd frontend && npx tsc --noEmit); then
+  if (cd ui/console && npx tsc --noEmit); then
     pass "TypeScript"
   else
     fail "TypeScript check failed"

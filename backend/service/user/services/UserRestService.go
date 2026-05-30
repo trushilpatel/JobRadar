@@ -6,6 +6,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/common/identity"
+	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 )
 
 // RestService is the HTTP adapter for the user domain. It owns request
@@ -93,4 +94,34 @@ func (h *RestService) deleteMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// getMyConfig returns the caller's UserConfig. New users without a
+// user_preferences row receive the zero-value defaults (all booleans false).
+func (h *RestService) getMyConfig(w http.ResponseWriter, r *http.Request) {
+	id := identity.MustFromContext(r.Context())
+	cfg, err := h.next.GetConfig(r.Context(), id.UserID)
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, cfg)
+}
+
+// updateMyConfig merges a partial UserConfig into the caller's stored config.
+// The user_id always comes from the ctx-bound Identity — never the request
+// body — so an attacker cannot target another user's preferences.
+func (h *RestService) updateMyConfig(w http.ResponseWriter, r *http.Request) {
+	id := identity.MustFromContext(r.Context())
+	var partial usermodel.UserConfig
+	if err := json.NewDecoder(r.Body).Decode(&partial); err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+	cfg, err := h.next.PatchConfig(r.Context(), id.UserID, partial)
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, cfg)
 }

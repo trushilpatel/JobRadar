@@ -14,11 +14,13 @@ import (
 // recorder per method so we can assert delegation without depending on
 // concrete behaviour from a sibling test file.
 type recordingNext struct {
-	getCalled       bool
-	getByEmail      bool
-	provisionCalled bool
-	updateCalled    bool
-	deleteCalled    bool
+	getCalled         bool
+	getByEmail        bool
+	provisionCalled   bool
+	updateCalled      bool
+	deleteCalled      bool
+	getConfigCalled   bool
+	patchConfigCalled bool
 
 	getReturn        *usermodel.User
 	getErr           error
@@ -49,6 +51,14 @@ func (r *recordingNext) UpdateProfile(_ context.Context, _, _ string) error {
 func (r *recordingNext) Delete(_ context.Context, _ string) error {
 	r.deleteCalled = true
 	return r.deleteErr
+}
+func (r *recordingNext) GetConfig(_ context.Context, _ string) (*usermodel.UserConfig, error) {
+	r.getConfigCalled = true
+	return &usermodel.UserConfig{}, nil
+}
+func (r *recordingNext) PatchConfig(_ context.Context, _ string, partial usermodel.UserConfig) (*usermodel.UserConfig, error) {
+	r.patchConfigCalled = true
+	return &partial, nil
 }
 
 // baseHarness is a do-nothing decorator that embeds BaseService. Calling its
@@ -114,6 +124,22 @@ func TestBaseService_DelegatesEveryMethod(t *testing.T) {
 	}
 	if !next.deleteCalled {
 		t.Error("next.Delete not invoked")
+	}
+
+	// GetConfig
+	if _, err := b.GetConfig(context.Background(), "u1"); err != nil {
+		t.Errorf("GetConfig error = %v", err)
+	}
+	if !next.getConfigCalled {
+		t.Error("next.GetConfig not invoked")
+	}
+
+	// PatchConfig
+	if _, err := b.PatchConfig(context.Background(), "u1", usermodel.UserConfig{}); err != nil {
+		t.Errorf("PatchConfig error = %v", err)
+	}
+	if !next.patchConfigCalled {
+		t.Error("next.PatchConfig not invoked")
 	}
 }
 

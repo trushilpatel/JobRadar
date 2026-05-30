@@ -34,5 +34,7 @@ func (rt *RestRouter) Register(r chi.Router) {
 		sub.Get("/", rt.handler.getMe)
 		sub.Patch("/", rt.handler.updateMe)
 		sub.Delete("/", rt.handler.deleteMe)
+		sub.Get("/config", rt.handler.getMyConfig)
+		sub.Patch("/config", rt.handler.updateMyConfig)
 	})
 }

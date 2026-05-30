@@ -24,6 +24,8 @@ type Service interface {
 	Provision(ctx context.Context, id, email string) (*usermodel.User, error)
 	UpdateProfile(ctx context.Context, id string, displayName string) error
 	Delete(ctx context.Context, id string) error
+	GetConfig(ctx context.Context, userID string) (*usermodel.UserConfig, error)
+	PatchConfig(ctx context.Context, userID string, partial usermodel.UserConfig) (*usermodel.UserConfig, error)
 }
 
 // BaseService auto-delegates every Service method to next. Layers embed it
@@ -59,4 +61,12 @@ func (b *BaseService) UpdateProfile(ctx context.Context, id string, displayName 
 
 func (b *BaseService) Delete(ctx context.Context, id string) error {
 	return b.next.Delete(ctx, id)
+}
+
+func (b *BaseService) GetConfig(ctx context.Context, userID string) (*usermodel.UserConfig, error) {
+	return b.next.GetConfig(ctx, userID)
+}
+
+func (b *BaseService) PatchConfig(ctx context.Context, userID string, partial usermodel.UserConfig) (*usermodel.UserConfig, error) {
+	return b.next.PatchConfig(ctx, userID, partial)
 }
