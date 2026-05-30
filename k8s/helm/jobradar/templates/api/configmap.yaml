@@ -16,7 +16,7 @@ data:
   RATE_LIMIT_READ_RPM: {{ .Values.api.rateLimitReadRpm | quote }}
   RATE_LIMIT_WRITE_RPM: {{ .Values.api.rateLimitWriteRpm | quote }}
   RATE_LIMIT_ADMIN_RPM: {{ .Values.api.rateLimitAdminRpm | quote }}
-  SUPABASE_PROJECT_URL: {{ .Values.api.supabaseProjectUrl | quote }}
+  SUPABASE_PROJECT_URL: {{ required "api.supabaseProjectUrl must be set — for local k3d copy k8s/helm/jobradar/values.local.yaml.example to values.local.yaml and fill it in (Helm picks it up automatically), or pass --set api.supabaseProjectUrl=https://<ref>.supabase.co. The api pod CrashLoopBackOffs with 'SUPABASE_PROJECT_URL must be set' if this is empty." .Values.api.supabaseProjectUrl | quote }}
   JWT_CLOCK_SKEW_SECONDS: {{ .Values.api.jwtClockSkewSeconds | quote }}
   JWKS_CACHE_TTL_SECONDS: {{ .Values.api.jwksCacheTtlSeconds | quote }}
   API_MAX_BODY_BYTES: {{ .Values.api.apiMaxBodyBytes | quote }}

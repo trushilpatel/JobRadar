@@ -1,0 +1,40 @@
+# Local k3d overrides for the jobradar chart.
+#
+# Copy to values.local.yaml (gitignored) and fill in the values below:
+#   cp k8s/helm/jobradar/values.local.yaml.example k8s/helm/jobradar/values.local.yaml
+#
+# `make k8s-up` requires this file and passes it via `-f` automatically. The
+# chart aborts at render time if api.supabaseProjectUrl is empty, so the api
+# pod can never start with a blank SUPABASE_PROJECT_URL.
+#
+# Git worktrees: this file is gitignored and lives only in the main checkout.
+# A fresh worktree won't have it — symlink it in before deploying:
+#   ln -s "$(git rev-parse --git-common-dir | sed 's,/.git,,')/k8s/helm/jobradar/values.local.yaml" \
+#         k8s/helm/jobradar/values.local.yaml
+
+api:
+  # REQUIRED. Your Supabase project URL — https://<project-ref>.supabase.co
+  # Sourced from the same project as SUPABASE_URL in the root .env.
+  supabaseProjectUrl: "https://<project-ref>.supabase.co"
+  # Email allowed to authenticate against the local stack.
+  allowedEmail: "you@example.com"
+
+# Local k3d uses an in-cluster NATS (JetStream) instead of Synadia Cloud. The
+# shared jobradar-prod Synadia account only allows 5 connections and is used by
+# other environments, so local dev must not depend on that budget. In-cluster
+# NATS has no auth and unlimited connections — workers connect to the cluster
+# service with no creds.
+nats:
+  external: false
+
+crawler:
+  natsUrl: "nats://nats:4222"
+  natsCredsFile: ""
+
+filter:
+  natsUrl: "nats://nats:4222"
+  natsCredsFile: ""
+
+enricher:
+  natsUrl: "nats://nats:4222"
+  natsCredsFile: ""
