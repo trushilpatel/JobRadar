@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	userdto "github.com/trushilpatel/jobradar/service/user/dto"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
 )
@@ -52,11 +53,11 @@ func (r *recordingNext) Delete(_ context.Context, _ string) error {
 	r.deleteCalled = true
 	return r.deleteErr
 }
-func (r *recordingNext) GetConfig(_ context.Context, _ string) (*usermodel.UserConfig, error) {
+func (r *recordingNext) GetConfig(_ context.Context, _ string) (*userdto.UserConfig, error) {
 	r.getConfigCalled = true
-	return &usermodel.UserConfig{}, nil
+	return &userdto.UserConfig{}, nil
 }
-func (r *recordingNext) PatchConfig(_ context.Context, _ string, partial usermodel.UserConfig) (*usermodel.UserConfig, error) {
+func (r *recordingNext) PatchConfig(_ context.Context, _ string, partial userdto.UserConfig) (*userdto.UserConfig, error) {
 	r.patchConfigCalled = true
 	return &partial, nil
 }
@@ -135,7 +136,7 @@ func TestBaseService_DelegatesEveryMethod(t *testing.T) {
 	}
 
 	// PatchConfig
-	if _, err := b.PatchConfig(context.Background(), "u1", usermodel.UserConfig{}); err != nil {
+	if _, err := b.PatchConfig(context.Background(), "u1", userdto.UserConfig{}); err != nil {
 		t.Errorf("PatchConfig error = %v", err)
 	}
 	if !next.patchConfigCalled {

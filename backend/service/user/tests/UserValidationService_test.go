@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	userdto "github.com/trushilpatel/jobradar/service/user/dto"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
 )
@@ -35,10 +36,10 @@ func (p *passthroughRepo) UpdateProfile(_ context.Context, _, name string) error
 	return nil
 }
 func (p *passthroughRepo) Delete(_ context.Context, _ string) error { return nil }
-func (p *passthroughRepo) GetConfig(_ context.Context, _ string) (*usermodel.UserConfig, error) {
-	return &usermodel.UserConfig{}, nil
+func (p *passthroughRepo) GetConfig(_ context.Context, _ string) (*userdto.UserConfig, error) {
+	return &userdto.UserConfig{}, nil
 }
-func (p *passthroughRepo) PatchConfig(_ context.Context, _ string, partial usermodel.UserConfig) (*usermodel.UserConfig, error) {
+func (p *passthroughRepo) PatchConfig(_ context.Context, _ string, partial userdto.UserConfig) (*userdto.UserConfig, error) {
 	return &partial, nil
 }
 

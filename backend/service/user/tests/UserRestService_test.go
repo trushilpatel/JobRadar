@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/identity"
+	userdto "github.com/trushilpatel/jobradar/service/user/dto"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
 )
@@ -25,9 +26,9 @@ type stubService struct {
 	updatedErr     error
 	deletedID      string
 	deletedErr     error
-	configGet      *usermodel.UserConfig
+	configGet      *userdto.UserConfig
 	configGetErr   error
-	configPatch    *usermodel.UserConfig
+	configPatch    *userdto.UserConfig
 	configPatchErr error
 }
 
@@ -49,16 +50,16 @@ func (s *stubService) Delete(_ context.Context, id string) error {
 	s.deletedID = id
 	return s.deletedErr
 }
-func (s *stubService) GetConfig(_ context.Context, _ string) (*usermodel.UserConfig, error) {
+func (s *stubService) GetConfig(_ context.Context, _ string) (*userdto.UserConfig, error) {
 	if s.configGetErr != nil {
 		return nil, s.configGetErr
 	}
 	if s.configGet != nil {
 		return s.configGet, nil
 	}
-	return &usermodel.UserConfig{}, nil
+	return &userdto.UserConfig{}, nil
 }
-func (s *stubService) PatchConfig(_ context.Context, _ string, partial usermodel.UserConfig) (*usermodel.UserConfig, error) {
+func (s *stubService) PatchConfig(_ context.Context, _ string, partial userdto.UserConfig) (*userdto.UserConfig, error) {
 	if s.configPatchErr != nil {
 		return nil, s.configPatchErr
 	}
@@ -289,7 +290,7 @@ func TestGetMyConfigReturnsDefault(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var body struct {
-		Data usermodel.UserConfig `json:"data"`
+		Data userdto.UserConfig `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -303,7 +304,7 @@ func TestGetMyConfigReturnsDefault(t *testing.T) {
 func TestGetMyConfigReturnsExistingConfig(t *testing.T) {
 	t.Parallel()
 	svc := &stubService{
-		configGet: &usermodel.UserConfig{ShowKeyboardShortcuts: true},
+		configGet: &userdto.UserConfig{ShowKeyboardShortcuts: true},
 	}
 	ident := identity.Identity{UserID: "u1", Email: "a@b.com", Status: "active"}
 	srv := httptest.NewServer(newTestRouter(svc, ident))
@@ -318,7 +319,7 @@ func TestGetMyConfigReturnsExistingConfig(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var body struct {
-		Data usermodel.UserConfig `json:"data"`
+		Data userdto.UserConfig `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -335,7 +336,7 @@ func TestGetMyConfigReturnsExistingConfig(t *testing.T) {
 func TestPatchMyConfigCallsServiceWithBody(t *testing.T) {
 	t.Parallel()
 	svc := &stubService{
-		configPatch: &usermodel.UserConfig{ShowKeyboardShortcuts: true},
+		configPatch: &userdto.UserConfig{ShowKeyboardShortcuts: true},
 	}
 	ident := identity.Identity{UserID: "u1", Email: "a@b.com", Status: "active"}
 	srv := httptest.NewServer(newTestRouter(svc, ident))
@@ -352,7 +353,7 @@ func TestPatchMyConfigCallsServiceWithBody(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 	var out struct {
-		Data usermodel.UserConfig `json:"data"`
+		Data userdto.UserConfig `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode: %v", err)
