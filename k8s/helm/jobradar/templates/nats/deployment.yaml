@@ -26,6 +26,8 @@ spec:
           imagePullPolicy: {{ .Values.images.nats.pullPolicy }}
           args:
             - -js
+            - --store_dir
+            - /data
             - --http_port
             - "8222"
           ports:
@@ -57,4 +59,15 @@ spec:
             allowPrivilegeEscalation: false
             runAsNonRoot: true
             runAsUser: 1000
+          volumeMounts:
+            - name: nats-js
+              mountPath: /data
+      volumes:
+        # JetStream store — ephemeral on purpose. Local dev only; workers
+        # recreate streams via EnsureStreams on startup, so losing the store on
+        # pod restart is acceptable. Disk-backed (not Memory), so it does not
+        # count against the container memory limit.
+        - name: nats-js
+          emptyDir:
+            sizeLimit: 256Mi
 {{- end }}

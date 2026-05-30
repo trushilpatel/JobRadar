@@ -43,8 +43,10 @@ describe('useUserConfig', () => {
     const { result } = renderHook(() => useUserConfig(), { wrapper })
     await waitFor(() => result.current.isSuccess)
     const query = qc.getQueryCache().find({ queryKey: USER_CONFIG_QUERY_KEY })
-    // staleTime is 30 * 60 * 1000 = 1_800_000
-    expect(query?.options.staleTime).toBe(30 * 60 * 1000)
+    // staleTime is 30 * 60 * 1000 = 1_800_000. It is merged onto query.options at
+    // runtime from the observer, but QueryOptions doesn't declare it in v5's types.
+    const options = query?.options as { staleTime?: number } | undefined
+    expect(options?.staleTime).toBe(30 * 60 * 1000)
   })
 
   it('invalidates user-config query on successful patch', async () => {

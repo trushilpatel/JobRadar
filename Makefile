@@ -260,17 +260,3 @@ help: ## Show this help
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-24s\033[0m %s\n", $$1, $$2}'
 
 .DEFAULT_GOAL := help
-
-# ── AutoCodeEngine ────────────────────────────────────────────────────────────
-# Features dir points into the submodule so PRDs live with the engine.
-# Run: make run FEATURE=<slug>   (add SKIP_GATES=performance,red_team for speed)
--include .factory.env
-FEATURES_DIR ?= AutoCodeEngine/features
-include AutoCodeEngine/factory.mk
-
-# Re-define help after the include to restore the broader regex that matches
-# k8s-*, run-*, and other targets with digits/slashes that factory.mk's grep misses.
-help:
-	@grep -hE '^[a-zA-Z0-9_%/-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| sort -u \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
