@@ -157,9 +157,11 @@ func (r *repositoryService) PatchConfig(ctx context.Context, userID string, part
 		return nil, domainerrs.ErrInternal.WithMessage("user repo: patch config: marshal: " + marshalErr.Error())
 	}
 
-	// pgx binds []byte as bytea; the ::jsonb cast is required for Postgres so
-	// the || merge resolves against a jsonb column. SQLite (tests) uses a plain
-	// ? — detect the dialect to keep unit tests sqlite-compatible.
+	// pgx binds []byte as bytea; Postgres cannot cast bytea→jsonb directly.
+	// Passing string(data) causes pgx to bind the value as text, which Postgres
+	// can cast to jsonb via the explicit ::jsonb operator. SQLite stores jsonb
+	// columns as TEXT so the plain ? binding works without any cast.
+	jsonStr := string(data)
 	dataBind := "?"
 	if r.db.Name() == "postgres" {
 		dataBind = "?::jsonb"
@@ -169,7 +171,7 @@ func (r *repositoryService) PatchConfig(ctx context.Context, userID string, part
 		ON CONFLICT (user_id) DO UPDATE
 		SET data = user_preferences.data || EXCLUDED.data,
 		    updated_at = CURRENT_TIMESTAMP`
-	if execErr := r.db.WithContext(ctx).Exec(sql, userID, data).Error; execErr != nil {
+	if execErr := r.db.WithContext(ctx).Exec(sql, userID, jsonStr).Error; execErr != nil {
 		return nil, domainerrs.ErrInternal.WithMessage("user repo: patch config: " + execErr.Error())
 	}
 
