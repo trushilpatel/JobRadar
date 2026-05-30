@@ -101,3 +101,23 @@ Every component can be verified in isolation.
 - Clock injection in workers (`clock` interface) — time-dependent behaviour is deterministic in tests
 - No real HTTP in unit tests — use `httptest.NewServer`; no real Kafka — use in-process publisher stubs
 - `logger.NewNoop()` silences log output in tests without changing the interface
+
+## Scalability
+
+The system handles growth — more companies, more jobs, more users — without redesign.
+
+- Workers are stateless and horizontally scalable — add crawler/filter/analyzer replicas; coordination is via the DB queue and NATS, never in-process state
+- `company_scan_queue` is the unit of fan-out — work is sharded across crawler instances by claiming queue rows, not by partitioning code
+- Keyset (cursor) pagination on every list endpoint — query cost is constant as tables grow; never `OFFSET` that degrades with table size
+- LLM throughput scales via rate-limit + cooldown slots (`LLMRateLimitMemoryStore` / Redis), not by hardcoded concurrency — back-pressure is explicit, never an unbounded fan-out
+- Per-user overlays (`user_job_state`) keep the global `jobs` feed shared — user growth doesn't multiply the operational dataset
+
+## Performance Efficiency
+
+The system uses time, memory, and external quota deliberately under fixed resource limits.
+
+- Resource limits are intentional (128Mi k3d limits for an 8GB M1) — code must run within them; never assume headroom
+- Hot queries are index-backed; `job_post_id` UNIQUE and the partial indexes on the queue/ledger exist to keep lookups O(log n), not table scans
+- NATS JetStream decouples producers from consumers — a slow analyzer never blocks the crawler; back-pressure is absorbed by the stream, not by dropped work
+- LLM calls are batched and quota-aware — the most expensive external dependency is spent deliberately, with retry ladders instead of hot-loop retries
+- Non-fatal writes (`job_analytics`) never sit on the critical path of the primary `jobs` write
