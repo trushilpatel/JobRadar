@@ -14,7 +14,7 @@ vi.mock('@/lib/core/supabase', () => ({
   },
 }))
 
-import { AuthCallback } from '../AuthCallback'
+import { AuthCallback } from '../components/AuthCallback'
 
 const originalLocation = window.location
 

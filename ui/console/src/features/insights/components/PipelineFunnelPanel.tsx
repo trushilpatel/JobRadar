@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import type { FunnelStep } from '@/types'
 import { cn } from '@/lib/utils/utils'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
-import { useFunnel } from './hooks/useInsights'
+import { useFunnel } from '../hooks/useInsights'
 
 const COLORS: Record<string, string> = {
   enriched: 'bg-slate-500',

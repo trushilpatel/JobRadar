@@ -3,7 +3,9 @@ import { Upload, ArrowUpRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import { useResumes, ResumePickerInline, ResumeStateBadge } from '@/features/resumes'
-import { getMockAttachmentForJob, resumeQueryKeys } from '@/features/resumes'
+import { resumeQueryKeys } from '@/features/resumes'
+// TODO: replace with real useJobAttachment(jobId) hook once backend is wired
+import { getMockAttachmentForJob } from '@/features/resumes'
 import { routes } from '@/config/routes'
 
 interface Props {

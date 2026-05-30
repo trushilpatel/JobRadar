@@ -15,4 +15,5 @@ export { AttachedJobsList } from './components/AttachedJobsList'
 export type * from './types'
 export { RESUME_LIMIT_PER_USER } from './types'
 export { resumeQueryKeys } from './queryKeys'
+// TODO: remove once real useJobAttachment(jobId) backend hook is wired
 export { getMockAttachmentForJob, getMockJob } from './mockData'

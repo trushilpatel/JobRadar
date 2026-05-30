@@ -6,13 +6,13 @@ React 19 · TypeScript (strict) · Vite · TanStack Query v5 · TanStack Table v
 
 ## Project layout
 
-`src/api/` (one file per domain) · `src/types/` (all shared types in `index.ts`) · `src/constants/` · `src/lib/` (api-client, queryClient, supabase, utils) · `src/features/<domain>/` (components + hooks + `queryKeys.ts` + `__tests__/` + barrel `index.ts`) · `src/components/ui/` (generic, zero domain knowledge) · `src/components/shared/` (lightly domain-aware) · `src/pages/` (route-level, compose features only).
+`src/config/` (env, routes, constants) · `src/lib/` (api-client, queryClient, supabase, utils, commands) · `src/types/` (all shared types in `index.ts`) · `src/features/<domain>/` (api + components + hooks + `queryKeys.ts` + `__tests__/` + barrel `index.ts`) · `src/components/ui/` (generic, zero domain knowledge) · `src/components/shared/` (lightly domain-aware) · `src/pages/` (route-level, compose features only).
 
 ---
 
 ## Canonical patterns
 
-### 1. API functions (`src/api/<domain>.ts`)
+### 1. API functions (`src/features/<domain>/api/<domain>.api.ts`)
 
 - Return a **fully normalized, non-null** type — never `T | null`
 - Normalize null/undefined inside the function body with `?? fallback`
@@ -141,17 +141,17 @@ const setStatus = useMutation({
 
 ### Layers + mock points
 
-| Layer         | Tool                                              | Mock                                                  |
-| ------------- | ------------------------------------------------- | ----------------------------------------------------- |
-| API functions | Vitest                                            | `apiClient.get/post/patch/delete` via `vi.fn()`       |
-| Custom hooks  | `renderHook` + `QueryClientProvider`              | The underlying `fetchXxx` function                    |
-| Components    | `render` + `QueryClientProvider`                  | The `fetchXxx` function (`vi.mock('@/api/<domain>')`) |
-| Pages         | `render` + `MemoryRouter` + `QueryClientProvider` | All `fetchXxx` functions used by child panels         |
+| Layer         | Tool                                              | Mock                                                                        |
+| ------------- | ------------------------------------------------- | --------------------------------------------------------------------------- |
+| API functions | Vitest                                            | `apiClient.get/post/patch/delete` via `vi.fn()`                             |
+| Custom hooks  | `renderHook` + `QueryClientProvider`              | The underlying `fetchXxx` function                                          |
+| Components    | `render` + `QueryClientProvider`                  | The `fetchXxx` function (`vi.mock('@/features/<domain>/api/<domain>.api')`) |
+| Pages         | `render` + `MemoryRouter` + `QueryClientProvider` | All `fetchXxx` functions used by child panels                               |
 
 ### Conventions
 
 - Each test file builds its own `QueryClient` (with `retry: 0, gcTime: 0`) to prevent cache bleed
-- Mock at the API module level (`vi.mock('@/api/insights')`) — never at fetch level
+- Mock at the API module level (`vi.mock('@/features/insights/api/insights.api')`) — never at fetch level
 - For API functions, test the normalisation explicitly: a server `null` must resolve to `[]`
 - Every panel covers the four states it must handle: loading, populated, empty, error
 - Every hook covers: successful data transformation, error propagation, mutation success + cache invalidation, mutation error handling
@@ -180,7 +180,7 @@ global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
 | --------------- | -------------------------------------- | ------------------------------------ |
 | Components      | PascalCase `.tsx`                      | `TechStackPanel.tsx`                 |
 | Hooks           | camelCase with `use` prefix            | `useTechStack.ts`                    |
-| API functions   | camelCase                              | `insights.ts`                        |
+| API functions   | camelCase with `.api.ts` suffix        | `insights.api.ts`                    |
 | Query key files | `queryKeys.ts`                         | `src/features/insights/queryKeys.ts` |
 | Test files      | `<subject>.test.ts(x)` in `__tests__/` | `TechStackPanel.test.tsx`            |
 | Constants       | camelCase                              | `jobStatus.ts`                       |

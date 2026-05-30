@@ -17,7 +17,7 @@ vi.mock('@/features/auth/api/me.api')
 vi.mock('@/features/settings/api/adapterConfigs.api')
 
 // ── Mock auth store so pages don't try to fetch identity ─────────────────────
-vi.mock('@/features/auth/store', () => ({
+vi.mock('@/features/auth/store/auth.store', () => ({
   useAuthStore: vi.fn((selector: (s: unknown) => unknown) =>
     selector({
       session: { access_token: 'tok', user: { id: 'u1', email: 'test@test.com' } },

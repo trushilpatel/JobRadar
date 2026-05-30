@@ -26,7 +26,7 @@ vi.mock('sonner', () => ({
 }))
 
 // ── Auth store mock ───────────────────────────────────────────────────────────
-vi.mock('@/features/auth/store', () => ({
+vi.mock('@/features/auth/store/auth.store', () => ({
   useAuthStore: vi.fn((selector: (s: unknown) => unknown) =>
     selector({
       identity: { user_id: 'admin-self', email: 'admin@test.com', roles: ['admin'] },

@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import type { CompanyVelocityInsight } from '@/types'
 import { cn } from '@/lib/utils/utils'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
-import { useVelocity } from './hooks/useInsights'
+import { useVelocity } from '../hooks/useInsights'
 
 const BADGE: Record<string, string> = {
   spike: 'bg-amber-500/15 text-amber-400',

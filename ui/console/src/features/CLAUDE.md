@@ -9,7 +9,8 @@ features/<domain>/
   api/            fetch functions + zod schemas + z.infer types
   components/     UI components for this domain
   hooks/          hooks for this domain
-  types/          domain-local types (not shared app-wide)
+  commands/       (optional) keyboard shortcut definitions for this feature
+  types.ts        domain-local types (flat file, not a subdir) — not shared app-wide
   queryKeys.ts    query key factory
   index.ts        PUBLIC API — the ONLY legal import path for consumers
 ```
