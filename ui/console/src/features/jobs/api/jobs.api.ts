@@ -17,16 +17,20 @@ const UserJobStateSchema = z
   })
   .partial()
 
+// Embedded company on a job. The backend serialises the `companies` row
+// (id/name/slug/website/created_at…); operational fields (adapter_type, active,
+// scan status) live in `company_scan_settings` and are NOT part of this
+// embedded object. Only id + name are guaranteed; everything else is optional.
+// The jobs UI reads `company.name` only (with `company_id` as fallback).
 const CompanyRefSchema = z
   .object({
     id: z.string(),
     name: z.string(),
-    url: z.string(),
-    adapter_type: z.string(),
-    active: z.boolean(),
-    created_at: z.string(),
-    last_scan_at: z.string().nullable(),
-    last_scan_status: z.enum(['ok', 'error', 'pending', 'running', 'queued']).nullable(),
+    slug: z.string().optional(),
+    website: z.string().optional(),
+    careers_url: z.string().nullish(),
+    logo_url: z.string().nullish(),
+    created_at: z.string().optional(),
   })
   .passthrough()
 

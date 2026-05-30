@@ -266,7 +266,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
         })
         onCreated?.({
           ...adminCompany,
-          url: adminCompany.website,
+          url: adminCompany.website ?? '',
           adapter_type: form.adapter_type,
           active: form.active,
           last_scan_at: null,

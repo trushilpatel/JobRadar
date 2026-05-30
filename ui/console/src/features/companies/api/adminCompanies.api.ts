@@ -2,17 +2,23 @@ import { z } from 'zod'
 import { apiClient } from '@/lib/core/api-client'
 import type { ADAPTER_TYPES } from '@/types'
 
+// Mirrors the backend `CompanyScanSettingsListView`/`CompanyScanSettingsView`.
+// The list endpoint omits `adapter_config` entirely (detail-only) and applies
+// `omitempty` to the nullable timestamp/override/error fields — so those keys
+// are ABSENT (not present-as-null) when unset. Use `.nullish()` (null OR
+// missing) rather than `.nullable()` (which rejects a missing key) for every
+// `omitempty` field, or the per-item parse throws on real rows.
 const ScanSettingsViewSchema = z
   .object({
     company_id: z.string(),
     adapter_type: z.string(),
-    adapter_config: z.record(z.string(), z.unknown()).nullable(),
-    scan_interval_override: z.number().nullable(),
+    adapter_config: z.record(z.string(), z.unknown()).nullish(),
+    scan_interval_override: z.number().nullish(),
     active: z.boolean(),
-    last_scan_at: z.string().nullable(),
-    last_success_at: z.string().nullable(),
-    last_error_at: z.string().nullable(),
-    last_error_message: z.string().nullable(),
+    last_scan_at: z.string().nullish(),
+    last_success_at: z.string().nullish(),
+    last_error_at: z.string().nullish(),
+    last_error_message: z.string().nullish(),
     consecutive_errors: z.number(),
     created_at: z.string(),
     updated_at: z.string(),
@@ -22,7 +28,8 @@ const ScanSettingsViewSchema = z
 const AdminCompanySchema = z.object({
   id: z.string(),
   name: z.string(),
-  website: z.string(),
+  // `omitempty` on the backend — the key is absent when the website is blank.
+  website: z.string().optional(),
   created_at: z.string(),
   scan_settings: ScanSettingsViewSchema.nullable(),
   queue_status: z.string().optional(),

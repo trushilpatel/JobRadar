@@ -127,6 +127,43 @@ describe('adminCompanies API', () => {
       expect(result.data[0]?.id).toBe('stripe')
     })
 
+    it('parses the real list shape: scan_settings omits adapter_config and null omitempty fields', async () => {
+      // Regression: the backend CompanyScanSettingsListView omits adapter_config
+      // (detail-only) and applies omitempty to nullable timestamp/override/error
+      // fields, so those keys are ABSENT (not null) on real rows. Website is
+      // also omitempty. A schema that required them via .nullable() threw on
+      // every company that had scan settings and blanked the companies page.
+      const realListResult = {
+        data: [
+          {
+            id: 'acme',
+            name: 'Acme',
+            // website omitted (omitempty, blank)
+            created_at: '2024-01-01T00:00:00Z',
+            scan_settings: {
+              company_id: 'acme',
+              adapter_type: 'greenhouse',
+              // adapter_config omitted (detail-only)
+              // scan_interval_override / last_* omitted (omitempty, null)
+              active: true,
+              consecutive_errors: 0,
+              created_at: '2024-01-01T00:00:00Z',
+              updated_at: '2024-01-01T00:00:00Z',
+            },
+          },
+        ],
+        total: 1,
+        total_active: 1,
+        limit: 50,
+        next_cursor: null,
+      }
+      vi.mocked(apiClient.get).mockResolvedValue(realListResult)
+      const result = await fetchAdminCompanies()
+      expect(result.data).toHaveLength(1)
+      expect(result.data[0]?.scan_settings?.adapter_type).toBe('greenhouse')
+      expect(result.data[0]?.website).toBeUndefined()
+    })
+
     it('propagates rejection when apiClient.get rejects', async () => {
       vi.mocked(apiClient.get).mockRejectedValue(new Error('Network error'))
       await expect(fetchAdminCompanies()).rejects.toThrow('Network error')

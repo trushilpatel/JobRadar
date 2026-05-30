@@ -121,7 +121,23 @@ export interface Job {
   notes: string | null
   user_state: UserJobState
   added_at: string
-  company: Company
+  company: JobCompany
+}
+
+// Embedded company reference on a Job. The backend serialises the `companies`
+// row (id/name/slug/website/created_at…); operational fields (adapter_type,
+// active, scan status) live in company_scan_settings and are NOT part of this
+// embedded object. Only id + name are guaranteed; the jobs UI reads
+// `company.name` (falling back to `company_id`).
+export interface JobCompany {
+  id: string
+  name: string
+  slug?: string
+  website?: string
+  careers_url?: string | null
+  logo_url?: string | null
+  created_at?: string
+  [key: string]: unknown
 }
 
 export interface JobApplication {
