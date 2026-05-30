@@ -17,7 +17,7 @@ export function normalizeAdminCompany(c: AdminCompany): Company {
   return {
     id: c.id,
     name: c.name,
-    url: c.website,
+    url: c.website ?? '',
     adapter_type: c.scan_settings?.adapter_type ?? '',
     active: c.scan_settings?.active ?? false,
     created_at: c.created_at,

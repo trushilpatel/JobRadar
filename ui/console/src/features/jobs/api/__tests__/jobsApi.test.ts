@@ -186,6 +186,29 @@ describe('jobs API', () => {
       expect(result.items).toHaveLength(1)
     })
 
+    it('parses the real embedded-company shape (no url/adapter_type/active/scan status)', async () => {
+      // Regression: the backend `JobView` embeds the `companies` row, which only
+      // carries id/name/slug/website/created_at — operational fields live in
+      // company_scan_settings and are NOT in this object. A strict schema that
+      // required url/adapter_type/active/last_scan_status threw on every job and
+      // blanked the jobs page once the feed had data.
+      const rawBackendCompany = {
+        ...rawJob,
+        company: {
+          id: 'c1',
+          name: 'Acme Corp',
+          slug: 'acme',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-02T00:00:00Z',
+        },
+      }
+      const page: JobsPage = { items: [rawBackendCompany as never], next_cursor: '' }
+      vi.mocked(apiClient.get).mockResolvedValue(page)
+      const result = await fetchJobs(baseFilters, '', 20)
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0]?.company?.name).toBe('Acme Corp')
+    })
+
     it('normalizes job: fills status from user_state when present', async () => {
       const rawWithState = {
         ...rawJob,
