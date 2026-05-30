@@ -2,6 +2,16 @@
 
 Production-grade automated job tracker. Monitors careers pages, filters via LLM, surfaces relevant jobs.
 
+## Development principle — build for a team, always
+
+Every decision is made as if a multi-developer team owns this code, even when one person is writing it today. Never reason from, justify with, or optimise for a "solo developer", "single developer", "just one person", or "single-user" framing — and never weaken a choice because "only one person touches this". Concretely:
+
+- Favour solutions that stay correct when many people change the code concurrently: shared sources of truth over hand-synced duplicates, generated/enforced contracts over convention, CI guards over "I'll remember".
+- Treat clarity, documentation, and guardrails as mandatory — the next contributor is a stranger, not the author.
+- When weighing effort vs. payoff, assume team scale and API/feature churn; do not discount robustness because the current headcount is small.
+
+This supersedes any cost/benefit argument that leans on small team size.
+
 ## Pipeline
 
 ```
@@ -129,6 +139,7 @@ This file and the project's skill files evolve as the codebase is worked on. Whe
 ## See also
 
 - `infra/CLAUDE.md` — k8s deployment + iteration (k3d is the only deployment target; no Docker Compose)
-- `docs/QUALITY.md` — quality attributes reference (`.claude/rules/quality-attributes.md` auto-loads on backend files; `frontend-quality-attributes.md` on frontend files)
+- `docs/QUALITY.md` — quality attributes reference (`.claude/rules/quality-attributes.md` auto-loads on backend files; `frontend-quality-attributes.md` on frontend files). Covers intrinsic qualities incl. Scalability + Performance — _"is the code good?"_
+- `.claude/rules/dev-ergonomics.md` — developer-ergonomics model: friction to change, consistency, extensibility, agent-legibility — _"is it ergonomic to keep it good?"_ Audited by the `dev-ergonomics` skill (read-only, recommends; never edits) via the `dev-ergonomics-auditor` agent
 - Subdirectory `CLAUDE.md` files cover each `backend/*` and `ui/console/*` area and auto-load when you work there
 - `.claude/skills/` — project skills; each has a self-improvement footer that invokes `skill-self-improvement` after completion
