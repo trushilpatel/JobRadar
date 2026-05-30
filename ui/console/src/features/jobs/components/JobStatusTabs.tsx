@@ -5,15 +5,15 @@ import { useIsMobile } from '@/lib/hooks/use-media-query'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { TabKey } from '../hooks/useJobs'
 import { JOB_STATUS, TAB_KEYS } from '@/config/constants/jobStatus'
-import { JOBS_TOKENS } from '@/config/tokens/jobs.tokens'
+import { COPY } from '@/config/copy'
 
 const TAB_LABELS: Record<(typeof TAB_KEYS)[number], string> = {
-  [JOB_STATUS.NEW]: JOBS_TOKENS['jobs.tab.new'].copy,
-  [JOB_STATUS.SAVED]: JOBS_TOKENS['jobs.tab.saved'].copy,
-  [JOB_STATUS.APPLIED]: JOBS_TOKENS['jobs.tab.applied'].copy,
-  [JOB_STATUS.INTERVIEWING]: JOBS_TOKENS['jobs.tab.interviewing'].copy,
-  [JOB_STATUS.OFFER]: JOBS_TOKENS['jobs.tab.offer'].copy,
-  [JOB_STATUS.REJECTED]: JOBS_TOKENS['jobs.tab.rejected'].copy,
+  [JOB_STATUS.NEW]: COPY['jobs.tab.new'],
+  [JOB_STATUS.SAVED]: COPY['jobs.tab.saved'],
+  [JOB_STATUS.APPLIED]: COPY['jobs.tab.applied'],
+  [JOB_STATUS.INTERVIEWING]: COPY['jobs.tab.interviewing'],
+  [JOB_STATUS.OFFER]: COPY['jobs.tab.offer'],
+  [JOB_STATUS.REJECTED]: COPY['jobs.tab.rejected'],
 }
 
 const TABS: { key: TabKey; label: string }[] = TAB_KEYS.map((key) => ({

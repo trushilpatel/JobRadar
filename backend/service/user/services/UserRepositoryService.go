@@ -157,8 +157,15 @@ func (r *repositoryService) PatchConfig(ctx context.Context, userID string, part
 		return nil, domainerrs.ErrInternal.WithMessage("user repo: patch config: marshal: " + marshalErr.Error())
 	}
 
+	// pgx binds []byte as bytea; the ::jsonb cast is required for Postgres so
+	// the || merge resolves against a jsonb column. SQLite (tests) uses a plain
+	// ? — detect the dialect to keep unit tests sqlite-compatible.
+	dataBind := "?"
+	if r.db.Name() == "postgres" {
+		dataBind = "?::jsonb"
+	}
 	sql := `INSERT INTO user_preferences (user_id, data, updated_at)
-		VALUES (?, ?, CURRENT_TIMESTAMP)
+		VALUES (?, ` + dataBind + `, CURRENT_TIMESTAMP)
 		ON CONFLICT (user_id) DO UPDATE
 		SET data = user_preferences.data || EXCLUDED.data,
 		    updated_at = CURRENT_TIMESTAMP`

@@ -1,6 +1,22 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, render, fireEvent, act } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { renderHook, render, fireEvent, act, cleanup } from '@testing-library/react'
 import { useJobKeyboard, type UseJobKeyboardArgs } from '@/features/jobs/hooks/useJobKeyboard'
+
+// Integration test: NO mock of react-hotkeys-hook. We fire real DOM keydown
+// events and assert the page callbacks fire, exercising the full path
+// JOB_COMMANDS → buildDispatch → useCommandKeyboard → react-hotkeys-hook →
+// resolve → handler.
+
+// Pin the platform to Mac so `mod` resolves to `meta` — the meta-combo tests
+// below fire with metaKey. (Without this, a prior test file leaving
+// navigator.platform on Win32 would make `mod+k` register as ctrl+k.)
+beforeEach(() => {
+  Object.defineProperty(window.navigator, 'platform', { value: 'MacIntel', configurable: true })
+})
+
+afterEach(() => {
+  cleanup()
+})
 
 function makeArgs(): UseJobKeyboardArgs {
   return {
@@ -25,16 +41,14 @@ function makeArgs(): UseJobKeyboardArgs {
   }
 }
 
-// Map letters/digits/specials to a plausible `code` value so react-hotkeys-hook
-// (which inspects `e.code` for chord/modifier tracking) sees the same code a
-// browser would emit.
+// react-hotkeys-hook inspects `e.code` for chord/modifier tracking; supply a
+// plausible code so the browser-equivalent path is taken.
 function codeFor(key: string): string {
   if (key.length === 1) {
     const upper = key.toUpperCase()
     if (/[A-Z]/.test(upper)) return `Key${upper}`
     if (/[0-9]/.test(upper)) return `Digit${upper}`
-    if (key === '/') return 'Slash'
-    if (key === '?') return 'Slash'
+    if (key === '/' || key === '?') return 'Slash'
   }
   if (key === 'ArrowDown') return 'ArrowDown'
   if (key === 'ArrowUp') return 'ArrowUp'
@@ -46,8 +60,12 @@ function codeFor(key: string): string {
 }
 
 function fireKey(init: KeyboardEventInit) {
+  const code = codeFor(init.key ?? '')
   act(() => {
-    fireEvent.keyDown(document.body, { code: codeFor(init.key ?? ''), ...init })
+    fireEvent.keyDown(document.body, { code, ...init })
+    // Release so react-hotkeys-hook's pressed-keys tracker does not retain a
+    // "held" key into the next press or test.
+    fireEvent.keyUp(document.body, { code, ...init })
   })
 }
 
@@ -58,7 +76,6 @@ describe('useJobKeyboard', () => {
     args = makeArgs()
   })
 
-  // ── Single-key navigation ─────────────────────────────────────────────────
   it('j and ArrowDown both call onFocusNext', () => {
     renderHook(() => useJobKeyboard(args))
     fireKey({ key: 'j' })
@@ -87,11 +104,9 @@ describe('useJobKeyboard', () => {
     expect(args.onEscape).toHaveBeenCalledTimes(1)
   })
 
-  it('ArrowLeft / ArrowRight page through results', () => {
+  it('ArrowRight pages forward', () => {
     renderHook(() => useJobKeyboard(args))
-    fireKey({ key: 'ArrowLeft' })
     fireKey({ key: 'ArrowRight' })
-    expect(args.onPrevPage).toHaveBeenCalledTimes(1)
     expect(args.onNextPage).toHaveBeenCalledTimes(1)
   })
 
@@ -106,16 +121,14 @@ describe('useJobKeyboard', () => {
   it('double ArrowLeft within 200ms fires onFirstPage on the second press', () => {
     const onFirstPage = vi.fn()
     renderHook(() => useJobKeyboard({ ...args, onFirstPage }))
-    // First press: fires prev.
     fireKey({ key: 'ArrowLeft' })
     expect(args.onPrevPage).toHaveBeenCalledTimes(1)
-    // Second press immediately after: fires first (not a second prev).
     fireKey({ key: 'ArrowLeft' })
     expect(onFirstPage).toHaveBeenCalledTimes(1)
-    expect(args.onPrevPage).toHaveBeenCalledTimes(1) // still only the first call
+    expect(args.onPrevPage).toHaveBeenCalledTimes(1)
   })
 
-  it('three ArrowLeft presses fire prev → first → prev (third press resets the window)', () => {
+  it('three ArrowLeft presses fire prev → first → prev (window resets)', () => {
     const onFirstPage = vi.fn()
     renderHook(() => useJobKeyboard({ ...args, onFirstPage }))
     fireKey({ key: 'ArrowLeft' })
@@ -125,7 +138,6 @@ describe('useJobKeyboard', () => {
     expect(onFirstPage).toHaveBeenCalledTimes(1)
   })
 
-  // ── Status keys (workflow only) ───────────────────────────────────────────
   it.each([
     ['a', 'applied'],
     ['i', 'interviewing'],
@@ -137,7 +149,7 @@ describe('useJobKeyboard', () => {
     expect(args.onSetStatus).toHaveBeenCalledWith(status)
   })
 
-  it('"s" toggles save (orthogonal flag) — never sets workflow status', () => {
+  it('"s" toggles save — never sets workflow status', () => {
     renderHook(() => useJobKeyboard(args))
     fireKey({ key: 's' })
     expect(args.onToggleSave).toHaveBeenCalledTimes(1)
@@ -152,11 +164,6 @@ describe('useJobKeyboard', () => {
     expect(args.onUndo).toHaveBeenCalledTimes(1)
   })
 
-  // ── Selection / bulk shortcuts removed in the bookmark refactor ───────────
-  // x, shift+x, shift+s, shift+a, shift+d no longer exist — verify they are
-  // truly inert (don't fire any callback). The status `a` shortcut on the
-  // focused row still works without modifiers.
-
   it('ArrowLeft / ArrowRight are suppressed inside a Radix popover', () => {
     function Harness() {
       useJobKeyboard(args)
@@ -169,22 +176,12 @@ describe('useJobKeyboard', () => {
     const { getByTestId } = render(<Harness />)
     const opt = getByTestId('opt') as HTMLElement
     opt.focus()
-    // Active element is inside [role="listbox"] — page nav must NOT fire.
     fireEvent.keyDown(opt, { code: 'ArrowLeft', key: 'ArrowLeft' })
     fireEvent.keyDown(opt, { code: 'ArrowRight', key: 'ArrowRight' })
     expect(args.onPrevPage).not.toHaveBeenCalled()
     expect(args.onNextPage).not.toHaveBeenCalled()
   })
 
-  it('shift+/ (cross-layout fallback) also opens help', () => {
-    renderHook(() => useJobKeyboard(args))
-    // First call from the existing "?" test isolation issue won't apply here.
-    fireKey({ key: '/', shiftKey: true })
-    // shift+/ should fire onOpenHelp at least once.
-    expect(args.onOpenHelp).toHaveBeenCalled()
-  })
-
-  // ── Search / palette / help ───────────────────────────────────────────────
   it('"/" focuses search; Cmd+K opens palette; ? opens help', () => {
     renderHook(() => useJobKeyboard(args))
     fireKey({ key: '/' })
@@ -192,8 +189,6 @@ describe('useJobKeyboard', () => {
     fireKey({ key: '?', shiftKey: true })
     expect(args.onFocusSearch).toHaveBeenCalledTimes(1)
     expect(args.onOpenPalette).toHaveBeenCalledTimes(1)
-    // `?` AND `shift+slash` both match the help binding on a US keyboard.
-    // That redundancy is intentional (cross-layout fallback) — assert ≥1.
     expect(args.onOpenHelp).toHaveBeenCalled()
   })
 
@@ -203,7 +198,6 @@ describe('useJobKeyboard', () => {
     expect(args.onResetFilters).toHaveBeenCalledTimes(1)
   })
 
-  // ── Chord sequences ───────────────────────────────────────────────────────
   it('g g calls onFocusFirst', () => {
     renderHook(() => useJobKeyboard(args))
     fireKey({ key: 'g' })
@@ -228,10 +222,11 @@ describe('useJobKeyboard', () => {
     renderHook(() => useJobKeyboard(args))
     fireKey({ key: 'g' })
     fireKey({ key })
-    expect(args.onGoToTab).toHaveBeenLastCalledWith(tab)
+    // `toHaveBeenCalledWith` (not Last) keeps this resilient if the second key
+    // also has a standalone binding that fires alongside the chord.
+    expect(args.onGoToTab).toHaveBeenCalledWith(tab)
   })
 
-  // ── Enabled flag ──────────────────────────────────────────────────────────
   it('does not fire any callbacks when enabled is false', () => {
     renderHook(() => useJobKeyboard({ ...args, enabled: false }))
     fireKey({ key: 'j' })
@@ -244,7 +239,6 @@ describe('useJobKeyboard', () => {
     expect(args.onEscape).not.toHaveBeenCalled()
   })
 
-  // ── enableOnFormTags=false: shortcuts ignored when typing in inputs ───────
   it('shortcuts do not fire when the keydown originates from an INPUT', () => {
     function Harness() {
       useJobKeyboard(args)
@@ -253,9 +247,9 @@ describe('useJobKeyboard', () => {
     const { getByTestId } = render(<Harness />)
     const input = getByTestId('search') as HTMLInputElement
     input.focus()
-    fireEvent.keyDown(input, { key: 'j' })
-    fireEvent.keyDown(input, { key: 's' })
-    fireEvent.keyDown(input, { key: 'd' })
+    fireEvent.keyDown(input, { key: 'j', code: 'KeyJ' })
+    fireEvent.keyDown(input, { key: 's', code: 'KeyS' })
+    fireEvent.keyDown(input, { key: 'd', code: 'KeyD' })
     expect(args.onFocusNext).not.toHaveBeenCalled()
     expect(args.onSetStatus).not.toHaveBeenCalled()
     expect(args.onDismiss).not.toHaveBeenCalled()

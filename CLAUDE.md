@@ -2,6 +2,16 @@
 
 Production-grade automated job tracker. Monitors careers pages, filters via LLM, surfaces relevant jobs.
 
+## Development principle — build for a team, always
+
+Every decision is made as if a multi-developer team owns this code, even when one person is writing it today. Never reason from, justify with, or optimise for a "solo developer", "single developer", "just one person", or "single-user" framing — and never weaken a choice because "only one person touches this". Concretely:
+
+- Favour solutions that stay correct when many people change the code concurrently: shared sources of truth over hand-synced duplicates, generated/enforced contracts over convention, CI guards over "I'll remember".
+- Treat clarity, documentation, and guardrails as mandatory — the next contributor is a stranger, not the author.
+- When weighing effort vs. payoff, assume team scale and API/feature churn; do not discount robustness because the current headcount is small.
+
+This supersedes any cost/benefit argument that leans on small team size.
+
 ## Pipeline
 
 ```
