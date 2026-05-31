@@ -1,0 +1,105 @@
+on:
+  workflow_call:
+    inputs:
+      packages:
+        description: "Space-separated Go package patterns to test and instrument"
+        required: true
+        type: string
+      flags:
+        description: "Codecov flag identifying this run (e.g. backend)"
+        required: true
+        type: string
+      artifact-name:
+        description: "Name for the uploaded coverage artifact"
+        required: true
+        type: string
+      upload:
+        description: >
+          Whether to push coverage + test results to Codecov. Kept false for the
+          per-service PR jobs (the coverage gate is enforced locally by
+          check-coverage.sh, no upload needed) and true only for the single
+          consolidated main-branch run — this is what keeps the monthly Codecov
+          upload count within the private-repo budget at high merge volume.
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  run:
+    name: go test
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      # gotestsum runs the suite and emits a JUnit report alongside the coverage
+      # profile so Codecov Test Analytics can annotate failed/flaky tests.
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@v1.12.0
+
+      - name: Run unit tests (race + coverage)
+        run: |
+          PKGS="${{ inputs.packages }}"
+          COVERPKGS=$(echo "$PKGS" | tr ' ' ',')
+          gotestsum --junitfile /tmp/junit.xml --format pkgname -- \
+            -race -count=1 -short \
+            -coverpkg="$COVERPKGS" \
+            -coverprofile=/tmp/coverage.out \
+            $PKGS
+        working-directory: backend
+
+      # The real gate — runs on every PR and main push regardless of upload.
+      - name: Enforce per-package coverage threshold
+        run: ../scripts/check-coverage.sh /tmp/coverage.out 95
+        working-directory: backend
+
+      # Surface the real silent failure — a missing secret — loudly. The Codecov
+      # upload itself stays non-blocking (fail_ci_if_error: false) so a Codecov
+      # outage never blocks a merge; a misconfigured repo, however, must fail.
+      - name: Verify Codecov token is configured
+        if: always() && inputs.upload
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: |
+          if [ -z "$CODECOV_TOKEN" ]; then
+            echo "::error::CODECOV_TOKEN secret is not set — coverage and test results will NOT reach Codecov. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - name: Upload coverage to Codecov
+        if: always() && inputs.upload
+        uses: codecov/codecov-action@v5
+        with:
+          files: /tmp/coverage.out
+          flags: ${{ inputs.flags }}
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload test results to Codecov
+        if: always() && inputs.upload
+        uses: codecov/codecov-action@v5
+        with:
+          files: /tmp/junit.xml
+          flags: ${{ inputs.flags }}
+          report_type: test_results
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      # Always retained — the PR jobs' profiles feed the diff-cover comment, and
+      # the main run's profile is downloadable for local inspection.
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: /tmp/coverage.out
+          if-no-files-found: ignore

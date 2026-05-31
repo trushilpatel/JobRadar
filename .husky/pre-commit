@@ -11,10 +11,10 @@ info() { printf "${YELLOW}→${NC} %s\n" "$1"; }
 
 FAILED=0
 
-# ── Block direct commits to main (serial, instant) ───────────────────────────
+# ── Block direct commits to main or dev (serial, instant) ────────────────────
 CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
-if [ "$CURRENT_BRANCH" = "main" ]; then
-  fail "Direct commits to 'main' are not allowed."
+if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "dev" ]; then
+  fail "Direct commits to '${CURRENT_BRANCH}' are not allowed."
   printf "${YELLOW}→${NC} Create a feature branch: ${YELLOW}git checkout -b <branch-name>${NC}\n"
   exit 1
 fi
@@ -64,13 +64,13 @@ else
   info "No backend changes — skipping Go lint and tests"
 fi
 
-if printf '%s\n' "$CHANGED" | grep -q '^ui/'; then
-  launch "eslint" "cd ui/console && npm run lint --silent"
-  launch "tsc" "cd ui/console && ./node_modules/.bin/tsc --noEmit"
+if printf '%s\n' "$CHANGED" | grep -q '^frontend/'; then
+  launch "eslint" "cd frontend && npm run lint --silent"
+  launch "tsc" "cd frontend && ./node_modules/.bin/tsc --noEmit"
   # Contract drift guard: strict-parses recorded real payloads against the
   # frontend schemas (the *Contract.test.ts files). Fails if backend
   # serialization drifts from the schema — caught here, never in production.
-  launch "contract" "cd ui/console && ./node_modules/.bin/vitest run Contract --silent --passWithNoTests"
+  launch "contract" "cd frontend && ./node_modules/.bin/vitest run Contract --silent --passWithNoTests"
 else
   info "No frontend changes — skipping ESLint, tsc, contract tests"
 fi

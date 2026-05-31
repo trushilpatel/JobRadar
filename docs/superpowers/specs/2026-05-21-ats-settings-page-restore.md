@@ -25,7 +25,7 @@ Frontend-only. No backend changes, no DB migrations, no API changes. The backend
 
 ## Design
 
-### 1. Route Guard — `ui/console/src/App.tsx`
+### 1. Route Guard — `frontend/src/App.tsx`
 
 Move the `/settings` route inside the existing `<Route element={<RequireAdmin />}>` block. Adapter config is infrastructure-level; it belongs with Companies, Users, and Audit Log.
 
@@ -49,7 +49,7 @@ Move the `/settings` route inside the existing `<Route element={<RequireAdmin />
 </Route>
 ```
 
-### 2. Sidebar Nav — `ui/console/src/components/Sidebar.tsx`
+### 2. Sidebar Nav — `frontend/src/components/Sidebar.tsx`
 
 Add a Settings entry to `adminNav`:
 
@@ -59,7 +59,7 @@ Add a Settings entry to `adminNav`:
 
 Import `Settings` from lucide-react. The item appears in the Admin section for admins only, consistent with all other admin nav entries.
 
-### 3. Auto-Color — `ui/console/src/lib/adapterColor.ts`
+### 3. Auto-Color — `frontend/src/lib/adapterColor.ts`
 
 New pure utility module. Exports:
 
@@ -86,7 +86,7 @@ Palette (12 entries, reuses the current set of adapter colors):
 
 Remove the hardcoded `ADAPTER_COLORS` constant from `AdapterConfigsTable.tsx`. Replace usage with `getAdapterDotColor(cfg.adapter_type)`.
 
-### 4. QueryKeys Factory — `ui/console/src/features/settings/queryKeys.ts`
+### 4. QueryKeys Factory — `frontend/src/features/settings/queryKeys.ts`
 
 ```ts
 export const settingsQueryKeys = {
@@ -111,16 +111,16 @@ Single row spanning all columns, centered, muted text. Consistent with the empty
 
 ## Files Changed
 
-| File                                                                  | Change                                                             |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `ui/console/src/App.tsx`                                              | Move `/settings` under `RequireAdmin`                              |
-| `ui/console/src/components/Sidebar.tsx`                               | Add Settings to `adminNav`                                         |
-| `ui/console/src/lib/adapterColor.ts`                                  | New — deterministic color utility                                  |
-| `ui/console/src/features/settings/queryKeys.ts`                       | New — queryKeys factory                                            |
-| `ui/console/src/features/settings/components/AdapterConfigsTable.tsx` | Remove `ADAPTER_COLORS`, use `getAdapterDotColor`, add empty state |
-| `ui/console/src/features/settings/hooks/useAdapterConfigs.ts`         | Use queryKeys factory                                              |
-| `ui/console/src/features/settings/hooks/useAdapterConfigActions.ts`   | Use queryKeys factory                                              |
-| `ui/console/src/features/settings/index.ts`                           | Export `settingsQueryKeys`                                         |
+| File                                                                | Change                                                             |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `frontend/src/App.tsx`                                              | Move `/settings` under `RequireAdmin`                              |
+| `frontend/src/components/Sidebar.tsx`                               | Add Settings to `adminNav`                                         |
+| `frontend/src/lib/adapterColor.ts`                                  | New — deterministic color utility                                  |
+| `frontend/src/features/settings/queryKeys.ts`                       | New — queryKeys factory                                            |
+| `frontend/src/features/settings/components/AdapterConfigsTable.tsx` | Remove `ADAPTER_COLORS`, use `getAdapterDotColor`, add empty state |
+| `frontend/src/features/settings/hooks/useAdapterConfigs.ts`         | Use queryKeys factory                                              |
+| `frontend/src/features/settings/hooks/useAdapterConfigActions.ts`   | Use queryKeys factory                                              |
+| `frontend/src/features/settings/index.ts`                           | Export `settingsQueryKeys`                                         |
 
 ---
 

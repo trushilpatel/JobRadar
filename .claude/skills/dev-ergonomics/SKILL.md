@@ -31,7 +31,7 @@ Read `.claude/rules/dev-ergonomics.md` and the root `CLAUDE.md` first.
 
 1. **Backend service slices** — `backend/service/*` (group the small ones; give large slices like `company`, `job` their own auditor).
 2. **Backend apps + platform** — `backend/apps/*`, `backend/common/*`, `backend/platform/*`.
-3. **Frontend** — `ui/console/src/*` (features, pages, components, lib, config).
+3. **Frontend** — `frontend/src/*` (features, pages, components, lib, config).
 4. **Infra** — `infra/`, `k8s/`, `Makefile`, `.husky/`, CI workflows.
 5. **Agent tooling** — `.claude/` (rules, skills, agents) + `docs/` + the root `CLAUDE.md` set. The ergonomics of the harness that agents work through is in scope.
 

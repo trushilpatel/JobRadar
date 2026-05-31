@@ -28,7 +28,7 @@ You are the **Test Lead** responsible for comprehensive test coverage across bot
 
 ## Existing Test Files to Read
 
-{list specific existing test files in touched packages — e.g. backend/service/{domain}/tests/, ui/console/src/features/{name}/\*.test.tsx}
+{list specific existing test files in touched packages — e.g. backend/service/{domain}/tests/, frontend/src/features/{name}/\*.test.tsx}
 
 ---
 
@@ -77,7 +77,7 @@ Cross-reference Phase 1 edge-case catalog (using the methodology from `.claude/a
 
 **Frontend:**
 
-- [ ] All frontend tests passing: `cd ui/console && npm test -- --run`
+- [ ] All frontend tests passing: `cd frontend && npm test -- --run`
 
 ## Your Report
 

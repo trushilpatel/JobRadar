@@ -1,0 +1,71 @@
+# Codecov configuration — https://docs.codecov.com/docs/codecov-yaml
+#
+# Uploads happen ONLY on push to main (see the CI workflows): backend uploads one
+# consolidated `backend` report, console uploads one `console` report. PRs never
+# upload — the coverage gate is enforced in CI (check-coverage.sh / vitest), which
+# keeps the monthly upload count within the private-repo budget at high merge
+# volume. `carryforward: true` reuses the last known coverage for whichever flag
+# didn't run on a given merge (e.g. a console-only merge carries `backend`
+# forward), so the project status never reads 0% for an untouched stack.
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto # compare against the base commit
+        threshold: 1% # absorb line-hit jitter from the race detector
+      backend:
+        target: 95% # matches scripts/check-coverage.sh
+        flags:
+          - backend
+      console:
+        target: 90% # matches vite.config.ts statement threshold
+        flags:
+          - console
+    patch:
+      # PRs don't upload, so Codecov can't compute patch coverage on them — the
+      # diff-cover CI step posts new-line coverage as a PR comment instead. This
+      # status applies to the main-branch report only.
+      default:
+        target: 90% # new/changed lines must be covered
+        threshold: 0%
+        informational: true
+
+flag_management:
+  default_rules:
+    carryforward: true
+
+# Group the dashboard by service so coverage trends are per-component.
+component_management:
+  individual_components:
+    - component_id: crawler
+      paths: [backend/apps/crawler/**]
+    - component_id: api-server
+      paths: [backend/apps/api/**]
+    - component_id: workers
+      paths:
+        - backend/apps/scheduler/**
+        - backend/apps/filter/**
+        - backend/apps/analyzer/**
+    - component_id: service-core
+      paths: [backend/service/job/**, backend/service/scan/**]
+    - component_id: service-users
+      paths:
+        - backend/service/user/**
+        - backend/service/company/**
+        - backend/service/application/**
+        - backend/service/role/**
+    - component_id: service-support
+      paths:
+        - backend/service/llm/**
+        - backend/service/dashboard/**
+        - backend/service/insights/**
+        - backend/service/audit/**
+    - component_id: platform
+      paths: [backend/platform/**, backend/common/**]
+    - component_id: console
+      paths: [frontend/**]
+
+comment:
+  layout: "header, diff, flags, components"
+  require_changes: false

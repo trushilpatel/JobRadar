@@ -28,6 +28,6 @@ Three targeted fixes to the `k8s/helm/jobradar` chart addressing resource correc
 - `k8s/helm/jobradar/templates/console/configmap.yaml`
 - `k8s/helm/observability/values.yaml`
 - `infra/Dockerfile.crawler`
-- `ui/console/nginx.conf`
+- `frontend/nginx.conf`
 - `Makefile`
 - `infra/CLAUDE.md`
