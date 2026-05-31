@@ -1,6 +1,14 @@
 name: Console
 
 on:
+  # Run on merges to the default branch so Codecov gets a baseline coverage
+  # report and test-results upload tagged to `main` — required for the Test
+  # Analytics dashboard and for PR `target: auto` comparisons to have a base.
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/console.yml'
   pull_request:
     branches: [main]
     paths:
