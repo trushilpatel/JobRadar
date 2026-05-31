@@ -90,7 +90,7 @@ func (m *MetaAdapter) FetchJobs(ctx context.Context, _ string) (types.FetchJobsR
 		defer cancel()
 	}
 
-	m.log.Info("meta/sitemap: fetching", logger.Str("url", sitemapURL))
+	m.log.Info("meta/sitemap: fetching", logger.Str(logger.FieldURL, sitemapURL))
 	ids, err := m.fetchSitemap(ctx)
 	if err != nil {
 		return types.FetchJobsResponse{}, fmt.Errorf("meta: %w", err)

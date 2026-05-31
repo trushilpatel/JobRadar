@@ -357,10 +357,10 @@ func (w *Worker) markLedgerRetryWithRetry(ctx context.Context, entry jobsvc.Retr
 	// won't make the row appear. Record the metric and return without the second
 	// attempt. NATS remains authoritative for retry scheduling.
 	if stderrors.Is(err, domainerr.ErrLedgerRowMissing) {
-		metrics.EnricherLedgerMissing.WithLabelValues(jobcommon.SeenReasonRetry).Inc()
+		metrics.EnricherLedgerMissing.WithLabelValues(string(jobcommon.SeenReasonRetry)).Inc()
 		w.log.Warn("ledger row missing on retry update — skipping second attempt",
 			logger.Str(logger.FieldJobID, entry.JobID),
-			logger.Str(logger.FieldReason, jobcommon.SeenReasonRetry),
+			logger.Str(logger.FieldReason, string(jobcommon.SeenReasonRetry)),
 		)
 		return err
 	}
@@ -402,21 +402,21 @@ func (w *Worker) sendToDLQ(ctx context.Context, jobLog logger.Logger, fj fetched
 // enricher stage a missing ledger row (cleaned out by a maintenance migration,
 // or never written) is non-fatal: it logs WARN, increments a metric, and the
 // worker proceeds rather than crashing. Any other error is logged at ERROR.
-func (w *Worker) ledgerMissingTolerated(err error, jobID, reason string) {
+func (w *Worker) ledgerMissingTolerated(err error, jobID string, reason jobcommon.SeenReason) {
 	if err == nil {
 		return
 	}
 	if stderrors.Is(err, domainerr.ErrLedgerRowMissing) {
-		metrics.EnricherLedgerMissing.WithLabelValues(reason).Inc()
+		metrics.EnricherLedgerMissing.WithLabelValues(string(reason)).Inc()
 		w.log.Warn("ledger row missing — continuing (non-fatal at enricher stage)",
 			logger.Str(logger.FieldJobID, jobID),
-			logger.Str(logger.FieldReason, reason),
+			logger.Str(logger.FieldReason, string(reason)),
 		)
 		return
 	}
 	w.log.Error("failed to mark ledger in seen_ledger", err,
 		logger.Str(logger.FieldJobID, jobID),
-		logger.Str(logger.FieldReason, reason),
+		logger.Str(logger.FieldReason, string(reason)),
 	)
 }
 

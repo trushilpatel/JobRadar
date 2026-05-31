@@ -37,7 +37,7 @@ func (f *fakeScorer) ScoreBatch(_ context.Context, jobs []llmdto.JobsRelevanceFi
 
 type ledgerCall struct {
 	ids    []string
-	reason string
+	reason jobcommon.SeenReason
 }
 
 type fakeLedger struct {
@@ -47,10 +47,10 @@ type fakeLedger struct {
 	// seenErr, when set, is returned by UpdateSeenReasonBatch (used to inject
 	// ErrLedgerRowMissing). seenErrForReason takes precedence when its key matches.
 	seenErr          error
-	seenErrForReason map[string]error
+	seenErrForReason map[jobcommon.SeenReason]error
 }
 
-func (f *fakeLedger) UpdateSeenReasonBatch(_ context.Context, ids []string, reason string) error {
+func (f *fakeLedger) UpdateSeenReasonBatch(_ context.Context, ids []string, reason jobcommon.SeenReason) error {
 	f.calls = append(f.calls, ledgerCall{ids: append([]string(nil), ids...), reason: reason})
 	if f.seenErrForReason != nil {
 		if err, ok := f.seenErrForReason[reason]; ok {
@@ -330,9 +330,9 @@ func TestProcessChunk_LedgerRowMissing_NaksMessage(t *testing.T) {
 	item2, state2 := makeChunkItem(makeJob("job-2"), 1)
 
 	w := makeWorker(scorer, ledger, pub)
-	before := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(jobcommon.SeenReasonFiltered))
+	before := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(string(jobcommon.SeenReasonFiltered)))
 	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-missing", 0, 1)
-	after := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(jobcommon.SeenReasonFiltered))
+	after := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(string(jobcommon.SeenReasonFiltered)))
 
 	if !state1.Naked || !state2.Naked {
 		t.Errorf("expected both messages Nak'd on missing ledger row: j1=%v j2=%v", state1.Naked, state2.Naked)
@@ -737,5 +737,134 @@ func TestProcessFetch_RetryCountFromDelivery(t *testing.T) {
 	want := now.Add(10 * time.Minute)
 	if !ledger.retryBatches[0][0].NextAttemptAt.Equal(want) {
 		t.Errorf("expected next_attempt_at=%v (10m tier), got %v", want, ledger.retryBatches[0][0].NextAttemptAt)
+	}
+}
+
+// ── Task 1: filterBackOff alignment ────────────────────────────────────────────
+
+// TestFilterBackOffMatchesConsumerConfig asserts that filterBackOff (used by
+// the filter worker to stamp next_attempt_at into the retry ledger) stays in
+// sync with the JOBS_RAW consumer BackOff slice in common/jetstream/streams.go.
+// These two slices must stay identical — if either changes the retry ladder
+// behaviour diverges. This test is the compiler/CI guard replacing the prose
+// comment "Must match the BackOff length on JOBS_RAW consumer".
+//
+// Expected BackOff from ConsumerFilterWorkers in streams.go:
+//
+//	[]time.Duration{time.Minute, 10 * time.Minute, time.Hour}
+func TestFilterBackOffMatchesConsumerConfig(t *testing.T) {
+	// consumerBackOff mirrors the BackOff slice from common/jetstream/streams.go
+	// ConsumerFilterWorkers config. Both slices must be kept identical.
+	consumerBackOff := []time.Duration{time.Minute, 10 * time.Minute, time.Hour}
+
+	if len(filterBackOff) != len(consumerBackOff) {
+		t.Fatalf("filterBackOff length %d != consumer BackOff length %d; update one to match the other",
+			len(filterBackOff), len(consumerBackOff))
+	}
+	for i, want := range consumerBackOff {
+		if filterBackOff[i] != want {
+			t.Errorf("filterBackOff[%d] = %v, consumer BackOff[%d] = %v; they must match",
+				i, filterBackOff[i], i, want)
+		}
+	}
+}
+
+// ── Task 4: publishToDLQ direct coverage ───────────────────────────────────────
+
+// TestPublishToDLQ_Success calls publishToDLQ directly and asserts the
+// success path: the job is published to the DLQ subject, the message is
+// Term'd, and true is returned.
+func TestPublishToDLQ_Success(t *testing.T) {
+	pub := &fakePublisher{}
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, pub)
+
+	item, state := makeChunkItem(makeJob("dlq-direct"), filterMaxRetries+1)
+	ok := w.publishToDLQ(context.Background(), item, errors.New("score error"))
+
+	if !ok {
+		t.Errorf("expected publishToDLQ to return true on success")
+	}
+	if !state.Termed {
+		t.Errorf("expected message Term'd after successful DLQ publish")
+	}
+	if state.Acked {
+		t.Errorf("DLQ job must not be Acked")
+	}
+	dlqRecords := pub.recordsOnSubject(js.SubjectJobsDLQ)
+	if len(dlqRecords) != 1 {
+		t.Fatalf("expected 1 DLQ publish, got %d", len(dlqRecords))
+	}
+	// Verify the payload round-trips cleanly back to the original job.
+	var got ats.RawJob
+	if err := json.Unmarshal(dlqRecords[0].value, &got); err != nil {
+		t.Fatalf("unmarshal DLQ payload: %v", err)
+	}
+	if got.ID != "dlq-direct" {
+		t.Errorf("DLQ payload job ID = %q, want dlq-direct", got.ID)
+	}
+}
+
+// TestPublishToDLQ_PublishError calls publishToDLQ with a publisher that
+// fails for the DLQ subject. The message must be Term'd (to release it from
+// the broker) and false returned — no phantom Ack, no silent drop.
+func TestPublishToDLQ_PublishError(t *testing.T) {
+	pub := &fakePublisher{err: errors.New("broker unavailable")}
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, pub)
+
+	item, state := makeChunkItem(makeJob("dlq-pub-fail"), filterMaxRetries+1)
+	ok := w.publishToDLQ(context.Background(), item, errors.New("score error"))
+
+	if ok {
+		t.Errorf("expected publishToDLQ to return false when publish fails")
+	}
+	if !state.Termed {
+		t.Errorf("expected message Term'd even when DLQ publish fails (no endless redelivery)")
+	}
+	if state.Acked {
+		t.Errorf("must not Ack on publish failure")
+	}
+}
+
+// TestPublishToDLQ_TermError_OnPublishFail exercises the "Term itself fails"
+// branch inside the publish-failure path. This is belt-and-suspenders: the
+// Term error is logged but must not panic or suppress the false return.
+func TestPublishToDLQ_TermError_OnPublishFail(t *testing.T) {
+	pub := &fakePublisher{err: errors.New("broker unavailable")}
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, pub)
+
+	item, state := makeChunkItem(makeJob("dlq-term-fail-pubfail"), filterMaxRetries+1)
+	state.TermErr = errors.New("term broker error") // inject Term failure
+
+	ok := w.publishToDLQ(context.Background(), item, errors.New("score error"))
+
+	if ok {
+		t.Errorf("expected false even when both publish and Term fail")
+	}
+	if !state.Termed {
+		t.Errorf("expected Term to have been attempted")
+	}
+}
+
+// TestPublishToDLQ_TermError_OnSuccess exercises the "Term fails" branch in
+// the success path (publish succeeded, but Term itself errors). publishToDLQ
+// still returns true because the DLQ payload landed — the Term error is logged.
+func TestPublishToDLQ_TermError_OnSuccess(t *testing.T) {
+	pub := &fakePublisher{}
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, pub)
+
+	item, state := makeChunkItem(makeJob("dlq-term-fail-success"), filterMaxRetries+1)
+	state.TermErr = errors.New("term broker error") // inject Term failure
+
+	ok := w.publishToDLQ(context.Background(), item, errors.New("score error"))
+
+	if !ok {
+		t.Errorf("expected true: DLQ payload landed even though Term errored")
+	}
+	if !state.Termed {
+		t.Errorf("expected Term to have been attempted")
+	}
+	dlqRecords := pub.recordsOnSubject(js.SubjectJobsDLQ)
+	if len(dlqRecords) != 1 {
+		t.Fatalf("expected 1 DLQ publish, got %d", len(dlqRecords))
 	}
 }

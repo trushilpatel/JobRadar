@@ -20,6 +20,11 @@ func (r *Registry) Register(svc AdapterCrawlerService) {
 	r.services = append(r.services, svc)
 }
 
+// Len returns the number of registered crawler services.
+func (r *Registry) Len() int {
+	return len(r.services)
+}
+
 // StartAll launches each registered service in its own goroutine.
 // Each goroutine calls wg.Done when its Run method returns (i.e. when ctx is cancelled).
 func (r *Registry) StartAll(ctx context.Context, wg *sync.WaitGroup) {

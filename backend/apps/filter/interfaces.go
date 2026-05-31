@@ -5,12 +5,13 @@ import (
 	"time"
 
 	js "github.com/trushilpatel/jobradar/common/jetstream"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
 
 // FilterLedger is the narrow ledger interface the filter worker needs.
 type FilterLedger interface {
-	UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason string) error
+	UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason jobcommon.SeenReason) error
 	UpdateRetryBatch(ctx context.Context, entries []jobsvc.RetryLedgerEntry) error
 }
 

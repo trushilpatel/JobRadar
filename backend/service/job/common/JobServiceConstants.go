@@ -19,18 +19,23 @@ const (
 	JobStatusRejected     = "rejected"
 )
 
+// SeenReason is the type-safe alias for job_pipeline_ledger.reason values.
+// Using SeenReason instead of string in function signatures makes the
+// compiler reject raw-string literals and catch stale constant references.
+type SeenReason string
+
 // SeenReason values for job_pipeline_ledger.reason. Mirrors the CHECK
 // constraint installed by migration 059. Adding a new value here must be
 // paired with a new migration that widens the constraint.
 const (
-	SeenReasonFetch         = "fetch"
-	SeenReasonFiltered      = "filtered" // passed filter, published to jobs.filtered.*
-	SeenReasonLLMIrrelevant = "llm_irrelevant"
-	SeenReasonRetry         = "retry"
-	SeenReasonUserDismissed = "user_dismissed"
-	SeenReasonError         = "error"
-	SeenReasonNonUSA        = "non_usa_location"
-	SeenReasonSaved         = "saved" // job successfully written to the jobs table
+	SeenReasonFetch         SeenReason = "fetch"
+	SeenReasonFiltered      SeenReason = "filtered" // passed filter, published to jobs.filtered.*
+	SeenReasonLLMIrrelevant SeenReason = "llm_irrelevant"
+	SeenReasonRetry         SeenReason = "retry"
+	SeenReasonUserDismissed SeenReason = "user_dismissed"
+	SeenReasonError         SeenReason = "error"
+	SeenReasonNonUSA        SeenReason = "non_usa_location"
+	SeenReasonSaved         SeenReason = "saved" // job successfully written to the jobs table
 )
 
 // DismissalReason values stored on user_job_state.dismissal_reason. The

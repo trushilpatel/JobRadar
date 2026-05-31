@@ -24,7 +24,7 @@ import (
 // double instead of the full ledger surface.
 type pipelineLedgerSink interface {
 	HasSeen(ctx context.Context, jobID string) (bool, error)
-	UpdateSeenReason(ctx context.Context, jobID, reason string) error
+	UpdateSeenReason(ctx context.Context, jobID string, reason jobcommon.SeenReason) error
 }
 
 type pipelineService struct {
@@ -103,10 +103,10 @@ func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.Enriche
 func (p *pipelineService) markSavedTolerant(ctx context.Context, jobID string) error {
 	if err := p.ledger.UpdateSeenReason(ctx, jobID, jobcommon.SeenReasonSaved); err != nil {
 		if stderrors.Is(err, domainerrs.ErrLedgerRowMissing) {
-			metrics.EnricherLedgerMissing.WithLabelValues(jobcommon.SeenReasonSaved).Inc()
+			metrics.EnricherLedgerMissing.WithLabelValues(string(jobcommon.SeenReasonSaved)).Inc()
 			p.logger.Warn("ledger row missing on save; continuing",
 				logger.Str(logger.FieldJobID, jobID),
-				logger.Str(logger.FieldReason, jobcommon.SeenReasonSaved))
+				logger.Str(logger.FieldReason, string(jobcommon.SeenReasonSaved)))
 			return nil
 		}
 		return fmt.Errorf("mark ledger seen: %w", err)

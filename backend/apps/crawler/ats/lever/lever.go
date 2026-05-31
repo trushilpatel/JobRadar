@@ -251,3 +251,10 @@ func (l *Lever) FetchJobContent(ctx context.Context, job types.RawJob) (types.Fe
 
 	return raw.toFetchJobContentResponse(), nil
 }
+
+// Compile-time interface checks.
+var (
+	_ types.Adapter        = (*Lever)(nil)
+	_ types.URLProvider    = (*Lever)(nil)
+	_ types.ContentFetcher = (*Lever)(nil)
+)

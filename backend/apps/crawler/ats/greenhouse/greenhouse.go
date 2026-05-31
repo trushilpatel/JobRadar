@@ -178,3 +178,10 @@ func (g *Greenhouse) FetchJobContent(ctx context.Context, job types.RawJob) (typ
 
 	return raw.toFetchJobContentResponse(), nil
 }
+
+// Compile-time interface checks.
+var (
+	_ types.Adapter        = (*Greenhouse)(nil)
+	_ types.URLProvider    = (*Greenhouse)(nil)
+	_ types.ContentFetcher = (*Greenhouse)(nil)
+)

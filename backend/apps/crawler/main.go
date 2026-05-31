@@ -105,7 +105,7 @@ func main() {
 	adapterRegistry.Register(atsgoogle.NewCrawlerService(queue, engine, googleCfg, log))
 	adapterRegistry.Register(atsmeta.NewCrawlerService(queue, engine, log))
 
-	log.Info("starting multi-lane crawler", logger.Int("adapters", 14))
+	log.Info("starting multi-lane crawler", logger.Int("adapters", adapterRegistry.Len()))
 
 	var wg sync.WaitGroup
 	adapterRegistry.StartAll(ctx, &wg)

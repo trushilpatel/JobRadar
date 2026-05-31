@@ -20,7 +20,10 @@ type SchedulerCycleResult struct {
 // SchedulerService is the narrow interface the scheduler worker depends on.
 type SchedulerService interface {
 	EnqueueDue(ctx context.Context, intervalMinutes int) (SchedulerCycleResult, error)
-	ResetStuck(ctx context.Context, staleDur time.Duration) error
+	// ResetStuck resets queue rows stuck in 'running' state whose heartbeat has
+	// expired. Returns the count of rows recovered so the scheduler can log and
+	// metric the recovery event — zero is not an error.
+	ResetStuck(ctx context.Context, staleDur time.Duration) (int, error)
 	// PurgeInactive removes queued (not processing) entries for companies that
 	// have been deactivated since they were enqueued. Returns number of rows removed.
 	PurgeInactive(ctx context.Context) (int, error)
@@ -32,7 +35,9 @@ type Service interface {
 	// REST decorator chain too — the API binary uses the same Service
 	// interface for its scheduler-style endpoints.
 	EnqueueDue(ctx context.Context, intervalMinutes int) (SchedulerCycleResult, error)
-	ResetStuck(ctx context.Context, staleDur time.Duration) error
+	// ResetStuck resets queue rows stuck in 'running' state whose heartbeat has
+	// expired. Returns the count of rows recovered — zero is not an error.
+	ResetStuck(ctx context.Context, staleDur time.Duration) (int, error)
 	PurgeInactive(ctx context.Context) (int, error)
 	TriggerScan(ctx context.Context, companyID string) error
 	TriggerScanAll(ctx context.Context) (int, error)
@@ -61,7 +66,7 @@ func (b *BaseService) EnqueueDue(ctx context.Context, intervalMinutes int) (Sche
 	return b.next.EnqueueDue(ctx, intervalMinutes)
 }
 
-func (b *BaseService) ResetStuck(ctx context.Context, staleDur time.Duration) error {
+func (b *BaseService) ResetStuck(ctx context.Context, staleDur time.Duration) (int, error) {
 	return b.next.ResetStuck(ctx, staleDur)
 }
 

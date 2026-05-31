@@ -37,6 +37,8 @@ Read `.claude/rules/dev-ergonomics.md` and the root `CLAUDE.md` first.
 
 If the user names one component ("audit the jobs feature's ergonomics"), default to a **targeted single-component** run — one auditor, full ten dimensions — and skip the sweep. Only sweep the whole repo on an explicit full-repo request.
 
+If the user names 2–3 specific components ("audit the crawler filter and schedule"), default to a **targeted multi-component** run — one auditor per named component in parallel, full ten dimensions each — then synthesize exactly as in Step 3. Do not expand to the full sweep.
+
 If the user names a single dimension ("check the whole repo for doc drift"), run a **per-dimension sweep** instead: one auditor per component but with `DIMENSIONS` narrowed to that one.
 
 ## Step 2 — Dispatch the auditors

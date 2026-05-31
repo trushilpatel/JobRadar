@@ -19,11 +19,14 @@ func NewTestMsg(data []byte, deliveryCount int) (*Msg, *TestMsgState) {
 // TestMsgState records which disposition was called on a test message.
 // NakErr, when set, is returned by Nak() so tests can exercise the Nak-failure
 // path; the Naked flag is still set so the call is observable.
+// TermErr, when set, is returned by Term() so tests can exercise the Term-failure
+// path; the Termed flag is still set so the call is observable.
 type TestMsgState struct {
-	Acked  bool
-	Naked  bool
-	Termed bool
-	NakErr error
+	Acked   bool
+	Naked   bool
+	Termed  bool
+	NakErr  error
+	TermErr error
 }
 
 type testMsg struct {
@@ -44,8 +47,8 @@ func (m *testMsg) NakWithDelay(_ time.Duration) error {
 	return m.state.NakErr
 }
 func (m *testMsg) InProgress() error             { return nil }
-func (m *testMsg) Term() error                   { m.state.Termed = true; return nil }
-func (m *testMsg) TermWithReason(_ string) error { m.state.Termed = true; return nil }
+func (m *testMsg) Term() error                   { m.state.Termed = true; return m.state.TermErr }
+func (m *testMsg) TermWithReason(_ string) error { m.state.Termed = true; return m.state.TermErr }
 func (m *testMsg) Metadata() (*natsjs.MsgMetadata, error) {
 	return &natsjs.MsgMetadata{NumDelivered: m.deliveryCount}, nil
 }

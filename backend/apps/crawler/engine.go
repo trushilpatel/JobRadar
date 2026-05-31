@@ -251,7 +251,7 @@ func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, c
 	var filteredJobs []ats.FetchJobsItem
 	for _, job := range newJobs {
 		if job.LocationKnown && location.AnyNonUSA(job.AllLocations) {
-			if err := e.ledger.MarkSeenBatch(ctx, []string{job.ID}, companyID, jobcommon.SeenReasonNonUSA); err != nil {
+			if err := e.ledger.MarkSeenBatch(ctx, []string{job.ID}, companyID, string(jobcommon.SeenReasonNonUSA)); err != nil {
 				log.Error("failed to mark non-USA job as seen (skipping publish anyway)", err,
 					logger.Str(logger.FieldJobID, job.ID),
 				)
@@ -279,7 +279,7 @@ func (e *Engine) publishNewJobs(ctx context.Context, jobs []ats.FetchJobsItem, c
 	for i, job := range filteredJobs {
 		filteredIDs[i] = job.ID
 	}
-	if err := e.ledger.MarkSeenBatch(ctx, filteredIDs, companyID, jobcommon.SeenReasonFetch); err != nil {
+	if err := e.ledger.MarkSeenBatch(ctx, filteredIDs, companyID, string(jobcommon.SeenReasonFetch)); err != nil {
 		// Could not record the ledger rows — do NOT publish, or the filter would
 		// race a missing row. The next scan re-discovers these jobs.
 		log.Error("batch mark seen failed before publish (skipping publish; recovered next scan)", err,

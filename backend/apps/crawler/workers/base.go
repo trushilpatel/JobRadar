@@ -131,7 +131,7 @@ func (w *BaseWorker) RunLoop(ctx context.Context) {
 		}
 		if err := w.queue.Complete(ctx, item.ID); err != nil {
 			w.log.Error("complete failed", err,
-				logger.Str("adapter_type", w.adapterType),
+				logger.Str(logger.FieldAdapterType, w.adapterType),
 				logger.Str(logger.FieldQueueID, item.ID),
 			)
 		}

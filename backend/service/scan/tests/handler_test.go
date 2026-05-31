@@ -33,8 +33,10 @@ func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error { r
 func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (svc.SchedulerCycleResult, error) {
 	return svc.SchedulerCycleResult{}, f.err
 }
-func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error { return f.err }
-func (f *fakeScanService) PurgeInactive(_ context.Context) (int, error)        { return 0, f.err }
+func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) (int, error) {
+	return 0, f.err
+}
+func (f *fakeScanService) PurgeInactive(_ context.Context) (int, error) { return 0, f.err }
 func (f *fakeScanService) GetAnalytics(_ context.Context, _ string) (*dto.CompanyAnalytics, error) {
 	return &dto.CompanyAnalytics{}, f.err
 }

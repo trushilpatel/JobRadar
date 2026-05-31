@@ -500,7 +500,7 @@ func newOrderingLedger(states ...*js.TestMsgState) *orderingLedger {
 	return &orderingLedger{tracked: states}
 }
 
-func (o *orderingLedger) UpdateSeenReasonBatch(_ context.Context, ids []string, reason string) error {
+func (o *orderingLedger) UpdateSeenReasonBatch(_ context.Context, ids []string, reason jobcommon.SeenReason) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	callIdx := len(o.calls) + 1
@@ -717,7 +717,7 @@ func TestFilter_CrawlerRaceScenario_NoPhantomRow(t *testing.T) {
 	}
 
 	// Phase 2 — crawler INSERT lands (reason='fetch'), then the message replays.
-	if err := store.MarkSeenBatch(context.Background(), []string{"race-1"}, "co-race", jobcommon.SeenReasonFetch); err != nil {
+	if err := store.MarkSeenBatch(context.Background(), []string{"race-1"}, "co-race", string(jobcommon.SeenReasonFetch)); err != nil {
 		t.Fatalf("crawler MarkSeenBatch: %v", err)
 	}
 	item2, state2 := makeChunkItem(ats.RawJob{ID: "race-1", Adapter: "greenhouse", Title: "Engineer"}, 2)
@@ -730,7 +730,7 @@ func TestFilter_CrawlerRaceScenario_NoPhantomRow(t *testing.T) {
 	if err := db.Where("job_id = ?", "race-1").First(&got).Error; err != nil {
 		t.Fatalf("readback: %v", err)
 	}
-	if got.Reason != jobcommon.SeenReasonFiltered {
+	if got.Reason != string(jobcommon.SeenReasonFiltered) {
 		t.Errorf("after replay, reason = %q, want filtered", got.Reason)
 	}
 }
@@ -816,7 +816,7 @@ func TestMergedLocations(t *testing.T) {
 func TestProcessChunk_DLQLedgerFailure_IncrementsCommitFailures(t *testing.T) {
 	scorer := &fakeScorer{err: context.DeadlineExceeded}
 	ledger := &fakeLedger{
-		seenErrForReason: map[string]error{
+		seenErrForReason: map[jobcommon.SeenReason]error{
 			jobcommon.SeenReasonError: errors.New("db write failed"),
 		},
 	}
@@ -867,7 +867,7 @@ func TestProcessChunk_RetryBatchLedgerFailure_IncrementsCommitFailures(t *testin
 func TestProcessChunk_NonUSA_LedgerError_NaksNotAcks(t *testing.T) {
 	scorer := &fakeScorer{}
 	ledger := &fakeLedger{
-		seenErrForReason: map[string]error{
+		seenErrForReason: map[jobcommon.SeenReason]error{
 			jobcommon.SeenReasonNonUSA: errors.New("db down"),
 		},
 	}
@@ -899,14 +899,14 @@ func TestProcessChunk_NonUSA_LedgerError_NaksNotAcks(t *testing.T) {
 func TestProcessChunk_NonUSA_LedgerRowMissing_NaksAndIncrementsMissing(t *testing.T) {
 	scorer := &fakeScorer{}
 	ledger := &fakeLedger{
-		seenErrForReason: map[string]error{
+		seenErrForReason: map[jobcommon.SeenReason]error{
 			jobcommon.SeenReasonNonUSA: domainerr.ErrLedgerRowMissing.WithMessage("race"),
 		},
 	}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	before := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(jobcommon.SeenReasonNonUSA))
+	before := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(string(jobcommon.SeenReasonNonUSA)))
 
 	item, state := makeChunkItem(ats.RawJob{
 		ID:            "uk-missing",
@@ -918,7 +918,7 @@ func TestProcessChunk_NonUSA_LedgerRowMissing_NaksAndIncrementsMissing(t *testin
 
 	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-nonusa-missing", 0, 1)
 
-	after := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(jobcommon.SeenReasonNonUSA))
+	after := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(string(jobcommon.SeenReasonNonUSA)))
 	if after-before != 1 {
 		t.Errorf("expected filter_ledger_missing_total{non_usa_location} +1, got +%v", after-before)
 	}

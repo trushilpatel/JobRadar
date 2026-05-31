@@ -92,7 +92,7 @@ func (f *fakeLedger) MarkSeenBatch(_ context.Context, ids []string, companyID, r
 	f.markSeenLastReason = reason
 	f.markSeenLastCompany = companyID
 	f.markSeenReasons = append(f.markSeenReasons, reason)
-	if reason == jobcommon.SeenReasonFetch {
+	if reason == string(jobcommon.SeenReasonFetch) {
 		recordOrder(f.order, f.orderMu, "mark_seen")
 	}
 	if f.markSeenErrForReason != nil {
@@ -399,13 +399,13 @@ func TestPublishNewJobs_NonUSADroppedBeforePublish(t *testing.T) {
 	// Verify at least one MarkSeenBatch call used the non_usa_location reason.
 	var foundReason bool
 	for _, r := range ledger.markSeenReasons {
-		if r == jobcommon.SeenReasonNonUSA {
+		if r == string(jobcommon.SeenReasonNonUSA) {
 			foundReason = true
 			break
 		}
 	}
 	if !foundReason {
-		t.Errorf("expected a MarkSeenBatch call with reason %q; reasons seen=%v", jobcommon.SeenReasonNonUSA, ledger.markSeenReasons)
+		t.Errorf("expected a MarkSeenBatch call with reason %q; reasons seen=%v", string(jobcommon.SeenReasonNonUSA), ledger.markSeenReasons)
 	}
 }
 
@@ -418,7 +418,7 @@ func TestPublishNewJobs_NonUSALedgerFailureIsolated(t *testing.T) {
 	}
 	ledger := &fakeLedger{
 		seenMap:              map[string]bool{},
-		markSeenErrForReason: map[string]error{jobcommon.SeenReasonNonUSA: errors.New("ledger flaky")},
+		markSeenErrForReason: map[string]error{string(jobcommon.SeenReasonNonUSA): errors.New("ledger flaky")},
 	}
 	pub := &fakePublisher{}
 	e := newTestEngine(&fakeSettingsReader{}, ledger, &fakeRecorder{}, pub)
@@ -612,7 +612,7 @@ func TestPublishNewJobs_AllPublishesFail(t *testing.T) {
 	if len(ledger.markSeenCalls) != 1 {
 		t.Fatalf("expected one MarkSeenBatch (mark-seen-first), got %d", len(ledger.markSeenCalls))
 	}
-	if ledger.markSeenLastReason != jobcommon.SeenReasonFetch {
+	if ledger.markSeenLastReason != string(jobcommon.SeenReasonFetch) {
 		t.Errorf("MarkSeenBatch reason: got %q, want fetch", ledger.markSeenLastReason)
 	}
 }
@@ -696,7 +696,7 @@ func TestPublishNewJobs_PublishFailure_LedgerRemainsAtFetch(t *testing.T) {
 	if len(ledger.markSeenCalls) != 1 || len(ledger.markSeenCalls[0]) != 2 {
 		t.Errorf("expected one MarkSeenBatch with both IDs, got %v", ledger.markSeenCalls)
 	}
-	if ledger.markSeenLastReason != jobcommon.SeenReasonFetch {
+	if ledger.markSeenLastReason != string(jobcommon.SeenReasonFetch) {
 		t.Errorf("MarkSeenBatch reason: got %q, want fetch", ledger.markSeenLastReason)
 	}
 }

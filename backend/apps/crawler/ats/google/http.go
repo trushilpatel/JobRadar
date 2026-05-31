@@ -174,7 +174,7 @@ scanLoop:
 		if err != nil {
 			s.log.Warn("google/http: listing fetch failed",
 				logger.Int("page", pageNum),
-				logger.Str("error", err.Error()))
+				logger.Err(err))
 			break
 		}
 
@@ -195,7 +195,7 @@ scanLoop:
 			seenMap, err = s.seenChecker(ctx, ids)
 			if err != nil {
 				s.log.Warn("google/http: seen check failed, skipping enrichment for this page",
-					logger.Str("error", err.Error()))
+					logger.Err(err))
 				seenMap = make(map[string]bool, len(ids))
 				for _, id := range ids {
 					seenMap[id] = true
