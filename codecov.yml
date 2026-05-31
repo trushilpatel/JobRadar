@@ -1,9 +1,12 @@
 # Codecov configuration — https://docs.codecov.com/docs/codecov-yaml
 #
-# Path filters in the CI workflows mean most PRs only run the changed service's
-# test job, so only a subset of flags upload per PR. `carryforward: true` reuses
-# the last known coverage for absent flags — without it, an unrelated service
-# would read as 0% on every PR and tank the project status.
+# Uploads happen ONLY on push to main (see the CI workflows): backend uploads one
+# consolidated `backend` report, console uploads one `console` report. PRs never
+# upload — the coverage gate is enforced in CI (check-coverage.sh / vitest), which
+# keeps the monthly upload count within the private-repo budget at high merge
+# volume. `carryforward: true` reuses the last known coverage for whichever flag
+# didn't run on a given merge (e.g. a console-only merge carries `backend`
+# forward), so the project status never reads 0% for an untouched stack.
 
 coverage:
   status:
@@ -14,21 +17,19 @@ coverage:
       backend:
         target: 95% # matches scripts/check-coverage.sh
         flags:
-          - crawler
-          - api-server
-          - workers
-          - service-core
-          - service-users
-          - service-support
-          - platform
+          - backend
       console:
         target: 90% # matches vite.config.ts statement threshold
         flags:
           - console
     patch:
+      # PRs don't upload, so Codecov can't compute patch coverage on them — the
+      # diff-cover CI step posts new-line coverage as a PR comment instead. This
+      # status applies to the main-branch report only.
       default:
         target: 90% # new/changed lines must be covered
         threshold: 0%
+        informational: true
 
 flag_management:
   default_rules:
