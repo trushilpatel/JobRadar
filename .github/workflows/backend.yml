@@ -83,11 +83,15 @@ jobs:
     uses: ./.github/workflows/backend-lint.yml
     secrets: inherit
 
-  # ── Test jobs (each runs only when its paths or shared deps changed) ─────────
+  # ── PR test jobs ─────────────────────────────────────────────────────────────
+  # Parallel + change-detected for fast, granular signal. These DO NOT upload to
+  # Codecov — the coverage gate is enforced locally by check-coverage.sh. Keeping
+  # uploads off PRs is what fits the private-repo Codecov budget at high merge
+  # volume; the main-branch `coverage` job below is the single upload point.
   test-crawler:
     name: test / crawler
     needs: changes
-    if: needs.changes.outputs.crawler == 'true' || needs.changes.outputs.platform == 'true'
+    if: github.event_name == 'pull_request' && (needs.changes.outputs.crawler == 'true' || needs.changes.outputs.platform == 'true')
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./apps/crawler/...
@@ -98,7 +102,7 @@ jobs:
   test-api-server:
     name: test / api-server
     needs: changes
-    if: needs.changes.outputs.api-server == 'true' || needs.changes.outputs.platform == 'true'
+    if: github.event_name == 'pull_request' && (needs.changes.outputs.api-server == 'true' || needs.changes.outputs.platform == 'true')
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./apps/api/...
@@ -109,7 +113,7 @@ jobs:
   test-workers:
     name: test / workers
     needs: changes
-    if: needs.changes.outputs.workers == 'true' || needs.changes.outputs.platform == 'true'
+    if: github.event_name == 'pull_request' && (needs.changes.outputs.workers == 'true' || needs.changes.outputs.platform == 'true')
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./apps/scheduler/... ./apps/filter/... ./apps/analyzer/...
@@ -120,7 +124,7 @@ jobs:
   test-service-core:
     name: test / service-core
     needs: changes
-    if: needs.changes.outputs.service-core == 'true' || needs.changes.outputs.platform == 'true'
+    if: github.event_name == 'pull_request' && (needs.changes.outputs.service-core == 'true' || needs.changes.outputs.platform == 'true')
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./service/job/... ./service/scan/...
@@ -131,7 +135,7 @@ jobs:
   test-service-users:
     name: test / service-users
     needs: changes
-    if: needs.changes.outputs.service-users == 'true' || needs.changes.outputs.platform == 'true'
+    if: github.event_name == 'pull_request' && (needs.changes.outputs.service-users == 'true' || needs.changes.outputs.platform == 'true')
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./service/user/... ./service/company/... ./service/application/... ./service/role/...
@@ -142,7 +146,7 @@ jobs:
   test-service-support:
     name: test / service-support
     needs: changes
-    if: needs.changes.outputs.service-support == 'true' || needs.changes.outputs.platform == 'true'
+    if: github.event_name == 'pull_request' && (needs.changes.outputs.service-support == 'true' || needs.changes.outputs.platform == 'true')
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./service/llm/... ./service/dashboard/... ./service/insights/... ./service/audit/...
@@ -153,10 +157,28 @@ jobs:
   test-platform:
     name: test / platform
     needs: changes
-    if: needs.changes.outputs.platform == 'true'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.platform == 'true'
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./platform/... ./common/...
       flags: platform
       artifact-name: coverage-platform
+    secrets: inherit
+
+  # ── Main-branch coverage upload ──────────────────────────────────────────────
+  # One consolidated run over ALL backend packages on push to main. Single
+  # Codecov upload under the `backend` flag (+ one test_results upload) — the
+  # per-service dashboard breakdown comes from path-based component_management in
+  # codecov.yml, not from per-service flags. This is the ONLY backend Codecov
+  # upload, which caps backend at 2 uploads/merge regardless of how many services
+  # changed (no 7× platform fan-out).
+  coverage:
+    name: coverage / backend
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/backend-test.yml
+    with:
+      packages: ./apps/... ./service/... ./platform/... ./common/...
+      flags: backend
+      artifact-name: coverage-backend
+      upload: true
     secrets: inherit
