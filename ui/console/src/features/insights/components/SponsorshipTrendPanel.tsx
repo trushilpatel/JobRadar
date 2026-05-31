@@ -9,8 +9,8 @@ import {
 } from 'recharts'
 import type { SponsorshipDay } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
-import { tooltipStyle } from './insightStyles'
-import { useSponsorshipTrend } from './hooks/useInsights'
+import { tooltipStyle } from '../insightStyles'
+import { useSponsorshipTrend } from '../hooks/useInsights'
 
 function SponsorshipContent({ data }: { data: SponsorshipDay[] }) {
   if (data.length === 0) return <InsightEmpty />

@@ -31,7 +31,7 @@ vi.mock('sonner', () => {
   toast.dismiss = vi.fn()
   return { toast, Toaster: () => null }
 })
-vi.mock('@/features/auth/store', () => ({
+vi.mock('@/features/auth/store/auth.store', () => ({
   useAuthStore: vi.fn((sel: (s: unknown) => unknown) =>
     sel({
       session: { access_token: 'tok', user: { id: 'u1', email: 'test@test.com' } },

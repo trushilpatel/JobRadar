@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import type { CompanyWeekCount } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
-import { useCompanyActivity } from './hooks/useInsights'
+import { useCompanyActivity } from '../hooks/useInsights'
 
 function ActivityContent({ data }: { data: CompanyWeekCount[] }) {
   const stats = useMemo(() => {

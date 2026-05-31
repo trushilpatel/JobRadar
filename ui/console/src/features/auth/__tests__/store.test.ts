@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useAuthStore } from '../store'
+import { useAuthStore } from '../store/auth.store'
 
 // ── Supabase mock ──────────────────────────────────────────────────────────────
 const getSession = vi.fn()

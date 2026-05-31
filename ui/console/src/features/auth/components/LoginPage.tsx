@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { useAuthStore } from './store'
+import { useAuthStore } from '../store/auth.store'
 import { cn } from '@/lib/utils/utils'
 import { LogoLockup } from '@/components/brand/Logo'
 

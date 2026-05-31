@@ -42,8 +42,8 @@ src/
 │   ├── InsightsPage.tsx
 │   ├── SettingsPage.tsx
 │   ├── AccountPage.tsx
+│   ├── CompaniesPage.tsx
 │   └── admin/
-│       ├── CompaniesPage.tsx
 │       ├── AdminUsersPage.tsx
 │       ├── AdminAuditPage.tsx
 │       ├── ResumeLibraryPage.tsx
@@ -56,9 +56,9 @@ src/
 │   │   ├── api/
 │   │   │   └── jobs.api.ts       # fetch functions + zod schemas + z.infer types
 │   │   ├── components/
+│   │   ├── commands/
+│   │   │   └── jobCommands.ts    # keyboard shortcut registry for jobs feature
 │   │   ├── hooks/
-│   │   ├── types/                # types used only within this feature
-│   │   ├── constants/            # constants used only within this feature
 │   │   ├── queryKeys.ts
 │   │   └── index.ts              # ← PUBLIC API — the ONLY legal import path for consumers
 │   │
@@ -68,8 +68,7 @@ src/
 │   │   │   └── adminCompanies.api.ts
 │   │   ├── components/
 │   │   ├── hooks/
-│   │   ├── types/
-│   │   ├── constants/
+│   │   ├── constants.ts          # constants used only within this feature
 │   │   ├── queryKeys.ts
 │   │   └── index.ts
 │   │
@@ -107,10 +106,9 @@ src/
 │   │   └── index.ts
 │   │
 │   └── resumes/                  # deferred — same shape when resumed
-│       ├── api/
 │       ├── components/
 │       ├── hooks/
-│       ├── types/
+│       ├── types.ts              # domain-local types (flat file, not a subdir)
 │       ├── queryKeys.ts
 │       └── index.ts
 │
@@ -136,15 +134,22 @@ src/
 │   │   ├── use-media-query.ts
 │   │   ├── use-undo-toast.ts
 │   │   └── hidden-items.ts
+│   ├── commands/                 # command registry — keyboard shortcuts, dispatch, platform detection
+│   │   ├── types.ts
+│   │   ├── buildDispatch.ts
+│   │   ├── formatKeys.ts
+│   │   ├── platform.ts
+│   │   └── useCommandKeyboard.ts
 │   └── utils/
-│       ├── utils.ts              # cn(), formatRelativeTime(), etc.
-│       └── formatters.ts         # avatarColor(), formatSalary() (was services/)
+│       └── utils.ts              # cn(), formatRelativeTime(), avatarColor(), formatSalary(), etc.
 │
 ├── config/                       # layer 0 — imports nothing from src/
 │   ├── routes.ts                 # ALL route builders (was lib/routes.ts)
 │   ├── env.ts                    # typed import.meta.env (VITE_* vars)
-│   └── constants/
-│       └── jobStatus.ts          # JOB_STATUS, TAB_KEYS, etc.
+│   ├── constants/
+│   │   └── jobStatus.ts          # JOB_STATUS, TAB_KEYS, etc.
+│   └── copy/
+│       └── index.ts              # UI copy strings — nav labels, status copy, feature text
 │
 └── types/                        # shared types used across 2+ features
     └── index.ts                  # shrinks as domain types move to features/<x>/types/
@@ -154,7 +159,7 @@ src/
 
 ## The six import rules
 
-Enforced by `eslint-plugin-boundaries`. These are **CI errors**, not warnings.
+Enforced via `no-restricted-imports` rules in `eslint.config.js`. (`eslint-plugin-boundaries` is installed but the active rules use the built-in `no-restricted-imports` so `@/` path aliases are matched as-written without a resolver.) These are **CI errors**, not warnings.
 
 | Rule                                                            | What it prevents                     |
 | --------------------------------------------------------------- | ------------------------------------ |
@@ -194,12 +199,12 @@ reviewable, diff-visible act.
 | New app-wide constant                 | `config/constants/<name>.ts`                                  |
 | New HTTP utility                      | `lib/core/api-client.ts` or new file in `lib/core/`           |
 | New shared hook (used by 2+ features) | `lib/hooks/`                                                  |
-| New formatting utility                | `lib/utils/formatters.ts`                                     |
+| New formatting utility                | `lib/utils/utils.ts`                                          |
 | New UI primitive (Radix / Tailwind)   | `components/ui/`                                              |
 | New component used by 2+ features     | `components/shared/`                                          |
 | New domain component / hook           | `features/<domain>/components/` or `features/<domain>/hooks/` |
 | New API function                      | `features/<domain>/api/<domain>.api.ts`                       |
-| New domain-local type                 | `features/<domain>/types/`                                    |
+| New domain-local type                 | `features/<domain>/types.ts` (flat file, not a subdir)        |
 | New type used by 2+ features          | `types/index.ts`                                              |
 | New page (route)                      | `pages/` (or `pages/admin/` for admin routes)                 |
 | New route definition                  | `app/router.tsx`                                              |

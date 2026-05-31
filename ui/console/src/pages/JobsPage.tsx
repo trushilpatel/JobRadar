@@ -20,6 +20,7 @@ import {
   JobShortcutSheet,
 } from '@/features/jobs'
 import { JobResumeSection } from '@/pages/jobs/JobResumeSection'
+// TODO: replace with real useJobAttachment(jobId) hook once backend is wired
 import { getMockAttachmentForJob } from '@/features/resumes'
 import { useIsMobile } from '@/lib/hooks/use-media-query'
 import { useHiddenItems } from '@/lib/hooks/hidden-items'

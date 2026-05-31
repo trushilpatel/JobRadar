@@ -6,6 +6,7 @@
 - `hooks/` — shared hooks used by 2+ features (debounce, media query, undo, hidden-items)
 - `utils/` — pure utility functions (cn, formatters, etc.)
 - `api/` — shared API helpers used by 2+ features (e.g. pipeline.ts)
+- `commands/` — command registry — keyboard shortcuts, dispatch, platform detection, useCommandKeyboard hook
 
 ## What does NOT belong here
 

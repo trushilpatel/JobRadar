@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import type { LocationData } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
-import { useLocation } from './hooks/useInsights'
+import { useLocation } from '../hooks/useInsights'
 
 function LocationContent({ data }: { data: LocationData }) {
   const countries = data.countries

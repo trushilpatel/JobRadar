@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/core/supabase'
 import { sessionRef } from '@/lib/core/session-ref'
-import { fetchMe } from './api/me.api'
+import { fetchMe } from '../api/me.api'
 import type { Identity } from '@/types'
 
 interface AuthState {

@@ -1,8 +1,8 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import type { TechCount } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
-import { tooltipStyle } from './insightStyles'
-import { useTechStack } from './hooks/useInsights'
+import { tooltipStyle } from '../insightStyles'
+import { useTechStack } from '../hooks/useInsights'
 
 function TechContent({ data }: { data: TechCount[] }) {
   if (data.length === 0) return <InsightEmpty />

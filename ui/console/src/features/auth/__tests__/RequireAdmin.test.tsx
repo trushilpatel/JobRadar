@@ -1,8 +1,8 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { RequireAdmin } from '../RequireAdmin'
-import { useAuthStore } from '../store'
+import { RequireAdmin } from '../components/RequireAdmin'
+import { useAuthStore } from '../store/auth.store'
 
 vi.mock('@/lib/core/supabase', () => ({
   supabase: {

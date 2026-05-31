@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import type { RoleCategoryCount } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
-import { useRoleCategories } from './hooks/useInsights'
+import { useRoleCategories } from '../hooks/useInsights'
 
 const ROLE_COLORS: Record<string, string> = {
   backend: '#7c3aed',

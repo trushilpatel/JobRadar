@@ -1,11 +1,11 @@
-export { PipelineFunnelPanel } from './PipelineFunnelPanel'
-export { RoleCategoryPanel } from './RoleCategoryPanel'
-export { CompanyVelocityPanel } from './CompanyVelocityPanel'
-export { LocationPanel } from './LocationPanel'
-export { SponsorshipTrendPanel } from './SponsorshipTrendPanel'
-export { TechStackPanel } from './TechStackPanel'
-export { CompanyActivityPanel } from './CompanyActivityPanel'
-export { InsightCard } from './InsightCard'
+export { PipelineFunnelPanel } from './components/PipelineFunnelPanel'
+export { RoleCategoryPanel } from './components/RoleCategoryPanel'
+export { CompanyVelocityPanel } from './components/CompanyVelocityPanel'
+export { LocationPanel } from './components/LocationPanel'
+export { SponsorshipTrendPanel } from './components/SponsorshipTrendPanel'
+export { TechStackPanel } from './components/TechStackPanel'
+export { CompanyActivityPanel } from './components/CompanyActivityPanel'
+export { InsightCard } from './components/InsightCard'
 export {
   useTechStack,
   useCompanyActivity,

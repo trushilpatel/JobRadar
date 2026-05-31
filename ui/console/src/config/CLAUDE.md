@@ -7,6 +7,7 @@ The bottom of the import stack. `config/` imports NOTHING from `src/`.
 - `routes.ts` — all typed URL builder functions (`routes.jobs()`, etc.)
 - `env.ts` — typed `VITE_*` environment variable access
 - `constants/` — app-wide constants (`jobStatus.ts`, etc.)
+- `copy/` — UI copy strings — nav labels, status copy, feature text (imported via `useCopy` hook)
 
 ## What does NOT belong here
 

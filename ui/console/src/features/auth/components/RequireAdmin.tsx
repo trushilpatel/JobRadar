@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from 'react-router-dom'
-import { useAuthStore } from './store'
+import { useAuthStore } from '../store/auth.store'
 
 /**
  * Route guard that redirects non-admin users to /dashboard.

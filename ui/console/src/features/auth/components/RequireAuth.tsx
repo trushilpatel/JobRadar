@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from 'react-router-dom'
-import { useAuthStore } from './store'
+import { useAuthStore } from '../store/auth.store'
 
 export function RequireAuth() {
   const session = useAuthStore((s) => s.session)
