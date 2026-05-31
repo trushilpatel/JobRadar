@@ -41,6 +41,13 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Dummy values so `config/env.ts`'s eager validation passes at import time.
+    // CI has no repo-root `.env` (gitignored), and every test mocks the API /
+    // auth layer, so the Supabase client built from these is never called.
+    env: {
+      VITE_SUPABASE_URL: 'http://localhost:54321',
+      VITE_SUPABASE_ANON_KEY: 'test-anon-key',
+    },
     setupFiles: ['./src/test/setup.ts'],
     globals: true,
     // Emit a JUnit report in CI (GitHub sets CI=true) for Codecov Test
