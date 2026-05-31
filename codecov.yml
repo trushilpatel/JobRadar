@@ -1,0 +1,70 @@
+# Codecov configuration — https://docs.codecov.com/docs/codecov-yaml
+#
+# Path filters in the CI workflows mean most PRs only run the changed service's
+# test job, so only a subset of flags upload per PR. `carryforward: true` reuses
+# the last known coverage for absent flags — without it, an unrelated service
+# would read as 0% on every PR and tank the project status.
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto # compare against the base commit
+        threshold: 1% # absorb line-hit jitter from the race detector
+      backend:
+        target: 95% # matches scripts/check-coverage.sh
+        flags:
+          - crawler
+          - api-server
+          - workers
+          - service-core
+          - service-users
+          - service-support
+          - platform
+      console:
+        target: 90% # matches vite.config.ts statement threshold
+        flags:
+          - console
+    patch:
+      default:
+        target: 90% # new/changed lines must be covered
+        threshold: 0%
+
+flag_management:
+  default_rules:
+    carryforward: true
+
+# Group the dashboard by service so coverage trends are per-component.
+component_management:
+  individual_components:
+    - component_id: crawler
+      paths: [backend/apps/crawler/**]
+    - component_id: api-server
+      paths: [backend/apps/api/**]
+    - component_id: workers
+      paths:
+        - backend/apps/scheduler/**
+        - backend/apps/filter/**
+        - backend/apps/analyzer/**
+    - component_id: service-core
+      paths: [backend/service/job/**, backend/service/scan/**]
+    - component_id: service-users
+      paths:
+        - backend/service/user/**
+        - backend/service/company/**
+        - backend/service/application/**
+        - backend/service/role/**
+    - component_id: service-support
+      paths:
+        - backend/service/llm/**
+        - backend/service/dashboard/**
+        - backend/service/insights/**
+        - backend/service/audit/**
+    - component_id: platform
+      paths: [backend/platform/**, backend/common/**]
+    - component_id: console
+      paths: [frontend/**]
+
+comment:
+  layout: "header, diff, flags, components"
+  require_changes: false

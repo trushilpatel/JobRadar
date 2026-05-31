@@ -31,11 +31,17 @@ jobs:
           go-version-file: backend/go.mod
           cache: true
 
+      # gotestsum runs the suite and emits a JUnit report alongside the coverage
+      # profile so Codecov Test Analytics can annotate failed/flaky tests.
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@v1.12.0
+
       - name: Run unit tests (race + coverage)
         run: |
           PKGS="${{ inputs.packages }}"
           COVERPKGS=$(echo "$PKGS" | tr ' ' ',')
-          go test -race -count=1 -short \
+          gotestsum --junitfile /tmp/junit.xml --format pkgname -- \
+            -race -count=1 -short \
             -coverpkg="$COVERPKGS" \
             -coverprofile=/tmp/coverage.out \
             $PKGS
@@ -45,11 +51,33 @@ jobs:
         run: ../scripts/check-coverage.sh /tmp/coverage.out 95
         working-directory: backend
 
-      - name: Upload to Codecov
+      # Surface the real silent failure — a missing secret — loudly. The Codecov
+      # upload itself stays non-blocking (fail_ci_if_error: false) so a Codecov
+      # outage never blocks a merge; a misconfigured repo, however, must fail.
+      - name: Verify Codecov token is configured
+        if: always()
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: |
+          if [ -z "$CODECOV_TOKEN" ]; then
+            echo "::error::CODECOV_TOKEN secret is not set — coverage and test results will NOT reach Codecov. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - name: Upload coverage to Codecov
         if: always()
         uses: codecov/codecov-action@v4
         with:
           files: /tmp/coverage.out
+          flags: ${{ inputs.flags }}
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload test results to Codecov
+        if: always()
+        uses: codecov/test-results-action@v1
+        with:
+          files: /tmp/junit.xml
           flags: ${{ inputs.flags }}
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}

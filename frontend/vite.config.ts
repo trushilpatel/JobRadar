@@ -43,6 +43,10 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     globals: true,
+    // Emit a JUnit report in CI (GitHub sets CI=true) for Codecov Test
+    // Analytics; locally we keep the default reporter only — no stray files.
+    reporters: process.env.CI ? ['default', 'junit'] : ['default'],
+    outputFile: { junit: './coverage/junit.xml' },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov', 'json-summary'],
