@@ -182,11 +182,11 @@ type apiCompensation struct {
 }
 
 type customField struct {
-	ID         string      `json:"id"`
-	IsPrivate  bool        `json:"isPrivate,omitempty"`
-	Title      string      `json:"title"`
-	ValueLabel interface{} `json:"valueLabel,omitempty"`
-	Value      interface{} `json:"value"`
+	ID         string `json:"id"`
+	IsPrivate  bool   `json:"isPrivate,omitempty"`
+	Title      string `json:"title"`
+	ValueLabel any    `json:"valueLabel,omitempty"`
+	Value      any    `json:"value"`
 }
 
 type hiringTeam struct {
@@ -493,3 +493,10 @@ func (a *Ashby) FetchJobContentViaAPI(ctx context.Context, jobID string) (types.
 
 	return raw.toAPIFetchJobContentResponse(), nil
 }
+
+// Compile-time interface checks.
+var (
+	_ types.Adapter        = (*Ashby)(nil)
+	_ types.URLProvider    = (*Ashby)(nil)
+	_ types.ContentFetcher = (*Ashby)(nil)
+)

@@ -91,12 +91,12 @@ func (s *seenLedgerStore) MarkSeenBatch(ctx context.Context, jobIDs []string, co
 		CreateInBatches(rows, 500).Error
 }
 
-func (s *seenLedgerStore) UpdateSeenReason(ctx context.Context, jobID, reason string) (err error) {
+func (s *seenLedgerStore) UpdateSeenReason(ctx context.Context, jobID string, reason jobcommon.SeenReason) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.UpdateSeenReason")
 	defer tracing.End(span, &err)
 	res := s.db.WithContext(ctx).Model(&jobmodel.JobSeenLedger{}).
 		Where("job_id = ?", jobID).
-		Update("reason", reason)
+		Update("reason", string(reason))
 	if res.Error != nil {
 		return res.Error
 	}
@@ -107,7 +107,7 @@ func (s *seenLedgerStore) UpdateSeenReason(ctx context.Context, jobID, reason st
 	return nil
 }
 
-func (s *seenLedgerStore) UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason string) (err error) {
+func (s *seenLedgerStore) UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason jobcommon.SeenReason) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.UpdateSeenReasonBatch")
 	defer tracing.End(span, &err)
 	if len(jobIDs) == 0 {
@@ -115,7 +115,7 @@ func (s *seenLedgerStore) UpdateSeenReasonBatch(ctx context.Context, jobIDs []st
 	}
 	res := s.db.WithContext(ctx).Model(&jobmodel.JobSeenLedger{}).
 		Where("job_id IN ?", jobIDs).
-		Update("reason", reason)
+		Update("reason", string(reason))
 	if res.Error != nil {
 		return res.Error
 	}
@@ -143,7 +143,7 @@ func (s *seenLedgerStore) UpdateRetryBatch(ctx context.Context, entries []RetryL
 	}
 
 	query := "UPDATE job_pipeline_ledger AS l " +
-		"SET reason = '" + jobcommon.SeenReasonRetry + "', retry_count = v.retry_count, next_attempt_at = v.next_attempt_at " +
+		"SET reason = '" + string(jobcommon.SeenReasonRetry) + "', retry_count = v.retry_count, next_attempt_at = v.next_attempt_at " +
 		"FROM (VALUES " + strings.Join(valuesClauses, ",") + ") " +
 		"AS v(job_id, retry_count, next_attempt_at) " +
 		"WHERE l.job_id = v.job_id"

@@ -2,7 +2,7 @@
 
 Consumes `jobs.raw.*` (NATS JetStream), scores jobs in batches via LLM, routes relevant jobs to `jobs.filtered.*`, marks irrelevant / error / retry jobs in `job_pipeline_ledger`.
 
-Design spec: `docs/superpowers/specs/2026-04-22-filter-simplification-design.md`.
+Design spec: `docs/superpowers/specs/2026-05-23-filter-pipeline-silent-failures.md`.
 
 ## Key files
 
@@ -28,8 +28,9 @@ The crawler writes the `reason='fetch'` ledger row **before** publishing to NATS
 
 ## Error handling rules
 
-- `ScoreBatch` failures never re-queue directly to the main topic. Failed chunks are republished to retry tiers; exhausted retries go to DLQ.
-- **Silent-drop window:** if a publish inside `routeFailedChunk` fails transiently, the job is logged, `filter_retry_publish_failures_total` increments, and the chunk commits anyway. The retry topic is the designed safety net for `ScoreBatch` failures — do not introduce an in-loop retry.
+- `ScoreBatch` failures → `routeFailedChunk` issues `msg.Nak()` so NATS BackOff handles redelivery on the configured back-off schedule. No publish to a retry topic — NATS manages redelivery timing.
+- `UpdateRetryBatch` records `next_attempt_at` in the ledger for dashboard visibility only; its failure is non-fatal to message disposition.
+- Exhausted jobs (retry count >= max) → `msg.Term()` + publish to `jobs.dlq` via `publishToDLQ`. If the DLQ publish itself fails, the message is still Term'd (prevents endless redelivery of an exhausted job).
 - Reprocess stuck `error` rows by deleting the ledger rows manually.
 
 ## Ledger retry state
@@ -42,8 +43,8 @@ The crawler writes the `reason='fetch'` ledger row **before** publishing to NATS
 
 ## Observability
 
-- **Spans:** `filter.worker.processFetch` → `filter.worker.processChunk` → (`filter.worker.scoreBatch` | `filter.worker.routeFailed`) → `filter.worker.commit`. Started/ended via `platform/tracing`.
-- **Metrics** (in `platform/metrics`): `filter_chunk_duration_seconds`, `filter_retry_publishes_total`, `filter_retry_publish_failures_total`, `filter_dlq_publishes_total`, `filter_commit_failures_total`, `filter_chunks_per_fetch`, `filter_publish_failures_total{subject}` (publish to `jobs.filtered.*` failed → Nak), `filter_ledger_missing_total{reason}` (ledger UPDATE hit `ErrLedgerRowMissing` → Nak for redelivery). Existing `FilterLLMDuration` and `FilterJobsTotal{relevant|irrelevant|error}` retained (former now labeled per-chunk).
+- **Spans:** `filter.worker.processFetch` → `filter.worker.processChunk` → (`filter.worker.scoreBatch` | `filter.worker.routeFailed`). Started/ended via `platform/tracing`.
+- **Metrics** (in `common/metrics`): `filter_chunk_duration_seconds`, `filter_retry_publishes_total`, `filter_retry_publish_failures_total`, `filter_dlq_publishes_total`, `filter_commit_failures_total`, `filter_chunks_per_fetch`, `filter_publish_failures_total{subject}` (publish to `jobs.filtered.*` failed → Nak), `filter_ledger_missing_total{reason}` (ledger UPDATE hit `ErrLedgerRowMissing` → Nak for redelivery). Existing `FilterLLMDuration` and `FilterJobsTotal{relevant|irrelevant|error}` retained (former now labeled per-chunk).
 - **Logs:** `processFetch` mints a UUID `fetch_id` attached via `log.With(...)` so every descendant line carries it. Additional field constants: `chunk_index`, `chunk_count`, `retry_count`, `retry_tier`, `next_attempt_at`, `partition`, `offset`.
 
 ## LLM dependency

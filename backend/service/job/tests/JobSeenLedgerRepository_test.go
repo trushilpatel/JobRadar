@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	"gorm.io/gorm"
@@ -151,14 +152,14 @@ func TestSeenLedger_UpdateSeenReason(t *testing.T) {
 	seedLedger(t, db, "p1", "c1", "fetch")
 	store := jobsvc.NewSeenLedgerStore(db)
 
-	if err := store.UpdateSeenReason(context.Background(), "p1", "user_dismissed"); err != nil {
+	if err := store.UpdateSeenReason(context.Background(), "p1", jobcommon.SeenReasonUserDismissed); err != nil {
 		t.Fatalf("UpdateSeenReason err = %v", err)
 	}
 	var got jobmodel.JobSeenLedger
 	if err := db.Where("job_id = ?", "p1").First(&got).Error; err != nil {
 		t.Fatalf("readback: %v", err)
 	}
-	if got.Reason != "user_dismissed" {
+	if got.Reason != string(jobcommon.SeenReasonUserDismissed) {
 		t.Errorf("reason = %q, want user_dismissed", got.Reason)
 	}
 }
@@ -171,7 +172,7 @@ func TestSeenLedger_UpdateSeenReason_MissingRow_ReturnsErrLedgerRowMissing(t *te
 	db := newJobTestDB(t)
 	store := jobsvc.NewSeenLedgerStore(db)
 
-	err := store.UpdateSeenReason(context.Background(), "ghost", "filtered")
+	err := store.UpdateSeenReason(context.Background(), "ghost", jobcommon.SeenReasonFiltered)
 	if !stderrors.Is(err, domainerrs.ErrLedgerRowMissing) {
 		t.Fatalf("want ErrLedgerRowMissing, got %v", err)
 	}
@@ -183,7 +184,7 @@ func TestSeenLedger_UpdateSeenReasonBatch_AllMissing_ReturnsSentinel(t *testing.
 	db := newJobTestDB(t)
 	store := jobsvc.NewSeenLedgerStore(db)
 
-	err := store.UpdateSeenReasonBatch(context.Background(), []string{"g1", "g2", "g3"}, "filtered")
+	err := store.UpdateSeenReasonBatch(context.Background(), []string{"g1", "g2", "g3"}, jobcommon.SeenReasonFiltered)
 	if !stderrors.Is(err, domainerrs.ErrLedgerRowMissing) {
 		t.Fatalf("want ErrLedgerRowMissing, got %v", err)
 	}
@@ -198,7 +199,7 @@ func TestSeenLedger_UpdateSeenReasonBatch_PartialMatch_ReturnsSentinel(t *testin
 	seedLedger(t, db, "p1", "c1", "fetch")
 	store := jobsvc.NewSeenLedgerStore(db)
 
-	err := store.UpdateSeenReasonBatch(context.Background(), []string{"p1", "p2", "p3"}, "filtered")
+	err := store.UpdateSeenReasonBatch(context.Background(), []string{"p1", "p2", "p3"}, jobcommon.SeenReasonFiltered)
 	if !stderrors.Is(err, domainerrs.ErrLedgerRowMissing) {
 		t.Fatalf("want ErrLedgerRowMissing, got %v", err)
 	}
@@ -207,7 +208,7 @@ func TestSeenLedger_UpdateSeenReasonBatch_PartialMatch_ReturnsSentinel(t *testin
 	if err := db.Where("job_id = ?", "p1").First(&got).Error; err != nil {
 		t.Fatalf("readback: %v", err)
 	}
-	if got.Reason != "filtered" {
+	if got.Reason != string(jobcommon.SeenReasonFiltered) {
 		t.Errorf("present row reason = %q, want filtered", got.Reason)
 	}
 }
@@ -222,7 +223,7 @@ func TestSeenLedger_UpdateSeenReasonBatch_AllPresent_ReturnsNil(t *testing.T) {
 	seedLedger(t, db, "p3", "c1", "fetch")
 	store := jobsvc.NewSeenLedgerStore(db)
 
-	if err := store.UpdateSeenReasonBatch(context.Background(), []string{"p1", "p2", "p3"}, "filtered"); err != nil {
+	if err := store.UpdateSeenReasonBatch(context.Background(), []string{"p1", "p2", "p3"}, jobcommon.SeenReasonFiltered); err != nil {
 		t.Fatalf("all-present batch should succeed: %v", err)
 	}
 }
@@ -231,7 +232,7 @@ func TestSeenLedger_UpdateSeenReasonBatch_AllPresent_ReturnsNil(t *testing.T) {
 func TestSeenLedger_UpdateSeenReasonBatch_Empty(t *testing.T) {
 	t.Parallel()
 	store := jobsvc.NewSeenLedgerStore(newJobTestDB(t))
-	if err := store.UpdateSeenReasonBatch(context.Background(), nil, "user_dismissed"); err != nil {
+	if err := store.UpdateSeenReasonBatch(context.Background(), nil, jobcommon.SeenReasonUserDismissed); err != nil {
 		t.Errorf("empty batch should no-op: %v", err)
 	}
 }
@@ -247,7 +248,7 @@ func TestSeenLedger_UpdateSeenReasonBatch(t *testing.T) {
 	store := jobsvc.NewSeenLedgerStore(db)
 
 	if err := store.UpdateSeenReasonBatch(context.Background(),
-		[]string{"p1", "p2"}, "user_dismissed"); err != nil {
+		[]string{"p1", "p2"}, jobcommon.SeenReasonUserDismissed); err != nil {
 		t.Fatalf("UpdateSeenReasonBatch err = %v", err)
 	}
 	var rows []jobmodel.JobSeenLedger
@@ -258,10 +259,10 @@ func TestSeenLedger_UpdateSeenReasonBatch(t *testing.T) {
 	for _, r := range rows {
 		got[r.JobID] = r.Reason
 	}
-	if got["p1"] != "user_dismissed" || got["p2"] != "user_dismissed" {
+	if got["p1"] != string(jobcommon.SeenReasonUserDismissed) || got["p2"] != string(jobcommon.SeenReasonUserDismissed) {
 		t.Errorf("p1+p2 not updated: %v", got)
 	}
-	if got["p3"] != "fetch" {
+	if got["p3"] != string(jobcommon.SeenReasonFetch) {
 		t.Errorf("p3 should be untouched, got %q", got["p3"])
 	}
 }

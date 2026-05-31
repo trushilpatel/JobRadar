@@ -191,11 +191,11 @@ func (f *fakeLedgerWriter) MarkSeen(_ context.Context, _, _, _ string) error { r
 func (f *fakeLedgerWriter) MarkSeenBatch(_ context.Context, _ []string, _, _ string) error {
 	return nil
 }
-func (f *fakeLedgerWriter) UpdateSeenReason(_ context.Context, _, _ string) error {
+func (f *fakeLedgerWriter) UpdateSeenReason(_ context.Context, _ string, _ jobcommon.SeenReason) error {
 	f.calls++
 	return nil
 }
-func (f *fakeLedgerWriter) UpdateSeenReasonBatch(_ context.Context, _ []string, _ string) error {
+func (f *fakeLedgerWriter) UpdateSeenReasonBatch(_ context.Context, _ []string, _ jobcommon.SeenReason) error {
 	f.batchCalls++
 	return nil
 }

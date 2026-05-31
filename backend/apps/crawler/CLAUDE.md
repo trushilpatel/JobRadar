@@ -41,4 +41,4 @@ One sub-package per platform. Each implements the `Adapter` interface (list jobs
 
 - Never fetch job content in the crawler — publish `RawJob` to NATS and let the analyzer fetch it
 - One company per queue claim — no bulk processing in a single goroutine
-- `companyDelay` paces claims to avoid hammering ATS APIs back-to-back
+- Inter-company delay is enforced at the DB level — `ClaimNext` checks `adapter_configs.inter_company_delay_s` before claiming the next row; no sleep loop is needed in the worker

@@ -971,8 +971,8 @@ func counterValue(c prometheus.Counter) float64 {
 	return 0
 }
 
-func ledgerMissingCount(reason string) float64 {
-	return counterValue(metrics.EnricherLedgerMissing.WithLabelValues(reason))
+func ledgerMissingCount(reason jobcommon.SeenReason) float64 {
+	return counterValue(metrics.EnricherLedgerMissing.WithLabelValues(string(reason)))
 }
 
 // TestMarkError_LedgerMissing_NonFatal (#24) — MarkLedgerError returning

@@ -12,6 +12,8 @@ import (
 // the service package's exported type.
 type SchedulerService interface {
 	EnqueueDue(ctx context.Context, intervalMinutes int) (scansvc.SchedulerCycleResult, error)
-	ResetStuck(ctx context.Context, staleDur time.Duration) error
+	// ResetStuck resets queue rows stuck in 'running' state whose heartbeat has
+	// expired. Returns the count of rows recovered — zero is not an error.
+	ResetStuck(ctx context.Context, staleDur time.Duration) (int, error)
 	PurgeInactive(ctx context.Context) (int, error)
 }

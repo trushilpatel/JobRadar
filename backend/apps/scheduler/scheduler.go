@@ -72,11 +72,15 @@ func Run(
 func runCycle(ctx context.Context, log logger.Logger, svc SchedulerService, intervalMinutes int, stuckTimeout time.Duration) {
 	start := time.Now()
 
-	if err := svc.ResetStuck(ctx, stuckTimeout); err != nil {
+	if resetCount, err := svc.ResetStuck(ctx, stuckTimeout); err != nil {
 		metrics.SchedulerErrorsTotal.WithLabelValues("reset_stuck").Inc()
 		log.Error("reset stuck failed", err)
 	} else {
 		metrics.SchedulerStuckChecksTotal.Inc()
+		if resetCount > 0 {
+			metrics.SchedulerStuckRowsResetTotal.Add(float64(resetCount))
+			log.Info("reset stuck queue rows", logger.Int(logger.FieldCount, resetCount))
+		}
 	}
 
 	if purged, err := svc.PurgeInactive(ctx); err != nil {

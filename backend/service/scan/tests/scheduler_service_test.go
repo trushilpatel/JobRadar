@@ -17,6 +17,7 @@ import (
 type schedulerFakeQueue struct {
 	enqueueDueRes svc.EnqueueDueResult
 	purgeCount    int
+	resetCount    int
 	err           error
 
 	enqueueDueArgs struct {
@@ -40,7 +41,7 @@ func (f *schedulerFakeQueue) Complete(context.Context, string) error { return ni
 func (f *schedulerFakeQueue) Remove(context.Context, string) error   { return nil }
 func (f *schedulerFakeQueue) ResetStuck(_ context.Context, d time.Duration) (int, error) {
 	f.resetStuckArg = d
-	return 0, f.err
+	return f.resetCount, f.err
 }
 func (f *schedulerFakeQueue) PurgeInactive(context.Context) (int, error) {
 	return f.purgeCount, f.err
@@ -86,14 +87,31 @@ func TestSchedulerService_EnqueueDue_StoreError(t *testing.T) {
 }
 
 func TestSchedulerService_ResetStuck_OK(t *testing.T) {
-	q := &schedulerFakeQueue{}
+	q := &schedulerFakeQueue{resetCount: 2}
 	s := svc.NewSchedulerService(q)
 
-	if err := s.ResetStuck(context.Background(), 90*time.Second); err != nil {
+	n, err := s.ResetStuck(context.Background(), 90*time.Second)
+	if err != nil {
 		t.Fatalf("ResetStuck() error = %v", err)
+	}
+	if n != 2 {
+		t.Errorf("expected reset count 2, got %d", n)
 	}
 	if q.resetStuckArg != 90*time.Second {
 		t.Errorf("expected 90s, got %v", q.resetStuckArg)
+	}
+}
+
+func TestSchedulerService_ResetStuck_ZeroCount_OK(t *testing.T) {
+	q := &schedulerFakeQueue{resetCount: 0}
+	s := svc.NewSchedulerService(q)
+
+	n, err := s.ResetStuck(context.Background(), 30*time.Second)
+	if err != nil {
+		t.Fatalf("ResetStuck() zero-count error = %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected reset count 0, got %d", n)
 	}
 }
 
@@ -101,7 +119,7 @@ func TestSchedulerService_ResetStuck_StoreError(t *testing.T) {
 	q := &schedulerFakeQueue{err: errors.New("db down")}
 	s := svc.NewSchedulerService(q)
 
-	err := s.ResetStuck(context.Background(), 30*time.Second)
+	_, err := s.ResetStuck(context.Background(), 30*time.Second)
 	assertInternal(t, err)
 }
 

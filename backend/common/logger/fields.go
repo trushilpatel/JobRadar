@@ -24,6 +24,7 @@ const (
 	FieldMethod        = "method"
 	FieldPath          = "path"
 	FieldStatus        = "status"
+	FieldURL           = "url"
 	FieldQueueID       = "queue_id"
 	FieldEnqueued      = "enqueued"
 	FieldFetchID       = "fetch_id"

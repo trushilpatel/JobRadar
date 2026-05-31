@@ -94,8 +94,12 @@ func TestRun_ExecutesImmediateCycle(t *testing.T) {
 // invokes runCycle more than once before ctx is cancelled, proving the
 // ticker branch executes.
 func TestRun_TicksMultipleTimes(t *testing.T) {
-	svc := &fakeSchedulerService{}
+	// ready closes when EnqueueDue has been called at least twice
+	// (1 immediate + ≥1 ticker-driven cycle).
+	ready := make(chan struct{})
+	svc := &fakeSchedulerService{readyAt: 2, readyCh: ready}
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	done := make(chan struct{})
 	go func() {
@@ -103,8 +107,12 @@ func TestRun_TicksMultipleTimes(t *testing.T) {
 		close(done)
 	}()
 
-	// Wait long enough for at least a few ticks to fire.
-	time.Sleep(60 * time.Millisecond)
+	select {
+	case <-ready:
+		// condition met — cancel and wait for Run to exit
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not execute ≥2 cycles within 2s")
+	}
 	cancel()
 	select {
 	case <-done:
@@ -121,8 +129,12 @@ func TestRun_TicksMultipleTimes(t *testing.T) {
 // TestRun_ReturnsOnContextCancellation_FromTickerLoop asserts the loop
 // exits promptly when ctx is cancelled while it is parked on a select.
 func TestRun_ReturnsOnContextCancellation_FromTickerLoop(t *testing.T) {
-	svc := &fakeSchedulerService{}
+	// ready closes after the immediate cycle's EnqueueDue call, confirming
+	// Run has entered the ticker select before we cancel the context.
+	ready := make(chan struct{})
+	svc := &fakeSchedulerService{readyAt: 1, readyCh: ready}
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	done := make(chan struct{})
 	go func() {
@@ -131,8 +143,12 @@ func TestRun_ReturnsOnContextCancellation_FromTickerLoop(t *testing.T) {
 		close(done)
 	}()
 
-	// Give the immediate cycle a moment to complete, then cancel.
-	time.Sleep(20 * time.Millisecond)
+	// Wait for the immediate cycle to complete, then cancel.
+	select {
+	case <-ready:
+	case <-time.After(2 * time.Second):
+		t.Fatal("immediate cycle did not complete within 2s")
+	}
 	cancel()
 
 	select {
@@ -185,13 +201,20 @@ func TestRun_ConcurrentSafe(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			svc := &fakeSchedulerService{}
+			// ready closes after the first two EnqueueDue calls (immediate +
+			// one ticker cycle), then we cancel so the goroutine exits cleanly.
+			ready := make(chan struct{})
+			fakeSvc := &fakeSchedulerService{readyAt: 2, readyCh: ready}
 			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			go func() {
-				time.Sleep(30 * time.Millisecond)
+				select {
+				case <-ready:
+				case <-time.After(2 * time.Second):
+				}
 				cancel()
 			}()
-			Run(ctx, logger.NewNoop(), svc, 1440, 5*time.Millisecond, 30*time.Minute)
+			Run(ctx, logger.NewNoop(), fakeSvc, 1440, 5*time.Millisecond, 30*time.Minute)
 		}()
 	}
 	wg.Wait()

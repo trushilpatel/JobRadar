@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 )
@@ -159,8 +160,8 @@ type SeenLedgerReader interface {
 type SeenLedgerWriter interface {
 	MarkSeen(ctx context.Context, jobID, companyID, reason string) error
 	MarkSeenBatch(ctx context.Context, jobIDs []string, companyID, reason string) error
-	UpdateSeenReason(ctx context.Context, jobID, reason string) error
-	UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason string) error
+	UpdateSeenReason(ctx context.Context, jobID string, reason jobcommon.SeenReason) error
+	UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason jobcommon.SeenReason) error
 	UpdateRetryBatch(ctx context.Context, entries []RetryLedgerEntry) error
 	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
 }

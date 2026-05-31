@@ -193,8 +193,10 @@ func (f *fakeScanService) RemoveFromQueue(_ context.Context, _ string) error { r
 func (f *fakeScanService) EnqueueDue(_ context.Context, _ int) (scansvc.SchedulerCycleResult, error) {
 	return scansvc.SchedulerCycleResult{}, nil
 }
-func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) error { return nil }
-func (f *fakeScanService) PurgeInactive(_ context.Context) (int, error)        { return 0, nil }
+func (f *fakeScanService) ResetStuck(_ context.Context, _ time.Duration) (int, error) {
+	return 0, nil
+}
+func (f *fakeScanService) PurgeInactive(_ context.Context) (int, error) { return 0, nil }
 func (f *fakeScanService) GetAnalytics(_ context.Context, _ string) (*scandto.CompanyAnalytics, error) {
 	return &scandto.CompanyAnalytics{}, nil
 }

@@ -34,14 +34,14 @@ type pipelineLedgerStore struct {
 	hasSeen           bool
 	hasSeenErr        error
 	updateReasonJobID string
-	updateReasonVal   string
+	updateReasonVal   jobcommon.SeenReason
 	updateReasonErr   error
 }
 
 func (f *pipelineLedgerStore) HasSeen(_ context.Context, _ string) (bool, error) {
 	return f.hasSeen, f.hasSeenErr
 }
-func (f *pipelineLedgerStore) UpdateSeenReason(_ context.Context, jobID, reason string) error {
+func (f *pipelineLedgerStore) UpdateSeenReason(_ context.Context, jobID string, reason jobcommon.SeenReason) error {
 	f.updateReasonJobID = jobID
 	f.updateReasonVal = reason
 	return f.updateReasonErr

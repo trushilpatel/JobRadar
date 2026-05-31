@@ -385,7 +385,7 @@ func TestResetStuck_OK(t *testing.T) {
 	q := &fakeQueueStore{}
 	service := newImplService(q, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
 
-	if err := service.ResetStuck(context.Background(), 30*time.Minute); err != nil {
+	if _, err := service.ResetStuck(context.Background(), 30*time.Minute); err != nil {
 		t.Fatalf("ResetStuck() error = %v", err)
 	}
 	if !q.resetStuckCalled {
@@ -397,7 +397,7 @@ func TestResetStuck_StoreError(t *testing.T) {
 	q := &fakeQueueStore{err: errors.New("db down")}
 	service := newImplService(q, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
 
-	err := service.ResetStuck(context.Background(), 30*time.Minute)
+	_, err := service.ResetStuck(context.Background(), 30*time.Minute)
 	if err == nil {
 		t.Fatal("expected error on store failure")
 	}

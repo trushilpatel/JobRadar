@@ -217,6 +217,14 @@ var SchedulerStuckChecksTotal = prometheus.NewCounter(prometheus.CounterOpts{
 	Help: "Total stuck-detection passes completed by the scheduler without error.",
 })
 
+// SchedulerStuckRowsResetTotal counts the total number of stuck queue rows
+// recovered across all ResetStuck calls. Zero recoveries in a call are not
+// counted — only incremented when at least one row was actually reclaimed.
+var SchedulerStuckRowsResetTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "scheduler_stuck_rows_reset_total",
+	Help: "Total number of stuck queue rows recovered by the scheduler.",
+})
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 func init() {
@@ -254,6 +262,7 @@ func init() {
 		SchedulerRunDuration,
 		SchedulerErrorsTotal,
 		SchedulerStuckChecksTotal,
+		SchedulerStuckRowsResetTotal,
 	)
 }
 

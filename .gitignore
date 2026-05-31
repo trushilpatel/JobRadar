@@ -35,6 +35,7 @@ __pycache__/
 # Test coverage
 *.coverprofile
 coverage.out
+coverage/
 
 *node_modules*
 

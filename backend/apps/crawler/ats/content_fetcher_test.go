@@ -19,9 +19,11 @@ import (
 // supported in production and verifies Registry produces a non-nil Adapter.
 // Catches accidental case-statement drops in registry.go.
 func TestRegistry_ReturnsAdapterForEveryKnownType(t *testing.T) {
+	// must include every type in registry.go — add new adapters here when extending the registry
 	knownTypes := []string{
 		"greenhouse", "lever", "ashby", "google", "netflix",
 		"uber", "microsoft", "rippling", "apple", "meta",
+		"gem", "deel", "workday", "eightfold",
 	}
 	for _, name := range knownTypes {
 		t.Run(name, func(t *testing.T) {
@@ -38,7 +40,7 @@ func TestRegistry_ReturnsAdapterForEveryKnownType(t *testing.T) {
 
 // TestRegistry_UnknownAdapterTypeReturnsError verifies the default branch.
 func TestRegistry_UnknownAdapterTypeReturnsError(t *testing.T) {
-	_, err := ats.Registry("workday-not-yet-supported")
+	_, err := ats.Registry("not-a-real-adapter-xyzzy")
 	if err == nil {
 		t.Fatal("expected error for unknown adapter type")
 	}
