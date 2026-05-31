@@ -1,0 +1,63 @@
+on:
+  workflow_call:
+    inputs:
+      packages:
+        description: "Space-separated Go package patterns to test and instrument"
+        required: true
+        type: string
+      flags:
+        description: "Codecov flag identifying this service (e.g. crawler, api-server)"
+        required: true
+        type: string
+      artifact-name:
+        description: "Name for the uploaded coverage artifact"
+        required: true
+        type: string
+
+jobs:
+  run:
+    name: go test
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      - name: Run unit tests (race + coverage)
+        run: |
+          PKGS="${{ inputs.packages }}"
+          COVERPKGS=$(echo "$PKGS" | tr ' ' ',')
+          go test -race -count=1 -short \
+            -coverpkg="$COVERPKGS" \
+            -coverprofile=/tmp/coverage.out \
+            $PKGS
+        working-directory: backend
+
+      - name: Enforce per-package coverage threshold
+        run: ../scripts/check-coverage.sh /tmp/coverage.out 95
+        working-directory: backend
+
+      - name: Upload to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: /tmp/coverage.out
+          flags: ${{ inputs.flags }}
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: /tmp/coverage.out
+          if-no-files-found: ignore

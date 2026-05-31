@@ -1,0 +1,150 @@
+name: Backend
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+      - '.github/workflows/backend/**'
+      - '.github/.golangci.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Detect which services changed ────────────────────────────────────────────
+  # Changing platform/common/go.mod triggers all test jobs — shared deps can
+  # break any service.
+  changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      crawler:         ${{ steps.filter.outputs.crawler }}
+      api-server:      ${{ steps.filter.outputs.api-server }}
+      workers:         ${{ steps.filter.outputs.workers }}
+      service-core:    ${{ steps.filter.outputs.service-core }}
+      service-users:   ${{ steps.filter.outputs.service-users }}
+      service-support: ${{ steps.filter.outputs.service-support }}
+      platform:        ${{ steps.filter.outputs.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            crawler:
+              - 'backend/apps/crawler/**'
+            api-server:
+              - 'backend/apps/api/**'
+            workers:
+              - 'backend/apps/scheduler/**'
+              - 'backend/apps/filter/**'
+              - 'backend/apps/analyzer/**'
+            service-core:
+              - 'backend/service/job/**'
+              - 'backend/service/scan/**'
+            service-users:
+              - 'backend/service/user/**'
+              - 'backend/service/company/**'
+              - 'backend/service/application/**'
+              - 'backend/service/role/**'
+            service-support:
+              - 'backend/service/llm/**'
+              - 'backend/service/dashboard/**'
+              - 'backend/service/insights/**'
+              - 'backend/service/audit/**'
+            platform:
+              - 'backend/platform/**'
+              - 'backend/common/**'
+              - 'backend/go.mod'
+              - 'backend/go.sum'
+
+  # ── Lint (always runs — only lints changed files via --new-from-rev) ─────────
+  lint:
+    name: lint
+    uses: ./.github/workflows/backend/lint.yml
+    secrets: inherit
+
+  # ── Test jobs (each runs only when its paths or shared deps changed) ─────────
+  test-crawler:
+    name: test / crawler
+    needs: changes
+    if: needs.changes.outputs.crawler == 'true' || needs.changes.outputs.platform == 'true'
+    uses: ./.github/workflows/backend/test.yml
+    with:
+      packages: ./apps/crawler/...
+      flags: crawler
+      artifact-name: coverage-crawler
+    secrets: inherit
+
+  test-api-server:
+    name: test / api-server
+    needs: changes
+    if: needs.changes.outputs.api-server == 'true' || needs.changes.outputs.platform == 'true'
+    uses: ./.github/workflows/backend/test.yml
+    with:
+      packages: ./apps/api/...
+      flags: api-server
+      artifact-name: coverage-api-server
+    secrets: inherit
+
+  test-workers:
+    name: test / workers
+    needs: changes
+    if: needs.changes.outputs.workers == 'true' || needs.changes.outputs.platform == 'true'
+    uses: ./.github/workflows/backend/test.yml
+    with:
+      packages: ./apps/scheduler/... ./apps/filter/... ./apps/analyzer/...
+      flags: workers
+      artifact-name: coverage-workers
+    secrets: inherit
+
+  test-service-core:
+    name: test / service-core
+    needs: changes
+    if: needs.changes.outputs.service-core == 'true' || needs.changes.outputs.platform == 'true'
+    uses: ./.github/workflows/backend/test.yml
+    with:
+      packages: ./service/job/... ./service/scan/...
+      flags: service-core
+      artifact-name: coverage-service-core
+    secrets: inherit
+
+  test-service-users:
+    name: test / service-users
+    needs: changes
+    if: needs.changes.outputs.service-users == 'true' || needs.changes.outputs.platform == 'true'
+    uses: ./.github/workflows/backend/test.yml
+    with:
+      packages: ./service/user/... ./service/company/... ./service/application/... ./service/role/...
+      flags: service-users
+      artifact-name: coverage-service-users
+    secrets: inherit
+
+  test-service-support:
+    name: test / service-support
+    needs: changes
+    if: needs.changes.outputs.service-support == 'true' || needs.changes.outputs.platform == 'true'
+    uses: ./.github/workflows/backend/test.yml
+    with:
+      packages: ./service/llm/... ./service/dashboard/... ./service/insights/... ./service/audit/...
+      flags: service-support
+      artifact-name: coverage-service-support
+    secrets: inherit
+
+  test-platform:
+    name: test / platform
+    needs: changes
+    if: needs.changes.outputs.platform == 'true'
+    uses: ./.github/workflows/backend/test.yml
+    with:
+      packages: ./platform/... ./common/...
+      flags: platform
+      artifact-name: coverage-platform
+    secrets: inherit

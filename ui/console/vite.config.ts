@@ -47,7 +47,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov', 'json-summary'],
       thresholds: {
-        statements: 90,
+        statements: 90, // aspirational — fix ScanQueuePage, CompanyDetailPage, CompanyEditorPage, ResumeLibraryPage to meet this
       },
       exclude: ['src/test/**', 'src/main.tsx', 'src/types/**', '**/*.d.ts', '**/*.config.*'],
     },

@@ -11,10 +11,10 @@ info() { printf "${YELLOW}→${NC} %s\n" "$1"; }
 
 FAILED=0
 
-# ── Block direct commits to main (serial, instant) ───────────────────────────
+# ── Block direct commits to main or dev (serial, instant) ────────────────────
 CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
-if [ "$CURRENT_BRANCH" = "main" ]; then
-  fail "Direct commits to 'main' are not allowed."
+if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "dev" ]; then
+  fail "Direct commits to '${CURRENT_BRANCH}' are not allowed."
   printf "${YELLOW}→${NC} Create a feature branch: ${YELLOW}git checkout -b <branch-name>${NC}\n"
   exit 1
 fi

@@ -93,9 +93,10 @@ Frontend rule highlights (full set in `ui/console/CLAUDE.md`):
 
 ## Git policy
 
-- Never commit or push directly to `main` — `.husky/pre-commit` blocks it. Every change lands via PR, including hotfixes, doc-only changes, and config tweaks. Never run `git push origin <branch>:main`, `git push origin HEAD:main`, or any equivalent
+- `dev` is the integration branch — all feature branches PR to `dev`; only `dev` → `main` PRs promote to production
+- Never commit or push directly to `main` or `dev` — `.husky/pre-commit` blocks both. Every change lands via PR, including hotfixes, doc-only changes, and config tweaks. Never run `git push origin <branch>:main`, `git push origin <branch>:dev`, or any equivalent
 - Never use `git commit --no-verify` or any hook-skipping flag (`--no-gpg-sign`, `core.hooksPath=/dev/null`, …) — fix the underlying failure and recommit
-- Hook is the floor: formatting, Go lint, Go unit tests, frontend lint, TypeScript check, and the main-branch guard must all pass
+- Hook is the floor: formatting, Go lint, Go unit tests, frontend lint, TypeScript check, and the protected-branch guard must all pass
 - **No AI attribution** in commit messages or PR descriptions — no `Co-Authored-By: Claude`, no `🤖 Generated with Claude Code`, no equivalent. Author / `Co-Authored-By` reflect human contributors only. Holds even when the user says "commit this"
 
 ## Implementation workflow

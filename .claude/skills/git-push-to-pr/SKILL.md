@@ -1,15 +1,15 @@
 ---
 name: git-push-to-pr
-description: Use when there are local changes (staged, unstaged, or committed on main) that need to be moved onto a new feature branch, rebased on top of origin/main, and pushed to origin ready for a PR.
+description: Use when there are local changes (staged, unstaged, or committed on a feature branch) that need to be moved onto a clean feature branch, rebased on top of origin/dev, and pushed to origin ready for a PR targeting dev.
 ---
 
 # Git Push to PR
 
 ## Overview
 
-Package local changes into a clean feature branch rebased on top of the latest `origin/main`, then push to origin. Follows this project's commit conventions and hook requirements.
+Package local changes into a clean feature branch rebased on top of the latest `origin/dev`, then push to origin with a PR targeting `dev`. Only `dev` → `main` PRs promote to production. Follows this project's commit conventions and hook requirements.
 
-**Core principle:** Never commit to main. Always rebase, never merge. Hooks are the floor — never skip them.
+**Core principle:** Never commit directly to `main` or `dev`. Always rebase onto `dev`, never merge. Hooks are the floor — never skip them.
 
 ## Step 1 — Assess state
 
@@ -73,10 +73,10 @@ Wrap at 72 chars."
 git fetch origin
 ```
 
-## Step 6 — Rebase onto origin/main
+## Step 6 — Rebase onto origin/dev
 
 ```bash
-git rebase origin/main
+git rebase origin/dev
 ```
 
 ### If conflicts arise
@@ -124,18 +124,18 @@ REMOTE=$(git remote get-url origin)
 # Strip git@ prefix and .git suffix, replace : with /
 HTTPS=$(echo "$REMOTE" | sed 's|git@github.com:|https://github.com/|; s|\.git$||')
 BRANCH=$(git branch --show-current)
-echo "${HTTPS}/compare/main...${BRANCH}?expand=1"
+echo "${HTTPS}/compare/dev...${BRANCH}?expand=1"
 ```
 
 Output the link to the user as the final step:
 
-> **Open PR:** `https://github.com/<owner>/<repo>/compare/main...<branch>?expand=1`
+> **Open PR:** `https://github.com/<owner>/<repo>/compare/dev...<branch>?expand=1`
 
-This URL opens GitHub's "Open a pull request" page with the base set to `main` and the compare set to the current branch, ready to submit.
+This URL opens GitHub's "Open a pull request" page with the base set to `dev` and the compare set to the current branch, ready to submit.
 
 ## Step 9 — Clean up worktrees (if applicable)
 
-After the push and PR link are output, check whether the session is running inside a git worktree. If it is, remove it and delete the local branch — the remote branch is all that's needed for the PR.
+After the push and PR link are output, check whether the session is running inside a git worktree. If it is, remove **only this worktree** and delete **only this worktree's branch** — never touch other worktrees or unrelated local branches.
 
 **Detect:** compare `--git-dir` with `--git-common-dir`. If they differ, you're in a worktree.
 
@@ -160,6 +160,8 @@ Tell the user after cleanup:
 
 > Worktree `<path>` removed and local branch `<branch>` deleted. Remote branch is still live — open the PR at the link above.
 
+**Scope guard:** only act on `$WORKTREE_PATH` (the CWD at push time). Do not list, inspect, or remove any other worktree entries. Do not delete any branch other than `$BRANCH`.
+
 | Scenario                                                | Action                                                    |
 | ------------------------------------------------------- | --------------------------------------------------------- |
 | Inside a worktree (`.worktrees/`, `.claude/worktrees/`) | Remove worktree, delete local branch, output confirmation |
@@ -168,13 +170,14 @@ Tell the user after cleanup:
 ## Quick reference
 
 ```bash
-# Full happy path (on main, unstaged changes)
+# Full happy path (on a feature branch, unstaged changes)
 git checkout -b feat/my-feature
 git add src/foo.go src/bar.go
 git commit -m "feat(api): add rate-limit header to response"
 git fetch origin
-git rebase origin/main
+git rebase origin/dev
 git push -u origin feat/my-feature
+# PR targets dev: https://github.com/<owner>/<repo>/compare/dev...feat/my-feature?expand=1
 ```
 
 ## Common mistakes
@@ -182,16 +185,16 @@ git push -u origin feat/my-feature
 | Mistake                                      | Fix                                                           |
 | -------------------------------------------- | ------------------------------------------------------------- |
 | `git add .` or `git add -A` without checking | Always run `git status` first; stage by name                  |
-| Committing to `main`                         | The pre-commit hook blocks it — create a branch first         |
+| Committing to `main` or `dev`                | The pre-commit hook blocks both — create a feature branch     |
 | Using `--no-verify` when hook fails          | Fix the lint/test failure; never skip                         |
 | Adding AI attribution to commit message      | Omit it entirely — human author only                          |
 | `git push --force` (no lease)                | Always `--force-with-lease` if force is needed                |
-| Skipping `git fetch` before rebase           | You'll rebase onto stale main — always fetch first            |
+| Skipping `git fetch` before rebase           | You'll rebase onto stale dev — always fetch first             |
 | Forgetting to clean up the worktree          | After push + PR link, run Step 9 — stale worktrees accumulate |
 
 ## Red flags — stop and reassess
 
-- You're about to run `git commit` on the `main` branch
+- You're about to run `git commit` on the `main` or `dev` branch
 - You're considering `--no-verify`
 - You're about to `git push --force` (not `--force-with-lease`)
 - The rebase produced more conflicts than expected — `git rebase --abort` and verify you fetched first
