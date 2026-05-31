@@ -21,7 +21,7 @@ If a finding is really a correctness bug or a missing feature, name it and route
 
 ## Inputs you will be given
 
-- `SCOPE` — the component to audit: a path (e.g. `backend/service/company`, `ui/console/src/features/jobs`), a grouped area (e.g. "all backend service slices"), `infra`, `agent-tooling` (the `.claude/` + `docs/` harness itself), or `full-repo`.
+- `SCOPE` — the component to audit: a path (e.g. `backend/service/company`, `frontend/src/features/jobs`), a grouped area (e.g. "all backend service slices"), `infra`, `agent-tooling` (the `.claude/` + `docs/` harness itself), or `full-repo`.
 - `DIMENSIONS` — which of the ten to score (default: all ten).
 - `FOCUS` — optional: a specific concern to weight (e.g. "consistency across slices", "doc drift", "agent legibility").
 

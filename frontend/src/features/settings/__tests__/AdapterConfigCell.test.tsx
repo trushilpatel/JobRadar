@@ -80,7 +80,9 @@ describe('AdapterConfigCell', () => {
     await user.click(screen.getByRole('button'))
 
     const input = screen.getByRole('spinbutton')
-    act(() => { input.focus() })
+    act(() => {
+      input.focus()
+    })
     fireEvent.keyDown(input, { key: 'Escape', code: 'Escape' })
 
     await waitFor(() => expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument())

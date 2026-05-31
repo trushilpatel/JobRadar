@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'ui/console/**'
+      - 'frontend/**'
       - '.github/workflows/console.yml'
 
 concurrency:
@@ -25,19 +25,19 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: ui/console/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
-        working-directory: ui/console
+        working-directory: frontend
 
       - name: Run ESLint
         run: npm run lint
-        working-directory: ui/console
+        working-directory: frontend
 
       - name: TypeScript check
         run: npx tsc --noEmit
-        working-directory: ui/console
+        working-directory: frontend
 
   test:
     name: console / test
@@ -52,21 +52,21 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: ui/console/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
-        working-directory: ui/console
+        working-directory: frontend
 
       - name: Run tests with coverage
         run: npm run test:coverage
-        working-directory: ui/console
+        working-directory: frontend
 
       - name: Upload to Codecov
         if: always()
         uses: codecov/codecov-action@v4
         with:
-          files: ui/console/coverage/lcov.info
+          files: frontend/coverage/lcov.info
           flags: console
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -76,5 +76,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: console-coverage
-          path: ui/console/coverage/
+          path: frontend/coverage/
           if-no-files-found: ignore

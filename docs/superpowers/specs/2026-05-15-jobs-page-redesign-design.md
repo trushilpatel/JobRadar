@@ -7,10 +7,10 @@
 
 The current jobs page is a generic admin table with limited keyboard support and no mobile story.
 
-1. **Keyboard shortcuts only fire after a mouse click.** [`useJobShortcuts`](../../../ui/console/src/features/jobs/hooks/useJobShortcuts.ts) requires `activeJob` (set by clicking a row in [`JobsPage.tsx`](../../../ui/console/src/pages/JobsPage.tsx#L185)). Pure-keyboard navigation is impossible. The shortcut tooltip (`JobsPage.tsx:116`) literally instructs the user to "click a row first."
-2. **Listed shortcut `↑/↓ Move selection` is not implemented.** [`useJobShortcuts.ts:21-22`](../../../ui/console/src/features/jobs/hooks/useJobShortcuts.ts#L21-L22) advertises it; the handler at `:49-65` only handles `s/a/i/o/r/d`.
+1. **Keyboard shortcuts only fire after a mouse click.** [`useJobShortcuts`](../../../frontend/src/features/jobs/hooks/useJobShortcuts.ts) requires `activeJob` (set by clicking a row in [`JobsPage.tsx`](../../../frontend/src/pages/JobsPage.tsx#L185)). Pure-keyboard navigation is impossible. The shortcut tooltip (`JobsPage.tsx:116`) literally instructs the user to "click a row first."
+2. **Listed shortcut `↑/↓ Move selection` is not implemented.** [`useJobShortcuts.ts:21-22`](../../../frontend/src/features/jobs/hooks/useJobShortcuts.ts#L21-L22) advertises it; the handler at `:49-65` only handles `s/a/i/o/r/d`.
 3. **No URL state.** Tab, active job, filters, and pagination all live in `useState`. Refresh wipes context; share-links don't work; back-button does the wrong thing.
-4. **Limited bulk actions.** Only "bulk dismiss" exists ([`JobsPage.tsx:39`](../../../ui/console/src/pages/JobsPage.tsx#L39)). No bulk save, no bulk applied.
+4. **Limited bulk actions.** Only "bulk dismiss" exists ([`JobsPage.tsx:39`](../../../frontend/src/pages/JobsPage.tsx#L39)). No bulk save, no bulk applied.
 5. **No discoverability.** Shortcut help is buried in a tooltip on a small icon. No command palette. No `?` overlay.
 6. **Not mobile-usable.** The split list+preview is desktop-only; tabs and filter row both overflow `<640px`.
 7. **No undo.** Destructive actions (`d`, bulk dismiss) commit immediately with no soft-undo window.
@@ -191,47 +191,47 @@ Every destructive or status-changing action surfaces a `sonner` toast with an "U
 
 ### New / added
 
-| File                                                             | Purpose                                                                           |
-| ---------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `ui/console/components.json`                                     | shadcn config                                                                     |
-| `ui/console/src/components/ui/drawer.tsx`                        | shadcn `Drawer` (vaul)                                                            |
-| `ui/console/src/components/ui/sheet.tsx`                         | shadcn `Sheet` (Radix Dialog variant)                                             |
-| `ui/console/src/components/ui/command.tsx`                       | shadcn `Command` (cmdk)                                                           |
-| `ui/console/src/components/ui/tabs.tsx`                          | shadcn `Tabs` (Radix) — replaces `JobStatusTabs` internals                        |
-| `ui/console/src/components/ui/dialog.tsx`                        | shadcn `Dialog` — used by `DismissModal` rewrite                                  |
-| `ui/console/src/components/ui/alert-dialog.tsx`                  | shadcn `AlertDialog`                                                              |
-| `ui/console/src/components/ui/toggle-group.tsx`                  | shadcn `ToggleGroup` — exp / date / location pills                                |
-| `ui/console/src/components/ui/kbd.tsx`                           | Keyboard key display                                                              |
-| `ui/console/src/features/jobs/components/JobCommandPalette.tsx`  | `⌘K` palette (commands + recent jobs)                                             |
-| `ui/console/src/features/jobs/components/JobShortcutSheet.tsx`   | `?` help overlay                                                                  |
-| `ui/console/src/features/jobs/components/MobileFilterDrawer.tsx` | Mobile-only filter sheet                                                          |
-| `ui/console/src/features/jobs/hooks/useJobUrlState.ts`           | nuqs-backed URL state, replaces local state in `useJobs`                          |
-| `ui/console/src/features/jobs/hooks/useJobKeyboard.ts`           | All shortcut bindings via `react-hotkeys-hook`; replaces `useJobShortcuts`        |
-| `ui/console/src/features/jobs/hooks/useFocusedJob.ts`            | Focused-row tracking (independent of `activeJob`/preview-open)                    |
-| `ui/console/src/lib/use-media-query.ts`                          | Tiny hook for breakpoint-conditional behavior (e.g., preview pane vs. route push) |
-| `ui/console/src/lib/use-undo-toast.ts`                           | Wraps `sonner` for status undo                                                    |
+| File                                                           | Purpose                                                                           |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `frontend/components.json`                                     | shadcn config                                                                     |
+| `frontend/src/components/ui/drawer.tsx`                        | shadcn `Drawer` (vaul)                                                            |
+| `frontend/src/components/ui/sheet.tsx`                         | shadcn `Sheet` (Radix Dialog variant)                                             |
+| `frontend/src/components/ui/command.tsx`                       | shadcn `Command` (cmdk)                                                           |
+| `frontend/src/components/ui/tabs.tsx`                          | shadcn `Tabs` (Radix) — replaces `JobStatusTabs` internals                        |
+| `frontend/src/components/ui/dialog.tsx`                        | shadcn `Dialog` — used by `DismissModal` rewrite                                  |
+| `frontend/src/components/ui/alert-dialog.tsx`                  | shadcn `AlertDialog`                                                              |
+| `frontend/src/components/ui/toggle-group.tsx`                  | shadcn `ToggleGroup` — exp / date / location pills                                |
+| `frontend/src/components/ui/kbd.tsx`                           | Keyboard key display                                                              |
+| `frontend/src/features/jobs/components/JobCommandPalette.tsx`  | `⌘K` palette (commands + recent jobs)                                             |
+| `frontend/src/features/jobs/components/JobShortcutSheet.tsx`   | `?` help overlay                                                                  |
+| `frontend/src/features/jobs/components/MobileFilterDrawer.tsx` | Mobile-only filter sheet                                                          |
+| `frontend/src/features/jobs/hooks/useJobUrlState.ts`           | nuqs-backed URL state, replaces local state in `useJobs`                          |
+| `frontend/src/features/jobs/hooks/useJobKeyboard.ts`           | All shortcut bindings via `react-hotkeys-hook`; replaces `useJobShortcuts`        |
+| `frontend/src/features/jobs/hooks/useFocusedJob.ts`            | Focused-row tracking (independent of `activeJob`/preview-open)                    |
+| `frontend/src/lib/use-media-query.ts`                          | Tiny hook for breakpoint-conditional behavior (e.g., preview pane vs. route push) |
+| `frontend/src/lib/use-undo-toast.ts`                           | Wraps `sonner` for status undo                                                    |
 
 ### Refactored
 
-| File                                                         | Change                                                                                                                                                                 |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ui/console/src/pages/JobsPage.tsx`                          | Driven by `useJobUrlState` + `useFocusedJob`; renders preview via shadcn `Sheet` (mobile) or inline (desktop)                                                          |
-| `ui/console/src/features/jobs/hooks/useJobs.ts`              | Reads filters from URL state via `useJobUrlState`; no longer owns filter `useState`                                                                                    |
-| `ui/console/src/features/jobs/components/JobsTable.tsx`      | Adds `data-row-index` + ref for focused-row scroll-into-view; row click toggles open instead of merely "active"                                                        |
-| `ui/console/src/features/jobs/components/JobDetailPanel.tsx` | Receives `mode: 'pane' \| 'route'` for layout differences; mobile route variant adds sticky action bar                                                                 |
-| `ui/console/src/features/jobs/components/JobStatusTabs.tsx`  | Internals re-implemented on shadcn `Tabs`; mobile breakpoint swaps to `Select` dropdown                                                                                |
-| `ui/console/src/features/jobs/components/JobFilters.tsx`     | Above `md:` — inline pill bar (current). Below `md:` — single trigger button + `MobileFilterDrawer`                                                                    |
-| `ui/console/src/features/jobs/components/DismissModal.tsx`   | Re-built on shadcn `Dialog` (current is bespoke)                                                                                                                       |
-| `ui/console/src/features/jobs/hooks/useJobActions.ts`        | Wraps mutations with `useUndoToast`; exposes `undoLast`                                                                                                                |
-| `ui/console/src/App.tsx`                                     | New route `/jobs/:id` for mobile detail (same component as preview, `mode='route'`)                                                                                    |
-| `ui/console/src/main.tsx`                                    | Wrap with `<NuqsAdapter>`                                                                                                                                              |
-| `ui/console/package.json`                                    | Add `nuqs`, `react-hotkeys-hook`. shadcn-added components bring `cmdk`, `vaul`, `@radix-ui/react-tabs`, `@radix-ui/react-toggle-group`, `@radix-ui/react-alert-dialog` |
+| File                                                       | Change                                                                                                                                                                 |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `frontend/src/pages/JobsPage.tsx`                          | Driven by `useJobUrlState` + `useFocusedJob`; renders preview via shadcn `Sheet` (mobile) or inline (desktop)                                                          |
+| `frontend/src/features/jobs/hooks/useJobs.ts`              | Reads filters from URL state via `useJobUrlState`; no longer owns filter `useState`                                                                                    |
+| `frontend/src/features/jobs/components/JobsTable.tsx`      | Adds `data-row-index` + ref for focused-row scroll-into-view; row click toggles open instead of merely "active"                                                        |
+| `frontend/src/features/jobs/components/JobDetailPanel.tsx` | Receives `mode: 'pane' \| 'route'` for layout differences; mobile route variant adds sticky action bar                                                                 |
+| `frontend/src/features/jobs/components/JobStatusTabs.tsx`  | Internals re-implemented on shadcn `Tabs`; mobile breakpoint swaps to `Select` dropdown                                                                                |
+| `frontend/src/features/jobs/components/JobFilters.tsx`     | Above `md:` — inline pill bar (current). Below `md:` — single trigger button + `MobileFilterDrawer`                                                                    |
+| `frontend/src/features/jobs/components/DismissModal.tsx`   | Re-built on shadcn `Dialog` (current is bespoke)                                                                                                                       |
+| `frontend/src/features/jobs/hooks/useJobActions.ts`        | Wraps mutations with `useUndoToast`; exposes `undoLast`                                                                                                                |
+| `frontend/src/App.tsx`                                     | New route `/jobs/:id` for mobile detail (same component as preview, `mode='route'`)                                                                                    |
+| `frontend/src/main.tsx`                                    | Wrap with `<NuqsAdapter>`                                                                                                                                              |
+| `frontend/package.json`                                    | Add `nuqs`, `react-hotkeys-hook`. shadcn-added components bring `cmdk`, `vaul`, `@radix-ui/react-tabs`, `@radix-ui/react-toggle-group`, `@radix-ui/react-alert-dialog` |
 
 ### Deleted
 
-| File                                                    | Replaced by         |
-| ------------------------------------------------------- | ------------------- |
-| `ui/console/src/features/jobs/hooks/useJobShortcuts.ts` | `useJobKeyboard.ts` |
+| File                                                  | Replaced by         |
+| ----------------------------------------------------- | ------------------- |
+| `frontend/src/features/jobs/hooks/useJobShortcuts.ts` | `useJobKeyboard.ts` |
 
 ---
 

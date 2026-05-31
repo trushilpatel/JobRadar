@@ -28,10 +28,10 @@ Migration 044 renamed `companies.url` → `companies.website`. The frontend `Adm
 
 ### Fix
 
-- `ui/console/src/api/adminCompanies.ts` — `AdminCompany.url` → `website`; `createAdminCompany` and `updateAdminCompany` payloads send `website`
-- `ui/console/src/features/companies/hooks/normalizeAdminCompany.ts` — reads `c.website` to populate `Company.url`
-- `ui/console/src/features/companies/components/AddCompanyModal.tsx` — form state, all bindings, and submit payloads updated from `url` → `website`
-- `ui/console/src/features/companies/hooks/__tests__/normalizeAdminCompany.test.ts` — fixture updated
+- `frontend/src/api/adminCompanies.ts` — `AdminCompany.url` → `website`; `createAdminCompany` and `updateAdminCompany` payloads send `website`
+- `frontend/src/features/companies/hooks/normalizeAdminCompany.ts` — reads `c.website` to populate `Company.url`
+- `frontend/src/features/companies/components/AddCompanyModal.tsx` — form state, all bindings, and submit payloads updated from `url` → `website`
+- `frontend/src/features/companies/hooks/__tests__/normalizeAdminCompany.test.ts` — fixture updated
 
 ---
 
@@ -39,13 +39,13 @@ Migration 044 renamed `companies.url` → `companies.website`. The frontend `Adm
 
 ### Changes
 
-**`ui/console/src/components/ui/pagination.tsx`** — layout changed from `justify-between` (showing label left, controls center/right) to fully right-aligned: showing label, page numbers, and rows selector all grouped on the right.
+**`frontend/src/components/ui/pagination.tsx`** — layout changed from `justify-between` (showing label left, controls center/right) to fully right-aligned: showing label, page numbers, and rows selector all grouped on the right.
 
-**`ui/console/src/features/companies/components/CompaniesTable.tsx`** — pagination moved out of `DataTable`'s `overflow-auto` scroll area into a `shrink-0` sticky footer (same layout as `JobsTable`). `DataTable` is now called without `serverPagination`.
+**`frontend/src/features/companies/components/CompaniesTable.tsx`** — pagination moved out of `DataTable`'s `overflow-auto` scroll area into a `shrink-0` sticky footer (same layout as `JobsTable`). `DataTable` is now called without `serverPagination`.
 
-**`ui/console/src/features/jobs/components/JobsTable.tsx`** — custom minimal footer replaced with the full `Pagination` component. Accepts a new `total` prop (from `counts[tab]`). Cursor-based prev/next is mapped to `onPageChange` direction detection; page number buttons follow the same cursor chain.
+**`frontend/src/features/jobs/components/JobsTable.tsx`** — custom minimal footer replaced with the full `Pagination` component. Accepts a new `total` prop (from `counts[tab]`). Cursor-based prev/next is mapped to `onPageChange` direction detection; page number buttons follow the same cursor chain.
 
-**`ui/console/src/pages/JobsPage.tsx`** — passes `total={jobs.counts[jobs.tab] ?? 0}` and `onPageChange` to `JobsTable`.
+**`frontend/src/pages/JobsPage.tsx`** — passes `total={jobs.counts[jobs.tab] ?? 0}` and `onPageChange` to `JobsTable`.
 
 ### Lint Fixes
 

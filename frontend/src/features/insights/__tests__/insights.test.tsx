@@ -2,13 +2,13 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import * as insightsApi from '@/features/insights/api/insights.api'
 
-import { TechStackPanel } from '../TechStackPanel'
-import { CompanyVelocityPanel } from '../CompanyVelocityPanel'
-import { PipelineFunnelPanel } from '../PipelineFunnelPanel'
-import { RoleCategoryPanel } from '../RoleCategoryPanel'
-import { SponsorshipTrendPanel } from '../SponsorshipTrendPanel'
-import { CompanyActivityPanel } from '../CompanyActivityPanel'
-import { LocationPanel } from '../LocationPanel'
+import { TechStackPanel } from '../components/TechStackPanel'
+import { CompanyVelocityPanel } from '../components/CompanyVelocityPanel'
+import { PipelineFunnelPanel } from '../components/PipelineFunnelPanel'
+import { RoleCategoryPanel } from '../components/RoleCategoryPanel'
+import { SponsorshipTrendPanel } from '../components/SponsorshipTrendPanel'
+import { CompanyActivityPanel } from '../components/CompanyActivityPanel'
+import { LocationPanel } from '../components/LocationPanel'
 
 vi.mock('@/features/insights/api/insights.api')
 

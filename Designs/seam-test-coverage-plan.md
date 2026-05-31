@@ -28,7 +28,7 @@ Per page, audit 4 seam categories + enforce 1 typing gate:
 5. **Typing gate** — `no-restricted-imports` is now an **error** (architecture complete); sweep the page's slice to **zero `any`**.
 
 **Gates per page (all must pass):**
-`cd ui/console && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
+`cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
 
 **Workflow per page:** map seams → add typed contracts → write tests TDD (red→green) → sweep `any` → run gates → update this doc → commit → `git-push-to-pr`. One PR per page.
 

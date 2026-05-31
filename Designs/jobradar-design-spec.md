@@ -573,7 +573,7 @@ Run `storybook` alongside the dev app. Screenshots of Storybook stories become t
 
 ### Option D: Screenshots in CLAUDE.md (Current best practice)
 
-Add a `ui/console/CLAUDE.md` section that links to this spec file and adds a note that Claude should reference it when building or modifying UI components. Claude Code's context loading will pick it up automatically when working in the UI directory.
+Add a `frontend/CLAUDE.md` section that links to this spec file and adds a note that Claude should reference it when building or modifying UI components. Claude Code's context loading will pick it up automatically when working in the UI directory.
 
 ### What to put in the Figma file
 

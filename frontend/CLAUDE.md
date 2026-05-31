@@ -158,7 +158,7 @@ const setStatus = useMutation({
 
 ### Coverage target
 
-90% statement coverage per file. Run: `cd ui/console && npx vitest run --coverage`.
+90% statement coverage per file. Run: `cd frontend && npx vitest run --coverage`.
 
 ### ResizeObserver mock (required for Recharts)
 

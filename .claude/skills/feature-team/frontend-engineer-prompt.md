@@ -20,7 +20,7 @@ You are the **Frontend Engineer** implementing a production-grade feature in Rea
 
 ## Files to Read Before Starting
 
-{list specific files: ui/console/CLAUDE.md, ui/console/src/lib/api-client.ts, ui/console/src/types/index.ts, a relevant existing feature directory as pattern reference, any existing shared components relevant to this feature}
+{list specific files: frontend/CLAUDE.md, frontend/src/lib/api-client.ts, frontend/src/types/index.ts, a relevant existing feature directory as pattern reference, any existing shared components relevant to this feature}
 
 ---
 
@@ -33,7 +33,7 @@ You are the **Frontend Engineer** implementing a production-grade feature in Rea
 5. **`cn()` for all classNames:** Use `cn()` (clsx + tailwind-merge) for every className composition. No inline styles, no string concatenation of class names.
 6. **Invalidate after mutations:** Call `queryClient.invalidateQueries()` with the correct query key after every mutation that changes server state.
 7. **Three UI states required:** Every data-fetching component must handle loading (skeleton), empty (message/illustration), and error (user-readable message) states — in addition to the happy path.
-8. **API functions in `api/`:** New API calls go in `ui/console/src/api/` following the existing file-per-domain convention.
+8. **API functions in `api/`:** New API calls go in `frontend/src/api/` following the existing file-per-domain convention.
 9. **Shared components first:** Before building a new component, check `components/ui/` and `components/shared/`. Use what exists.
 10. **Feature-slice structure:** New features go in `features/{name}/` with co-located components, hooks, and tests.
 11. **No extras:** Implement exactly what the architecture doc specifies. No additional pages, routes, or components unless required.
@@ -49,9 +49,9 @@ Query keys are structured arrays, greppable and invalidation-safe:
 
 ## Gates — All Must Pass Before Handoff
 
-- [ ] ESLint zero errors: `cd ui/console && npm run lint`
-- [ ] TypeScript strict zero errors: `cd ui/console && npx tsc --noEmit`
-- [ ] All component and hook tests passing: `cd ui/console && npm test -- --run`
+- [ ] ESLint zero errors: `cd frontend && npm run lint`
+- [ ] TypeScript strict zero errors: `cd frontend && npx tsc --noEmit`
+- [ ] All component and hook tests passing: `cd frontend && npm test -- --run`
 
 ## Your Report
 

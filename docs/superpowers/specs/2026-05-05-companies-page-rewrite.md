@@ -88,15 +88,15 @@ Parse `scan_status` from query string and pass into `CompanyAdminFilter.ScanStat
 
 ### Files changed
 
-| File                                                                  | Change                                                                   |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `ui/console/src/types/index.ts`                                       | Add `queue_status?: string` to `Company` type                            |
-| `ui/console/src/api/adminCompanies.ts`                                | Add `scanStatus` to `AdminCompanyFilters`, wire to query param           |
-| `ui/console/src/features/companies/hooks/useCompanies.ts`             | Full rewrite — remove all client-side filter logic                       |
-| `ui/console/src/features/companies/hooks/normalizeAdminCompany.ts`    | Use `queue_status` from backend; derive status from `consecutive_errors` |
-| `ui/console/src/features/companies/components/CompaniesFilterBar.tsx` | Rewrite to match `JobFilters` pattern                                    |
-| `ui/console/src/features/companies/components/CompaniesHeader.tsx`    | Remove queue polling trigger; keep auto-refresh toggle                   |
-| `ui/console/src/features/companies/constants.ts`                      | Add `SCAN_STATUS_FILTER` enum matching backend values                    |
+| File                                                                | Change                                                                   |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `frontend/src/types/index.ts`                                       | Add `queue_status?: string` to `Company` type                            |
+| `frontend/src/api/adminCompanies.ts`                                | Add `scanStatus` to `AdminCompanyFilters`, wire to query param           |
+| `frontend/src/features/companies/hooks/useCompanies.ts`             | Full rewrite — remove all client-side filter logic                       |
+| `frontend/src/features/companies/hooks/normalizeAdminCompany.ts`    | Use `queue_status` from backend; derive status from `consecutive_errors` |
+| `frontend/src/features/companies/components/CompaniesFilterBar.tsx` | Rewrite to match `JobFilters` pattern                                    |
+| `frontend/src/features/companies/components/CompaniesHeader.tsx`    | Remove queue polling trigger; keep auto-refresh toggle                   |
+| `frontend/src/features/companies/constants.ts`                      | Add `SCAN_STATUS_FILTER` enum matching backend values                    |
 
 ### `useCompanies` — rewritten state
 

@@ -7,32 +7,32 @@ Trigger: User-reported keyboard bug on `/jobs` ("shortcuts act on the first job,
 
 ### Hooks
 
-- [ui/console/src/features/jobs/hooks/useFocusedJob.ts](../../../ui/console/src/features/jobs/hooks/useFocusedJob.ts) — refactored to track focus by **job id** (was: array index). Adds `resetKey` option for deliberate context-change resets. Clamps to the prior index when the focused job is removed. Exposes `setFocusedJobId`.
-- [ui/console/src/features/jobs/hooks/useJobActions.ts](../../../ui/console/src/features/jobs/hooks/useJobActions.ts) — fixed the `lookupStatus` query-key predicate (P0: every undo silently reverted to NEW because the predicate `['jobs', 'list']` never matched the writer's `['jobs', filters, limit]`). Added optimistic UI for single mutations, a `runWithLimit` concurrency throttle (5 in flight) for bulk paths, a 20-entry cap on the undo stack, `toast.warning('Nothing to undo')` on empty pop, and `invalidateUserData` that fans out to `['jobs']` + `['dashboard']` + `['insights']`.
-- [ui/console/src/features/jobs/hooks/useJobKeyboard.ts](../../../ui/console/src/features/jobs/hooks/useJobKeyboard.ts) — removed the `Cmd/Ctrl+A` binding (it hijacked the browser's text select-all), scoped `←` / `→` page nav via an `isInPopover()` guard so they no longer close Radix Selects, added `shift+/` as a cross-layout help fallback.
-- [ui/console/src/features/jobs/hooks/useJobUrlState.ts](../../../ui/console/src/features/jobs/hooks/useJobUrlState.ts) — replaced the dead `cursor` URL slot with `page` (integer). Per-setter history policy: `push` for tab/filter/sort/limit changes, `replace` for search debounce / pagination / preview-open.
-- [ui/console/src/features/jobs/hooks/useJobs.ts](../../../ui/console/src/features/jobs/hooks/useJobs.ts) — page now read/written via URL state (replaces local `useState`). Auto-snap effect: when a refetch returns fewer pages than the current `page` index, snap back to the last available page. Now exposes `isError` so the table can render a retry affordance.
-- [ui/console/src/features/jobs/queryKeys.ts](../../../ui/console/src/features/jobs/queryKeys.ts) — added an `isJobListKey()` predicate that all jobs-list cache scans go through, so a key shape drift can't silently break lookup again.
+- [frontend/src/features/jobs/hooks/useFocusedJob.ts](../../../frontend/src/features/jobs/hooks/useFocusedJob.ts) — refactored to track focus by **job id** (was: array index). Adds `resetKey` option for deliberate context-change resets. Clamps to the prior index when the focused job is removed. Exposes `setFocusedJobId`.
+- [frontend/src/features/jobs/hooks/useJobActions.ts](../../../frontend/src/features/jobs/hooks/useJobActions.ts) — fixed the `lookupStatus` query-key predicate (P0: every undo silently reverted to NEW because the predicate `['jobs', 'list']` never matched the writer's `['jobs', filters, limit]`). Added optimistic UI for single mutations, a `runWithLimit` concurrency throttle (5 in flight) for bulk paths, a 20-entry cap on the undo stack, `toast.warning('Nothing to undo')` on empty pop, and `invalidateUserData` that fans out to `['jobs']` + `['dashboard']` + `['insights']`.
+- [frontend/src/features/jobs/hooks/useJobKeyboard.ts](../../../frontend/src/features/jobs/hooks/useJobKeyboard.ts) — removed the `Cmd/Ctrl+A` binding (it hijacked the browser's text select-all), scoped `←` / `→` page nav via an `isInPopover()` guard so they no longer close Radix Selects, added `shift+/` as a cross-layout help fallback.
+- [frontend/src/features/jobs/hooks/useJobUrlState.ts](../../../frontend/src/features/jobs/hooks/useJobUrlState.ts) — replaced the dead `cursor` URL slot with `page` (integer). Per-setter history policy: `push` for tab/filter/sort/limit changes, `replace` for search debounce / pagination / preview-open.
+- [frontend/src/features/jobs/hooks/useJobs.ts](../../../frontend/src/features/jobs/hooks/useJobs.ts) — page now read/written via URL state (replaces local `useState`). Auto-snap effect: when a refetch returns fewer pages than the current `page` index, snap back to the last available page. Now exposes `isError` so the table can render a retry affordance.
+- [frontend/src/features/jobs/queryKeys.ts](../../../frontend/src/features/jobs/queryKeys.ts) — added an `isJobListKey()` predicate that all jobs-list cache scans go through, so a key shape drift can't silently break lookup again.
 
 ### Components
 
-- [ui/console/src/features/jobs/components/JobDetailPanel.tsx](../../../ui/console/src/features/jobs/components/JobDetailPanel.tsx) — notes textarea with 800 ms debounce + save-on-blur, `<StatusSelect>` rendered in both desktop and mobile-route modes (so Interviewing / Offer / Rejected are reachable on phone), `pb-[max(0.75rem,env(safe-area-inset-bottom))]` on the sticky action bar, panel container labelled `role="region" aria-label="Job details"`.
-- [ui/console/src/features/jobs/components/DismissModal.tsx](../../../ui/console/src/features/jobs/components/DismissModal.tsx) — `role="radiogroup"` + `role="radio"` semantics with arrow-key + Home/End nav, optional free-text note textarea (max 500 chars, auto-fills from the selected label when empty), `count` prop for bulk mode (title becomes "Dismiss N jobs?"), new `onConfirm({reason, note})` signature.
-- [ui/console/src/features/jobs/components/JobsTable.tsx](../../../ui/console/src/features/jobs/components/JobsTable.tsx) — wired `getRowProps` to make rows tabbable (`tabIndex=0`, `role="button"`, `aria-label`, Enter/Space → open), focused-row indicator switched to a strong violet inset ring, accepts `isError` + `onRetry`.
-- [ui/console/src/features/jobs/components/jobs-columns.tsx](../../../ui/console/src/features/jobs/components/jobs-columns.tsx) — checkbox `aria-label`s ("Select all jobs on this page", "Select {title} at {company}").
-- [ui/console/src/features/jobs/components/MobileJobDetailRoute.tsx](../../../ui/console/src/features/jobs/components/MobileJobDetailRoute.tsx) — `navigate(-1)` falls back to `navigate('/jobs')` when there's no in-app history (deep-link / refresh). Error UI differentiates 404 / 403 / network with a Retry affordance for network errors. Threads `note` through `dismissJob`.
+- [frontend/src/features/jobs/components/JobDetailPanel.tsx](../../../frontend/src/features/jobs/components/JobDetailPanel.tsx) — notes textarea with 800 ms debounce + save-on-blur, `<StatusSelect>` rendered in both desktop and mobile-route modes (so Interviewing / Offer / Rejected are reachable on phone), `pb-[max(0.75rem,env(safe-area-inset-bottom))]` on the sticky action bar, panel container labelled `role="region" aria-label="Job details"`.
+- [frontend/src/features/jobs/components/DismissModal.tsx](../../../frontend/src/features/jobs/components/DismissModal.tsx) — `role="radiogroup"` + `role="radio"` semantics with arrow-key + Home/End nav, optional free-text note textarea (max 500 chars, auto-fills from the selected label when empty), `count` prop for bulk mode (title becomes "Dismiss N jobs?"), new `onConfirm({reason, note})` signature.
+- [frontend/src/features/jobs/components/JobsTable.tsx](../../../frontend/src/features/jobs/components/JobsTable.tsx) — wired `getRowProps` to make rows tabbable (`tabIndex=0`, `role="button"`, `aria-label`, Enter/Space → open), focused-row indicator switched to a strong violet inset ring, accepts `isError` + `onRetry`.
+- [frontend/src/features/jobs/components/jobs-columns.tsx](../../../frontend/src/features/jobs/components/jobs-columns.tsx) — checkbox `aria-label`s ("Select all jobs on this page", "Select {title} at {company}").
+- [frontend/src/features/jobs/components/MobileJobDetailRoute.tsx](../../../frontend/src/features/jobs/components/MobileJobDetailRoute.tsx) — `navigate(-1)` falls back to `navigate('/jobs')` when there's no in-app history (deep-link / refresh). Error UI differentiates 404 / 403 / network with a Retry affordance for network errors. Threads `note` through `dismissJob`.
 
 ### Primitives
 
-- [ui/console/src/components/ui/data-table.tsx](../../../ui/console/src/components/ui/data-table.tsx) — `isError` + `onRetry` props with a real error state (no more "looks like an empty list"), skeleton rows during `loading` (replaces the centered spinner), `aria-busy` while loading, `aria-sort` on sortable headers, `getRowProps` callback to let callers inject row-level a11y attrs without leaking domain knowledge into the primitive.
+- [frontend/src/components/ui/data-table.tsx](../../../frontend/src/components/ui/data-table.tsx) — `isError` + `onRetry` props with a real error state (no more "looks like an empty list"), skeleton rows during `loading` (replaces the centered spinner), `aria-busy` while loading, `aria-sort` on sortable headers, `getRowProps` callback to let callers inject row-level a11y attrs without leaking domain knowledge into the primitive.
 
 ### Page
 
-- [ui/console/src/pages/JobsPage.tsx](../../../ui/console/src/pages/JobsPage.tsx) — syncs `focus.setFocusedJobId(job.id)` on row click (eliminates the headline bug), prunes `selectedIds` whenever the visible jobs change (no more phantom-id bulk dismiss), routes both single and bulk dismiss through `DismissModal` (bulk no longer silently bypasses the reason capture), bulk action bar gains Save / Mark applied buttons + `role="status"` live region, auto-clears stale `?job=` when the open job is filtered out, scroll restoration via `sessionStorage`, mounts `useJobKeyboard` only on non-mobile, wires `isError` + `refetch` into the table.
+- [frontend/src/pages/JobsPage.tsx](../../../frontend/src/pages/JobsPage.tsx) — syncs `focus.setFocusedJobId(job.id)` on row click (eliminates the headline bug), prunes `selectedIds` whenever the visible jobs change (no more phantom-id bulk dismiss), routes both single and bulk dismiss through `DismissModal` (bulk no longer silently bypasses the reason capture), bulk action bar gains Save / Mark applied buttons + `role="status"` live region, auto-clears stale `?job=` when the open job is filtered out, scroll restoration via `sessionStorage`, mounts `useJobKeyboard` only on non-mobile, wires `isError` + `refetch` into the table.
 
 ### App / root
 
-- [ui/console/src/App.tsx](../../../ui/console/src/App.tsx) — `h-screen` → `h-dvh` (dynamic viewport height) so the iOS Safari address-bar collapse no longer causes layout jumps.
+- [frontend/src/App.tsx](../../../frontend/src/App.tsx) — `h-screen` → `h-dvh` (dynamic viewport height) so the iOS Safari address-bar collapse no longer causes layout jumps.
 
 ## Architecture rules — enforce in code review
 
@@ -62,12 +62,12 @@ These are the patterns that, when violated, produced the bugs in this audit.
 
 The audit fixes are protected by these regression tests. Coverage of these specific assertions IS the spec — if any of them break, the bug is back.
 
-- [src/features/jobs/hooks/**tests**/useFocusedJob.test.ts](../../../ui/console/src/features/jobs/hooks/__tests__/useFocusedJob.test.ts)
+- [src/features/jobs/hooks/**tests**/useFocusedJob.test.ts](../../../frontend/src/features/jobs/hooks/__tests__/useFocusedJob.test.ts)
   - "PRESERVES focus across a TanStack refetch (same ids, new array reference)" — the focus-reset bug.
   - "CLAMPS focus to the same index when the focused job is removed" — the dismiss-cursor-jumps bug.
   - "resetKey change forces focus back to the first item" — deliberate context-change semantics.
 
-- [src/features/jobs/hooks/**tests**/useJobActions.test.ts](../../../ui/console/src/features/jobs/hooks/__tests__/useJobActions.test.ts)
+- [src/features/jobs/hooks/**tests**/useJobActions.test.ts](../../../frontend/src/features/jobs/hooks/__tests__/useJobActions.test.ts)
   - "REGRESSION: undo reverts to the correct prior status when the cache is populated" — the `lookupStatus` query-key mismatch.
   - "throttles bulk mutations to at most 5 concurrent" — the 429-storm guard.
   - "caps the undo stack at 20 entries" — the unbounded-history guard.
@@ -76,25 +76,25 @@ The audit fixes are protected by these regression tests. Coverage of these speci
   - "rolls back optimistic patch when the mutation fails" — the no-rollback gap.
   - "shows a 'Nothing to undo' warning when history is empty" — the silent-no-op gap.
 
-- [src/features/jobs/hooks/**tests**/useJobKeyboard.test.tsx](../../../ui/console/src/features/jobs/hooks/__tests__/useJobKeyboard.test.tsx)
+- [src/features/jobs/hooks/**tests**/useJobKeyboard.test.tsx](../../../frontend/src/features/jobs/hooks/__tests__/useJobKeyboard.test.tsx)
   - "Cmd+A no longer hijacks 'select all' — text selection stays native".
   - "ArrowLeft / ArrowRight are suppressed inside a Radix popover".
   - "shift+/ (cross-layout fallback) also opens help".
 
-- [src/features/jobs/components/**tests**/DismissModal.test.tsx](../../../ui/console/src/features/jobs/components/__tests__/DismissModal.test.tsx)
+- [src/features/jobs/components/**tests**/DismissModal.test.tsx](../../../frontend/src/features/jobs/components/__tests__/DismissModal.test.tsx)
   - "wraps options in a role='radiogroup' with role='radio' + aria-checked".
   - "arrow keys move selection across radios".
   - "emits { reason, note } with the auto-filled label when the note is empty".
   - "user-typed note overrides the auto-filled label".
   - bulk-mode title + Dismiss button text reflect the count.
 
-- [src/features/jobs/components/**tests**/JobDetailPanel.test.tsx](../../../ui/console/src/features/jobs/components/__tests__/JobDetailPanel.test.tsx)
+- [src/features/jobs/components/**tests**/JobDetailPanel.test.tsx](../../../frontend/src/features/jobs/components/__tests__/JobDetailPanel.test.tsx)
   - "exposes the panel via role='region' with aria-label 'Job details'".
   - "renders StatusSelect in route mode (so Interviewing / Offer / Rejected are reachable)".
   - "saves on blur via setJobNotes".
   - "applies a safe-area-inset-bottom padding in route mode".
 
-- [src/pages/**tests**/JobsPage.integration.test.tsx](../../../ui/console/src/pages/__tests__/JobsPage.integration.test.tsx)
+- [src/pages/**tests**/JobsPage.integration.test.tsx](../../../frontend/src/pages/__tests__/JobsPage.integration.test.tsx)
   - "REGRESSION: clicking row 3 then pressing `s` saves row 3, not row 0" — **the headline user-reported bug**.
   - "REGRESSION: clicking bulk dismiss opens the modal (no longer silent)".
   - "REGRESSION: bulk save and mark-applied buttons exist in the bulk bar".

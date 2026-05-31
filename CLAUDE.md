@@ -84,7 +84,7 @@ Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_{READ,WRITE,A
 - Crawler image (`infra/Dockerfile.crawler`) is **pure Go** — no Node, no Chromium, no Playwright. Do not add browser deps
 - Each service domain follows the decorator chain — see `backend/service/CLAUDE.md`
 
-Frontend rule highlights (full set in `ui/console/CLAUDE.md`):
+Frontend rule highlights (full set in `frontend/CLAUDE.md`):
 
 - Server state: TanStack Query only — never `fetch` + `useState` for API data
 - Shared UI state: Zustand; local-only: `useState` / `useReducer`
@@ -110,7 +110,7 @@ During implementation: proceed autonomously, but pause and surface the tradeoff 
 Every feature must ship with:
 
 - Tests alongside implementation — not after
-- Frontend lint passing: `cd ui/console && npm run lint`
+- Frontend lint passing: `cd frontend && npm run lint`
 - Backend lint passing: `cd backend && golangci-lint run --config ../.github/.golangci.yml --timeout 5m`
 - Backend per-package coverage ≥95%: `scripts/check-coverage.sh /tmp/cov.out 95` (pre-commit + PR CI)
 - Race detector clean: `go test -race -short ./...` (pre-commit) / `-count=1` (PR CI)
@@ -142,5 +142,5 @@ This file and the project's skill files evolve as the codebase is worked on. Whe
 - `infra/CLAUDE.md` — k8s deployment + iteration (k3d is the only deployment target; no Docker Compose)
 - `docs/QUALITY.md` — quality attributes reference (`.claude/rules/quality-attributes.md` auto-loads on backend files; `frontend-quality-attributes.md` on frontend files). Covers intrinsic qualities incl. Scalability + Performance — _"is the code good?"_
 - `.claude/rules/dev-ergonomics.md` — developer-ergonomics model: friction to change, consistency, extensibility, agent-legibility — _"is it ergonomic to keep it good?"_ Audited by the `dev-ergonomics` skill (read-only, recommends; never edits) via the `dev-ergonomics-auditor` agent
-- Subdirectory `CLAUDE.md` files cover each `backend/*` and `ui/console/*` area and auto-load when you work there
+- Subdirectory `CLAUDE.md` files cover each `backend/*` and `frontend/*` area and auto-load when you work there
 - `.claude/skills/` — project skills; each has a self-improvement footer that invokes `skill-self-improvement` after completion

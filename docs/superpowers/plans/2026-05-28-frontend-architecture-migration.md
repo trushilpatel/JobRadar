@@ -4,7 +4,7 @@
 > (recommended) or `superpowers:executing-plans` to implement this plan task-by-task.
 > Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate `ui/console/src/` to a 6-layer unidirectional architecture with
+**Goal:** Migrate `frontend/src/` to a 6-layer unidirectional architecture with
 machine-enforced import boundaries, consistent feature shapes, and AI-proof conventions —
 10 sequential PRs, app fully working after each one.
 
@@ -17,12 +17,12 @@ entry point for external consumers. No file has more than one clear responsibili
 Radix UI, Vitest, eslint-plugin-boundaries, plop (new — scaffolding only).
 
 **Spec:** `docs/superpowers/specs/2026-05-28-frontend-architecture-design.md`
-**Reference:** `ui/console/ARCHITECTURE.md`
+**Reference:** `frontend/ARCHITECTURE.md`
 
 **Gates (run after every PR before committing):**
 
 ```bash
-cd ui/console
+cd frontend
 npm run lint
 npx tsc --noEmit
 npx vitest run
@@ -40,12 +40,12 @@ full violation inventory that PRs 2–9 fix.
 
 **Files:**
 
-- Modify: `ui/console/package.json` (dev dependency added by npm)
+- Modify: `frontend/package.json` (dev dependency added by npm)
 
 - [ ] **Install the package**
 
 ```bash
-cd ui/console
+cd frontend
 npm install --save-dev eslint-plugin-boundaries
 ```
 
@@ -65,7 +65,7 @@ Expected: `not yet configured`
 
 **Files:**
 
-- Modify: `ui/console/eslint.config.js`
+- Modify: `frontend/eslint.config.js`
 
 - [ ] **Read the current eslint config**
 
@@ -75,7 +75,7 @@ cat eslint.config.js
 
 - [ ] **Add boundaries plugin and element-type rules**
 
-Replace the full contents of `ui/console/eslint.config.js` with:
+Replace the full contents of `frontend/eslint.config.js` with:
 
 ```js
 import js from '@eslint/js'
@@ -605,7 +605,7 @@ If any absolute path aliases point to moved files, update them.
 - [ ] **Run all gates**
 
 ```bash
-cd ui/console && npm run lint && npx tsc --noEmit && npx vitest run && npm run build && echo "ALL GREEN"
+cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build && echo "ALL GREEN"
 ```
 
 - [ ] **Verify no old paths remain**
@@ -746,7 +746,7 @@ previously imported types from `@/api/jobs` can now get them from `@/features/jo
 - [ ] **Run all gates**
 
 ```bash
-cd ui/console && npm run lint && npx tsc --noEmit && npx vitest run && npm run build && echo "ALL GREEN"
+cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build && echo "ALL GREEN"
 ```
 
 - [ ] **Commit**
@@ -1018,7 +1018,7 @@ If it imports from `./App`, update to `./app/App` if you moved the file.
 - [ ] **Run all gates**
 
 ```bash
-cd ui/console && npm run lint && npx tsc --noEmit && npx vitest run && npm run build && echo "ALL GREEN"
+cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build && echo "ALL GREEN"
 ```
 
 - [ ] **Commit**
@@ -1112,7 +1112,7 @@ If it's still 342 lines, audit again — more types can move.
 - [ ] **Run all gates**
 
 ```bash
-cd ui/console && npm run lint && npx tsc --noEmit && npx vitest run && npm run build && echo "ALL GREEN"
+cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build && echo "ALL GREEN"
 ```
 
 - [ ] **Commit**
@@ -1241,7 +1241,7 @@ Expected: both `clean` and `constants/ deleted`.
 - [ ] **Run all gates**
 
 ```bash
-cd ui/console && npm run lint && npx tsc --noEmit && npx vitest run && npm run build && echo "ALL GREEN"
+cd frontend && npm run lint && npx tsc --noEmit && npx vitest run && npm run build && echo "ALL GREEN"
 ```
 
 - [ ] **Commit**
@@ -1273,13 +1273,13 @@ Agents and engineers run this instead of inventing structure.
 - [ ] **Install plop**
 
 ```bash
-cd ui/console
+cd frontend
 npm install --save-dev plop
 ```
 
 ### Task 8.2 — Create plopfile and templates
 
-- [ ] **Create `ui/console/plopfile.js`**
+- [ ] **Create `frontend/plopfile.js`**
 
 ```js
 export default function (plop) {
@@ -1321,7 +1321,7 @@ export default function (plop) {
 }
 ```
 
-- [ ] **Create `ui/console/plop-templates/feature/queryKeys.ts.hbs`**
+- [ ] **Create `frontend/plop-templates/feature/queryKeys.ts.hbs`**
 
 ```ts
 export const {{camelCase name}}QueryKeys = {
@@ -1331,7 +1331,7 @@ export const {{camelCase name}}QueryKeys = {
 }
 ```
 
-- [ ] **Create `ui/console/plop-templates/feature/api.ts.hbs`**
+- [ ] **Create `frontend/plop-templates/feature/api.ts.hbs`**
 
 ```ts
 import { z } from 'zod'
@@ -1354,7 +1354,7 @@ export async function fetch{{pascalCase name}}(id: string): Promise<{{pascalCase
 }
 ```
 
-- [ ] **Create `ui/console/plop-templates/feature/index.ts.hbs`**
+- [ ] **Create `frontend/plop-templates/feature/index.ts.hbs`**
 
 ```ts
 // {{pascalCase name}} feature — public API
@@ -1368,7 +1368,7 @@ export type { {{pascalCase name}} } from './api/{{name}}.api'
 
 - [ ] **Add scaffold script to `package.json`**
 
-In `ui/console/package.json`, add to `scripts`:
+In `frontend/package.json`, add to `scripts`:
 
 ```json
 "scaffold": "plop"
@@ -1379,7 +1379,7 @@ In `ui/console/package.json`, add to `scripts`:
 - [ ] **Run the scaffolder for a test feature**
 
 ```bash
-cd ui/console
+cd frontend
 npm run scaffold feature -- --name testfeature
 ```
 
@@ -1607,7 +1607,7 @@ import fails CI instantly. The architecture is machine-enforced.
 - [ ] **Run lint and count boundary warnings**
 
 ```bash
-cd ui/console
+cd frontend
 npm run lint 2>&1 | grep "boundaries/" | wc -l
 ```
 
@@ -1642,7 +1642,7 @@ Expected: `ARCHITECTURE ENFORCED` — zero errors, zero warnings from boundaries
 
 ### Task 10.4 — Update ARCHITECTURE.md status line
 
-- [ ] **Update `ui/console/ARCHITECTURE.md`**
+- [ ] **Update `frontend/ARCHITECTURE.md`**
 
 Change the status line from:
 
@@ -1667,7 +1667,7 @@ architecture migration is complete and boundary rules are errors.
 
 ```bash
 git checkout -b chore/arch-pr10-boundaries-as-errors
-git add eslint.config.js ui/console/ARCHITECTURE.md Designs/seam-test-coverage-plan.md
+git add eslint.config.js frontend/ARCHITECTURE.md Designs/seam-test-coverage-plan.md
 git commit -m "chore(ui): promote boundary rules from warn to error
 
 All 10 architectural migration PRs complete. Every layer boundary is now

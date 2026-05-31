@@ -202,19 +202,19 @@ No structural changes to `TechRow`, `TechSparkline`, or `ColHeader` components.
 
 ## Files touched
 
-| File                                                                   | Change                                                                   |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `backend/service/dashboard/dto/TechAdoption.go`                        | Rename to `TechMonthlyRow`, rename fields                                |
-| `backend/service/dashboard/dto/TechTrends.go`                          | Rename `Q1–Q4 → M1–M4` in `TechTrendRow`                                 |
-| `backend/service/dashboard/services/DashboardRepositoryService.go`     | Replace `GetTechStackQuarterlyAdoption` with `GetTechStackMonthlyTrends` |
-| `backend/service/dashboard/services/DashboardUserImplService.go`       | Update `GetTechTrends` thresholds, floor, momentum sort                  |
-| `backend/service/dashboard/services/DashboardService.go`               | Update interface method signature                                        |
-| `backend/service/dashboard/tests/DashboardRepositoryService_test.go`   | Update test fixtures                                                     |
-| `backend/service/dashboard/tests/DashboardUserImplService_test.go`     | Update threshold + sort tests                                            |
-| `backend/service/job/common/` (new file)                               | `tech_normalize.go` — `normalizeTech` + map                              |
-| `backend/service/job/services/JobPipelineImplService.go`               | Call `normalizeTech` before `InsertTechTags`                             |
-| `backend/service/job/tests/JobPipelineImplService_test.go`             | Cover normalization in tag-write path                                    |
-| New migration                                                          | `CREATE INDEX idx_job_tech_tags_tagged_at_tech`                          |
-| `ui/console/src/types/index.ts`                                        | Rename `q1–q4 → m1–m4` in `TechTrendRow`                                 |
-| `ui/console/src/features/dashboard/components/TechTrendsPanel.tsx`     | Labels, subtitle, field refs                                             |
-| `ui/console/src/features/dashboard/__tests__/TechTrendsPanel.test.tsx` | Update field refs and label assertions                                   |
+| File                                                                 | Change                                                                   |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `backend/service/dashboard/dto/TechAdoption.go`                      | Rename to `TechMonthlyRow`, rename fields                                |
+| `backend/service/dashboard/dto/TechTrends.go`                        | Rename `Q1–Q4 → M1–M4` in `TechTrendRow`                                 |
+| `backend/service/dashboard/services/DashboardRepositoryService.go`   | Replace `GetTechStackQuarterlyAdoption` with `GetTechStackMonthlyTrends` |
+| `backend/service/dashboard/services/DashboardUserImplService.go`     | Update `GetTechTrends` thresholds, floor, momentum sort                  |
+| `backend/service/dashboard/services/DashboardService.go`             | Update interface method signature                                        |
+| `backend/service/dashboard/tests/DashboardRepositoryService_test.go` | Update test fixtures                                                     |
+| `backend/service/dashboard/tests/DashboardUserImplService_test.go`   | Update threshold + sort tests                                            |
+| `backend/service/job/common/` (new file)                             | `tech_normalize.go` — `normalizeTech` + map                              |
+| `backend/service/job/services/JobPipelineImplService.go`             | Call `normalizeTech` before `InsertTechTags`                             |
+| `backend/service/job/tests/JobPipelineImplService_test.go`           | Cover normalization in tag-write path                                    |
+| New migration                                                        | `CREATE INDEX idx_job_tech_tags_tagged_at_tech`                          |
+| `frontend/src/types/index.ts`                                        | Rename `q1–q4 → m1–m4` in `TechTrendRow`                                 |
+| `frontend/src/features/dashboard/components/TechTrendsPanel.tsx`     | Labels, subtitle, field refs                                             |
+| `frontend/src/features/dashboard/__tests__/TechTrendsPanel.test.tsx` | Update field refs and label assertions                                   |
