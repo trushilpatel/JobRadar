@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import * as dashboardApi from '@/features/dashboard/api/dashboard.api'
@@ -11,6 +12,12 @@ import { VelocityPanel } from '../components/VelocityPanel'
 import { TechTrendsPanel } from '../components/TechTrendsPanel'
 
 vi.mock('@/features/dashboard/api/dashboard.api')
+
+const navigateMock = vi.fn()
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
+  return { ...actual, useNavigate: () => navigateMock }
+})
 
 // Recharts uses ResizeObserver which is not available in jsdom
 class MockResizeObserver {
@@ -130,6 +137,48 @@ describe('MarketPanel', () => {
     vi.mocked(dashboardApi.fetchMarket).mockResolvedValue(sampleMarket)
     render(<MarketPanel />, { wrapper: makeWrapper() })
     await waitFor(() => expect(document.querySelector('.animate-pulse')).not.toBeInTheDocument())
+  })
+
+  it('shows the error message when the query rejects', async () => {
+    vi.mocked(dashboardApi.fetchMarket).mockRejectedValue(new Error('boom'))
+    render(<MarketPanel />, { wrapper: makeWrapper() })
+    await waitFor(() => expect(screen.getByText('Failed to load market data')).toBeInTheDocument())
+  })
+
+  it('navigates to the 24h jobs feed when the New jobs stat is clicked', async () => {
+    navigateMock.mockClear()
+    vi.mocked(dashboardApi.fetchMarket).mockResolvedValue(sampleMarket)
+    render(<MarketPanel />, { wrapper: makeWrapper() })
+    await waitFor(() => expect(screen.getByRole('button')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button'))
+    expect(navigateMock).toHaveBeenCalledWith('/jobs?since=24h')
+  })
+
+  it('navigates on Enter key on the New jobs stat', async () => {
+    navigateMock.mockClear()
+    vi.mocked(dashboardApi.fetchMarket).mockResolvedValue(sampleMarket)
+    render(<MarketPanel />, { wrapper: makeWrapper() })
+    await waitFor(() => expect(screen.getByRole('button')).toBeInTheDocument())
+    fireEvent.keyDown(screen.getByRole('button'), { key: 'Enter' })
+    expect(navigateMock).toHaveBeenCalledWith('/jobs?since=24h')
+  })
+
+  it('navigates on Space key on the New jobs stat', async () => {
+    navigateMock.mockClear()
+    vi.mocked(dashboardApi.fetchMarket).mockResolvedValue(sampleMarket)
+    render(<MarketPanel />, { wrapper: makeWrapper() })
+    await waitFor(() => expect(screen.getByRole('button')).toBeInTheDocument())
+    fireEvent.keyDown(screen.getByRole('button'), { key: ' ' })
+    expect(navigateMock).toHaveBeenCalledWith('/jobs?since=24h')
+  })
+
+  it('ignores unrelated keys on the New jobs stat', async () => {
+    navigateMock.mockClear()
+    vi.mocked(dashboardApi.fetchMarket).mockResolvedValue(sampleMarket)
+    render(<MarketPanel />, { wrapper: makeWrapper() })
+    await waitFor(() => expect(screen.getByRole('button')).toBeInTheDocument())
+    fireEvent.keyDown(screen.getByRole('button'), { key: 'a' })
+    expect(navigateMock).not.toHaveBeenCalled()
   })
 })
 
