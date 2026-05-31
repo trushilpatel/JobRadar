@@ -133,6 +133,38 @@ Output the link to the user as the final step:
 
 This URL opens GitHub's "Open a pull request" page with the base set to `main` and the compare set to the current branch, ready to submit.
 
+## Step 9 — Clean up worktrees (if applicable)
+
+After the push and PR link are output, check whether the session is running inside a git worktree. If it is, remove it and delete the local branch — the remote branch is all that's needed for the PR.
+
+**Detect:** compare `--git-dir` with `--git-common-dir`. If they differ, you're in a worktree.
+
+```bash
+git rev-parse --git-dir        # worktree: /path/to/.git/worktrees/<name>
+git rev-parse --git-common-dir # always:   /path/to/.git
+```
+
+If they differ:
+
+```bash
+WORKTREE_PATH=$(pwd)
+BRANCH=$(git branch --show-current)
+MAIN_ROOT=$(git rev-parse --git-common-dir | sed 's|/\.git$||')
+
+cd "$MAIN_ROOT"
+git worktree remove --force "$WORKTREE_PATH"
+git branch -D "$BRANCH"
+```
+
+Tell the user after cleanup:
+
+> Worktree `<path>` removed and local branch `<branch>` deleted. Remote branch is still live — open the PR at the link above.
+
+| Scenario                                                | Action                                                    |
+| ------------------------------------------------------- | --------------------------------------------------------- |
+| Inside a worktree (`.worktrees/`, `.claude/worktrees/`) | Remove worktree, delete local branch, output confirmation |
+| In the main working tree                                | Skip — nothing to clean                                   |
+
 ## Quick reference
 
 ```bash
@@ -147,14 +179,15 @@ git push -u origin feat/my-feature
 
 ## Common mistakes
 
-| Mistake                                      | Fix                                                   |
-| -------------------------------------------- | ----------------------------------------------------- |
-| `git add .` or `git add -A` without checking | Always run `git status` first; stage by name          |
-| Committing to `main`                         | The pre-commit hook blocks it — create a branch first |
-| Using `--no-verify` when hook fails          | Fix the lint/test failure; never skip                 |
-| Adding AI attribution to commit message      | Omit it entirely — human author only                  |
-| `git push --force` (no lease)                | Always `--force-with-lease` if force is needed        |
-| Skipping `git fetch` before rebase           | You'll rebase onto stale main — always fetch first    |
+| Mistake                                      | Fix                                                           |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| `git add .` or `git add -A` without checking | Always run `git status` first; stage by name                  |
+| Committing to `main`                         | The pre-commit hook blocks it — create a branch first         |
+| Using `--no-verify` when hook fails          | Fix the lint/test failure; never skip                         |
+| Adding AI attribution to commit message      | Omit it entirely — human author only                          |
+| `git push --force` (no lease)                | Always `--force-with-lease` if force is needed                |
+| Skipping `git fetch` before rebase           | You'll rebase onto stale main — always fetch first            |
+| Forgetting to clean up the worktree          | After push + PR link, run Step 9 — stale worktrees accumulate |
 
 ## Red flags — stop and reassess
 

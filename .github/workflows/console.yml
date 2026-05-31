@@ -1,0 +1,80 @@
+name: Console
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ui/console/**'
+      - '.github/workflows/console.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: console / lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/console/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ui/console
+
+      - name: Run ESLint
+        run: npm run lint
+        working-directory: ui/console
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+        working-directory: ui/console
+
+  test:
+    name: console / test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/console/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ui/console
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+        working-directory: ui/console
+
+      - name: Upload to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: ui/console/coverage/lcov.info
+          flags: console
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: console-coverage
+          path: ui/console/coverage/
+          if-no-files-found: ignore
