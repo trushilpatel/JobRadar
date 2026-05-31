@@ -43,5 +43,13 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     globals: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov', 'json-summary'],
+      thresholds: {
+        statements: 90,
+      },
+      exclude: ['src/test/**', 'src/main.tsx', 'src/types/**', '**/*.d.ts', '**/*.config.*'],
+    },
   },
 })

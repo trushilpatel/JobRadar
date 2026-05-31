@@ -111,7 +111,7 @@ Every feature must ship with:
 - Tests alongside implementation — not after
 - Frontend lint passing: `cd ui/console && npm run lint`
 - Backend lint passing: `cd backend && golangci-lint run --config ../.github/.golangci.yml --timeout 5m`
-- Backend per-package coverage ≥80%: `scripts/check-coverage.sh /tmp/cov.out 80` (pre-commit + PR CI)
+- Backend per-package coverage ≥95%: `scripts/check-coverage.sh /tmp/cov.out 95` (pre-commit + PR CI)
 - Race detector clean: `go test -race -short ./...` (pre-commit) / `-count=1` (PR CI)
 - Do not mark complete with any test, lint, race, or coverage failure outstanding
 

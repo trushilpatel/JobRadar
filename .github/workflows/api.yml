@@ -1,0 +1,418 @@
+name: API
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/api.yml'
+      - '.github/.golangci.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Detect which services changed ────────────────────────────────────────────
+  # Each test job reads these outputs to decide whether to run.
+  # Changing platform/common/go.mod triggers all test jobs since those are
+  # shared dependencies — a break there can affect every service.
+  changes:
+    name: api / detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      crawler:         ${{ steps.filter.outputs.crawler }}
+      api-server:      ${{ steps.filter.outputs.api-server }}
+      workers:         ${{ steps.filter.outputs.workers }}
+      service-core:    ${{ steps.filter.outputs.service-core }}
+      service-users:   ${{ steps.filter.outputs.service-users }}
+      service-support: ${{ steps.filter.outputs.service-support }}
+      platform:        ${{ steps.filter.outputs.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            crawler:
+              - 'backend/apps/crawler/**'
+            api-server:
+              - 'backend/apps/api/**'
+            workers:
+              - 'backend/apps/scheduler/**'
+              - 'backend/apps/filter/**'
+              - 'backend/apps/analyzer/**'
+            service-core:
+              - 'backend/service/job/**'
+              - 'backend/service/scan/**'
+            service-users:
+              - 'backend/service/user/**'
+              - 'backend/service/company/**'
+              - 'backend/service/application/**'
+              - 'backend/service/role/**'
+            service-support:
+              - 'backend/service/llm/**'
+              - 'backend/service/dashboard/**'
+              - 'backend/service/insights/**'
+              - 'backend/service/audit/**'
+            platform:
+              - 'backend/platform/**'
+              - 'backend/common/**'
+              - 'backend/go.mod'
+              - 'backend/go.sum'
+
+  # ── Lint (always runs — golangci-lint only checks changed files via --new-from-rev) ──
+  lint:
+    name: api / lint
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: false
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.11.4
+          working-directory: backend
+          args: --config ../.github/.golangci.yml --new-from-rev=origin/main --timeout 5m --path-mode=abs
+
+  # ── Test jobs (each only runs when its paths or shared deps changed) ──────────
+  test-crawler:
+    name: api / test / crawler
+    needs: changes
+    if: needs.changes.outputs.crawler == 'true' || needs.changes.outputs.platform == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      - name: Run unit tests (race + coverage)
+        run: |
+          go test -race -count=1 -short \
+            -coverpkg=./apps/crawler/... -coverprofile=/tmp/coverage.out \
+            ./apps/crawler/...
+        working-directory: backend
+
+      - name: Enforce per-package coverage threshold
+        run: ../scripts/check-coverage.sh /tmp/coverage.out 95
+        working-directory: backend
+
+      - name: Upload to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: /tmp/coverage.out
+          flags: crawler
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-crawler
+          path: /tmp/coverage.out
+          if-no-files-found: ignore
+
+  test-api-server:
+    name: api / test / api-server
+    needs: changes
+    if: needs.changes.outputs.api-server == 'true' || needs.changes.outputs.platform == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      - name: Run unit tests (race + coverage)
+        run: |
+          go test -race -count=1 -short \
+            -coverpkg=./apps/api/... -coverprofile=/tmp/coverage.out \
+            ./apps/api/...
+        working-directory: backend
+
+      - name: Enforce per-package coverage threshold
+        run: ../scripts/check-coverage.sh /tmp/coverage.out 95
+        working-directory: backend
+
+      - name: Upload to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: /tmp/coverage.out
+          flags: api-server
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-api-server
+          path: /tmp/coverage.out
+          if-no-files-found: ignore
+
+  test-workers:
+    name: api / test / workers
+    needs: changes
+    if: needs.changes.outputs.workers == 'true' || needs.changes.outputs.platform == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      - name: Run unit tests (race + coverage)
+        run: |
+          go test -race -count=1 -short \
+            -coverpkg=./apps/scheduler/... ./apps/filter/... ./apps/analyzer/... \
+            -coverprofile=/tmp/coverage.out \
+            ./apps/scheduler/... ./apps/filter/... ./apps/analyzer/...
+        working-directory: backend
+
+      - name: Enforce per-package coverage threshold
+        run: ../scripts/check-coverage.sh /tmp/coverage.out 95
+        working-directory: backend
+
+      - name: Upload to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: /tmp/coverage.out
+          flags: workers
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-workers
+          path: /tmp/coverage.out
+          if-no-files-found: ignore
+
+  test-service-core:
+    name: api / test / service-core
+    needs: changes
+    if: needs.changes.outputs.service-core == 'true' || needs.changes.outputs.platform == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      - name: Run unit tests (race + coverage)
+        run: |
+          go test -race -count=1 -short \
+            -coverpkg=./service/job/... ./service/scan/... \
+            -coverprofile=/tmp/coverage.out \
+            ./service/job/... ./service/scan/...
+        working-directory: backend
+
+      - name: Enforce per-package coverage threshold
+        run: ../scripts/check-coverage.sh /tmp/coverage.out 95
+        working-directory: backend
+
+      - name: Upload to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: /tmp/coverage.out
+          flags: service-core
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-service-core
+          path: /tmp/coverage.out
+          if-no-files-found: ignore
+
+  test-service-users:
+    name: api / test / service-users
+    needs: changes
+    if: needs.changes.outputs.service-users == 'true' || needs.changes.outputs.platform == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      - name: Run unit tests (race + coverage)
+        run: |
+          go test -race -count=1 -short \
+            -coverpkg=./service/user/... ./service/company/... ./service/application/... ./service/role/... \
+            -coverprofile=/tmp/coverage.out \
+            ./service/user/... ./service/company/... ./service/application/... ./service/role/...
+        working-directory: backend
+
+      - name: Enforce per-package coverage threshold
+        run: ../scripts/check-coverage.sh /tmp/coverage.out 95
+        working-directory: backend
+
+      - name: Upload to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: /tmp/coverage.out
+          flags: service-users
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-service-users
+          path: /tmp/coverage.out
+          if-no-files-found: ignore
+
+  test-service-support:
+    name: api / test / service-support
+    needs: changes
+    if: needs.changes.outputs.service-support == 'true' || needs.changes.outputs.platform == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      - name: Run unit tests (race + coverage)
+        run: |
+          go test -race -count=1 -short \
+            -coverpkg=./service/llm/... ./service/dashboard/... ./service/insights/... ./service/audit/... \
+            -coverprofile=/tmp/coverage.out \
+            ./service/llm/... ./service/dashboard/... ./service/insights/... ./service/audit/...
+        working-directory: backend
+
+      - name: Enforce per-package coverage threshold
+        run: ../scripts/check-coverage.sh /tmp/coverage.out 95
+        working-directory: backend
+
+      - name: Upload to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: /tmp/coverage.out
+          flags: service-support
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-service-support
+          path: /tmp/coverage.out
+          if-no-files-found: ignore
+
+  test-platform:
+    name: api / test / platform
+    needs: changes
+    if: needs.changes.outputs.platform == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      - name: Run unit tests (race + coverage)
+        run: |
+          go test -race -count=1 -short \
+            -coverpkg=./platform/... ./common/... \
+            -coverprofile=/tmp/coverage.out \
+            ./platform/... ./common/...
+        working-directory: backend
+
+      - name: Enforce per-package coverage threshold
+        run: ../scripts/check-coverage.sh /tmp/coverage.out 95
+        working-directory: backend
+
+      - name: Upload to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: /tmp/coverage.out
+          flags: platform
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-platform
+          path: /tmp/coverage.out
+          if-no-files-found: ignore
