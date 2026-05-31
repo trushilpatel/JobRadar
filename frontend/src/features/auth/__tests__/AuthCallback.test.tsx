@@ -79,4 +79,63 @@ describe('AuthCallback', () => {
     const link = screen.getByRole('link', { name: /back to sign in/i })
     expect(link).toHaveAttribute('href', '/login')
   })
+
+  it('falls back to a generic message when the code exchange error has no message', async () => {
+    mockLocation('?code=abc')
+    exchangeCodeForSession.mockResolvedValue({ data: null, error: { message: '' } })
+
+    render(<Harness />)
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Authentication failed')
+    )
+  })
+
+  it('succeeds via the hash-token path when a session is present', async () => {
+    mockLocation('', '#access_token=xyz')
+    getSession.mockResolvedValue({ data: { session: {} }, error: null })
+
+    render(<Harness />)
+
+    await waitFor(() => expect(getSession).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByText('HOME')).toBeInTheDocument())
+  })
+
+  it('errors on the hash-token path when getSession returns an error', async () => {
+    mockLocation('', '#error=denied')
+    getSession.mockResolvedValue({ data: { session: null }, error: { message: 'denied' } })
+
+    render(<Harness />)
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('denied'))
+  })
+
+  it('errors on the hash-token path when no session is returned', async () => {
+    mockLocation('', '#access_token=xyz')
+    getSession.mockResolvedValue({ data: { session: null }, error: null })
+
+    render(<Harness />)
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('No session returned'))
+  })
+
+  it('falls back to checking an existing session when neither code nor hash present', async () => {
+    mockLocation('', '')
+    getSession.mockResolvedValue({ data: { session: {} } })
+
+    render(<Harness />)
+
+    await waitFor(() => expect(screen.getByText('HOME')).toBeInTheDocument())
+  })
+
+  it('errors with "Missing authorization code" when no code, no hash, and no session', async () => {
+    mockLocation('', '')
+    getSession.mockResolvedValue({ data: { session: null } })
+
+    render(<Harness />)
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Missing authorization code')
+    )
+  })
 })
