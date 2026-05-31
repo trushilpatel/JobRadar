@@ -76,7 +76,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: always()
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: frontend/coverage/lcov.info
           flags: console
@@ -85,10 +85,11 @@ jobs:
 
       - name: Upload test results to Codecov
         if: always()
-        uses: codecov/test-results-action@v1
+        uses: codecov/codecov-action@v5
         with:
           files: frontend/coverage/junit.xml
           flags: console
+          report_type: test_results
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
