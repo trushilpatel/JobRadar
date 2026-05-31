@@ -31,17 +31,19 @@ Do not add writable host-path mounts. If a new workload needs temporary storage,
 - **kubectl context must be `k3d-jobradar`**, never `docker-desktop`. Check: `kubectl config current-context`. Switch: `kubectl config use-context k3d-jobradar`
 - **Storage class is `local-path`** in both Helm charts — the only class k3d provides. Never change it to `standard` (that's Docker Desktop)
 - **Images must be built and imported into k3d** before deploying — `make k8s-build` or `make k8s-build-{backend,crawler,console}`. Images imported into k3d are NOT available in Docker Desktop's Kubernetes and vice versa
+- **`k8s/helm/jobradar/values.local.yaml` is required** — copy it from `values.local.yaml.example` and fill in `api.supabaseProjectUrl`. `make k8s-up` aborts if the file is missing, and the chart aborts at render time if the value is empty (otherwise the api pod CrashLoopBackOffs with `SUPABASE_PROJECT_URL must be set`). The file is gitignored and lives only in the main checkout — in a **git worktree** symlink it in first (the `make k8s-up` error prints the exact `ln -s` command)
 - Redis is **external (Upstash)** — not deployed in-cluster
-- NATS is **external (Synadia Cloud)** — not deployed in-cluster
+- NATS is **external (Synadia Cloud)** in prod; local k3d runs an **in-cluster** NATS (`nats.external: false` in `values.local.yaml`)
 
 ## Deploy sequence
 
 ```bash
 kubectl config use-context k3d-jobradar    # verify context first
-make k8s-build                              # build + import all images into k3d
-make k8s-up                                 # preflight + helm install
+make k8s-redeploy                           # build + import + helm sync + roll all app pods
 make k8s-logs-crawler                       # verify
 ```
+
+`make k8s-redeploy` is the blessed full-redeploy command. It chains `k8s-build` → `k8s-up` → `kubectl rollout restart` of every app deployment (nats excluded). The explicit rollout is **required**: images use the fixed `:local` tag, so a re-import is invisible to Helm (no pod-template diff) and the old image keeps running — see the `k3d stale image snapshot` memory. Use `make k8s-up` alone only for config/values changes that don't need new images.
 
 ## Iterate on the crawler only
 

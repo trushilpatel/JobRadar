@@ -165,17 +165,30 @@ k8s-preflight: ## Verify kubectl context is k3d-jobradar before any deploy
 		echo "WARN: secret jobradar-$$svc-secret missing — pods will fail with CreateContainerConfigError"; \
 	done
 
-k8s-up: k8s-preflight ## Deploy app chart via Helm — reads DEV_TOKEN from .env and values.local.yaml if present
+k8s-up: k8s-preflight ## Deploy app chart via Helm — requires values.local.yaml; reads DEV_TOKEN from .env
+	@if [ ! -f k8s/helm/jobradar/values.local.yaml ]; then \
+		echo "ERROR: k8s/helm/jobradar/values.local.yaml not found"; \
+		echo "Copy k8s/helm/jobradar/values.local.yaml.example and fill in supabaseProjectUrl (the chart aborts on an empty value)."; \
+		echo "In a git worktree this file is absent (gitignored, lives only in the main checkout) — symlink it:"; \
+		echo "  ln -s \$$(git rev-parse --git-common-dir | sed 's,/.git,,')/k8s/helm/jobradar/values.local.yaml k8s/helm/jobradar/values.local.yaml"; \
+		exit 1; \
+	fi
 	helm dependency update k8s/helm/jobradar 2>/dev/null || true
 	@DEV_TOKEN=$$(grep -E '^DEV_TOKEN=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]'); \
-	LOCAL_VALUES=$$([ -f k8s/helm/jobradar/values.local.yaml ] && echo "-f k8s/helm/jobradar/values.local.yaml" || echo ""); \
 	if [ -n "$$DEV_TOKEN" ]; then \
 		echo "DEV_TOKEN loaded from .env"; \
-		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace $$LOCAL_VALUES --set api.devToken="$$DEV_TOKEN"; \
+		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace -f k8s/helm/jobradar/values.local.yaml --set api.devToken="$$DEV_TOKEN"; \
 	else \
-		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace $$LOCAL_VALUES; \
+		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace -f k8s/helm/jobradar/values.local.yaml; \
 	fi
 	kubectl get pods -n $(K8S_NS)
+
+k8s-redeploy: k8s-build k8s-up ## Rebuild images, Helm-sync, then roll all app pods so same-tag :local images are actually picked up
+	@echo "Rolling app deployments to pick up freshly imported :local images (same-tag rebuilds don't trigger a Helm rollout)..."
+	kubectl rollout restart deployment -l app=jobradar,component!=nats -n $(K8S_NS)
+	@for d in $$(kubectl get deployment -l app=jobradar,component!=nats -n $(K8S_NS) -o name); do \
+		kubectl rollout status $$d -n $(K8S_NS) --timeout=180s; \
+	done
 
 k8s-nuke: ## Fully wipe namespace + PVCs — use when storage class or StatefulSet spec changed
 	helm uninstall jobradar -n $(K8S_NS) --ignore-not-found
