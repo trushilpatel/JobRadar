@@ -16,19 +16,19 @@ Fixed a crash on the jobs page when clicking any job row. The multi-user refacto
 { ...job fields..., "user_state": { "status": "new", "notes": null, ... } }
 ```
 
-The frontend `Job` type in `ui/console/src/types/index.ts` still declared `status: JobStatus` at the top level. `job.status` was always `undefined`, and `STATUS_CONFIG[undefined]` returned `undefined`, crashing `.classes` access in `StatusSelect`.
+The frontend `Job` type in `frontend/src/types/index.ts` still declared `status: JobStatus` at the top level. `job.status` was always `undefined`, and `STATUS_CONFIG[undefined]` returned `undefined`, crashing `.classes` access in `StatusSelect`.
 
 ---
 
 ## Fix
 
-### `ui/console/src/types/index.ts`
+### `frontend/src/types/index.ts`
 
 - Added `UserJobState` interface matching `UserJobStateView` from the backend
 - Added `user_state: UserJobState` to `Job`
 - Kept `status`, `saved`, `notes` at the top level (flattened by the API layer for backward compatibility with all existing components)
 
-### `ui/console/src/api/jobs.ts`
+### `frontend/src/api/jobs.ts`
 
 - Added `normalizeJob()` — flattens `user_state.status` → `status` (default `'new'`), `user_state.notes` → `notes`, `user_state.saved_at != null` → `saved`, and populates the full `user_state` object
 - Applied to `fetchJobs` (maps over `page.items`) and `fetchJob`

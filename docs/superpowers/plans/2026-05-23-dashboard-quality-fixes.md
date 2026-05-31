@@ -692,16 +692,16 @@ Expected: all pass. Fix any failures.
 
 Files modified:
 
-- `ui/console/src/features/dashboard/ProgressPanel.tsx`
-- `ui/console/src/features/dashboard/MarketPanel.tsx`
-- `ui/console/src/features/dashboard/VelocityPanel.tsx`
-- `ui/console/src/features/dashboard/TechTrendsPanel.tsx`
-- `ui/console/src/features/dashboard/InterviewingPanel.tsx`
-- `ui/console/src/features/dashboard/HeatmapPanel.tsx`
-- `ui/console/src/pages/DashboardPage.tsx`
-- `ui/console/src/features/dashboard/components/StatCol.tsx` (NEW)
-- `ui/console/src/features/dashboard/index.ts` (NEW)
-- `ui/console/src/api/dashboard.ts` (remove dead functions, remove intermediate type)
+- `frontend/src/features/dashboard/ProgressPanel.tsx`
+- `frontend/src/features/dashboard/MarketPanel.tsx`
+- `frontend/src/features/dashboard/VelocityPanel.tsx`
+- `frontend/src/features/dashboard/TechTrendsPanel.tsx`
+- `frontend/src/features/dashboard/InterviewingPanel.tsx`
+- `frontend/src/features/dashboard/HeatmapPanel.tsx`
+- `frontend/src/pages/DashboardPage.tsx`
+- `frontend/src/features/dashboard/components/StatCol.tsx` (NEW)
+- `frontend/src/features/dashboard/index.ts` (NEW)
+- `frontend/src/api/dashboard.ts` (remove dead functions, remove intermediate type)
 
 ---
 
@@ -709,10 +709,10 @@ Files modified:
 
 **Files:**
 
-- Modify: `ui/console/src/features/dashboard/ProgressPanel.tsx`
-- Create: `ui/console/src/features/dashboard/components/StatCol.tsx`
+- Modify: `frontend/src/features/dashboard/ProgressPanel.tsx`
+- Create: `frontend/src/features/dashboard/components/StatCol.tsx`
 
-- [ ] **C1.1** Create `ui/console/src/features/dashboard/components/StatCol.tsx`:
+- [ ] **C1.1** Create `frontend/src/features/dashboard/components/StatCol.tsx`:
 
 ```tsx
 import { cn } from '@/lib/utils'
@@ -845,7 +845,7 @@ export function ProgressPanel() {
 
 **Files:**
 
-- Modify: `ui/console/src/features/dashboard/MarketPanel.tsx`
+- Modify: `frontend/src/features/dashboard/MarketPanel.tsx`
 
 - [ ] **C2.1** Rewrite `MarketPanel.tsx` using shared `StatCol`:
 
@@ -922,7 +922,7 @@ export function MarketPanel() {
 
 **Files:**
 
-- Modify: `ui/console/src/features/dashboard/VelocityPanel.tsx`
+- Modify: `frontend/src/features/dashboard/VelocityPanel.tsx`
 
 - [ ] **C3.1** Rewrite `VelocityPanel.tsx` — add `isError`, replace inline `style` with Tailwind:
 
@@ -1039,7 +1039,7 @@ export function VelocityPanel() {
 
 **Files:**
 
-- Modify: `ui/console/src/features/dashboard/TechTrendsPanel.tsx`
+- Modify: `frontend/src/features/dashboard/TechTrendsPanel.tsx`
 
 - [ ] **C4.1** Fix `TechTrendsPanel.tsx` — change `!data ? null` to proper error state:
 
@@ -1068,7 +1068,7 @@ Also remove `style={{ minWidth: 0 }}` from `TechRow` — replace with `min-w-0` 
 
 **Files:**
 
-- Modify: `ui/console/src/features/dashboard/InterviewingPanel.tsx`
+- Modify: `frontend/src/features/dashboard/InterviewingPanel.tsx`
 
 - [ ] **C5.1** Rewrite `InterviewingPanel.tsx`:
 
@@ -1245,7 +1245,7 @@ export function InterviewingPanel() {
 
 **Files:**
 
-- Modify: `ui/console/src/features/dashboard/HeatmapPanel.tsx`
+- Modify: `frontend/src/features/dashboard/HeatmapPanel.tsx`
 
 - [ ] **C6.1** Remove `data: sparse = []` default (line 115):
 
@@ -1275,12 +1275,12 @@ The `isError` branch already exists in HeatmapPanel — no change needed there.
 
 **Files:**
 
-- Read: `ui/console/src/pages/DashboardPage.tsx` (check current structure)
-- Modify: `ui/console/src/pages/DashboardPage.tsx`
+- Read: `frontend/src/pages/DashboardPage.tsx` (check current structure)
+- Modify: `frontend/src/pages/DashboardPage.tsx`
 
 - [ ] **C7.1** Read the current DashboardPage to understand its structure, then wrap all panels in an `ErrorBoundary`.
 
-Check if an `ErrorBoundary` component exists in `ui/console/src/components/`. If not, create `ui/console/src/components/shared/ErrorBoundary.tsx`:
+Check if an `ErrorBoundary` component exists in `frontend/src/components/`. If not, create `frontend/src/components/shared/ErrorBoundary.tsx`:
 
 ```tsx
 import { Component, type ErrorInfo, type ReactNode } from 'react'
@@ -1339,14 +1339,14 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 
 **Files:**
 
-- Modify: `ui/console/src/api/dashboard.ts`
-- Modify: `ui/console/src/features/dashboard/queryKeys.ts`
+- Modify: `frontend/src/api/dashboard.ts`
+- Modify: `frontend/src/features/dashboard/queryKeys.ts`
 
 **Important — verify before deleting:**
 
 ```bash
 grep -r "fetchDashboardStats\|fetchDashboardActivity\|dashboardQueryKeys\.stats\|dashboardQueryKeys\.activity" \
-  /Users/trushil/Projects/JobRadar/ui/console/src --include="*.tsx" --include="*.ts" | grep -v "__tests__"
+  /Users/trushil/Projects/JobRadar/frontend/src --include="*.tsx" --include="*.ts" | grep -v "__tests__"
 ```
 
 If the result is only the definition files themselves (no consumers), proceed to delete.
@@ -1361,9 +1361,9 @@ If the result is only the definition files themselves (no consumers), proceed to
 
 **Files:**
 
-- Create: `ui/console/src/features/dashboard/index.ts`
+- Create: `frontend/src/features/dashboard/index.ts`
 
-- [ ] **C9.1** Create `ui/console/src/features/dashboard/index.ts` exporting all public components:
+- [ ] **C9.1** Create `frontend/src/features/dashboard/index.ts` exporting all public components:
 
 ```ts
 export { ProgressPanel } from './ProgressPanel'
@@ -1377,7 +1377,7 @@ export { HeatmapPanel } from './HeatmapPanel'
 - [ ] **C9.2** Frontend build verification:
 
 ```bash
-cd /Users/trushil/Projects/JobRadar/ui/console && npm run build 2>&1 | tail -30
+cd /Users/trushil/Projects/JobRadar/frontend && npm run build 2>&1 | tail -30
 ```
 
 Expected: zero TypeScript errors and a successful build.
@@ -1517,7 +1517,7 @@ Expected: no package below 80%.
 
 Files modified:
 
-- `ui/console/src/features/dashboard/__tests__/dashboard.test.tsx`
+- `frontend/src/features/dashboard/__tests__/dashboard.test.tsx`
 
 ### Task E1: Add error state tests for all 5 panels
 
@@ -1607,7 +1607,7 @@ describe('DashboardPage', () => {
 
 ### Task E4: Add API normalisation tests
 
-- [ ] **E4.1** Create `ui/console/src/api/__tests__/dashboard.test.ts`:
+- [ ] **E4.1** Create `frontend/src/api/__tests__/dashboard.test.ts`:
 
 ```ts
 import { vi, describe, it, expect, beforeEach } from 'vitest'
@@ -1647,7 +1647,7 @@ describe('fetchVelocity', () => {
 - [ ] **E5.1**:
 
 ```bash
-cd /Users/trushil/Projects/JobRadar/ui/console && npx vitest run --reporter=verbose 2>&1 | tail -40
+cd /Users/trushil/Projects/JobRadar/frontend && npx vitest run --reporter=verbose 2>&1 | tail -40
 ```
 
 Expected: all tests pass.
@@ -1655,7 +1655,7 @@ Expected: all tests pass.
 - [ ] **E5.2** Check coverage:
 
 ```bash
-cd /Users/trushil/Projects/JobRadar/ui/console && npx vitest run --coverage 2>&1 | grep -E "dashboard|All files"
+cd /Users/trushil/Projects/JobRadar/frontend && npx vitest run --coverage 2>&1 | grep -E "dashboard|All files"
 ```
 
 Expected: dashboard files ≥ 90% statement coverage.
@@ -1678,7 +1678,7 @@ cd /Users/trushil/Projects/JobRadar/backend && \
 - [ ] **F1.2** Frontend:
 
 ```bash
-cd /Users/trushil/Projects/JobRadar/ui/console && \
+cd /Users/trushil/Projects/JobRadar/frontend && \
   npm run lint && \
   npx tsc --noEmit && \
   npx vitest run
@@ -1692,8 +1692,8 @@ Fix any failures before proceeding.
 
 ```bash
 git add backend/service/dashboard/ backend/apps/api/wire_gen.go backend/migrations/068_dashboard_security_indexes.sql \
-        ui/console/src/features/dashboard/ ui/console/src/pages/DashboardPage.tsx \
-        ui/console/src/api/dashboard.ts ui/console/src/components/shared/ErrorBoundary.tsx
+        frontend/src/features/dashboard/ frontend/src/pages/DashboardPage.tsx \
+        frontend/src/api/dashboard.ts frontend/src/components/shared/ErrorBoundary.tsx
 git status
 ```
 

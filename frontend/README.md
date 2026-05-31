@@ -36,7 +36,7 @@ Auth uses Supabase magic link. Add `http://localhost:5173/auth/callback` to the 
 ## Build
 
 ```bash
-cd ui/console && npm run build
+cd frontend && npm run build
 ```
 
 The Kubernetes image is built via `make k8s-build-console` (from repo root) and served by a static nginx container.
@@ -44,10 +44,10 @@ The Kubernetes image is built via `make k8s-build-console` (from repo root) and 
 ## Tests
 
 ```bash
-cd ui/console && npx vitest run            # all tests
-cd ui/console && npx vitest run --coverage # with coverage report
-cd ui/console && npm run lint              # ESLint
-cd ui/console && npm run tsc               # TypeScript check (no emit)
+cd frontend && npx vitest run            # all tests
+cd frontend && npx vitest run --coverage # with coverage report
+cd frontend && npm run lint              # ESLint
+cd frontend && npm run tsc               # TypeScript check (no emit)
 ```
 
 Coverage target is 90% statement coverage per file.

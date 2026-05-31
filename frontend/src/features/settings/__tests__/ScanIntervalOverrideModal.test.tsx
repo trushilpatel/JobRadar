@@ -43,10 +43,9 @@ describe('ScanIntervalOverrideModal', () => {
   })
 
   it('prefills input when currentOverride is set', () => {
-    render(
-      <ScanIntervalOverrideModal {...defaultProps} currentOverride={120} />,
-      { wrapper: makeWrapper() }
-    )
+    render(<ScanIntervalOverrideModal {...defaultProps} currentOverride={120} />, {
+      wrapper: makeWrapper(),
+    })
     const input = screen.getByRole('spinbutton') as HTMLInputElement
     expect(input.value).toBe('120')
   })
@@ -84,10 +83,9 @@ describe('ScanIntervalOverrideModal', () => {
     mockSetOverride.mockResolvedValue(undefined)
     const onClose = vi.fn()
     const user = userEvent.setup()
-    render(
-      <ScanIntervalOverrideModal {...defaultProps} onClose={onClose} />,
-      { wrapper: makeWrapper() }
-    )
+    render(<ScanIntervalOverrideModal {...defaultProps} onClose={onClose} />, {
+      wrapper: makeWrapper(),
+    })
 
     const input = screen.getByRole('spinbutton')
     await user.clear(input)
@@ -102,10 +100,9 @@ describe('ScanIntervalOverrideModal', () => {
     mockSetOverride.mockRejectedValue(new Error('Server error'))
     const onClose = vi.fn()
     const user = userEvent.setup()
-    render(
-      <ScanIntervalOverrideModal {...defaultProps} onClose={onClose} />,
-      { wrapper: makeWrapper() }
-    )
+    render(<ScanIntervalOverrideModal {...defaultProps} onClose={onClose} />, {
+      wrapper: makeWrapper(),
+    })
 
     const input = screen.getByRole('spinbutton')
     await user.clear(input)
@@ -120,10 +117,9 @@ describe('ScanIntervalOverrideModal', () => {
 
   it('calls onClose when Cancel is clicked', async () => {
     const onClose = vi.fn()
-    render(
-      <ScanIntervalOverrideModal {...defaultProps} onClose={onClose} />,
-      { wrapper: makeWrapper() }
-    )
+    render(<ScanIntervalOverrideModal {...defaultProps} onClose={onClose} />, {
+      wrapper: makeWrapper(),
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(onClose).toHaveBeenCalled()

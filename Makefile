@@ -24,8 +24,8 @@ dev: ## Migrate then start console + API on host
 	cd backend && go run ./apps/migrate
 	$(MAKE) -j2 dev-console dev-backend
 
-dev-console: ## Start Vite dev server (ui/console)
-	cd ui/console && npm run dev
+dev-console: ## Start Vite dev server (frontend)
+	cd frontend && npm run dev
 
 dev-backend: ## Start API server (hot-reload via go run)
 	cd backend && go run ./apps/api
@@ -35,10 +35,10 @@ dev-backend: ## Start API server (hot-reload via go run)
 build: build-console build-backend ## Build everything
 
 clean-console: ## Remove console build artifacts from host
-	rm -rf ui/console/dist
+	rm -rf frontend/dist
 
 build-console: clean-console ## Build console on host (local preview only — Docker builds its own via Dockerfile)
-	cd ui/console && npm run build
+	cd frontend && npm run build
 
 build-backend: ## Compile all Go binaries
 	cd backend && go build ./...
@@ -72,7 +72,7 @@ db-truncate: ## Truncate all tables except companies — requires psql + DB_URL 
 # ── Quality ───────────────────────────────────────────────────────────────────
 
 lint: ## Run ESLint on console
-	cd ui/console && npm run lint
+	cd frontend && npm run lint
 
 lint-go: ## Run golangci-lint on backend (matches CI config)
 	@command -v golangci-lint >/dev/null 2>&1 || { \
@@ -85,7 +85,7 @@ fmt: ## Format all Go files with gofmt
 	cd backend && go fmt ./...
 
 tsc: ## Type-check console without emitting
-	cd ui/console && npx tsc --noEmit
+	cd frontend && npx tsc --noEmit
 
 test: ## Run all Go tests
 	cd backend && go test ./...
@@ -128,7 +128,7 @@ k8s-build-crawler: ## Build crawler image and import into k3d
 
 k8s-build-console: ## Build console image (bakes VITE_ vars from root .env) and import into k3d
 	@mkdir -p $(K8S_CACHE)
-	@DIGEST=$$(find ui/console/src ui/console/public ui/console/index.html ui/console/package-lock.json ui/console/Dockerfile -type f 2>/dev/null | sort | xargs shasum 2>/dev/null | shasum | cut -c1-16); \
+	@DIGEST=$$(find frontend/src frontend/public frontend/index.html frontend/package-lock.json frontend/Dockerfile -type f 2>/dev/null | sort | xargs shasum 2>/dev/null | shasum | cut -c1-16); \
 	CACHED=$$(cat $(K8S_CACHE)/console 2>/dev/null || echo ""); \
 	if [ "$$DIGEST" = "$$CACHED" ]; then \
 		echo "  [skip] console image is up to date"; \
@@ -139,7 +139,7 @@ k8s-build-console: ## Build console image (bakes VITE_ vars from root .env) and 
 			--build-arg VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY" \
 			--build-arg GIT_SHA=$(GIT_SHA) \
 			-t jobradar-console:local \
-			-f ui/console/Dockerfile ./ui/console && \
+			-f frontend/Dockerfile ./frontend && \
 		k3d image import jobradar-console:local -c $(K3D_CLUSTER) --mode=direct && \
 		printf '%s' "$$DIGEST" > $(K8S_CACHE)/console; \
 	fi

@@ -4,7 +4,7 @@
 **Authored:** 2026-05-23 via 3-agent (UX × Eng × PM) × 5-round design loop.
 **Owner:** Trushil Patel.
 
-This document is the source of truth for the resume feature. Frontend mockup already lives at `ui/console/src/features/resumes/` and `ui/console/src/pages/admin/Resume*Page.tsx` — wired with stub data only. Backend slice not yet built.
+This document is the source of truth for the resume feature. Frontend mockup already lives at `frontend/src/features/resumes/` and `frontend/src/pages/admin/Resume*Page.tsx` — wired with stub data only. Backend slice not yet built.
 
 ---
 
@@ -377,8 +377,8 @@ Any single veto blocks launch.
 
 ## 20. References
 
-- Frontend mockup: `ui/console/src/features/resumes/` and `ui/console/src/pages/admin/Resume*Page.tsx`
-- Sidebar nav entries: `ui/console/src/components/Sidebar.tsx`
-- Routes: `ui/console/src/App.tsx`
+- Frontend mockup: `frontend/src/features/resumes/` and `frontend/src/pages/admin/Resume*Page.tsx`
+- Sidebar nav entries: `frontend/src/components/Sidebar.tsx`
+- Routes: `frontend/src/App.tsx`
 - Backend skeleton (not yet built): planned `backend/service/resume/`
-- Existing JobRadar conventions: `backend/service/CLAUDE.md`, `ui/console/CLAUDE.md`, `.claude/rules/`
+- Existing JobRadar conventions: `backend/service/CLAUDE.md`, `frontend/CLAUDE.md`, `.claude/rules/`

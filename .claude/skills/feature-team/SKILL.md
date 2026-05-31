@@ -163,10 +163,10 @@ Error path: {how failures propagate and where they stop}
 ## Frontend Component Map
 | File | Responsibility | Key Props / State | Depends On |
 |------|---------------|------------------|-----------|
-| ui/console/src/features/{name}/pages/{Name}Page.tsx | ... | ... | ... |
-| ui/console/src/features/{name}/components/{Name}.tsx | ... | ... | ... |
-| ui/console/src/features/{name}/hooks/use{Name}.ts | ... | ... | TanStack Query |
-| ui/console/src/api/{name}.ts | ... | ... | api-client |
+| frontend/src/features/{name}/pages/{Name}Page.tsx | ... | ... | ... |
+| frontend/src/features/{name}/components/{Name}.tsx | ... | ... | ... |
+| frontend/src/features/{name}/hooks/use{Name}.ts | ... | ... | TanStack Query |
+| frontend/src/api/{name}.ts | ... | ... | api-client |
 
 ## DB Schema (exact DDL)
 {ALTER TABLE / CREATE TABLE statements or migration SQL}
@@ -315,8 +315,8 @@ Frontend:
 - [ ] `go test -race -short ./...` clean
 - [ ] `golangci-lint run --config ../.github/.golangci.yml --timeout 5m` zero warnings
 - [ ] `scripts/check-coverage.sh /tmp/cov.out 80` passes for every touched package
-- [ ] `cd ui/console && npm run lint` zero errors
-- [ ] `cd ui/console && npx tsc --noEmit` zero type errors
+- [ ] `cd frontend && npm run lint` zero errors
+- [ ] `cd frontend && npx tsc --noEmit` zero type errors
 - [ ] All acceptance criteria covered in Test Plan
 
 **SWE Output Report:**

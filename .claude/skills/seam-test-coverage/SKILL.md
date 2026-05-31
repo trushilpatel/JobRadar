@@ -94,7 +94,7 @@ Follow in order. TDD is mandatory for every test (red → green).
 4. **Sweep `any`.** Grep the page's files; fix with real types.
 5. **Gates:**
    ```
-   cd ui/console
+   cd frontend
    npm run lint
    npx tsc --noEmit
    npx vitest run
@@ -138,4 +138,4 @@ After completing a page (or finding a new seam pattern), invoke `skill-self-impr
 
 - **New seam-bug pattern found?** Append a row to the **Seam Catalog**.
 - **A category check produced false positives?** Refine that category's description.
-- **A project-wide invariant emerged?** Consider `ui/console/CLAUDE.md` per the self-improvement protocol.
+- **A project-wide invariant emerged?** Consider `frontend/CLAUDE.md` per the self-improvement protocol.

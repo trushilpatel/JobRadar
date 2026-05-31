@@ -1,7 +1,7 @@
 ---
 paths:
-  - 'ui/console/**/*.ts'
-  - 'ui/console/**/*.tsx'
+  - 'frontend/**/*.ts'
+  - 'frontend/**/*.tsx'
 ---
 
 # Frontend — Component Architecture & Best Practices

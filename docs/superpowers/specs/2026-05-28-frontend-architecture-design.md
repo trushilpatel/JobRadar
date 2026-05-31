@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-28
 **Status:** Approved — proceed to implementation plan
-**Scope:** `ui/console/src/` — structure, enforced boundaries, AI-proof conventions
+**Scope:** `frontend/src/` — structure, enforced boundaries, AI-proof conventions
 
 ---
 

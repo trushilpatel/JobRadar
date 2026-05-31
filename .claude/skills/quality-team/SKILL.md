@@ -17,7 +17,7 @@ Before dispatching, clarify scope with the user if not stated:
 
 - **Target**: which feature, page, service, or "full product"?
 - **Layers**: full-stack, backend-only, or frontend-only?
-- **Entry points**: e.g., `backend/service/jobs/`, `ui/console/src/features/jobs/`
+- **Entry points**: e.g., `backend/service/jobs/`, `frontend/src/features/jobs/`
 
 If the user's message is clear (e.g., "check the Jobs UI page and API"), derive scope from it — don't ask.
 
@@ -103,7 +103,7 @@ Dispatch **all applicable agents in parallel** (skip agents irrelevant to scope;
 
 ### Agent 6 — Frontend Code Quality Reviewer
 
-**Reads:** Feature directories under `ui/console/src/features/`, shared components, `api/*.ts`, hooks
+**Reads:** Feature directories under `frontend/src/features/`, shared components, `api/*.ts`, hooks
 
 **Finds:**
 

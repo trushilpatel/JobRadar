@@ -80,13 +80,13 @@ Use `superpowers:dispatching-parallel-agents`. All five run simultaneously.
 
 ### Specialist 1 — Bug Scanner
 
-**Reads:** `backend/apps/`, `backend/service/`, `backend/common/`, `ui/console/src/`
+**Reads:** `backend/apps/`, `backend/service/`, `backend/common/`, `frontend/src/`
 
 **Detection signals — run all of these:**
 
 ```bash
 # Known breakage markers
-grep -rn "TODO.*broken\|FIXME\|HACK\|BUG\|panic(" backend/ ui/console/src/
+grep -rn "TODO.*broken\|FIXME\|HACK\|BUG\|panic(" backend/ frontend/src/
 
 # Broken builds — try to build every app binary
 cd backend && go build ./apps/... 2>&1
@@ -115,7 +115,7 @@ Test to add: {assertion that catches this regression}
 
 ### Specialist 2 — Tech Debt Scanner
 
-**Reads:** `backend/service/`, `backend/apps/`, `ui/console/src/`
+**Reads:** `backend/service/`, `backend/apps/`, `frontend/src/`
 
 **Detection signals:**
 
@@ -133,10 +133,10 @@ grep -rn "json\.NewEncoder\|json\.Marshal" backend/apps/
 grep -rn "\"log\"\|log\.Print\|log\.Fatal\|fmt\.Println" backend/service/ backend/apps/
 
 # Raw fetch in frontend
-grep -rn "^import.*fetch\|= fetch(" ui/console/src/features/ ui/console/src/api/
+grep -rn "^import.*fetch\|= fetch(" frontend/src/features/ frontend/src/api/
 
 # useEffect + useState for server data (should be TanStack Query)
-grep -rn "useEffect\|useState" ui/console/src/features/ | grep -v "_test\|// "
+grep -rn "useEffect\|useState" frontend/src/features/ | grep -v "_test\|// "
 
 # Files over 400 lines — single-concern violation
 find backend/service -name "*.go" | xargs wc -l | sort -rn | head -20
@@ -159,7 +159,7 @@ Effort: S / M / L
 
 ### Specialist 3 — Feature Gap Analyst
 
-**Reads:** `Designs/`, `CLAUDE.md` pipeline section, `backend/apps/`, `backend/service/`, `ui/console/src/`, latest migration files.
+**Reads:** `Designs/`, `CLAUDE.md` pipeline section, `backend/apps/`, `backend/service/`, `frontend/src/`, latest migration files.
 
 **Detection signals:**
 
@@ -168,7 +168,7 @@ Effort: S / M / L
 grep -rn "TODO\|not started\|planned\|Phase [0-9].*not" Designs/
 
 # Stubs or placeholders in handlers
-grep -rn "StatusNotImplemented\|not implemented\|Coming soon\|placeholder" backend/apps/ ui/console/src/
+grep -rn "StatusNotImplemented\|not implemented\|Coming soon\|placeholder" backend/apps/ frontend/src/
 
 # Orphaned DB columns — migrations add a column but no service reads it
 ls backend/db/migrations/ | tail -10   # read recent migrations then grep service for each new column
@@ -177,7 +177,7 @@ ls backend/db/migrations/ | tail -10   # read recent migrations then grep servic
 grep -rn "disabled\|intentionally\|re-enable" backend/service/ backend/apps/
 
 # Frontend routes with no real content
-grep -rn "route\|Route\|path=" ui/console/src/App.tsx
+grep -rn "route\|Route\|path=" frontend/src/App.tsx
 ```
 
 Also read the `Designs/` directory fully. For each design doc, check:
@@ -202,7 +202,7 @@ Prompt: `/feature-team {ready-to-paste scope}`
 
 ### Specialist 4 — Quality & Observability Analyst
 
-**Reads:** `backend/service/`, `backend/apps/`, `.github/workflows/`, `scripts/check-coverage.sh`, `ui/console/src/`, `ui/console/src/features/`
+**Reads:** `backend/service/`, `backend/apps/`, `.github/workflows/`, `scripts/check-coverage.sh`, `frontend/src/`, `frontend/src/features/`
 
 **Detection signals:**
 
@@ -248,14 +248,14 @@ grep -rn "if err != nil {" backend/apps/ | grep -v "log\.\|return\|panic"
 
 ```bash
 # Feature directories with no test files
-for dir in ui/console/src/features/*/; do
+for dir in frontend/src/features/*/; do
   find "$dir" -name "*.test.tsx" -o -name "*.test.ts" | head -1 | grep -q . || echo "NO TESTS: $dir"
 done
 
 # Pages with no tests
-find ui/console/src/pages -name "*.tsx" | while read f; do
+find frontend/src/pages -name "*.tsx" | while read f; do
   base=$(basename "$f" .tsx)
-  find ui/console/src -name "${base}*.test.tsx" | grep -q . || echo "NO TESTS: $f"
+  find frontend/src -name "${base}*.test.tsx" | grep -q . || echo "NO TESTS: $f"
 done
 ```
 
@@ -263,7 +263,7 @@ done
 
 ```bash
 # Data-fetching components missing loading state
-grep -rn "useQuery\|useSuspenseQuery" ui/console/src/features/ | grep -v "_test"
+grep -rn "useQuery\|useSuspenseQuery" frontend/src/features/ | grep -v "_test"
 # Check each for skeleton / isLoading handling nearby
 ```
 
