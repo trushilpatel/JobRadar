@@ -57,16 +57,14 @@ function makeJob(id: string): Job {
   } as Job
 }
 
-function makeWrapper(initialSearch = '') {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: 0, gcTime: 0 } },
-  })
+function makeWrapper(qc?: QueryClient, initialSearch = '') {
+  const client = qc ?? new QueryClient({ defaultOptions: { queries: { retry: 0, gcTime: 0 } } })
   const NuqsWrapper = withNuqsTestingAdapter({ searchParams: initialSearch, hasMemory: true })
   return ({ children }: { children: React.ReactNode }) =>
     createElement(
       MemoryRouter,
       {},
-      createElement(QueryClientProvider, { client: qc }, createElement(NuqsWrapper, { children }))
+      createElement(QueryClientProvider, { client }, createElement(NuqsWrapper, { children }))
     )
 }
 
@@ -88,7 +86,7 @@ describe('useJobs — pagination + sorting branches', () => {
     vi.mocked(jobsApi.fetchJobs).mockResolvedValue({ items: [makeJob('a')], next_cursor: '' })
     // Seed a sort via the URL so clearing it exercises the empty-next branch.
     const { result } = renderHook(() => useJobs(), {
-      wrapper: makeWrapper('?sort=title&dir=desc'),
+      wrapper: makeWrapper(undefined, '?sort=title&dir=desc'),
     })
     expect(result.current.sorting).toEqual([{ id: 'title', desc: true }])
     act(() => result.current.handleSortingChange([]))
@@ -118,26 +116,39 @@ describe('useJobs — pagination + sorting branches', () => {
       if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
       return { items: [makeJob('b')], next_cursor: '' }
     })
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    await waitFor(() => expect(result.current.isLoading).toBe(false))
 
-    // First advance triggers the fetch of page 2.
-    await act(async () => {
-      result.current.goToNextPage()
+    // Use a shared QueryClient (gcTime/staleTime=Infinity so the cache survives
+    // unmount and is still warm when phase 2 mounts).
+    const sharedQC = new QueryClient({
+      defaultOptions: { queries: { retry: 0, gcTime: Infinity, staleTime: Infinity } },
     })
-    await waitFor(() => expect(result.current.page).toBe(2), { timeout: 5000 })
 
-    // Go back, then forward again — page 2 is now pre-fetched, so this hits
-    // the "advance immediately" branch (pageIndex < fetchedPages.length - 1).
-    await act(async () => {
-      result.current.goToPrevPage()
+    // Phase 1: populate the TanStack Query infinite cache with 2 pages.
+    const { result: r1, unmount } = renderHook(() => useJobs(), {
+      wrapper: makeWrapper(sharedQC),
     })
-    await waitFor(() => expect(result.current.page).toBe(1), { timeout: 5000 })
+    await waitFor(() => expect(r1.current.isLoading).toBe(false))
     await act(async () => {
-      result.current.goToNextPage()
+      r1.current.goToNextPage()
+    }) // boundary fetch → page 2
+    await waitFor(() => expect(r1.current.jobs[0]?.id).toBe('b'))
+    unmount()
+
+    // Phase 2: fresh nuqs instance (page=0, first-ever visit) + warm cache that
+    // already has both pages. goToNextPage() hits the "advance immediately"
+    // branch (fetchedPages.length=2, pageIndex=0 → 0 < 1) with no nuqs history
+    // to trigger the setState-during-render edge case.
+    const { result: r2 } = renderHook(() => useJobs(), {
+      wrapper: makeWrapper(sharedQC),
     })
-    await waitFor(() => expect(result.current.page).toBe(2), { timeout: 5000 })
-    expect(result.current.jobs[0]?.id).toBe('b')
+    await waitFor(() => expect(r2.current.isLoading).toBe(false))
+    expect(r2.current.hasNextPage).toBe(true)
+
+    await act(async () => {
+      r2.current.goToNextPage()
+    })
+    await waitFor(() => expect(r2.current.page).toBe(2))
+    expect(r2.current.jobs[0]?.id).toBe('b')
   })
 
   it('goToNextPage is a no-op when there is no next page', async () => {
