@@ -11,10 +11,24 @@ export interface Company {
   // Real scan history from company_scan_log: true=ok, false=error, oldest→newest.
   // Populated by the list endpoint. Absent for companies with no scan runs yet.
   scan_history?: boolean[]
+  // Per-company scan operational config + persistent error state, surfaced from
+  // company_scan_settings via the admin list endpoint. Absent for companies with
+  // no scan_settings row; mapped in normalizeAdminCompany.
+  scan_settings?: CompanyScanSettings
+}
+
+// Operational scan settings + persistent error state for a company. Mirrors the
+// admin `CompanyScanSettingsListView` fields the console reads. `consecutive_errors`
+// is the source of truth for "is this company currently failing"; the error
+// message/timestamp describe the most recent failure.
+export interface CompanyScanSettings {
+  scan_interval_override: number | null
+  consecutive_errors: number
+  last_error_message: string | null
+  last_error_at: string | null
 }
 
 export interface ScanRun {
-  id: number
   company_id: string
   scanned_at: string
   jobs_fetched: number

@@ -53,6 +53,47 @@ func TestCache_GetPublic_NilResultIsNotCached(t *testing.T) {
 	}
 }
 
+// TestCache_ListPublic_GenerationBumpInvalidates verifies P0.3: once the
+// public-list generation counter advances (as an admin write does), a
+// subsequent ListPublic for the same filter computes a new key, misses the
+// stale cached page, and falls through to the source of truth.
+func TestCache_ListPublic_GenerationBumpInvalidates(t *testing.T) {
+	fake := &fakePublic{
+		listResult: companydto.CompanyPublicListResult{Total: 1},
+	}
+	c := cache.NewMemoryCache()
+	svc := companysvc.NewCacheService(fake, c, time.Minute, nil)
+
+	// First read populates the cache under generation 0.
+	if _, err := svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 20); err != nil {
+		t.Fatalf("first ListPublic: %v", err)
+	}
+	if fake.listCalls != 1 {
+		t.Fatalf("expected 1 DB call, got %d", fake.listCalls)
+	}
+
+	// Same query, still generation 0 → cache hit, no new DB call.
+	if _, err := svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 20); err != nil {
+		t.Fatalf("second ListPublic: %v", err)
+	}
+	if fake.listCalls != 1 {
+		t.Fatalf("expected cache hit (still 1 DB call), got %d", fake.listCalls)
+	}
+
+	// Simulate an admin write bumping the generation counter.
+	if err := c.Set(context.Background(), companysvc.PublicListGenKey, int64(1), 0); err != nil {
+		t.Fatalf("bump gen: %v", err)
+	}
+
+	// New generation → new key → miss → DB call.
+	if _, err := svc.ListPublic(context.Background(), companydto.CompanyFilter{}, 20); err != nil {
+		t.Fatalf("post-bump ListPublic: %v", err)
+	}
+	if fake.listCalls != 2 {
+		t.Errorf("generation bump must force a reload; DB calls = %d, want 2", fake.listCalls)
+	}
+}
+
 // TestCache_ZeroTTLIsPassThrough mirrors the nil-cache guard: ttl<=0 disables
 // the decorator entirely.
 func TestCache_ZeroTTLIsPassThrough(t *testing.T) {

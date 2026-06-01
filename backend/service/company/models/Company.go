@@ -16,7 +16,7 @@ type Company struct {
 	ID         string    `gorm:"primaryKey"              json:"id"`
 	Name       string    `gorm:"not null"                json:"name"`
 	Slug       string    `gorm:"not null;uniqueIndex"    json:"slug"`
-	Website    string    `gorm:"column:website"          json:"website,omitempty"`
+	Website    *string   `gorm:"column:website"          json:"website,omitempty"`
 	CareersURL *string   `gorm:"column:careers_url"      json:"careers_url,omitempty"`
 	LogoURL    *string   `gorm:"column:logo_url"         json:"logo_url,omitempty"`
 	CreatedAt  time.Time `gorm:"not null;autoCreateTime" json:"created_at"`

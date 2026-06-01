@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"strings"
@@ -108,7 +109,7 @@ func (r *adminRepositoryService) List(ctx context.Context, filter companydto.Com
 	}
 
 	for _, c := range companies {
-		view := companydto.CompanyAdminListView{Company: c}
+		view := companydto.CompanyAdminListView{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: c}}
 		if s, ok := settingsByID[c.ID]; ok {
 			view.ScanSettings = companydto.ScanSettingsListViewFromModel(s)
 		}
@@ -144,7 +145,7 @@ func (r *adminRepositoryService) Get(ctx context.Context, id string) (_ *company
 		return nil, apperr.ErrInternal.WithMessage("failed to fetch company")
 	}
 
-	view := companydto.CompanyAdminView{Company: c}
+	view := companydto.CompanyAdminView{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: c}}
 	var s companymodel.CompanyScanSettings
 	if err = r.db.WithContext(ctx).First(&s, "company_id = ?", id).Error; err != nil {
 		if !apperr.IsNotFound(err) {
@@ -170,7 +171,7 @@ func (r *adminRepositoryService) Create(ctx context.Context, public companydto.C
 		Slug: public.Slug,
 	}
 	if public.Website != nil {
-		company.Website = *public.Website
+		company.Website = public.Website
 	}
 	if public.CareersURL != nil {
 		company.CareersURL = public.CareersURL
@@ -206,14 +207,39 @@ func (r *adminRepositoryService) Create(ctx context.Context, public companydto.C
 		return nil
 	})
 	if err != nil {
-		r.log.Warn("failed to create company", logger.Str(logger.FieldCompany, public.ID), logger.Err(err))
-		return nil, apperr.ErrInternal.WithMessage("failed to create company")
+		// Classify the failure so callers get an actionable status code:
+		//   - unique violation (duplicate id/slug)      → 409 Conflict
+		//   - FK violation (adapter_type not registered) → 400 Bad Request
+		//   - anything else                              → 500 Internal
+		switch {
+		case isUniqueViolation(err):
+			r.log.Warn("company create conflict", logger.Str(logger.FieldCompany, public.ID), logger.Err(err))
+			return nil, apperr.ErrConflict.WithMessage("company id or slug already exists")
+		case isForeignKeyViolation(err):
+			r.log.Warn("company create FK violation",
+				logger.Str(logger.FieldCompany, public.ID),
+				logger.Str(logger.FieldAdapterType, adapterTypeOf(settings)),
+				logger.Err(err))
+			return nil, apperr.ErrBadRequest.WithMessage("adapter_type not registered")
+		default:
+			r.log.Warn("failed to create company", logger.Str(logger.FieldCompany, public.ID), logger.Err(err))
+			return nil, apperr.ErrInternal.WithMessage("failed to create company")
+		}
 	}
 
 	return &companydto.CompanyAdminView{
-		Company:      company,
-		ScanSettings: companydto.ScanSettingsViewFromModel(settingsRow),
+		CompanyAdminCommon: companydto.CompanyAdminCommon{Company: company},
+		ScanSettings:       companydto.ScanSettingsViewFromModel(settingsRow),
 	}, nil
+}
+
+// adapterTypeOf returns the adapter_type string from a scan-settings input,
+// or empty when none was supplied. Used only to enrich error logs.
+func adapterTypeOf(s companydto.CompanyScanSettingsInput) string {
+	if s.AdapterType != nil {
+		return *s.AdapterType
+	}
+	return ""
 }
 
 // UpdatePublic patches the `companies` row only.
@@ -253,7 +279,10 @@ func (r *adminRepositoryService) UpdateScanSettings(ctx context.Context, id stri
 		Where("company_id = ?", id).
 		Updates(fields)
 	if res.Error != nil {
-		r.log.Warn("failed to update scan settings", logger.Str(logger.FieldCompany, id), logger.Err(res.Error))
+		r.log.Warn("failed to update scan settings",
+			logger.Str(logger.FieldCompany, id),
+			logger.Str(logger.FieldAdapterType, adapterTypeFromInput(p)),
+			logger.Err(res.Error))
 		return apperr.ErrInternal.WithMessage("failed to update scan settings")
 	}
 	if res.RowsAffected == 0 {
@@ -284,10 +313,14 @@ func (r *adminRepositoryService) SetAllActive(ctx context.Context, active bool) 
 	ctx, span := tracing.Start(ctx, "company.admin.repo.SetAllActive")
 	defer tracing.End(span, &err)
 
+	// No RowsAffected check: this is a global toggle, so matching 0 rows
+	// (an empty company_scan_settings table) is a legitimate no-op, not a
+	// missing-row error.
 	if err = r.db.WithContext(ctx).
 		Model(&companymodel.CompanyScanSettings{}).
 		Where("1 = 1").
 		Update("active", active).Error; err != nil {
+		r.log.Warn("failed to set all scan settings active", logger.Bool(logger.FieldActive, active), logger.Err(err))
 		return apperr.ErrInternal.WithMessage("failed to update scan settings")
 	}
 	return nil
@@ -313,7 +346,7 @@ func (r *adminRepositoryService) GetByIDs(ctx context.Context, ids []string) (_ 
 	}
 	views := make([]companydto.CompanyAdminView, 0, len(companies))
 	for _, c := range companies {
-		view := companydto.CompanyAdminView{Company: c}
+		view := companydto.CompanyAdminView{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: c}}
 		if s, ok := settingsByID[c.ID]; ok {
 			view.ScanSettings = companydto.ScanSettingsViewFromModel(s)
 		}
@@ -337,7 +370,7 @@ func (r *adminRepositoryService) GetAll(ctx context.Context) (_ []companydto.Com
 	}
 	views := make([]companydto.CompanyAdminView, 0, len(companies))
 	for _, c := range companies {
-		view := companydto.CompanyAdminView{Company: c}
+		view := companydto.CompanyAdminView{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: c}}
 		if s, ok := settingsByID[c.ID]; ok {
 			view.ScanSettings = companydto.ScanSettingsViewFromModel(s)
 		}
@@ -410,35 +443,46 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 	// last_scan_at), NULL rows sort LAST in ASC and FIRST in DESC (NULLS LAST
 	// is applied in the ORDER BY). The cursor records whether the last item's
 	// sort value was NULL so we can construct the correct predicate.
+	// The ORDER BY is always `col <dir> NULLS LAST, c.id <dir>` — so the NULL
+	// bucket is ALWAYS the final bucket, regardless of direction. The keyset
+	// predicate therefore has the same shape for ASC and DESC, differing only
+	// in the comparison operator and the id tie-break direction.
+	//
+	// The comparison uses CAST(col AS TEXT): the cursor SV is the projected,
+	// text-cast value of the previous page's last row (see the SELECT below),
+	// so both sides of the comparison share one textual form. Comparing the
+	// raw column against a text literal instead would mis-order on drivers
+	// whose column text differs from their literal text (e.g. sqlite
+	// timestamps), skipping or duplicating the page boundary.
+	colText := "CAST(" + col + " AS TEXT)"
 	cur := decodeAdminCursor(filter.Cursor)
 	if cur.ID != "" {
+		cmp := ">"
+		if isDesc {
+			cmp = "<"
+		}
 		if cur.IsNull {
-			if isDesc {
-				// Cursor row had a NULL sort value: in DESC+NULLS LAST, NULL rows
-				// come first. The next page starts after the last NULL row with
-				// id < cursor.ID (within the NULL bucket), then non-NULL rows.
-				// Since NULLS LAST reversal puts NULLs at the beginning in DESC,
-				// and our order is DESC NULLS LAST (NULLs at end), we just
-				// continue within the NULL bucket by id.
-				q = q.Where("("+col+" IS NULL AND c.id < ?) OR "+col+" IS NOT NULL", cur.ID)
-			} else {
-				// ASC NULLS LAST: NULL rows come last; cursor is in the NULL
-				// bucket, so next page is remaining NULL rows after cursor id.
-				q = q.Where(col+" IS NULL AND c.id > ?", cur.ID)
-			}
+			// Cursor row is in the final (NULL) bucket. Only remaining NULL
+			// rows, ordered by id, can follow it.
+			q = q.Where(col+" IS NULL AND c.id "+cmp+" ?", cur.ID)
 		} else {
-			if isDesc {
-				q = q.Where("("+col+" < ? OR ("+col+" = ? AND c.id < ?)) OR "+col+" IS NULL", cur.SV, cur.SV, cur.ID)
-			} else {
-				// ASC: next page has values > cursor.SV, or equal with id > cursor.ID.
-				// NULL rows come after (NULLS LAST), so they are naturally excluded.
-				q = q.Where("("+col+" > ? OR ("+col+" = ? AND c.id > ?))", cur.SV, cur.SV, cur.ID)
-			}
+			// Cursor row is a non-NULL row. The next page is: rows with a
+			// strictly-further value, OR equal value with a further id, OR the
+			// entire NULL bucket (which always sorts after every non-NULL row).
+			q = q.Where(
+				"("+colText+" "+cmp+" ? OR ("+colText+" = ? AND c.id "+cmp+" ?)) OR "+col+" IS NULL",
+				cur.SV, cur.SV, cur.ID)
 		}
 	}
 
-	var rows []companymodel.Company
-	q2 := q.Select("c.*").
+	// Project the actual sort column alongside c.* so the next-page cursor can
+	// encode the real sort value (and its NULL-ness) for EVERY sortable column,
+	// not just name. Without this, paging by adapter_type / last_scan_at /
+	// created_at would compare the column against an empty cursor value and
+	// skip or duplicate rows. sortVal/sortNull are scanned from the aliased
+	// projection; for the name sort they mirror c.name.
+	var rows []adminCompanyRow
+	q2 := q.Select("c.*, " + colText + " AS sort_val, (" + col + " IS NULL) AS sort_null").
 		Order(col + " " + dir + " NULLS LAST").
 		Order("c.id " + dir).
 		Limit(limit + 1)
@@ -447,34 +491,48 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 		return nil, 0, nil, apperr.ErrInternal.WithMessage("failed to fetch companies")
 	}
 
-	var nextCursor *string
-	if len(rows) > limit {
+	companies := make([]companymodel.Company, 0, len(rows))
+	hasNext := len(rows) > limit
+	if hasNext {
 		rows = rows[:limit]
-	} else {
-		return rows, total, nil, nil
+	}
+	for i := range rows {
+		companies = append(companies, rows[i].Company)
+	}
+	if !hasNext {
+		return companies, total, nil, nil
 	}
 
-	// Build next-page cursor from the last row in the result set.
-	// The cursor value depends on the sort column; nullable columns encode
-	// IsNull=true so the next-page predicate can handle the NULL bucket.
+	// Build next-page cursor from the last projected row: encode the real sort
+	// value + IsNull so the next-page predicate (above) handles the NULL bucket
+	// correctly for nullable columns.
 	last := rows[len(rows)-1]
-	enc := encodeAdminCursor(last.ID, "", false) // default: name sort
-	switch filter.SortBy {
-	case "adapter_type", "last_scan_at", "created_at":
-		// For these sort columns, we do not have the value directly on the
-		// Company struct (they are on scan_settings or are timestamps not
-		// surfaced in the public select). We rely on the id-only cursor
-		// with an empty SV — the id tie-break ensures forward progress.
-		// In practice, last_scan_at and adapter_type NULLs are handled by
-		// the IsNull=false, SV="" path which degrades gracefully.
-		enc = encodeAdminCursor(last.ID, "", false)
-	default:
-		// Default sort: name ASC. SV = the name value.
-		enc = encodeAdminCursor(last.ID, last.Name, false)
-	}
-	nextCursor = &enc
+	enc := encodeAdminCursor(last.ID, sortValueString(last.SortVal), last.SortNull)
 
-	return rows, total, nextCursor, nil
+	return companies, total, &enc, nil
+}
+
+// adminCompanyRow is the scan target for the paginated page query: the public
+// Company columns plus the projected sort value (SortVal) and its NULL-ness
+// (SortNull). Keeping the projection in a dedicated struct keeps cursor
+// construction correct for every sortable column without per-column GORM tags
+// leaking onto the Company model.
+type adminCompanyRow struct {
+	companymodel.Company
+	SortVal  sql.NullString `gorm:"column:sort_val"`
+	SortNull bool           `gorm:"column:sort_null"`
+}
+
+// sortValueString renders a scanned sort value into the cursor's string form.
+// A NULL value renders empty — the cursor's IsNull flag (not this string) is
+// what drives the NULL-bucket predicate, so the empty string is never compared
+// against a real column for NULL rows. timestamps come back from Postgres in a
+// lexicographically-orderable text form, so string comparison preserves order.
+func sortValueString(v sql.NullString) string {
+	if !v.Valid {
+		return ""
+	}
+	return v.String
 }
 
 // fetchSettingsForCompanies returns a {company_id → *CompanyScanSettings}

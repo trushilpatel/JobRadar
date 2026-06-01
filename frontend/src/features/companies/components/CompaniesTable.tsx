@@ -11,6 +11,8 @@ interface CompaniesTableProps {
   itemsBeforePage: number
   knownTotal?: number
   loading: boolean
+  isError?: boolean
+  onRetry?: () => void
   limit: number
   onLimitChange: (limit: number) => void
   nextCursor: string | null
@@ -33,6 +35,8 @@ export function CompaniesTable({
   itemsBeforePage,
   knownTotal,
   loading,
+  isError,
+  onRetry,
   limit,
   onLimitChange,
   nextCursor,
@@ -47,11 +51,7 @@ export function CompaniesTable({
   sorting,
   onSortingChange,
 }: CompaniesTableProps) {
-  const columns = useMemo(
-    () => buildCompanyColumns(actions),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [actions.scanning]
-  )
+  const columns = useMemo(() => buildCompanyColumns(actions), [actions])
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden min-w-0">
@@ -60,6 +60,9 @@ export function CompaniesTable({
           columns={columns}
           data={companies}
           loading={loading}
+          isError={isError}
+          onRetry={onRetry}
+          errorMessage="Couldn’t load companies."
           emptyMessage={emptyMessage}
           getRowId={(c) => c.id}
           selectedId={activeCompanyId}

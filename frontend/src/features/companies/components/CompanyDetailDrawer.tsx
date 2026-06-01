@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { X, Trash2, RefreshCw, Pencil, ChevronDown, ChevronUp } from 'lucide-react'
+import { X, Trash2, RefreshCw, Pencil, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import {
   AreaChart,
   Area,
@@ -33,14 +33,14 @@ export function CompanyDetailDrawer({
   onDelete,
   onViewJobs,
 }: CompanyDetailDrawerProps) {
-  const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set())
+  const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set())
   const [logsOpen, setLogsOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   const { data: stats, isLoading } = useCompanyScanStats(company.id)
   const { data: analytics, isError: analyticsError } = useCompanyAnalytics(company.id)
 
-  function toggleError(id: number) {
+  function toggleError(id: string) {
     setExpandedErrors((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -61,6 +61,19 @@ export function CompanyDetailDrawer({
   const successCount = history.filter((p) => p === 'ok').length
   const scannedCount = history.filter((p) => p !== 'idle').length
   const successRate = scannedCount ? Math.round((successCount / scannedCount) * 100) : 0
+
+  // Persistent failure state from company_scan_settings — distinct from the
+  // per-run scan logs below. Only surfaced while the company is actively failing
+  // (consecutive_errors > 0); resets to 0 on the next successful scan.
+  const settings = company.scan_settings
+  const persistentError =
+    settings && settings.consecutive_errors > 0
+      ? {
+          consecutive_errors: settings.consecutive_errors,
+          last_error_message: settings.last_error_message,
+          last_error_at: settings.last_error_at,
+        }
+      : null
 
   return (
     <div className="flex flex-col h-full bg-[#0d0d14]">
@@ -123,6 +136,33 @@ export function CompanyDetailDrawer({
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        {persistentError && (
+          <div
+            role="alert"
+            className="rounded-lg border border-red-500/30 bg-red-950/20 px-3 py-2.5"
+          >
+            <div className="flex items-center gap-1.5 text-red-300">
+              <AlertTriangle size={13} />
+              <span className="text-xs font-semibold">
+                Scan failing
+                {persistentError.consecutive_errors > 1
+                  ? ` · ${persistentError.consecutive_errors} consecutive errors`
+                  : ''}
+              </span>
+              {persistentError.last_error_at && (
+                <span className="ml-auto text-[10px] text-red-400/70">
+                  {formatRelativeTime(persistentError.last_error_at)}
+                </span>
+              )}
+            </div>
+            {persistentError.last_error_message && (
+              <p className="mt-1.5 text-[11px] text-red-300/90 font-mono break-all leading-relaxed">
+                {persistentError.last_error_message}
+              </p>
+            )}
+          </div>
+        )}
+
         <Section title="Recent scans">
           <div className="flex gap-2">
             <div className="flex-1 border border-white/[0.07] rounded-lg px-3 py-2.5 flex flex-col justify-between gap-2">
@@ -173,13 +213,13 @@ export function CompanyDetailDrawer({
             ) : (
               <div className="mt-2 text-xs">
                 {(stats?.recent_runs ?? []).slice(0, 10).map((r) => (
-                  <div key={r.id} className="border-b border-white/[0.04]">
+                  <div key={r.scanned_at} className="border-b border-white/[0.04]">
                     <div
                       className={cn(
                         'flex items-center justify-between py-1.5',
                         r.error && 'cursor-pointer'
                       )}
-                      onClick={() => r.error && toggleError(r.id)}
+                      onClick={() => r.error && toggleError(r.scanned_at)}
                     >
                       <span className="text-slate-300 flex items-center gap-1.5">
                         {formatRelativeTime(r.scanned_at)}
@@ -196,7 +236,7 @@ export function CompanyDetailDrawer({
                         {r.error ? (
                           <>
                             Error
-                            {expandedErrors.has(r.id) ? (
+                            {expandedErrors.has(r.scanned_at) ? (
                               <ChevronUp size={10} />
                             ) : (
                               <ChevronDown size={10} />
@@ -207,7 +247,7 @@ export function CompanyDetailDrawer({
                         )}
                       </span>
                     </div>
-                    {r.error && expandedErrors.has(r.id) && (
+                    {r.error && expandedErrors.has(r.scanned_at) && (
                       <div className="pb-2">
                         <p className="text-[11px] text-red-300 font-mono bg-red-950/20 rounded p-2 break-all leading-relaxed">
                           {r.error}

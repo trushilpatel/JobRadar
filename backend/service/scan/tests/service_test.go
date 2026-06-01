@@ -231,12 +231,14 @@ func TestListQueue_EnrichesWithCompanyData(t *testing.T) {
 	}
 	views := []companydto.CompanyAdminView{
 		{
-			Company: companymodel.Company{ID: "stripe", Name: "Stripe"},
+			CompanyAdminCommon: companydto.CompanyAdminCommon{Company: companymodel.Company{ID: "stripe", Name: "Stripe"}},
 			ScanSettings: &companydto.CompanyScanSettingsView{
-				CompanyID:   "stripe",
-				AdapterType: "greenhouse",
-				Active:      true,
-				LastScanAt:  &lastScan,
+				CompanyScanSettingsListView: companydto.CompanyScanSettingsListView{
+					CompanyID:   "stripe",
+					AdapterType: "greenhouse",
+					Active:      true,
+					LastScanAt:  &lastScan,
+				},
 			},
 		},
 	}
@@ -275,7 +277,7 @@ func TestListQueue_CompanyMissingScanSettings(t *testing.T) {
 		{ID: "q1", CompanyID: "stripe", Status: "queued", Source: "manual"},
 	}
 	views := []companydto.CompanyAdminView{
-		{Company: companymodel.Company{ID: "stripe", Name: "Stripe"}, ScanSettings: nil},
+		{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: companymodel.Company{ID: "stripe", Name: "Stripe"}}, ScanSettings: nil},
 	}
 
 	service := newImplService(

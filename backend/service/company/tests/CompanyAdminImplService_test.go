@@ -55,7 +55,7 @@ func (f *fakeAdmin) GetAll(_ context.Context) ([]companydto.CompanyAdminView, er
 
 func TestAdminImpl_Create_PopulatesCacheKeyAfterWrite(t *testing.T) {
 	fake := &fakeAdmin{
-		createView: &companydto.CompanyAdminView{Company: companymodel.Company{ID: "stripe"}},
+		createView: &companydto.CompanyAdminView{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: companymodel.Company{ID: "stripe"}}},
 	}
 	c := cache.NewMemoryCache()
 	// Seed the public cache with a stale entry so we can verify it gets cleared.
@@ -130,6 +130,79 @@ func TestAdminImpl_Delete_InvalidatesPublicCache(t *testing.T) {
 	}
 	if fake.deleteCalls != 1 {
 		t.Errorf("Delete not delegated, calls=%d", fake.deleteCalls)
+	}
+}
+
+// TestAdminImpl_Create_BumpsListGeneration verifies P0.3: after an admin
+// Create, the public-list generation counter advances, so any previously
+// cached list page key (which folds the old generation in) becomes
+// unreachable — a guaranteed cache miss that forces a DB reload.
+func TestAdminImpl_Create_BumpsListGeneration(t *testing.T) {
+	fake := &fakeAdmin{
+		createView: &companydto.CompanyAdminView{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: companymodel.Company{ID: "stripe"}}},
+	}
+	c := cache.NewMemoryCache()
+	svc := companysvc.NewAdminImplService(fake, c, nil)
+
+	var before int64
+	_, _ = c.Get(context.Background(), companysvc.PublicListGenKey, &before)
+
+	if _, err := svc.Create(context.Background(), companydto.CompanyPublicInput{ID: "stripe"}, companydto.CompanyScanSettingsInput{}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	var after int64
+	hit, _ := c.Get(context.Background(), companysvc.PublicListGenKey, &after)
+	if !hit {
+		t.Fatal("expected list generation key to be set after Create")
+	}
+	if after != before+1 {
+		t.Errorf("generation = %d, want %d", after, before+1)
+	}
+}
+
+// TestAdminImpl_UpdateAndDelete_BumpListGeneration verifies P0.3 for the
+// remaining mutating paths that change the public list.
+func TestAdminImpl_UpdateAndDelete_BumpListGeneration(t *testing.T) {
+	c := cache.NewMemoryCache()
+	svc := companysvc.NewAdminImplService(&fakeAdmin{}, c, nil)
+
+	read := func() int64 {
+		var g int64
+		_, _ = c.Get(context.Background(), companysvc.PublicListGenKey, &g)
+		return g
+	}
+
+	g0 := read()
+	if err := svc.UpdatePublic(context.Background(), "stripe", companydto.CompanyPublicInput{Name: "X"}); err != nil {
+		t.Fatalf("UpdatePublic: %v", err)
+	}
+	if g1 := read(); g1 != g0+1 {
+		t.Errorf("after UpdatePublic gen = %d, want %d", g1, g0+1)
+	}
+
+	g1 := read()
+	if err := svc.Delete(context.Background(), "stripe"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if g2 := read(); g2 != g1+1 {
+		t.Errorf("after Delete gen = %d, want %d", g2, g1+1)
+	}
+}
+
+// TestAdminImpl_UpdateScanSettings_DoesNotBumpListGeneration verifies P0.3:
+// scan_settings changes are not part of the public list view, so they must not
+// invalidate the public list cache.
+func TestAdminImpl_UpdateScanSettings_DoesNotBumpListGeneration(t *testing.T) {
+	c := cache.NewMemoryCache()
+	svc := companysvc.NewAdminImplService(&fakeAdmin{}, c, nil)
+
+	if err := svc.UpdateScanSettings(context.Background(), "stripe", companydto.CompanyScanSettingsInput{Active: boolPtr(false)}); err != nil {
+		t.Fatalf("UpdateScanSettings: %v", err)
+	}
+	var g int64
+	hit, _ := c.Get(context.Background(), companysvc.PublicListGenKey, &g)
+	if hit {
+		t.Errorf("scan_settings update must not bump the list generation, got gen=%d", g)
 	}
 }
 

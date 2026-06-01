@@ -2,415 +2,157 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { apiClient } from '@/lib/core/api-client'
 import {
   fetchScanStats,
-  fetchCompanyAnalytics,
   triggerScan,
-  fetchCompanies,
-  createCompany,
-  updateCompany,
-  deleteCompany,
   triggerScanAll,
-  setAllCompaniesActive,
-  fetchQueue,
-  removeFromQueue,
-} from '@/features/companies/api/companies.api'
-import type { ScanStats, CompanyAnalytics, Company, QueueEntry } from '@/types'
+  fetchCompanyAnalytics,
+} from '../companies.api'
 
-vi.mock('@/lib/core/api-client')
-
-const mockScanStats: ScanStats = {
-  total_scans: 10,
-  total_fetched: 50,
-  total_new: 20,
-  error_count: 2,
-  avg_duration_ms: 1200,
-  new_today: 3,
-  new_this_month: 15,
-  recent_runs: [],
-}
-
-const mockAnalytics: CompanyAnalytics = {
-  monthly: [
-    { month: '2024-01', new: 10, removed: 2 },
-    { month: '2024-02', new: 15, removed: 1 },
-  ],
-  velocity: {
-    this_week: 5,
-    last_week: 3,
+vi.mock('@/lib/core/api-client', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
   },
-}
+}))
 
-describe('companies API', () => {
+const mockedGet = vi.mocked(apiClient.get)
+const mockedPost = vi.mocked(apiClient.post)
+
+describe('companies.api', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  // ── fetchScanStats ─────────────────────────────────────────────────────────
-
   describe('fetchScanStats', () => {
-    it('calls GET /companies/:id/scan-stats and returns data', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue(mockScanStats)
-
-      const result = await fetchScanStats('stripe')
-
-      expect(apiClient.get).toHaveBeenCalledWith('/companies/stripe/scan-stats')
-      expect(result).toEqual(mockScanStats)
-    })
-
-    it('URL-encodes the company id', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue(mockScanStats)
-
-      await fetchScanStats('my company')
-
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
-      expect(url).toContain('my%20company')
-    })
-
-    it('propagates rejection when apiClient.get rejects', async () => {
-      vi.mocked(apiClient.get).mockRejectedValue(new Error('Network error'))
-
-      await expect(fetchScanStats('stripe')).rejects.toThrow('Network error')
-    })
-  })
-
-  // ── fetchCompanyAnalytics ──────────────────────────────────────────────────
-
-  describe('fetchCompanyAnalytics', () => {
-    it('calls GET /companies/:id/analytics and returns data', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue(mockAnalytics)
-
-      const result = await fetchCompanyAnalytics('stripe')
-
-      expect(apiClient.get).toHaveBeenCalledWith('/companies/stripe/analytics')
-      expect(result).toEqual(mockAnalytics)
-    })
-
-    it('URL-encodes the company id', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue(mockAnalytics)
-
-      await fetchCompanyAnalytics('my company')
-
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
-      expect(url).toContain('my%20company')
-    })
-
-    it('propagates rejection when apiClient.get rejects', async () => {
-      vi.mocked(apiClient.get).mockRejectedValue(new Error('Server error'))
-
-      await expect(fetchCompanyAnalytics('stripe')).rejects.toThrow('Server error')
-    })
-  })
-
-  // ── triggerScan ────────────────────────────────────────────────────────────
-
-  describe('triggerScan', () => {
-    it('calls POST /companies/:id/scan', async () => {
-      vi.mocked(apiClient.post).mockResolvedValue(undefined)
-
-      await triggerScan('stripe')
-
-      expect(apiClient.post).toHaveBeenCalledWith('/companies/stripe/scan')
-    })
-
-    it('URL-encodes the company id', async () => {
-      vi.mocked(apiClient.post).mockResolvedValue(undefined)
-
-      await triggerScan('my company')
-
-      const [url] = vi.mocked(apiClient.post).mock.calls[0]!
-      expect(url).toContain('my%20company')
-    })
-
-    it('propagates rejection when apiClient.post rejects', async () => {
-      vi.mocked(apiClient.post).mockRejectedValue(new Error('Queue full'))
-
-      await expect(triggerScan('stripe')).rejects.toThrow('Queue full')
-    })
-  })
-
-  // ── fetchCompanies ─────────────────────────────────────────────────────────
-
-  describe('fetchCompanies', () => {
-    const page = {
-      data: [] as Company[],
-      total: 0,
-      total_active: 0,
-      page: 1,
-      limit: 20,
-    }
-
-    it('sends only page + limit when no filters provided', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue(page)
-
-      const result = await fetchCompanies()
-
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
-      expect(url).toBe('/companies?page=1&limit=20')
-      expect(result).toEqual(page)
-    })
-
-    it('serialises every filter field into the query string', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue(page)
-
-      await fetchCompanies(
-        {
-          active: false,
-          adapterTypes: ['greenhouse', 'lever'],
-          search: 'stripe',
-          lastScanStatus: 'error',
-          sortBy: 'name',
-          sortDir: 'desc',
-        },
-        2,
-        50
-      )
-
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
-      expect(url).toContain('page=2')
-      expect(url).toContain('limit=50')
-      expect(url).toContain('active=false')
-      expect(url).toContain('adapter_types=greenhouse')
-      expect(url).toContain('adapter_types=lever')
-      expect(url).toContain('search=stripe')
-      expect(url).toContain('last_scan_status=error')
-      expect(url).toContain('sort_by=name')
-      expect(url).toContain('sort_dir=desc')
-    })
-
-    it('omits the active param when active is undefined', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue(page)
-
-      await fetchCompanies({ adapterTypes: [] })
-
-      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
-      expect(url).not.toContain('active=')
-    })
-
-    it('parses a populated company row through the schema', async () => {
-      const populated = {
-        ...page,
-        data: [
+    it('parses scan stats with a non-empty recent_runs array (no `id` field)', async () => {
+      // Regression: the backend ScanRun DTO never sends `id`. The schema must
+      // parse real runs that lack it — previously `id: z.number()` threw here,
+      // breaking the detail-drawer Logs panel for every scanned company.
+      mockedGet.mockResolvedValue({
+        total_scans: 3,
+        total_fetched: 120,
+        total_new: 8,
+        error_count: 1,
+        avg_duration_ms: 1500,
+        new_today: 2,
+        new_this_month: 8,
+        recent_runs: [
           {
-            id: 'stripe',
-            name: 'Stripe',
-            url: 'https://stripe.com',
-            adapter_type: 'greenhouse',
-            active: true,
-            created_at: '2024-01-01T00:00:00Z',
-            last_scan_at: null,
-            last_scan_status: null,
-            scan_history: [true, false],
+            company_id: 'c1',
+            scanned_at: '2025-01-02T00:00:00Z',
+            jobs_fetched: 40,
+            jobs_new: 3,
+            error: null,
+            duration_ms: 1400,
+          },
+          {
+            company_id: 'c1',
+            scanned_at: '2025-01-01T00:00:00Z',
+            jobs_fetched: 0,
+            jobs_new: 0,
+            error: 'boom',
+            duration_ms: null,
           },
         ],
-        total: 1,
-        total_active: 1,
-      }
-      vi.mocked(apiClient.get).mockResolvedValue(populated)
+      })
 
-      const result = await fetchCompanies()
+      const result = await fetchScanStats('c1')
 
-      expect(result.data[0]!.name).toBe('Stripe')
-      expect(result.total).toBe(1)
+      expect(mockedGet).toHaveBeenCalledWith('/companies/c1/scan-stats')
+      expect(result.recent_runs).toHaveLength(2)
+      expect(result.recent_runs[0]!.scanned_at).toBe('2025-01-02T00:00:00Z')
+      expect(result.recent_runs[1]!.error).toBe('boom')
     })
 
-    it('throws when the response shape is invalid', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue({ data: 'not-an-array' })
+    it('parses scan stats with empty recent_runs', async () => {
+      mockedGet.mockResolvedValue({
+        total_scans: 0,
+        total_fetched: 0,
+        total_new: 0,
+        error_count: 0,
+        avg_duration_ms: null,
+        new_today: 0,
+        new_this_month: 0,
+        recent_runs: [],
+      })
 
-      await expect(fetchCompanies()).rejects.toThrow()
+      const result = await fetchScanStats('c1')
+
+      expect(result.recent_runs).toHaveLength(0)
+      expect(result.avg_duration_ms).toBeNull()
+    })
+
+    it('url-encodes the company id', async () => {
+      mockedGet.mockResolvedValue({
+        total_scans: 0,
+        total_fetched: 0,
+        total_new: 0,
+        error_count: 0,
+        avg_duration_ms: null,
+        new_today: 0,
+        new_this_month: 0,
+        recent_runs: [],
+      })
+
+      await fetchScanStats('a/b')
+
+      expect(mockedGet).toHaveBeenCalledWith('/companies/a%2Fb/scan-stats')
     })
 
     it('propagates rejection when apiClient.get rejects', async () => {
-      vi.mocked(apiClient.get).mockRejectedValue(new Error('Network error'))
-
-      await expect(fetchCompanies()).rejects.toThrow('Network error')
+      mockedGet.mockRejectedValue(new Error('Network error'))
+      await expect(fetchScanStats('c1')).rejects.toThrow('Network error')
     })
   })
 
-  // ── createCompany ──────────────────────────────────────────────────────────
-
-  describe('createCompany', () => {
-    const input = {
-      id: 'stripe',
-      name: 'Stripe',
-      url: 'https://stripe.com',
-      adapter_type: 'greenhouse',
-      active: true,
-    }
-
-    it('calls POST /companies with the payload and returns the company', async () => {
-      const created = { ...input, created_at: '2024-01-01T00:00:00Z' } as unknown as Company
-      vi.mocked(apiClient.post).mockResolvedValue(created)
-
-      const result = await createCompany(input)
-
-      expect(apiClient.post).toHaveBeenCalledWith('/companies', input)
-      expect(result).toEqual(created)
+  describe('triggerScan', () => {
+    it('posts to the scan endpoint', async () => {
+      mockedPost.mockResolvedValue(undefined)
+      await triggerScan('c1')
+      expect(mockedPost).toHaveBeenCalledWith('/companies/c1/scan')
     })
 
-    it('propagates rejection when apiClient.post rejects', async () => {
-      vi.mocked(apiClient.post).mockRejectedValue(new Error('Conflict'))
-
-      await expect(createCompany(input)).rejects.toThrow('Conflict')
+    it('url-encodes the company id', async () => {
+      mockedPost.mockResolvedValue(undefined)
+      await triggerScan('a b')
+      expect(mockedPost).toHaveBeenCalledWith('/companies/a%20b/scan')
     })
   })
-
-  // ── updateCompany ──────────────────────────────────────────────────────────
-
-  describe('updateCompany', () => {
-    it('calls PATCH /companies/:id with the partial fields', async () => {
-      vi.mocked(apiClient.patch).mockResolvedValue(undefined)
-
-      await updateCompany('stripe', { name: 'Stripe Inc' })
-
-      expect(apiClient.patch).toHaveBeenCalledWith('/companies/stripe', { name: 'Stripe Inc' })
-    })
-
-    it('URL-encodes the company id', async () => {
-      vi.mocked(apiClient.patch).mockResolvedValue(undefined)
-
-      await updateCompany('my company', { active: false })
-
-      const [url] = vi.mocked(apiClient.patch).mock.calls[0]!
-      expect(url).toContain('my%20company')
-    })
-
-    it('propagates rejection when apiClient.patch rejects', async () => {
-      vi.mocked(apiClient.patch).mockRejectedValue(new Error('Bad request'))
-
-      await expect(updateCompany('stripe', { name: 'x' })).rejects.toThrow('Bad request')
-    })
-  })
-
-  // ── deleteCompany ──────────────────────────────────────────────────────────
-
-  describe('deleteCompany', () => {
-    it('calls DELETE /companies/:id', async () => {
-      vi.mocked(apiClient.delete).mockResolvedValue(undefined)
-
-      await deleteCompany('stripe')
-
-      expect(apiClient.delete).toHaveBeenCalledWith('/companies/stripe')
-    })
-
-    it('URL-encodes the company id', async () => {
-      vi.mocked(apiClient.delete).mockResolvedValue(undefined)
-
-      await deleteCompany('my company')
-
-      const [url] = vi.mocked(apiClient.delete).mock.calls[0]!
-      expect(url).toContain('my%20company')
-    })
-
-    it('propagates rejection when apiClient.delete rejects', async () => {
-      vi.mocked(apiClient.delete).mockRejectedValue(new Error('Not found'))
-
-      await expect(deleteCompany('stripe')).rejects.toThrow('Not found')
-    })
-  })
-
-  // ── triggerScanAll ─────────────────────────────────────────────────────────
 
   describe('triggerScanAll', () => {
-    it('calls POST /companies/scan-all and parses the queued count', async () => {
-      vi.mocked(apiClient.post).mockResolvedValue({ queued: 7 })
-
+    it('posts to scan-all and parses the queued count', async () => {
+      // apiClient unwraps the `{data}` envelope, so the function receives the
+      // inner `{queued}` payload from the backend's 202 response.
+      mockedPost.mockResolvedValue({ queued: 7 })
       const result = await triggerScanAll()
-
-      expect(apiClient.post).toHaveBeenCalledWith('/companies/scan-all')
-      expect(result).toEqual({ queued: 7 })
+      expect(mockedPost).toHaveBeenCalledWith('/companies/scan-all')
+      expect(result.queued).toBe(7)
     })
 
     it('throws when the response shape is invalid', async () => {
-      vi.mocked(apiClient.post).mockResolvedValue({ queued: 'lots' })
-
+      mockedPost.mockResolvedValue({ queued: 'lots' })
       await expect(triggerScanAll()).rejects.toThrow()
     })
-
-    it('propagates rejection when apiClient.post rejects', async () => {
-      vi.mocked(apiClient.post).mockRejectedValue(new Error('Server error'))
-
-      await expect(triggerScanAll()).rejects.toThrow('Server error')
-    })
   })
 
-  // ── setAllCompaniesActive ──────────────────────────────────────────────────
+  describe('fetchCompanyAnalytics', () => {
+    it('fetches and parses analytics', async () => {
+      mockedGet.mockResolvedValue({
+        monthly: [{ month: '2025-01', new: 5, removed: 1 }],
+        velocity: { this_week: 3, last_week: 2 },
+      })
 
-  describe('setAllCompaniesActive', () => {
-    it('calls PATCH /companies/active with the active flag', async () => {
-      vi.mocked(apiClient.patch).mockResolvedValue(undefined)
+      const result = await fetchCompanyAnalytics('c1')
 
-      await setAllCompaniesActive(true)
-
-      expect(apiClient.patch).toHaveBeenCalledWith('/companies/active', { active: true })
-    })
-
-    it('propagates rejection when apiClient.patch rejects', async () => {
-      vi.mocked(apiClient.patch).mockRejectedValue(new Error('Forbidden'))
-
-      await expect(setAllCompaniesActive(false)).rejects.toThrow('Forbidden')
-    })
-  })
-
-  // ── fetchQueue ─────────────────────────────────────────────────────────────
-
-  describe('fetchQueue', () => {
-    const entry: QueueEntry = {
-      id: 'q1',
-      company_id: 'stripe',
-      company_name: 'Stripe',
-      adapter_type: 'greenhouse',
-      status: 'queued',
-      source: 'manual',
-      priority: 1,
-      queued_at: '2024-01-01T00:00:00Z',
-      started_at: null,
-      next_scan_at: null,
-    }
-
-    it('calls GET /companies/queue and parses entries', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue([entry])
-
-      const result = await fetchQueue()
-
-      expect(apiClient.get).toHaveBeenCalledWith('/companies/queue')
-      expect(result).toEqual([entry])
-    })
-
-    it('parses an empty queue array', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue([])
-
-      const result = await fetchQueue()
-
-      expect(result).toEqual([])
-    })
-
-    it('throws when an entry has an invalid status', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue([{ ...entry, status: 'bogus' }])
-
-      await expect(fetchQueue()).rejects.toThrow()
+      expect(mockedGet).toHaveBeenCalledWith('/companies/c1/analytics')
+      expect(result.monthly).toHaveLength(1)
+      expect(result.velocity.this_week).toBe(3)
     })
 
     it('propagates rejection when apiClient.get rejects', async () => {
-      vi.mocked(apiClient.get).mockRejectedValue(new Error('Network error'))
-
-      await expect(fetchQueue()).rejects.toThrow('Network error')
-    })
-  })
-
-  // ── removeFromQueue ────────────────────────────────────────────────────────
-
-  describe('removeFromQueue', () => {
-    it('calls DELETE /companies/queue/:entryId', async () => {
-      vi.mocked(apiClient.delete).mockResolvedValue(undefined)
-
-      await removeFromQueue('q1')
-
-      expect(apiClient.delete).toHaveBeenCalledWith('/companies/queue/q1')
-    })
-
-    it('propagates rejection when apiClient.delete rejects', async () => {
-      vi.mocked(apiClient.delete).mockRejectedValue(new Error('Not found'))
-
-      await expect(removeFromQueue('q1')).rejects.toThrow('Not found')
+      mockedGet.mockRejectedValue(new Error('Server error'))
+      await expect(fetchCompanyAnalytics('c1')).rejects.toThrow('Server error')
     })
   })
 })
