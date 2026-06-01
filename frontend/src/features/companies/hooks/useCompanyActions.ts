@@ -13,6 +13,7 @@ import { companyQueryKeys } from '../queryKeys'
 export function useCompanyActions() {
   const qc = useQueryClient()
   const [scanning, setScanning] = useState<Set<string>>(new Set())
+  const [togglingActive, setTogglingActive] = useState<Set<string>>(new Set())
   const [bulkToggling, setBulkToggling] = useState(false)
   const [runningAll, setRunningAll] = useState(false)
 
@@ -22,12 +23,19 @@ export function useCompanyActions() {
 
   async function toggleActive(company: Company) {
     const next = !company.active
+    setTogglingActive((s) => new Set(s).add(company.id))
     try {
       await updateAdminCompanyScanSettings(company.id, { active: next })
       toast.success(`${company.name} ${next ? 'activated' : 'deactivated'}`)
       invalidate()
     } catch {
       toast.error('Failed to update company')
+    } finally {
+      setTogglingActive((s) => {
+        const n = new Set(s)
+        n.delete(company.id)
+        return n
+      })
     }
   }
 
@@ -109,6 +117,7 @@ export function useCompanyActions() {
 
   return {
     scanning,
+    togglingActive,
     bulkToggling,
     runningAll,
     toggleActive,

@@ -149,14 +149,26 @@ describe('buildCompanyColumns — active toggle', () => {
   it('shows Deactivate label and invokes onToggleActive when active', () => {
     const actions = makeActions()
     renderHost({ active: true }, actions)
-    const toggle = screen.getByRole('button', { name: 'Deactivate' })
+    const toggle = screen.getByRole('switch', { name: 'Deactivate' })
     fireEvent.click(toggle)
     expect(actions.onToggleActive).toHaveBeenCalledOnce()
   })
 
   it('shows Activate label when inactive', () => {
     renderHost({ active: false })
-    expect(screen.getByRole('button', { name: 'Activate' })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Activate' })).toBeInTheDocument()
+  })
+
+  it('exposes the toggle as a switch reflecting active state', () => {
+    renderHost({ active: true })
+    const toggle = screen.getByRole('switch')
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('disables the toggle while a toggle is in flight (P1.7)', () => {
+    const actions = makeActions({ togglingActive: new Set(['stripe']) })
+    renderHost({ id: 'stripe', active: true }, actions)
+    expect(screen.getByRole('switch')).toBeDisabled()
   })
 })
 

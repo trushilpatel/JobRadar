@@ -6,30 +6,38 @@ import (
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
+	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 )
 
-// validAdapters mirrors the legacy validator: any adapter referenced in a
-// scan_settings input must appear here. Keep in sync with
-// common/CompanyServiceConstants.go.
-var validAdapters = map[string]bool{
-	companycommon.AdapterGreenhouse: true,
-	companycommon.AdapterLever:      true,
-	companycommon.AdapterAshby:      true,
-	companycommon.AdapterGoogle:     true,
-	companycommon.AdapterNetflix:    true,
-	companycommon.AdapterUber:       true,
-	companycommon.AdapterApple:      true,
-	companycommon.AdapterMeta:       true,
-	companycommon.AdapterMicrosoft:  true,
-	companycommon.AdapterRippling:   true,
-	companycommon.AdapterGem:        true,
-	companycommon.AdapterDeel:       true,
-	companycommon.AdapterWorkday:    true,
-	// NOTE: eightfold is registered in adapter_configs (migration 056) and
-	// wired into the crawler, but intentionally NOT exposed via the admin
-	// validation surface — the AddCompany modal does not yet collect the
-	// host+domain adapter_config that the eightfold adapter requires.
-	// Re-enable here when the modal gains an eightfold config form.
+// validScanStatuses is the admin-list scan_status filter allow-list. Keyed by
+// the owning scan-domain constants so the validator and the repo switch share
+// one source of truth. An empty/unset scan_status means "no filter".
+var validScanStatuses = map[string]bool{
+	scancommon.QueueStatusQueued:  true,
+	scancommon.QueueStatusRunning: true,
+	scancommon.ScanStatusError:    true,
+	scancommon.ScanStatusOK:       true,
+}
+
+// validAdapters is the admin-creatable adapter allow-list, derived once from
+// common.AdapterTypes minus common.AdminUnsupportedAdapters. Deriving it from
+// the canonical list means a new adapter const is admin-creatable by default —
+// the only hand-maintained surface is the unsupported set in
+// common/CompanyServiceConstants.go, so there is exactly one place to make the
+// omission a deliberate edit.
+var validAdapters = buildValidAdapters()
+
+// buildValidAdapters projects common.AdapterTypes into a membership set,
+// excluding any adapter flagged unsupported for the admin surface.
+func buildValidAdapters() map[string]bool {
+	out := make(map[string]bool, len(companycommon.AdapterTypes))
+	for _, at := range companycommon.AdapterTypes {
+		if companycommon.AdminUnsupportedAdapters[at] {
+			continue
+		}
+		out[at] = true
+	}
+	return out
 }
 
 type adminValidationService struct {
@@ -59,6 +67,13 @@ func (v *adminValidationService) List(ctx context.Context, filter companydto.Com
 			Field:   "search",
 			Code:    "INVALID_VALUE",
 			Message: "search must be 100 characters or fewer",
+		})
+	}
+	if filter.ScanStatus != "" && !validScanStatuses[filter.ScanStatus] {
+		errs = append(errs, apperr.ValidationError{
+			Field:   "scan_status",
+			Code:    "INVALID_VALUE",
+			Message: "scan_status must be one of queued, running, error, ok",
 		})
 	}
 	if limit < 1 || limit > 100 {
@@ -170,11 +185,19 @@ func validatePublicCreate(p companydto.CompanyPublicInput) apperr.ValidationErro
 	return errs
 }
 
-// validateScanSettings checks adapter_type when present. Set requireAdapter
-// when the input is non-empty AND supplied via Create — Update only checks
-// adapter_type when explicitly patched.
-func validateScanSettings(s companydto.CompanyScanSettingsInput, _ bool) apperr.ValidationErrors {
+// validateScanSettings checks adapter_type when present. When requireAdapter
+// is true AND the input is non-empty, adapter_type must be supplied — Create
+// passes true (a scan_settings row makes no sense without an adapter), Update
+// passes false (partial-patch: adapter_type is only validated when present).
+func validateScanSettings(s companydto.CompanyScanSettingsInput, requireAdapter bool) apperr.ValidationErrors {
 	var errs apperr.ValidationErrors
+	if requireAdapter && !s.IsEmpty() && s.AdapterType == nil {
+		errs = append(errs, apperr.ValidationError{
+			Field:   "adapter_type",
+			Code:    "INVALID_VALUE",
+			Message: "adapter_type is required when scan settings are provided",
+		})
+	}
 	if s.AdapterType != nil && !validAdapters[*s.AdapterType] {
 		errs = append(errs, apperr.ValidationError{
 			Field:   "adapter_type",

@@ -18,6 +18,9 @@ export interface CompanyColumnActions {
   onDelete: (id: string) => void
   onToggleActive: (c: Company) => void
   scanning: Set<string>
+  // Per-company in-flight set for the active/inactive toggle. Optional so the
+  // table can render without wiring it; absence is treated as "not toggling".
+  togglingActive?: Set<string>
 }
 
 export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Company, unknown>[] {
@@ -137,16 +140,21 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
       header: () => <span className="text-slate-400">Active</span>,
       cell: ({ row }) => {
         const c = row.original
+        const isToggling = actions.togglingActive?.has(c.id) ?? false
         return (
           <button
             type="button"
+            role="switch"
+            aria-checked={c.active}
+            disabled={isToggling}
             onClick={(e) => {
               e.stopPropagation()
               actions.onToggleActive(c)
             }}
             className={cn(
               'relative inline-flex w-9 h-5 rounded-full transition-colors shrink-0',
-              c.active ? 'bg-violet-600' : 'bg-white/15'
+              c.active ? 'bg-violet-600' : 'bg-white/15',
+              isToggling && 'opacity-50 cursor-not-allowed'
             )}
             aria-label={c.active ? 'Deactivate' : 'Activate'}
           >

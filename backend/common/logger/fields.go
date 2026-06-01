@@ -87,6 +87,8 @@ const (
 	FieldRemoved             = "removed"
 	FieldConfigBytes         = "config_bytes"
 	FieldCount               = "count"
+	FieldHasSettings         = "has_settings"
+	FieldActive              = "active"
 )
 
 // Str creates a string field.
