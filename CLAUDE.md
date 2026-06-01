@@ -56,7 +56,7 @@ new → dismissed          (job row kept in `jobs` for FK integrity)
 
 ## Multi-user
 
-All three phases shipped. Status doc: [`Designs/multi-user-rollout-plan.md`](Designs/multi-user-rollout-plan.md).
+All three phases shipped.
 
 - **Decorator chain:** `Rest → Validation → Cache → Impl → Repo`. `CacheService` is optional per slice.
 - **Identity flow:** repos take `userID` explicitly; services pull from ctx via `identity.FromContext` / `UserIDFrom` / `IsAdmin`.
@@ -144,3 +144,18 @@ This file and the project's skill files evolve as the codebase is worked on. Whe
 - `.claude/rules/dev-ergonomics.md` — developer-ergonomics model: friction to change, consistency, extensibility, agent-legibility — _"is it ergonomic to keep it good?"_ Audited by the `dev-ergonomics` skill (read-only, recommends; never edits) via the `dev-ergonomics-auditor` agent
 - Subdirectory `CLAUDE.md` files cover each `backend/*` and `frontend/*` area and auto-load when you work there
 - `.claude/skills/` — project skills; each has a self-improvement footer that invokes `skill-self-improvement` after completion
+
+## Docs layout
+
+All non-code documentation lives under `docs/`:
+
+| Folder                    | Purpose                                                                 |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `docs/design/`            | Feature specs and design docs (active or future work)                   |
+| `docs/ux/`                | UX reviews and UI mockups                                               |
+| `docs/knowledge/`         | Post-mortems and incident root-cause notes                              |
+| `docs/superpowers/specs/` | Agent-generated implementation specs (written after each feature lands) |
+| `docs/superpowers/plans/` | Agent-generated implementation plans (active only — delete when merged) |
+| `docs/ARCHITECTURE.md`    | System architecture reference                                           |
+| `docs/QUALITY.md`         | Quality attributes reference                                            |
+| `docs/REFERENCE.md`       | Quick-reference for common commands and URLs                            |
