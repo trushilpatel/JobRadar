@@ -157,7 +157,7 @@ func TestAdminRest_List_ServiceError(t *testing.T) {
 
 func TestAdminRest_Get_OK(t *testing.T) {
 	rec := &recordingAdminForRest{getView: &companydto.CompanyAdminView{
-		Company: companymodel.Company{ID: "stripe", Name: "Stripe", Slug: "stripe"},
+		CompanyAdminCommon: companydto.CompanyAdminCommon{Company: companymodel.Company{ID: "stripe", Name: "Stripe", Slug: "stripe"}},
 	}}
 	r := newAdminRouter(rec)
 	req := httptest.NewRequest(http.MethodGet, "/companies/stripe", nil)
@@ -284,11 +284,42 @@ func TestAdminRest_SetAllActive_ServiceError(t *testing.T) {
 	}
 }
 
+// TestAdminRest_List_InvalidScanStatus verifies P1.6 end-to-end: an unknown
+// scan_status query param is rejected with 400 by the validation layer before
+// reaching the repo.
+func TestAdminRest_List_InvalidScanStatus(t *testing.T) {
+	svc := companysvc.NewAdminValidationService(&recordingAdminForRest{})
+	r := newAdminRouter(svc)
+	req := httptest.NewRequest(http.MethodGet, "/companies?scan_status=bogus&limit=20", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestAdminRest_List_ValidScanStatusPasses verifies P1.6: a recognised
+// scan_status is accepted and reaches the repo.
+func TestAdminRest_List_ValidScanStatusPasses(t *testing.T) {
+	rec := &recordingAdminForRest{}
+	svc := companysvc.NewAdminValidationService(rec)
+	r := newAdminRouter(svc)
+	req := httptest.NewRequest(http.MethodGet, "/companies?scan_status=error&limit=20", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	if rec.listFilter.ScanStatus != "error" {
+		t.Errorf("ScanStatus = %q, want error", rec.listFilter.ScanStatus)
+	}
+}
+
 // TestAdminRest_Create_SettingsPlumbed verifies the embedded ScanSettings on
 // the request body reaches the service layer intact (adapter_type only on
 // purpose — partial payloads must round-trip).
 func TestAdminRest_Create_SettingsPlumbed(t *testing.T) {
-	rec := &recordingAdminForRest{createView: &companydto.CompanyAdminView{Company: companymodel.Company{ID: "x"}}}
+	rec := &recordingAdminForRest{createView: &companydto.CompanyAdminView{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: companymodel.Company{ID: "x"}}}}
 	r := newAdminRouter(rec)
 	body, _ := json.Marshal(map[string]any{
 		"id":   "x",

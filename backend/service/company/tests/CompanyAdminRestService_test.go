@@ -25,7 +25,7 @@ func newAdminRouter(svc companysvc.CompanyAdminService) *chi.Mux {
 
 func TestAdminRest_Create_PublicOnly(t *testing.T) {
 	svc := companysvc.NewAdminValidationService(&fakeAdmin{
-		createView: &companydto.CompanyAdminView{Company: companymodel.Company{ID: "stripe", Name: "Stripe", Slug: "stripe"}},
+		createView: &companydto.CompanyAdminView{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: companymodel.Company{ID: "stripe", Name: "Stripe", Slug: "stripe"}}},
 	})
 	r := newAdminRouter(svc)
 
@@ -45,7 +45,7 @@ func TestAdminRest_Create_PublicOnly(t *testing.T) {
 
 func TestAdminRest_Create_WithSettings(t *testing.T) {
 	svc := companysvc.NewAdminValidationService(&fakeAdmin{
-		createView: &companydto.CompanyAdminView{Company: companymodel.Company{ID: "stripe", Name: "Stripe", Slug: "stripe"}},
+		createView: &companydto.CompanyAdminView{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: companymodel.Company{ID: "stripe", Name: "Stripe", Slug: "stripe"}}},
 	})
 	r := newAdminRouter(svc)
 

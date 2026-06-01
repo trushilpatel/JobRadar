@@ -87,6 +87,17 @@ function validateWorkdaySite(site: string): string {
   return ''
 }
 
+// Scan-interval override is optional; blank means "use the global default".
+// When provided it must be a positive integer number of minutes.
+function validateIntervalOverride(raw: string): string {
+  const value = raw.trim()
+  if (value === '') return ''
+  if (!/^\d+$/.test(value) || Number(value) <= 0) {
+    return 'Must be a positive whole number of minutes'
+  }
+  return ''
+}
+
 const EMPTY_FORM = { id: '', name: '', website: '', adapter_type: 'greenhouse', active: true }
 const EMPTY_WORKDAY = { host: '', site: '' }
 
@@ -104,6 +115,9 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
 
   const [form, setForm] = useState(EMPTY_FORM)
   const [workday, setWorkday] = useState(EMPTY_WORKDAY)
+  // Per-company scan-interval override (minutes). Edit-only; '' means "use the
+  // global default". Kept as a string so the input stays controlled and blank.
+  const [intervalOverride, setIntervalOverride] = useState('')
   const [urlManuallyEdited, setUrlManuallyEdited] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [globalError, setGlobalError] = useState('')
@@ -122,10 +136,13 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
         active: initialData.active,
       })
       setWorkday(EMPTY_WORKDAY)
+      const override = initialData.scan_settings?.scan_interval_override
+      setIntervalOverride(override != null ? String(override) : '')
       setUrlManuallyEdited(true) // treat existing URL as manual — don't auto-overwrite
     } else if (open && !initialData) {
       setForm(EMPTY_FORM)
       setWorkday(EMPTY_WORKDAY)
+      setIntervalOverride('')
       setUrlManuallyEdited(false)
     }
     setFieldErrors({})
@@ -207,6 +224,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
   function handleClose() {
     setForm(EMPTY_FORM)
     setWorkday(EMPTY_WORKDAY)
+    setIntervalOverride('')
     setUrlManuallyEdited(false)
     setFieldErrors({})
     setGlobalError('')
@@ -215,6 +233,13 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    // Interval override is edit-only; validate before any network call so a bad
+    // value blocks submit with an inline field error.
+    const intervalErr = isEdit ? validateIntervalOverride(intervalOverride) : ''
+    if (intervalErr) {
+      setFieldErrors((errs) => ({ ...errs, interval_override: intervalErr }))
+      return
+    }
     if (isWorkday) {
       const hostErr = validateWorkdayHost(workday.host)
       const siteErr = validateWorkdaySite(workday.site)
@@ -251,9 +276,14 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
       }
       if (isEdit && initialData) {
         await updateAdminCompany(initialData.id, { name: form.name, website: form.website })
+        // Blank override clears any existing one (null tells the backend to fall
+        // back to the global SCAN_INTERVAL_MINUTES default).
+        const trimmedInterval = intervalOverride.trim()
+        const scanIntervalOverride = trimmedInterval === '' ? null : Number(trimmedInterval)
         await updateAdminCompanyScanSettings(initialData.id, {
           adapter_type: scanSettings.adapter_type,
           active: scanSettings.active,
+          scan_interval_override: scanIntervalOverride,
           ...(scanSettings.adapter_config ? { adapter_config: scanSettings.adapter_config } : {}),
         })
         onUpdated?.({ ...initialData, ...form })
@@ -271,6 +301,10 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
           active: form.active,
           last_scan_at: null,
           last_scan_status: null,
+          // adminCompany.scan_settings is the raw ScanSettingsView | null; the
+          // Company overlay carries the narrower CompanyScanSettings. A freshly
+          // created company has no error state, so leave it undefined.
+          scan_settings: undefined,
         })
       }
       handleClose()
@@ -486,6 +520,35 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                 />
               </button>
             </div>
+
+            {isEdit && (
+              <Field
+                label="Scan interval override (minutes)"
+                hint="Optional — blank uses the global default"
+              >
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  value={intervalOverride}
+                  aria-label="Scan interval override (minutes)"
+                  onChange={(e) => {
+                    setIntervalOverride(e.target.value)
+                    setFieldErrors((errs) => {
+                      const updated = { ...errs }
+                      delete updated.interval_override
+                      return updated
+                    })
+                  }}
+                  placeholder="e.g. 720"
+                  className={inputClass}
+                />
+                {fieldErrors.interval_override && (
+                  <p className="text-xs text-red-400 mt-1">{fieldErrors.interval_override}</p>
+                )}
+              </Field>
+            )}
 
             {globalError && <p className="text-sm text-red-400">{globalError}</p>}
 

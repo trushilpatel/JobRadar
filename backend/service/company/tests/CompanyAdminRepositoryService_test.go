@@ -43,7 +43,13 @@ func (f *fakeScanHistory) GetScanHistories(_ context.Context, _ []string) (map[s
 // sub-SELECTs the sqlite driver can't run (the queue table is unmigrated).
 func newAdminTestDB(t *testing.T) (*gorm.DB, *fakeScanHistory) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	// TranslateError maps driver-specific constraint errors onto GORM's
+	// portable sentinels (gorm.ErrDuplicatedKey / ErrForeignKeyViolated) so the
+	// admin Create classification (P1.1) can be exercised against sqlite.
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger:         gormlogger.Default.LogMode(gormlogger.Silent),
+		TranslateError: true,
+	})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -151,7 +157,7 @@ func TestAdminRepo_Create_NoSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if view.ID != "stripe" || view.Website != web {
+	if view.ID != "stripe" || view.Website == nil || *view.Website != web {
 		t.Errorf("view fields wrong: %+v", view)
 	}
 	if view.ScanSettings != nil {
@@ -206,6 +212,105 @@ func TestAdminRepo_Create_DuplicateID(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on duplicate id, got nil")
 	}
+	// P1.1: a unique violation is now classified as CONFLICT, not INTERNAL.
+	var se *apperr.ServiceError
+	if !errors.As(err, &se) || se.Code != "CONFLICT" {
+		t.Errorf("expected CONFLICT error, got %T %v", err, err)
+	}
+}
+
+// TestAdminRepo_Create_DuplicateSlug verifies P1.1: a duplicate slug (unique
+// index) is also surfaced as CONFLICT.
+func TestAdminRepo_Create_DuplicateSlug(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	seedAdminCompany(t, db, "stripe", "Stripe") // slug = "stripe"
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	_, err := repo.Create(context.Background(),
+		companydto.CompanyPublicInput{ID: "other", Name: "Other", Slug: "stripe"},
+		companydto.CompanyScanSettingsInput{})
+	if err == nil {
+		t.Fatal("expected error on duplicate slug, got nil")
+	}
+	var se *apperr.ServiceError
+	if !errors.As(err, &se) || se.Code != "CONFLICT" {
+		t.Errorf("expected CONFLICT error, got %T %v", err, err)
+	}
+}
+
+// TestAdminRepo_Create_FKViolationIsBadRequest verifies P1.1: when the
+// scan_settings insert violates a foreign key (adapter_type not registered in
+// adapter_configs), Create returns BAD_REQUEST, not a generic 500. The schema
+// is built by hand with sqlite FK enforcement enabled so the FK fires.
+func TestAdminRepo_Create_FKViolationIsBadRequest(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file::memory:?_foreign_keys=on"), &gorm.Config{
+		Logger:         gormlogger.Default.LogMode(gormlogger.Silent),
+		TranslateError: true,
+	})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	// companies, an adapter_configs registry, and a scan_settings table whose
+	// adapter_type FKs into adapter_configs — mirroring migration 062.
+	stmts := []string{
+		`CREATE TABLE companies (
+			id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE,
+			website TEXT, careers_url TEXT, logo_url TEXT,
+			created_at DATETIME, updated_at DATETIME)`,
+		`CREATE TABLE adapter_configs (adapter_type TEXT PRIMARY KEY)`,
+		`CREATE TABLE company_scan_settings (
+			company_id TEXT PRIMARY KEY,
+			adapter_type TEXT NOT NULL REFERENCES adapter_configs(adapter_type),
+			adapter_config TEXT, scan_interval_override INTEGER,
+			active INTEGER NOT NULL DEFAULT 1,
+			last_scan_at DATETIME, last_success_at DATETIME, last_error_at DATETIME,
+			last_error_message TEXT, consecutive_errors INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME, updated_at DATETIME,
+			FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE)`,
+		`INSERT INTO adapter_configs (adapter_type) VALUES ('greenhouse')`,
+	}
+	for _, s := range stmts {
+		if err := db.Exec(s).Error; err != nil {
+			t.Fatalf("schema setup: %v", err)
+		}
+	}
+
+	repo := companysvc.NewAdminRepositoryService(db, &fakeScanHistory{}, logger.NewNoop())
+	bogus := "not-registered"
+	_, err = repo.Create(context.Background(),
+		companydto.CompanyPublicInput{ID: "acme", Name: "Acme", Slug: "acme"},
+		companydto.CompanyScanSettingsInput{AdapterType: &bogus})
+	if err == nil {
+		t.Fatal("expected FK violation error, got nil")
+	}
+	var se *apperr.ServiceError
+	if !errors.As(err, &se) || se.Code != "BAD_REQUEST" {
+		t.Errorf("expected BAD_REQUEST, got %T %v", err, err)
+	}
+
+	// Verify the transaction rolled back — no orphan companies row.
+	var n int64
+	_ = db.Table("companies").Where("id = ?", "acme").Count(&n).Error
+	if n != 0 {
+		t.Errorf("company row should have rolled back, count=%d", n)
+	}
+}
+
+// TestAdminRepo_Create_OtherErrorIsInternal verifies P1.1: an unclassified
+// failure (e.g. the companies table missing) still maps to INTERNAL.
+func TestAdminRepo_Create_OtherErrorIsInternal(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	if err := db.Exec("DROP TABLE companies").Error; err != nil {
+		t.Fatalf("drop companies: %v", err)
+	}
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	_, err := repo.Create(context.Background(),
+		companydto.CompanyPublicInput{ID: "x", Name: "X", Slug: "x"},
+		companydto.CompanyScanSettingsInput{})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
 	var se *apperr.ServiceError
 	if !errors.As(err, &se) || se.Code != "INTERNAL" {
 		t.Errorf("expected INTERNAL error, got %T %v", err, err)
@@ -225,8 +330,47 @@ func TestAdminRepo_UpdatePublic_Patch(t *testing.T) {
 	if err := db.First(&got, "id = ?", "stripe").Error; err != nil {
 		t.Fatalf("readback: %v", err)
 	}
-	if got.Name != "Renamed" || got.Website != web {
+	if got.Name != "Renamed" || got.Website == nil || *got.Website != web {
 		t.Errorf("patch didn't land: %+v", got)
+	}
+}
+
+// TestAdminRepo_UpdatePublic_WebsitePatchSemantics verifies P2: with Website
+// now a *string, an absent patch (nil) leaves the stored value untouched while
+// an explicit empty-string patch clears it.
+func TestAdminRepo_UpdatePublic_WebsitePatchSemantics(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	orig := "https://acme.com"
+	if _, err := repo.Create(context.Background(),
+		companydto.CompanyPublicInput{ID: "acme", Name: "Acme", Slug: "acme", Website: &orig},
+		companydto.CompanyScanSettingsInput{}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Patch a different field, leaving Website absent (nil) → unchanged.
+	if err := repo.UpdatePublic(context.Background(), "acme", companydto.CompanyPublicInput{Name: "Acme Inc"}); err != nil {
+		t.Fatalf("UpdatePublic name-only: %v", err)
+	}
+	var got companymodel.Company
+	if err := db.First(&got, "id = ?", "acme").Error; err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if got.Website == nil || *got.Website != orig {
+		t.Errorf("absent website patch should leave value untouched, got %v", got.Website)
+	}
+
+	// Explicit empty-string patch clears the website.
+	empty := ""
+	if err := repo.UpdatePublic(context.Background(), "acme", companydto.CompanyPublicInput{Website: &empty}); err != nil {
+		t.Fatalf("UpdatePublic clear website: %v", err)
+	}
+	if err := db.First(&got, "id = ?", "acme").Error; err != nil {
+		t.Fatalf("readback 2: %v", err)
+	}
+	if got.Website == nil || *got.Website != "" {
+		t.Errorf("explicit empty website patch should clear to empty string, got %v", got.Website)
 	}
 }
 
@@ -349,10 +493,28 @@ func TestAdminRepo_SetAllActive(t *testing.T) {
 		}
 	}
 
-	// Empty table is allowed — must not error.
+	// Empty table is allowed — must not error (global toggle, 0 rows is fine).
 	_ = db.Exec("DELETE FROM company_scan_settings").Error
 	if err := repo.SetAllActive(context.Background(), true); err != nil {
 		t.Errorf("SetAllActive on empty: %v", err)
+	}
+}
+
+// TestAdminRepo_SetAllActive_DBError verifies P2: a hard DB failure surfaces
+// as ErrInternal (and is logged before returning).
+func TestAdminRepo_SetAllActive_DBError(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	if err := db.Exec("DROP TABLE company_scan_settings").Error; err != nil {
+		t.Fatalf("drop table: %v", err)
+	}
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+	err := repo.SetAllActive(context.Background(), true)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var se *apperr.ServiceError
+	if !errors.As(err, &se) || se.Code != "INTERNAL" {
+		t.Errorf("expected INTERNAL, got %T %v", err, err)
 	}
 }
 
@@ -635,6 +797,112 @@ func TestAdminRepo_List_ScanHistoryErrorBubbles(t *testing.T) {
 	var se *apperr.ServiceError
 	if !errors.As(err, &se) || se.Code != "INTERNAL" {
 		t.Errorf("expected INTERNAL, got %T %v", err, err)
+	}
+}
+
+// paginateAll walks every page of the admin list with the given sort,
+// feeding each NextCursor into the following request, and returns the ordered
+// list of ids seen. Fails the test if more than maxPages are needed (guards
+// against an infinite cursor loop).
+func paginateAll(t *testing.T, repo companysvc.CompanyAdminService, sortBy, sortDir string, limit int) []string {
+	t.Helper()
+	var ids []string
+	cursor := ""
+	for page := 0; page < 50; page++ {
+		res, err := repo.List(context.Background(),
+			companydto.CompanyFilter{SortBy: sortBy, SortDir: sortDir, Cursor: cursor}, limit)
+		if err != nil {
+			t.Fatalf("List page %d (sort=%s/%s): %v", page, sortBy, sortDir, err)
+		}
+		for _, it := range res.Items {
+			ids = append(ids, it.ID)
+		}
+		if res.NextCursor == nil {
+			return ids
+		}
+		cursor = *res.NextCursor
+	}
+	t.Fatalf("pagination did not terminate for sort=%s/%s", sortBy, sortDir)
+	return nil
+}
+
+// assertNoGapNoOverlap verifies the paginated ids are exactly the expected set
+// with no duplicates (overlap) and nothing missing (gap).
+func assertNoGapNoOverlap(t *testing.T, got, want []string, label string) {
+	t.Helper()
+	seen := map[string]int{}
+	for _, id := range got {
+		seen[id]++
+		if seen[id] > 1 {
+			t.Errorf("%s: id %q appeared twice (overlap)", label, id)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("%s: paginated %d ids, want %d (%v vs %v)", label, len(got), len(want), got, want)
+	}
+	for _, id := range want {
+		if seen[id] == 0 {
+			t.Errorf("%s: id %q missing from pages (gap)", label, id)
+		}
+	}
+}
+
+// TestAdminRepo_List_KeysetPagination_AllSorts verifies P0.4: paging past
+// page 1 with a non-default sort (adapter_type / last_scan_at / created_at)
+// and the default name sort produces no overlap and no gap. last_scan_at mixes
+// NULL and non-NULL rows to exercise the NULLS-LAST bucket cursor.
+func TestAdminRepo_List_KeysetPagination_AllSorts(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	// Seed 7 companies (> limit of 3) with distinct names, adapters, and a mix
+	// of NULL / non-NULL last_scan_at values.
+	type seed struct {
+		id, name, adapter string
+		lastScan          *time.Time
+	}
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	tp := func(d int) *time.Time { v := base.AddDate(0, 0, d); return &v }
+	adapters := []string{
+		companycommon.AdapterGreenhouse, companycommon.AdapterLever,
+		companycommon.AdapterAshby, companycommon.AdapterGoogle,
+		companycommon.AdapterMeta, companycommon.AdapterNetflix,
+		companycommon.AdapterUber,
+	}
+	seeds := []seed{
+		{"c1", "Gamma", adapters[0], tp(3)},
+		{"c2", "Alpha", adapters[1], nil},
+		{"c3", "Echo", adapters[2], tp(1)},
+		{"c4", "Bravo", adapters[3], nil},
+		{"c5", "Delta", adapters[4], tp(5)},
+		{"c6", "Foxtrot", adapters[5], tp(2)},
+		{"c7", "Hotel", adapters[6], nil},
+	}
+	want := make([]string, 0, len(seeds))
+	for _, s := range seeds {
+		seedAdminCompany(t, db, s.id, s.name)
+		row := companymodel.CompanyScanSettings{
+			CompanyID:   s.id,
+			AdapterType: s.adapter,
+			Active:      true,
+			LastScanAt:  s.lastScan,
+		}
+		if err := db.Create(&row).Error; err != nil {
+			t.Fatalf("seed settings %s: %v", s.id, err)
+		}
+		want = append(want, s.id)
+	}
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	for _, sort := range []struct{ by, dir string }{
+		{"", "asc"},             // default name ASC
+		{"name", "desc"},        // name DESC
+		{"adapter_type", "asc"}, // adapter ASC
+		{"last_scan_at", "asc"}, // nullable ASC (NULLs last)
+		{"last_scan_at", "desc"},
+		{"created_at", "asc"},
+	} {
+		label := sort.by + "/" + sort.dir
+		got := paginateAll(t, repo, sort.by, sort.dir, 3)
+		assertNoGapNoOverlap(t, got, want, label)
 	}
 }
 

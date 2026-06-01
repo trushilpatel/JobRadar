@@ -56,7 +56,7 @@ export function useCompanies() {
     setCursorHistory([])
   }
 
-  const { data, isLoading, isFetching, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: companyQueryKeys.adminCompanies(filters, cursor, limit),
     queryFn: () => fetchAdminCompanies(filters, cursor, limit),
     staleTime: 10_000,
@@ -98,6 +98,14 @@ export function useCompanies() {
     setCursorHistory([])
   }
 
+  // Changing page size invalidates any keyset cursor (a cursor minted for one
+  // limit is meaningless under another), so reset to the first page.
+  function changeLimit(newLimit: number) {
+    setLimit(newLimit)
+    setCursor('')
+    setCursorHistory([])
+  }
+
   function handleSortingChange(newSorting: SortingState) {
     setSorting(newSorting)
     setCursor('')
@@ -128,6 +136,7 @@ export function useCompanies() {
     totalActive,
     isLoading,
     isFetching,
+    isError,
     refetch,
 
     search,
@@ -143,7 +152,7 @@ export function useCompanies() {
     handleSortingChange,
 
     limit,
-    setLimit,
+    setLimit: changeLimit,
     nextCursor,
     hasPrev: cursorHistory.length > 0,
     goToNextPage,

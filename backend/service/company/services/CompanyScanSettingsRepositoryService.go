@@ -88,7 +88,10 @@ func (r *scanSettingsRepository) Create(ctx context.Context, s companymodel.Comp
 		if isUniqueViolation(err) {
 			return apperr.ErrConflict.WithMessage("scan settings already exist for company")
 		}
-		r.log.Warn("failed to create scan settings", logger.Str(logger.FieldCompany, s.CompanyID), logger.Err(err))
+		r.log.Warn("failed to create scan settings",
+			logger.Str(logger.FieldCompany, s.CompanyID),
+			logger.Str(logger.FieldAdapterType, s.AdapterType),
+			logger.Err(err))
 		return apperr.ErrInternal.WithMessage("failed to create scan settings")
 	}
 	return nil
@@ -112,13 +115,25 @@ func (r *scanSettingsRepository) Update(ctx context.Context, companyID string, p
 		Where("company_id = ?", companyID).
 		Updates(fields)
 	if res.Error != nil {
-		r.log.Warn("failed to update scan settings", logger.Str(logger.FieldCompany, companyID), logger.Err(res.Error))
+		r.log.Warn("failed to update scan settings",
+			logger.Str(logger.FieldCompany, companyID),
+			logger.Str(logger.FieldAdapterType, adapterTypeFromInput(p)),
+			logger.Err(res.Error))
 		return apperr.ErrInternal.WithMessage("failed to update scan settings")
 	}
 	if res.RowsAffected == 0 {
 		return apperr.ErrNotFound.WithMessage("scan settings not found")
 	}
 	return nil
+}
+
+// adapterTypeFromInput returns the patched adapter_type, or empty when the
+// patch does not touch it. Used to enrich scan-settings update error logs.
+func adapterTypeFromInput(p companydto.CompanyScanSettingsInput) string {
+	if p.AdapterType != nil {
+		return *p.AdapterType
+	}
+	return ""
 }
 
 // UpdateScanState is the worker-only write path. It applies a partial
@@ -219,6 +234,25 @@ func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		return pgErr.Code == "23505"
+	}
+	return false
+}
+
+// isForeignKeyViolation detects PostgreSQL foreign-key-constraint failures
+// (SQLSTATE 23503). The company Create path uses this to surface an
+// unregistered adapter_type (FK → adapter_configs) as a 400 rather than a
+// generic 500. GORM exposes ErrForeignKeyViolated on recent versions; we also
+// inspect the raw pgconn code for portability across local dev and CI.
+func isForeignKeyViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrForeignKeyViolated) {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23503"
 	}
 	return false
 }

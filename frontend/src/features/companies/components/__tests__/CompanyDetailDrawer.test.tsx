@@ -219,7 +219,6 @@ describe('CompanyDetailDrawer — logs section', () => {
         new_this_month: 0,
         recent_runs: [
           {
-            id: 1,
             company_id: 'stripe',
             scanned_at: '2024-01-01T00:00:00Z',
             jobs_fetched: 12,
@@ -228,7 +227,6 @@ describe('CompanyDetailDrawer — logs section', () => {
             duration_ms: 1500,
           },
           {
-            id: 2,
             company_id: 'stripe',
             scanned_at: '2024-01-02T00:00:00Z',
             jobs_fetched: 0,

@@ -80,6 +80,8 @@ export function CompaniesPage() {
             itemsBeforePage={c.itemsBeforePage}
             knownTotal={c.total}
             loading={c.isLoading}
+            isError={c.isError}
+            onRetry={c.refetch}
             limit={c.limit}
             onLimitChange={c.setLimit}
             nextCursor={c.nextCursor}
@@ -100,6 +102,7 @@ export function CompaniesPage() {
               onDelete: (id) => setDeleteTarget(c.companies.find((co) => co.id === id) ?? null),
               onToggleActive: actions.toggleActive,
               scanning: actions.scanning,
+              togglingActive: actions.togglingActive,
             }}
           />
 
