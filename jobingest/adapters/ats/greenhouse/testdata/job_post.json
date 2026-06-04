@@ -1,0 +1,18 @@
+{
+  "id": 12345,
+  "title": "Backend Engineer",
+  "location": { "name": "San Francisco, CA" },
+  "absolute_url": "https://job-boards.greenhouse.io/stripe/jobs/12345",
+  "content": "<p>Join our infrastructure team.</p><ul><li>Build scalable systems</li></ul>",
+  "departments": [{ "name": "Engineering" }],
+  "updated_at": "2024-01-15T10:00:00Z",
+  "pay_input_ranges": [
+    {
+      "min_cents": 5000000,
+      "max_cents": 7500000,
+      "currency_type": "USD",
+      "title": "NYC Salary Range",
+      "blurb": "In order to provide transparency..."
+    }
+  ]
+}

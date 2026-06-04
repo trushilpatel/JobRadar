@@ -1,0 +1,16 @@
+{
+  "jobs": [
+    {
+      "id": 12345,
+      "title": "Backend Engineer",
+      "location": { "name": "San Francisco, CA" },
+      "absolute_url": "https://job-boards.greenhouse.io/stripe/jobs/12345"
+    },
+    {
+      "id": 67890,
+      "title": "ML Researcher",
+      "location": { "name": "Remote" },
+      "absolute_url": "https://job-boards.greenhouse.io/stripe/jobs/67890"
+    }
+  ]
+}
