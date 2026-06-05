@@ -288,7 +288,7 @@ func TestAdminRest_SetAllActive_ServiceError(t *testing.T) {
 // scan_status query param is rejected with 400 by the validation layer before
 // reaching the repo.
 func TestAdminRest_List_InvalidScanStatus(t *testing.T) {
-	svc := companysvc.NewAdminValidationService(&recordingAdminForRest{})
+	svc := companysvc.NewAdminValidationService(&recordingAdminForRest{}, newMockAts())
 	r := newAdminRouter(svc)
 	req := httptest.NewRequest(http.MethodGet, "/companies?scan_status=bogus&limit=20", nil)
 	w := httptest.NewRecorder()
@@ -302,7 +302,7 @@ func TestAdminRest_List_InvalidScanStatus(t *testing.T) {
 // scan_status is accepted and reaches the repo.
 func TestAdminRest_List_ValidScanStatusPasses(t *testing.T) {
 	rec := &recordingAdminForRest{}
-	svc := companysvc.NewAdminValidationService(rec)
+	svc := companysvc.NewAdminValidationService(rec, newMockAts())
 	r := newAdminRouter(svc)
 	req := httptest.NewRequest(http.MethodGet, "/companies?scan_status=error&limit=20", nil)
 	w := httptest.NewRecorder()

@@ -1,7 +1,11 @@
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
-import { AdapterConfigsTable } from '@/features/settings'
+import { AtsTable } from '@/features/settings'
+import { useAts, useAtsActions } from '@/features/ats'
 
 export function SettingsPage() {
+  const { data: atsList, isLoading, isError, refetch } = useAts()
+  const mutation = useAtsActions()
+
   return (
     <div className="flex flex-col h-full bg-[#0d0d14] overflow-y-auto">
       <div className="border-b border-white/[0.07] px-6 py-4 shrink-0">
@@ -18,7 +22,13 @@ export function SettingsPage() {
             </p>
           </div>
           <ErrorBoundary>
-            <AdapterConfigsTable />
+            <AtsTable
+              atsList={atsList}
+              isLoading={isLoading}
+              isError={isError}
+              refetch={refetch}
+              onUpdate={(name, data) => mutation.mutateAsync({ name, data })}
+            />
           </ErrorBoundary>
         </section>
       </div>

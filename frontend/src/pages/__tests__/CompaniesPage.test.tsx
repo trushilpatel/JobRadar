@@ -25,6 +25,13 @@ vi.mock('@/features/companies/hooks/useRetryTier', () => ({
 }))
 vi.mock('@/features/companies/hooks/useCompanyScanStats')
 vi.mock('@/features/companies/hooks/useCompanyAnalytics')
+vi.mock('@/features/ats', () => ({
+  useAts: vi.fn(() => ({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })),
+  useAtsActions: vi.fn(),
+  atsQueryKeys: { list: () => ['ats'], detail: (name: string) => ['ats', name] },
+  getAts: vi.fn(),
+  updateAts: vi.fn(),
+}))
 
 const navigate = vi.fn()
 vi.mock('react-router-dom', async () => {

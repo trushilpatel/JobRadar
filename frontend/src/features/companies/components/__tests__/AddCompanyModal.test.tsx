@@ -4,9 +4,77 @@ import userEvent from '@testing-library/user-event'
 import * as adminApi from '@/features/companies/api/adminCompanies.api'
 import { ApiValidationError } from '@/lib/core/api-error'
 import { AddCompanyModal } from '../AddCompanyModal'
-import type { Company } from '@/types'
+import type { Company, ATS } from '@/types'
 
 vi.mock('@/features/companies/api/adminCompanies.api')
+
+// Minimal ATS list with the adapters used in tests.
+// Includes base_url for adapters with URL templates; empty base_url for fixed-URL adapters.
+const mockAtsList: ATS[] = [
+  {
+    name: 'greenhouse',
+    display_name: 'Greenhouse',
+    base_url: 'https://boards-api.greenhouse.io/v1/boards/',
+    is_active: true,
+    is_admin_creatable: true,
+    scan_interval_min: 1440,
+    inter_company_delay_s: 3,
+  },
+  {
+    name: 'lever',
+    display_name: 'Lever',
+    base_url: 'https://jobs.lever.co/',
+    is_active: true,
+    is_admin_creatable: true,
+    scan_interval_min: 1440,
+    inter_company_delay_s: 5,
+  },
+  {
+    name: 'ashby',
+    display_name: 'Ashby',
+    base_url: 'https://jobs.ashbyhq.com/',
+    is_active: true,
+    is_admin_creatable: true,
+    scan_interval_min: 1440,
+    inter_company_delay_s: 5,
+  },
+  {
+    name: 'gem',
+    display_name: 'Gem',
+    base_url: 'https://jobs.gem.com/',
+    is_active: true,
+    is_admin_creatable: true,
+    scan_interval_min: 1440,
+    inter_company_delay_s: 5,
+  },
+  {
+    name: 'deel',
+    display_name: 'Deel',
+    base_url: 'https://jobs.deel.com/',
+    is_active: true,
+    is_admin_creatable: true,
+    scan_interval_min: 1440,
+    inter_company_delay_s: 5,
+  },
+  {
+    name: 'google',
+    display_name: 'Google',
+    base_url: '',
+    is_active: true,
+    is_admin_creatable: false,
+    scan_interval_min: 1440,
+    inter_company_delay_s: 30,
+  },
+  {
+    name: 'workday',
+    display_name: 'Workday',
+    base_url: '',
+    is_active: true,
+    is_admin_creatable: true,
+    scan_interval_min: 1440,
+    inter_company_delay_s: 10,
+  },
+]
 
 // Radix Dialog uses a Portal — make sure it renders into the document body
 // which jsdom handles automatically, but we need a container for queries.
@@ -16,6 +84,7 @@ const baseProps = {
   onClose: vi.fn(),
   onCreated: vi.fn(),
   onUpdated: vi.fn(),
+  atsList: mockAtsList,
 }
 
 const mockAdminCompanyResponse = {

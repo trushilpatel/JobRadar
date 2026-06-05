@@ -253,7 +253,7 @@ func TestScanQueueStore_ClaimNext_EmitsForUpdateAndSkipLocked(t *testing.T) {
 	// At minimum the first lock-check SELECT must be emitted with the
 	// FOR UPDATE clause that serialises concurrent pod claims.
 	for _, want := range []string{
-		"FROM adapter_configs",
+		"FROM ats",
 		"FOR UPDATE",
 	} {
 		if !strings.Contains(joined, want) {
@@ -372,5 +372,69 @@ func TestScanQueueStore_ListQueue_BothFilters(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Errorf("expected SQL to contain %q; got:\n%s", want, joined)
 		}
+	}
+}
+
+// --- Closed-DB error-path tests for ScanQueueStore ---
+// These exercise the error branches that can't be hit via DryRun mode
+// (which never executes SQL and therefore never returns DB errors).
+
+func newClosedScanQueueDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db := newScanQueueExecDB(t)
+	raw, err := db.DB()
+	if err != nil {
+		t.Fatalf("raw db: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	return db
+}
+
+func TestScanQueueStore_Complete_DBError(t *testing.T) {
+	store := svc.NewQueueStore(newClosedScanQueueDB(t))
+	err := store.Complete(context.Background(), "any")
+	if err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+	if stderrors.Is(err, domainerrs.ErrQueueRowMissing) {
+		t.Error("unexpected ErrQueueRowMissing — should be a DB error")
+	}
+}
+
+func TestScanQueueStore_Remove_DBError(t *testing.T) {
+	store := svc.NewQueueStore(newClosedScanQueueDB(t))
+	err := store.Remove(context.Background(), "any")
+	if err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+	if stderrors.Is(err, domainerrs.ErrQueueRowMissing) {
+		t.Error("unexpected ErrQueueRowMissing — should be a DB error")
+	}
+}
+
+func TestScanQueueStore_UpdateHeartbeat_DBError(t *testing.T) {
+	store := svc.NewQueueStore(newClosedScanQueueDB(t))
+	err := store.UpdateHeartbeat(context.Background(), "any")
+	if err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+	if stderrors.Is(err, domainerrs.ErrQueueRowMissing) {
+		t.Error("unexpected ErrQueueRowMissing — should be a DB error")
+	}
+}
+
+func TestScanQueueStore_ResetStuck_DBError(t *testing.T) {
+	store := svc.NewQueueStore(newClosedScanQueueDB(t))
+	if _, err := store.ResetStuck(context.Background(), 30*time.Second); err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+}
+
+func TestScanQueueStore_ListQueue_DBError(t *testing.T) {
+	store := svc.NewQueueStore(newClosedScanQueueDB(t))
+	if _, err := store.ListQueue(context.Background(), dto.QueueFilter{}); err == nil {
+		t.Fatal("expected error on closed DB")
 	}
 }

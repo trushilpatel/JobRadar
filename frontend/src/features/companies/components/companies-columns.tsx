@@ -1,7 +1,7 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { RefreshCw, Pencil, Trash2, ExternalLink } from 'lucide-react'
 import * as Tooltip from '@radix-ui/react-tooltip'
-import type { Company } from '@/types'
+import type { Company, ATS } from '@/types'
 import { QUEUE_STATUS, SCAN_STATUS } from '../constants'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +21,9 @@ export interface CompanyColumnActions {
   // Per-company in-flight set for the active/inactive toggle. Optional so the
   // table can render without wiring it; absence is treated as "not toggling".
   togglingActive?: Set<string>
+  // Optional ATS display name map — keyed by adapter name. When provided,
+  // the adapter_type cell renders the display name. Falls back to raw string.
+  atsMap?: Map<string, ATS>
 }
 
 export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Company, unknown>[] {
@@ -55,7 +58,11 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
       accessorKey: 'adapter_type',
       size: 110,
       header: ({ column }) => <DataTableColumnHeader column={column} title="Adapter" />,
-      cell: ({ getValue }) => <Badge variant="mono">{getValue() as string}</Badge>,
+      cell: ({ getValue }) => {
+        const raw = getValue() as string
+        const display = actions.atsMap?.get(raw)?.display_name
+        return <Badge variant="mono">{display ?? raw}</Badge>
+      },
     },
 
     {

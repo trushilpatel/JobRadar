@@ -9,7 +9,7 @@ import {
   Tooltip as RechartTooltip,
   ResponsiveContainer,
 } from 'recharts'
-import type { Company } from '@/types'
+import type { Company, ATS } from '@/types'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
 import { cn, formatRelativeTime } from '@/lib/utils/utils'
@@ -23,6 +23,8 @@ interface CompanyDetailDrawerProps {
   onEdit: (c: Company) => void
   onDelete: (id: string) => void
   onViewJobs?: (companyName: string) => void
+  /** Optional ATS entry for this company — used to display human-readable adapter name. */
+  atsEntry?: ATS
 }
 
 export function CompanyDetailDrawer({
@@ -32,6 +34,7 @@ export function CompanyDetailDrawer({
   onEdit,
   onDelete,
   onViewJobs,
+  atsEntry,
 }: CompanyDetailDrawerProps) {
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set())
   const [logsOpen, setLogsOpen] = useState(false)
@@ -128,7 +131,7 @@ export function CompanyDetailDrawer({
                 {safeHost(company.url)}
               </a>
               {' · '}
-              {company.adapter_type}
+              {atsEntry?.display_name ?? company.adapter_type}
             </p>
           </div>
         </div>

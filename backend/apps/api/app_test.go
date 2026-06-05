@@ -11,6 +11,8 @@ import (
 	appdto "github.com/trushilpatel/jobradar/service/application/dto"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	appsvc "github.com/trushilpatel/jobradar/service/application/services"
+	atsdto "github.com/trushilpatel/jobradar/service/ats/dto"
+	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	"github.com/trushilpatel/jobradar/service/dashboard"
@@ -34,10 +36,9 @@ func buildTestApp() *App {
 	scanRest := scansvc.NewRestService(fakeScan)
 	scanH := scansvc.NewRestRouter(scanRest)
 
-	fakeAdapterCfg := &fakeAdapterConfigService{}
-	adapterCfgValidation := scansvc.NewAdapterConfigValidator(fakeAdapterCfg)
-	adapterCfgRest := scansvc.NewAdapterConfigRestService(adapterCfgValidation)
-	adapterCfgH := scansvc.NewAdapterConfigRestRouter(adapterCfgRest)
+	fakeAts := &fakeAtsService{}
+	atsRest := atssvc.NewAtsRestService(fakeAts)
+	atsH := atssvc.NewAtsRestRouter(atsRest)
 
 	fakeJob := &fakeJobService{}
 	jobRest := jobsvc.NewRestService(fakeJob)
@@ -57,7 +58,7 @@ func buildTestApp() *App {
 	insightsRest := insightssvc.NewRestService(insightsValidation)
 	insightsH := insightssvc.NewRestRouter(insightsRest)
 
-	return NewApp(companyH, scanH, adapterCfgH, jobH, appH, dashH, insightsH, &fakePipelineService{}, nil)
+	return NewApp(companyH, scanH, atsH, jobH, appH, dashH, insightsH, &fakePipelineService{}, nil)
 }
 
 func TestApp_Handlers_ReturnsExpectedCount(t *testing.T) {
@@ -200,6 +201,12 @@ func (f *fakeScanService) PurgeInactive(_ context.Context) (int, error) { return
 func (f *fakeScanService) GetAnalytics(_ context.Context, _ string) (*scandto.CompanyAnalytics, error) {
 	return &scandto.CompanyAnalytics{}, nil
 }
+func (f *fakeScanService) GetEffectiveScanConfig(_ context.Context, _ string) (scandto.EffectiveScanConfigDTO, error) {
+	return scandto.EffectiveScanConfigDTO{}, nil
+}
+func (f *fakeScanService) UpdateScanIntervalOverride(_ context.Context, _ string, _ *int) error {
+	return nil
+}
 
 type fakeJobService struct{}
 
@@ -307,25 +314,22 @@ func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insightsdto.
 	return insightsdto.PipelineCounts{}, nil
 }
 
-type fakeAdapterConfigService struct{}
+type fakeAtsService struct{}
 
-func (f *fakeAdapterConfigService) ListAdapterConfigs(_ context.Context) ([]scandto.AdapterConfigDTO, error) {
+func (f *fakeAtsService) ListATS(_ context.Context) ([]atsdto.ATSDTO, error) {
 	return nil, nil
 }
-func (f *fakeAdapterConfigService) UpdateAdapterConfig(_ context.Context, _ string, _ scandto.UpdateAdapterConfigInput) (scandto.AdapterConfigDTO, error) {
-	return scandto.AdapterConfigDTO{}, nil
+func (f *fakeAtsService) GetATS(_ context.Context, _ string) (atsdto.ATSDTO, error) {
+	return atsdto.ATSDTO{}, nil
 }
-func (f *fakeAdapterConfigService) GetEffectiveScanConfig(_ context.Context, _ string) (scandto.EffectiveScanConfigDTO, error) {
-	return scandto.EffectiveScanConfigDTO{}, nil
-}
-func (f *fakeAdapterConfigService) UpdateScanIntervalOverride(_ context.Context, _ string, _ *int) error {
-	return nil
+func (f *fakeAtsService) UpdateATS(_ context.Context, _ string, _ atsdto.UpdateATSInput) (atsdto.ATSDTO, error) {
+	return atsdto.ATSDTO{}, nil
 }
 
 // Ensure fakes implement interfaces.
 var _ companysvc.CompanyService = (*fakeCompanyService)(nil)
 var _ scansvc.Service = (*fakeScanService)(nil)
-var _ scansvc.AdapterConfigService = (*fakeAdapterConfigService)(nil)
+var _ atssvc.AtsService = (*fakeAtsService)(nil)
 var _ jobsvc.JobService = (*fakeJobService)(nil)
 var _ appsvc.ApplicationRepository = (*fakeAppService)(nil)
 var _ dashboard.Service = (*fakeDashboardService)(nil)

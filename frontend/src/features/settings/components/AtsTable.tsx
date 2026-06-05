@@ -2,11 +2,8 @@ import { useState, useCallback } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
-import { formatRelativeTime } from '@/lib/utils/utils'
-import { useAdapterConfigs } from '../hooks/useAdapterConfigs'
-import { useAdapterConfigActions } from '../hooks/useAdapterConfigActions'
 import { AdapterConfigCell } from './AdapterConfigCell'
-import type { AdapterConfig, UpdateAdapterConfigInput } from '../api/adapterConfigs.api'
+import type { ATS } from '@/types'
 
 const ADAPTER_COLORS: Record<string, string> = {
   greenhouse: 'bg-emerald-400',
@@ -23,29 +20,44 @@ const ADAPTER_COLORS: Record<string, string> = {
   deel: 'bg-amber-400',
 }
 
+type EditableField = 'scan_interval_min' | 'inter_company_delay_s'
+
 interface PendingChange {
-  adapterType: string
-  field: keyof UpdateAdapterConfigInput
+  atsName: string
+  displayName: string
+  field: EditableField
   newValue: number
-  currentConfig: AdapterConfig
+  currentAts: ATS
   resolve: () => void
   reject: (err: Error) => void
 }
 
-export function AdapterConfigsTable() {
-  const { data: configs, isLoading, isError, refetch } = useAdapterConfigs()
-  const { updateConfig } = useAdapterConfigActions()
+export interface AtsTableProps {
+  atsList: ATS[] | undefined
+  isLoading: boolean
+  isError: boolean
+  refetch: () => void
+  onUpdate: (
+    name: string,
+    data: Partial<
+      Pick<ATS, 'scan_interval_min' | 'inter_company_delay_s' | 'is_active' | 'is_admin_creatable'>
+    >
+  ) => Promise<ATS>
+}
+
+export function AtsTable({ atsList, isLoading, isError, refetch, onUpdate }: AtsTableProps) {
   const [pending, setPending] = useState<PendingChange | null>(null)
 
   const handleSave = useCallback(
     (
-      adapterType: string,
-      field: keyof UpdateAdapterConfigInput,
+      atsName: string,
+      displayName: string,
+      field: EditableField,
       newValue: number,
-      currentConfig: AdapterConfig
+      currentAts: ATS
     ): Promise<void> => {
       return new Promise<void>((resolve, reject) => {
-        setPending({ adapterType, field, newValue, currentConfig, resolve, reject })
+        setPending({ atsName, displayName, field, newValue, currentAts, resolve, reject })
       })
     },
     []
@@ -53,15 +65,15 @@ export function AdapterConfigsTable() {
 
   async function confirmSave() {
     if (!pending) return
-    const { adapterType, field, newValue, currentConfig, resolve, reject } = pending
-    const data: UpdateAdapterConfigInput = {
-      scan_interval_minutes: currentConfig.scan_interval_minutes,
-      inter_company_delay_s: currentConfig.inter_company_delay_s,
+    const { atsName, field, newValue, currentAts, resolve, reject } = pending
+    const data: Partial<Pick<ATS, 'scan_interval_min' | 'inter_company_delay_s'>> = {
+      scan_interval_min: currentAts.scan_interval_min,
+      inter_company_delay_s: currentAts.inter_company_delay_s,
       [field]: newValue,
     }
     setPending(null)
     try {
-      await updateConfig(adapterType, data)
+      await onUpdate(atsName, data)
       resolve()
     } catch (err) {
       reject(err instanceof Error ? err : new Error('Failed'))
@@ -87,7 +99,7 @@ export function AdapterConfigsTable() {
   if (isError) {
     return (
       <div className="flex items-center gap-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
-        <span>Failed to load adapter configs.</span>
+        <span>Failed to load ATS configs.</span>
         <button
           type="button"
           onClick={() => void refetch()}
@@ -99,10 +111,10 @@ export function AdapterConfigsTable() {
     )
   }
 
-  const rows = configs ?? []
+  const rows = atsList ?? []
 
   if (rows.length === 0) {
-    return <p className="text-sm text-white/40 py-4">No adapter configurations found.</p>
+    return <p className="text-sm text-white/40 py-4">No ATS configurations found.</p>
   }
 
   return (
@@ -121,50 +133,60 @@ export function AdapterConfigsTable() {
                 Inter-Company Delay
               </th>
               <th className="text-left px-4 py-2.5 text-[11px] font-medium text-white/40 uppercase tracking-wider">
-                Last Scheduled
-              </th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-medium text-white/40 uppercase tracking-wider">
-                Updated
+                Status
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.04]">
-            {rows.map((cfg) => (
-              <tr key={cfg.adapter_type} className="hover:bg-white/[0.02] transition-colors">
+            {rows.map((ats) => (
+              <tr key={ats.name} className="hover:bg-white/[0.02] transition-colors">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span
                       className={cn(
                         'w-2 h-2 rounded-full shrink-0',
-                        ADAPTER_COLORS[cfg.adapter_type] ?? 'bg-slate-400'
+                        ADAPTER_COLORS[ats.name] ?? 'bg-slate-400'
                       )}
                     />
-                    <span className="text-white font-medium">{cfg.adapter_type}</span>
+                    <div className="flex flex-col">
+                      <span className="text-white font-medium">{ats.display_name}</span>
+                      <span className="text-white/40 text-xs">{ats.name}</span>
+                    </div>
                   </div>
                 </td>
                 <td className="px-4 py-3">
                   <AdapterConfigCell
-                    value={cfg.scan_interval_minutes}
+                    value={ats.scan_interval_min}
                     min={1}
                     max={10080}
                     unit="min"
-                    onSave={(v) => handleSave(cfg.adapter_type, 'scan_interval_minutes', v, cfg)}
+                    onSave={(v) =>
+                      handleSave(ats.name, ats.display_name, 'scan_interval_min', v, ats)
+                    }
                   />
                 </td>
                 <td className="px-4 py-3">
                   <AdapterConfigCell
-                    value={cfg.inter_company_delay_s}
+                    value={ats.inter_company_delay_s}
                     min={0}
                     max={3600}
                     unit="s"
-                    onSave={(v) => handleSave(cfg.adapter_type, 'inter_company_delay_s', v, cfg)}
+                    onSave={(v) =>
+                      handleSave(ats.name, ats.display_name, 'inter_company_delay_s', v, ats)
+                    }
                   />
                 </td>
-                <td className="px-4 py-3 text-white/50">
-                  {cfg.last_scheduled_at ? formatRelativeTime(cfg.last_scheduled_at) : 'Never'}
-                </td>
-                <td className="px-4 py-3 text-white/50">
-                  {new Date(cfg.updated_at).toLocaleDateString()}
+                <td className="px-4 py-3">
+                  <span
+                    className={cn(
+                      'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
+                      ats.is_active
+                        ? 'bg-emerald-500/10 text-emerald-400'
+                        : 'bg-white/5 text-white/40'
+                    )}
+                  >
+                    {ats.is_active ? 'Active' : 'Inactive'}
+                  </span>
                 </td>
               </tr>
             ))}
@@ -192,14 +214,12 @@ export function AdapterConfigsTable() {
             <Dialog.Description className="text-sm text-white/70 mb-5">
               {pending && (
                 <>
-                  Changing <span className="text-white font-medium">{pending.adapterType}</span>{' '}
-                  {pending.field === 'scan_interval_minutes'
-                    ? 'scan interval'
-                    : 'inter-company delay'}{' '}
+                  Changing <span className="text-white font-medium">{pending.displayName}</span>{' '}
+                  {pending.field === 'scan_interval_min' ? 'scan interval' : 'inter-company delay'}{' '}
                   to{' '}
                   <span className="text-violet-300 font-medium">
                     {pending.newValue}
-                    {pending.field === 'scan_interval_minutes' ? ' min' : ' s'}
+                    {pending.field === 'scan_interval_min' ? ' min' : ' s'}
                   </span>{' '}
                   will affect all companies using this adapter.
                 </>
