@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
-import { ADAPTER_TYPES } from '@/types'
-import type { Company } from '@/types'
+import type { Company, ATS } from '@/types'
 import {
   createAdminCompany,
   updateAdminCompany,
@@ -18,15 +17,8 @@ interface Props {
   initialData?: Company
   onCreated?: (company: Company) => void
   onUpdated?: (company: Company) => void
-}
-
-// URL templates for adapters that have a known API pattern.
-const URL_TEMPLATES: Partial<Record<string, (id: string) => string>> = {
-  greenhouse: (id) => `https://boards-api.greenhouse.io/v1/boards/${id}/jobs`,
-  lever: (id) => `https://jobs.lever.co/${id}`,
-  ashby: (id) => `https://jobs.ashbyhq.com/${id}`,
-  gem: (id) => `https://jobs.gem.com/${id}`,
-  deel: (id) => `https://jobs.deel.com/${id}`,
+  /** ATS list from the parent (fetched at page level). Defaults to [] while loading. */
+  atsList?: ATS[]
 }
 
 const ADAPTER_HINTS: Partial<Record<string, string>> = {
@@ -43,27 +35,10 @@ const ADAPTER_HINTS: Partial<Record<string, string>> = {
   workday: 'URL auto-filled from Workday host + site',
 }
 
-function buildUrl(adapter: string, id: string): string {
-  const tmpl = URL_TEMPLATES[adapter]
-  return tmpl && id ? tmpl(id) : ''
+function buildUrl(ats: ATS | undefined, id: string): string {
+  if (!ats?.base_url) return ''
+  return ats.base_url + id
 }
-
-// Eightfold requires per-company host+domain config that this modal does not
-// yet collect. Hide it from the selectable list — admins must seed via
-// migration until a config form is added. Filter on the Companies page
-// remains driven by ADAPTER_TYPES so existing eightfold companies stay
-// searchable.
-const MODAL_ADAPTER_TYPES = ADAPTER_TYPES.filter((a) => a !== 'eightfold')
-
-const FIXED_URL_ADAPTERS = new Set([
-  'google',
-  'netflix',
-  'uber',
-  'apple',
-  'meta',
-  'microsoft',
-  'rippling',
-])
 
 const ADAPTER_WORKDAY = 'workday'
 const WORKDAY_HOST_REGEX = /^[a-z0-9-]+\.wd[0-9]+\.myworkdayjobs\.com$/
@@ -110,7 +85,14 @@ type CreateScanSettings = {
   adapter_config?: Record<string, unknown>
 }
 
-export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdated }: Props) {
+export function AddCompanyModal({
+  open,
+  onClose,
+  initialData,
+  onCreated,
+  onUpdated,
+  atsList = [],
+}: Props) {
   const isEdit = !!initialData
 
   const [form, setForm] = useState(EMPTY_FORM)
@@ -124,6 +106,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
   const [loading, setLoading] = useState(false)
 
   const isWorkday = form.adapter_type === ADAPTER_WORKDAY
+  const currentAts = atsList.find((a) => a.name === form.adapter_type)
 
   // Sync form when modal opens in edit mode
   useEffect(() => {
@@ -150,6 +133,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
   }, [open, initialData])
 
   function handleAdapterChange(adapter: string) {
+    const nextAts = atsList.find((a) => a.name === adapter)
     setForm((f) => {
       if (adapter === ADAPTER_WORKDAY) {
         // Workday derives the URL from host + site rather than the slug.
@@ -162,7 +146,7 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
       return {
         ...f,
         adapter_type: adapter,
-        website: !urlManuallyEdited ? buildUrl(adapter, f.id) : f.website,
+        website: !urlManuallyEdited ? buildUrl(nextAts, f.id) : f.website,
       }
     })
     setFieldErrors({})
@@ -177,7 +161,10 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
         f.adapter_type === ADAPTER_WORKDAY
           ? f.website
           : !urlManuallyEdited
-            ? buildUrl(f.adapter_type, id)
+            ? buildUrl(
+                atsList.find((a) => a.name === f.adapter_type),
+                id
+              )
             : f.website,
     }))
     setFieldErrors({})
@@ -253,15 +240,10 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
         }
         return
       }
-    } else if (
-      !form.id ||
-      !form.name ||
-      (!FIXED_URL_ADAPTERS.has(form.adapter_type) && !form.website)
-    ) {
+    } else if (!form.id || !form.name || (currentAts?.base_url !== '' && !form.website)) {
+      const isFixedUrl = currentAts?.base_url === ''
       setGlobalError(
-        FIXED_URL_ADAPTERS.has(form.adapter_type)
-          ? 'Identifier and name are required'
-          : 'Identifier, name, and URL are required'
+        isFixedUrl ? 'Identifier and name are required' : 'Identifier, name, and URL are required'
       )
       return
     }
@@ -340,7 +322,8 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
   }
 
   const urlHint = ADAPTER_HINTS[form.adapter_type]
-  const hasTemplate = !!URL_TEMPLATES[form.adapter_type]
+  // hasTemplate = true when the ATS has a known base_url prefix for auto-fill
+  const hasTemplate = !!(currentAts?.base_url && currentAts.base_url !== '')
 
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && handleClose()}>
@@ -372,11 +355,13 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                 onChange={(e) => handleAdapterChange(e.target.value)}
                 className={inputClass}
               >
-                {MODAL_ADAPTER_TYPES.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
+                {atsList
+                  .filter((a) => a.is_admin_creatable)
+                  .map((a) => (
+                    <option key={a.name} value={a.name}>
+                      {a.display_name}
+                    </option>
+                  ))}
               </select>
               {fieldErrors.adapter_type && (
                 <p className="text-xs text-red-400 mt-1">{fieldErrors.adapter_type}</p>
@@ -465,7 +450,13 @@ export function AddCompanyModal({ open, onClose, initialData, onCreated, onUpdat
                       type="button"
                       onClick={() => {
                         setUrlManuallyEdited(false)
-                        setForm((f) => ({ ...f, website: buildUrl(f.adapter_type, f.id) }))
+                        setForm((f) => ({
+                          ...f,
+                          website: buildUrl(
+                            atsList.find((a) => a.name === f.adapter_type),
+                            f.id
+                          ),
+                        }))
                       }}
                       className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
                     >

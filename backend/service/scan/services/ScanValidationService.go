@@ -8,6 +8,9 @@ import (
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 )
 
+// Compile-time check: validationService must implement Service.
+var _ Service = (*validationService)(nil)
+
 var validQueueStatuses = map[string]bool{
 	scancommon.QueueStatusQueued:  true,
 	scancommon.QueueStatusRunning: true,
@@ -66,4 +69,39 @@ func (v *validationService) ListQueue(ctx context.Context, filter dto.QueueFilte
 		return nil, errs
 	}
 	return v.next.ListQueue(ctx, filter)
+}
+
+// GetEffectiveScanConfig validates that companyID is non-empty before delegating.
+func (v *validationService) GetEffectiveScanConfig(ctx context.Context, companyID string) (dto.EffectiveScanConfigDTO, error) {
+	if companyID == "" {
+		return dto.EffectiveScanConfigDTO{}, errors.ValidationErrors{errors.ValidationError{
+			Field:   "company_id",
+			Code:    "REQUIRED",
+			Message: "company_id is required",
+		}}
+	}
+	return v.next.GetEffectiveScanConfig(ctx, companyID)
+}
+
+// UpdateScanIntervalOverride validates companyID and the optional override value.
+func (v *validationService) UpdateScanIntervalOverride(ctx context.Context, companyID string, override *int) error {
+	var errs errors.ValidationErrors
+	if companyID == "" {
+		errs = append(errs, errors.ValidationError{
+			Field:   "company_id",
+			Code:    "REQUIRED",
+			Message: "company_id is required",
+		})
+	}
+	if override != nil && (*override < 1 || *override > 10080) {
+		errs = append(errs, errors.ValidationError{
+			Field:   "scan_interval_minutes_override",
+			Code:    "INVALID_VALUE",
+			Message: "scan_interval_minutes_override must be between 1 and 10080, or null to clear",
+		})
+	}
+	if len(errs) > 0 {
+		return errs
+	}
+	return v.next.UpdateScanIntervalOverride(ctx, companyID, override)
 }

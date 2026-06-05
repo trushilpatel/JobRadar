@@ -30,6 +30,12 @@ func (n *noopService) PurgeInactive(_ context.Context) (int, error)             
 func (n *noopService) GetAnalytics(_ context.Context, _ string) (*dto.CompanyAnalytics, error) {
 	return &dto.CompanyAnalytics{}, nil
 }
+func (n *noopService) GetEffectiveScanConfig(_ context.Context, _ string) (dto.EffectiveScanConfigDTO, error) {
+	return dto.EffectiveScanConfigDTO{}, nil
+}
+func (n *noopService) UpdateScanIntervalOverride(_ context.Context, _ string, _ *int) error {
+	return nil
+}
 
 var _ svc.Service = (*noopService)(nil)
 

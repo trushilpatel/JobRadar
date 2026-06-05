@@ -164,8 +164,10 @@ func (f *fakeCompanyAdminService) GetByIDs(_ context.Context, ids []string) ([]c
 }
 
 // newImplService builds the full impl chain: repositoryService → implService.
+// db and atsSvc are nil for tests that don't exercise GetEffectiveScanConfig
+// or UpdateScanIntervalOverride — those are covered in scan_config_service_test.go.
 func newImplService(q *fakeQueueStore, log *fakeScanLogReader, settings *fakeScanSettingsRepo, admin *fakeCompanyAdminService, cfg svc.Config) svc.Service {
-	repo := svc.NewRepositoryService(q, log, cfg)
+	repo := svc.NewRepositoryService(q, log, cfg, nil, nil)
 	return svc.NewService(repo, settings, admin, cfg)
 }
 

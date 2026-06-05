@@ -1,8 +1,6 @@
-export { AdapterConfigsTable } from './components/AdapterConfigsTable'
+export { AtsTable } from './components/AtsTable'
 export { AdapterConfigCell } from './components/AdapterConfigCell'
 export { ScanIntervalOverrideModal } from './components/ScanIntervalOverrideModal'
-export { useAdapterConfigs } from './hooks/useAdapterConfigs'
-export { useAdapterConfigActions } from './hooks/useAdapterConfigActions'
 export { useScanIntervalOverride } from './hooks/useScanIntervalOverride'
 export { settingsQueryKeys, scanIntervalOverrideMutationInvalidationRoots } from './queryKeys'
 export {

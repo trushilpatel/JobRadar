@@ -8,6 +8,8 @@ import (
 
 	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
+	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 	"gorm.io/gorm"
@@ -115,7 +117,7 @@ func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, so
 		INSERT INTO company_scan_queue (company_id, source, adapter_type)
 		SELECT s.company_id, ?, s.adapter_type
 		FROM company_scan_settings s
-		LEFT JOIN adapter_configs ac ON ac.adapter_type = s.adapter_type
+		LEFT JOIN ats a ON a.name = s.adapter_type
 		WHERE s.active = true
 		  AND NOT EXISTS (
 		    SELECT 1 FROM company_scan_queue q
@@ -125,7 +127,7 @@ func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, so
 		    s.last_scan_at IS NULL
 		    OR s.last_scan_at + COALESCE(
 		        s.scan_interval_override,
-		        ac.scan_interval_minutes,
+		        a.scan_interval_min,
 		        ?
 		    ) * INTERVAL '1 minute' <= NOW()
 		  )
@@ -183,8 +185,8 @@ func (s *scanQueueStore) ClaimNext(ctx context.Context, adapterType string) (_ *
 		var delayS int
 		res := tx.Raw(`
 			SELECT inter_company_delay_s
-			FROM adapter_configs
-			WHERE adapter_type = ?
+			FROM ats
+			WHERE name = ?
 			  AND (
 			    last_scheduled_at IS NULL
 			    OR NOW() - last_scheduled_at >= inter_company_delay_s * INTERVAL '1 second'
@@ -217,7 +219,7 @@ func (s *scanQueueStore) ClaimNext(ctx context.Context, adapterType string) (_ *
 
 		// Step 3: Record when this adapter was last claimed so the next claim
 		// waits for inter_company_delay_s before proceeding.
-		return tx.Exec(`UPDATE adapter_configs SET last_scheduled_at = NOW() WHERE adapter_type = ?`, adapterType).Error
+		return tx.Exec(`UPDATE ats SET last_scheduled_at = NOW() WHERE name = ?`, adapterType).Error
 	})
 
 	if txErr == errNoEligibleAdapter {
@@ -335,11 +337,15 @@ type repositoryService struct {
 	queue   ScanQueueStore
 	scanLog ScanLogReader
 	config  Config
+	db      *gorm.DB
+	atsSvc  atssvc.AtsService
 }
 
 // NewRepositoryService constructs the terminal Service implementation backed by DB stores.
-func NewRepositoryService(queue ScanQueueStore, scanLog ScanLogReader, cfg Config) Service {
-	return &repositoryService{queue: queue, scanLog: scanLog, config: cfg}
+// atsSvc is used by GetEffectiveScanConfig to resolve the adapter's scan_interval_min from
+// the ats table without a direct DB query in the service layer.
+func NewRepositoryService(queue ScanQueueStore, scanLog ScanLogReader, cfg Config, db *gorm.DB, atsSvc atssvc.AtsService) Service {
+	return &repositoryService{queue: queue, scanLog: scanLog, config: cfg, db: db, atsSvc: atsSvc}
 }
 
 func (s *repositoryService) EnqueueDue(ctx context.Context, intervalMinutes int) (_ SchedulerCycleResult, err error) {
@@ -447,4 +453,50 @@ func (s *repositoryService) GetAnalytics(ctx context.Context, companyID string) 
 		return nil, errors.ErrInternal.WithMessage("failed to fetch company analytics")
 	}
 	return &a, nil
+}
+
+func (s *repositoryService) GetEffectiveScanConfig(ctx context.Context, companyID string) (_ dto.EffectiveScanConfigDTO, err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.GetEffectiveScanConfig")
+	defer tracing.End(span, &err)
+
+	var settings companymodel.CompanyScanSettings
+	if err = s.db.WithContext(ctx).First(&settings, "company_id = ?", companyID).Error; err != nil {
+		if errors.IsNotFound(err) {
+			return dto.EffectiveScanConfigDTO{}, errors.ErrNotFound.WithMessage("company has no scan settings configured")
+		}
+		return dto.EffectiveScanConfigDTO{}, errors.ErrInternal.WithMessage("failed to fetch company scan settings")
+	}
+
+	ats, err := s.atsSvc.GetATS(ctx, settings.AdapterType)
+	if err != nil {
+		return dto.EffectiveScanConfigDTO{}, err
+	}
+
+	effective := ats.ScanIntervalMin
+	if settings.ScanIntervalOverride != nil {
+		effective = *settings.ScanIntervalOverride
+	}
+	return dto.EffectiveScanConfigDTO{
+		CompanyID:                    companyID,
+		AdapterType:                  settings.AdapterType,
+		AdapterScanIntervalMinutes:   ats.ScanIntervalMin,
+		EffectiveScanIntervalMinutes: effective,
+		ScanIntervalMinutesOverride:  settings.ScanIntervalOverride,
+		InterCompanyDelayS:           ats.InterCompanyDelayS,
+	}, nil
+}
+
+func (s *repositoryService) UpdateScanIntervalOverride(ctx context.Context, companyID string, override *int) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.repository.UpdateScanIntervalOverride")
+	defer tracing.End(span, &err)
+	result := s.db.WithContext(ctx).Model(&companymodel.CompanyScanSettings{}).
+		Where("company_id = ?", companyID).
+		Update("scan_interval_override", override)
+	if result.Error != nil {
+		return errors.ErrInternal.WithMessage("failed to update scan interval override")
+	}
+	if result.RowsAffected == 0 {
+		return errors.ErrNotFound.WithMessage("company has no scan settings configured")
+	}
+	return nil
 }

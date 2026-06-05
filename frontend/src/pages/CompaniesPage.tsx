@@ -1,10 +1,11 @@
-import { useState, useCallback, type CSSProperties } from 'react'
+import { useState, useCallback, useMemo, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Company } from '@/types'
 import { ADAPTER_TYPES } from '@/types'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { EMPTY_MESSAGES } from '@/features/companies'
 import { jobsUrl } from '@/features/jobs'
+import { useAts } from '@/features/ats'
 import { ResizeHandle } from '@/components/ui/resize-handle'
 import {
   AlertDialog,
@@ -29,6 +30,11 @@ import {
 export function CompaniesPage() {
   const c = useCompanies()
   const actions = useCompanyActions()
+  const { data: atsList } = useAts()
+  const atsMap = useMemo(() => {
+    if (!atsList) return undefined
+    return new Map(atsList.map((a) => [a.name, a]))
+  }, [atsList])
 
   const [addOpen, setAddOpen] = useState(false)
   const [editCompany, setEditCompany] = useState<Company | null>(null)
@@ -103,6 +109,7 @@ export function CompaniesPage() {
               onToggleActive: actions.toggleActive,
               scanning: actions.scanning,
               togglingActive: actions.togglingActive,
+              atsMap,
             }}
           />
 
@@ -123,6 +130,7 @@ export function CompaniesPage() {
                     setDrawerCompany(null)
                   }}
                   onViewJobs={handleViewJobs}
+                  atsEntry={atsMap?.get(drawerCompany.adapter_type)}
                 />
               </aside>
             </>
@@ -133,6 +141,7 @@ export function CompaniesPage() {
       <AddCompanyModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
+        atsList={atsList}
         onCreated={(company) => {
           setAddOpen(false)
           actions.handleCompanyAdded(company)
@@ -143,6 +152,7 @@ export function CompaniesPage() {
         open={!!editCompany}
         initialData={editCompany ?? undefined}
         onClose={() => setEditCompany(null)}
+        atsList={atsList}
         onUpdated={(updated) => {
           setEditCompany(null)
           actions.handleCompanyUpdated(updated)

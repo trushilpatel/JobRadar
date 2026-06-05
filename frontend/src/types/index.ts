@@ -62,6 +62,22 @@ export interface CompanyAnalytics {
   }
 }
 
+// ATS interface — sourced from the /admin/ats API; replaces the hardcoded
+// ADAPTER_TYPES list. is_admin_creatable gates which adapters appear in the
+// AddCompanyModal dropdown; base_url drives URL auto-fill (empty = fixed-URL adapter).
+export interface ATS {
+  name: string
+  display_name: string
+  base_url: string
+  is_active: boolean
+  is_admin_creatable: boolean
+  scan_interval_min: number
+  inter_company_delay_s: number
+}
+
+// ADAPTER_TYPES and AdapterType are kept for backward compatibility with places
+// that still reference them (e.g., CompaniesPage adapter filter options).
+// New code should use ATS from the API instead.
 export const ADAPTER_TYPES = [
   'greenhouse',
   'lever',

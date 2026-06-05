@@ -15,6 +15,7 @@ vi.mock('@/features/auth/api/adminAudit.api')
 vi.mock('@/features/auth/api/adminUsers.api')
 vi.mock('@/features/auth/api/me.api')
 vi.mock('@/features/settings/api/adapterConfigs.api')
+vi.mock('@/features/ats')
 
 // ── Mock auth store so pages don't try to fetch identity ─────────────────────
 vi.mock('@/features/auth/store/auth.store', () => ({
@@ -75,6 +76,7 @@ import * as dashboardApi from '@/features/dashboard'
 import * as insightsApi from '@/features/insights'
 import * as jobsApi from '@/features/jobs'
 import * as adapterConfigsApi from '@/features/settings'
+import * as atsFeature from '@/features/ats'
 import * as adminCompaniesApi from '@/features/companies'
 import * as adminUsersApi from '@/features/auth'
 import * as adminAuditApi from '@/features/auth'
@@ -153,6 +155,19 @@ describe('InsightsPage', () => {
 describe('SettingsPage', () => {
   beforeEach(() => {
     vi.mocked(adapterConfigsApi.getAdapterConfigs).mockReturnValue(pending())
+    vi.mocked(atsFeature.useAts).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      refetch: vi.fn(),
+    } as never)
+    vi.mocked(atsFeature.useAtsActions).mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+      isError: false,
+      isSuccess: false,
+      mutate: vi.fn(),
+    } as never)
   })
 
   it('renders without crashing', () => {
@@ -218,6 +233,12 @@ describe('CompaniesPage', () => {
   beforeEach(() => {
     vi.mocked(adminCompaniesApi.fetchAdminCompanies).mockReturnValue(pending())
     vi.mocked(adapterConfigsApi.getAdapterConfigs).mockReturnValue(pending())
+    vi.mocked(atsFeature.useAts).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      refetch: vi.fn(),
+    } as never)
   })
 
   it('renders without crashing', () => {

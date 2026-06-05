@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -89,4 +90,34 @@ func (h *RestService) Analytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handler.Respond(w, http.StatusOK, a)
+}
+
+// GET /companies/{id}/scan-config
+func (h *RestService) GetEffectiveScanConfig(w http.ResponseWriter, r *http.Request) {
+	companyID := chi.URLParam(r, "id")
+	config, err := h.next.GetEffectiveScanConfig(r.Context(), companyID)
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, config)
+}
+
+// PATCH /companies/{id}/scan-interval-override
+func (h *RestService) UpdateScanIntervalOverride(w http.ResponseWriter, r *http.Request) {
+	companyID := chi.URLParam(r, "id")
+
+	var body struct {
+		ScanIntervalMinutesOverride *int `json:"scan_interval_minutes_override"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+
+	if err := h.next.UpdateScanIntervalOverride(r.Context(), companyID, body.ScanIntervalMinutesOverride); err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, map[string]string{"company_id": companyID, "status": "updated"})
 }

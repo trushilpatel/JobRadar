@@ -74,6 +74,22 @@ func newScanLogTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+// closedScanLogDB returns a DB whose underlying connection has been closed —
+// every subsequent operation surfaces "sql: database is closed" so the
+// store's error branches are exercised without requiring Postgres.
+func closedScanLogDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db := newScanLogTestDB(t)
+	raw, err := db.DB()
+	if err != nil {
+		t.Fatalf("raw db: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	return db
+}
+
 // TestScanLogStore_InsertCompanyScanLog_OK verifies a row round-trips with
 // the supplied fields preserved.
 func TestScanLogStore_InsertCompanyScanLog_OK(t *testing.T) {
@@ -271,5 +287,59 @@ func TestScanLogStore_RecordScanResult_OKStatusResetsErrors(t *testing.T) {
 	joined := strings.Join(cap.statements(), "\n")
 	if !strings.Contains(joined, "last_success_at") {
 		t.Errorf("expected last_success_at update on success; got:\n%s", joined)
+	}
+}
+
+// --- Error-path tests (closed DB) ---
+// These cover the error-handling branches in scan log functions that use
+// Postgres-specific SQL. A closed-connection DB surfaces a real error
+// without needing a live Postgres instance.
+
+func TestScanLogStore_InsertCompanyScanLog_DBError(t *testing.T) {
+	store := svc.NewLogStore(closedScanLogDB(t))
+	if err := store.InsertCompanyScanLog(context.Background(), "stripe", 1, 0, 100, nil); err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+}
+
+func TestScanLogStore_GetScanStats_DBError(t *testing.T) {
+	store := svc.NewLogStore(closedScanLogDB(t))
+	if _, err := store.GetScanStats(context.Background(), "stripe"); err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+}
+
+func TestScanLogStore_GetScanHistories_DBError(t *testing.T) {
+	store := svc.NewLogStore(closedScanLogDB(t))
+	if _, err := store.GetScanHistories(context.Background(), []string{"stripe"}); err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+}
+
+func TestScanLogStore_GetJobsScannedToday_DBError(t *testing.T) {
+	store := svc.NewLogStore(closedScanLogDB(t))
+	if _, err := store.GetJobsScannedToday(context.Background()); err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+}
+
+func TestScanLogStore_GetScansByDay_DBError(t *testing.T) {
+	store := svc.NewLogStore(closedScanLogDB(t))
+	if _, err := store.GetScansByDay(context.Background(), 30); err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+}
+
+func TestScanLogStore_GetCompanyAnalytics_DBError(t *testing.T) {
+	store := svc.NewLogStore(closedScanLogDB(t))
+	if _, err := store.GetCompanyAnalytics(context.Background(), "stripe"); err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+}
+
+func TestScanLogStore_RecordScanResult_DBError(t *testing.T) {
+	store := svc.NewLogStore(closedScanLogDB(t))
+	if err := store.RecordScanResult(context.Background(), "stripe", "ok", 1, 0, 100, nil); err == nil {
+		t.Fatal("expected error on closed DB")
 	}
 }

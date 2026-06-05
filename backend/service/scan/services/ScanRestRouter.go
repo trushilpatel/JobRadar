@@ -21,4 +21,6 @@ func (r *RestRouter) Register(router chi.Router) {
 	router.Get("/companies/{id}/scan-stats", r.handler.ScanStats)
 	router.Post("/companies/{id}/scan", r.handler.TriggerScan)
 	router.Get("/companies/{id}/analytics", r.handler.Analytics)
+	router.Get("/companies/{id}/scan-config", r.handler.GetEffectiveScanConfig)
+	router.Patch("/companies/{id}/scan-interval-override", r.handler.UpdateScanIntervalOverride)
 }

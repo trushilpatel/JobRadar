@@ -250,24 +250,24 @@ func TestAdminRepo_Create_FKViolationIsBadRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	// companies, an adapter_configs registry, and a scan_settings table whose
-	// adapter_type FKs into adapter_configs — mirroring migration 062.
+	// companies, an ats registry, and a scan_settings table whose
+	// adapter_type FKs into ats — mirroring migration 077.
 	stmts := []string{
 		`CREATE TABLE companies (
 			id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE,
 			website TEXT, careers_url TEXT, logo_url TEXT,
 			created_at DATETIME, updated_at DATETIME)`,
-		`CREATE TABLE adapter_configs (adapter_type TEXT PRIMARY KEY)`,
+		`CREATE TABLE ats (name TEXT PRIMARY KEY)`,
 		`CREATE TABLE company_scan_settings (
 			company_id TEXT PRIMARY KEY,
-			adapter_type TEXT NOT NULL REFERENCES adapter_configs(adapter_type),
+			adapter_type TEXT NOT NULL REFERENCES ats(name),
 			adapter_config TEXT, scan_interval_override INTEGER,
 			active INTEGER NOT NULL DEFAULT 1,
 			last_scan_at DATETIME, last_success_at DATETIME, last_error_at DATETIME,
 			last_error_message TEXT, consecutive_errors INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME, updated_at DATETIME,
 			FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE)`,
-		`INSERT INTO adapter_configs (adapter_type) VALUES ('greenhouse')`,
+		`INSERT INTO ats (name) VALUES ('greenhouse')`,
 	}
 	for _, s := range stmts {
 		if err := db.Exec(s).Error; err != nil {

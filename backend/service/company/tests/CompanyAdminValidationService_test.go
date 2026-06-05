@@ -6,6 +6,9 @@ import (
 
 	"gorm.io/datatypes"
 
+	apperr "github.com/trushilpatel/jobradar/common/errors"
+	atsdto "github.com/trushilpatel/jobradar/service/ats/dto"
+	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
@@ -39,8 +42,55 @@ func (n *noopAdmin) GetAll(_ context.Context) ([]companydto.CompanyAdminView, er
 	return nil, nil
 }
 
+// mockAtsService is a configurable AtsService test double.
+// Known adapters return a valid DTO; unknown names return ErrNotFound.
+// Adapters listed in notCreatable have IsAdminCreatable=false.
+type mockAtsService struct {
+	known        map[string]atsdto.ATSDTO
+	notCreatable map[string]bool
+}
+
+func newMockAts() *mockAtsService {
+	known := map[string]atsdto.ATSDTO{}
+	notCreatable := map[string]bool{}
+
+	// Seed every adapter from the canonical constants list.
+	for _, at := range companycommon.AdapterTypes {
+		known[at] = atsdto.ATSDTO{
+			Name:             at,
+			IsAdminCreatable: !companycommon.AdminUnsupportedAdapters[at],
+		}
+		if companycommon.AdminUnsupportedAdapters[at] {
+			notCreatable[at] = true
+		}
+	}
+	return &mockAtsService{known: known, notCreatable: notCreatable}
+}
+
+func (m *mockAtsService) ListATS(_ context.Context) ([]atsdto.ATSDTO, error) {
+	out := make([]atsdto.ATSDTO, 0, len(m.known))
+	for _, v := range m.known {
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+func (m *mockAtsService) GetATS(_ context.Context, name string) (atsdto.ATSDTO, error) {
+	dto, ok := m.known[name]
+	if !ok {
+		return atsdto.ATSDTO{}, apperr.ErrNotFound.WithMessage("ats not found: " + name)
+	}
+	return dto, nil
+}
+
+func (m *mockAtsService) UpdateATS(_ context.Context, _ string, _ atsdto.UpdateATSInput) (atsdto.ATSDTO, error) {
+	return atsdto.ATSDTO{}, nil
+}
+
+var _ atssvc.AtsService = (*mockAtsService)(nil)
+
 func newAdminValidator() companysvc.CompanyAdminService {
-	return companysvc.NewAdminValidationService(&noopAdmin{})
+	return companysvc.NewAdminValidationService(&noopAdmin{}, newMockAts())
 }
 
 func TestAdminValidator_Create(t *testing.T) {
@@ -101,6 +151,13 @@ func TestAdminValidator_Create(t *testing.T) {
 			public:   companydto.CompanyPublicInput{ID: "stripe", Name: "Stripe", Slug: "stripe"},
 			settings: companydto.CompanyScanSettingsInput{},
 		},
+		{
+			// eightfold is registered but not admin-creatable.
+			name:     "eightfold adapter rejects on Create (not admin creatable)",
+			public:   companydto.CompanyPublicInput{ID: "stripe", Name: "Stripe", Slug: "stripe"},
+			settings: companydto.CompanyScanSettingsInput{AdapterType: strPtr(companycommon.AdapterEightfold)},
+			wantErr:  true,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -150,6 +207,9 @@ func TestAdminValidator_UpdateScanSettings(t *testing.T) {
 		// P1.2: Update does NOT require adapter_type — partial-patch of
 		// Active alone is a legitimate update (requireAdapter=false).
 		{name: "active-only patch allowed on Update", input: companydto.CompanyScanSettingsInput{Active: boolPtr(true)}},
+		// eightfold is registered but not admin-creatable — UpdateScanSettings
+		// uses requireAdapter=false so the is_admin_creatable check is skipped.
+		{name: "eightfold allowed on Update (requireAdapter=false)", input: companydto.CompanyScanSettingsInput{AdapterType: strPtr(companycommon.AdapterEightfold)}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -197,10 +257,11 @@ func TestAdminValidator_List(t *testing.T) {
 	}
 }
 
-// TestAdminValidator_AdapterAllowList_DerivedFromCommon verifies P1.5: every
-// adapter in common.AdapterTypes except the admin-unsupported set validates,
-// the unsupported set (eightfold) is rejected, and an unknown string fails.
-func TestAdminValidator_AdapterAllowList_DerivedFromCommon(t *testing.T) {
+// TestAdminValidator_AdapterAllowList_DerivedFromMockAts verifies that every
+// adapter in common.AdapterTypes (except admin-unsupported ones) passes
+// validation, admin-unsupported adapters are rejected on Create, and an
+// unknown adapter string is always rejected.
+func TestAdminValidator_AdapterAllowList_DerivedFromMockAts(t *testing.T) {
 	v := newAdminValidator()
 	for _, at := range companycommon.AdapterTypes {
 		at := at
@@ -218,12 +279,12 @@ func TestAdminValidator_AdapterAllowList_DerivedFromCommon(t *testing.T) {
 		})
 	}
 
-	// eightfold is the canonical admin-unsupported adapter — must be rejected.
+	// eightfold is the canonical admin-unsupported adapter — must be rejected on Create.
 	_, err := v.Create(context.Background(),
 		companydto.CompanyPublicInput{ID: "c", Name: "C", Slug: "c"},
 		companydto.CompanyScanSettingsInput{AdapterType: strPtr(companycommon.AdapterEightfold)})
 	if err == nil {
-		t.Errorf("eightfold must be rejected by the admin validator")
+		t.Errorf("eightfold must be rejected by the admin validator on Create")
 	}
 
 	// Unknown string is rejected.
@@ -235,7 +296,7 @@ func TestAdminValidator_AdapterAllowList_DerivedFromCommon(t *testing.T) {
 	}
 }
 
-// TestAdapterTypes_NoDuplicates verifies P1.5/P3: the canonical adapter list
+// TestAdapterTypes_NoDuplicates verifies the canonical adapter list
 // has no duplicate entries.
 func TestAdapterTypes_NoDuplicates(t *testing.T) {
 	seen := map[string]bool{}
