@@ -1,0 +1,14 @@
+{
+  "data": {
+    "jobPosting": {
+      "id": "abc-123-def-456",
+      "title": "Backend Engineer",
+      "locationName": "San Francisco, CA",
+      "workplaceType": "Hybrid",
+      "employmentType": "FullTime",
+      "descriptionHtml": "<p>Join our <strong>infrastructure</strong> team.</p><ul><li>Build scalable systems</li><li>Ship reliable services</li></ul>",
+      "compensationTierSummary": "$180K – $240K",
+      "publishedDate": "2024-01-15"
+    }
+  }
+}
