@@ -225,3 +225,22 @@ func TestParseJobURL(t *testing.T) {
 		})
 	}
 }
+
+// ── resolveBaseURL / default URL ──────────────────────────────────────────────
+
+func TestGreenhouse_ResolveBaseURL_Default(t *testing.T) {
+	g := New(logger.NewNoop(), http.DefaultClient)
+	if g.resolveBaseURL() != defaultBaseURL {
+		t.Errorf("resolveBaseURL() = %q, want %q", g.resolveBaseURL(), defaultBaseURL)
+	}
+}
+
+func TestGreenhouse_Get_RequestBuildError(t *testing.T) {
+	// Passing an invalid URL causes http.NewRequestWithContext to error.
+	g := New(logger.NewNoop(), http.DefaultClient)
+	var dst any
+	err := g.get(context.Background(), "://invalid-url", &dst)
+	if err == nil {
+		t.Fatal("expected error for invalid URL, got nil")
+	}
+}

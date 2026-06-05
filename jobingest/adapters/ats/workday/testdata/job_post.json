@@ -1,0 +1,20 @@
+{
+  "jobPostingInfo": {
+    "id": "abc123",
+    "title": "Senior Software Engineer",
+    "jobDescription": "<p>We are looking for a <strong>Senior Software Engineer</strong> to join our Platform team.</p><ul><li>Design distributed systems</li><li>Mentor junior engineers</li></ul>",
+    "location": "San Jose, CA",
+    "postedOn": "Posted 5 Days Ago",
+    "startDate": "2026-05-01",
+    "timeType": "Full time",
+    "jobReqId": "R-12345",
+    "jobPostingId": "posting-001",
+    "jobPostingSiteId": "site-001",
+    "country": { "descriptor": "United States of America", "id": "US" },
+    "canApply": true,
+    "posted": true,
+    "includeResumeParsing": false,
+    "externalUrl": "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/San-Jose/Senior-Software-Engineer_R-12345",
+    "questionnaireId": ""
+  }
+}

@@ -1,0 +1,35 @@
+[
+  {
+    "id": "abc123",
+    "title": "Software Engineer",
+    "absolute_url": "https://jobs.gem.com/inception/posts/abc123",
+    "content": "<p>Full <b>HTML</b> job description for Software Engineer.</p>",
+    "content_plain": "Full plain-text job description for Software Engineer.",
+    "location": { "name": "San Francisco, CA" },
+    "location_type": "hybrid",
+    "employment_type": "full_time",
+    "departments": [{ "id": "dept-1", "name": "Engineering" }],
+    "offices": [{ "location": { "name": "San Francisco, CA" } }],
+    "first_published_at": "2025-01-16T09:00:00Z",
+    "updated_at": "2025-03-01T08:30:00Z",
+    "created_at": "2025-01-15T10:00:00Z"
+  },
+  {
+    "id": "def456",
+    "title": "Product Intern",
+    "absolute_url": "https://jobs.gem.com/inception/posts/def456",
+    "content": "<p>Join our <em>product</em> team as an intern &amp; grow.</p>",
+    "content_plain": "",
+    "location": { "name": "" },
+    "location_type": "remote",
+    "employment_type": "internship",
+    "departments": [],
+    "offices": [
+      { "location": { "name": "New York, NY" } },
+      { "location": { "name": "Austin, TX" } }
+    ],
+    "first_published_at": "",
+    "updated_at": "2025-04-10T12:00:00Z",
+    "created_at": "2025-04-01T09:00:00Z"
+  }
+]
