@@ -136,7 +136,11 @@ type CrawlerConfig struct {
 	PollIntervalSeconds      int
 	StuckTimeoutSeconds      int
 	HeartbeatIntervalSeconds int
-	Google                   GoogleScraperConfig
+	// CrawlerTokenSecret is the HMAC-SHA256 signing key used by the orchestrator
+	// to verify bearer tokens from distributed crawler nodes. Required when the
+	// orchestrator is running.
+	CrawlerTokenSecret string
+	Google             GoogleScraperConfig
 }
 
 type GoogleScraperConfig struct {
@@ -286,6 +290,7 @@ func Load() *Config {
 			PollIntervalSeconds:      getEnvInt("CRAWLER_POLL_INTERVAL_SECONDS", 60),
 			StuckTimeoutSeconds:      getEnvInt("CRAWLER_STUCK_TIMEOUT_SECONDS", 120),
 			HeartbeatIntervalSeconds: getEnvInt("CRAWLER_HEARTBEAT_INTERVAL_SECONDS", 30),
+			CrawlerTokenSecret:       os.Getenv("CRAWLER_TOKEN_SECRET"),
 			Google: GoogleScraperConfig{
 				// Listing pacing for the HTTP-based Google scraper.
 				MinDelayMs: getEnvInt("GOOGLE_SCRAPER_MIN_DELAY", 20000),
