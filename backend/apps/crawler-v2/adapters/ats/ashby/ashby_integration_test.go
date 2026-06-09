@@ -1,3 +1,5 @@
+//go:build integration
+
 package ashby
 
 // Integration tests — hit the real Ashby public GraphQL API.

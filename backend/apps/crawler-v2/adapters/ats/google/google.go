@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats"
 	googleapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/google/api"
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
@@ -98,14 +99,14 @@ func (g *Google) FetchJobListing(ctx context.Context, _ string) (core.JobListing
 	for ctx.Err() == nil {
 		listingURL := fmt.Sprintf("%s&page=%d", g.resolveListingBaseURL(), pageNum)
 		log.Debug("fetching listing page",
-			logger.Int("page", pageNum),
+			logger.Int(logger.FieldPage, pageNum),
 			logger.Str(logger.FieldURL, listingURL),
 		)
 
 		html, err := g.fetch(ctx, listingURL)
 		if err != nil {
 			log.Error("listing page fetch failed", err,
-				logger.Int("page", pageNum),
+				logger.Int(logger.FieldPage, pageNum),
 				logger.Str(logger.FieldURL, listingURL),
 			)
 			return core.JobListing{}, fmt.Errorf("google: listing page %d: %w", pageNum, err)
@@ -113,9 +114,9 @@ func (g *Google) FetchJobListing(ctx context.Context, _ string) (core.JobListing
 
 		parsed, total := parseListing(html)
 		log.Info("listing page fetched",
-			logger.Int("page", pageNum),
+			logger.Int(logger.FieldPage, pageNum),
 			logger.Int(logger.FieldJobCount, len(parsed)),
-			logger.Int("total_in_search", total),
+			logger.Int(logger.FieldTotal, total),
 		)
 
 		for _, p := range parsed {
@@ -125,8 +126,8 @@ func (g *Google) FetchJobListing(ctx context.Context, _ string) (core.JobListing
 		// Stop when all pages covered.
 		if total > 0 && pageNum*pageSize >= total {
 			log.Info("covered all listing pages",
-				logger.Int("page", pageNum),
-				logger.Int("total", total),
+				logger.Int(logger.FieldPage, pageNum),
+				logger.Int(logger.FieldTotal, total),
 			)
 			break
 		}
@@ -313,7 +314,7 @@ func extractDescription(html string) string {
 				continue
 			}
 			// Strip HTML tags and decode entities.
-			plain := stripHTMLSimple(decoded)
+			plain := ats.StripHTML(decoded)
 			if plain == "" {
 				continue
 			}
@@ -325,13 +326,6 @@ func extractDescription(html string) string {
 		}
 	}
 	return strings.Join(parts, "\n\n")
-}
-
-// stripHTMLSimple removes all HTML tags and collapses whitespace.
-// Mirrors the ats.StripHTML helper but defined locally to avoid the import cycle.
-func stripHTMLSimple(s string) string {
-	plain := reTag.ReplaceAllString(s, " ")
-	return strings.TrimSpace(reWS.ReplaceAllString(plain, " "))
 }
 
 // cleanText strips tags, collapses whitespace, optionally removes the

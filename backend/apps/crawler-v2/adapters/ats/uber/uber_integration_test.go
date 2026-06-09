@@ -1,3 +1,5 @@
+//go:build integration
+
 package uber
 
 // Integration tests — hit the real Uber careers API.
