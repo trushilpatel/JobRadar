@@ -3,9 +3,9 @@ paths:
   - 'backend/**/*.go'
 ---
 
-# Backend — SOLID (pragmatic, not strict)
+# Backend — SOLID
 
-Apply these to keep the backend maintainable. Use judgement — don't over-engineer simple cases, don't ignore them when they matter.
+These are hard rules for the backend. See `.claude/rules/engineering-principles.md` for the language-agnostic statement of each principle. This file covers Go-specific application.
 
 ## Single Responsibility
 

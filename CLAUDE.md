@@ -141,6 +141,7 @@ This file and the project's skill files evolve as the codebase is worked on. Whe
 
 - `infra/CLAUDE.md` — k8s deployment + iteration (k3d is the only deployment target; no Docker Compose)
 - `docs/QUALITY.md` — quality attributes reference (`.claude/rules/quality-attributes.md` auto-loads on backend files; `frontend-quality-attributes.md` on frontend files). Covers intrinsic qualities incl. Scalability + Performance — _"is the code good?"_
+- `.claude/rules/engineering-principles.md` — hard rules applied globally: SOLID (strict), loose coupling, no magic values, extensibility by design, test-first, formatting — _"how must the code be written?"_
 - `.claude/rules/dev-ergonomics.md` — developer-ergonomics model: friction to change, consistency, extensibility, agent-legibility — _"is it ergonomic to keep it good?"_ Audited by the `dev-ergonomics` skill (read-only, recommends; never edits) via the `dev-ergonomics-auditor` agent
 - Subdirectory `CLAUDE.md` files cover each `backend/*` and `frontend/*` area and auto-load when you work there
 - `.claude/skills/` — project skills; each has a self-improvement footer that invokes `skill-self-improvement` after completion
