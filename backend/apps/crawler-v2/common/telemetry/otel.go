@@ -16,6 +16,15 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
 )
 
+// newExporter constructs the OTLP span exporter. Overridden in tests to
+// inject a factory that returns an error, covering the error-path branch.
+var newExporter = func(ctx context.Context, endpoint string) (sdktrace.SpanExporter, error) {
+	return otlptracehttp.New(ctx,
+		otlptracehttp.WithEndpointURL(endpoint),
+		otlptracehttp.WithInsecure(),
+	)
+}
+
 const tracerName = "crawler-v2"
 
 // Init bootstraps the global OTel tracer provider and W3C propagator.
@@ -35,12 +44,10 @@ func Init(serviceName, endpoint string, log logger.Logger) func() {
 		})
 	}))
 
-	exp, err := otlptracehttp.New(context.Background(),
-		otlptracehttp.WithEndpointURL(endpoint),
-		otlptracehttp.WithInsecure(),
-	)
+	exp, err := newExporter(context.Background(), endpoint)
 	if err != nil {
-		panic("telemetry: failed to create OTLP exporter: " + err.Error())
+		log.Warn("telemetry: OTLP exporter init failed (tracing disabled)", logger.Err(err))
+		return func() {}
 	}
 
 	res, _ := resource.Merge(

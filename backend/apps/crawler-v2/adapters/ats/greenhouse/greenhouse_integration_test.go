@@ -1,3 +1,5 @@
+//go:build integration
+
 package greenhouse
 
 // Integration tests — hit the real Greenhouse public API.

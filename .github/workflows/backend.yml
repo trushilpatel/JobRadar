@@ -34,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       crawler:         ${{ steps.filter.outputs.crawler }}
+      crawler-v2:      ${{ steps.filter.outputs.crawler-v2 }}
       api-server:      ${{ steps.filter.outputs.api-server }}
       workers:         ${{ steps.filter.outputs.workers }}
       service-core:    ${{ steps.filter.outputs.service-core }}
@@ -52,6 +53,8 @@ jobs:
           filters: |
             crawler:
               - 'backend/apps/crawler/**'
+            crawler-v2:
+              - 'backend/apps/crawler-v2/**'
             api-server:
               - 'backend/apps/api/**'
             workers:
@@ -97,6 +100,17 @@ jobs:
       packages: ./apps/crawler/...
       flags: crawler
       artifact-name: coverage-crawler
+    secrets: inherit
+
+  test-crawler-v2:
+    name: test / crawler-v2
+    needs: changes
+    if: github.event_name == 'pull_request' && (needs.changes.outputs.crawler-v2 == 'true' || needs.changes.outputs.platform == 'true')
+    uses: ./.github/workflows/backend-test.yml
+    with:
+      packages: ./apps/crawler-v2/...
+      flags: crawler-v2
+      artifact-name: coverage-crawler-v2
     secrets: inherit
 
   test-api-server:

@@ -602,6 +602,21 @@ func TestParseListing_SkipsAriaWithoutHref(t *testing.T) {
 
 // ── extractDescription — truncated/invalid JSON string ────────────────────────
 
+func TestExtractDescription_DecodesHTMLEntities(t *testing.T) {
+	// Google embeds job data as JSON with < encoded as <.
+	// After json.Unmarshal, decoded = "<p>Pay &gt;$100k &amp; great</p>".
+	// extractDescription must decode HTML entities (&gt; → >, &amp; → &) at
+	// extraction time, not rely on mapper to do it later.
+	html := "<script>AF_initDataCallback({key: 'ds:0', data:[\"\\u003cp\\u003ePay &gt;$100k &amp; great\\u003c/p\\u003e\"]});</script>"
+	got := extractDescription(html)
+	if strings.Contains(got, "&gt;") || strings.Contains(got, "&amp;") {
+		t.Errorf("extractDescription should decode HTML entities at extraction time; got: %q", got)
+	}
+	if !strings.Contains(got, "&") || !strings.Contains(got, ">$100k") {
+		t.Errorf("extractDescription should retain decoded text; got: %q", got)
+	}
+}
+
 func TestExtractDescription_SkipsInvalidJSONStrings(t *testing.T) {
 	// A block that contains `<` inside a malformed JSON string should not panic.
 	// The state machine skips strings that fail json.Unmarshal.

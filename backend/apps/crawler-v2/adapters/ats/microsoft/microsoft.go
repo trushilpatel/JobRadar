@@ -61,7 +61,7 @@ func (m *Microsoft) FetchJobListing(ctx context.Context, _ string) (core.JobList
 		if err := m.get(ctx, pageURL, &page); err != nil {
 			log.Error("listing page fetch failed", err,
 				logger.Str(logger.FieldURL, pageURL),
-				logger.Int("start", offset),
+				logger.Int(logger.FieldOffset, offset),
 			)
 			return core.JobListing{}, fmt.Errorf("microsoft: listing page start=%d: %w", offset, err)
 		}

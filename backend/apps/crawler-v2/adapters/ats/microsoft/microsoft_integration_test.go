@@ -1,3 +1,5 @@
+//go:build integration
+
 package microsoft
 
 // Integration tests — hit the real Microsoft careers API.

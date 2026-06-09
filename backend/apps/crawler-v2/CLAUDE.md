@@ -4,7 +4,7 @@ Go module for the orchestration-based crawler (formerly `jobingest`). Fetches jo
 
 ## Module path
 
-`github.com/trushilpatel/jobradar/crawler-v2`
+`github.com/trushilpatel/jobradar/apps/crawler-v2` (part of the main `backend` module — no separate `go.mod`)
 
 ## Core interfaces (`core/interfaces.go`)
 

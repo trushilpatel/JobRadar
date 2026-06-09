@@ -1,3 +1,5 @@
+//go:build integration
+
 package apple
 
 // Integration tests — hit the real jobs.apple.com API.

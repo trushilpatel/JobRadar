@@ -3,6 +3,7 @@ package greenhouse
 import (
 	"fmt"
 
+	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats"
 	ghapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/greenhouse/api"
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
 )
@@ -39,7 +40,7 @@ func mapJobPost(g ghapi.JobPost) core.JobPost {
 		Title:         g.Title,
 		Location:      g.Location.Name,
 		URL:           g.AbsoluteURL,
-		Description:   g.Content,
+		Description:   ats.StripHTML(g.Content),
 		Department:    dept,
 		Compensation:  comp,
 		PublishedDate: g.UpdatedAt,

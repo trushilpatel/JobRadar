@@ -78,7 +78,7 @@ func (u *Uber) FetchJobListing(ctx context.Context, _ string) (core.JobListing, 
 	for _, dept := range departments {
 		jobs, err := u.fetchJobsForDepartment(ctx, dept)
 		if err != nil {
-			log.Error("fetch jobs for department failed", err, logger.Str("department", dept))
+			log.Error("fetch jobs for department failed", err, logger.Str(logger.FieldDepartment, dept))
 			return core.JobListing{}, fmt.Errorf("uber: fetch jobs for department %q: %w", dept, err)
 		}
 		for _, job := range jobs {

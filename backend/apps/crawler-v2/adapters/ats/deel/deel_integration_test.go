@@ -1,3 +1,5 @@
+//go:build integration
+
 package deel
 
 // Integration tests — hit the real jobs.deel.com API.

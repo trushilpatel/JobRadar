@@ -1,3 +1,5 @@
+//go:build integration
+
 package meta
 
 // Integration tests — hit the real Meta Careers endpoints.

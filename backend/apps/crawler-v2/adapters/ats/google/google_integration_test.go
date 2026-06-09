@@ -1,3 +1,5 @@
+//go:build integration
+
 package google
 
 // Integration tests — hit the real Google Careers page.

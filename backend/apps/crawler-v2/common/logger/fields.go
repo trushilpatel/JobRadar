@@ -26,6 +26,11 @@ const (
 	FieldTraceID    = "trace_id"
 	FieldSpanID     = "span_id"
 	FieldError      = "error"
+	FieldPage       = "page"
+	FieldTotalPages = "total_pages"
+	FieldTotal      = "total"
+	FieldDepartment = "department"
+	FieldOffset     = "offset"
 )
 
 func Str(key, val string) Field             { return Field{Key: key, Value: val} }
