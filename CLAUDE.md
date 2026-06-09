@@ -150,13 +150,14 @@ This file and the project's skill files evolve as the codebase is worked on. Whe
 
 All non-code documentation lives under `docs/`:
 
-| Folder                    | Purpose                                                                 |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `docs/design/`            | Feature specs and design docs (active or future work)                   |
-| `docs/ux/`                | UX reviews and UI mockups                                               |
-| `docs/knowledge/`         | Post-mortems and incident root-cause notes                              |
-| `docs/superpowers/specs/` | Agent-generated implementation specs (written after each feature lands) |
-| `docs/superpowers/plans/` | Agent-generated implementation plans (active only — delete when merged) |
-| `docs/ARCHITECTURE.md`    | System architecture reference                                           |
-| `docs/QUALITY.md`         | Quality attributes reference                                            |
-| `docs/REFERENCE.md`       | Quick-reference for common commands and URLs                            |
+| Folder                    | Purpose                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `docs/design/`            | Feature specs and design docs (active or future work)                                                              |
+| `docs/ux/`                | UX reviews and UI mockups                                                                                          |
+| `docs/knowledge/`         | Post-mortems and incident root-cause notes                                                                         |
+| `docs/superpowers/specs/` | Agent-generated implementation specs (written after each feature lands)                                            |
+| `docs/superpowers/plans/` | Agent-generated implementation plans (active only — delete when merged)                                            |
+| `docs/tech-debt/`         | Tech debt reports produced by the `tech-debt` skill — one file per scored area, named `YYYY-MM-DD-<scope>-debt.md` |
+| `docs/ARCHITECTURE.md`    | System architecture reference                                                                                      |
+| `docs/QUALITY.md`         | Quality attributes reference                                                                                       |
+| `docs/REFERENCE.md`       | Quick-reference for common commands and URLs                                                                       |
