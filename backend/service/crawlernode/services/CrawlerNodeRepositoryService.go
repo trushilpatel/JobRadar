@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	stderrors "errors"
+	"strings"
+	"time"
 
 	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
@@ -52,7 +54,7 @@ func (s *nodeRepositoryService) UpdateLastSeen(ctx context.Context, nodeID strin
 	result := s.db.WithContext(ctx).
 		Model(&crawlernodemodel.CrawlerNode{}).
 		Where("id = ?", nodeID).
-		Update("last_seen_at", gorm.Expr("NOW()"))
+		Update("last_seen_at", time.Now().UTC())
 	if result.Error != nil {
 		return errors.ErrInternal.WithMessage("update last_seen_at: " + result.Error.Error())
 	}
@@ -66,9 +68,10 @@ func (s *nodeRepositoryService) SetStatus(ctx context.Context, nodeID, status st
 	ctx, span := tracing.Start(ctx, "crawlernode.store.SetStatus")
 	defer tracing.End(span, &err)
 
+	// Guard: retired is terminal — WHERE excludes retired rows; 0 rows → ErrNotFound.
 	result := s.db.WithContext(ctx).
 		Model(&crawlernodemodel.CrawlerNode{}).
-		Where("id = ?", nodeID).
+		Where("id = ? AND status != 'retired'", nodeID).
 		Update("status", status)
 	if result.Error != nil {
 		return errors.ErrInternal.WithMessage("set node status: " + result.Error.Error())
@@ -116,12 +119,12 @@ func (s *nodeRepositoryService) Retire(ctx context.Context, nodeID string) (err 
 	return nil
 }
 
-// isUniqueViolation detects Postgres UNIQUE constraint violation (SQLSTATE 23505).
+// isUniqueViolation detects UNIQUE constraint violations across Postgres (SQLSTATE 23505)
+// and SQLite (error string contains "UNIQUE constraint failed").
 func isUniqueViolation(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Check for pq/pgx error code 23505
 	type pgErr interface {
 		SQLState() string
 	}
@@ -129,5 +132,6 @@ func isUniqueViolation(err error) bool {
 	if stderrors.As(err, &pg) {
 		return pg.SQLState() == "23505"
 	}
-	return false
+	// SQLite fallback used in unit tests.
+	return strings.Contains(err.Error(), "UNIQUE constraint failed:")
 }
