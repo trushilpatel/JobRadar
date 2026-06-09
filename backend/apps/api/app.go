@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/service/application"
+	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	"github.com/trushilpatel/jobradar/service/dashboard"
 	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
@@ -17,12 +18,12 @@ import (
 // Phase 2: the insights handler and pipeline service are exposed for
 // mounting under /admin — see buildMultiUser in multiuser_setup.go.
 type App struct {
-	companyHandler       *companysvc.RestRouter
-	scanHandler          *scansvc.RestRouter
-	adapterConfigHandler *scansvc.AdapterConfigRestRouter
-	jobHandler           *jobsvc.RestRouter
-	applicationHandler   *application.Handler
-	dashboardHandler     *dashboard.Handler
+	companyHandler     *companysvc.RestRouter
+	scanHandler        *scansvc.RestRouter
+	atsHandler         *atssvc.AtsRestRouter
+	jobHandler         *jobsvc.RestRouter
+	applicationHandler *application.Handler
+	dashboardHandler   *dashboard.Handler
 	// insightsHandler is NOT returned by Handlers() — it moves to /admin in
 	// Phase 2 and is threaded through buildMultiUser via InsightsHandler().
 	insightsHandler *insightssvc.RestRouter
@@ -38,7 +39,7 @@ type App struct {
 func NewApp(
 	companyHandler *companysvc.RestRouter,
 	scanHandler *scansvc.RestRouter,
-	adapterConfigHandler *scansvc.AdapterConfigRestRouter,
+	atsHandler *atssvc.AtsRestRouter,
 	jobHandler *jobsvc.RestRouter,
 	applicationHandler *application.Handler,
 	dashboardHandler *dashboard.Handler,
@@ -47,20 +48,20 @@ func NewApp(
 	companyAdminHandler *companysvc.AdminRestRouter,
 ) *App {
 	return &App{
-		companyHandler:       companyHandler,
-		scanHandler:          scanHandler,
-		adapterConfigHandler: adapterConfigHandler,
-		jobHandler:           jobHandler,
-		applicationHandler:   applicationHandler,
-		dashboardHandler:     dashboardHandler,
-		insightsHandler:      insightsHandler,
-		pipelineSvc:          pipelineSvc,
-		companyAdminHandler:  companyAdminHandler,
+		companyHandler:      companyHandler,
+		scanHandler:         scanHandler,
+		atsHandler:          atsHandler,
+		jobHandler:          jobHandler,
+		applicationHandler:  applicationHandler,
+		dashboardHandler:    dashboardHandler,
+		insightsHandler:     insightsHandler,
+		pipelineSvc:         pipelineSvc,
+		companyAdminHandler: companyAdminHandler,
 	}
 }
 
 // Handlers returns all route groups for mounting onto the public router.
-// Insights and AdapterConfig are intentionally excluded — they are mounted
+// Insights and ATS are intentionally excluded — they are mounted
 // under /admin by buildMultiUser and must not also appear on the public router.
 func (a *App) Handlers() []handler.RouteGroup {
 	return []handler.RouteGroup{
@@ -72,9 +73,9 @@ func (a *App) Handlers() []handler.RouteGroup {
 	}
 }
 
-// AdapterConfigHandler returns the adapter config router for admin mounting.
-func (a *App) AdapterConfigHandler() *scansvc.AdapterConfigRestRouter {
-	return a.adapterConfigHandler
+// AtsHandler returns the ATS router for admin mounting.
+func (a *App) AtsHandler() *atssvc.AtsRestRouter {
+	return a.atsHandler
 }
 
 // InsightsHandler returns the insights router for admin mounting.

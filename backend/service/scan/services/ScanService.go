@@ -45,6 +45,12 @@ type Service interface {
 	GetAnalytics(ctx context.Context, companyID string) (*dto.CompanyAnalytics, error)
 	ListQueue(ctx context.Context, filter dto.QueueFilter) ([]dto.QueueEntryView, error)
 	RemoveFromQueue(ctx context.Context, entryID string) error
+	// GetEffectiveScanConfig returns the merged scan config for a company:
+	// the adapter default (from the ats table) plus any company-level override.
+	GetEffectiveScanConfig(ctx context.Context, companyID string) (dto.EffectiveScanConfigDTO, error)
+	// UpdateScanIntervalOverride patches the per-company scan interval override
+	// on company_scan_settings. Pass nil to clear the override.
+	UpdateScanIntervalOverride(ctx context.Context, companyID string, override *int) error
 }
 
 // BaseService auto-delegates all Service methods to next.
@@ -96,4 +102,12 @@ func (b *BaseService) ListQueue(ctx context.Context, filter dto.QueueFilter) ([]
 
 func (b *BaseService) RemoveFromQueue(ctx context.Context, entryID string) error {
 	return b.next.RemoveFromQueue(ctx, entryID)
+}
+
+func (b *BaseService) GetEffectiveScanConfig(ctx context.Context, companyID string) (dto.EffectiveScanConfigDTO, error) {
+	return b.next.GetEffectiveScanConfig(ctx, companyID)
+}
+
+func (b *BaseService) UpdateScanIntervalOverride(ctx context.Context, companyID string, override *int) error {
+	return b.next.UpdateScanIntervalOverride(ctx, companyID, override)
 }

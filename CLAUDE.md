@@ -22,21 +22,21 @@ Each binary lives in `backend/apps/<name>/` (wiring + worker loop only) and depe
 
 ## Database tables
 
-| Table                     | Role                                                                                                                                                                                                                                                            |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `companies`               | Tracked company catalog; operational config lives in `company_scan_settings`                                                                                                                                                                                    |
-| `adapter_configs`         | Canonical adapter registry (PK `adapter_type`); `company_scan_settings` and `company_scan_queue` carry FK constraints to this table — never add raw adapter type strings elsewhere                                                                              |
-| `company_scan_settings`   | Per-company scan config (admin-managed); `adapter_type` FK → `adapter_configs`; rows missing here are skipped by workers                                                                                                                                        |
-| `company_scan_queue`      | Durable work queue for pending/in-progress scans; deduped by unique partial index; `adapter_type` FK → `adapter_configs`                                                                                                                                        |
-| `company_scan_log`        | Per-run scan summary (fetched, new, duration, error)                                                                                                                                                                                                            |
-| `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` marks disappearance; `reason='retry'` carries `retry_count`/`next_attempt_at`, written via filter `UpdateRetryBatch`. UPDATE ops return `ErrLedgerRowMissing` on 0/partial rows — never silent nil (migrations 071/073) |
-| `jobs`                    | Operational feed — global rows; per-user status/notes live in `user_job_state`. `job_post_id` is **UNIQUE** (`uq_jobs_job_post_id`, migration 071); `InsertJob` is idempotent (`ON CONFLICT DO NOTHING` → `ErrJobAlreadyExists`)                                |
-| `user_job_state`          | Per-user overlay: saved_at, applied_at, status, notes, dismissal reason/note                                                                                                                                                                                    |
-| `job_analytics`           | Append-only snapshot from analyzer; survives job dismissal                                                                                                                                                                                                      |
-| `job_application_tracker` | Application stage tracking; `user_id NOT NULL`                                                                                                                                                                                                                  |
-| `users`                   | Registered users (id, email citext, display_name, status, timestamps)                                                                                                                                                                                           |
-| `roles`, `user_roles`     | RBAC0 catalog + join. Cascades: `user_id` CASCADE, `role_id` RESTRICT, `granted_by` SET NULL. Seeded by migration 043                                                                                                                                           |
-| `admin_audit_log`         | Append-only audit trail for admin mutations                                                                                                                                                                                                                     |
+| Table                     | Role                                                                                                                                                                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `companies`               | Tracked company catalog; operational config lives in `company_scan_settings`                                                                                                                                                                                                    |
+| `ats`                     | Canonical ATS registry (PK `name`); `company_scan_settings` and `company_scan_queue` carry FK constraints to this table — never add raw adapter type strings elsewhere. Served by `service/ats/` with in-process `MemoryCache` (5min TTL). Admin routes: `GET/PATCH /admin/ats` |
+| `company_scan_settings`   | Per-company scan config (admin-managed); `adapter_type` FK → `ats(name)`; rows missing here are skipped by workers                                                                                                                                                              |
+| `company_scan_queue`      | Durable work queue for pending/in-progress scans; deduped by unique partial index; `adapter_type` FK → `ats(name)`                                                                                                                                                              |
+| `company_scan_log`        | Per-run scan summary (fetched, new, duration, error)                                                                                                                                                                                                                            |
+| `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` marks disappearance; `reason='retry'` carries `retry_count`/`next_attempt_at`, written via filter `UpdateRetryBatch`. UPDATE ops return `ErrLedgerRowMissing` on 0/partial rows — never silent nil (migrations 071/073)                 |
+| `jobs`                    | Operational feed — global rows; per-user status/notes live in `user_job_state`. `job_post_id` is **UNIQUE** (`uq_jobs_job_post_id`, migration 071); `InsertJob` is idempotent (`ON CONFLICT DO NOTHING` → `ErrJobAlreadyExists`)                                                |
+| `user_job_state`          | Per-user overlay: saved_at, applied_at, status, notes, dismissal reason/note                                                                                                                                                                                                    |
+| `job_analytics`           | Append-only snapshot from analyzer; survives job dismissal                                                                                                                                                                                                                      |
+| `job_application_tracker` | Application stage tracking; `user_id NOT NULL`                                                                                                                                                                                                                                  |
+| `users`                   | Registered users (id, email citext, display_name, status, timestamps)                                                                                                                                                                                                           |
+| `roles`, `user_roles`     | RBAC0 catalog + join. Cascades: `user_id` CASCADE, `role_id` RESTRICT, `granted_by` SET NULL. Seeded by migration 043                                                                                                                                                           |
+| `admin_audit_log`         | Append-only audit trail for admin mutations                                                                                                                                                                                                                                     |
 
 ## Job status flow
 
@@ -141,6 +141,7 @@ This file and the project's skill files evolve as the codebase is worked on. Whe
 
 - `infra/CLAUDE.md` — k8s deployment + iteration (k3d is the only deployment target; no Docker Compose)
 - `docs/QUALITY.md` — quality attributes reference (`.claude/rules/quality-attributes.md` auto-loads on backend files; `frontend-quality-attributes.md` on frontend files). Covers intrinsic qualities incl. Scalability + Performance — _"is the code good?"_
+- `.claude/rules/engineering-principles.md` — hard rules applied globally: SOLID (strict), loose coupling, no magic values, extensibility by design, test-first, formatting — _"how must the code be written?"_
 - `.claude/rules/dev-ergonomics.md` — developer-ergonomics model: friction to change, consistency, extensibility, agent-legibility — _"is it ergonomic to keep it good?"_ Audited by the `dev-ergonomics` skill (read-only, recommends; never edits) via the `dev-ergonomics-auditor` agent
 - Subdirectory `CLAUDE.md` files cover each `backend/*` and `frontend/*` area and auto-load when you work there
 - `.claude/skills/` — project skills; each has a self-improvement footer that invokes `skill-self-improvement` after completion
@@ -149,13 +150,14 @@ This file and the project's skill files evolve as the codebase is worked on. Whe
 
 All non-code documentation lives under `docs/`:
 
-| Folder                    | Purpose                                                                 |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `docs/design/`            | Feature specs and design docs (active or future work)                   |
-| `docs/ux/`                | UX reviews and UI mockups                                               |
-| `docs/knowledge/`         | Post-mortems and incident root-cause notes                              |
-| `docs/superpowers/specs/` | Agent-generated implementation specs (written after each feature lands) |
-| `docs/superpowers/plans/` | Agent-generated implementation plans (active only — delete when merged) |
-| `docs/ARCHITECTURE.md`    | System architecture reference                                           |
-| `docs/QUALITY.md`         | Quality attributes reference                                            |
-| `docs/REFERENCE.md`       | Quick-reference for common commands and URLs                            |
+| Folder                    | Purpose                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `docs/design/`            | Feature specs and design docs (active or future work)                                                              |
+| `docs/ux/`                | UX reviews and UI mockups                                                                                          |
+| `docs/knowledge/`         | Post-mortems and incident root-cause notes                                                                         |
+| `docs/superpowers/specs/` | Agent-generated implementation specs (written after each feature lands)                                            |
+| `docs/superpowers/plans/` | Agent-generated implementation plans (active only — delete when merged)                                            |
+| `docs/tech-debt/`         | Tech debt reports produced by the `tech-debt` skill — one file per scored area, named `YYYY-MM-DD-<scope>-debt.md` |
+| `docs/ARCHITECTURE.md`    | System architecture reference                                                                                      |
+| `docs/QUALITY.md`         | Quality attributes reference                                                                                       |
+| `docs/REFERENCE.md`       | Quick-reference for common commands and URLs                                                                       |

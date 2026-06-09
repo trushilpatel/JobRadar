@@ -1,0 +1,19 @@
+{
+  "total": 2,
+  "jobPostings": [
+    {
+      "title": "Senior Software Engineer",
+      "externalPath": "/job/San-Jose/Senior-Software-Engineer_R-12345",
+      "locationsText": "San Jose, CA",
+      "postedOn": "Posted 5 Days Ago",
+      "bulletFields": ["R-12345"]
+    },
+    {
+      "title": "Machine Learning Engineer",
+      "externalPath": "/job/Remote-US/ML-Engineer_R-99999",
+      "locationsText": "Remote, USA",
+      "postedOn": "Posted 12 Days Ago",
+      "bulletFields": ["R-99999"]
+    }
+  ]
+}

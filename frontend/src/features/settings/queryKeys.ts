@@ -1,5 +1,4 @@
 export const settingsQueryKeys = {
-  adapterConfigs: () => ['adapter-configs'] as const,
   companyScanConfig: (id: string) => ['company-scan-config', id] as const,
 }
 

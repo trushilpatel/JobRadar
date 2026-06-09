@@ -40,6 +40,12 @@ func (f *fakeScanService) PurgeInactive(_ context.Context) (int, error) { return
 func (f *fakeScanService) GetAnalytics(_ context.Context, _ string) (*dto.CompanyAnalytics, error) {
 	return &dto.CompanyAnalytics{}, f.err
 }
+func (f *fakeScanService) GetEffectiveScanConfig(_ context.Context, _ string) (dto.EffectiveScanConfigDTO, error) {
+	return dto.EffectiveScanConfigDTO{}, f.err
+}
+func (f *fakeScanService) UpdateScanIntervalOverride(_ context.Context, _ string, _ *int) error {
+	return f.err
+}
 
 // newScanTestRouter wires the full decorator chain under test using the given
 // service as the terminal, then mounts all routes onto a chi router.

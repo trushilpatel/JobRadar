@@ -1,0 +1,32 @@
+[
+  {
+    "id": "abc-111-def",
+    "text": "Backend Engineer",
+    "hostedUrl": "https://jobs.lever.co/netlify/abc-111-def",
+    "applyUrl": "https://jobs.lever.co/netlify/abc-111-def/apply",
+    "country": "US",
+    "categories": {
+      "location": "Remote",
+      "commitment": "Full-time",
+      "team": "Engineering",
+      "department": "Product & Engineering",
+      "allLocations": ["Remote", "San Francisco, CA"]
+    },
+    "workplaceType": "remote"
+  },
+  {
+    "id": "xyz-222-ghi",
+    "text": "Frontend Intern",
+    "hostedUrl": "https://jobs.lever.co/netlify/xyz-222-ghi",
+    "applyUrl": "https://jobs.lever.co/netlify/xyz-222-ghi/apply",
+    "country": "US",
+    "categories": {
+      "location": "San Francisco, CA",
+      "commitment": "Intern",
+      "team": "Product",
+      "department": "Product & Engineering",
+      "allLocations": ["San Francisco, CA"]
+    },
+    "workplaceType": "on-site"
+  }
+]

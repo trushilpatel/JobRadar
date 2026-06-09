@@ -147,7 +147,7 @@ func TestRepo_RemoveFromQueue_StoreError(t *testing.T) {
 // CompanyAdminService interface directly — used so tests can swap in
 // tracking fakes that record GetByIDs invocations.
 func newImplServiceWithAdmin(q svc.ScanQueueStore, log svc.ScanLogReader, settings *fakeScanSettingsRepo, admin companysvc.CompanyAdminService, cfg svc.Config) svc.Service {
-	repo := svc.NewRepositoryService(q, log, cfg)
+	repo := svc.NewRepositoryService(q, log, cfg, nil, nil)
 	return svc.NewService(repo, settings, admin, cfg)
 }
 

@@ -1,0 +1,8 @@
+{
+  "data": {
+    "department": {
+      "Engineering": ["Backend", "Frontend", "Machine Learning"],
+      "Design": ["Brand", "Product Design"]
+    }
+  }
+}

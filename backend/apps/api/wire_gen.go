@@ -7,11 +7,14 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/platform/cache"
 	"github.com/trushilpatel/jobradar/service/application"
 	services3 "github.com/trushilpatel/jobradar/service/application/services"
+	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	services "github.com/trushilpatel/jobradar/service/company/services"
 	services4 "github.com/trushilpatel/jobradar/service/dashboard/services"
 	services5 "github.com/trushilpatel/jobradar/service/insights/services"
@@ -32,6 +35,16 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 
 	// ── Company (admin chain — needed by scan service + /admin/companies) ──────
 	scanSettingsRepository := services.NewScanSettingsRepositoryService(db)
+	// ── ATS (built first — company admin validator depends on it) ────────────
+	atsStore := atssvc.NewAtsStore(db)
+	atsRepositoryService := atssvc.NewAtsRepositoryService(atsStore)
+	atsImplService := atssvc.NewAtsImplService(atsRepositoryService)
+	atsMemoryCache := cache.NewMemoryCache()
+	atsCacheService := atssvc.NewAtsCacheService(atsImplService, atsMemoryCache, 5*time.Minute)
+	atsValidationService := atssvc.NewAtsValidationService(atsCacheService)
+	atsRestService := atssvc.NewAtsRestService(atsValidationService)
+	atsRestRouter := atssvc.NewAtsRestRouter(atsRestService)
+
 	scanLogStoreForCompany := services2.NewLogStore(db)
 	scanHistoryReader := provideScanHistoryReader(scanLogStoreForCompany)
 	companyAdminRepositoryService := services.NewAdminRepositoryService(db, scanHistoryReader, log)
@@ -39,7 +52,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	// multi-user setup in multiuser_setup.go passes a real cache to its own
 	// admin chain instance. nil log: no-op logger for this wiring path.
 	companyAdminImplService := services.NewAdminImplService(companyAdminRepositoryService, nil, nil)
-	companyAdminValidationService := services.NewAdminValidationService(companyAdminImplService)
+	companyAdminValidationService := services.NewAdminValidationService(companyAdminImplService, atsValidationService)
 	companyAdminRestService := services.NewAdminRestService(companyAdminValidationService)
 	companyAdminRouter := services.NewAdminRestRouter(companyAdminRestService)
 
@@ -48,19 +61,11 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	scanLogReader := provideScanLogReader(scanLogStore)
 	servicesConfig := provideScanConfig(cfg)
 	scanQueueStore := services2.NewQueueStore(db)
-	scanRepositoryService := services2.NewRepositoryService(scanQueueStore, scanLogReader, servicesConfig)
+	scanRepositoryService := services2.NewRepositoryService(scanQueueStore, scanLogReader, servicesConfig, db, atsValidationService)
 	scanImplService := services2.NewService(scanRepositoryService, scanSettingsRepository, companyAdminValidationService, servicesConfig)
 	scanValidationService := services2.NewValidator(scanImplService)
 	scanRestService := services2.NewRestService(scanValidationService)
 	scanRestRouter := services2.NewRestRouter(scanRestService)
-
-	// ── AdapterConfig ─────────────────────────────────────────────────────────
-	adapterConfigStore := services2.NewAdapterConfigStore(db)
-	adapterConfigRepositoryService := services2.NewAdapterConfigRepositoryService(adapterConfigStore)
-	adapterConfigImplService := services2.NewAdapterConfigImplService(adapterConfigRepositoryService)
-	adapterConfigValidationService := services2.NewAdapterConfigValidator(adapterConfigImplService)
-	adapterConfigRestService := services2.NewAdapterConfigRestService(adapterConfigValidationService)
-	adapterConfigRestRouter := services2.NewAdapterConfigRestRouter(adapterConfigRestService)
 
 	// ── Job ──────────────────────────────────────────────────────────────────
 	jobStore := jobsvc.NewJobStore(db)
@@ -100,7 +105,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	dashboardRestService := services4.NewDashboardRestService(dashboardService, userDashboardService)
 	dashboardRestRouter := services4.NewRestRouter(dashboardRestService)
 
-	app := NewApp(companyHandler, scanRestRouter, adapterConfigRestRouter, jobHandler, applicationRestRouter, dashboardRestRouter, insightsRestRouter, pipelineService, companyAdminRouter)
+	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, dashboardRestRouter, insightsRestRouter, pipelineService, companyAdminRouter)
 	return app, nil
 }
 

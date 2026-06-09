@@ -1,0 +1,86 @@
+{
+  "status": "success",
+  "data": {
+    "results": [
+      {
+        "id": 157927,
+        "title": "Software Engineer II - Discovery & Monetization",
+        "description": "**About the Role**\n\nBuild scalable systems for Uber's marketplace.",
+        "department": "Engineering",
+        "type": "",
+        "programAndPlatform": "",
+        "location": {
+          "country": "CAN",
+          "region": "Ontario",
+          "city": "Toronto",
+          "countryName": "Canada"
+        },
+        "featured": false,
+        "level": "5",
+        "creationDate": "2026-03-10T00:00:00.000Z",
+        "otherLevels": null,
+        "team": "Backend",
+        "portalID": "EXTERNAL",
+        "isPipeline": false,
+        "statusID": "D31001",
+        "statusName": "Approved",
+        "updatedDate": "2026-04-09T11:00:00.000Z",
+        "uniqueSkills": "",
+        "timeType": "Full-Time",
+        "allLocations": [
+          {
+            "country": "CAN",
+            "region": "Ontario",
+            "city": "Toronto",
+            "countryName": "Canada"
+          }
+        ]
+      },
+      {
+        "id": 298431,
+        "title": "Senior Product Designer",
+        "description": "**About the Role**\n\nShape the future of Uber's rider experience.",
+        "department": "Design",
+        "type": "",
+        "programAndPlatform": "",
+        "location": {
+          "country": "USA",
+          "region": "California",
+          "city": "San Francisco",
+          "countryName": "United States"
+        },
+        "featured": false,
+        "level": "",
+        "creationDate": "2026-02-20T00:00:00.000Z",
+        "otherLevels": null,
+        "team": "Product Design",
+        "portalID": "EXTERNAL",
+        "isPipeline": false,
+        "statusID": "D31001",
+        "statusName": "Approved",
+        "updatedDate": "2026-04-01T00:00:00.000Z",
+        "uniqueSkills": "",
+        "timeType": "Full-Time",
+        "allLocations": [
+          {
+            "country": "USA",
+            "region": "California",
+            "city": "San Francisco",
+            "countryName": "United States"
+          },
+          {
+            "country": "USA",
+            "region": "New York",
+            "city": "New York",
+            "countryName": "United States"
+          }
+        ]
+      }
+    ],
+    "totalResults": {
+      "low": 2,
+      "high": 0,
+      "unsigned": false
+    }
+  }
+}

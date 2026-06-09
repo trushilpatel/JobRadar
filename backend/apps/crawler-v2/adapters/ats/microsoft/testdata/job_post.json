@@ -1,0 +1,23 @@
+{
+  "status": "success",
+  "error": "",
+  "data": {
+    "id": 1812345678,
+    "displayJobId": "1812345678",
+    "name": "Senior Software Engineer - 1812345678",
+    "locations": ["Redmond, Washington, United States"],
+    "standardizedLocations": ["Redmond, WA"],
+    "postedTs": 1712678400,
+    "department": "Engineering",
+    "workLocationOption": "Up to 50% work from home",
+    "jobDescription": "<p>Join our <b>infrastructure</b> team.</p><ul><li>Build scalable systems</li><li>Drive cloud architecture</li></ul>",
+    "location": "Redmond, Washington, United States",
+    "efcustomTextWorkSite": ["Hybrid"],
+    "efcustomTextEmploymentType": ["Full-Time"],
+    "efcustomTextRoletype": ["Individual Contributor"],
+    "efcustomTextRequiredTravel": ["0-25%"],
+    "publicUrl": "https://careers.microsoft.com/v2/global/en/job/1812345678/senior-software-engineer",
+    "atsJobId": "REQ-12345",
+    "positionUrl": "https://careers.microsoft.com/v2/global/en/job/1812345678/senior-software-engineer"
+  }
+}

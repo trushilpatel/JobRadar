@@ -20,17 +20,6 @@ func TestNewBaseService_NilNextPanics(t *testing.T) {
 	_ = svc.NewBaseService(nil)
 }
 
-// TestNewBaseAdapterConfigService_NilNextPanics mirrors the same guard for
-// the adapter-config decorator chain.
-func TestNewBaseAdapterConfigService_NilNextPanics(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected panic for nil next")
-		}
-	}()
-	_ = svc.NewBaseAdapterConfigService(nil)
-}
-
 // basePassthroughService composes BaseService with a noop next and exposes
 // no overrides — it is used to assert that BaseService auto-delegates every
 // Service method to next. Methods overridden by implService (TriggerScan,
@@ -56,23 +45,22 @@ func TestBaseService_DelegatesTriggerScanAndListQueue(t *testing.T) {
 	}
 }
 
-// baseAdapterConfigPassthrough mirrors basePassthroughService for the
-// adapter-config chain. The UpdateAdapterConfig delegate in
-// BaseAdapterConfigService is shadowed by every decorator that overrides
-// it; this test exercises the delegate directly.
-type baseAdapterConfigPassthrough struct {
-	svc.BaseAdapterConfigService
+// TestBaseService_DelegatesGetEffectiveScanConfig exercises the auto-delegation
+// of the two new methods through BaseService.
+func TestBaseService_DelegatesGetEffectiveScanConfig(t *testing.T) {
+	noop := &noopService{}
+	base := newBasePassthroughService(noop)
+
+	if _, err := base.GetEffectiveScanConfig(context.Background(), "stripe"); err != nil {
+		t.Errorf("GetEffectiveScanConfig delegate error = %v", err)
+	}
 }
 
-func newBaseAdapterConfigPassthrough(next svc.AdapterConfigService) svc.AdapterConfigService {
-	return &baseAdapterConfigPassthrough{BaseAdapterConfigService: svc.NewBaseAdapterConfigService(next)}
-}
+func TestBaseService_DelegatesUpdateScanIntervalOverride(t *testing.T) {
+	noop := &noopService{}
+	base := newBasePassthroughService(noop)
 
-func TestBaseAdapterConfigService_DelegatesUpdate(t *testing.T) {
-	noop := &noopAdapterConfigService{}
-	base := newBaseAdapterConfigPassthrough(noop)
-
-	if _, err := base.UpdateAdapterConfig(context.Background(), "greenhouse", dto.UpdateAdapterConfigInput{}); err != nil {
-		t.Errorf("UpdateAdapterConfig delegate error = %v", err)
+	if err := base.UpdateScanIntervalOverride(context.Background(), "stripe", nil); err != nil {
+		t.Errorf("UpdateScanIntervalOverride delegate error = %v", err)
 	}
 }

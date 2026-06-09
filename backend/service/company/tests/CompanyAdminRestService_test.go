@@ -26,7 +26,7 @@ func newAdminRouter(svc companysvc.CompanyAdminService) *chi.Mux {
 func TestAdminRest_Create_PublicOnly(t *testing.T) {
 	svc := companysvc.NewAdminValidationService(&fakeAdmin{
 		createView: &companydto.CompanyAdminView{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: companymodel.Company{ID: "stripe", Name: "Stripe", Slug: "stripe"}}},
-	})
+	}, newMockAts())
 	r := newAdminRouter(svc)
 
 	body, _ := json.Marshal(map[string]any{
@@ -46,7 +46,7 @@ func TestAdminRest_Create_PublicOnly(t *testing.T) {
 func TestAdminRest_Create_WithSettings(t *testing.T) {
 	svc := companysvc.NewAdminValidationService(&fakeAdmin{
 		createView: &companydto.CompanyAdminView{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: companymodel.Company{ID: "stripe", Name: "Stripe", Slug: "stripe"}}},
-	})
+	}, newMockAts())
 	r := newAdminRouter(svc)
 
 	body, _ := json.Marshal(map[string]any{
@@ -67,7 +67,7 @@ func TestAdminRest_Create_WithSettings(t *testing.T) {
 }
 
 func TestAdminRest_Create_ValidationError(t *testing.T) {
-	svc := companysvc.NewAdminValidationService(&fakeAdmin{})
+	svc := companysvc.NewAdminValidationService(&fakeAdmin{}, newMockAts())
 	r := newAdminRouter(svc)
 
 	body, _ := json.Marshal(map[string]any{}) // missing id/name/slug
@@ -80,7 +80,7 @@ func TestAdminRest_Create_ValidationError(t *testing.T) {
 }
 
 func TestAdminRest_UpdatePublic_OK(t *testing.T) {
-	svc := companysvc.NewAdminValidationService(&fakeAdmin{})
+	svc := companysvc.NewAdminValidationService(&fakeAdmin{}, newMockAts())
 	r := newAdminRouter(svc)
 
 	body, _ := json.Marshal(companydto.CompanyPublicInput{Name: "Renamed"})
@@ -93,7 +93,7 @@ func TestAdminRest_UpdatePublic_OK(t *testing.T) {
 }
 
 func TestAdminRest_UpdateScanSettings_OK(t *testing.T) {
-	svc := companysvc.NewAdminValidationService(&fakeAdmin{})
+	svc := companysvc.NewAdminValidationService(&fakeAdmin{}, newMockAts())
 	r := newAdminRouter(svc)
 
 	body, _ := json.Marshal(companydto.CompanyScanSettingsInput{Active: boolPtr(false)})

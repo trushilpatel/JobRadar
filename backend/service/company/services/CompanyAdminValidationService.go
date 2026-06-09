@@ -4,7 +4,7 @@ import (
 	"context"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
-	companycommon "github.com/trushilpatel/jobradar/service/company/common"
+	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 )
@@ -19,41 +19,22 @@ var validScanStatuses = map[string]bool{
 	scancommon.ScanStatusOK:       true,
 }
 
-// validAdapters is the admin-creatable adapter allow-list, derived once from
-// common.AdapterTypes minus common.AdminUnsupportedAdapters. Deriving it from
-// the canonical list means a new adapter const is admin-creatable by default —
-// the only hand-maintained surface is the unsupported set in
-// common/CompanyServiceConstants.go, so there is exactly one place to make the
-// omission a deliberate edit.
-var validAdapters = buildValidAdapters()
-
-// buildValidAdapters projects common.AdapterTypes into a membership set,
-// excluding any adapter flagged unsupported for the admin surface.
-func buildValidAdapters() map[string]bool {
-	out := make(map[string]bool, len(companycommon.AdapterTypes))
-	for _, at := range companycommon.AdapterTypes {
-		if companycommon.AdminUnsupportedAdapters[at] {
-			continue
-		}
-		out[at] = true
-	}
-	return out
-}
-
 type adminValidationService struct {
 	BaseAdminService
+	atsSvc atssvc.AtsService
 }
 
 // NewAdminValidationService wraps next with the admin validator.
-func NewAdminValidationService(next CompanyAdminService) CompanyAdminService {
-	return &adminValidationService{BaseAdminService: NewBaseAdminService(next)}
+// atsSvc is used to validate adapter_type values against the live ats table.
+func NewAdminValidationService(next CompanyAdminService, atsSvc atssvc.AtsService) CompanyAdminService {
+	return &adminValidationService{BaseAdminService: NewBaseAdminService(next), atsSvc: atsSvc}
 }
 
 // List validates filter and pagination then delegates.
 func (v *adminValidationService) List(ctx context.Context, filter companydto.CompanyFilter, limit int) (companydto.CompanyAdminListResult, error) {
 	var errs apperr.ValidationErrors
 	for _, at := range filter.AdapterTypes {
-		if !validAdapters[at] {
+		if _, err := v.atsSvc.GetATS(ctx, at); err != nil {
 			errs = append(errs, apperr.ValidationError{
 				Field:   "adapter_types",
 				Code:    "INVALID_VALUE",
@@ -96,7 +77,11 @@ func (v *adminValidationService) List(ctx context.Context, filter companydto.Com
 func (v *adminValidationService) Create(ctx context.Context, public companydto.CompanyPublicInput, settings companydto.CompanyScanSettingsInput) (*companydto.CompanyAdminView, error) {
 	var allErrs apperr.ValidationErrors
 	allErrs = append(allErrs, validatePublicCreate(public)...)
-	allErrs = append(allErrs, validateScanSettings(settings, true)...)
+	settingsErrs, err := v.validateScanSettings(ctx, settings, true)
+	if err != nil {
+		return nil, err
+	}
+	allErrs = append(allErrs, settingsErrs...)
 	if len(allErrs) > 0 {
 		return nil, allErrs
 	}
@@ -146,7 +131,11 @@ func (v *adminValidationService) UpdateScanSettings(ctx context.Context, id stri
 			Message: "at least one field must be provided",
 		})
 	}
-	errs = append(errs, validateScanSettings(p, false)...)
+	settingsErrs, err := v.validateScanSettings(ctx, p, false)
+	if err != nil {
+		return err
+	}
+	errs = append(errs, settingsErrs...)
 	if len(errs) > 0 {
 		return errs
 	}
@@ -185,11 +174,19 @@ func validatePublicCreate(p companydto.CompanyPublicInput) apperr.ValidationErro
 	return errs
 }
 
-// validateScanSettings checks adapter_type when present. When requireAdapter
-// is true AND the input is non-empty, adapter_type must be supplied — Create
-// passes true (a scan_settings row makes no sense without an adapter), Update
-// passes false (partial-patch: adapter_type is only validated when present).
-func validateScanSettings(s companydto.CompanyScanSettingsInput, requireAdapter bool) apperr.ValidationErrors {
+// validateScanSettings checks adapter_type when present via a live AtsService
+// lookup. When requireAdapter is true AND the input is non-empty, adapter_type
+// must be supplied — Create passes true (a scan_settings row makes no sense
+// without an adapter), Update passes false (partial-patch: adapter_type is
+// only validated when present).
+//
+// For the Create path it additionally checks that the adapter's
+// IsAdminCreatable flag is true — adapters that require extra configuration
+// (e.g. eightfold) are blocked until the admin UI supports their config form.
+//
+// Returns (ValidationErrors, nil) on validation failure, (nil, ServiceError)
+// on an unexpected AtsService error, or (nil, nil) when all checks pass.
+func (v *adminValidationService) validateScanSettings(ctx context.Context, s companydto.CompanyScanSettingsInput, requireAdapter bool) (apperr.ValidationErrors, error) {
 	var errs apperr.ValidationErrors
 	if requireAdapter && !s.IsEmpty() && s.AdapterType == nil {
 		errs = append(errs, apperr.ValidationError{
@@ -198,12 +195,26 @@ func validateScanSettings(s companydto.CompanyScanSettingsInput, requireAdapter 
 			Message: "adapter_type is required when scan settings are provided",
 		})
 	}
-	if s.AdapterType != nil && !validAdapters[*s.AdapterType] {
-		errs = append(errs, apperr.ValidationError{
-			Field:   "adapter_type",
-			Code:    "INVALID_VALUE",
-			Message: "adapter_type is not a recognised adapter",
-		})
+	if s.AdapterType != nil {
+		ats, err := v.atsSvc.GetATS(ctx, *s.AdapterType)
+		if err != nil {
+			if apperr.IsNotFound(err) {
+				errs = append(errs, apperr.ValidationError{
+					Field:   "adapter_type",
+					Code:    "INVALID_VALUE",
+					Message: "adapter_type is not a recognised adapter",
+				})
+			} else {
+				// Unexpected service error — propagate as-is so the handler can map it.
+				return nil, err
+			}
+		} else if requireAdapter && !ats.IsAdminCreatable {
+			errs = append(errs, apperr.ValidationError{
+				Field:   "adapter_type",
+				Code:    "INVALID_VALUE",
+				Message: "adapter_type is not available for admin creation",
+			})
+		}
 	}
 	if s.ScanIntervalOverride != nil && *s.ScanIntervalOverride <= 0 {
 		errs = append(errs, apperr.ValidationError{
@@ -219,7 +230,7 @@ func validateScanSettings(s companydto.CompanyScanSettingsInput, requireAdapter 
 			Message: "adapter_config must be 10240 bytes (10 KB) or fewer",
 		})
 	}
-	return errs
+	return errs, nil
 }
 
 var _ CompanyAdminService = (*adminValidationService)(nil)
