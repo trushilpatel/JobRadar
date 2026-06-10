@@ -1,4 +1,4 @@
-import { useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import type { ThemePreference } from '@/types'
 import { ThemeContext } from '@/app/ThemeContext'
 
@@ -27,13 +27,20 @@ interface ThemeProviderProps {
 }
 
 export function ThemeProvider({ children, preference, onThemeChange }: ThemeProviderProps) {
-  // Apply theme when preference changes
+  // `applied` tracks what's actually rendered — updated optimistically by
+  // setTheme() so the toggle reflects the new choice immediately, without
+  // waiting for the server round-trip.
+  const [applied, setApplied] = useState<ThemePreference>(preference)
+
+  // Sync applied when server preference changes (e.g. after a fresh load or
+  // when the backend starts storing the theme field).
   useEffect(() => {
+    setApplied(preference)
     applyTheme(resolveTheme(preference))
     localStorage.setItem('jobradar-theme', preference)
   }, [preference])
 
-  // Listen for system theme changes when pref is 'system'
+  // React to OS changes when preference is 'system'
   useEffect(() => {
     if (preference !== 'system') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
@@ -46,14 +53,13 @@ export function ThemeProvider({ children, preference, onThemeChange }: ThemeProv
     (next: ThemePreference) => {
       applyTheme(resolveTheme(next))
       localStorage.setItem('jobradar-theme', next)
+      setApplied(next) // optimistic — toggle updates instantly
       onThemeChange(next)
     },
     [onThemeChange]
   )
 
   return (
-    <ThemeContext.Provider value={{ theme: preference, setTheme }}>
-      {children}
-    </ThemeContext.Provider>
+    <ThemeContext.Provider value={{ theme: applied, setTheme }}>{children}</ThemeContext.Provider>
   )
 }

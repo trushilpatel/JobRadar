@@ -93,5 +93,16 @@ export async function fetchVelocity(limit = 20): Promise<CompanyVelocityInsight[
 export async function fetchRoleCategories(): Promise<RoleCategoryCount[]> {
   const raw = await apiClient.get<unknown>('/admin/insights/role-categories')
   const result = z.array(RoleCategoryCountSchema).nullable().parse(raw)
-  return result ?? []
+  const normalized = (result ?? []).map((item) =>
+    item.category === '' ? { ...item, category: 'unknown' } : item
+  )
+  return normalized.reduce<RoleCategoryCount[]>((acc, item) => {
+    const existing = acc.find((x) => x.category === item.category)
+    if (existing) {
+      existing.count += item.count
+    } else {
+      acc.push({ ...item })
+    }
+    return acc
+  }, [])
 }

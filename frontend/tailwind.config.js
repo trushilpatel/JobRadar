@@ -20,6 +20,7 @@ export default {
         'accent-text': 'var(--accent-text)',
         sidebar: 'var(--sidebar-bg)',
         'sidebar-border': 'var(--sidebar-border)',
+        'sidebar-fg': 'var(--sidebar-fg)',
       },
     },
   },

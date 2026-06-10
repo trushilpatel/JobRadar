@@ -52,7 +52,6 @@ export const routes = {
   // ─── Top-level user routes ────────────────────────────────────────────────
   dashboard: () => '/dashboard',
   insights: () => '/insights',
-  settings: () => '/settings',
   account: () => '/account',
   login: () => '/login',
 
@@ -82,6 +81,7 @@ export const routes = {
   adminCompanies: () => '/admin/companies',
   adminUsers: () => '/admin/users',
   adminAudit: () => '/admin/audit',
+  adminPipeline: () => '/admin/pipeline',
 } as const
 
 export type RouteBuilders = typeof routes

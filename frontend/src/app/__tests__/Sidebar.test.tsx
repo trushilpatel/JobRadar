@@ -61,7 +61,7 @@ describe('Sidebar', () => {
     expect(screen.getByRole('link', { name: /Apply Queue/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Audit Log/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Insights/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Settings/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Pipeline/i })).toBeInTheDocument()
   })
 
   it('highlights the active route', () => {

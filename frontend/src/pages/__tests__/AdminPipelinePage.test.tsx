@@ -10,7 +10,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 // ── Lazy imports after mocks are registered ───────────────────────────────────
 import { useAts, useAtsActions } from '@/features/ats'
-import { SettingsPage } from '@/pages/SettingsPage'
+import { AdminPipelinePage } from '@/pages/admin/AdminPipelinePage'
 import type { ATS } from '@/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -49,9 +49,9 @@ const mockAtsList: ATS[] = [
 const mockMutateAsync = vi.fn()
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SettingsPage
+// AdminPipelinePage
 // ─────────────────────────────────────────────────────────────────────────────
-describe('SettingsPage', () => {
+describe('AdminPipelinePage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(useAtsActions).mockReturnValue({
@@ -63,15 +63,15 @@ describe('SettingsPage', () => {
     } as never)
   })
 
-  it('renders the Settings heading', () => {
+  it('renders the Pipeline Config heading', () => {
     vi.mocked(useAts).mockReturnValue({
       data: undefined,
       isLoading: true,
       isError: false,
       refetch: vi.fn(),
     } as never)
-    render(<SettingsPage />, { wrapper: makeWrapper() })
-    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    render(<AdminPipelinePage />, { wrapper: makeWrapper() })
+    expect(screen.getByRole('heading', { name: 'Pipeline Config' })).toBeInTheDocument()
   })
 
   it('renders the Adapter Configuration section heading', () => {
@@ -81,7 +81,7 @@ describe('SettingsPage', () => {
       isError: false,
       refetch: vi.fn(),
     } as never)
-    render(<SettingsPage />, { wrapper: makeWrapper() })
+    render(<AdminPipelinePage />, { wrapper: makeWrapper() })
     expect(screen.getByText('Adapter Configuration')).toBeInTheDocument()
   })
 
@@ -92,7 +92,7 @@ describe('SettingsPage', () => {
       isError: false,
       refetch: vi.fn(),
     } as never)
-    const { container } = render(<SettingsPage />, { wrapper: makeWrapper() })
+    const { container } = render(<AdminPipelinePage />, { wrapper: makeWrapper() })
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0)
   })
 
@@ -103,11 +103,23 @@ describe('SettingsPage', () => {
       isError: false,
       refetch: vi.fn(),
     } as never)
-    render(<SettingsPage />, { wrapper: makeWrapper() })
+    render(<AdminPipelinePage />, { wrapper: makeWrapper() })
     await waitFor(() => {
       // AtsTable shows display_name as primary and name as subtitle
       expect(screen.getByText('Greenhouse')).toBeInTheDocument()
       expect(screen.getByText('Lever')).toBeInTheDocument()
     })
+  })
+
+  it('shows error state when ATS fetch fails', () => {
+    vi.mocked(useAts).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+    } as never)
+    render(<AdminPipelinePage />, { wrapper: makeWrapper() })
+    expect(screen.getByText('Failed to load ATS configs.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
   })
 })

@@ -26,6 +26,7 @@
     --sidebar-border: rgba(0, 0, 0, 0.07);
     --sidebar-hover: rgba(0, 0, 0, 0.06);
     --sidebar-active: rgba(109, 40, 217, 0.12);
+    --sidebar-fg: #0f1117;
     --accent: #7c3aed;
     --accent-dim: rgba(109, 40, 217, 0.15);
     --accent-text: #7c3aed;
@@ -50,6 +51,7 @@
     --sidebar-border: rgba(255, 255, 255, 0.06);
     --sidebar-hover: rgba(255, 255, 255, 0.04);
     --sidebar-active: rgba(109, 40, 217, 0.2);
+    --sidebar-fg: #e2e8f0;
     --accent: #7c3aed;
     --accent-dim: rgba(109, 40, 217, 0.25);
     --accent-text: #a78bfa;
@@ -58,7 +60,7 @@
   }
 
   html {
-    color-scheme: dark;
+    color-scheme: dark light;
   }
 
   body {

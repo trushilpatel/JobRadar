@@ -11,6 +11,7 @@ const ROLE_COLORS: Record<string, string> = {
   ml: '#d97706',
   data: '#dc2626',
   other: '#475569',
+  unknown: '#475569',
 }
 
 function RoleContent({ data }: { data: RoleCategoryCount[] }) {
