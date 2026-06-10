@@ -38,13 +38,13 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
           <div className="flex items-center gap-2.5 min-w-0">
             <CompanyAvatar name={c.name} />
             <div className="min-w-0 flex items-center gap-1.5">
-              <p className="text-sm font-medium text-white truncate">{c.name}</p>
+              <p className="text-sm font-medium text-primary truncate">{c.name}</p>
               <a
                 href={c.url}
                 target="_blank"
                 rel="noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="text-slate-500 hover:text-slate-300 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                className="text-muted hover:text-secondary transition-colors opacity-0 group-hover:opacity-100 shrink-0"
               >
                 <ExternalLink size={10} />
               </a>
@@ -69,7 +69,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
       id: 'status',
       size: 110,
       enableSorting: false,
-      header: () => <span className="text-slate-400">Status</span>,
+      header: () => <span className="text-muted">Status</span>,
       cell: ({ row }) => {
         const c = row.original
         const kind: StatusKind =
@@ -94,11 +94,11 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
         <Tooltip.Provider delayDuration={200}>
           <Tooltip.Root>
             <Tooltip.Trigger asChild>
-              <span className="text-slate-400 cursor-help">Last 10 scans</span>
+              <span className="text-muted cursor-help">Last 10 scans</span>
             </Tooltip.Trigger>
             <Tooltip.Portal>
               <Tooltip.Content
-                className="z-50 bg-slate-800 border border-white/10 text-xs text-slate-300 px-2.5 py-1.5 rounded-lg shadow-lg"
+                className="z-50 bg-panel border border-[var(--border-strong)] text-xs text-secondary px-2.5 py-1.5 rounded-lg shadow-lg"
                 sideOffset={4}
               >
                 green = ok · amber = running · red = error · grey = no data
@@ -136,7 +136,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
       header: ({ column }) => <DataTableColumnHeader column={column} title="Last scan" />,
       cell: ({ getValue }) => {
         const v = getValue() as string | null
-        return <span className="text-xs text-slate-400">{v ? relativeTime(new Date(v)) : '—'}</span>
+        return <span className="text-xs text-muted">{v ? relativeTime(new Date(v)) : '—'}</span>
       },
     },
 
@@ -144,7 +144,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
       id: 'active',
       size: 72,
       enableSorting: false,
-      header: () => <span className="text-slate-400">Active</span>,
+      header: () => <span className="text-muted">Active</span>,
       cell: ({ row }) => {
         const c = row.original
         const isToggling = actions.togglingActive?.has(c.id) ?? false
@@ -199,7 +199,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
                 'p-1.5 rounded-md transition-colors',
                 isScanning
                   ? 'text-violet-400 bg-violet-500/10'
-                  : 'text-slate-500 hover:text-violet-300 hover:bg-violet-500/10 opacity-0 group-hover:opacity-100 focus-within:opacity-100'
+                  : 'text-muted hover:text-violet-300 hover:bg-violet-500/10 opacity-0 group-hover:opacity-100 focus-within:opacity-100'
               )}
             >
               <RefreshCw size={14} className={isScanning ? 'animate-spin' : ''} />
@@ -209,7 +209,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
               onClick={() => actions.onEdit(c)}
               title="Edit"
               aria-label={`Edit ${c.name}`}
-              className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-white/[0.06] transition-colors opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+              className="p-1.5 rounded-md text-muted hover:text-primary hover:bg-hover transition-colors opacity-0 group-hover:opacity-100 focus-within:opacity-100"
             >
               <Pencil size={14} />
             </button>
@@ -218,7 +218,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
               onClick={() => actions.onDelete(c.id)}
               title="Delete"
               aria-label={`Delete ${c.name}`}
-              className="p-1.5 rounded-md text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+              className="p-1.5 rounded-md text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100 focus-within:opacity-100"
             >
               <Trash2 size={14} />
             </button>

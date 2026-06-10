@@ -48,7 +48,7 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400',
               saved
                 ? 'text-amber-400 hover:bg-amber-500/10'
-                : 'text-slate-500 hover:text-amber-300 hover:bg-white/[0.06]'
+                : 'text-muted hover:text-amber-300 hover:bg-hover'
             )}
           >
             <Bookmark size={15} fill={saved ? 'currentColor' : 'none'} />
@@ -69,7 +69,7 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
         return (
           <div className="flex items-center gap-2.5">
             <CompanyAvatar name={name} size="sm" />
-            <span className="text-xs text-slate-300 truncate max-w-[120px]">{name}</span>
+            <span className="text-xs text-secondary truncate max-w-[120px]">{name}</span>
           </div>
         )
       },
@@ -95,7 +95,9 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
                 aria-label={`Resume attached (${attachmentState})`}
               />
             )}
-            <span className="font-medium text-white text-sm truncate">{getValue() as string}</span>
+            <span className="font-medium text-primary text-sm truncate">
+              {getValue() as string}
+            </span>
           </div>
         )
       },
@@ -106,7 +108,7 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       id: 'location',
       size: 180,
       enableSorting: false,
-      header: () => <span className="text-slate-400">Location</span>,
+      header: () => <span className="text-muted">Location</span>,
       cell: ({ row }) => {
         const j = row.original
         if (j.remote)
@@ -117,7 +119,7 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
           )
         if (j.location)
           return (
-            <span className="inline-flex items-center gap-1 text-xs text-slate-400">
+            <span className="inline-flex items-center gap-1 text-xs text-muted">
               <MapPin size={10} /> {j.location}
             </span>
           )
@@ -132,7 +134,7 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       id: 'salary',
       size: 140,
       enableSorting: false,
-      header: () => <span className="text-slate-400">Salary</span>,
+      header: () => <span className="text-muted">Salary</span>,
       cell: ({ row }) => {
         const salary = formatSalary(row.original.salary_range)
         return salary ? <span className="text-xs text-amber-300">{salary}</span> : null
@@ -145,7 +147,7 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       size: 100,
       header: ({ column }) => <DataTableColumnHeader column={column} title="Added" />,
       cell: ({ getValue }) => (
-        <span className="text-xs text-slate-500">{formatRelativeTime(getValue() as string)}</span>
+        <span className="text-xs text-muted">{formatRelativeTime(getValue() as string)}</span>
       ),
     },
 
@@ -168,7 +170,7 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
           aria-label={`Dismiss ${row.original.title}`}
           title="Dismiss"
           className={cn(
-            'p-1.5 rounded-md transition-all text-slate-500 hover:text-red-400 hover:bg-red-500/10',
+            'p-1.5 rounded-md transition-all text-muted hover:text-red-400 hover:bg-red-500/10',
             'opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100',
             'focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400'
           )}

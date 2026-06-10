@@ -5,8 +5,7 @@ import { useJob } from '../hooks/useJob'
 import { useJobActions } from '../hooks/useJobActions'
 import { JobDetailPanel } from './JobDetailPanel'
 import { showDismissStripe } from '@/components/ui/dismiss-stripe'
-
-const HIDDEN_COMPANIES_CATEGORY = 'companies'
+import { HIDDEN_COMPANIES_CATEGORY } from '@/config/constants/hiddenItems'
 
 export function MobileJobDetailRoute() {
   const { id } = useParams<{ id: string }>()
@@ -72,9 +71,9 @@ export function MobileJobDetailRoute() {
   if (job.isLoading) {
     return (
       <div className="flex flex-1 flex-col gap-3 p-6">
-        <div className="h-6 w-2/3 animate-pulse rounded bg-white/[0.05]" />
-        <div className="h-4 w-1/3 animate-pulse rounded bg-white/[0.05]" />
-        <div className="mt-4 h-32 animate-pulse rounded bg-white/[0.05]" />
+        <div className="h-6 w-2/3 animate-pulse rounded bg-subtle" />
+        <div className="h-4 w-1/3 animate-pulse rounded bg-subtle" />
+        <div className="mt-4 h-32 animate-pulse rounded bg-subtle" />
       </div>
     )
   }
@@ -98,7 +97,7 @@ export function MobileJobDetailRoute() {
             <button
               type="button"
               onClick={() => navigate('/jobs')}
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-300"
+              className="rounded-lg border border-[var(--border-strong)] bg-subtle px-3 py-1.5 text-sm text-secondary"
             >
               Browse all jobs
             </button>
@@ -106,7 +105,7 @@ export function MobileJobDetailRoute() {
             <button
               type="button"
               onClick={() => job.refetch()}
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-300"
+              className="rounded-lg border border-[var(--border-strong)] bg-subtle px-3 py-1.5 text-sm text-secondary"
             >
               Try again
             </button>
@@ -114,7 +113,7 @@ export function MobileJobDetailRoute() {
           <button
             type="button"
             onClick={safeBack}
-            className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-300"
+            className="rounded-lg border border-[var(--border-strong)] bg-subtle px-3 py-1.5 text-sm text-secondary"
           >
             Back
           </button>

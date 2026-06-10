@@ -387,6 +387,9 @@ export interface Identity {
   roles: string[]
 }
 
+export type ThemePreference = 'dark' | 'light' | 'system'
+
 export interface UserConfig {
   show_keyboard_shortcuts: boolean
+  theme?: ThemePreference
 }

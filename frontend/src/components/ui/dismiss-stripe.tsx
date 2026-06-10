@@ -93,16 +93,16 @@ function DismissStripeContent({
   return (
     <div
       data-testid="dismiss-stripe"
-      className="w-[360px] rounded-xl border border-white/10 bg-[#13131e] shadow-2xl overflow-hidden"
+      className="max-w-[360px] w-full rounded-xl border border-[var(--border-strong)] bg-panel shadow-2xl overflow-hidden"
     >
       <div className="flex items-start gap-3 px-4 py-3">
         <div className="flex items-center justify-center w-7 h-7 rounded-full shrink-0 bg-emerald-500/15">
           <Check size={14} strokeWidth={2.5} className="text-emerald-400" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-white">{message}</p>
+          <p className="text-sm font-medium text-primary">{message}</p>
           {submessage && (
-            <p className="text-xs text-slate-400 truncate" title={submessage}>
+            <p className="text-xs text-muted truncate" title={submessage}>
               {submessage}
             </p>
           )}
@@ -112,7 +112,7 @@ function DismissStripeContent({
             <button
               type="button"
               onClick={handleUndo}
-              className="text-xs font-medium text-violet-300 hover:text-violet-200 px-2 py-1 rounded-md hover:bg-white/[0.06] transition-colors"
+              className="text-xs font-medium text-violet-300 hover:text-violet-200 px-2 py-1 rounded-md hover:bg-hover transition-colors"
             >
               Undo
             </button>
@@ -121,7 +121,7 @@ function DismissStripeContent({
             type="button"
             onClick={handleClose}
             aria-label="Dismiss toast"
-            className="p-1 text-slate-500 hover:text-white rounded-md hover:bg-white/[0.06] transition-colors"
+            className="p-1 text-muted hover:text-primary rounded-md hover:bg-hover transition-colors"
           >
             <X size={13} />
           </button>
@@ -133,7 +133,7 @@ function DismissStripeContent({
           <label
             className={cn(
               'flex items-center gap-2 text-xs cursor-pointer transition-colors',
-              hideChecked ? 'text-violet-300' : 'text-slate-400 hover:text-slate-200'
+              hideChecked ? 'text-violet-300' : 'text-muted hover:text-primary'
             )}
           >
             <input

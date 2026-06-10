@@ -9,6 +9,22 @@
     <meta name="theme-color" content="#0d0d14" />
     <meta name="description" content="JobRadar — automated job tracker. Monitors careers pages, filters via LLM, surfaces relevant roles." />
     <title>JobRadar</title>
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem('jobradar-theme');
+        var theme = stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'dark';
+        var resolved = theme === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : theme;
+        if (resolved !== 'light') {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
   </head>
   <body>
     <div id="root"></div>

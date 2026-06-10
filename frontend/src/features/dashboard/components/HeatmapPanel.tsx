@@ -70,7 +70,10 @@ function HeatRow({
               ? monthLabel(w.weekStart)
               : ''
           return (
-            <div key={col} className="text-[10px] text-slate-600 text-center leading-none min-w-0">
+            <div
+              key={col}
+              className="text-[10px] text-placeholder text-center leading-none min-w-0"
+            >
               {label}
             </div>
           )
@@ -93,10 +96,10 @@ function HeatRow({
                 <TooltipPrimitive.Content
                   side="top"
                   sideOffset={6}
-                  className="z-50 rounded-md bg-[#1e1e23] border border-white/[0.1] px-2.5 py-1.5 text-[11px] text-slate-200 shadow-xl"
+                  className="z-50 rounded-md bg-subtle border border-[var(--border-strong)] px-2.5 py-1.5 text-[11px] text-primary shadow-xl"
                 >
                   {formatWeekLabel(w.weekStart, w.count)}
-                  <TooltipPrimitive.Arrow className="fill-[#1e1e23]" />
+                  <TooltipPrimitive.Arrow className="fill-subtle" />
                 </TooltipPrimitive.Content>
               </TooltipPrimitive.Portal>
             </TooltipPrimitive.Root>
@@ -130,15 +133,15 @@ export function HeatmapPanel() {
 
   return (
     <TooltipPrimitive.Provider delayDuration={120}>
-      <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-5">
-        <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-slate-500 mb-3">
+      <div className="bg-subtle border border-[var(--border)] rounded-xl p-5">
+        <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-muted mb-3">
           new jobs detected — all watched companies
         </p>
 
         {isLoading ? (
-          <div className="h-24 bg-white/[0.03] rounded-lg animate-pulse" />
+          <div className="h-24 bg-subtle rounded-lg animate-pulse" />
         ) : isError ? (
-          <div className="h-24 flex items-center justify-center text-xs text-slate-500">
+          <div className="h-24 flex items-center justify-center text-xs text-muted">
             Failed to load heatmap data
           </div>
         ) : (
@@ -153,7 +156,7 @@ export function HeatmapPanel() {
 
             {/* Legend */}
             <div className="flex items-center justify-end gap-1.5">
-              <span className="text-[11px] text-slate-600">fewer</span>
+              <span className="text-[11px] text-placeholder">fewer</span>
               <div className="flex gap-[3px]">
                 {HEAT_COLORS.map((c, i) => (
                   <span
@@ -163,7 +166,7 @@ export function HeatmapPanel() {
                   />
                 ))}
               </div>
-              <span className="text-[11px] text-slate-600">more</span>
+              <span className="text-[11px] text-placeholder">more</span>
             </div>
           </div>
         )}

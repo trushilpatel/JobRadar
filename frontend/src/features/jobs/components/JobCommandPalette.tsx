@@ -135,8 +135,8 @@ export function JobCommandPalette({
                 onSelect={runAndClose(() => onSelectJob?.(job))}
               >
                 <span className="truncate">
-                  <span className="text-slate-400">{job.company?.name ?? '—'}</span>
-                  <span className="mx-1 text-slate-500">·</span>
+                  <span className="text-muted">{job.company?.name ?? '—'}</span>
+                  <span className="mx-1 text-muted">·</span>
                   <span>{job.title}</span>
                 </span>
               </CommandItem>

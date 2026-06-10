@@ -29,12 +29,12 @@ export function ResumeVersionList({ versions, activeId, onSelect, selectedId }: 
               'w-full text-left rounded-lg px-3 py-2.5 transition-colors border',
               isSelected
                 ? 'border-violet-500/30 bg-violet-500/5'
-                : 'border-white/[0.05] bg-[#141420] hover:bg-[#171723]'
+                : 'border-[var(--border)] bg-panel hover:bg-subtle'
             )}
           >
             <div className="flex items-center justify-between mb-0.5">
               <div className="flex items-center gap-2">
-                <span className="text-white text-sm font-medium tabular-nums">
+                <span className="text-primary text-sm font-medium tabular-nums">
                   v{v.version_number}
                 </span>
                 {isActive && (
@@ -43,14 +43,14 @@ export function ResumeVersionList({ versions, activeId, onSelect, selectedId }: 
                   </span>
                 )}
               </div>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wide">
+              <span className="text-[10px] text-muted uppercase tracking-wide">
                 {v.file_format}
               </span>
             </div>
             {v.change_summary && (
-              <div className="text-xs text-slate-400 mt-1 line-clamp-2">{v.change_summary}</div>
+              <div className="text-xs text-muted mt-1 line-clamp-2">{v.change_summary}</div>
             )}
-            <div className="flex items-center justify-between mt-2 text-[10px] text-slate-500">
+            <div className="flex items-center justify-between mt-2 text-[10px] text-muted">
               <span>{formatRelativeTime(v.created_at)}</span>
               <span>{formatBytes(v.size_bytes)}</span>
             </div>

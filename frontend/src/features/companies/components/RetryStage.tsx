@@ -36,7 +36,7 @@ export function RetryStage({ label, worker, counts }: RetryStageProps) {
             <span
               className={cn(
                 'text-[10px] uppercase tracking-[0.08em] mt-0.5 text-center',
-                total === 0 ? 'text-slate-700' : 'text-slate-500'
+                total === 0 ? 'text-slate-700' : 'text-muted'
               )}
             >
               {label.split(' ').map((word, i) => (
@@ -55,7 +55,7 @@ export function RetryStage({ label, worker, counts }: RetryStageProps) {
             <div className="space-y-1.5">
               {TIERS.map(({ key, label: tierLabel }) => (
                 <div key={key} className="flex items-center gap-2">
-                  <span className="text-slate-400 text-xs font-mono w-8 shrink-0">{tierLabel}</span>
+                  <span className="text-muted text-xs font-mono w-8 shrink-0">{tierLabel}</span>
                   <span className="text-white text-xs tabular-nums flex-1 text-right">
                     {counts[key]}
                   </span>

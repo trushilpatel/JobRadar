@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils/utils'
 interface JobsTableProps {
   jobs: Job[]
   loading: boolean
+  isFetchingMore?: boolean
   isError?: boolean
   onRetry?: () => void
   tab: TabKey
@@ -50,6 +51,7 @@ const EMPTY_MESSAGES: Record<TabKey, string> = {
 export function JobsTable({
   jobs,
   loading,
+  isFetchingMore = false,
   isError,
   onRetry,
   tab,
@@ -101,7 +103,7 @@ export function JobsTable({
         <DataTable
           columns={columns}
           data={jobs}
-          loading={loading}
+          loading={loading && jobs.length === 0}
           isError={isError}
           onRetry={onRetry}
           errorMessage="Couldn't load jobs"
@@ -112,15 +114,20 @@ export function JobsTable({
           selectedId={activeJobId ?? undefined}
           onRowClick={onRowClick}
           getRowClassName={(job) => {
-            const idx = jobs.findIndex((j) => j.id === job.id)
-            const isFocused = focusedIndex !== undefined && focusedIndex === idx
+            // Avoid O(n) findIndex: derive focused job id directly from the
+            // pre-computed focusedIndex so the comparison is O(1).
+            const focusedJobId =
+              focusedIndex !== undefined && focusedIndex >= 0
+                ? (jobs[focusedIndex]?.id ?? null)
+                : null
+            const isFocused = focusedJobId !== null && job.id === focusedJobId
             const isActive = activeJobId === job.id
             return cn(
               // `group/row` enables Tailwind named-group hover for child cells
               // (the hover-revealed Dismiss button in jobs-columns.tsx).
               'group/row',
               isFocused && 'ring-2 ring-violet-400 ring-inset',
-              isActive ? 'bg-violet-500/[0.08]' : 'hover:bg-white/[0.03]'
+              isActive ? 'bg-violet-500/[0.08]' : 'hover:bg-hover'
             )
           }}
           getRowProps={(job) => ({
@@ -142,7 +149,13 @@ export function JobsTable({
         />
       </div>
 
-      <div className="border-t border-white/[0.07] shrink-0">
+      {isFetchingMore && jobs.length > 0 && (
+        <div className="py-2 text-center text-xs text-muted shrink-0">
+          <span className="animate-pulse">Loading more…</span>
+        </div>
+      )}
+
+      <div className="border-t border-[var(--border)] shrink-0">
         <Pagination
           mode="cursor"
           page={page}

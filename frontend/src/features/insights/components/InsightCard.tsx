@@ -8,10 +8,10 @@ export function InsightCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="bg-white/[0.03] border border-white/[0.07] rounded-xl p-5">
+    <div className="bg-subtle border border-[var(--border)] rounded-xl p-5">
       <div className="mb-4">
-        <h2 className="text-sm font-semibold text-white">{title}</h2>
-        <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
+        <h2 className="text-sm font-semibold text-primary">{title}</h2>
+        <p className="text-xs text-muted mt-0.5">{subtitle}</p>
       </div>
       {children}
     </div>
@@ -20,7 +20,7 @@ export function InsightCard({
 
 export function InsightEmpty() {
   return (
-    <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
+    <div className="flex items-center justify-center h-32 text-muted text-sm">
       Not enough data yet
     </div>
   )
@@ -33,5 +33,5 @@ export function InsightError({ message = 'Failed to load data' }: { message?: st
 }
 
 export function InsightSkeleton({ height = 'h-32' }: { height?: string }) {
-  return <div className={`${height} bg-white/[0.03] rounded-lg animate-pulse`} />
+  return <div className={`${height} bg-subtle rounded-lg animate-pulse`} />
 }

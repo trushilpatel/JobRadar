@@ -7,7 +7,7 @@ import type { JobStatus } from '@/types'
 const STATUS_CONFIG: Record<JobStatus, { label: string; classes: string }> = {
   new: {
     label: 'New',
-    classes: 'text-slate-300 bg-white/[0.06] border-white/[0.12]',
+    classes: 'text-secondary bg-subtle border-[var(--border-strong)]',
   },
   // 'saved' kept in the config only to satisfy the JobStatus Record<>.
   // It's never offered in the dropdown — SELECT_STATUSES excludes it.
@@ -30,7 +30,7 @@ const STATUS_CONFIG: Record<JobStatus, { label: string; classes: string }> = {
   },
   dismissed: {
     label: 'Dismissed',
-    classes: 'text-slate-400 bg-white/[0.04] border-white/[0.08]',
+    classes: 'text-muted bg-subtle border-[var(--border)]',
   },
   rejected: {
     label: 'Rejected',
@@ -74,7 +74,7 @@ export function StatusSelect({ status, onChange, disabled }: StatusSelectProps) 
         <Select.Content
           position="popper"
           sideOffset={4}
-          className="z-50 min-w-[140px] rounded-lg border border-white/[0.1] bg-[#13131f] shadow-xl overflow-hidden"
+          className="z-50 min-w-[140px] rounded-lg border border-[var(--border-strong)] bg-panel shadow-xl overflow-hidden"
         >
           <Select.Viewport className="p-1">
             {ALL_STATUSES.map((s) => {
@@ -85,7 +85,7 @@ export function StatusSelect({ status, onChange, disabled }: StatusSelectProps) 
                   value={s}
                   className={cn(
                     'flex items-center justify-between gap-2 px-3 py-1.5 text-xs rounded-md cursor-pointer outline-none',
-                    'data-[highlighted]:bg-white/[0.06]',
+                    'data-[highlighted]:bg-hover',
                     cfg.classes.split(' ')[0]
                   )}
                 >

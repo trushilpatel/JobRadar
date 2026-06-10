@@ -16,7 +16,7 @@ interface Props {
 }
 
 const LIFECYCLE_TONE: Record<string, string> = {
-  saved: 'text-slate-400',
+  saved: 'text-muted',
   applied: 'text-sky-300',
   interviewing: 'text-amber-300',
   offer: 'text-emerald-300',
@@ -27,11 +27,17 @@ export function ApplyQueueTable({ items, isLoading, emptyMessage }: Props) {
   const qc = useQueryClient()
 
   if (isLoading) {
-    return <div className="text-sm text-slate-400 py-8">Loading…</div>
+    return (
+      <div className="space-y-2 animate-pulse pt-4">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="h-14 rounded-lg bg-slate-800/60" />
+        ))}
+      </div>
+    )
   }
   if (items.length === 0) {
     return (
-      <div className="text-sm text-slate-500 italic py-12 text-center border border-dashed border-white/[0.06] rounded-lg">
+      <div className="text-sm text-muted italic py-12 text-center border border-dashed border-[var(--border)] rounded-lg">
         {emptyMessage ?? 'No jobs in this state.'}
       </div>
     )
@@ -57,10 +63,10 @@ export function ApplyQueueTable({ items, isLoading, emptyMessage }: Props) {
   }
 
   return (
-    <div className="rounded-xl border border-white/[0.06] overflow-hidden">
+    <div className="rounded-xl border border-[var(--border)] overflow-hidden">
       <table className="w-full text-sm">
-        <thead className="bg-white/[0.02] border-b border-white/[0.06]">
-          <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+        <thead className="bg-subtle border-b border-[var(--border)]">
+          <tr className="text-left text-[11px] uppercase tracking-wide text-muted">
             <th className="px-4 py-2 font-medium">Job</th>
             <th className="px-3 py-2 font-medium w-[100px]">Saved</th>
             <th className="px-3 py-2 font-medium w-[260px]">Resume</th>
@@ -97,7 +103,7 @@ function ApplyQueueRow({ item, onRowClick, onAttach, onSubmit }: RowProps) {
 
   return (
     <tr
-      className="border-b border-white/[0.04] last:border-0 hover:bg-white/[0.02] cursor-pointer transition-colors"
+      className="border-b border-[var(--border)] last:border-0 hover:bg-hover cursor-pointer transition-colors"
       onClick={(e) => {
         // Don't navigate when clicks land on interactive children
         const t = e.target as HTMLElement
@@ -110,10 +116,10 @@ function ApplyQueueRow({ item, onRowClick, onAttach, onSubmit }: RowProps) {
         <div className="flex items-center gap-2 min-w-0">
           {attachment && <Paperclip size={11} className="text-violet-400 shrink-0" />}
           <div className="min-w-0">
-            <div className="text-white truncate">{job.title}</div>
-            <div className="text-xs text-slate-400 truncate">
+            <div className="text-primary truncate">{job.title}</div>
+            <div className="text-xs text-muted truncate">
               {job.company} · {job.location}
-              {job.salary && <span className="text-slate-500"> · {job.salary}</span>}
+              {job.salary && <span className="text-muted"> · {job.salary}</span>}
             </div>
           </div>
         </div>
@@ -121,7 +127,7 @@ function ApplyQueueRow({ item, onRowClick, onAttach, onSubmit }: RowProps) {
 
       {/* Saved */}
       <td className="px-3 py-3 align-middle">
-        <div className="text-xs text-slate-400">{formatRelativeTime(job.saved_at)}</div>
+        <div className="text-xs text-muted">{formatRelativeTime(job.saved_at)}</div>
         {lifecycle !== 'saved' && (
           <div
             className={cn('text-[10px] uppercase tracking-wide mt-0.5', LIFECYCLE_TONE[lifecycle])}
@@ -140,7 +146,7 @@ function ApplyQueueRow({ item, onRowClick, onAttach, onSubmit }: RowProps) {
             onSelect={(resumeId) => onAttach(job.id, resumeId)}
           />
           {resume && (
-            <span className="text-[10px] text-slate-500 tabular-nums shrink-0">
+            <span className="text-[10px] text-muted tabular-nums shrink-0">
               v{resume.version_number}
             </span>
           )}
@@ -152,7 +158,7 @@ function ApplyQueueRow({ item, onRowClick, onAttach, onSubmit }: RowProps) {
         {attachment ? (
           <ResumeStateBadge state={attachment.state} />
         ) : (
-          <span className="text-[11px] text-slate-500 italic">Not attached</span>
+          <span className="text-[11px] text-muted italic">Not attached</span>
         )}
       </td>
 
@@ -162,7 +168,7 @@ function ApplyQueueRow({ item, onRowClick, onAttach, onSubmit }: RowProps) {
           {resume && attachment && attachment.state !== 'submitted' && (
             <Link
               to={routes.resumeEdit(resume.id, { jobId: job.id })}
-              className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-white/[0.04] hover:bg-white/[0.08] text-slate-300"
+              className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-subtle hover:bg-hover text-secondary"
               title="Edit resume for this job"
             >
               <Edit3 size={11} />
@@ -183,7 +189,7 @@ function ApplyQueueRow({ item, onRowClick, onAttach, onSubmit }: RowProps) {
             href={job.url}
             target="_blank"
             rel="noreferrer"
-            className="text-slate-400 hover:text-white p-1"
+            className="text-muted hover:text-primary p-1"
             title="Open job posting in new tab"
           >
             <ExternalLink size={12} />

@@ -27,6 +27,8 @@ import {
   AddCompanyModal,
 } from '@/features/companies'
 
+const DEFAULT_PANEL_WIDTH = 480
+
 export function CompaniesPage() {
   const c = useCompanies()
   const actions = useCompanyActions()
@@ -40,7 +42,7 @@ export function CompaniesPage() {
   const [editCompany, setEditCompany] = useState<Company | null>(null)
   const [drawerCompany, setDrawerCompany] = useState<Company | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Company | null>(null)
-  const [panelWidth, setPanelWidth] = useState(480)
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
   const navigate = useNavigate()
   const handleViewJobs = useCallback(
     (companyName: string) => navigate(jobsUrl({ companies: [companyName] })),
@@ -118,7 +120,7 @@ export function CompaniesPage() {
               <ResizeHandle width={panelWidth} onChange={setPanelWidth} />
               <aside
                 style={{ ['--panel-width' as string]: `${panelWidth}px` } as CSSProperties}
-                className="shrink-0 min-h-0 border-l border-white/[0.07] overflow-hidden [width:var(--panel-width)]"
+                className="shrink-0 min-h-0 border-l border-[var(--border)] overflow-hidden [width:var(--panel-width)]"
               >
                 <CompanyDetailDrawer
                   company={drawerCompany}
@@ -160,9 +162,9 @@ export function CompaniesPage() {
       />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent className="bg-[#0d0d14] border-white/10">
+        <AlertDialogContent className="bg-panel border-[var(--border)]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Delete Company</AlertDialogTitle>
+            <AlertDialogTitle className="text-primary">Delete Company</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete <strong>{deleteTarget?.name}</strong> and all its scan
               history. This cannot be undone.

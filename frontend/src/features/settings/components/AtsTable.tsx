@@ -90,7 +90,7 @@ export function AtsTable({ atsList, isLoading, isError, refetch, onUpdate }: Ats
     return (
       <div className="space-y-2">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-10 bg-white/5 rounded animate-pulse" />
+          <div key={i} className="h-10 bg-subtle rounded animate-pulse" />
         ))}
       </div>
     )
@@ -114,32 +114,32 @@ export function AtsTable({ atsList, isLoading, isError, refetch, onUpdate }: Ats
   const rows = atsList ?? []
 
   if (rows.length === 0) {
-    return <p className="text-sm text-white/40 py-4">No ATS configurations found.</p>
+    return <p className="text-sm text-muted py-4">No ATS configurations found.</p>
   }
 
   return (
     <>
-      <div className="rounded-lg border border-white/[0.07] overflow-hidden">
+      <div className="rounded-lg border border-[var(--border)] overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-white/[0.07] bg-white/[0.02]">
-              <th className="text-left px-4 py-2.5 text-[11px] font-medium text-white/40 uppercase tracking-wider">
+            <tr className="border-b border-[var(--border)] bg-subtle">
+              <th className="text-left px-4 py-2.5 text-[11px] font-medium text-muted uppercase tracking-wider">
                 Adapter
               </th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-medium text-white/40 uppercase tracking-wider">
+              <th className="text-left px-4 py-2.5 text-[11px] font-medium text-muted uppercase tracking-wider">
                 Scan Interval
               </th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-medium text-white/40 uppercase tracking-wider">
+              <th className="text-left px-4 py-2.5 text-[11px] font-medium text-muted uppercase tracking-wider">
                 Inter-Company Delay
               </th>
-              <th className="text-left px-4 py-2.5 text-[11px] font-medium text-white/40 uppercase tracking-wider">
+              <th className="text-left px-4 py-2.5 text-[11px] font-medium text-muted uppercase tracking-wider">
                 Status
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/[0.04]">
+          <tbody className="divide-y divide-[var(--border)]">
             {rows.map((ats) => (
-              <tr key={ats.name} className="hover:bg-white/[0.02] transition-colors">
+              <tr key={ats.name} className="hover:bg-hover transition-colors">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span
@@ -149,8 +149,8 @@ export function AtsTable({ atsList, isLoading, isError, refetch, onUpdate }: Ats
                       )}
                     />
                     <div className="flex flex-col">
-                      <span className="text-white font-medium">{ats.display_name}</span>
-                      <span className="text-white/40 text-xs">{ats.name}</span>
+                      <span className="text-primary font-medium">{ats.display_name}</span>
+                      <span className="text-muted text-xs">{ats.name}</span>
                     </div>
                   </div>
                 </td>
@@ -180,9 +180,7 @@ export function AtsTable({ atsList, isLoading, isError, refetch, onUpdate }: Ats
                   <span
                     className={cn(
                       'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
-                      ats.is_active
-                        ? 'bg-emerald-500/10 text-emerald-400'
-                        : 'bg-white/5 text-white/40'
+                      ats.is_active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-subtle text-muted'
                     )}
                   >
                     {ats.is_active ? 'Active' : 'Inactive'}
@@ -198,23 +196,23 @@ export function AtsTable({ atsList, isLoading, isError, refetch, onUpdate }: Ats
       <Dialog.Root open={!!pending} onOpenChange={(v) => !v && cancelSave()}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-[#13131a] border border-white/10 rounded-xl shadow-2xl p-6">
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-panel border border-[var(--border-strong)] rounded-xl shadow-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <Dialog.Title className="text-base font-semibold text-white">
+              <Dialog.Title className="text-base font-semibold text-primary">
                 Confirm Change
               </Dialog.Title>
               <button
                 type="button"
                 onClick={cancelSave}
-                className="text-slate-400 hover:text-white transition-colors"
+                className="text-muted hover:text-primary transition-colors"
               >
                 <X size={16} />
               </button>
             </div>
-            <Dialog.Description className="text-sm text-white/70 mb-5">
+            <Dialog.Description className="text-sm text-secondary mb-5">
               {pending && (
                 <>
-                  Changing <span className="text-white font-medium">{pending.displayName}</span>{' '}
+                  Changing <span className="text-primary font-medium">{pending.displayName}</span>{' '}
                   {pending.field === 'scan_interval_min' ? 'scan interval' : 'inter-company delay'}{' '}
                   to{' '}
                   <span className="text-violet-300 font-medium">
@@ -229,7 +227,7 @@ export function AtsTable({ atsList, isLoading, isError, refetch, onUpdate }: Ats
               <button
                 type="button"
                 onClick={cancelSave}
-                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-subtle hover:bg-hover text-secondary transition-colors"
               >
                 Cancel
               </button>

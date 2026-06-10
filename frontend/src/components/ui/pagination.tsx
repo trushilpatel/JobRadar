@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { ChevronLeft, ChevronRight, ChevronsLeft, MoreHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
 
@@ -86,6 +87,14 @@ function CursorPagination({
   const from = itemsOnPage === 0 ? 0 : itemsBeforePage + 1
   const to = itemsBeforePage + itemsOnPage
 
+  // H7: If we land on a page with no items but there IS a previous page,
+  // auto-reset to first page so the user doesn't see a blank paginated view.
+  useEffect(() => {
+    if (itemsOnPage === 0 && hasPrev && !loading && onFirst) {
+      onFirst()
+    }
+  }, [itemsOnPage, hasPrev, loading, onFirst])
+
   // Middle-text logic. The range IS the position indicator — no separate
   // "Page N" label. See Pagination JSDoc for why.
   let middle: string
@@ -170,7 +179,7 @@ function OffsetPagination({
         <div className="flex items-center gap-0.5">
           {getPages().map((p, i) =>
             p === 'ellipsis' ? (
-              <span key={`ellipsis-${i}`} className="px-1.5 py-1 text-xs text-slate-600">
+              <span key={`ellipsis-${i}`} className="px-1.5 py-1 text-xs text-placeholder">
                 <MoreHorizontal size={13} />
               </span>
             ) : (
@@ -181,7 +190,7 @@ function OffsetPagination({
                   'min-w-[26px] px-2 py-1 text-xs rounded-md transition-colors',
                   p === page
                     ? 'bg-violet-600 text-white font-medium'
-                    : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
+                    : 'text-muted hover:text-primary hover:bg-hover'
                 )}
               >
                 {p}
@@ -251,9 +260,7 @@ function NavCluster({
         <ChevronLeft size={14} />
       </IconButton>
 
-      <div className="px-2 py-1 text-xs text-slate-400 tabular-nums whitespace-nowrap">
-        {children}
-      </div>
+      <div className="px-2 py-1 text-xs text-muted tabular-nums whitespace-nowrap">{children}</div>
 
       <IconButton
         onClick={onNext}
@@ -288,10 +295,10 @@ function IconButton({
       aria-label={ariaLabel}
       title={title}
       className={cn(
-        'flex items-center justify-center w-7 h-7 rounded-md text-slate-400 transition-colors',
-        'hover:text-white hover:bg-white/[0.06]',
+        'flex items-center justify-center w-7 h-7 rounded-md text-muted transition-colors',
+        'hover:text-primary hover:bg-hover',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400',
-        'disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-400'
+        'disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted'
       )}
     >
       {children}
@@ -318,7 +325,7 @@ function RangeText({
       aria-label={`Page ${page}`}
       className={cn(
         'text-xs shrink-0 tabular-nums whitespace-nowrap',
-        loading ? 'text-slate-600' : 'text-slate-500',
+        loading ? 'text-placeholder' : 'text-muted',
         className
       )}
     >
@@ -341,14 +348,14 @@ function RowsSelector({
   if (!onLimitChange) return null
   return (
     <div className="flex items-center gap-2 shrink-0">
-      <span className="text-xs text-slate-500">Rows</span>
+      <span className="text-xs text-muted">Rows</span>
       <select
         value={limit}
         onChange={(e) => {
           onLimitChange(Number(e.target.value))
           onResetPage?.()
         }}
-        className="bg-white/[0.04] border border-white/[0.08] text-xs text-slate-300 rounded-md px-2 py-1 focus:outline-none focus:border-violet-500 transition-colors cursor-pointer"
+        className="bg-subtle border border-[var(--border)] text-xs text-secondary rounded-md px-2 py-1 focus:outline-none focus:border-violet-500 transition-colors cursor-pointer"
       >
         {limitOptions.map((n) => (
           <option key={n} value={n}>

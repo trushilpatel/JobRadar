@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { resumeQueryKeys } from '../queryKeys'
-import { MOCK_ATTACHMENTS, MOCK_RESUMES, MOCK_VERSIONS } from '../mockData'
+import { getAllMockAttachments, MOCK_RESUMES, MOCK_VERSIONS } from '../mockData'
 import type { Resume, ResumeJobAttachment, ResumeVersion } from '../types'
 
 interface ResumeDetailResult {
@@ -18,7 +18,7 @@ export function useResume(id: string | undefined) {
     queryFn: () => {
       const resume = MOCK_RESUMES.find((r) => r.id === id) ?? null
       const versions = id ? (MOCK_VERSIONS[id] ?? []) : []
-      const attachments = id ? MOCK_ATTACHMENTS.filter((a) => a.resume_id === id) : []
+      const attachments = id ? getAllMockAttachments().filter((a) => a.resume_id === id) : []
       return Promise.resolve({ resume, versions, attachments })
     },
     staleTime: 30_000,
