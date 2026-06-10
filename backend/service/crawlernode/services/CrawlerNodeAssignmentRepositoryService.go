@@ -22,29 +22,49 @@ func NewAssignmentRepositoryService(db *gorm.DB) AssignmentStore {
 	return &assignmentRepositoryService{db: db}
 }
 
-// ClaimNextForNode claims the next queued row for the given adapterType using
-// FOR UPDATE SKIP LOCKED and sets locked_by = nodeID atomically.
+// ClaimNextForNode claims the next queued row using FOR UPDATE SKIP LOCKED and
+// sets locked_by = nodeID atomically. When adapterType is empty, any adapter type
+// is eligible (the crawler-node is generic and supports all adapters).
 func (s *assignmentRepositoryService) ClaimNextForNode(ctx context.Context, nodeID, adapterType string) (_ *dto.ScanQueueItem, err error) {
 	ctx, span := tracing.Start(ctx, "crawlernode.store.ClaimNextForNode")
 	defer tracing.End(span, &err)
 
 	var item dto.ScanQueueItem
-	result := s.db.WithContext(ctx).Raw(`
-		UPDATE company_scan_queue
-		SET status = 'running',
-		    locked_by = ?,
-		    started_at = NOW(),
-		    heartbeat_at = NOW()
-		WHERE id = (
-		    SELECT id FROM company_scan_queue
-		    WHERE status = 'queued'
-		      AND adapter_type = ?
-		    ORDER BY priority DESC, queued_at ASC
-		    LIMIT 1
-		    FOR UPDATE SKIP LOCKED
-		)
-		RETURNING id, company_id, adapter_type, status, source, started_at, heartbeat_at
-	`, nodeID, adapterType).Scan(&item)
+	var result *gorm.DB
+	if adapterType != "" {
+		result = s.db.WithContext(ctx).Raw(`
+			UPDATE company_scan_queue
+			SET status = 'running',
+			    locked_by = ?,
+			    started_at = NOW(),
+			    heartbeat_at = NOW()
+			WHERE id = (
+			    SELECT id FROM company_scan_queue
+			    WHERE status = 'queued'
+			      AND adapter_type = ?
+			    ORDER BY priority DESC, queued_at ASC
+			    LIMIT 1
+			    FOR UPDATE SKIP LOCKED
+			)
+			RETURNING id, company_id, adapter_type, status, source, started_at, heartbeat_at
+		`, nodeID, adapterType).Scan(&item)
+	} else {
+		result = s.db.WithContext(ctx).Raw(`
+			UPDATE company_scan_queue
+			SET status = 'running',
+			    locked_by = ?,
+			    started_at = NOW(),
+			    heartbeat_at = NOW()
+			WHERE id = (
+			    SELECT id FROM company_scan_queue
+			    WHERE status = 'queued'
+			    ORDER BY priority DESC, queued_at ASC
+			    LIMIT 1
+			    FOR UPDATE SKIP LOCKED
+			)
+			RETURNING id, company_id, adapter_type, status, source, started_at, heartbeat_at
+		`, nodeID).Scan(&item)
+	}
 
 	if result.Error != nil {
 		return nil, errors.ErrInternal.WithMessage("claim next for node: " + result.Error.Error())

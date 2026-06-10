@@ -40,10 +40,13 @@ func TestValidationService_GetWork_EmptyNodeIDReturnsBadRequest(t *testing.T) {
 	assertBadRequest(t, "GetWork(nodeID='')", err)
 }
 
-func TestValidationService_GetWork_EmptyAdapterTypeReturnsBadRequest(t *testing.T) {
+// Empty adapterType is now valid — the orchestrator is adapter-agnostic and claims any queued item.
+func TestValidationService_GetWork_EmptyAdapterTypePassesThrough(t *testing.T) {
 	svc := newValidationSvc()
 	_, err := svc.GetWork(context.Background(), "node-1", "", nil)
-	assertBadRequest(t, "GetWork(adapterType='')", err)
+	if err != nil {
+		t.Errorf("GetWork(adapterType=''): expected nil (adapter is optional), got %v", err)
+	}
 }
 
 func TestValidationService_GetWork_ValidPassesThrough(t *testing.T) {

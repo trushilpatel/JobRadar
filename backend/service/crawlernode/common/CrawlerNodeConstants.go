@@ -41,7 +41,8 @@ const MaxJobsPerBatch = 5000
 const ScanReasonFetch = "fetch"
 
 // ScanReasonNonUSA is the ledger reason when a job is dropped for non-USA location.
-const ScanReasonNonUSA = "non_usa"
+// Must match the DB CHECK constraint on job_pipeline_ledger.reason.
+const ScanReasonNonUSA = "non_usa_location"
 
 // ScanStatusOK is the status written to company_scan_log on success.
 const ScanStatusOK = "ok"
