@@ -193,7 +193,7 @@ func TestRest_List_ParsesAllFilters(t *testing.T) {
 			"&employ_types=full_time&employ_types=contract"+
 			"&experience_ranges=0-2&experience_ranges=5%2B"+
 			"&remote=true&sponsorship=false&requires_citizen=false"+
-			"&on_site=true&no_requirements=true"+
+			"&on_site=true&no_requirements=true&hybrid=true"+
 			"&days_added=7&sort_by=title&sort_dir=asc",
 		nil)
 	w := httptest.NewRecorder()
@@ -244,6 +244,9 @@ func TestRest_List_ParsesAllFilters(t *testing.T) {
 	if !got.OnSite {
 		t.Errorf("on_site = %v, want true", got.OnSite)
 	}
+	if !got.Hybrid {
+		t.Errorf("hybrid = %v, want true", got.Hybrid)
+	}
 	if !got.NoRequirements {
 		t.Errorf("no_requirements = %v, want true", got.NoRequirements)
 	}
@@ -276,7 +279,7 @@ func TestRest_List_DefaultsWhenAbsent(t *testing.T) {
 	got := fake.lastFilter
 	if got.Status != "" || got.Search != "" || len(got.Companies) != 0 ||
 		got.Remote != nil || got.Sponsorship != nil || got.RequiresCitizen != nil ||
-		got.OnSite || got.NoRequirements || got.DaysAdded != nil ||
+		got.OnSite || got.Hybrid || got.NoRequirements || got.DaysAdded != nil ||
 		got.SortBy != "" || got.SortDir != "" || len(got.ExperienceRanges) != 0 {
 		t.Errorf("non-zero default filter: %+v", got)
 	}
@@ -751,6 +754,36 @@ func TestRest_Dismiss_ServiceErrorMapsToStatus(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+// TestRest_List_HybridParam_True verifies ?hybrid=true sets filter.Hybrid=true.
+func TestRest_List_HybridParam_True(t *testing.T) {
+	fake := &fakeRestSvc{}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodGet, "/jobs?hybrid=true", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if !fake.lastFilter.Hybrid {
+		t.Errorf("hybrid = false, want true when ?hybrid=true")
+	}
+}
+
+// TestRest_List_HybridParam_Absent verifies no hybrid param leaves filter.Hybrid=false.
+func TestRest_List_HybridParam_Absent(t *testing.T) {
+	fake := &fakeRestSvc{}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodGet, "/jobs", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if fake.lastFilter.Hybrid {
+		t.Errorf("hybrid = true, want false when param absent")
 	}
 }
 

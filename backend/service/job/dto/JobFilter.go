@@ -8,6 +8,7 @@ type JobFilter struct {
 	Search           string            // ILIKE match on title, location, or company name
 	Remote           *bool             // remote = true/false
 	OnSite           bool              // remote = false (on-site only)
+	Hybrid           bool              // employ_type ILIKE '%hybrid%'
 	EmployTypes      []string          // employ_type IN (...) — OR across values
 	Sponsorship      *bool             // sponsorship = true/false
 	NoRequirements   bool              // requires_citizen = false AND security_clearance = false

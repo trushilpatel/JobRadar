@@ -499,6 +499,125 @@ func TestJobStore_GetJobByID_DBError(t *testing.T) {
 	}
 }
 
+// -------- hybrid filter tests --------
+
+// seedJobWithEmployType inserts a job row with the given employ_type string (nullable).
+func seedJobWithEmployType(t *testing.T, db *gorm.DB, id, companyID, jobPostID string, employType *string) {
+	t.Helper()
+	row := jobmodel.Job{
+		ID:         id,
+		JobPostID:  jobPostID,
+		CompanyID:  companyID,
+		Title:      "Test Job " + id,
+		URL:        "https://example.com/" + id,
+		AddedAt:    time.Now(),
+		EmployType: employType,
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatalf("seedJobWithEmployType %s: %v", id, err)
+	}
+}
+
+// TestJobStore_HybridFilter_ReturnOnlyHybridJobs verifies that Hybrid=true only
+// returns jobs whose employ_type contains "hybrid" (case-insensitive).
+func TestJobStore_HybridFilter_ReturnOnlyHybridJobs(t *testing.T) {
+	t.Parallel()
+	db := newJobTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJobWithEmployType(t, db, "j-hybrid", "c1", "p-hybrid", strPtr("Hybrid"))
+	seedJobWithEmployType(t, db, "j-remote", "c1", "p-remote", strPtr("Remote"))
+	seedJobWithEmployType(t, db, "j-onsite", "c1", "p-onsite", strPtr("On-site"))
+
+	store := jobsvc.NewJobStore(db)
+	jobs, _, err := store.GetJobs(context.Background(), jobdto.JobFilter{Hybrid: true}, "", 10)
+	if err != nil {
+		t.Fatalf("GetJobs err = %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("len = %d, want 1 (only hybrid job)", len(jobs))
+	}
+	if jobs[0].ID != "j-hybrid" {
+		t.Errorf("job id = %q, want j-hybrid", jobs[0].ID)
+	}
+}
+
+// TestJobStore_HybridFilter_NullEmployType verifies that a job with nil
+// employ_type is NOT returned when Hybrid=true (ILIKE on NULL never matches).
+func TestJobStore_HybridFilter_NullEmployType(t *testing.T) {
+	t.Parallel()
+	db := newJobTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJobWithEmployType(t, db, "j-null", "c1", "p-null", nil)
+	seedJobWithEmployType(t, db, "j-hybrid", "c1", "p-hybrid", strPtr("Hybrid"))
+
+	store := jobsvc.NewJobStore(db)
+	jobs, _, err := store.GetJobs(context.Background(), jobdto.JobFilter{Hybrid: true}, "", 10)
+	if err != nil {
+		t.Fatalf("GetJobs err = %v", err)
+	}
+	// Only the hybrid job must be returned; the null-employ_type job must be excluded.
+	if len(jobs) != 1 {
+		t.Fatalf("len = %d, want 1 (null employ_type excluded)", len(jobs))
+	}
+	if jobs[0].ID != "j-hybrid" {
+		t.Errorf("job id = %q, want j-hybrid", jobs[0].ID)
+	}
+}
+
+// TestJobStore_HybridFilter_CaseInsensitive verifies both 'HYBRID' and 'hybrid'
+// are matched when Hybrid=true. SQLite LIKE is case-insensitive for ASCII chars,
+// which mirrors Postgres ILIKE behaviour for this value.
+func TestJobStore_HybridFilter_CaseInsensitive(t *testing.T) {
+	t.Parallel()
+	db := newJobTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJobWithEmployType(t, db, "j-upper", "c1", "p-upper", strPtr("HYBRID"))
+	seedJobWithEmployType(t, db, "j-lower", "c1", "p-lower", strPtr("hybrid"))
+	seedJobWithEmployType(t, db, "j-mixed", "c1", "p-mixed", strPtr("Hybrid"))
+	seedJobWithEmployType(t, db, "j-remote", "c1", "p-remote", strPtr("Remote"))
+
+	store := jobsvc.NewJobStore(db)
+	jobs, _, err := store.GetJobs(context.Background(), jobdto.JobFilter{Hybrid: true}, "", 10)
+	if err != nil {
+		t.Fatalf("GetJobs err = %v", err)
+	}
+	if len(jobs) != 3 {
+		t.Fatalf("len = %d, want 3 (HYBRID + hybrid + Hybrid)", len(jobs))
+	}
+	got := map[string]bool{}
+	for _, j := range jobs {
+		got[j.ID] = true
+	}
+	for _, id := range []string{"j-upper", "j-lower", "j-mixed"} {
+		if !got[id] {
+			t.Errorf("expected job %s in result", id)
+		}
+	}
+	if got["j-remote"] {
+		t.Error("j-remote should not be in result")
+	}
+}
+
+// TestJobStore_HybridFilter_NoFilter verifies that when Hybrid=false the filter
+// is not applied and all jobs are returned regardless of employ_type.
+func TestJobStore_HybridFilter_NoFilter(t *testing.T) {
+	t.Parallel()
+	db := newJobTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJobWithEmployType(t, db, "j-hybrid", "c1", "p-hybrid", strPtr("Hybrid"))
+	seedJobWithEmployType(t, db, "j-remote", "c1", "p-remote", strPtr("Remote"))
+	seedJobWithEmployType(t, db, "j-null", "c1", "p-null", nil)
+
+	store := jobsvc.NewJobStore(db)
+	jobs, _, err := store.GetJobs(context.Background(), jobdto.JobFilter{Hybrid: false}, "", 10)
+	if err != nil {
+		t.Fatalf("GetJobs err = %v", err)
+	}
+	if len(jobs) != 3 {
+		t.Fatalf("len = %d, want 3 (no filter applied)", len(jobs))
+	}
+}
+
 // -------- helpers --------
 
 func dummyFilter() jobdto.JobFilter {

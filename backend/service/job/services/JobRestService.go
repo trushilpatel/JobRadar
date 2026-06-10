@@ -67,6 +67,9 @@ func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
 	if q.Get("on_site") == "true" {
 		filter.OnSite = true
 	}
+	if q.Get("hybrid") == "true" {
+		filter.Hybrid = true
+	}
 	if q.Get("no_requirements") == "true" {
 		filter.NoRequirements = true
 	}
