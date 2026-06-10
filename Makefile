@@ -7,11 +7,11 @@ export GIT_SHA
         migrate scan-google db-truncate lint lint-go tsc \
         test test-short test-adapters \
         fmt \
-        k8s-build k8s-build-backend k8s-build-crawler k8s-build-console \
+        k8s-build k8s-build-backend k8s-build-crawler k8s-build-orchestrator k8s-build-crawler-node k8s-build-console \
         k8s-up k8s-down k8s-migrate k8s-status k8s-forward k8s-unforward \
         k8s-obs-up k8s-obs-down \
-        k8s-logs k8s-logs-nats k8s-logs-filter k8s-logs-enricher k8s-logs-api k8s-logs-console k8s-logs-crawler k8s-logs-scheduler \
-        k8s-restart \
+        k8s-logs k8s-logs-nats k8s-logs-filter k8s-logs-enricher k8s-logs-api k8s-logs-console k8s-logs-crawler k8s-logs-scheduler k8s-logs-orchestrator k8s-logs-crawler-node \
+        k8s-restart k8s-restart-orchestrator k8s-restart-crawler-node \
         k8s-bootstrap k8s-preflight k8s-nuke \
         install-hooks \
         help
@@ -144,8 +144,32 @@ k8s-build-console: ## Build console image (bakes VITE_ vars from root .env) and 
 		printf '%s' "$$DIGEST" > $(K8S_CACHE)/console; \
 	fi
 
+k8s-build-orchestrator: ## Build orchestrator image and import into k3d
+	@mkdir -p $(K8S_CACHE)
+	@DIGEST=$$(find backend -type f \( -name "*.go" -o -name "go.mod" -o -name "go.sum" \) \( -path "*/apps/orchestrator/*" -o -path "*/service/crawlernode/*" -o -path "*/common/*" \) | sort | xargs shasum 2>/dev/null | shasum | cut -c1-16); \
+	CACHED=$$(cat $(K8S_CACHE)/orchestrator 2>/dev/null || echo ""); \
+	if [ "$$DIGEST" = "$$CACHED" ]; then \
+		echo "  [skip] orchestrator image is up to date"; \
+	else \
+		docker build -t jobradar-orchestrator:local --build-arg GIT_SHA=$(GIT_SHA) -f infra/Dockerfile.orchestrator ./backend && \
+		k3d image import jobradar-orchestrator:local -c $(K3D_CLUSTER) --mode=direct && \
+		printf '%s' "$$DIGEST" > $(K8S_CACHE)/orchestrator; \
+	fi
+
+k8s-build-crawler-node: ## Build crawler-node image and import into k3d
+	@mkdir -p $(K8S_CACHE)
+	@DIGEST=$$(find backend -type f \( -name "*.go" -o -name "go.mod" -o -name "go.sum" \) \( -path "*/apps/crawler-node/*" -o -path "*/apps/crawler/ats/*" -o -path "*/common/*" \) | sort | xargs shasum 2>/dev/null | shasum | cut -c1-16); \
+	CACHED=$$(cat $(K8S_CACHE)/crawler-node 2>/dev/null || echo ""); \
+	if [ "$$DIGEST" = "$$CACHED" ]; then \
+		echo "  [skip] crawler-node image is up to date"; \
+	else \
+		docker build -t jobradar-crawler-node:local --build-arg GIT_SHA=$(GIT_SHA) -f infra/Dockerfile.crawler-node ./backend && \
+		k3d image import jobradar-crawler-node:local -c $(K3D_CLUSTER) --mode=direct && \
+		printf '%s' "$$DIGEST" > $(K8S_CACHE)/crawler-node; \
+	fi
+
 k8s-build: ## Build all images in parallel and import into k3d
-	$(MAKE) -j3 k8s-build-backend k8s-build-crawler k8s-build-console
+	$(MAKE) -j5 k8s-build-backend k8s-build-crawler k8s-build-orchestrator k8s-build-crawler-node k8s-build-console
 
 k8s-bootstrap: ## Fresh-machine setup: validate all files/env/creds, create cluster + all k8s secrets
 	@bash scripts/k8s-bootstrap.sh
@@ -245,6 +269,20 @@ k8s-logs-crawler: ## Tail crawler logs
 
 k8s-logs-scheduler: ## Tail scheduler logs
 	kubectl logs -f -l app=jobradar,component=scheduler -n $(K8S_NS)
+
+k8s-logs-orchestrator: ## Tail orchestrator logs
+	kubectl logs -f -l app=jobradar,component=orchestrator -n $(K8S_NS)
+
+k8s-logs-crawler-node: ## Tail all crawler-node replica logs (prefixed by pod name)
+	kubectl logs -f -l app=jobradar,component=crawler-node -n $(K8S_NS) --max-log-requests=10 --prefix
+
+k8s-restart-orchestrator: ## Rolling restart orchestrator deployment
+	kubectl rollout restart deployment/jobradar-orchestrator -n $(K8S_NS)
+	kubectl rollout status deployment/jobradar-orchestrator -n $(K8S_NS) --timeout=120s
+
+k8s-restart-crawler-node: ## Rolling restart all crawler-node replicas
+	kubectl rollout restart deployment/jobradar-crawler-node -n $(K8S_NS)
+	kubectl rollout status deployment/jobradar-crawler-node -n $(K8S_NS) --timeout=120s
 
 k8s-forward: ## Port-forward console :3000 and API :8080 (when cluster has no NodePort mappings)
 	kubectl port-forward svc/jobradar-console -n $(K8S_NS) 3000:8080 &

@@ -10,6 +10,14 @@ images:
     repository: jobradar-crawler
     tag: local
     pullPolicy: IfNotPresent
+  orchestrator:
+    repository: jobradar-orchestrator
+    tag: local
+    pullPolicy: IfNotPresent
+  crawlerNode:
+    repository: jobradar-crawler-node
+    tag: local
+    pullPolicy: IfNotPresent
   console:
     repository: jobradar-console
     tag: local
@@ -106,6 +114,30 @@ scheduler:
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "6543"
+
+orchestrator:
+  natsUrl: "tls://connect.ngs.global"
+  natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
+  logLevel: info
+  logFormat: json
+  metricsAddr: ":9104"
+  otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  dbSslmode: require
+  dbPort: "6543"
+
+# crawlerNode: stateless HTTP workers that poll the orchestrator.
+# Increase replicas to scale out concurrent crawling capacity.
+crawlerNode:
+  replicas: 1
+  # orchestratorUrl is the in-cluster Service address of the orchestrator.
+  orchestratorUrl: "http://jobradar-orchestrator.jobradar-local.svc.cluster.local:8082"
+  pollIntervalSeconds: "10"
+  maxConcurrent: "3"
+  adapterTimeoutSeconds: "600"
+  httpTimeoutSeconds: "15"
+  retryMaxAttempts: "3"
+  logLevel: info
+  otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
 
 nats:
   external: true   # Synadia Cloud is the broker — no in-cluster NATS deployed
