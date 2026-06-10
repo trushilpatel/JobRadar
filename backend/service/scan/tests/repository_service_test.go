@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
@@ -141,6 +142,25 @@ func TestRepo_RemoveFromQueue_StoreError(t *testing.T) {
 
 	err := s.RemoveFromQueue(context.Background(), "entry-1")
 	assertInternal(t, err)
+}
+
+// TestRepo_RemoveFromQueue_QueueRowMissing — when the store returns
+// ErrQueueRowMissing, RemoveFromQueue propagates it as a 404 (not 500).
+func TestRepo_RemoveFromQueue_QueueRowMissing(t *testing.T) {
+	q := &fakeQueueStore{err: domainerrs.ErrQueueRowMissing.WithMessage("not found")}
+	s := newImplService(q, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
+
+	err := s.RemoveFromQueue(context.Background(), "entry-1")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var se *domainerrs.ServiceError
+	if !errors.As(err, &se) {
+		t.Fatalf("expected *ServiceError, got %T: %v", err, err)
+	}
+	if se.Code != "QUEUE_ROW_MISSING" {
+		t.Errorf("code = %q, want QUEUE_ROW_MISSING", se.Code)
+	}
 }
 
 // newImplServiceWithAdmin mirrors newImplService but accepts the

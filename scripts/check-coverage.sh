@@ -27,8 +27,11 @@ fi
 EXCLUDE_REGEX='(/main|/wire_gen|/compat|/testutil|/dto|/models|/common/db|/common/jetstream)(/|$)'
 
 # Files excluded individually: wire.go, generated wire_gen.go, any
-# wire_*.go wiring helper, and every main.go entry point.
-FILE_EXCLUDE_REGEX='/(wire(_[a-z_]+)?|wire_gen|main)\.go$'
+# wire_*.go wiring helper, every main.go entry point, and
+# ScanLogRepositoryService.go which contains Postgres-coupled analytics SQL
+# (DATE_TRUNC, FILTER (WHERE ...), TO_CHAR, FOR UPDATE SKIP LOCKED) that
+# cannot be exercised in the SQLite unit tier — verified by integration tests.
+FILE_EXCLUDE_REGEX='/(wire(_[a-z_]+)?|wire_gen|main|ScanLogRepositoryService)\.go$'
 
 # Profile lines look like:
 #   github.com/x/y/file.go:start.col,end.col numStatements numHits
