@@ -18,17 +18,18 @@ export GIT_SHA
 
 # ── Dev (host) ────────────────────────────────────────────────────────────────
 # Runs the API + console on host against Supabase/Upstash (no local NATS needed).
+# Secrets are injected by Doppler (doppler.yaml binds this repo to job-radar/dev).
 # For full pipeline workers use make k8s-up instead.
 
 dev: ## Migrate then start console + API on host
-	cd backend && go run ./apps/migrate
+	doppler run -- sh -c 'cd backend && go run ./apps/migrate'
 	$(MAKE) -j2 dev-console dev-backend
 
-dev-console: ## Start Vite dev server (frontend)
-	cd frontend && npm run dev
+dev-console: ## Start Vite dev server (frontend) — proxies /api to API_PROXY_TARGET
+	cd frontend && doppler run -- npm run dev
 
 dev-backend: ## Start API server (hot-reload via go run)
-	cd backend && go run ./apps/api
+	cd backend && doppler run -- go run ./apps/api
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 
@@ -46,21 +47,21 @@ build-backend: ## Compile all Go binaries
 # ── Run individual workers ────────────────────────────────────────────────────
 
 run-crawler: ## Run job listing crawler worker
-	cd backend && go run ./apps/crawler
+	cd backend && doppler run -- go run ./apps/crawler
 
 run-filter: ## Run LLM relevance filter worker
-	cd backend && go run ./apps/filter
+	cd backend && doppler run -- go run ./apps/filter
 
 run-enricher: ## Run job post analyzer/enricher worker
-	cd backend && go run ./apps/analyzer
+	cd backend && doppler run -- go run ./apps/analyzer
 
 run-scheduler: ## Run scan scheduler (enqueues due companies)
-	cd backend && go run ./apps/scheduler
+	cd backend && doppler run -- go run ./apps/scheduler
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
 migrate: ## Run database migrations (goose up)
-	cd backend && go run ./apps/migrate
+	cd backend && doppler run -- go run ./apps/migrate
 
 scan-google: ## Manually trigger a Google careers scan (bypasses cooldown)
 	curl -s -X POST http://localhost:8080/companies/google/scan | jq .
@@ -126,20 +127,20 @@ k8s-build-crawler: ## Build crawler image and import into k3d
 		printf '%s' "$$DIGEST" > $(K8S_CACHE)/crawler; \
 	fi
 
-k8s-build-console: ## Build console image (bakes VITE_ vars from root .env) and import into k3d
+k8s-build-console: ## Build console image (bakes VITE_ vars from Doppler) and import into k3d
 	@mkdir -p $(K8S_CACHE)
 	@DIGEST=$$(find frontend/src frontend/public frontend/index.html frontend/package-lock.json frontend/Dockerfile -type f 2>/dev/null | sort | xargs shasum 2>/dev/null | shasum | cut -c1-16); \
 	CACHED=$$(cat $(K8S_CACHE)/console 2>/dev/null || echo ""); \
 	if [ "$$DIGEST" = "$$CACHED" ]; then \
 		echo "  [skip] console image is up to date"; \
 	else \
-		set -a && . ./.env && set +a && \
-		docker build \
-			--build-arg VITE_SUPABASE_URL="$$VITE_SUPABASE_URL" \
-			--build-arg VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY" \
-			--build-arg GIT_SHA=$(GIT_SHA) \
-			-t jobradar-console:local \
-			-f frontend/Dockerfile ./frontend && \
+		doppler run -- sh -c ' \
+			docker build \
+				--build-arg VITE_SUPABASE_URL="$$VITE_SUPABASE_URL" \
+				--build-arg VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY" \
+				--build-arg GIT_SHA=$(GIT_SHA) \
+				-t jobradar-console:local \
+				-f frontend/Dockerfile ./frontend' && \
 		k3d image import jobradar-console:local -c $(K3D_CLUSTER) --mode=direct && \
 		printf '%s' "$$DIGEST" > $(K8S_CACHE)/console; \
 	fi
@@ -189,7 +190,7 @@ k8s-preflight: ## Verify kubectl context is k3d-jobradar before any deploy
 		echo "WARN: secret jobradar-$$svc-secret missing — pods will fail with CreateContainerConfigError"; \
 	done
 
-k8s-up: k8s-preflight ## Deploy app chart via Helm — requires values.local.yaml; reads DEV_TOKEN from .env
+k8s-up: k8s-preflight ## Deploy app chart via Helm — requires values.local.yaml; reads DEV_TOKEN from Doppler
 	@if [ ! -f k8s/helm/jobradar/values.local.yaml ]; then \
 		echo "ERROR: k8s/helm/jobradar/values.local.yaml not found"; \
 		echo "Copy k8s/helm/jobradar/values.local.yaml.example and fill in supabaseProjectUrl (the chart aborts on an empty value)."; \
@@ -198,9 +199,9 @@ k8s-up: k8s-preflight ## Deploy app chart via Helm — requires values.local.yam
 		exit 1; \
 	fi
 	helm dependency update k8s/helm/jobradar 2>/dev/null || true
-	@DEV_TOKEN=$$(grep -E '^DEV_TOKEN=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]'); \
+	@DEV_TOKEN=$$(doppler secrets get DEV_TOKEN --plain --project job-radar --config dev 2>/dev/null || true); \
 	if [ -n "$$DEV_TOKEN" ]; then \
-		echo "DEV_TOKEN loaded from .env"; \
+		echo "DEV_TOKEN loaded from Doppler"; \
 		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace -f k8s/helm/jobradar/values.local.yaml --set api.devToken="$$DEV_TOKEN"; \
 	else \
 		helm upgrade --install jobradar k8s/helm/jobradar -n $(K8S_NS) --create-namespace -f k8s/helm/jobradar/values.local.yaml; \

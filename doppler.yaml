@@ -1,0 +1,3 @@
+setup:
+  project: job-radar
+  config: dev

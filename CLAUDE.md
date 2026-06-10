@@ -72,6 +72,18 @@ All three phases shipped.
 
 Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_{READ,WRITE,ADMIN}_RPM`, `CACHE_TTL_USER_SECONDS`.
 
+## Secret management
+
+All secrets and config values are managed in **Doppler** (project `job-radar`, configs `dev` / `prod`). The `doppler.yaml` at the repo root binds the project — no manual env file setup is needed.
+
+- **New developer onboarding:** `doppler login && doppler setup` — one-time, then all commands just work.
+- **Running services locally:** every `make dev*`, `make run-*`, and `make migrate` target already wraps with `doppler run --`. Do not source `.env` files manually.
+- **k8s bootstrap:** `make k8s-bootstrap` fetches secrets from Doppler at runtime (`DOPPLER_CONFIG=prod make k8s-bootstrap` for production). No `.env` file is read.
+- **Changing a secret:** update it in the Doppler dashboard or via `doppler secrets set KEY=value --config dev`. The next `doppler run --` picks it up — no file edits, no restarts of other processes.
+- **Local snapshot (rare):** `doppler secrets download --format env-no-quotes --no-file > .env.local` (gitignored) for tools that can't use `doppler run --`.
+- Never create or commit a `.env` file with real values. `.env.example` (committed) is the canonical list of keys — values live in Doppler only.
+- **Frontend proxy target:** `API_PROXY_TARGET` in Doppler controls where the Vite dev server forwards `/api` calls. Default `http://localhost:30080` (local k3d). Change it in Doppler to point at a remote cluster without touching any code.
+
 ## Key rules
 
 - Workers depend on **service interfaces**, never on concrete store types or GORM
