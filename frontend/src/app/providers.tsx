@@ -15,10 +15,23 @@ function ThemeAwareToaster() {
   return <Toaster position="bottom-center" theme={resolved} richColors closeButton />
 }
 
+function readStoredTheme(): ThemePreference {
+  try {
+    const v = localStorage.getItem('jobradar-theme')
+    if (v === 'light' || v === 'dark' || v === 'system') return v
+  } catch {
+    return 'dark'
+  }
+  return 'dark'
+}
+
 function ThemeSync({ children }: { children: ReactNode }) {
   const { data: userConfig } = useUserConfig()
   const patchConfig = usePatchUserConfig()
-  const pref: ThemePreference = userConfig?.theme ?? 'dark'
+  // Server value wins if set; fall back to localStorage so the user's
+  // in-session choice survives React Router navigations before the backend
+  // theme field is available.
+  const pref: ThemePreference = userConfig?.theme ?? readStoredTheme()
 
   return (
     <ThemeProvider preference={pref} onThemeChange={(theme) => patchConfig.mutate({ theme })}>

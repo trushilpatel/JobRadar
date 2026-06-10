@@ -21,10 +21,13 @@ func NewTestMsg(data []byte, deliveryCount int) (*Msg, *TestMsgState) {
 // path; the Naked flag is still set so the call is observable.
 // TermErr, when set, is returned by Term() so tests can exercise the Term-failure
 // path; the Termed flag is still set so the call is observable.
+// AckErr, when set, is returned by Ack() so tests can exercise the Ack-failure
+// path; the Acked flag is still set so the call is observable.
 type TestMsgState struct {
 	Acked   bool
 	Naked   bool
 	Termed  bool
+	AckErr  error
 	NakErr  error
 	TermErr error
 }
@@ -39,8 +42,8 @@ func (m *testMsg) Data() []byte                      { return m.data }
 func (m *testMsg) Subject() string                   { return "test.subject" }
 func (m *testMsg) Headers() nats.Header              { return nil }
 func (m *testMsg) Reply() string                     { return "" }
-func (m *testMsg) Ack() error                        { m.state.Acked = true; return nil }
-func (m *testMsg) DoubleAck(_ context.Context) error { m.state.Acked = true; return nil }
+func (m *testMsg) Ack() error                        { m.state.Acked = true; return m.state.AckErr }
+func (m *testMsg) DoubleAck(_ context.Context) error { m.state.Acked = true; return m.state.AckErr }
 func (m *testMsg) Nak() error                        { m.state.Naked = true; return m.state.NakErr }
 func (m *testMsg) NakWithDelay(_ time.Duration) error {
 	m.state.Naked = true

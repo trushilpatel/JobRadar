@@ -45,7 +45,7 @@ const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [
     label: COPY['nav.audit-log'],
     icon: <ClipboardList size={16} />,
   },
-  { to: routes.settings(), label: COPY['nav.settings'], icon: <Settings size={16} /> },
+  { to: routes.adminPipeline(), label: COPY['nav.pipeline'], icon: <Settings size={16} /> },
 ]
 
 function NavItem({
@@ -107,7 +107,7 @@ export function Sidebar() {
       >
         {!collapsed && (
           <div className="flex items-center gap-2">
-            <LogoLockup className="text-white" />
+            <LogoLockup className="text-sidebar-fg" />
             <span className="text-xs text-violet-400 font-medium">beta</span>
           </div>
         )}

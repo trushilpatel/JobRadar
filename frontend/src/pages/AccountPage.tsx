@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ComponentType } from 'react'
 import { toast } from 'sonner'
 import * as Dialog from '@radix-ui/react-dialog'
+import { Sun, Moon, Monitor } from 'lucide-react'
 import { useAuthStore, updateMe, deleteMe } from '@/features/auth'
 import { JOB_COMMANDS, type JobCommandId } from '@/features/jobs'
 import { formatKeys } from '@/lib/commands/formatKeys'
@@ -9,6 +10,7 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { Switch } from '@/components/ui/switch'
 import { useUserConfig, usePatchUserConfig } from '@/lib/hooks/useUserConfig'
+import { cn } from '@/lib/utils/utils'
 import { useTheme } from '@/app/ThemeContext'
 import type { ThemePreference } from '@/types'
 
@@ -70,26 +72,31 @@ function ShortcutReference() {
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme()
-  const options: Array<{ value: ThemePreference; label: string }> = [
-    { value: 'light', label: 'Light' },
-    { value: 'dark', label: 'Dark' },
-    { value: 'system', label: 'System' },
+  const options: Array<{
+    value: ThemePreference
+    label: string
+    icon: ComponentType<{ size?: number }>
+  }> = [
+    { value: 'light', label: 'Light', icon: Sun },
+    { value: 'dark', label: 'Dark', icon: Moon },
+    { value: 'system', label: 'System', icon: Monitor },
   ]
   return (
     <div className="flex rounded-lg border border-[var(--border)] bg-panel p-1 gap-1">
-      {options.map((opt) => (
+      {options.map(({ value, label, icon: Icon }) => (
         <button
-          key={opt.value}
+          key={value}
           type="button"
-          onClick={() => setTheme(opt.value)}
-          className={[
-            'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-            theme === opt.value
+          onClick={() => setTheme(value)}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+            theme === value
               ? 'bg-violet-600 text-white'
-              : 'text-muted hover:text-primary hover:bg-hover',
-          ].join(' ')}
+              : 'text-muted hover:text-primary hover:bg-hover'
+          )}
         >
-          {opt.label}
+          <Icon size={14} />
+          {label}
         </button>
       ))}
     </div>
@@ -182,9 +189,7 @@ export function AccountPage() {
         {/* Appearance */}
         <ErrorBoundary>
           <section className="space-y-4">
-            <h2 className="text-sm font-semibold uppercase tracking-widest text-muted">
-              Appearance
-            </h2>
+            <h2 className="text-sm font-semibold text-primary mb-4">Appearance</h2>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-primary">Theme</p>
@@ -219,14 +224,14 @@ export function AccountPage() {
 
         {/* Danger zone */}
         <ErrorBoundary>
-          <section className="border border-red-900/40 rounded-lg p-4">
+          <section className="border border-red-300/60 dark:border-red-900/40 rounded-lg p-4">
             <h2 className="text-sm font-semibold text-red-400 mb-2">Danger zone</h2>
             <p className="text-xs text-muted mb-4">
               Permanently delete your account and all associated data. This cannot be undone.
             </p>
             <Dialog.Root open={deleteOpen} onOpenChange={setDeleteOpen}>
               <Dialog.Trigger asChild>
-                <button className="px-4 py-2 rounded-md text-sm font-medium border border-red-700/60 text-red-400 hover:bg-red-900/20 transition-colors">
+                <button className="px-4 py-2 rounded-md text-sm font-medium border border-red-400/70 hover:bg-red-50 dark:border-red-700/60 dark:hover:bg-red-900/20 text-red-400 transition-colors">
                   Delete account
                 </button>
               </Dialog.Trigger>

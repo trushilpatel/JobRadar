@@ -182,5 +182,38 @@ describe('insights API normalization', () => {
       await insightsApi.fetchRoleCategories()
       expect(apiClient.get).toHaveBeenCalledWith('/admin/insights/role-categories')
     })
+
+    it('normalizes empty-string category to "unknown"', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue([
+        { category: '', count: 658 },
+        { category: 'backend', count: 400 },
+      ])
+      const result = await insightsApi.fetchRoleCategories()
+      expect(result.find((r) => r.category === '')).toBeUndefined()
+      expect(result.find((r) => r.category === 'unknown')).toEqual({
+        category: 'unknown',
+        count: 658,
+      })
+      expect(result.find((r) => r.category === 'backend')).toEqual({
+        category: 'backend',
+        count: 400,
+      })
+    })
+
+    it('folds duplicate categories by summing counts', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue([
+        { category: '', count: 300 },
+        { category: '', count: 200 },
+      ])
+      const result = await insightsApi.fetchRoleCategories()
+      expect(result).toHaveLength(1)
+      expect(result[0]).toEqual({ category: 'unknown', count: 500 })
+    })
+
+    it('returns empty array when server returns null', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue(null)
+      const result = await insightsApi.fetchRoleCategories()
+      expect(result).toEqual([])
+    })
   })
 })

@@ -13,7 +13,7 @@ export const COPY = {
   'nav.apply-queue': 'Apply Queue',
   'nav.audit-log': 'Audit Log',
   'nav.insights': 'Insights',
-  'nav.settings': 'Settings',
+  'nav.pipeline': 'Pipeline',
   'nav.account': 'Account',
 
   // Job tab titles

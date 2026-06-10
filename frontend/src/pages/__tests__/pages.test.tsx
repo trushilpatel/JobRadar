@@ -84,7 +84,7 @@ import * as adminAuditApi from '@/features/auth'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { JobsPage } from '@/pages/JobsPage'
 import { InsightsPage } from '@/pages/InsightsPage'
-import { SettingsPage } from '@/pages/SettingsPage'
+import { AdminPipelinePage } from '@/pages/admin/AdminPipelinePage'
 import { AccountPage } from '@/pages/AccountPage'
 import { CompaniesPage } from '@/pages/CompaniesPage'
 import { AdminUsersPage } from '@/pages/admin/AdminUsersPage'
@@ -150,9 +150,9 @@ describe('InsightsPage', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SettingsPage
+// AdminPipelinePage
 // ─────────────────────────────────────────────────────────────────────────────
-describe('SettingsPage', () => {
+describe('AdminPipelinePage', () => {
   beforeEach(() => {
     vi.mocked(adapterConfigsApi.getAdapterConfigs).mockReturnValue(pending())
     vi.mocked(atsFeature.useAts).mockReturnValue({
@@ -171,7 +171,7 @@ describe('SettingsPage', () => {
   })
 
   it('renders without crashing', () => {
-    expect(() => render(<SettingsPage />, { wrapper: makeWrapper() })).not.toThrow()
+    expect(() => render(<AdminPipelinePage />, { wrapper: makeWrapper() })).not.toThrow()
   })
 })
 
