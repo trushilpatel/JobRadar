@@ -7,7 +7,7 @@ const cases: { status: StatusKind; text: string }[] = [
   { status: 'error', text: 'Error' },
   { status: 'running', text: 'Running' },
   { status: 'queued', text: 'Queued' },
-  { status: 'pending', text: 'Never' },
+  { status: 'pending', text: 'Not scanned' },
 ]
 
 describe('StatusPill', () => {

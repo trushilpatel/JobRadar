@@ -6,6 +6,7 @@ import { queryClient } from '@/lib/core/queryClient'
 import { ThemeProvider } from '@/app/ThemeProvider'
 import { useTheme, resolveSystemTheme } from '@/app/ThemeContext'
 import { useUserConfig, usePatchUserConfig } from '@/lib/hooks/useUserConfig'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import type { ThemePreference } from '@/types'
 
 function ThemeAwareToaster() {
@@ -31,7 +32,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <NuqsAdapter>
-        <ThemeSync>{children}</ThemeSync>
+        <ThemeSync>
+          <TooltipProvider>{children}</TooltipProvider>
+        </ThemeSync>
       </NuqsAdapter>
     </QueryClientProvider>
   )

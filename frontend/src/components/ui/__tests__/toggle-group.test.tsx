@@ -44,7 +44,7 @@ describe('ToggleGroup', () => {
       </ToggleGroup>
     )
     const item = screen.getByRole('radio', { name: 'Option A' })
-    expect(item.className).toContain('border-slate-200')
+    expect(item.className).toContain('border-[var(--border)]')
     expect(item.className).toContain('h-9')
   })
 
@@ -57,7 +57,7 @@ describe('ToggleGroup', () => {
       </ToggleGroup>
     )
     const item = screen.getByRole('radio', { name: 'Option A' })
-    expect(item.className).toContain('border-slate-200')
+    expect(item.className).toContain('border-[var(--border)]')
     expect(item.className).toContain('h-11')
   })
 })

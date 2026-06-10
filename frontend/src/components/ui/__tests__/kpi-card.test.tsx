@@ -35,7 +35,7 @@ describe('KpiCard', () => {
     render(<KpiCard value={1} label="Active" clickable active title="tooltip" />)
     const btn = screen.getByRole('button')
     expect(btn).toHaveAttribute('title', 'tooltip')
-    expect(btn.className).toContain('border-red-500/40')
+    expect(btn.className).toContain('border-violet-500/40')
   })
 
   it('applies a custom valueClassName', () => {

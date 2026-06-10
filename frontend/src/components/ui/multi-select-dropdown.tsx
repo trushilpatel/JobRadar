@@ -34,14 +34,19 @@ export function MultiSelectDropdown({
   const [search, setSearch] = useState('')
   const [newVal, setNewVal] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
+  const portalRef = useRef<HTMLDivElement>(null)
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 })
 
-  // H5: close on mousedown and touchstart outside
+  // H5: close on mousedown and touchstart outside both the trigger and the portal
   useEffect(() => {
     if (!open) return
     function handler(e: MouseEvent | TouchEvent) {
       const target = e.target as Node
-      if (containerRef.current && !containerRef.current.contains(target)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        (!portalRef.current || !portalRef.current.contains(target))
+      ) {
         setOpen(false)
       }
     }
@@ -119,6 +124,7 @@ export function MultiSelectDropdown({
       {open &&
         createPortal(
           <div
+            ref={portalRef}
             style={{
               position: 'fixed',
               top: dropdownPos.top,
