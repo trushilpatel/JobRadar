@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobradar-crawler-node
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: crawler-node
+spec:
+  replicas: {{ .Values.crawlerNode.replicas }}
+  selector:
+    matchLabels:
+      {{- include "jobradar.selectorLabels" (dict "component" "crawler-node") | nindent 6 }}
+  # RollingUpdate lets us scale to 3 replicas and upgrade without downtime.
+  # maxSurge:1 / maxUnavailable:0 ensures at least replicas pods are always running.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "jobradar.labels" . | nindent 8 }}
+        component: crawler-node
+    spec:
+      containers:
+        - name: crawler-node
+          image: {{ .Values.images.crawlerNode.repository }}:{{ .Values.images.crawlerNode.tag }}
+          imagePullPolicy: {{ .Values.images.crawlerNode.pullPolicy }}
+          command: ["/app/crawler-node"]
+          envFrom:
+            - configMapRef:
+                name: jobradar-crawler-node-config
+            - secretRef:
+                name: jobradar-crawler-node-secret
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "192Mi"
+              cpu: "300m"
+          securityContext:
+            {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
+      securityContext:
+        runAsNonRoot: true

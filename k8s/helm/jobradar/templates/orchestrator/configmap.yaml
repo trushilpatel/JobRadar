@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-orchestrator-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: orchestrator
+data:
+  NATS_URL: {{ .Values.orchestrator.natsUrl | quote }}
+  {{- if .Values.orchestrator.natsCredsFile }}
+  NATS_CREDS_FILE: {{ .Values.orchestrator.natsCredsFile | quote }}
+  {{- end }}
+  LOG_LEVEL: {{ .Values.orchestrator.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.orchestrator.logFormat | quote }}
+  METRICS_ADDR: {{ .Values.orchestrator.metricsAddr | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.orchestrator.otelEndpoint | quote }}
+  DB_SSLMODE: {{ .Values.orchestrator.dbSslmode | quote }}
+  DB_PORT: {{ .Values.orchestrator.dbPort | quote }}

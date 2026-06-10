@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobradar-orchestrator
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: orchestrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "jobradar.selectorLabels" (dict "component" "orchestrator") | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "jobradar.labels" . | nindent 8 }}
+        component: orchestrator
+    spec:
+      volumes:
+        {{- if .Values.orchestrator.natsCredsFile }}
+        - name: nats-creds
+          secret:
+            secretName: nats-creds
+        {{- end }}
+      containers:
+        - name: orchestrator
+          image: {{ .Values.images.orchestrator.repository }}:{{ .Values.images.orchestrator.tag }}
+          imagePullPolicy: {{ .Values.images.orchestrator.pullPolicy }}
+          command: ["/app/orchestrator"]
+          envFrom:
+            - configMapRef:
+                name: jobradar-orchestrator-config
+            - secretRef:
+                name: jobradar-orchestrator-secret
+          {{- if .Values.orchestrator.natsCredsFile }}
+          volumeMounts:
+            - name: nats-creds
+              mountPath: /etc/nats
+              readOnly: true
+          {{- end }}
+          ports:
+            - containerPort: 8082
+              name: http
+            - containerPort: 9104
+              name: metrics
+          livenessProbe:
+            httpGet:
+              path: /admin/crawler-nodes
+              port: 8082
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /admin/crawler-nodes
+              port: 8082
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "300m"
+          securityContext:
+            {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
+      securityContext:
+        runAsNonRoot: true
