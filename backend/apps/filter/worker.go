@@ -24,13 +24,17 @@ import (
 	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 )
 
-// filterMaxRetries is the max number of delivery attempts before a job goes to DLQ.
-// Must match the BackOff length on JOBS_RAW consumer in common/jetstream/streams.go.
-const filterMaxRetries = 3
+// filterMaxRetries is the max NATS delivery count before a job goes to DLQ
+// on the infra-error path. Must equal len(filterBackOff) so that every Nak'd
+// delivery has a BackOff entry and the (filterMaxRetries+1)-th delivery is DLQ'd.
+// Must stay in sync with MaxDeliver on the JOBS_RAW consumer in
+// common/jetstream/streams.go (MaxDeliver:3 → 2 Nak tiers before Term).
+const filterMaxRetries = 2
 
 // filterBackOff mirrors the JOBS_RAW consumer BackOff config so the ledger's
-// next_attempt_at field stays meaningful for dashboards.
-var filterBackOff = []time.Duration{time.Minute, 10 * time.Minute, time.Hour}
+// next_attempt_at field stays meaningful for dashboards on the infra-error path.
+// Must match the BackOff slice in ConsumerFilterWorkers (common/jetstream/streams.go).
+var filterBackOff = []time.Duration{30 * time.Second, 2 * time.Minute}
 
 // Worker consumes JOBS_RAW via NATS pull consumer, splits each fetch into
 // chunks of batchSize, and scores each chunk serially via ScoreBatch. An
@@ -86,8 +90,9 @@ type chunkItem struct {
 
 // routeOutcome is what routeFailedChunk reports so processChunk can update the ledger.
 type routeOutcome struct {
-	DLQed   []string
-	Retried []jobsvc.RetryLedgerEntry
+	DLQed              []string
+	Retried            []jobsvc.RetryLedgerEntry
+	RetriedWithPayload []jobsvc.RetryLedgerEntryWithPayload
 }
 
 // Run starts consuming JOBS_RAW and blocks until ctx is cancelled.
@@ -385,12 +390,13 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 			}
 		}
 
-		publishFailed := len(scorable) - len(outcome.DLQed) - len(outcome.Retried)
+		publishFailed := len(scorable) - len(outcome.DLQed) - len(outcome.Retried) - len(outcome.RetriedWithPayload)
 		w.log.Info("chunk routed",
 			logger.Str(logger.FieldFetchID, fetchID),
 			logger.Int(logger.FieldChunkIndex, chunkIndex),
 			logger.Int(logger.FieldChunkCount, chunkCount),
 			logger.Int(logger.FieldRetriedCount, len(outcome.Retried)),
+			logger.Int(logger.FieldExhaustedCount, len(outcome.RetriedWithPayload)),
 			logger.Int(logger.FieldDLQedCount, len(outcome.DLQed)),
 			logger.Int(logger.FieldPublishFailedCount, publishFailed),
 		)
@@ -523,8 +529,13 @@ func (w *Worker) markSeenOrNak(ctx context.Context, items []chunkItem, reason jo
 	}
 }
 
-// routeFailedChunk routes each job in a failed chunk to retry (Nak) or DLQ (Term).
-// NATS BackOff handles redelivery timing — we don't need to publish to retry topics.
+// routeFailedChunk routes each job in a failed chunk based on the error type:
+//
+//   - ErrLLMValidation: DLQ (Term) for every job regardless of retry count.
+//   - LLMAllExhaustedError: Term each message and record a payload-bearing retry
+//     ledger entry so the sweeper can re-publish without re-fetching the job.
+//     Does NOT Nak — the sweeper owns re-injection, not NATS BackOff.
+//   - Other (infra) errors: Nak within retry budget (NATS BackOff), DLQ when exhausted.
 func (w *Worker) routeFailedChunk(ctx context.Context, chunk []chunkItem, scoreErr error) routeOutcome {
 	var outcome routeOutcome
 
@@ -534,6 +545,98 @@ func (w *Worker) routeFailedChunk(ctx context.Context, chunk []chunkItem, scoreE
 				outcome.DLQed = append(outcome.DLQed, item.job.job.ID)
 			}
 		}
+		return outcome
+	}
+
+	// LLM exhaustion path: write payload to the ledger FIRST, then Term.
+	// The sweeper picks these up via FetchDueRetryJobs and re-publishes once
+	// LLM quota recovers. Do NOT Nak — NATS BackOff redelivery is not the
+	// right recovery mechanism here (quota is shared; re-delivering sooner
+	// just burns quota again).
+	//
+	// Ordering invariant: ledger write → Term. If the ledger write fails,
+	// Nak each message (NATS redelivers) so the job is not permanently lost.
+	var exhausted *domainerr.LLMAllExhaustedError
+	if stderrors.As(scoreErr, &exhausted) {
+		retryAfter := exhausted.RetryAfter
+		if retryAfter.IsZero() {
+			// No specific retry time: fall back to the first BackOff tier.
+			retryAfter = w.clock.Now().Add(filterBackOff[0])
+		}
+
+		// Phase 1: marshal each job's payload. Items that fail marshal are
+		// Term'd immediately — they can never be recovered via the sweeper.
+		type marshaledItem struct {
+			item  chunkItem
+			entry jobsvc.RetryLedgerEntryWithPayload
+			hasPL bool
+		}
+		marshaledItems := make([]marshaledItem, 0, len(chunk))
+		for _, item := range chunk {
+			payload, merr := json.Marshal(item.job.job)
+			if merr != nil {
+				w.log.Error("marshal for exhaustion retry failed; terming without ledger write", merr,
+					logger.Str(logger.FieldJobID, item.job.job.ID),
+				)
+				if terr := item.msg.Term(); terr != nil {
+					w.log.Warn("msg term failed", logger.Err(terr))
+				}
+				marshaledItems = append(marshaledItems, marshaledItem{item: item, hasPL: false})
+				continue
+			}
+			marshaledItems = append(marshaledItems, marshaledItem{
+				item: item,
+				entry: jobsvc.RetryLedgerEntryWithPayload{
+					JobID:         item.job.job.ID,
+					Adapter:       item.job.job.Adapter,
+					Payload:       json.RawMessage(payload),
+					RetryCount:    item.job.retryCount + 1,
+					NextAttemptAt: retryAfter,
+				},
+				hasPL: true,
+			})
+		}
+
+		// Collect entries for items that marshaled successfully.
+		var entries []jobsvc.RetryLedgerEntryWithPayload
+		for _, mi := range marshaledItems {
+			if mi.hasPL {
+				entries = append(entries, mi.entry)
+			}
+		}
+
+		if len(entries) > 0 {
+			// Phase 2: ledger write BEFORE any Term. If the write fails, Nak all
+			// entry-bearing items so NATS redelivers and the jobs are not lost.
+			if lerr := w.ledger.UpdateRetryBatchWithPayload(ctx, entries); lerr != nil {
+				w.log.Error("UpdateRetryBatchWithPayload failed on exhaustion path; naking for redelivery", lerr)
+				metrics.FilterCommitFailuresTotal.Inc()
+				for _, mi := range marshaledItems {
+					if mi.hasPL {
+						if nerr := mi.item.msg.Nak(); nerr != nil {
+							w.log.Warn("msg nak failed after ledger write failure", logger.Err(nerr),
+								logger.Str(logger.FieldJobID, mi.item.job.job.ID),
+							)
+						}
+					}
+				}
+				metrics.FilterLLMExhaustionTotal.Add(float64(len(chunk)))
+				return outcome
+			}
+
+			// Phase 3: ledger write succeeded — Term each successfully-written message.
+			for _, mi := range marshaledItems {
+				if mi.hasPL {
+					if terr := mi.item.msg.Term(); terr != nil {
+						w.log.Warn("msg term failed on exhaustion path", logger.Err(terr),
+							logger.Str(logger.FieldJobID, mi.item.job.job.ID),
+						)
+					}
+				}
+			}
+			outcome.RetriedWithPayload = entries
+		}
+		metrics.FilterLLMExhaustionTotal.Add(float64(len(chunk)))
 		return outcome
 	}
 

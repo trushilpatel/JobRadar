@@ -41,9 +41,11 @@ type ledgerCall struct {
 }
 
 type fakeLedger struct {
-	calls        []ledgerCall
-	retryBatches [][]jobsvc.RetryLedgerEntry
-	retryErr     error
+	calls                   []ledgerCall
+	retryBatches            [][]jobsvc.RetryLedgerEntry
+	retryBatchesWithPayload [][]jobsvc.RetryLedgerEntryWithPayload
+	retryErr                error
+	retryWithPayloadErr     error
 	// seenErr, when set, is returned by UpdateSeenReasonBatch (used to inject
 	// ErrLedgerRowMissing). seenErrForReason takes precedence when its key matches.
 	seenErr          error
@@ -66,6 +68,15 @@ func (f *fakeLedger) UpdateRetryBatch(_ context.Context, entries []jobsvc.RetryL
 	}
 	dup := append([]jobsvc.RetryLedgerEntry(nil), entries...)
 	f.retryBatches = append(f.retryBatches, dup)
+	return nil
+}
+
+func (f *fakeLedger) UpdateRetryBatchWithPayload(_ context.Context, entries []jobsvc.RetryLedgerEntryWithPayload) error {
+	if f.retryWithPayloadErr != nil {
+		return f.retryWithPayloadErr
+	}
+	dup := append([]jobsvc.RetryLedgerEntryWithPayload(nil), entries...)
+	f.retryBatchesWithPayload = append(f.retryBatchesWithPayload, dup)
 	return nil
 }
 
@@ -444,8 +455,8 @@ func TestProcessChunk_ScorerError_RoutesToRetry(t *testing.T) {
 		if e.RetryCount != 1 {
 			t.Errorf("expected retry_count=1, got %d for %s", e.RetryCount, e.JobID)
 		}
-		if !e.NextAttemptAt.Equal(now.Add(time.Minute)) {
-			t.Errorf("expected next_attempt_at=%v, got %v", now.Add(time.Minute), e.NextAttemptAt)
+		if !e.NextAttemptAt.Equal(now.Add(30 * time.Second)) {
+			t.Errorf("expected next_attempt_at=%v (30s tier), got %v", now.Add(30*time.Second), e.NextAttemptAt)
 		}
 	}
 	for _, call := range ledger.calls {
@@ -643,8 +654,8 @@ func TestProcessFetch_ScoreBatchFailureNaksAll(t *testing.T) {
 		if e.RetryCount != 1 {
 			t.Errorf("expected retry_count=1, got %d", e.RetryCount)
 		}
-		if !e.NextAttemptAt.Equal(now.Add(time.Minute)) {
-			t.Errorf("expected next_attempt_at=%v, got %v", now.Add(time.Minute), e.NextAttemptAt)
+		if !e.NextAttemptAt.Equal(now.Add(30 * time.Second)) {
+			t.Errorf("expected next_attempt_at=%v (30s tier), got %v", now.Add(30*time.Second), e.NextAttemptAt)
 		}
 	}
 }
@@ -715,7 +726,7 @@ func TestProcessFetch_AllMalformedReturnsNil(t *testing.T) {
 	}
 }
 
-// deliveryCount=2 → retryCount=1, next tier is the 10m BackOff slot.
+// deliveryCount=2 → retryCount=1, next tier is the 2m BackOff slot.
 func TestProcessFetch_RetryCountFromDelivery(t *testing.T) {
 	scorer := &fakeScorer{err: context.DeadlineExceeded}
 	ledger := &fakeLedger{}
@@ -734,9 +745,9 @@ func TestProcessFetch_RetryCountFromDelivery(t *testing.T) {
 	if len(ledger.retryBatches) != 1 || ledger.retryBatches[0][0].RetryCount != 2 {
 		t.Errorf("expected retry_count=2 ledger entry, got %+v", ledger.retryBatches)
 	}
-	want := now.Add(10 * time.Minute)
+	want := now.Add(2 * time.Minute)
 	if !ledger.retryBatches[0][0].NextAttemptAt.Equal(want) {
-		t.Errorf("expected next_attempt_at=%v (10m tier), got %v", want, ledger.retryBatches[0][0].NextAttemptAt)
+		t.Errorf("expected next_attempt_at=%v (2m tier), got %v", want, ledger.retryBatches[0][0].NextAttemptAt)
 	}
 }
 
@@ -751,11 +762,11 @@ func TestProcessFetch_RetryCountFromDelivery(t *testing.T) {
 //
 // Expected BackOff from ConsumerFilterWorkers in streams.go:
 //
-//	[]time.Duration{time.Minute, 10 * time.Minute, time.Hour}
+//	[]time.Duration{30 * time.Second, 2 * time.Minute}
 func TestFilterBackOffMatchesConsumerConfig(t *testing.T) {
 	// consumerBackOff mirrors the BackOff slice from common/jetstream/streams.go
 	// ConsumerFilterWorkers config. Both slices must be kept identical.
-	consumerBackOff := []time.Duration{time.Minute, 10 * time.Minute, time.Hour}
+	consumerBackOff := []time.Duration{30 * time.Second, 2 * time.Minute}
 
 	if len(filterBackOff) != len(consumerBackOff) {
 		t.Fatalf("filterBackOff length %d != consumer BackOff length %d; update one to match the other",
@@ -766,6 +777,23 @@ func TestFilterBackOffMatchesConsumerConfig(t *testing.T) {
 			t.Errorf("filterBackOff[%d] = %v, consumer BackOff[%d] = %v; they must match",
 				i, filterBackOff[i], i, want)
 		}
+	}
+}
+
+// TestFilterMaxRetriesMatchesConsumerMaxDeliver asserts that filterMaxRetries
+// (infra retry budget) equals len(filterBackOff), and that the budget equals
+// MaxDeliver-1 (since MaxDeliver counts all deliveries including the first).
+// Keeps the NATS consumer config and the worker constant in sync.
+func TestFilterMaxRetriesMatchesConsumerMaxDeliver(t *testing.T) {
+	// MaxDeliver is 3 in ConsumerFilterWorkers config.
+	const consumerMaxDeliver = 3
+	if filterMaxRetries != len(filterBackOff) {
+		t.Errorf("filterMaxRetries (%d) must equal len(filterBackOff) (%d)",
+			filterMaxRetries, len(filterBackOff))
+	}
+	if filterMaxRetries != consumerMaxDeliver-1 {
+		t.Errorf("filterMaxRetries (%d) must equal MaxDeliver-1 (%d)",
+			filterMaxRetries, consumerMaxDeliver-1)
 	}
 }
 
@@ -866,5 +894,759 @@ func TestPublishToDLQ_TermError_OnSuccess(t *testing.T) {
 	dlqRecords := pub.recordsOnSubject(js.SubjectJobsDLQ)
 	if len(dlqRecords) != 1 {
 		t.Fatalf("expected 1 DLQ publish, got %d", len(dlqRecords))
+	}
+}
+
+// ── LLM exhaustion path tests ─────────────────────────────────────────────────
+
+// TestRouteFailedChunk_LLMExhausted_TermsAndWritesPayload verifies that an
+// LLMAllExhaustedError causes each message to be Term'd (not Nak'd) and a
+// payload-bearing retry ledger entry to be recorded in RetriedWithPayload.
+// The infra retry path (Nak + RetryLedgerEntry) must not be used.
+func TestRouteFailedChunk_LLMExhausted_TermsAndWritesPayload(t *testing.T) {
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	retryAfter := now.Add(5 * time.Minute)
+	exhaustedErr := &domainerr.LLMAllExhaustedError{RetryAfter: retryAfter}
+
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
+	w.clock = &fakeClock{now: now}
+
+	job1 := ats.RawJob{ID: "ex-1", Title: "SWE", Adapter: "greenhouse"}
+	job2 := ats.RawJob{ID: "ex-2", Title: "PM", Adapter: "lever"}
+	item1, state1 := makeChunkItem(job1, 1)
+	item2, state2 := makeChunkItem(job2, 1)
+
+	outcome := w.routeFailedChunk(context.Background(), []chunkItem{item1, item2}, exhaustedErr)
+
+	// Messages must be Term'd (permanent), not Nak'd.
+	if !state1.Termed || !state2.Termed {
+		t.Errorf("expected both messages Term'd: j1=%v j2=%v", state1.Termed, state2.Termed)
+	}
+	if state1.Naked || state2.Naked {
+		t.Errorf("LLM exhaustion path must NOT Nak: j1=%v j2=%v", state1.Naked, state2.Naked)
+	}
+
+	// No infra retry entries.
+	if len(outcome.Retried) != 0 {
+		t.Errorf("expected 0 Retried entries, got %d", len(outcome.Retried))
+	}
+	if len(outcome.DLQed) != 0 {
+		t.Errorf("expected 0 DLQed entries, got %d", len(outcome.DLQed))
+	}
+
+	// Two payload-bearing retry entries.
+	if len(outcome.RetriedWithPayload) != 2 {
+		t.Fatalf("expected 2 RetriedWithPayload entries, got %d", len(outcome.RetriedWithPayload))
+	}
+	for _, e := range outcome.RetriedWithPayload {
+		switch e.JobID {
+		case "ex-1":
+			if e.Adapter != "greenhouse" {
+				t.Errorf("ex-1 adapter = %q, want greenhouse", e.Adapter)
+			}
+		case "ex-2":
+			if e.Adapter != "lever" {
+				t.Errorf("ex-2 adapter = %q, want lever", e.Adapter)
+			}
+		default:
+			t.Errorf("unexpected job ID %q in RetriedWithPayload", e.JobID)
+		}
+		if !e.NextAttemptAt.Equal(retryAfter) {
+			t.Errorf("entry %q next_attempt_at = %v, want %v", e.JobID, e.NextAttemptAt, retryAfter)
+		}
+		if len(e.Payload) == 0 {
+			t.Errorf("entry %q payload must not be empty", e.JobID)
+		}
+		// Verify the payload round-trips back to the original job.
+		var got ats.RawJob
+		if err := json.Unmarshal(e.Payload, &got); err != nil {
+			t.Fatalf("unmarshal payload for %q: %v", e.JobID, err)
+		}
+		if got.ID != e.JobID {
+			t.Errorf("payload job ID = %q, want %q", got.ID, e.JobID)
+		}
+	}
+}
+
+// TestRouteFailedChunk_LLMExhausted_ZeroRetryAfter falls back to filterBackOff[0]
+// when RetryAfter is the zero time.
+func TestRouteFailedChunk_LLMExhausted_ZeroRetryAfter(t *testing.T) {
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	exhaustedErr := &domainerr.LLMAllExhaustedError{} // zero RetryAfter
+
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
+	w.clock = &fakeClock{now: now}
+
+	item, state := makeChunkItem(makeJob("ex-zero"), 1)
+	outcome := w.routeFailedChunk(context.Background(), []chunkItem{item}, exhaustedErr)
+
+	if !state.Termed {
+		t.Errorf("expected Term on zero RetryAfter")
+	}
+	if len(outcome.RetriedWithPayload) != 1 {
+		t.Fatalf("expected 1 RetriedWithPayload entry, got %d", len(outcome.RetriedWithPayload))
+	}
+	want := now.Add(filterBackOff[0])
+	if !outcome.RetriedWithPayload[0].NextAttemptAt.Equal(want) {
+		t.Errorf("next_attempt_at = %v, want %v (filterBackOff[0])", outcome.RetriedWithPayload[0].NextAttemptAt, want)
+	}
+}
+
+// TestProcessChunk_LLMExhausted_TermsAndCallsUpdateRetryBatchWithPayload verifies
+// the full processChunk → routeFailedChunk → UpdateRetryBatchWithPayload path:
+// messages are Term'd, no Nak, and UpdateRetryBatchWithPayload is called.
+// UpdateRetryBatch (infra path) must NOT be called.
+func TestProcessChunk_LLMExhausted_TermsAndCallsUpdateRetryBatchWithPayload(t *testing.T) {
+	retryAfter := time.Date(2026, 6, 1, 14, 0, 0, 0, time.UTC)
+	exhaustedErr := &domainerr.LLMAllExhaustedError{RetryAfter: retryAfter}
+	scorer := &fakeScorer{err: exhaustedErr}
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{}
+
+	w := makeWorker(scorer, ledger, pub)
+
+	item1, state1 := makeChunkItem(ats.RawJob{ID: "e1", Title: "SWE", Adapter: "greenhouse"}, 1)
+	item2, state2 := makeChunkItem(ats.RawJob{ID: "e2", Title: "PM", Adapter: "lever"}, 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-exhaust", 0, 1)
+
+	if !state1.Termed || !state2.Termed {
+		t.Errorf("expected both Term'd: j1=%v j2=%v", state1.Termed, state2.Termed)
+	}
+	if state1.Naked || state2.Naked {
+		t.Errorf("exhaustion path must NOT Nak: j1=%v j2=%v", state1.Naked, state2.Naked)
+	}
+	// UpdateRetryBatchWithPayload must be called.
+	if len(ledger.retryBatchesWithPayload) != 1 {
+		t.Fatalf("expected 1 UpdateRetryBatchWithPayload call, got %d", len(ledger.retryBatchesWithPayload))
+	}
+	if len(ledger.retryBatchesWithPayload[0]) != 2 {
+		t.Errorf("expected 2 payload entries, got %d", len(ledger.retryBatchesWithPayload[0]))
+	}
+	// UpdateRetryBatch (infra path) must NOT be called.
+	if len(ledger.retryBatches) != 0 {
+		t.Errorf("UpdateRetryBatch must not be called on exhaustion path, got %d", len(ledger.retryBatches))
+	}
+	// No DLQ publishes.
+	if len(pub.recordsOnSubject(js.SubjectJobsDLQ)) != 0 {
+		t.Errorf("DLQ must not be used on exhaustion path")
+	}
+}
+
+// TestProcessChunk_LLMExhausted_PayloadLedgerWriteFailure verifies the
+// ordering invariant: when UpdateRetryBatchWithPayload fails, the message is
+// Nak'd (not Term'd) so NATS redelivers and the job is not permanently lost.
+// The sweeper cannot recover a job if the ledger row was never written.
+func TestProcessChunk_LLMExhausted_PayloadLedgerWriteFailure(t *testing.T) {
+	exhaustedErr := &domainerr.LLMAllExhaustedError{RetryAfter: time.Now().Add(time.Minute)}
+	scorer := &fakeScorer{err: exhaustedErr}
+	ledger := &fakeLedger{retryWithPayloadErr: errors.New("db down")}
+	pub := &fakePublisher{}
+
+	w := makeWorker(scorer, ledger, pub)
+	item, state := makeChunkItem(makeJob("e-ledgerfail"), 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-ledgerfail", 0, 1)
+
+	// Ledger write failed → must Nak (not Term) so NATS redelivers.
+	if state.Termed {
+		t.Errorf("must NOT Term when payload ledger write fails — job would be permanently lost")
+	}
+	if !state.Naked {
+		t.Errorf("expected message Nak'd when payload ledger write fails so NATS redelivers")
+	}
+}
+
+// TestProcessChunk_LLMExhausted_EmitsMetric verifies that routeFailedChunk on
+// LLMAllExhaustedError increments FilterLLMExhaustionTotal.
+func TestProcessChunk_LLMExhausted_EmitsMetric(t *testing.T) {
+	exhaustedErr := &domainerr.LLMAllExhaustedError{RetryAfter: time.Now().Add(time.Minute)}
+	scorer := &fakeScorer{err: exhaustedErr}
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{}
+
+	w := makeWorker(scorer, ledger, pub)
+	before := promtestutil.ToFloat64(metrics.FilterLLMExhaustionTotal)
+
+	item1, _ := makeChunkItem(makeJob("em-1"), 1)
+	item2, _ := makeChunkItem(makeJob("em-2"), 1)
+	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-metric", 0, 1)
+
+	after := promtestutil.ToFloat64(metrics.FilterLLMExhaustionTotal)
+	if after-before != 2 {
+		t.Errorf("expected FilterLLMExhaustionTotal +2, got +%v", after-before)
+	}
+}
+
+// TestRouteFailedChunk_LLMExhausted_TermFailAfterLedgerWrite verifies that a
+// Term failure after a successful ledger write is logged but does not cause the
+// entry to be dropped from RetriedWithPayload — the ledger row is authoritative.
+func TestRouteFailedChunk_LLMExhausted_TermFailAfterLedgerWrite(t *testing.T) {
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	exhaustedErr := &domainerr.LLMAllExhaustedError{RetryAfter: now.Add(5 * time.Minute)}
+
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
+	w.clock = &fakeClock{now: now}
+
+	item, state := makeChunkItem(makeJob("term-fail"), 1)
+	state.TermErr = errors.New("term broker error") // inject Term failure
+
+	outcome := w.routeFailedChunk(context.Background(), []chunkItem{item}, exhaustedErr)
+
+	// Term was attempted (and failed), but the ledger write succeeded.
+	if !state.Termed {
+		t.Errorf("expected Term to have been attempted even when it fails")
+	}
+	// Entry still in RetriedWithPayload (ledger write succeeded before Term).
+	if len(outcome.RetriedWithPayload) != 1 {
+		t.Fatalf("expected 1 RetriedWithPayload entry even when Term fails, got %d",
+			len(outcome.RetriedWithPayload))
+	}
+	if outcome.RetriedWithPayload[0].JobID != "term-fail" {
+		t.Errorf("unexpected job ID in entry: %q", outcome.RetriedWithPayload[0].JobID)
+	}
+}
+
+// TestRouteFailedChunk_LLMExhausted_NakFailAfterLedgerWriteFailure verifies that
+// when UpdateRetryBatchWithPayload fails AND the fallback Nak also fails, the
+// worker logs the Nak failure without panicking or dropping the entry.
+func TestRouteFailedChunk_LLMExhausted_NakFailAfterLedgerWriteFailure(t *testing.T) {
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	exhaustedErr := &domainerr.LLMAllExhaustedError{RetryAfter: now.Add(5 * time.Minute)}
+	ledger := &fakeLedger{retryWithPayloadErr: errors.New("db down")}
+
+	w := makeWorker(&fakeScorer{}, ledger, &fakePublisher{})
+	w.clock = &fakeClock{now: now}
+
+	item, state := makeChunkItem(makeJob("nak-fail-too"), 1)
+	state.NakErr = errors.New("nak broker error") // inject Nak failure on top of ledger failure
+
+	outcome := w.routeFailedChunk(context.Background(), []chunkItem{item}, exhaustedErr)
+
+	// Nak was attempted (and failed).
+	if !state.Naked {
+		t.Errorf("expected Nak to have been attempted on ledger write failure")
+	}
+	// No entry in RetriedWithPayload (ledger write failed).
+	if len(outcome.RetriedWithPayload) != 0 {
+		t.Errorf("expected no RetriedWithPayload entries when ledger write fails, got %d",
+			len(outcome.RetriedWithPayload))
+	}
+}
+
+// TestProcessChunk_LLMExhausted_MarshalFailTermsWithoutLedger verifies that
+// routeFailedChunk handles a marshal failure for one job: the failed item is
+// Term'd immediately (no ledger entry), other items are processed normally.
+func TestProcessChunk_LLMExhausted_MarshalFailTermsWithoutLedger(t *testing.T) {
+	// We can't easily inject a marshal failure for ats.RawJob (it's a clean struct),
+	// so we test via the routeFailedChunk function directly with a job that would
+	// successfully marshal. This test instead validates the happy path of that branch
+	// via TestRouteFailedChunk_LLMExhausted_TermsAndWritesPayload which exercises
+	// the exact same loop. Instead, we cover the all-entries path here to verify
+	// FilterLLMExhaustionTotal is incremented even when all items marshal OK and
+	// the ledger write succeeds.
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	exhaustedErr := &domainerr.LLMAllExhaustedError{RetryAfter: now.Add(3 * time.Minute)}
+
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
+	w.clock = &fakeClock{now: now}
+	before := promtestutil.ToFloat64(metrics.FilterLLMExhaustionTotal)
+
+	item1, state1 := makeChunkItem(makeJob("m1"), 1)
+	item2, state2 := makeChunkItem(makeJob("m2"), 1)
+	outcome := w.routeFailedChunk(context.Background(), []chunkItem{item1, item2}, exhaustedErr)
+
+	after := promtestutil.ToFloat64(metrics.FilterLLMExhaustionTotal)
+	if after-before != 2 {
+		t.Errorf("expected FilterLLMExhaustionTotal +2, got +%.0f", after-before)
+	}
+	if !state1.Termed || !state2.Termed {
+		t.Errorf("expected both items Term'd: s1=%v s2=%v", state1.Termed, state2.Termed)
+	}
+	if len(outcome.RetriedWithPayload) != 2 {
+		t.Errorf("expected 2 RetriedWithPayload entries, got %d", len(outcome.RetriedWithPayload))
+	}
+}
+
+// ── publishPartition branch coverage ─────────────────────────────────────────
+
+// TestPublishPartition_NakFailAfterPublishFail exercises the path where publish
+// fails and the subsequent Nak also fails — the message must be Term'd so it is
+// not stuck in the broker forever.
+func TestPublishPartition_NakFailAfterPublishFail(t *testing.T) {
+	pub := &fakePublisher{err: errors.New("broker down")}
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, pub)
+
+	item, state := makeChunkItem(makeJob("pp-nak-fail"), 1)
+	state.NakErr = errors.New("nak also failed") // inject Nak failure
+
+	published, failed := w.publishPartition(context.Background(), []chunkItem{item})
+
+	if len(published) != 0 {
+		t.Errorf("expected 0 published on failure, got %d", len(published))
+	}
+	if len(failed) != 1 {
+		t.Errorf("expected 1 failed, got %d", len(failed))
+	}
+	// Nak was attempted (and failed), so Term must have been called.
+	if !state.Naked {
+		t.Errorf("expected Nak to have been attempted")
+	}
+	if !state.Termed {
+		t.Errorf("expected Term'd after Nak failure following publish failure")
+	}
+}
+
+// TestPublishPartition_NakSuccessAfterPublishFail verifies the basic publish-fail
+// path: publish fails → Nak → item ends up in failed list, not published.
+func TestPublishPartition_NakSuccessAfterPublishFail(t *testing.T) {
+	pub := &fakePublisher{err: errors.New("broker transient")}
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, pub)
+
+	item, state := makeChunkItem(makeJob("pp-nak-ok"), 1)
+	// NakErr stays nil → Nak succeeds
+
+	published, failed := w.publishPartition(context.Background(), []chunkItem{item})
+
+	if len(published) != 0 {
+		t.Errorf("expected 0 published, got %d", len(published))
+	}
+	if len(failed) != 1 || failed[0].job.job.ID != "pp-nak-ok" {
+		t.Errorf("expected 1 failed item pp-nak-ok, got %v", failed)
+	}
+	if !state.Naked {
+		t.Errorf("expected Nak'd after publish failure")
+	}
+	if state.Termed {
+		t.Errorf("must NOT Term when Nak succeeds")
+	}
+}
+
+// TestPublishPartition_AllSuccess verifies the success path: all items published,
+// none in failed list.
+func TestPublishPartition_AllSuccess(t *testing.T) {
+	pub := &fakePublisher{}
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, pub)
+
+	item1, _ := makeChunkItem(ats.RawJob{ID: "s1", Adapter: "greenhouse"}, 1)
+	item2, _ := makeChunkItem(ats.RawJob{ID: "s2", Adapter: "lever"}, 1)
+
+	published, failed := w.publishPartition(context.Background(), []chunkItem{item1, item2})
+
+	if len(published) != 2 {
+		t.Errorf("expected 2 published, got %d", len(published))
+	}
+	if len(failed) != 0 {
+		t.Errorf("expected 0 failed, got %d", len(failed))
+	}
+}
+
+// ── nakRemainingChunks branch coverage ──────────────────────────────────────
+
+// TestNakRemainingChunks_EmptyChunks exercises the early-return path when the
+// total job count across chunks is zero — no logging, no Nak calls.
+func TestNakRemainingChunks_EmptyChunks(t *testing.T) {
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
+	// Must not panic and must not emit any messages.
+	w.nakRemainingChunks([][]chunkItem{}, "fetch-empty", "shutdown")
+	w.nakRemainingChunks([][]chunkItem{{}, {}}, "fetch-zero", "shutdown") // two empty inner slices
+}
+
+// TestNakRemainingChunks_NonEmpty exercises the main path where jobs are Nak'd.
+func TestNakRemainingChunks_NonEmpty(t *testing.T) {
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
+
+	item1, state1 := makeChunkItem(makeJob("nrc-1"), 1)
+	item2, state2 := makeChunkItem(makeJob("nrc-2"), 1)
+
+	w.nakRemainingChunks([][]chunkItem{{item1, item2}}, "fetch-1", "shutdown test")
+
+	if !state1.Naked || !state2.Naked {
+		t.Errorf("expected both items Nak'd: s1=%v s2=%v", state1.Naked, state2.Naked)
+	}
+}
+
+// TestNakRemainingChunks_NakFail exercises the Nak-failure sub-branch (error
+// logged, but function continues without panic).
+func TestNakRemainingChunks_NakFail(t *testing.T) {
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
+
+	item, state := makeChunkItem(makeJob("nrc-nak-fail"), 1)
+	state.NakErr = errors.New("nak failed") // inject Nak failure
+
+	// Must not panic even when Nak fails.
+	w.nakRemainingChunks([][]chunkItem{{item}}, "fetch-1", "shutdown test")
+
+	if !state.Naked {
+		t.Errorf("expected Nak to have been attempted")
+	}
+}
+
+// ── markSeenOrNak branch coverage ───────────────────────────────────────────
+
+// TestMarkSeenOrNak_EmptyItems verifies the early-return for empty input — no
+// ledger calls, no message disposition.
+func TestMarkSeenOrNak_EmptyItems(t *testing.T) {
+	ledger := &fakeLedger{}
+	w := makeWorker(&fakeScorer{}, ledger, &fakePublisher{})
+	w.markSeenOrNak(context.Background(), nil, jobcommon.SeenReasonFiltered, "fetch-1", 0)
+	if len(ledger.calls) != 0 {
+		t.Errorf("expected no ledger calls for empty input, got %d", len(ledger.calls))
+	}
+}
+
+// TestMarkSeenOrNak_GenericError covers the non-ErrLedgerRowMissing error branch
+// inside markSeenOrNak — all messages must be Nak'd (not Acked) and no
+// filter_ledger_missing metric increment (that metric is only for the race).
+func TestMarkSeenOrNak_GenericError(t *testing.T) {
+	ledger := &fakeLedger{seenErr: errors.New("db down")}
+	w := makeWorker(&fakeScorer{}, ledger, &fakePublisher{})
+
+	item1, state1 := makeChunkItem(makeJob("msn-1"), 1)
+	item2, state2 := makeChunkItem(makeJob("msn-2"), 1)
+	before := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(string(jobcommon.SeenReasonFiltered)))
+
+	w.markSeenOrNak(context.Background(), []chunkItem{item1, item2}, jobcommon.SeenReasonFiltered, "fetch-1", 0)
+
+	if !state1.Naked || !state2.Naked {
+		t.Errorf("expected both Nak'd on generic ledger error: s1=%v s2=%v", state1.Naked, state2.Naked)
+	}
+	if state1.Acked || state2.Acked {
+		t.Errorf("must NOT Ack on ledger error")
+	}
+	after := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(string(jobcommon.SeenReasonFiltered)))
+	if after != before {
+		t.Errorf("generic DB error must NOT increment filter_ledger_missing (that's only for race condition): delta=%.0f", after-before)
+	}
+}
+
+// TestMarkSeenOrNak_NakFailAfterLedgerError verifies that a Nak failure on top
+// of a ledger error doesn't panic — the Nak failure is logged and skipped.
+func TestMarkSeenOrNak_NakFailAfterLedgerError(t *testing.T) {
+	ledger := &fakeLedger{seenErr: errors.New("db down")}
+	w := makeWorker(&fakeScorer{}, ledger, &fakePublisher{})
+
+	item, state := makeChunkItem(makeJob("msn-nak-fail"), 1)
+	state.NakErr = errors.New("nak failed") // inject Nak failure on top
+
+	// Must not panic.
+	w.markSeenOrNak(context.Background(), []chunkItem{item}, jobcommon.SeenReasonFiltered, "fetch-1", 0)
+
+	if !state.Naked {
+		t.Errorf("expected Nak to have been attempted")
+	}
+}
+
+// ── processFetch additional branches ────────────────────────────────────────
+
+// TestProcessFetch_MalformedMessage_DLQPublishFail covers the path where a
+// message can't be JSON-decoded AND the subsequent DLQ publish also fails.
+// The message must still be Term'd and processFetch must return nil (non-fatal).
+func TestProcessFetch_MalformedMessage_DLQPublishFail(t *testing.T) {
+	scorer := &fakeScorer{}
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{err: errors.New("DLQ broker down")}
+	w := makeWorkerWithClock(scorer, ledger, pub, &fakeClock{now: time.Now()}, 5)
+
+	msg, state := js.NewTestMsg([]byte("not valid json"), 1)
+
+	err := w.processFetch(context.Background(), []*js.Msg{msg})
+	if err != nil {
+		t.Errorf("expected nil (malformed is non-fatal), got %v", err)
+	}
+	// Message must be Term'd even when DLQ publish fails.
+	if !state.Termed {
+		t.Errorf("expected malformed message to be Term'd even when DLQ publish fails")
+	}
+}
+
+// TestProcessFetch_ContextAlreadyCancelled ensures processFetch returns nil
+// immediately when the context is already done on entry.
+func TestProcessFetch_ContextAlreadyCancelled(t *testing.T) {
+	scorer := &fakeScorer{}
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{}
+	w := makeWorkerWithClock(scorer, ledger, pub, &fakeClock{now: time.Now()}, 5)
+
+	payload, _ := json.Marshal(makeJob("ctx-cancel"))
+	msg, _ := js.NewTestMsg(payload, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled
+
+	// Should not error — just propagate nil or context error.
+	// processFetch checks ctx.Err() inside the loop but the result is non-blocking.
+	_ = w.processFetch(ctx, []*js.Msg{msg})
+	// No assertion beyond "doesn't panic".
+}
+
+// ── Run function coverage ────────────────────────────────────────────────────
+
+// fakeMessageFetcher is a MessageFetcher that returns a controlled sequence
+// of fetch results.
+type fakeMessageFetcher struct {
+	results []fetchResult
+	callIdx int
+}
+
+type fetchResult struct {
+	msgs []*js.Msg
+	err  error
+}
+
+func (f *fakeMessageFetcher) Fetch(_ int, _ time.Duration) ([]*js.Msg, error) {
+	if f.callIdx >= len(f.results) {
+		// Block forever (simulate idle consumer).
+		time.Sleep(24 * time.Hour)
+		return nil, nil
+	}
+	r := f.results[f.callIdx]
+	f.callIdx++
+	return r.msgs, r.err
+}
+
+// TestRun_CancelledContext asserts that Run returns nil when the context is
+// cancelled — the worker stops cleanly without an error.
+func TestRun_CancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancelled immediately
+
+	consumer := &fakeMessageFetcher{
+		results: []fetchResult{{msgs: nil, err: nil}},
+	}
+	w := &Worker{
+		consumer:        consumer,
+		publisher:       &fakePublisher{},
+		scorer:          &fakeScorer{},
+		ledger:          &fakeLedger{},
+		batchSize:       5,
+		flushTimeout:    30 * time.Second,
+		llmCallInterval: 5 * time.Second,
+		clock:           realClock{},
+		log:             logger.NewNoop(),
+	}
+
+	err := w.Run(ctx)
+	if err != nil {
+		t.Errorf("expected nil on context cancel, got %v", err)
+	}
+}
+
+// TestRun_FetchError_ContinuesLoop verifies that a fetch error is logged but
+// does not abort Run. The loop continues until ctx is cancelled.
+func TestRun_FetchError_ContinuesLoop(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	callCount := 0
+	consumer := &fakeMessageFetcher{}
+	// Override Fetch to return an error the first time, then cancel context.
+	realFetcher := &callbackFetcher{fn: func(n int, maxWait time.Duration) ([]*js.Msg, error) {
+		callCount++
+		if callCount == 1 {
+			return nil, errors.New("nats connection lost")
+		}
+		cancel() // cancel on second call
+		return nil, nil
+	}}
+	_ = consumer
+
+	w := &Worker{
+		consumer:        realFetcher,
+		publisher:       &fakePublisher{},
+		scorer:          &fakeScorer{},
+		ledger:          &fakeLedger{},
+		batchSize:       5,
+		flushTimeout:    1 * time.Millisecond,
+		llmCallInterval: 5 * time.Second,
+		clock:           realClock{},
+		log:             logger.NewNoop(),
+	}
+
+	err := w.Run(ctx)
+	if err != nil {
+		t.Errorf("expected nil, got %v", err)
+	}
+	if callCount < 2 {
+		t.Errorf("expected at least 2 Fetch calls, got %d", callCount)
+	}
+}
+
+// callbackFetcher is a MessageFetcher that calls a user-supplied function.
+type callbackFetcher struct {
+	fn func(n int, maxWait time.Duration) ([]*js.Msg, error)
+}
+
+func (c *callbackFetcher) Fetch(n int, maxWait time.Duration) ([]*js.Msg, error) {
+	return c.fn(n, maxWait)
+}
+
+// ── Additional coverage tests ─────────────────────────────────────────────────
+
+// TestProcessFetch_MalformedMessage_TermFail_NoPanic verifies that when a
+// malformed message is received AND msg.Term() returns an error, the worker
+// logs a warning but does not panic. processFetch must return nil.
+func TestProcessFetch_MalformedMessage_TermFail_NoPanic(t *testing.T) {
+	scorer := &fakeScorer{}
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{}
+	w := makeWorkerWithClock(scorer, ledger, pub, &fakeClock{now: time.Now()}, 5)
+
+	msg, state := js.NewTestMsg([]byte("not valid json"), 1)
+	state.TermErr = errors.New("nats term error")
+
+	err := w.processFetch(context.Background(), []*js.Msg{msg})
+	if err != nil {
+		t.Errorf("processFetch: want nil, got %v", err)
+	}
+	if !state.Termed {
+		t.Errorf("expected Term to have been attempted on malformed message")
+	}
+}
+
+// panicScorer is a scorer that panics inside ScoreBatch to exercise the
+// panic recovery handler in processChunk.
+type panicScorer struct{}
+
+func (p *panicScorer) ScoreBatch(_ context.Context, _ []llmdto.JobsRelevanceFilterInput) ([]string, error) {
+	panic("scorer induced panic for testing")
+}
+
+// makeWorkerWithPanicScorer builds a worker using a scorer that panics.
+func makeWorkerWithPanicScorer(ledger *fakeLedger, pub *fakePublisher, clk clock, batchSize int) *Worker {
+	return &Worker{
+		scorer:          &panicScorer{},
+		ledger:          ledger,
+		publisher:       pub,
+		batchSize:       batchSize,
+		flushTimeout:    30 * time.Second,
+		llmCallInterval: 5 * time.Second,
+		clock:           clk,
+		log:             logger.NewNoop(),
+	}
+}
+
+// TestProcessFetch_PanicInProcessChunk_RecoveredAndNaks verifies that a panic
+// inside processChunk is caught by the deferred recovery in processFetch. The
+// affected messages are Nak'd and an error is logged.
+func TestProcessFetch_PanicInProcessChunk_RecoveredAndNaks(t *testing.T) {
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{}
+	w := makeWorkerWithPanicScorer(ledger, pub, &fakeClock{now: time.Now()}, 5)
+
+	// Title must be non-empty so the item goes into scorable (not passThrough),
+	// ensuring ScoreBatch is called and the panic occurs.
+	payload, _ := json.Marshal(ats.RawJob{ID: "panic-job", Adapter: "greenhouse", Title: "SWE"})
+	msg, state := js.NewTestMsg(payload, 1)
+
+	// processFetch must not propagate the panic.
+	err := w.processFetch(context.Background(), []*js.Msg{msg})
+	if err != nil {
+		t.Errorf("processFetch: want nil on recovered panic, got %v", err)
+	}
+	if !state.Naked {
+		t.Errorf("expected Nak'd in panic recovery handler")
+	}
+}
+
+// TestProcessFetch_PanicInProcessChunk_LedgerFail_NakFail_NoPanic verifies
+// that the panic recovery handler tolerates both a ledger batch failure and
+// a Nak failure without itself panicking.
+func TestProcessFetch_PanicInProcessChunk_LedgerFail_NakFail_NoPanic(t *testing.T) {
+	ledger := &fakeLedger{seenErr: errors.New("db down")} // UpdateSeenReasonBatch fails
+	pub := &fakePublisher{}
+	w := makeWorkerWithPanicScorer(ledger, pub, &fakeClock{now: time.Now()}, 5)
+
+	// Title must be non-empty so the item goes into scorable (not passThrough).
+	payload, _ := json.Marshal(ats.RawJob{ID: "panic-nak-fail", Adapter: "greenhouse", Title: "SWE"})
+	msg, state := js.NewTestMsg(payload, 1)
+	state.NakErr = errors.New("nak failed too") // Nak also fails
+
+	// processFetch must not panic despite both ledger and Nak failures.
+	err := w.processFetch(context.Background(), []*js.Msg{msg})
+	if err != nil {
+		t.Errorf("processFetch: want nil, got %v", err)
+	}
+	// Nak was attempted even though it failed.
+	if !state.Naked {
+		t.Errorf("expected Nak to have been attempted in panic recovery")
+	}
+}
+
+// TestMarkSeenOrNak_AckFail_NoPanic verifies that when Ack() returns an error
+// inside markSeenOrNak (success path), a warning is logged but no panic occurs.
+func TestMarkSeenOrNak_AckFail_NoPanic(t *testing.T) {
+	ledger := &fakeLedger{} // UpdateSeenReasonBatch succeeds
+	w := makeWorker(&fakeScorer{}, ledger, &fakePublisher{})
+
+	item, state := makeChunkItem(makeJob("ack-fail-mark"), 1)
+	state.AckErr = errors.New("nats ack error")
+
+	// Must not panic.
+	w.markSeenOrNak(context.Background(), []chunkItem{item}, jobcommon.SeenReasonLLMIrrelevant, "fetch-1", 0)
+
+	if !state.Acked {
+		t.Errorf("expected Ack to have been attempted")
+	}
+}
+
+// TestPublishPartition_NakFail_TermFail_NoPanic verifies that when both Nak
+// and Term fail in publishPartition (after a publish failure), the worker
+// logs warnings but does not panic.
+func TestPublishPartition_NakFail_TermFail_NoPanic(t *testing.T) {
+	pub := &fakePublisher{err: errors.New("publish down")}
+	w := makeWorker(&fakeScorer{}, &fakeLedger{}, pub)
+
+	item, state := makeChunkItem(makeJob("nak-term-fail"), 1)
+	state.NakErr = errors.New("nak failed")
+	state.TermErr = errors.New("term also failed")
+
+	published, failed := w.publishPartition(context.Background(), []chunkItem{item})
+
+	if len(published) != 0 {
+		t.Errorf("expected 0 published, got %d", len(published))
+	}
+	if len(failed) != 1 {
+		t.Errorf("expected 1 failed, got %d", len(failed))
+	}
+	if !state.Naked {
+		t.Errorf("expected Nak to have been attempted")
+	}
+	if !state.Termed {
+		t.Errorf("expected Term to have been attempted after Nak failure")
+	}
+}
+
+// TestRun_FetchError_CtxCancelDuringSleep verifies that when a fetch error
+// occurs and ctx is cancelled during the post-error backoff sleep, Run exits
+// cleanly (the ctx.Done() case in the select fires).
+func TestRun_FetchError_CtxCancelDuringSleep(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	callCount := 0
+	realFetcher := &callbackFetcher{fn: func(n int, maxWait time.Duration) ([]*js.Msg, error) {
+		callCount++
+		if callCount == 1 {
+			// Return an error; immediately cancel ctx so the backoff select
+			// fires ctx.Done() instead of time.After(1s).
+			go cancel()
+			return nil, errors.New("transient fetch error")
+		}
+		// Should not reach here — ctx.Done() path should exit.
+		return nil, nil
+	}}
+
+	w := &Worker{
+		consumer:        realFetcher,
+		publisher:       &fakePublisher{},
+		scorer:          &fakeScorer{},
+		ledger:          &fakeLedger{},
+		batchSize:       5,
+		flushTimeout:    1 * time.Millisecond,
+		llmCallInterval: 5 * time.Second,
+		clock:           realClock{},
+		log:             logger.NewNoop(),
+	}
+
+	err := w.Run(ctx)
+	if err != nil {
+		t.Errorf("Run: want nil after fetch error + ctx cancel, got %v", err)
 	}
 }

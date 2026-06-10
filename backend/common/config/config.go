@@ -154,6 +154,10 @@ type SchedulerConfig struct {
 	ScanIntervalMinutes  int
 	StuckTimeoutMinutes  int
 	CheckIntervalSeconds int
+	// SweeperMaxRetries is the maximum number of times the sweeper will
+	// re-publish a retry job before escalating to reason='error'.
+	// Defaults to 10. Configurable via SWEEPER_MAX_RETRIES.
+	SweeperMaxRetries int
 }
 
 // Validate returns an error if any required scheduler config values are invalid.
@@ -303,6 +307,7 @@ func Load() *Config {
 			ScanIntervalMinutes:  getEnvInt("SCAN_INTERVAL_MINUTES", 1440),
 			StuckTimeoutMinutes:  getEnvInt("SCHEDULER_STUCK_TIMEOUT_MINUTES", 30),
 			CheckIntervalSeconds: getEnvInt("SCHEDULER_CHECK_INTERVAL_SECONDS", 60),
+			SweeperMaxRetries:    getEnvInt("SWEEPER_MAX_RETRIES", 10),
 		},
 		Observability: ObservabilityConfig{
 			MetricsAddr:  getEnv("METRICS_ADDR", "127.0.0.1:9100"),

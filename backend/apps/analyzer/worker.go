@@ -23,9 +23,16 @@ import (
 	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 )
 
-const analyzerMaxRetries = 3
+// analyzerMaxRetries is the max NATS delivery count before a job goes to DLQ
+// on the infra-error path. Must equal len(analyzerBackOff). Must stay in sync
+// with MaxDeliver on the JOBS_FILTERED consumer in common/jetstream/streams.go
+// (MaxDeliver:3 → 2 Nak tiers before Term).
+const analyzerMaxRetries = 2
 
-var analyzerBackOff = []time.Duration{time.Minute, 10 * time.Minute, time.Hour}
+// analyzerBackOff mirrors the JOBS_FILTERED consumer BackOff config so the
+// ledger's next_attempt_at field stays meaningful for dashboards on the
+// infra-error path. Must match BackOff in ConsumerAnalyzerWorkers.
+var analyzerBackOff = []time.Duration{30 * time.Second, 2 * time.Minute}
 
 // clock abstracts wall-clock reads and ctx-aware sleeps so tests can control
 // both the inter-group pacing and the NextAttemptAt value stamped into the
@@ -286,6 +293,9 @@ func chunkFetched(s []fetchedJob, size int) [][]fetchedJob {
 
 // handleFailure routes a single failed job via NATS dispositions:
 //   - Validation errors → DLQ immediately (Term).
+//   - LLMAllExhaustedError (enrich stage) → Term + payload ledger entry so the
+//     sweeper can re-publish once quota recovers. Does NOT Nak — NATS redelivery
+//     would just burn quota again.
 //   - Within retry budget → Nak (NATS redelivers with consumer BackOff).
 //   - Budget exhausted → DLQ (Term).
 //
@@ -304,6 +314,52 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 
 	if stderrors.Is(err, domainerr.ErrLLMValidation) {
 		return w.sendToDLQ(ctx, jobLog, fj, "validation", err)
+	}
+
+	// LLM exhaustion path (enrich stage only): write payload to the ledger
+	// FIRST, then Term. Ordering invariant: ledger write → Term. If the
+	// ledger write fails, Nak (NATS redelivers) so the job is not lost.
+	// Do NOT Nak on success — NATS BackOff redelivery would just burn quota.
+	var exhausted *domainerr.LLMAllExhaustedError
+	if stderrors.As(err, &exhausted) && stage == "enrich" {
+		retryAfter := exhausted.RetryAfter
+		if retryAfter.IsZero() {
+			retryAfter = w.clock.Now().Add(analyzerBackOff[0])
+		}
+		payload, merr := json.Marshal(fj.job)
+		if merr != nil {
+			jobLog.Error("marshal for exhaustion retry failed; terming without ledger write", merr)
+			if terr := fj.msg.Term(); terr != nil {
+				jobLog.Warn("msg term failed", logger.Err(terr))
+			}
+			metrics.EnricherLLMExhaustionTotal.Inc()
+			return true
+		}
+		entry := jobsvc.RetryLedgerEntryWithPayload{
+			JobID:         fj.job.ID,
+			Adapter:       fj.job.Adapter,
+			Payload:       json.RawMessage(payload),
+			RetryCount:    fj.retryCount + 1,
+			NextAttemptAt: retryAfter,
+		}
+		// Ledger write BEFORE Term: if it fails, Nak so NATS redelivers.
+		if lerr := w.ledger.UpdateRetryBatchWithPayload(ctx, []jobsvc.RetryLedgerEntryWithPayload{entry}); lerr != nil {
+			metrics.EnricherRetryLedgerFailuresTotal.Inc()
+			jobLog.Error("UpdateRetryBatchWithPayload failed on exhaustion path; naking for redelivery", lerr)
+			if nerr := fj.msg.Nak(); nerr != nil {
+				jobLog.Warn("msg nak failed after ledger write failure", logger.Err(nerr))
+			}
+			metrics.EnricherLLMExhaustionTotal.Inc()
+			return false
+		}
+		if terr := fj.msg.Term(); terr != nil {
+			jobLog.Warn("msg term failed on exhaustion path", logger.Err(terr))
+		}
+		metrics.EnricherLLMExhaustionTotal.Inc()
+		jobLog.Info("LLM quota exhausted — wrote payload for sweeper then Term'd",
+			logger.Str(logger.FieldRetryAfter, retryAfter.UTC().Format(time.RFC3339)),
+		)
+		return true
 	}
 
 	if fj.retryCount >= analyzerMaxRetries {

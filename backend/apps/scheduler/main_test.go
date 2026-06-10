@@ -24,22 +24,24 @@ import (
 type fakeSchedulerService struct {
 	mu sync.Mutex
 
-	enqueueCount  int
-	skippedCount  int
-	purgeCount    int
-	resetCount    int
-	enqueueErr    error
-	resetErr      error
-	purgeErr      error
-	resetStuckArg time.Duration
+	enqueueCount    int
+	skippedCount    int
+	purgeCount      int
+	resetCount      int
+	enqueueErr      error
+	resetErr        error
+	purgeErr        error
+	retryDueJobsErr error
+	resetStuckArg   time.Duration
 
 	// Channel synchronisation — avoids time.Sleep in tests.
 	readyAt int64         // close readyCh when enqueueCalls reaches this value
 	readyCh chan struct{} // closed once; nil means no synchronisation needed
 
-	resetCalls   atomic.Int64
-	purgeCalls   atomic.Int64
-	enqueueCalls atomic.Int64
+	resetCalls        atomic.Int64
+	purgeCalls        atomic.Int64
+	enqueueCalls      atomic.Int64
+	retryDueJobsCalls atomic.Int64
 
 	enqueueDueArgs int
 }
@@ -82,6 +84,14 @@ func (f *fakeSchedulerService) PurgeInactive(_ context.Context) (int, error) {
 	f.mu.Unlock()
 	f.purgeCalls.Add(1)
 	return n, err
+}
+
+func (f *fakeSchedulerService) RetryDueJobs(_ context.Context) error {
+	f.mu.Lock()
+	err := f.retryDueJobsErr
+	f.mu.Unlock()
+	f.retryDueJobsCalls.Add(1)
+	return err
 }
 
 // resetCalled reports whether ResetStuck has been invoked at least once.

@@ -1,17 +1,22 @@
 package jobmodel
 
 import (
+	"encoding/json"
 	"time"
 
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 )
 
 type JobSeenLedger struct {
-	JobID       string     `gorm:"primaryKey"`
-	CompanyID   string     `gorm:"not null"`
-	FirstSeenAt time.Time  `gorm:"not null;autoCreateTime"`
-	Reason      string     `gorm:"not null"`
-	RemovedAt   *time.Time `gorm:"column:removed_at"`
+	JobID         string           `gorm:"primaryKey"`
+	CompanyID     string           `gorm:"not null"`
+	FirstSeenAt   time.Time        `gorm:"not null;autoCreateTime"`
+	Reason        string           `gorm:"not null"`
+	RemovedAt     *time.Time       `gorm:"column:removed_at"`
+	RetryCount    *int             `gorm:"column:retry_count"`
+	NextAttemptAt *time.Time       `gorm:"column:next_attempt_at"`
+	Payload       *json.RawMessage `gorm:"column:payload;type:jsonb"`
+	Adapter       *string          `gorm:"column:adapter"`
 
 	Company companymodel.Company `gorm:"foreignKey:CompanyID"`
 }

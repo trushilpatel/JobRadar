@@ -225,6 +225,44 @@ var SchedulerStuckRowsResetTotal = prometheus.NewCounter(prometheus.CounterOpts{
 	Help: "Total number of stuck queue rows recovered by the scheduler.",
 })
 
+// ── LLM Exhaustion + Sweeper ──────────────────────────────────────────────────
+
+// FilterLLMExhaustionTotal counts chunks routed via the LLM exhaustion path
+// in the filter (LLMAllExhaustedError → Term + ledger payload).
+var FilterLLMExhaustionTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "jobradar_filter_llm_exhaustion_total",
+	Help: "Total filter chunks routed via the LLM exhaustion path (Term + ledger payload write).",
+})
+
+// EnricherLLMExhaustionTotal counts jobs routed via the LLM exhaustion path
+// in the analyzer (LLMAllExhaustedError → Term + ledger payload).
+var EnricherLLMExhaustionTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "jobradar_analyzer_llm_exhaustion_total",
+	Help: "Total analyzer jobs routed via the LLM exhaustion path (Term + ledger payload write).",
+})
+
+// SweeperRetriesPublishedTotal counts jobs the sweeper successfully re-published
+// to jobs.raw.{adapter} after resetting their ledger reason to 'fetch'.
+var SweeperRetriesPublishedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "jobradar_sweeper_retries_published_total",
+	Help: "Total retry jobs re-published by the sweeper to jobs.raw.{adapter}.",
+})
+
+// SweeperRetriesEscalatedTotal counts jobs the sweeper escalated from
+// reason='retry' to reason='error' because retry_count >= max_retries.
+var SweeperRetriesEscalatedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "jobradar_sweeper_retries_escalated_total",
+	Help: "Total retry jobs escalated to error by the sweeper (retry_count >= max).",
+})
+
+// SweeperRetriesFailedTotal counts jobs the sweeper failed to re-publish
+// (NATS publish error). The ledger row is re-set to retry with a 1-minute
+// delay so the sweeper retries on the next tick.
+var SweeperRetriesFailedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "jobradar_sweeper_retries_failed_total",
+	Help: "Total retry jobs the sweeper failed to publish (ledger re-set to retry, 1m delay).",
+})
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 func init() {
@@ -263,6 +301,11 @@ func init() {
 		SchedulerErrorsTotal,
 		SchedulerStuckChecksTotal,
 		SchedulerStuckRowsResetTotal,
+		FilterLLMExhaustionTotal,
+		EnricherLLMExhaustionTotal,
+		SweeperRetriesPublishedTotal,
+		SweeperRetriesEscalatedTotal,
+		SweeperRetriesFailedTotal,
 	)
 }
 

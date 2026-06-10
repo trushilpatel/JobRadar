@@ -65,8 +65,8 @@ func ensureJobsRaw(ctx context.Context, js natsjs.JetStream) error {
 		Durable:    ConsumerFilterWorkers,
 		AckPolicy:  natsjs.AckExplicitPolicy,
 		AckWait:    2 * time.Minute,
-		MaxDeliver: 4,
-		BackOff:    []time.Duration{time.Minute, 10 * time.Minute, time.Hour},
+		MaxDeliver: 3,
+		BackOff:    []time.Duration{30 * time.Second, 2 * time.Minute},
 	}); err != nil {
 		return fmt.Errorf("consumer %s: %w", ConsumerFilterWorkers, err)
 	}
@@ -90,8 +90,8 @@ func ensureJobsFiltered(ctx context.Context, js natsjs.JetStream) error {
 		Durable:    ConsumerAnalyzerWorkers,
 		AckPolicy:  natsjs.AckExplicitPolicy,
 		AckWait:    5 * time.Minute,
-		MaxDeliver: 4,
-		BackOff:    []time.Duration{time.Minute, 10 * time.Minute, time.Hour},
+		MaxDeliver: 3,
+		BackOff:    []time.Duration{30 * time.Second, 2 * time.Minute},
 	}); err != nil {
 		return fmt.Errorf("consumer %s: %w", ConsumerAnalyzerWorkers, err)
 	}

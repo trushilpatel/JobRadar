@@ -46,6 +46,7 @@ func (f *fakeScanService) GetEffectiveScanConfig(_ context.Context, _ string) (d
 func (f *fakeScanService) UpdateScanIntervalOverride(_ context.Context, _ string, _ *int) error {
 	return f.err
 }
+func (f *fakeScanService) RetryDueJobs(_ context.Context) error { return f.err }
 
 // newScanTestRouter wires the full decorator chain under test using the given
 // service as the terminal, then mounts all routes onto a chi router.

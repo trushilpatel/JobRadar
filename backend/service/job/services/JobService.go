@@ -163,6 +163,19 @@ type SeenLedgerWriter interface {
 	UpdateSeenReason(ctx context.Context, jobID string, reason jobcommon.SeenReason) error
 	UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason jobcommon.SeenReason) error
 	UpdateRetryBatch(ctx context.Context, entries []RetryLedgerEntry) error
+	// UpdateRetryBatchWithPayload sets reason='retry' with payload and adapter
+	// columns alongside retry_count and next_attempt_at. Used by the sweeper path
+	// (LLM exhaustion) where the RawJob payload must be preserved for re-publish.
+	UpdateRetryBatchWithPayload(ctx context.Context, entries []RetryLedgerEntryWithPayload) error
+	// FetchDueRetryJobs returns up to limit ledger rows where reason='retry' and
+	// next_attempt_at <= now(), ordered by next_attempt_at ASC.
+	FetchDueRetryJobs(ctx context.Context, limit int) ([]RetryJobRecord, error)
+	// ResetRetryToFetch transitions a single row to reason='fetch', clearing
+	// payload, adapter, and next_attempt_at. ErrLedgerRowMissing on 0 rows.
+	ResetRetryToFetch(ctx context.Context, jobID string) error
+	// EscalateRetryToError transitions a row from reason='retry' to reason='error'.
+	// ErrLedgerRowMissing when no row matched (missing row or wrong reason).
+	EscalateRetryToError(ctx context.Context, jobID string) error
 	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
 }
 
