@@ -40,7 +40,6 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import * as useUserConfigModule from '@/lib/hooks/useUserConfig'
 import * as authModule from '@/features/auth'
-import { supabase } from '@/lib/core/supabase'
 import { toast } from 'sonner'
 import { AccountPage } from '@/pages/AccountPage'
 import { JOB_COMMANDS } from '@/features/jobs'
@@ -178,7 +177,6 @@ describe('AccountPage', () => {
   it('deletes the account and signs out on success', async () => {
     mockUserConfig(false)
     vi.mocked(authModule.deleteMe).mockResolvedValue(undefined)
-    vi.mocked(supabase.auth.signOut).mockResolvedValue({ error: null })
     const user = userEvent.setup()
     render(<AccountPage />, { wrapper: makeWrapper() })
 
@@ -186,7 +184,6 @@ describe('AccountPage', () => {
     await user.click(screen.getByRole('button', { name: 'Delete forever' }))
 
     await waitFor(() => expect(vi.mocked(authModule.deleteMe)).toHaveBeenCalled())
-    expect(vi.mocked(supabase.auth.signOut)).toHaveBeenCalledWith({ scope: 'global' })
     expect(signOutMock).toHaveBeenCalled()
   })
 

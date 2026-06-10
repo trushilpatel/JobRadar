@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { Sidebar } from '@/app/Sidebar'
 
 // ── Configurable auth-store mock (Sidebar imports from the feature barrel) ────
@@ -24,9 +25,11 @@ vi.mock('@/features/auth', () => ({
 
 function renderSidebar(initialEntries = ['/dashboard']) {
   return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <Sidebar />
-    </MemoryRouter>
+    <TooltipProvider>
+      <MemoryRouter initialEntries={initialEntries}>
+        <Sidebar />
+      </MemoryRouter>
+    </TooltipProvider>
   )
 }
 

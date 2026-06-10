@@ -48,7 +48,7 @@ describe('Toggle', () => {
       </Toggle>
     )
     const el = screen.getByRole('button', { name: 'bold' })
-    expect(el.className).toContain('border-slate-200')
+    expect(el.className).toContain('border-[var(--border)]')
     expect(el.className).toContain('h-9')
   })
 

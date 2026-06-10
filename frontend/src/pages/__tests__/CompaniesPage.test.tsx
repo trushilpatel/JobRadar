@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import type { Company } from '@/types'
 // Mock the hook source modules; reference the mocked fns through the feature
 // barrel (pages may only import from @/features/X, never internals).
@@ -113,11 +114,13 @@ function mockActions(over: Partial<ActionsReturn> = {}) {
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: 0, gcTime: 0 } } })
   return render(
-    <MemoryRouter>
-      <QueryClientProvider client={qc}>
-        <CompaniesPage />
-      </QueryClientProvider>
-    </MemoryRouter>
+    <TooltipProvider>
+      <MemoryRouter>
+        <QueryClientProvider client={qc}>
+          <CompaniesPage />
+        </QueryClientProvider>
+      </MemoryRouter>
+    </TooltipProvider>
   )
 }
 

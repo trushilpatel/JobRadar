@@ -8,7 +8,7 @@ describe('Button', () => {
     render(<Button>Click</Button>)
     const btn = screen.getByRole('button', { name: 'Click' })
     expect(btn.tagName).toBe('BUTTON')
-    expect(btn.className).toContain('bg-slate-900')
+    expect(btn.className).toContain('bg-panel')
     expect(btn.className).toContain('h-10')
   })
 
@@ -43,7 +43,7 @@ describe('Button', () => {
     )
     const link = screen.getByRole('link', { name: 'Link' })
     expect(link.tagName).toBe('A')
-    expect(link.className).toContain('bg-slate-900')
+    expect(link.className).toContain('bg-panel')
   })
 
   it('merges a custom className', () => {
@@ -52,6 +52,6 @@ describe('Button', () => {
   })
 
   it('exposes a buttonVariants helper', () => {
-    expect(buttonVariants({ variant: 'outline', size: 'sm' })).toContain('border-slate-200')
+    expect(buttonVariants({ variant: 'outline', size: 'sm' })).toContain('border-[var(--border)]')
   })
 })

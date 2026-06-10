@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { useReactTable, getCoreRowModel, flexRender, type ColumnDef } from '@tanstack/react-table'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import type { Company } from '@/types'
 import { buildCompanyColumns, type CompanyColumnActions } from '../companies-columns'
 
@@ -64,7 +65,11 @@ const base: Company = {
 }
 
 function renderHost(company: Partial<Company>, actions = makeActions()) {
-  return render(<Host companies={[{ ...base, ...company }]} actions={actions} />)
+  return render(
+    <TooltipProvider>
+      <Host companies={[{ ...base, ...company }]} actions={actions} />
+    </TooltipProvider>
+  )
 }
 
 beforeEach(() => vi.clearAllMocks())
