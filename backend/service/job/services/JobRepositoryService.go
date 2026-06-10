@@ -213,6 +213,9 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, cursor str
 	if filter.OnSite {
 		query = query.Where("jobs.remote = ?", false)
 	}
+	if filter.Hybrid {
+		query = query.Where("LOWER(jobs.employ_type) LIKE ?", "%hybrid%")
+	}
 
 	if len(filter.EmployTypes) > 0 {
 		query = query.Where("jobs.employ_type IN ?", filter.EmployTypes)
