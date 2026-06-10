@@ -264,7 +264,11 @@ func (s *implService) ProvisionNode(ctx context.Context, name string) (_ *dto.Cr
 	ctx, span := tracing.Start(ctx, "crawlernode.impl.ProvisionNode")
 	defer tracing.End(span, &err)
 
-	// Generate a UUID v4 token using crypto/rand.
+	// Generate node ID and token separately via crypto/rand.
+	nodeUUID, err := generateUUID()
+	if err != nil {
+		return nil, fmt.Errorf("ProvisionNode: generate node id: %w", err)
+	}
 	tokenUUID, err := generateUUID()
 	if err != nil {
 		return nil, fmt.Errorf("ProvisionNode: generate token: %w", err)
@@ -276,6 +280,7 @@ func (s *implService) ProvisionNode(ctx context.Context, name string) (_ *dto.Cr
 
 	prefix := tokenStr[:crawlernodecommon.TokenPrefixLen]
 	node := crawlernodemodel.CrawlerNode{
+		ID:          nodeUUID.String(),
 		Name:        name,
 		TokenPrefix: prefix,
 		TokenHash:   &tokenHash,

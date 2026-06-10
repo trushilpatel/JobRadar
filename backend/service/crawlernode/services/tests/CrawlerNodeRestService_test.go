@@ -56,15 +56,43 @@ func TestNodeRestService_GetWork_Returns200(t *testing.T) {
 	}
 }
 
-// getWork: missing adapter query param → 400.
-func TestNodeRestService_GetWork_MissingAdapter_Returns400(t *testing.T) {
-	svc := &mockFullNodeService{}
+// getWork: missing adapter query param → 200 (adapter is optional; empty means "any").
+func TestNodeRestService_GetWork_MissingAdapter_Returns200(t *testing.T) {
+	svc := &mockFullNodeService{
+		getWorkFn: func(_ context.Context, _, adapterType string, _ []string) (*dto.WorkResponse, error) {
+			if adapterType != "" {
+				t.Errorf("GetWork adapter = %q, want empty string for adapter-agnostic claim", adapterType)
+			}
+			return &dto.WorkResponse{}, nil
+		},
+	}
 	rs := services.NewNodeRestService(svc)
 	req := withNodeIdentity(httptest.NewRequest(http.MethodGet, "/node/work", nil), "node-1", "n1")
 	rr := httptest.NewRecorder()
 	rs.GetWork(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("GetWork (no adapter) status = %d, want 400", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Errorf("GetWork (no adapter) status = %d, want 200", rr.Code)
+	}
+}
+
+// getWork: ?holding=id1,id2 param is parsed and forwarded as holdingIDs slice.
+func TestNodeRestService_GetWork_WithHoldingParam_ForwardsHoldingIDs(t *testing.T) {
+	var gotHolding []string
+	svc := &mockFullNodeService{
+		getWorkFn: func(_ context.Context, _, _ string, holdingIDs []string) (*dto.WorkResponse, error) {
+			gotHolding = holdingIDs
+			return &dto.WorkResponse{}, nil
+		},
+	}
+	rs := services.NewNodeRestService(svc)
+	req := withNodeIdentity(httptest.NewRequest(http.MethodGet, "/node/work?holding=id1,id2", nil), "node-1", "n1")
+	rr := httptest.NewRecorder()
+	rs.GetWork(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("GetWork (holding) status = %d, want 200", rr.Code)
+	}
+	if len(gotHolding) != 2 || gotHolding[0] != "id1" || gotHolding[1] != "id2" {
+		t.Errorf("GetWork (holding) holdingIDs = %v, want [id1 id2]", gotHolding)
 	}
 }
 
@@ -338,6 +366,31 @@ func TestAdminRestService_RetireNode_ServiceError_Returns500(t *testing.T) {
 	if rr.Code != http.StatusInternalServerError {
 		t.Errorf("RetireNode (error) status = %d, want 500", rr.Code)
 	}
+}
+
+// --- Router smoke tests ---
+
+// NodeRestRouter.Register must mount routes without panicking.
+func TestNodeRestRouter_Register_MountsRoutes(t *testing.T) {
+	svc := &mockFullNodeService{
+		getWorkFn: func(_ context.Context, _, _ string, _ []string) (*dto.WorkResponse, error) {
+			return &dto.WorkResponse{}, nil
+		},
+	}
+	rs := services.NewNodeRestService(svc)
+	authMw := func(next http.Handler) http.Handler { return next }
+	router := services.NewNodeRestRouter(rs, authMw)
+	r := chi.NewRouter()
+	router.Register(r) // must not panic
+}
+
+// AdminRestRouter.Register must mount routes without panicking.
+func TestAdminRestRouter_Register_MountsRoutes(t *testing.T) {
+	svc := &mockFullNodeService{}
+	rs := services.NewAdminRestService(svc)
+	router := services.NewAdminRestRouter(rs)
+	r := chi.NewRouter()
+	router.Register(r) // must not panic
 }
 
 // Compile-time interface checks.

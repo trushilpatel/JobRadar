@@ -8,6 +8,7 @@ import (
 	"time"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	crawlernodecommon "github.com/trushilpatel/jobradar/service/crawlernode/common"
 	"github.com/trushilpatel/jobradar/service/crawlernode/dto"
 	crawlernodemodel "github.com/trushilpatel/jobradar/service/crawlernode/models"
 	"github.com/trushilpatel/jobradar/service/crawlernode/services"
@@ -310,7 +311,7 @@ func TestImplService_SubmitResults_NonUSAGate_DropsNonUSAJobs(t *testing.T) {
 	nonUSASeenIDs := make([]string, 0)
 	ledger := defaultLedgerStore()
 	ledger.markSeenFn = func(_ context.Context, ids []string, _, reason string) error {
-		if reason == "non_usa" {
+		if reason == crawlernodecommon.ScanReasonNonUSA {
 			nonUSASeenIDs = append(nonUSASeenIDs, ids...)
 		}
 		return nil
@@ -726,7 +727,7 @@ func TestImplService_SubmitResults_PropagatesHasSeenBatchError(t *testing.T) {
 func TestImplService_SubmitResults_PropagatesNonUSAMarkError(t *testing.T) {
 	ledger := defaultLedgerStore()
 	ledger.markSeenFn = func(_ context.Context, _ []string, _, reason string) error {
-		if reason == "non_usa" {
+		if reason == crawlernodecommon.ScanReasonNonUSA {
 			return domainerrs.ErrInternal.WithMessage("ledger error")
 		}
 		return nil

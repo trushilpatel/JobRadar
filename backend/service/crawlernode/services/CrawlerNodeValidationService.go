@@ -24,9 +24,7 @@ func (s *validationService) GetWork(ctx context.Context, nodeID, adapterType str
 	if nodeID == "" {
 		return nil, errors.ErrBadRequest.WithMessage("GetWork: nodeID is required")
 	}
-	if adapterType == "" {
-		return nil, errors.ErrBadRequest.WithMessage("GetWork: adapterType is required")
-	}
+	// adapterType is intentionally optional — empty means "any adapter type".
 	return s.next.GetWork(ctx, nodeID, adapterType, holdingIDs)
 }
 

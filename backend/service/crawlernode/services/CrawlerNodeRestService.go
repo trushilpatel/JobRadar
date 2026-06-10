@@ -23,12 +23,9 @@ func NewNodeRestService(next NodeService) *NodeRestService {
 }
 
 // GetWork handles GET /node/work?adapter=<type>&holding=<id,id,...>
+// adapter is optional — when omitted the orchestrator claims any available adapter type.
 func (h *NodeRestService) GetWork(w http.ResponseWriter, r *http.Request) {
 	adapterType := r.URL.Query().Get("adapter")
-	if adapterType == "" {
-		handler.HandleError(w, domainerrs.ErrBadRequest.WithMessage("adapter query param is required"))
-		return
-	}
 
 	nodeID := nodeidentity.IDFrom(r.Context())
 

@@ -310,3 +310,66 @@ func TestNodeRepositoryService_Retire_ErrInternalOnDBError(t *testing.T) {
 		t.Fatal("Retire() on closed DB expected error, got nil")
 	}
 }
+
+// --- ScanSettingsRepositoryService ---
+
+// newScanSettingsDB returns an in-memory SQLite DB with a minimal
+// company_scan_settings table for testing the scan settings reader.
+func newScanSettingsDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard})
+	if err != nil {
+		t.Fatalf("open sqlite for scan settings: %v", err)
+	}
+	if err := db.Exec(`
+		CREATE TABLE company_scan_settings (
+			company_id TEXT PRIMARY KEY,
+			adapter_config TEXT
+		)
+	`).Error; err != nil {
+		t.Fatalf("create company_scan_settings: %v", err)
+	}
+	return db
+}
+
+// GetAdapterConfig returns the adapter config when the row exists.
+func TestScanSettingsRepositoryService_GetAdapterConfig_ReturnsConfig(t *testing.T) {
+	db := newScanSettingsDB(t)
+	cfg := `{"board_token":"tok"}`
+	if err := db.Exec("INSERT INTO company_scan_settings (company_id, adapter_config) VALUES (?, ?)", "co-1", cfg).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	reader := services.NewScanSettingsReader(db)
+	got, err := reader.GetAdapterConfig(context.Background(), "co-1")
+	if err != nil {
+		t.Fatalf("GetAdapterConfig() error = %v", err)
+	}
+	if got == nil || *got != cfg {
+		t.Errorf("GetAdapterConfig() = %v, want %q", got, cfg)
+	}
+}
+
+// GetAdapterConfig returns nil, nil when the company has no settings row.
+func TestScanSettingsRepositoryService_GetAdapterConfig_ReturnsNilOnMissing(t *testing.T) {
+	db := newScanSettingsDB(t)
+	reader := services.NewScanSettingsReader(db)
+	got, err := reader.GetAdapterConfig(context.Background(), "no-such-company")
+	if err != nil {
+		t.Fatalf("GetAdapterConfig() missing error = %v", err)
+	}
+	if got != nil {
+		t.Errorf("GetAdapterConfig() = %v, want nil", got)
+	}
+}
+
+// GetAdapterConfig wraps DB errors as ErrInternal.
+func TestScanSettingsRepositoryService_GetAdapterConfig_ErrInternalOnDBError(t *testing.T) {
+	db := newScanSettingsDB(t)
+	raw, _ := db.DB()
+	_ = raw.Close()
+	reader := services.NewScanSettingsReader(db)
+	_, err := reader.GetAdapterConfig(context.Background(), "co-1")
+	if err == nil {
+		t.Fatal("GetAdapterConfig() on closed DB expected error, got nil")
+	}
+}

@@ -343,3 +343,33 @@ func TestAssignmentRepositoryService_ResetStuckForNodes_ErrInternalOnDBError(t *
 		t.Fatal("ResetStuckForNodes() on closed DB expected error, got nil")
 	}
 }
+
+// ClaimNextForNode with empty adapterType must NOT include "AND adapter_type = ?" in the WHERE clause.
+func TestAssignmentRepositoryService_ClaimNextForNode_EmptyAdapterType_SQLShape(t *testing.T) {
+	db, cap := newAssignDryRunDB(t)
+	store := services.NewAssignmentRepositoryService(db)
+
+	_, _ = store.ClaimNextForNode(context.Background(), "node-1", "")
+
+	stmts := cap.statements()
+	if len(stmts) == 0 {
+		t.Fatal("ClaimNextForNode (empty adapter): no SQL emitted")
+	}
+	sql := strings.ToUpper(stmts[0])
+	// The RETURNING clause always mentions adapter_type; the WHERE clause must not.
+	if strings.Contains(sql, "AND ADAPTER_TYPE") {
+		t.Errorf("ClaimNextForNode (empty adapter) SQL must not filter on adapter_type in WHERE:\n%s", stmts[0])
+	}
+	if !strings.Contains(sql, "FOR UPDATE SKIP LOCKED") {
+		t.Errorf("ClaimNextForNode (empty adapter) SQL missing FOR UPDATE SKIP LOCKED:\n%s", stmts[0])
+	}
+}
+
+// ClaimNextForNode with empty adapterType must propagate DB errors.
+func TestAssignmentRepositoryService_ClaimNextForNode_EmptyAdapterType_ErrInternalOnDBError(t *testing.T) {
+	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t))
+	_, err := store.ClaimNextForNode(context.Background(), "node-1", "")
+	if err == nil {
+		t.Fatal("ClaimNextForNode (empty adapter, closed DB) expected error, got nil")
+	}
+}
