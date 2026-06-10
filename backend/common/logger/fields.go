@@ -70,6 +70,7 @@ const (
 	FieldPassThroughCount    = "pass_through_count"
 	FieldEntriesCount        = "entries_count"
 	FieldRetriedCount        = "retried_count"
+	FieldExhaustedCount      = "exhausted_count"
 	FieldPublishFailedCount  = "publish_failed_count"
 	FieldDLQedCount          = "dlqed_count"
 	FieldRetryAfter          = "retry_after"
@@ -89,6 +90,7 @@ const (
 	FieldCount               = "count"
 	FieldHasSettings         = "has_settings"
 	FieldActive              = "active"
+	FieldSweeperEnabled      = "sweeper_enabled"
 )
 
 // Str creates a string field.

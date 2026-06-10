@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats"
 	atstypes "github.com/trushilpatel/jobradar/apps/crawler/ats/types"
@@ -592,6 +595,61 @@ func TestFetchOne_CountryCodeUS_PassesThrough(t *testing.T) {
 	}
 }
 
+// TestFetchOne_LocationKnownNonUSA_AckFail_NoPanic verifies that when the
+// LocationKnown early-gate rejects a non-USA job AND msg.Ack() returns an
+// error, the worker logs a warning but does not panic. The job is still
+// rejected (ok=false).
+func TestFetchOne_LocationKnownNonUSA_AckFail_NoPanic(t *testing.T) {
+	w := makeWorker(&fakeScorer{}, &fakePipelineService{}, &fakePublisher{}, &fakeLedger{})
+
+	job := ats.RawJob{
+		ID:            "non-usa-ack-fail",
+		Adapter:       "workday",
+		Location:      "London, UK",
+		LocationKnown: true,
+	}
+	msg, state := makeTestMsg(t, job, 1)
+	state.AckErr = stderrors.New("nats ack error")
+
+	_, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+
+	if ok {
+		t.Errorf("fetchOne must return ok=false for non-USA LocationKnown job")
+	}
+	if !state.Acked {
+		t.Errorf("expected Ack to have been attempted")
+	}
+}
+
+// TestFetchOne_PostBackfillNonUSA_AckFail_NoPanic verifies that when the
+// post-backfill gate (Path B) rejects a non-USA job (string_match) AND
+// msg.Ack() returns an error, the worker does not panic.
+func TestFetchOne_PostBackfillNonUSA_AckFail_NoPanic(t *testing.T) {
+	w := makeWorker(&fakeScorer{}, &fakePipelineService{}, &fakePublisher{}, &fakeLedger{})
+	w.registryFn = func(_ string) (ats.Adapter, error) {
+		return &fakeContentFetcher{resp: ats.FetchJobContentResponse{
+			ID:       "str-match-ack-fail",
+			Location: "Tokyo, Japan",
+		}}, nil
+	}
+
+	job := ats.RawJob{
+		ID:      "str-match-ack-fail",
+		Adapter: "workday",
+	}
+	msg, state := makeTestMsg(t, job, 1)
+	state.AckErr = stderrors.New("nats ack error")
+
+	_, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+
+	if ok {
+		t.Errorf("fetchOne must return ok=false for non-USA string-match job")
+	}
+	if !state.Acked {
+		t.Errorf("expected Ack to have been attempted")
+	}
+}
+
 // fakeContentFetcher is a minimal Adapter+ContentFetcher that returns a
 // pre-programmed FetchJobContentResponse. Used to inject CountryCode in tests.
 type fakeContentFetcher struct {
@@ -618,7 +676,7 @@ func nonUSACount() float64 {
 type errTransport struct{}
 
 func (errTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
-	return nil, errors.New("transport boom")
+	return nil, stderrors.New("transport boom")
 }
 
 // badHTTPClient returns an *http.Client whose transport always fails. Used by
@@ -631,5 +689,93 @@ type countingTransport struct {
 
 func (c *countingTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
 	c.calls++
-	return nil, errors.New("transport boom")
+	return nil, stderrors.New("transport boom")
+}
+
+// ── AdapterRateLimiter unit tests ─────────────────────────────────────────────
+
+// TestAdapterRateLimiter_GetOrCreate_CachedReturnsSameLimiter verifies that
+// calling getOrCreate twice for the same adapter returns the same limiter
+// (the cached branch) without creating a duplicate. This covers the RLock
+// hit-path inside getOrCreate.
+func TestAdapterRateLimiter_GetOrCreate_CachedReturnsSameLimiter(t *testing.T) {
+	rl := NewAdapterRateLimiter(100.0, 10, 0, logger.NewNoop())
+	l1 := rl.getOrCreate("greenhouse")
+	l2 := rl.getOrCreate("greenhouse")
+	if l1 != l2 {
+		t.Error("expected the same limiter instance on second call (cached)")
+	}
+}
+
+// TestAdapterRateLimiter_Wait_Success verifies that Wait completes without
+// error for a high-RPS limiter (no wait) and that a second call reuses the
+// cached limiter.
+func TestAdapterRateLimiter_Wait_Success(t *testing.T) {
+	rl := NewAdapterRateLimiter(1000.0, 100, 0, logger.NewNoop())
+	if err := rl.Wait(context.Background(), "lever"); err != nil {
+		t.Errorf("Wait: unexpected error: %v", err)
+	}
+	// Second call hits the RLock cached path in getOrCreate.
+	if err := rl.Wait(context.Background(), "lever"); err != nil {
+		t.Errorf("Wait (cached): unexpected error: %v", err)
+	}
+}
+
+// TestAdapterRateLimiter_Wait_CtxCancelWhileWaiting verifies that Wait returns
+// the context error when the context is cancelled while the token-bucket is
+// exhausted.
+func TestAdapterRateLimiter_Wait_CtxCancelWhileWaiting(t *testing.T) {
+	// RPS=0.001 → very slow; burst=1 consumed immediately, second call waits.
+	rl := NewAdapterRateLimiter(0.001, 1, 0, logger.NewNoop())
+	_ = rl.Wait(context.Background(), "ashby") // consume the single burst token
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel before the second Wait
+	err := rl.Wait(ctx, "ashby")
+	if err == nil {
+		t.Error("expected context error, got nil")
+	}
+}
+
+// TestAdapterRateLimiter_Wait_JitterCtxCancel verifies that a jitter-phase
+// context cancellation returns ctx.Err() (not nil).
+func TestAdapterRateLimiter_Wait_JitterCtxCancel(t *testing.T) {
+	// Large jitter (10s) with an already-cancelled context. After token grant the
+	// jitter select should immediately hit ctx.Done().
+	rl := NewAdapterRateLimiter(1000.0, 100, 10*time.Second, logger.NewNoop())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := rl.Wait(ctx, "ashby")
+	if err == nil {
+		t.Error("expected context error from jitter phase, got nil")
+	}
+}
+
+// TestAdapterRateLimiter_GetOrCreate_ConcurrentSameAdapter verifies that when
+// multiple goroutines concurrently call getOrCreate for the same adapter, they
+// all receive a non-nil limiter and the double-check under the write-lock
+// (the "another goroutine may have raced us" path) is exercised.
+func TestAdapterRateLimiter_GetOrCreate_ConcurrentSameAdapter(t *testing.T) {
+	rl := NewAdapterRateLimiter(100.0, 10, 0, logger.NewNoop())
+	const goroutines = 50
+	results := make([]*rate.Limiter, goroutines)
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			results[i] = rl.getOrCreate("concurrent-adapter")
+		}()
+	}
+	wg.Wait()
+	first := results[0]
+	for i, l := range results {
+		if l == nil {
+			t.Errorf("goroutine %d got nil limiter", i)
+		}
+		if l != first {
+			t.Errorf("goroutine %d got different limiter instance (not idempotent)", i)
+		}
+	}
 }

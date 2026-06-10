@@ -486,6 +486,14 @@ func (s *repositoryService) GetEffectiveScanConfig(ctx context.Context, companyI
 	}, nil
 }
 
+// RetryDueJobs is a no-op on the repository service. The sweeper is implemented
+// directly on schedulerService, which never routes through the REST decorator
+// chain. This satisfies the Service interface so the REST + validation
+// decorators compile without adding sweeper logic to the HTTP path.
+func (s *repositoryService) RetryDueJobs(_ context.Context) error {
+	return nil
+}
+
 func (s *repositoryService) UpdateScanIntervalOverride(ctx context.Context, companyID string, override *int) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.repository.UpdateScanIntervalOverride")
 	defer tracing.End(span, &err)

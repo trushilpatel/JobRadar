@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -21,6 +22,28 @@ type RetryLedgerEntry struct {
 	JobID         string
 	RetryCount    int
 	NextAttemptAt time.Time
+}
+
+// RetryLedgerEntryWithPayload is a per-job retry state update that also
+// persists the serialized RawJob payload and the adapter name to the ledger.
+// Used by UpdateRetryBatchWithPayload so the sweeper can re-publish the
+// original job payload without needing to re-fetch it from the source.
+type RetryLedgerEntryWithPayload struct {
+	JobID         string
+	Adapter       string
+	Payload       json.RawMessage
+	RetryCount    int
+	NextAttemptAt time.Time
+}
+
+// RetryJobRecord is returned by FetchDueRetryJobs. It carries everything
+// the sweeper needs to re-publish the job without touching the original
+// NATS message.
+type RetryJobRecord struct {
+	JobID      string
+	Adapter    string
+	Payload    json.RawMessage
+	RetryCount int
 }
 
 // seenLedgerStore is the GORM-backed terminal repo for the
@@ -156,6 +179,95 @@ func (s *seenLedgerStore) UpdateRetryBatch(ctx context.Context, entries []RetryL
 		return domainerrs.ErrLedgerRowMissing.WithMessage(
 			fmt.Sprintf("UpdateRetryBatch: %d of %d ledger rows missing",
 				int64(len(entries))-res.RowsAffected, len(entries)))
+	}
+	return nil
+}
+
+func (s *seenLedgerStore) UpdateRetryBatchWithPayload(ctx context.Context, entries []RetryLedgerEntryWithPayload) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.UpdateRetryBatchWithPayload")
+	defer tracing.End(span, &err)
+	if len(entries) == 0 {
+		return nil
+	}
+
+	valuesClauses := make([]string, 0, len(entries))
+	args := make([]any, 0, len(entries)*5)
+	for i, e := range entries {
+		base := i * 5
+		valuesClauses = append(valuesClauses, fmt.Sprintf(
+			"($%d, $%d::int, $%d::timestamptz, $%d::jsonb, $%d)",
+			base+1, base+2, base+3, base+4, base+5,
+		))
+		args = append(args, e.JobID, e.RetryCount, e.NextAttemptAt, []byte(e.Payload), e.Adapter)
+	}
+
+	query := "UPDATE job_pipeline_ledger AS l " +
+		"SET reason = '" + string(jobcommon.SeenReasonRetry) + "', retry_count = v.retry_count, next_attempt_at = v.next_attempt_at, payload = v.payload, adapter = v.adapter " +
+		"FROM (VALUES " + strings.Join(valuesClauses, ",") + ") " +
+		"AS v(job_id, retry_count, next_attempt_at, payload, adapter) " +
+		"WHERE l.job_id = v.job_id"
+
+	res := s.db.WithContext(ctx).Exec(query, args...)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected < int64(len(entries)) {
+		return domainerrs.ErrLedgerRowMissing.WithMessage(
+			fmt.Sprintf("UpdateRetryBatchWithPayload: %d of %d ledger rows missing",
+				int64(len(entries))-res.RowsAffected, len(entries)))
+	}
+	return nil
+}
+
+func (s *seenLedgerStore) FetchDueRetryJobs(ctx context.Context, limit int) (_ []RetryJobRecord, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.FetchDueRetryJobs")
+	defer tracing.End(span, &err)
+	var rows []RetryJobRecord
+	res := s.db.WithContext(ctx).Raw(`
+		SELECT job_id, COALESCE(adapter, '') AS adapter, payload, retry_count
+		FROM job_pipeline_ledger
+		WHERE reason = ? AND next_attempt_at <= CURRENT_TIMESTAMP
+		ORDER BY next_attempt_at ASC
+		LIMIT ?
+	`, string(jobcommon.SeenReasonRetry), limit).Scan(&rows)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	return rows, nil
+}
+
+func (s *seenLedgerStore) ResetRetryToFetch(ctx context.Context, jobID string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.ResetRetryToFetch")
+	defer tracing.End(span, &err)
+	res := s.db.WithContext(ctx).Exec(`
+		UPDATE job_pipeline_ledger
+		SET reason = ?, payload = NULL, adapter = NULL, next_attempt_at = NULL
+		WHERE job_id = ?
+	`, string(jobcommon.SeenReasonFetch), jobID)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domainerrs.ErrLedgerRowMissing.WithMessage(
+			fmt.Sprintf("ResetRetryToFetch: no ledger row for job_id=%s", jobID))
+	}
+	return nil
+}
+
+func (s *seenLedgerStore) EscalateRetryToError(ctx context.Context, jobID string) (err error) {
+	ctx, span := tracing.Start(ctx, "job.store.EscalateRetryToError")
+	defer tracing.End(span, &err)
+	res := s.db.WithContext(ctx).Exec(`
+		UPDATE job_pipeline_ledger
+		SET reason = ?
+		WHERE job_id = ? AND reason = ?
+	`, string(jobcommon.SeenReasonError), jobID, string(jobcommon.SeenReasonRetry))
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domainerrs.ErrLedgerRowMissing.WithMessage(
+			fmt.Sprintf("EscalateRetryToError: no retry ledger row for job_id=%s", jobID))
 	}
 	return nil
 }

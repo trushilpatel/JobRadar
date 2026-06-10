@@ -27,6 +27,10 @@ type SchedulerService interface {
 	// PurgeInactive removes queued (not processing) entries for companies that
 	// have been deactivated since they were enqueued. Returns number of rows removed.
 	PurgeInactive(ctx context.Context) (int, error)
+	// RetryDueJobs fetches ledger rows in reason='retry' whose next_attempt_at
+	// is due, then re-publishes them to jobs.raw.{adapter} or escalates to
+	// reason='error' when the retry budget is exhausted.
+	RetryDueJobs(ctx context.Context) error
 }
 
 // Service defines all business operations for the scan domain.
@@ -39,6 +43,8 @@ type Service interface {
 	// expired. Returns the count of rows recovered — zero is not an error.
 	ResetStuck(ctx context.Context, staleDur time.Duration) (int, error)
 	PurgeInactive(ctx context.Context) (int, error)
+	// RetryDueJobs re-publishes due retry-ledger jobs or escalates them.
+	RetryDueJobs(ctx context.Context) error
 	TriggerScan(ctx context.Context, companyID string) error
 	TriggerScanAll(ctx context.Context) (int, error)
 	GetStats(ctx context.Context, companyID string) (*dto.ScanStatsView, error)
@@ -78,6 +84,10 @@ func (b *BaseService) ResetStuck(ctx context.Context, staleDur time.Duration) (i
 
 func (b *BaseService) PurgeInactive(ctx context.Context) (int, error) {
 	return b.next.PurgeInactive(ctx)
+}
+
+func (b *BaseService) RetryDueJobs(ctx context.Context) error {
+	return b.next.RetryDueJobs(ctx)
 }
 
 func (b *BaseService) TriggerScan(ctx context.Context, companyID string) error {

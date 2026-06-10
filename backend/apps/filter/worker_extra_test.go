@@ -224,6 +224,9 @@ func TestProcessChunk_PassThroughMixed(t *testing.T) {
 
 // ── LLMAllExhaustedError logging path ───────────────────────────────────────
 
+// TestProcessChunk_LLMExhaustedLogsAndRetries verifies that LLMAllExhaustedError
+// routes through the exhaustion path: Term (not Nak) and payload-bearing ledger
+// entry written via UpdateRetryBatchWithPayload (not UpdateRetryBatch).
 func TestProcessChunk_LLMExhaustedLogsAndRetries(t *testing.T) {
 	retryAfter := time.Date(2026, 4, 22, 13, 0, 0, 0, time.UTC)
 	cd := time.Date(2026, 4, 22, 12, 30, 0, 0, time.UTC)
@@ -244,15 +247,31 @@ func TestProcessChunk_LLMExhaustedLogsAndRetries(t *testing.T) {
 	item, state := makeChunkItem(makeJob("job-1"), 1)
 	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
 
-	// Exhausted is treated as a transient error → retry via Nak.
-	if !state.Naked {
-		t.Errorf("expected job Nak'd on LLM exhausted error")
+	// Exhaustion path → Term (permanent), NOT Nak (redelivery).
+	if !state.Termed {
+		t.Errorf("expected job Term'd on LLM exhausted error")
 	}
-	if len(ledger.retryBatches) != 1 || ledger.retryBatches[0][0].RetryCount != 1 {
-		t.Errorf("expected retry ledger entry retry_count=1, got %+v", ledger.retryBatches)
+	if state.Naked {
+		t.Errorf("exhaustion path must NOT Nak")
+	}
+	// Payload-bearing ledger entry, NOT infra retry entry.
+	if len(ledger.retryBatchesWithPayload) != 1 || len(ledger.retryBatchesWithPayload[0]) != 1 {
+		t.Errorf("expected 1 UpdateRetryBatchWithPayload entry, got retryBatchesWithPayload=%v retryBatches=%v",
+			ledger.retryBatchesWithPayload, ledger.retryBatches)
+	}
+	if len(ledger.retryBatches) != 0 {
+		t.Errorf("UpdateRetryBatch must not be called on exhaustion path, got %v", ledger.retryBatches)
+	}
+	if len(ledger.retryBatchesWithPayload) == 1 {
+		e := ledger.retryBatchesWithPayload[0][0]
+		if !e.NextAttemptAt.Equal(retryAfter) {
+			t.Errorf("next_attempt_at = %v, want %v", e.NextAttemptAt, retryAfter)
+		}
 	}
 }
 
+// TestProcessChunk_LLMExhaustedZeroRetryAfter verifies zero RetryAfter falls
+// back to filterBackOff[0] and still uses Term + UpdateRetryBatchWithPayload.
 func TestProcessChunk_LLMExhaustedZeroRetryAfter(t *testing.T) {
 	// Zero RetryAfter time skips the retry_after log fields but path still works.
 	scoreErr := &domainerr.LLMAllExhaustedError{}
@@ -260,17 +279,31 @@ func TestProcessChunk_LLMExhaustedZeroRetryAfter(t *testing.T) {
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 
+	now := time.Now()
 	w := makeWorker(scorer, ledger, pub)
-	w.clock = &fakeClock{now: time.Now()}
+	w.clock = &fakeClock{now: now}
 
 	item, state := makeChunkItem(makeJob("job-1"), 1)
 	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
 
-	if !state.Naked {
-		t.Errorf("expected job Nak'd")
+	if !state.Termed {
+		t.Errorf("expected job Term'd on zero RetryAfter exhaustion path")
 	}
-	if len(ledger.retryBatches) != 1 {
-		t.Errorf("expected retry ledger entry")
+	if state.Naked {
+		t.Errorf("exhaustion path must NOT Nak")
+	}
+	if len(ledger.retryBatchesWithPayload) != 1 {
+		t.Errorf("expected 1 UpdateRetryBatchWithPayload call, got %d", len(ledger.retryBatchesWithPayload))
+	}
+	if len(ledger.retryBatches) != 0 {
+		t.Errorf("UpdateRetryBatch must not be called on exhaustion path")
+	}
+	if len(ledger.retryBatchesWithPayload) == 1 {
+		want := now.Add(filterBackOff[0])
+		e := ledger.retryBatchesWithPayload[0][0]
+		if !e.NextAttemptAt.Equal(want) {
+			t.Errorf("next_attempt_at = %v, want filterBackOff[0]=%v", e.NextAttemptAt, want)
+		}
 	}
 }
 
@@ -530,6 +563,10 @@ func (o *orderingLedger) UpdateRetryBatch(_ context.Context, entries []jobsvc.Re
 	o.mu.Lock()
 	o.retryBatches = append(o.retryBatches, dup)
 	o.mu.Unlock()
+	return nil
+}
+
+func (o *orderingLedger) UpdateRetryBatchWithPayload(_ context.Context, _ []jobsvc.RetryLedgerEntryWithPayload) error {
 	return nil
 }
 

@@ -36,6 +36,7 @@ func (n *noopService) GetEffectiveScanConfig(_ context.Context, _ string) (dto.E
 func (n *noopService) UpdateScanIntervalOverride(_ context.Context, _ string, _ *int) error {
 	return nil
 }
+func (n *noopService) RetryDueJobs(_ context.Context) error { return nil }
 
 var _ svc.Service = (*noopService)(nil)
 

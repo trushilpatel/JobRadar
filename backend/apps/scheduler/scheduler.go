@@ -90,6 +90,11 @@ func runCycle(ctx context.Context, log logger.Logger, svc SchedulerService, inte
 		log.Info("purged inactive company queue entries", logger.Int(logger.FieldPurged, purged))
 	}
 
+	if rerr := svc.RetryDueJobs(ctx); rerr != nil {
+		metrics.SchedulerErrorsTotal.WithLabelValues("retry_due_jobs").Inc()
+		log.Error("retry due jobs failed", rerr)
+	}
+
 	res, err := svc.EnqueueDue(ctx, intervalMinutes)
 	if err != nil {
 		metrics.SchedulerErrorsTotal.WithLabelValues("enqueue_due").Inc()
