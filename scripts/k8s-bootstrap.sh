@@ -17,16 +17,37 @@ fail() { echo -e "${RED}  ✗${NC} $*"; ERRORS=$((ERRORS + 1)); }
 
 ERRORS=0
 
-# Read a value from .env by key name — handles quoted and unquoted values.
+# ── 0. Fetch secrets from Doppler ─────────────────────────────────────────────
+# All secrets live in Doppler (job-radar / dev). We download them once to a
+# temp file and clean up on exit — nothing sensitive ever touches disk long-term.
+DOPPLER_CONFIG="${DOPPLER_CONFIG:-dev}"
+DOPPLER_ENV="$(mktemp)"
+trap "rm -f '$DOPPLER_ENV'" EXIT
+
+echo -e "\n${BOLD}[0/5] Fetching secrets from Doppler (job-radar / $DOPPLER_CONFIG)${NC}"
+if ! command -v doppler >/dev/null 2>&1; then
+  echo -e "${RED}  ✗ doppler CLI not found.${NC} Install: https://docs.doppler.com/docs/install-cli"
+  exit 1
+fi
+if ! doppler secrets download \
+    --project job-radar \
+    --config "$DOPPLER_CONFIG" \
+    --format env-no-quotes \
+    --no-file > "$DOPPLER_ENV" 2>/dev/null; then
+  echo -e "${RED}  ✗ Doppler fetch failed.${NC} Run: doppler login"
+  exit 1
+fi
+ok "Secrets downloaded ($(wc -l < "$DOPPLER_ENV") vars)"
+
+# Read a value from the Doppler env snapshot.
 env_val() {
   local key="$1"
-  grep -E "^${key}=" "$REPO_ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'"
+  grep -E "^${key}=" "$DOPPLER_ENV" 2>/dev/null | head -1 | cut -d= -f2-
 }
 
 # ── 1. Required files ─────────────────────────────────────────────────────────
 echo -e "\n${BOLD}[1/5] Checking required files${NC}"
 
-ENV_FILE="$REPO_ROOT/.env"
 CREDS_FILE="$REPO_ROOT/secrets/jobradar_NATS.creds"
 VALUES_LOCAL="$REPO_ROOT/k8s/helm/jobradar/values.local.yaml"
 
@@ -41,12 +62,11 @@ check_file() {
   fi
 }
 
-check_file "$ENV_FILE"     ".env"
 check_file "$CREDS_FILE"   "secrets/jobradar_NATS.creds"
 check_file "$VALUES_LOCAL" "k8s/helm/jobradar/values.local.yaml"
 
-# ── 2. Required env vars in .env ──────────────────────────────────────────────
-echo -e "\n${BOLD}[2/5] Checking required env vars in .env${NC}"
+# ── 2. Required secrets in Doppler ────────────────────────────────────────────
+echo -e "\n${BOLD}[2/5] Checking required secrets in Doppler${NC}"
 
 REQUIRED_VARS=(
   DB_HOST
@@ -64,7 +84,7 @@ REQUIRED_VARS=(
 for var in "${REQUIRED_VARS[@]}"; do
   val="$(env_val "$var")"
   if [ -z "$val" ]; then
-    fail "$var is not set in .env"
+    fail "$var is not set in Doppler (job-radar / $DOPPLER_CONFIG)"
   else
     ok "$var"
   fi
@@ -74,9 +94,9 @@ done
 JWKS="$(env_val SUPABASE_JWKS_URL)"
 JWT="$(env_val SUPABASE_JWT_SECRET)"
 if [ -n "$JWKS" ] && [ -n "$JWT" ]; then
-  fail "Both SUPABASE_JWKS_URL and SUPABASE_JWT_SECRET are set in .env — only one is allowed"
+  fail "Both SUPABASE_JWKS_URL and SUPABASE_JWT_SECRET are set in Doppler — only one is allowed"
 elif [ -z "$JWKS" ] && [ -z "$JWT" ]; then
-  fail "Neither SUPABASE_JWKS_URL nor SUPABASE_JWT_SECRET is set in .env — one is required"
+  fail "Neither SUPABASE_JWKS_URL nor SUPABASE_JWT_SECRET is set in Doppler — one is required"
 else
   ok "Supabase auth (${JWKS:+SUPABASE_JWKS_URL}${JWT:+SUPABASE_JWT_SECRET})"
 fi
