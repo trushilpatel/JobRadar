@@ -1,10 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="JobRadar">
   <title>JobRadar</title>
-  <rect width="512" height="512" fill="#0d0d14"/>
-  <g fill="none" stroke="#F8FAFC" stroke-linecap="round" stroke-linejoin="round" transform="translate(106 106) scale(6.25)">
+  <style>
+    :root { color: #0F172A; }
+    .bg { fill: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      :root { color: #F8FAFC; }
+      .bg { fill: #0d0d14; }
+    }
+  </style>
+  <rect class="bg" width="512" height="512"/>
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" transform="translate(106 106) scale(6.25)">
     <circle cx="24" cy="24" r="20" stroke-width="1.75"/>
     <circle cx="24" cy="24" r="11" stroke-width="1.75" opacity="0.45"/>
     <line x1="24" y1="24" x2="38" y2="14" stroke-width="1.75"/>
-    <circle cx="38" cy="14" r="3" fill="#F8FAFC" stroke="none"/>
+    <circle cx="38" cy="14" r="3" fill="currentColor" stroke="none"/>
   </g>
 </svg>

@@ -55,7 +55,7 @@ function DesktopTabs({
       className="flex items-end"
       data-testid="job-status-tabs-desktop"
     >
-      <TabsList className="flex h-auto items-end gap-0.5 bg-transparent p-0 text-muted dark:bg-transparent dark:text-muted">
+      <TabsList className="flex h-auto items-end gap-0.5 bg-transparent p-0 text-muted">
         {TABS.map((t) => {
           const active = tab === t.key
           const count = counts[t.key]
@@ -67,8 +67,7 @@ function DesktopTabs({
                 'rounded-none rounded-t-lg border-b-2 -mb-px px-4 py-2 text-sm font-medium transition-colors',
                 'shadow-none ring-offset-transparent focus-visible:ring-violet-500',
                 'data-[state=inactive]:border-transparent data-[state=inactive]:text-muted data-[state=inactive]:hover:text-primary data-[state=inactive]:hover:bg-hover',
-                'data-[state=active]:text-violet-300 data-[state=active]:border-violet-500 data-[state=active]:bg-violet-500/5 data-[state=active]:shadow-none',
-                'dark:data-[state=active]:bg-violet-500/5 dark:data-[state=active]:text-violet-300'
+                'data-[state=active]:text-violet-300 data-[state=active]:border-violet-500 data-[state=active]:bg-violet-500/5 data-[state=active]:shadow-none'
               )}
             >
               {t.label}

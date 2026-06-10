@@ -107,7 +107,7 @@ export function Sidebar() {
       >
         {!collapsed && (
           <div className="flex items-center gap-2">
-            <LogoLockup className="text-white" />
+            <LogoLockup className="text-sidebar-fg" />
             <span className="text-xs text-violet-400 font-medium">beta</span>
           </div>
         )}
