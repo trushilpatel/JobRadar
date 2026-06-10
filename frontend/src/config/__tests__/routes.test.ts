@@ -5,7 +5,6 @@ describe('routes — static top-level', () => {
   it.each([
     [routes.dashboard(), '/dashboard'],
     [routes.insights(), '/insights'],
-    [routes.settings(), '/settings'],
     [routes.account(), '/account'],
     [routes.login(), '/login'],
     [routes.resumeLibrary(), '/admin/resumes'],
@@ -13,6 +12,7 @@ describe('routes — static top-level', () => {
     [routes.adminCompanies(), '/admin/companies'],
     [routes.adminUsers(), '/admin/users'],
     [routes.adminAudit(), '/admin/audit'],
+    [routes.adminPipeline(), '/admin/pipeline'],
   ])('returns %s', (actual, expected) => {
     expect(actual).toBe(expected)
   })
