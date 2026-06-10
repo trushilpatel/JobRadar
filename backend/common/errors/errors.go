@@ -149,6 +149,14 @@ var (
 	// it as non-fatal — and is never serialised to a user-facing API. Status 200
 	// reflects "no error from the client's perspective".
 	ErrJobAlreadyExists = &ServiceError{Code: "JOB_DUPLICATE", Status: 200, InternalMessage: "job already exists for job_post_id"}
+
+	// ErrNodeUnauthorized is returned by RequireNodeToken when the Bearer token
+	// does not match any active crawler node (missing, malformed, or HMAC mismatch).
+	ErrNodeUnauthorized = &ServiceError{Code: "NODE_UNAUTHORIZED", Status: 401, ExternalMessage: "invalid or missing node token"}
+
+	// ErrNodeDisabled is returned by RequireNodeToken when the node's token is
+	// valid but the node status is not 'active' (disabled or retired).
+	ErrNodeDisabled = &ServiceError{Code: "NODE_DISABLED", Status: 403, ExternalMessage: "node is not active"}
 )
 
 // LLMSlotStatus is the public shape of slot state at exhaustion time.

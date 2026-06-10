@@ -329,14 +329,14 @@ export function AddCompanyModal({
     <Dialog.Root open={open} onOpenChange={(v) => !v && handleClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-[#13131a] border border-white/10 rounded-xl shadow-2xl p-6">
+        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-panel border border-[var(--border-strong)] rounded-xl shadow-2xl p-6">
           <div className="flex items-center justify-between mb-6">
-            <Dialog.Title className="text-lg font-semibold text-white">
+            <Dialog.Title className="text-lg font-semibold text-primary">
               {isEdit ? 'Edit Company' : 'Add Company'}
             </Dialog.Title>
             <button
               onClick={handleClose}
-              className="text-slate-400 hover:text-white transition-colors"
+              className="text-muted hover:text-primary transition-colors"
             >
               <X size={18} />
             </button>
@@ -440,8 +440,8 @@ export function AddCompanyModal({
                   className={cn(
                     inputClass,
                     'pr-9',
-                    hasTemplate && !urlManuallyEdited && form.website && 'text-slate-400',
-                    isWorkday && 'text-slate-400 cursor-not-allowed'
+                    hasTemplate && !urlManuallyEdited && form.website && 'text-muted',
+                    isWorkday && 'text-muted cursor-not-allowed'
                   )}
                 />
                 <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
@@ -470,7 +470,7 @@ export function AddCompanyModal({
                       rel="noreferrer"
                       tabIndex={-1}
                       title="Open URL"
-                      className="text-slate-500 hover:text-violet-400 transition-colors"
+                      className="text-muted hover:text-violet-400 transition-colors"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <ExternalLink size={13} />
@@ -492,7 +492,7 @@ export function AddCompanyModal({
             </Field>
 
             <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-300">Start scanning immediately</span>
+              <span className="text-sm text-secondary">Start scanning immediately</span>
               <button
                 type="button"
                 role="switch"
@@ -547,7 +547,7 @@ export function AddCompanyModal({
               <button
                 type="button"
                 onClick={handleClose}
-                className={cn(btnBase, 'flex-1 bg-white/5 hover:bg-white/10 text-slate-300')}
+                className={cn(btnBase, 'flex-1 bg-subtle hover:bg-hover text-secondary')}
               >
                 Cancel
               </button>
@@ -586,9 +586,9 @@ function Field({
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-sm font-medium text-slate-300">
+      <label className="text-sm font-medium text-secondary">
         {label}
-        {hint && <span className="ml-2 text-xs text-slate-500">{hint}</span>}
+        {hint && <span className="ml-2 text-xs text-muted">{hint}</span>}
       </label>
       {children}
     </div>
@@ -596,6 +596,6 @@ function Field({
 }
 
 const inputClass =
-  'w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-colors'
+  'w-full bg-subtle border border-[var(--border-strong)] rounded-lg px-3 py-2 text-sm text-primary placeholder:text-placeholder focus:outline-none focus:border-violet-500 transition-colors'
 const btnBase =
   'px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:cursor-not-allowed'

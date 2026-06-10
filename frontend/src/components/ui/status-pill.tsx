@@ -31,8 +31,8 @@ const CONFIG: Record<StatusKind, { text: string; cls: string; dot: string; pulse
     dot: 'bg-amber-500',
   },
   pending: {
-    text: 'Never',
-    cls: 'text-slate-400 bg-white/[0.05] border-white/[0.08]',
+    text: 'Not scanned',
+    cls: 'text-muted bg-subtle border-[var(--border)]',
     dot: 'bg-slate-500',
   },
 }

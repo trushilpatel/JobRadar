@@ -76,7 +76,7 @@ func TestMapJobPost_AllFields(t *testing.T) {
 			Name string `json:"name"`
 		}{Name: "San Francisco, CA"},
 		AbsoluteURL: "https://job-boards.greenhouse.io/stripe/jobs/12345",
-		Content:     "<p>Join our team.</p>",
+		Content:     "<p>Join our team &amp; build great things.</p>",
 		Departments: []struct {
 			Name string `json:"name"`
 		}{{Name: "Engineering"}},
@@ -94,13 +94,21 @@ func TestMapJobPost_AllFields(t *testing.T) {
 		Title:         "Backend Engineer",
 		Location:      "San Francisco, CA",
 		URL:           "https://job-boards.greenhouse.io/stripe/jobs/12345",
-		Description:   "<p>Join our team.</p>",
+		Description:   "Join our team & build great things.",
 		Department:    "Engineering",
 		Compensation:  "$50000 – $75000 USD",
 		PublishedDate: "2024-01-15T10:00:00Z",
 	}
 	if got := mapJobPost(input); got != want {
 		t.Errorf("mapJobPost:\n got  %+v\n want %+v", got, want)
+	}
+}
+
+func TestMapJobPost_DescriptionStripsHTML(t *testing.T) {
+	input := ghapi.JobPost{ID: 1, Content: "<h2>Role</h2><ul><li>Write code</li></ul><p>Pay: &gt;$100k</p>"}
+	got := mapJobPost(input)
+	if got.Description != "Role Write code Pay: >$100k" {
+		t.Errorf("Description = %q, want plain text", got.Description)
 	}
 }
 

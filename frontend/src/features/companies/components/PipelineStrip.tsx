@@ -25,7 +25,7 @@ function Stage({
       <span
         className={cn(
           'text-[10px] uppercase tracking-[0.08em] mt-0.5 text-center',
-          value === 0 ? 'text-slate-700' : 'text-slate-500'
+          value === 0 ? 'text-slate-700' : 'text-muted'
         )}
       >
         {label.split(' ').map((word, i) => (
@@ -39,7 +39,7 @@ function Stage({
 }
 
 function Arrow() {
-  return <span className="text-slate-600 text-sm px-1.5 select-none">→</span>
+  return <span className="text-placeholder text-sm px-1.5 select-none">→</span>
 }
 
 function Skeleton() {
@@ -47,7 +47,7 @@ function Skeleton() {
     <div className="flex items-center gap-2 animate-pulse">
       {Array.from({ length: 9 }, (_, i) => (
         <div key={i} className="flex items-center gap-1">
-          <div className="w-14 h-8 bg-white/[0.04] rounded" />
+          <div className="w-14 h-8 bg-subtle rounded" />
           {i < 8 && <div className="w-4 h-3 bg-white/[0.02] rounded" />}
         </div>
       ))}
@@ -61,7 +61,7 @@ export function PipelineStrip() {
   if (isLoading) return <Skeleton />
   if (isError || !data) {
     return (
-      <div className="flex items-center gap-2 text-xs text-slate-500">
+      <div className="flex items-center gap-2 text-xs text-muted">
         <AlertCircle size={13} className="text-red-400/70" />
         Pipeline stats unavailable
       </div>

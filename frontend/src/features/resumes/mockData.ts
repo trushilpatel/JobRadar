@@ -519,3 +519,9 @@ export function getMockJob(id: string): ApplyQueueItem['job'] | undefined {
 export function getMockAttachmentForJob(jobId: string): ResumeJobAttachment | null {
   return [...MOCK_ATTACHMENTS, ...EXTRA_ATTACHMENTS].find((a) => a.job_id === jobId) ?? null
 }
+
+// All attachments across both mock datasets — used by useResume to surface the
+// full attachment list on the resume detail page.
+export function getAllMockAttachments(): ResumeJobAttachment[] {
+  return [...MOCK_ATTACHMENTS, ...EXTRA_ATTACHMENTS]
+}

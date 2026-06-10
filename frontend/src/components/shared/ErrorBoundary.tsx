@@ -23,7 +23,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         this.props.fallback ?? (
-          <div className="rounded-xl border border-white/[0.07] bg-white/[0.04] p-5 text-sm text-slate-500">
+          <div className="rounded-xl border border-[var(--border)] bg-subtle p-5 text-sm text-muted">
             Something went wrong loading this panel.
           </div>
         )

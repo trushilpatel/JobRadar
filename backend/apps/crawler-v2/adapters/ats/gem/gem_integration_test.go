@@ -1,3 +1,5 @@
+//go:build integration
+
 package gem
 
 // Integration tests — hit the real Gem public Job Board API.

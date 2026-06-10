@@ -61,7 +61,7 @@ export function JobShortcutSheet({ open, onOpenChange }: JobShortcutSheetProps) 
                 key={category}
                 className={cn('border-t border-slate-800 pt-4 first:border-t-0 first:pt-0')}
               >
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
                   {title}
                 </h3>
                 <dl className="space-y-2">
@@ -73,7 +73,7 @@ export function JobShortcutSheet({ open, onOpenChange }: JobShortcutSheetProps) 
                       <dt className="flex items-center gap-2">
                         {renderKeys(JOB_COMMANDS[id].keys)}
                       </dt>
-                      <dd className="text-sm text-slate-300">{JOB_COMMANDS[id].label}</dd>
+                      <dd className="text-sm text-secondary">{JOB_COMMANDS[id].label}</dd>
                     </div>
                   ))}
                 </dl>

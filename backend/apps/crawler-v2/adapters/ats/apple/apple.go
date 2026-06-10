@@ -72,7 +72,7 @@ func (a *Apple) FetchJobListing(ctx context.Context, _ string) (core.JobListing,
 
 		pageJobs, err := a.fetchListingPage(ctx, page)
 		if err != nil {
-			log.Error("listing page fetch failed", err, logger.Int("page", page))
+			log.Error("listing page fetch failed", err, logger.Int(logger.FieldPage, page))
 			return core.JobListing{}, fmt.Errorf("apple: fetch page %d: %w", page, err)
 		}
 		if len(pageJobs) == 0 {
@@ -84,7 +84,7 @@ func (a *Apple) FetchJobListing(ctx context.Context, _ string) (core.JobListing,
 
 	log.Info("listing fetched",
 		logger.Int(logger.FieldJobCount, len(allJobs)),
-		logger.Int("pages", page-1),
+		logger.Int(logger.FieldTotalPages, page-1),
 		logger.Dur(logger.FieldDuration, time.Since(start)),
 	)
 	return core.JobListing{Jobs: allJobs}, nil

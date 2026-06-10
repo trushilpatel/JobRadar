@@ -1,3 +1,5 @@
+//go:build integration
+
 package workday
 
 // Integration tests — hit the real Workday CXS public API.

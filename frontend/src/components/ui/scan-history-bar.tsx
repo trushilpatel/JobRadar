@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils/utils'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export type HistoryPoint = 'ok' | 'err' | 'run' | 'idle'
 
@@ -23,12 +24,21 @@ const TITLE: Record<HistoryPoint, string> = {
 
 export function ScanHistoryBar({ history, className }: ScanHistoryBarProps) {
   if (!history.length) {
-    return <span className="text-[10px] text-slate-600">—</span>
+    return <span className="text-[10px] text-placeholder">—</span>
   }
   return (
-    <div className={cn('inline-flex gap-0.5', className)}>
+    <div
+      role="img"
+      aria-label={`Last ${history.length} scans`}
+      className={cn('inline-flex gap-0.5', className)}
+    >
       {history.map((p, i) => (
-        <span key={i} title={TITLE[p]} className={cn('w-[6px] h-4 rounded-sm', BAR_CLASS[p])} />
+        <Tooltip key={i}>
+          <TooltipTrigger asChild>
+            <span className={cn('w-[6px] h-4 rounded-sm', BAR_CLASS[p])} />
+          </TooltipTrigger>
+          <TooltipContent>{TITLE[p]}</TooltipContent>
+        </Tooltip>
       ))}
     </div>
   )

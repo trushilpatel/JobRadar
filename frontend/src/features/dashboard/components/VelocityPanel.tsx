@@ -7,7 +7,7 @@ import { dashboardQueryKeys } from '../queryKeys'
 const BADGE: Record<string, string> = {
   spike: 'bg-amber-500/15 text-amber-400',
   rising: 'bg-emerald-500/15 text-emerald-400',
-  normal: 'bg-white/[0.06] text-slate-400',
+  normal: 'bg-subtle text-muted',
 }
 
 function Sparkline({ row }: { row: CompanyVelocityRow }) {
@@ -46,12 +46,12 @@ export function VelocityPanel() {
   })
 
   return (
-    <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-5">
-      <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-slate-500 mb-4">
+    <div className="bg-subtle border border-[var(--border)] rounded-xl p-5">
+      <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-muted mb-4">
         top companies by velocity
       </p>
 
-      <div className="grid text-[10px] text-slate-500 pb-2 border-b border-white/[0.05] [grid-template-columns:1fr_60px_50px_36px] gap-3">
+      <div className="grid text-[10px] text-muted pb-2 border-b border-[var(--border)] [grid-template-columns:1fr_60px_50px_36px] gap-3">
         <span>company</span>
         <span>velocity</span>
         <span className="text-center">4 weeks</span>
@@ -61,13 +61,13 @@ export function VelocityPanel() {
       {isLoading ? (
         <div className="space-y-3 mt-2 animate-pulse">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-8 bg-white/[0.04] rounded-lg" />
+            <div key={i} className="h-8 bg-subtle rounded-lg" />
           ))}
         </div>
       ) : isError ? (
-        <p className="text-sm text-slate-500 py-4">Failed to load velocity data</p>
+        <p className="text-sm text-muted py-4">Failed to load velocity data</p>
       ) : !rows || rows.length === 0 ? (
-        <p className="text-sm text-slate-600 py-4">No velocity data yet</p>
+        <p className="text-sm text-placeholder py-4">No velocity data yet</p>
       ) : (
         <div>
           {rows.map((row, i) => (
@@ -75,10 +75,10 @@ export function VelocityPanel() {
               key={row.company_id}
               className={cn(
                 'grid items-center py-2.5 [grid-template-columns:1fr_60px_50px_36px] gap-3',
-                i < rows.length - 1 && 'border-b border-white/[0.05]'
+                i < rows.length - 1 && 'border-b border-[var(--border)]'
               )}
             >
-              <span className="text-[13px] font-medium text-white truncate">
+              <span className="text-[13px] font-medium text-primary truncate">
                 {row.company_name}
               </span>
               <span
@@ -93,7 +93,11 @@ export function VelocityPanel() {
                 <Sparkline row={row} />
               </div>
               <span className="text-[13px] font-medium text-emerald-400 text-right tabular-nums">
-                +{row.week_current}
+                {row.week_current > 0
+                  ? `+${row.week_current}`
+                  : row.week_current === 0
+                    ? '—'
+                    : row.week_current}
               </span>
             </div>
           ))}

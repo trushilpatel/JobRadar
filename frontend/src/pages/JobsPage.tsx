@@ -20,16 +20,14 @@ import {
   JobShortcutSheet,
 } from '@/features/jobs'
 import { JobResumeSection } from '@/pages/jobs/JobResumeSection'
-// TODO: replace with real useJobAttachment(jobId) hook once backend is wired
-import { getMockAttachmentForJob } from '@/features/resumes'
 import { useIsMobile } from '@/lib/hooks/use-media-query'
 import { useHiddenItems } from '@/lib/hooks/hidden-items'
 import { showDismissStripe } from '@/components/ui/dismiss-stripe'
+import { HIDDEN_COMPANIES_CATEGORY } from '@/config/constants/hiddenItems'
 
 type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new' | 'saved'>
 
 const SCROLL_RESTORATION_KEY = 'jobs-page-scroll-y'
-const HIDDEN_COMPANIES_CATEGORY = 'companies'
 
 export function JobsPage() {
   const jobs = useJobs()
@@ -256,8 +254,8 @@ export function JobsPage() {
         counts={jobs.counts}
         leftSlot={
           <div className="flex items-baseline gap-3">
-            <h1 className="text-lg font-semibold text-white">Jobs</h1>
-            <span className="text-xs text-slate-400">
+            <h1 className="text-lg font-semibold text-primary">Jobs</h1>
+            <span className="text-xs text-muted">
               {activeFilterCount > 0 && (
                 <span className="text-violet-300">
                   {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
@@ -275,13 +273,13 @@ export function JobsPage() {
                     type="button"
                     aria-label="Keyboard shortcuts"
                     onClick={() => setHelpOpen(true)}
-                    className="flex items-center justify-center h-7 w-7 rounded-md text-slate-400 hover:text-white hover:bg-white/[0.05] transition-colors"
+                    className="flex items-center justify-center h-7 w-7 rounded-md text-muted hover:text-primary hover:bg-hover transition-colors"
                   >
                     <Keyboard size={16} />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="end">
-                  <div className="text-[11px] text-slate-300">
+                  <div className="text-[11px] text-secondary">
                     Press <span className="font-mono">?</span> for shortcuts
                   </div>
                 </TooltipContent>
@@ -317,7 +315,8 @@ export function JobsPage() {
           <div ref={tableScrollRef} className="flex flex-1 min-w-0 overflow-hidden">
             <JobsTable
               jobs={visibleJobs}
-              loading={jobs.isLoading || jobs.isFetchingNextPage}
+              loading={jobs.isLoading && !jobs.isFetchingNextPage}
+              isFetchingMore={jobs.isFetchingNextPage}
               isError={jobs.isError}
               onRetry={() => void jobs.refetch()}
               tab={jobs.tab}
@@ -342,7 +341,7 @@ export function JobsPage() {
               }}
               onToggleSave={handleToggleSave}
               onDismiss={handleDismiss}
-              getAttachmentState={(jobId) => getMockAttachmentForJob(jobId)?.state ?? null}
+              getAttachmentState={() => null}
               onNextPage={jobs.goToNextPage}
               onPrevPage={jobs.goToPrevPage}
               onFirstPage={jobs.goToFirstPage}
@@ -357,7 +356,7 @@ export function JobsPage() {
               <ResizeHandle width={panelWidth} onChange={setPanelWidth} min={300} max={720} />
               <div
                 style={{ '--panel-width': `${panelWidth}px` } as CSSProperties}
-                className="shrink-0 flex flex-col min-h-0 border-l border-white/[0.07] overflow-hidden [width:var(--panel-width)]"
+                className="shrink-0 flex flex-col min-h-0 border-l border-[var(--border)] overflow-hidden [width:var(--panel-width)]"
               >
                 <JobDetailPanel
                   job={openJob}

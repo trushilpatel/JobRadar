@@ -56,37 +56,37 @@ export function ScanIntervalOverrideModal({
   }
 
   const inputClass =
-    'w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-colors'
+    'w-full bg-subtle border border-[var(--border-strong)] rounded-lg px-3 py-2 text-sm text-primary placeholder:text-placeholder focus:outline-none focus:border-violet-500 transition-colors'
 
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-[#13131a] border border-white/10 rounded-xl shadow-2xl p-6">
+        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-panel border border-[var(--border-strong)] rounded-xl shadow-2xl p-6">
           <div className="flex items-center justify-between mb-2">
-            <Dialog.Title className="text-base font-semibold text-white">
+            <Dialog.Title className="text-base font-semibold text-primary">
               Custom Scan Interval
             </Dialog.Title>
             <button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+              className="text-muted hover:text-primary transition-colors disabled:opacity-50"
             >
               <X size={16} />
             </button>
           </div>
 
-          <Dialog.Description className="text-sm text-white/60 mb-5">
+          <Dialog.Description className="text-sm text-secondary mb-5">
             Override the adapter default ({adapterDefault} min) for{' '}
-            <span className="text-white font-medium">{companyName}</span> only.
+            <span className="text-primary font-medium">{companyName}</span> only.
           </Dialog.Description>
 
           <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <div className="space-y-1">
-              <label className="text-sm font-medium text-slate-300">
+              <label className="text-sm font-medium text-secondary">
                 Scan interval
-                <span className="ml-2 text-xs text-slate-500">minutes</span>
+                <span className="ml-2 text-xs text-muted">minutes</span>
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -103,7 +103,7 @@ export function ScanIntervalOverrideModal({
                   autoFocus
                 />
               </div>
-              <p className="text-[11px] text-slate-500">Adapter default: {adapterDefault} min</p>
+              <p className="text-[11px] text-muted">Adapter default: {adapterDefault} min</p>
               {error && <p className="text-xs text-red-400">{error}</p>}
             </div>
 
@@ -112,7 +112,7 @@ export function ScanIntervalOverrideModal({
                 type="button"
                 onClick={onClose}
                 disabled={loading}
-                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-white/5 hover:bg-white/10 text-slate-300 transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-subtle hover:bg-hover text-secondary transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>

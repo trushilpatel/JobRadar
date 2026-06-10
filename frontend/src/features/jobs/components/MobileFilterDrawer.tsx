@@ -9,6 +9,7 @@ import {
 import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
 import { cn } from '@/lib/utils/utils'
 import type { DateFilter, LocationFilter } from '../hooks/useJobs'
+import { EXP_OPTIONS, DATE_OPTIONS, LOCATION_OPTIONS } from '../constants/filterOptions'
 
 export interface MobileFilterDrawerProps {
   open: boolean
@@ -24,17 +25,6 @@ export interface MobileFilterDrawerProps {
   onDateChange?: (v: DateFilter) => void
   onReset?: () => void
 }
-
-const EXP_OPTIONS = ['0-2', '2-5', '5+'] as const
-const DATE_OPTIONS: { value: Exclude<DateFilter, 'all'>; label: string }[] = [
-  { value: '24h', label: '24h' },
-  { value: '7d', label: '7d' },
-  { value: '30d', label: '30d' },
-]
-const LOCATION_OPTIONS: { value: LocationFilter; label: string }[] = [
-  { value: 'remote', label: 'Remote' },
-  { value: 'onsite', label: 'On-site' },
-]
 
 function PillButton({
   active,
@@ -53,7 +43,7 @@ function PillButton({
         'min-h-[44px] px-4 py-2 text-sm rounded-lg border transition-colors',
         active
           ? 'bg-violet-500/15 border-violet-500/30 text-violet-300'
-          : 'bg-white/[0.03] border-white/[0.07] text-slate-300 hover:bg-white/[0.06]'
+          : 'bg-subtle border-[var(--border)] text-secondary hover:bg-hover'
       )}
     >
       {children}
@@ -92,15 +82,15 @@ export function MobileFilterDrawer({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="border-t border-white/[0.08] bg-[#0d0d14] text-slate-200">
+      <DrawerContent className="border-t border-[var(--border-strong)] bg-panel text-primary">
         <DrawerHeader>
-          <DrawerTitle className="text-base font-semibold text-white">Filters</DrawerTitle>
+          <DrawerTitle className="text-base font-semibold text-primary">Filters</DrawerTitle>
         </DrawerHeader>
 
         <div className="space-y-6 px-4 pb-4">
           {onCompaniesChange && (
             <section>
-              <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+              <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-secondary">
                 Companies
               </h4>
               <MultiSelectDropdown
@@ -116,7 +106,7 @@ export function MobileFilterDrawer({
           )}
 
           <section>
-            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-secondary">
               Experience
             </h4>
             <div className="flex flex-wrap gap-2">
@@ -133,7 +123,7 @@ export function MobileFilterDrawer({
           </section>
 
           <section>
-            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-secondary">
               Posted
             </h4>
             <div className="flex flex-wrap gap-2">
@@ -150,7 +140,7 @@ export function MobileFilterDrawer({
           </section>
 
           <section>
-            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-secondary">
               Location
             </h4>
             <div className="flex flex-wrap gap-2">
@@ -174,7 +164,7 @@ export function MobileFilterDrawer({
               onClick={() => {
                 onReset()
               }}
-              className="flex-1 min-h-[44px] rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-400 transition-colors hover:bg-white/[0.08]"
+              className="flex-1 min-h-[44px] rounded-lg border border-[var(--border-strong)] bg-subtle px-4 py-2 text-sm text-muted transition-colors hover:bg-hover"
             >
               Reset
             </button>

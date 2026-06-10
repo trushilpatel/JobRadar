@@ -12,38 +12,38 @@ function LocationContent({ data }: { data: LocationData }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
       <div>
-        <p className="text-xs text-slate-500 mb-3 uppercase tracking-wider">By Country</p>
+        <p className="text-xs text-muted mb-3 uppercase tracking-wider">By Country</p>
         <div className="space-y-2">
           {countries.slice(0, 8).map(({ country, count }) => (
             <div key={country} className="flex items-center gap-3">
-              <span className="w-20 shrink-0 text-xs text-slate-300 truncate">{country}</span>
-              <div className="flex-1 bg-white/[0.04] rounded-full h-1.5 overflow-hidden">
+              <span className="w-20 shrink-0 text-xs text-secondary truncate">{country}</span>
+              <div className="flex-1 bg-subtle rounded-full h-1.5 overflow-hidden">
                 <div
                   style={{ '--bar-pct': `${(count / maxC) * 100}%` } as CSSProperties}
                   className="h-full bg-violet-500 rounded-full [width:var(--bar-pct)]"
                 />
               </div>
-              <span className="w-8 text-right text-xs text-slate-400 shrink-0">{count}</span>
+              <span className="w-8 text-right text-xs text-muted shrink-0">{count}</span>
             </div>
           ))}
         </div>
       </div>
       <div>
-        <p className="text-xs text-slate-500 mb-3 uppercase tracking-wider">USA by State</p>
+        <p className="text-xs text-muted mb-3 uppercase tracking-wider">USA by State</p>
         {states.length === 0 ? (
-          <p className="text-xs text-slate-600">No US state data yet</p>
+          <p className="text-xs text-placeholder">No US state data yet</p>
         ) : (
           <div className="space-y-2">
             {states.slice(0, 8).map(({ state, count }) => (
               <div key={state} className="flex items-center gap-3">
-                <span className="w-12 shrink-0 text-xs text-slate-300">{state}</span>
-                <div className="flex-1 bg-white/[0.04] rounded-full h-1.5 overflow-hidden">
+                <span className="w-12 shrink-0 text-xs text-secondary">{state}</span>
+                <div className="flex-1 bg-subtle rounded-full h-1.5 overflow-hidden">
                   <div
                     style={{ '--bar-pct': `${(count / maxS) * 100}%` } as CSSProperties}
                     className="h-full bg-sky-500 rounded-full [width:var(--bar-pct)]"
                   />
                 </div>
-                <span className="w-8 text-right text-xs text-slate-400 shrink-0">{count}</span>
+                <span className="w-8 text-right text-xs text-muted shrink-0">{count}</span>
               </div>
             ))}
           </div>

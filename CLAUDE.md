@@ -15,8 +15,10 @@ This supersedes any cost/benefit argument that leans on small team size.
 ## Pipeline
 
 ```
-scheduler → company_scan_queue (DB) → crawler → jobs.raw.<adapter> (NATS JetStream) → filter → jobs.filtered.<adapter> (NATS JetStream) → analyzer → jobs (DB) → API
+scheduler → company_scan_queue (DB) → orchestrator ← crawler-node(s) → jobs.raw.<adapter> (NATS JetStream) → filter → jobs.filtered.<adapter> (NATS JetStream) → analyzer → jobs (DB) → API
 ```
+
+The crawler tier is now **distributed pull-based**: the orchestrator (`backend/apps/orchestrator/`) exposes an HTTP API; one or more stateless crawler-node workers (`backend/apps/crawler-node/`) poll it for work, crawl the assigned company, and submit results back. Concurrency is controlled entirely by the replica count — no in-process worker pool needed.
 
 Each binary lives in `backend/apps/<name>/` (wiring + worker loop only) and depends on domain logic in `backend/service/<domain>/`. Subdirectory `CLAUDE.md` files auto-load when you work in that area.
 
@@ -27,8 +29,9 @@ Each binary lives in `backend/apps/<name>/` (wiring + worker loop only) and depe
 | `companies`               | Tracked company catalog; operational config lives in `company_scan_settings`                                                                                                                                                                                                    |
 | `ats`                     | Canonical ATS registry (PK `name`); `company_scan_settings` and `company_scan_queue` carry FK constraints to this table — never add raw adapter type strings elsewhere. Served by `service/ats/` with in-process `MemoryCache` (5min TTL). Admin routes: `GET/PATCH /admin/ats` |
 | `company_scan_settings`   | Per-company scan config (admin-managed); `adapter_type` FK → `ats(name)`; rows missing here are skipped by workers                                                                                                                                                              |
-| `company_scan_queue`      | Durable work queue for pending/in-progress scans; deduped by unique partial index; `adapter_type` FK → `ats(name)`                                                                                                                                                              |
+| `company_scan_queue`      | Durable work queue for pending/in-progress scans; deduped by unique partial index; `adapter_type` FK → `ats(name)`; `locked_by` holds the claiming crawler-node ID; `heartbeat_at` tracks liveness — `ResetStuckForNodes` reclaims expired rows                                 |
 | `company_scan_log`        | Per-run scan summary (fetched, new, duration, error)                                                                                                                                                                                                                            |
+| `crawler_nodes`           | Registered crawler-node registry; `token_hash` stores HMAC-SHA256 of the bearer token; `last_seen_at` drives online/offline status. Provisioned via `POST /admin/crawler-nodes`; token returned exactly once at creation                                                        |
 | `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` marks disappearance; `reason='retry'` carries `retry_count`/`next_attempt_at`, written via filter `UpdateRetryBatch`. UPDATE ops return `ErrLedgerRowMissing` on 0/partial rows — never silent nil (migrations 071/073)                 |
 | `jobs`                    | Operational feed — global rows; per-user status/notes live in `user_job_state`. `job_post_id` is **UNIQUE** (`uq_jobs_job_post_id`, migration 071); `InsertJob` is idempotent (`ON CONFLICT DO NOTHING` → `ErrJobAlreadyExists`)                                                |
 | `user_job_state`          | Per-user overlay: saved_at, applied_at, status, notes, dismissal reason/note                                                                                                                                                                                                    |
@@ -82,6 +85,9 @@ Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_{READ,WRITE,A
 - Ledger/queue UPDATE store methods check `RowsAffected` and return a sentinel (`ErrLedgerRowMissing` / `ErrQueueRowMissing`) when 0/partial rows match — never silently return nil. Workers act on it: filter Naks for redelivery (closes the crawler-INSERT vs filter-UPDATE race), analyzer treats it as non-fatal. The crawler writes the `fetch` ledger row **before** publishing to NATS so the row exists before the message can be consumed
 - All logging goes through `platform/logger.Logger` — never stdlib `log`; field keys come from `platform/logger/fields.go` only
 - Crawler image (`infra/Dockerfile.crawler`) is **pure Go** — no Node, no Chromium, no Playwright. Do not add browser deps
+- Orchestrator + crawler-node images (`infra/Dockerfile.orchestrator`) are also **pure Go**. Same constraint applies
+- Crawler-node count is controlled by `crawlerNode.replicas` in `k8s/helm/jobradar/values.local.yaml` — change the number there and run `make k8s-up` (no rebuild needed; replicas are a Deployment field). `maxConcurrent` in the same block controls how many assignments one node holds simultaneously
+- `ScanReasonNonUSA = "non_usa_location"` in `service/crawlernode/common/` — must match the DB CHECK constraint on `job_pipeline_ledger.reason`; never use the raw string
 - Each service domain follows the decorator chain — see `backend/service/CLAUDE.md`
 
 Frontend rule highlights (full set in `frontend/CLAUDE.md`):

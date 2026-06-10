@@ -1,3 +1,5 @@
+//go:build integration
+
 package netflix
 
 // Integration tests — hit the real Netflix Eightfold API.

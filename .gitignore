@@ -7,6 +7,8 @@ bin/
 backend/api
 backend/scheduler
 backend/crawler
+backend/crawler-node
+backend/orchestrator
 backend/filter
 backend/analyzer
 backend/enricher

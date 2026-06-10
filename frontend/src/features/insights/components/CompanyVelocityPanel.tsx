@@ -7,7 +7,7 @@ import { useVelocity } from '../hooks/useInsights'
 const BADGE: Record<string, string> = {
   spike: 'bg-amber-500/15 text-amber-400',
   rising: 'bg-emerald-500/15 text-emerald-400',
-  normal: 'bg-white/[0.06] text-slate-500',
+  normal: 'bg-subtle text-muted',
 }
 
 function Sparkline({ row }: { row: CompanyVelocityInsight }) {
@@ -41,17 +41,17 @@ function VelocityContent({ data }: { data: CompanyVelocityInsight[] }) {
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
-          <tr className="border-b border-white/[0.06]">
-            <th className="py-2 px-3 text-left text-xs text-slate-500 font-medium">Company</th>
-            <th className="py-2 px-3 text-center text-xs text-slate-500 font-medium">Velocity</th>
-            <th className="py-2 px-3 text-center text-xs text-slate-500 font-medium">4 weeks</th>
-            <th className="py-2 px-3 text-right text-xs text-slate-500 font-medium">This wk</th>
+          <tr className="border-b border-[var(--border)]">
+            <th className="py-2 px-3 text-left text-xs text-muted font-medium">Company</th>
+            <th className="py-2 px-3 text-center text-xs text-muted font-medium">Velocity</th>
+            <th className="py-2 px-3 text-center text-xs text-muted font-medium">4 weeks</th>
+            <th className="py-2 px-3 text-right text-xs text-muted font-medium">This wk</th>
           </tr>
         </thead>
         <tbody>
           {data.map((row) => (
-            <tr key={row.company_id} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
-              <td className="py-2.5 px-3 text-sm text-slate-200">{row.company_name}</td>
+            <tr key={row.company_id} className="border-b border-[var(--border)] hover:bg-hover">
+              <td className="py-2.5 px-3 text-sm text-primary">{row.company_name}</td>
               <td className="py-2.5 px-3">
                 <div className="flex justify-center">
                   <span

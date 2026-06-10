@@ -3,6 +3,7 @@ import { apiClient } from '@/lib/core/api-client'
 
 const UserConfigSchema = z.object({
   show_keyboard_shortcuts: z.boolean().default(false),
+  theme: z.enum(['dark', 'light', 'system']).optional(),
 })
 
 export type UserConfigResponse = z.infer<typeof UserConfigSchema>

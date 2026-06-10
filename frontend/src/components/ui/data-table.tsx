@@ -161,12 +161,12 @@ export function DataTable<TData>({
         role="alert"
         className="flex flex-col items-center justify-center gap-3 py-16 text-center"
       >
-        <p className="text-sm text-slate-300">{errorMessage}</p>
+        <p className="text-sm text-secondary">{errorMessage}</p>
         {onRetry && (
           <button
             type="button"
             onClick={onRetry}
-            className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+            className="rounded-lg border border-[var(--border)] bg-subtle px-3 py-1.5 text-xs text-primary hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
           >
             Try again
           </button>
@@ -181,7 +181,7 @@ export function DataTable<TData>({
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id} className="border-b border-white/[0.07]">
+              <tr key={hg.id} className="border-b border-[var(--border)]">
                 {hg.headers.map((header) => (
                   <TableHead
                     key={header.id}
@@ -200,7 +200,7 @@ export function DataTable<TData>({
               <TableRow key={`skeleton-${rowIdx}`} aria-hidden="true">
                 {table.getAllColumns().map((col) => (
                   <TableCell key={col.id}>
-                    <div className="h-3 w-3/4 animate-pulse rounded bg-white/[0.06]" />
+                    <div className="h-3 w-3/4 animate-pulse rounded bg-subtle" />
                   </TableCell>
                 ))}
               </TableRow>
@@ -212,7 +212,7 @@ export function DataTable<TData>({
   }
 
   if (data.length === 0) {
-    return <div className="text-center py-20 text-slate-500">{emptyMessage}</div>
+    return <div className="text-center py-20 text-muted">{emptyMessage}</div>
   }
 
   return (
@@ -225,7 +225,7 @@ export function DataTable<TData>({
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((hg) => (
-            <tr key={hg.id} className="border-b border-white/[0.07]">
+            <tr key={hg.id} className="border-b border-[var(--border)]">
               {hg.headers.map((header) => {
                 const sorted = header.column.getCanSort() ? header.column.getIsSorted() : false
                 const ariaSort: React.AriaAttributes['aria-sort'] = !header.column.getCanSort()
@@ -257,7 +257,7 @@ export function DataTable<TData>({
               ? getRowClassName(row.original)
               : isSelected
                 ? 'bg-violet-500/[0.08]'
-                : 'hover:bg-white/[0.02]'
+                : 'hover:bg-hover'
             const extraProps = getRowProps?.(row.original) ?? {}
             return (
               <TableRow
@@ -281,7 +281,7 @@ export function DataTable<TData>({
       </Table>
 
       {serverPagination && (
-        <div className="border-t border-white/[0.07]">
+        <div className="border-t border-[var(--border)]">
           <Pagination
             page={serverPagination.page}
             total={serverPagination.total}
@@ -312,7 +312,7 @@ export function DataTableColumnHeader<TData, TValue>({
   className,
 }: ColumnHeaderProps<TData, TValue>) {
   if (!column.getCanSort()) {
-    return <span className={cn('text-slate-400', className)}>{title}</span>
+    return <span className={cn('text-muted', className)}>{title}</span>
   }
 
   const sorted = column.getIsSorted()
@@ -323,7 +323,7 @@ export function DataTableColumnHeader<TData, TValue>({
       onClick={column.getToggleSortingHandler()}
       aria-label={`Sort by ${title}, currently ${direction}`}
       className={cn(
-        'inline-flex items-center gap-1 text-slate-400 hover:text-white transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:rounded',
+        'inline-flex items-center gap-1 text-muted hover:text-primary transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:rounded',
         className
       )}
     >

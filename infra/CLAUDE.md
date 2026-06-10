@@ -4,9 +4,9 @@ Dockerfiles for backend services. The local k3d cluster is driven from `k8s/helm
 
 k8s (k3d) is the only deployment target. There is no Docker Compose setup.
 
-## Crawler image is pure Go
+## Crawler images are pure Go
 
-`Dockerfile.crawler` is **pure Go** — no Node.js, no Chromium, no Playwright. All adapters speak plain HTTP. Do not add browser dependencies back.
+`Dockerfile.crawler` and `Dockerfile.orchestrator` are **pure Go** — no Node.js, no Chromium, no Playwright. All adapters speak plain HTTP. Do not add browser dependencies to either image.
 
 All ATS adapters (Greenhouse, Lever, Ashby, Apple, Microsoft, Netflix, Rippling, Uber, Google, Meta) work over HTTP / JSON / GraphQL / sitemap. Google uses HTTP + RE2 regex over server-rendered HTML (`backend/apps/crawler/ats/google/http.go`); Meta uses sitemap-driven listing + JSON-LD detail (`backend/apps/crawler/ats/meta/*.go`).
 
@@ -53,6 +53,40 @@ make k8s-restart-crawler                    # rolling restart crawler pod
 make k8s-logs-crawler
 ```
 
+## Iterate on the orchestrator / crawler-node
+
+```bash
+make k8s-build-orchestrator                 # rebuild + reimport orchestrator image
+make k8s-build-crawler-node                 # rebuild + reimport crawler-node image
+make k8s-up                                 # helm sync (applies replica count / env changes without rebuild)
+make k8s-logs-orchestrator
+make k8s-logs-crawler-node
+```
+
+## Scale crawler-node concurrency
+
+Two orthogonal knobs — both live in `k8s/helm/jobradar/values.local.yaml`, no image rebuild needed:
+
+| Knob                        | Where               | What it controls                                            |
+| --------------------------- | ------------------- | ----------------------------------------------------------- |
+| `crawlerNode.replicas`      | `values.local.yaml` | Number of crawler-node pods (each is an independent worker) |
+| `crawlerNode.maxConcurrent` | `values.local.yaml` | Assignments one pod holds at the same time                  |
+
+**Effective concurrency = `replicas × maxConcurrent`**
+
+Example — 3 pods × 3 concurrent = up to 9 companies crawled in parallel:
+
+```yaml
+# k8s/helm/jobradar/values.local.yaml
+crawlerNode:
+  replicas: 3
+  maxConcurrent: '3'
+```
+
+After editing, apply with `make k8s-up` (no image rebuild needed — replica count is a Deployment spec field).
+
+For the 8 GB M1 k3d node, `replicas: 3` with `maxConcurrent: 3` is a safe default. Each crawler-node pod is capped at 64Mi memory; 3 pods = 192Mi additional pressure. Check `kubectl top nodes` before raising replicas significantly.
+
 ## Trigger a scan manually
 
 ```bash
@@ -76,17 +110,21 @@ Models are pinned to a preview-access key — most GA models return 404 or `limi
 
 Tuned for a single-node k3d cluster on an 8 GB M1. Never raise limits without checking available headroom (`kubectl top nodes`).
 
-| Component | Req mem | Limit mem | Req CPU | Limit CPU |
-| --------- | ------- | --------- | ------- | --------- |
-| api       | 64Mi    | 128Mi     | 100m    | 500m      |
-| crawler   | 128Mi   | 256Mi     | 100m    | 300m      |
-| filter    | 32Mi    | 128Mi     | 100m    | 500m      |
-| enricher  | 32Mi    | 128Mi     | 100m    | 500m      |
-| scheduler | 64Mi    | 128Mi     | 50m     | 200m      |
-| console   | 32Mi    | 64Mi      | 25m     | 100m      |
-| migrate   | 32Mi    | 128Mi     | 50m     | —         |
+| Component    | Req mem | Limit mem      | Req CPU | Limit CPU |
+| ------------ | ------- | -------------- | ------- | --------- |
+| api          | 64Mi    | 128Mi          | 100m    | 500m      |
+| crawler      | 128Mi   | 256Mi          | 100m    | 300m      |
+| orchestrator | 64Mi    | 128Mi          | 50m     | 300m      |
+| crawler-node | 64Mi    | 64Mi (per pod) | 50m     | 200m      |
+| filter       | 32Mi    | 128Mi          | 100m    | 500m      |
+| enricher     | 32Mi    | 128Mi          | 100m    | 500m      |
+| scheduler    | 64Mi    | 128Mi          | 50m     | 200m      |
+| console      | 32Mi    | 64Mi           | 25m     | 100m      |
+| migrate      | 32Mi    | 128Mi          | 50m     | —         |
 
 CPU limits are required on all workloads to prevent a runaway pod from starving k3d. The migrate job has no CPU limit intentionally (short-lived; bursty is acceptable).
+
+For crawler-node, the per-pod limit is 64Mi. At 3 replicas = 192Mi total. If raising replicas, check `kubectl top nodes` — the 8 GB M1 k3d node has a fixed memory budget.
 
 ## Common failure modes
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Building2,
   Briefcase,
@@ -27,6 +28,7 @@ const userNav: { to: string; label: string; icon: React.ReactNode }[] = [
     icon: <LayoutDashboard size={16} />,
   },
   { to: routes.jobs(), label: COPY['nav.jobs'], icon: <Briefcase size={16} /> },
+  { to: routes.insights(), label: COPY['nav.insights'], icon: <BarChart2 size={16} /> },
 ]
 
 const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [
@@ -43,7 +45,6 @@ const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [
     label: COPY['nav.audit-log'],
     icon: <ClipboardList size={16} />,
   },
-  { to: routes.insights(), label: COPY['nav.insights'], icon: <BarChart2 size={16} /> },
   { to: routes.settings(), label: COPY['nav.settings'], icon: <Settings size={16} /> },
 ]
 
@@ -67,8 +68,8 @@ function NavItem({
           'w-full flex items-center rounded-lg text-sm transition-colors',
           collapsed ? 'justify-center p-2.5' : 'gap-2.5 px-3 py-2.5',
           isActive
-            ? 'bg-violet-600/20 text-violet-300 font-medium'
-            : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+            ? 'bg-[var(--sidebar-active)] text-violet-300 font-medium'
+            : 'text-muted hover:text-white hover:bg-[var(--sidebar-hover)]'
         )
       }
     >
@@ -93,14 +94,14 @@ export function Sidebar() {
   return (
     <div
       className={cn(
-        'shrink-0 bg-[#0d0d14] border-r border-white/[0.07] flex flex-col transition-[width] duration-200 overflow-hidden',
+        'shrink-0 bg-sidebar border-r border-[var(--sidebar-border)] flex flex-col transition-[width] duration-200 overflow-hidden',
         collapsed ? 'w-[52px]' : 'w-56'
       )}
     >
       {/* Logo + collapse toggle */}
       <div
         className={cn(
-          'flex items-center border-b border-white/[0.07] h-[57px]',
+          'flex items-center border-b border-[var(--sidebar-border)] h-[57px]',
           collapsed ? 'justify-center px-0' : 'justify-between px-5'
         )}
       >
@@ -111,8 +112,9 @@ export function Sidebar() {
           </div>
         )}
         <button
+          type="button"
           onClick={() => setCollapsed((v) => !v)}
-          className="p-1.5 text-slate-500 hover:text-white hover:bg-white/[0.06] rounded-md transition-colors shrink-0"
+          className="p-1.5 text-muted hover:text-white hover:bg-[var(--sidebar-hover)] rounded-md transition-colors shrink-0"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {collapsed ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
@@ -132,7 +134,9 @@ export function Sidebar() {
                 Admin
               </p>
             )}
-            {collapsed && <div className="my-2 border-t border-white/[0.07]" />}
+            {collapsed && (
+              <div role="separator" className="my-2 border-t border-[var(--sidebar-border)]" />
+            )}
             {adminNav.map(({ to, label, icon }) => (
               <NavItem key={to} to={to} label={label} icon={icon} collapsed={collapsed} />
             ))}
@@ -141,22 +145,31 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className={cn('border-t border-white/[0.07]', collapsed ? 'px-1.5 py-3' : 'px-3 py-3')}>
+      <div
+        className={cn(
+          'border-t border-[var(--sidebar-border)]',
+          collapsed ? 'px-1.5 py-3' : 'px-3 py-3'
+        )}
+      >
         {collapsed ? (
-          <NavLink
-            to="/account"
-            title={email}
-            className={({ isActive }) =>
-              cn(
-                'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
-                isActive ? 'bg-violet-600/20' : 'hover:bg-white/[0.05]'
-              )
-            }
-          >
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
-              {initials}
-            </span>
-          </NavLink>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <NavLink
+                to="/account"
+                className={({ isActive }) =>
+                  cn(
+                    'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
+                    isActive ? 'bg-[var(--sidebar-active)]' : 'hover:bg-[var(--sidebar-hover)]'
+                  )
+                }
+              >
+                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
+                  {initials}
+                </span>
+              </NavLink>
+            </TooltipTrigger>
+            <TooltipContent side="right">{email}</TooltipContent>
+          </Tooltip>
         ) : (
           <div className="flex items-center gap-2.5">
             <NavLink
@@ -167,7 +180,7 @@ export function Sidebar() {
                   'flex-1 flex items-center gap-2 rounded-lg px-1 py-1 -mx-1 transition-colors min-w-0',
                   isActive
                     ? 'text-violet-300'
-                    : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                    : 'text-muted hover:text-white hover:bg-[var(--sidebar-hover)]'
                 )
               }
             >
@@ -179,7 +192,7 @@ export function Sidebar() {
             <button
               onClick={signOut}
               title="Sign out"
-              className="p-1 text-slate-500 hover:text-white hover:bg-white/[0.06] rounded-md transition-colors shrink-0"
+              className="p-1 text-muted hover:text-white hover:bg-[var(--sidebar-hover)] rounded-md transition-colors shrink-0"
             >
               <LogOut size={13} />
             </button>

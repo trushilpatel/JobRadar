@@ -57,6 +57,8 @@ REQUIRED_VARS=(
   SUPABASE_URL
   GEMINI_KEY
   GEMINI_KEY_JP
+  CRAWLER_TOKEN_SECRET
+  CRAWLER_TOKEN
 )
 
 for var in "${REQUIRED_VARS[@]}"; do
@@ -164,6 +166,8 @@ GEMINI_KEY_JP="$(env_val GEMINI_KEY_JP)"
 SUPABASE_SERVICE_ROLE_KEY="$(env_val SUPABASE_SERVICE_ROLE_KEY)"
 SUPABASE_JWKS_URL="$(env_val SUPABASE_JWKS_URL)"
 SUPABASE_JWT_SECRET="$(env_val SUPABASE_JWT_SECRET)"
+CRAWLER_TOKEN_SECRET="$(env_val CRAWLER_TOKEN_SECRET)"
+CRAWLER_TOKEN="$(env_val CRAWLER_TOKEN)"
 
 # NATS credentials file
 apply_secret nats-creds \
@@ -215,6 +219,18 @@ apply_secret jobradar-crawler-secret \
   --from-literal="DB_PASSWORD=$DB_PASSWORD" \
   --from-literal="DB_NAME=$DB_NAME" \
   --from-literal="REDIS_URL=$REDIS_URL"
+
+# Orchestrator secret — needs DB + NATS + the HMAC signing key for node tokens
+apply_secret jobradar-orchestrator-secret \
+  --from-literal="DB_HOST=$DB_HOST" \
+  --from-literal="DB_USER=$DB_USER" \
+  --from-literal="DB_PASSWORD=$DB_PASSWORD" \
+  --from-literal="DB_NAME=$DB_NAME" \
+  --from-literal="CRAWLER_TOKEN_SECRET=$CRAWLER_TOKEN_SECRET"
+
+# Crawler-node secret — only needs the bearer token to authenticate to the orchestrator
+apply_secret jobradar-crawler-node-secret \
+  --from-literal="CRAWLER_TOKEN=$CRAWLER_TOKEN"
 
 # Scheduler secret
 apply_secret jobradar-scheduler-secret \

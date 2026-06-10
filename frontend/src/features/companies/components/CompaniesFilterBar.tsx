@@ -95,7 +95,7 @@ const SCAN_STATUS_OPTIONS: {
 ]
 
 function Divider() {
-  return <div className="w-px h-[22px] bg-white/[0.08] mx-1 shrink-0" />
+  return <div className="w-px h-[22px] bg-[var(--border-strong)] mx-1 shrink-0" />
 }
 
 export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
@@ -103,23 +103,23 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
   const [runAllConfirmOpen, setRunAllConfirmOpen] = useState(false)
 
   return (
-    <div className="px-6 py-3 border-b border-white/[0.07] flex items-center gap-2">
+    <div className="px-6 py-3 border-b border-[var(--border)] flex items-center gap-2">
       {/* Left: filters */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* Search */}
         <div className="relative">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
           <input
             value={p.search}
             onChange={(e) => p.onSearchChange(e.target.value)}
             placeholder="Search companies…"
-            className="pl-7 pr-7 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg placeholder-slate-500 focus:outline-none focus:border-violet-500 w-52 text-white"
+            className="pl-7 pr-7 py-1.5 text-xs bg-subtle border border-[var(--border-strong)] rounded-lg placeholder:text-placeholder focus:outline-none focus:border-violet-500 w-52 text-primary"
           />
           {p.search && (
             <button
               type="button"
               onClick={() => p.onSearchChange('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-secondary"
             >
               <X size={12} />
             </button>
@@ -170,7 +170,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
                   'flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-full border transition-colors',
                   isActive
                     ? opt.activeClass
-                    : 'text-slate-400 bg-white/5 border-white/10 hover:border-white/20 hover:text-slate-300'
+                    : 'text-muted bg-subtle border-[var(--border-strong)] hover:border-[var(--border-strong)] hover:text-secondary'
                 )}
               >
                 {opt.label}
@@ -184,7 +184,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
           type="button"
           onClick={p.onReset}
           className={cn(
-            'flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 px-1 transition-opacity',
+            'flex items-center gap-1 text-[11px] text-muted hover:text-secondary px-1 transition-opacity',
             p.hasActiveFilters ? 'opacity-100' : 'opacity-0 pointer-events-none'
           )}
           title="Reset filters"
@@ -200,7 +200,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
           type="button"
           onClick={p.bulkAllActive ? () => setDeactivateConfirmOpen(true) : p.onBulkToggle}
           disabled={p.bulkToggling}
-          className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 text-xs text-secondary bg-subtle border border-[var(--border-strong)] hover:bg-hover px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
         >
           {p.bulkToggling ? <Loader2 size={12} className="animate-spin" /> : <Power size={12} />}
           {p.bulkAllActive ? 'Deactivate all' : 'Activate all'}
@@ -230,11 +230,11 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
       <Dialog.Root open={deactivateConfirmOpen} onOpenChange={setDeactivateConfirmOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-[#13131a] border border-white/10 rounded-xl shadow-2xl p-6">
-            <Dialog.Title className="text-base font-semibold text-white mb-2">
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-panel border border-[var(--border-strong)] rounded-xl shadow-2xl p-6">
+            <Dialog.Title className="text-base font-semibold text-primary mb-2">
               Deactivate all companies?
             </Dialog.Title>
-            <Dialog.Description className="text-sm text-slate-400 mb-5">
+            <Dialog.Description className="text-sm text-muted mb-5">
               This will stop all future scans for every active company. You can reactivate them
               individually or all at once.
             </Dialog.Description>
@@ -242,7 +242,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
               <button
                 type="button"
                 onClick={() => setDeactivateConfirmOpen(false)}
-                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-subtle hover:bg-hover text-secondary transition-colors"
               >
                 Cancel
               </button>
@@ -265,11 +265,11 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
       <Dialog.Root open={runAllConfirmOpen} onOpenChange={setRunAllConfirmOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-[#13131a] border border-white/10 rounded-xl shadow-2xl p-6">
-            <Dialog.Title className="text-base font-semibold text-white mb-2">
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-panel border border-[var(--border-strong)] rounded-xl shadow-2xl p-6">
+            <Dialog.Title className="text-base font-semibold text-primary mb-2">
               Queue all companies for scan?
             </Dialog.Title>
-            <Dialog.Description className="text-sm text-slate-400 mb-5">
+            <Dialog.Description className="text-sm text-muted mb-5">
               This will queue all active companies for an immediate scan. This may generate
               significant load.
             </Dialog.Description>
@@ -277,7 +277,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
               <button
                 type="button"
                 onClick={() => setRunAllConfirmOpen(false)}
-                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-subtle hover:bg-hover text-secondary transition-colors"
               >
                 Cancel
               </button>

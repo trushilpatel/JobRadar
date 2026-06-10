@@ -1,3 +1,5 @@
+//go:build integration
+
 package lever
 
 // Integration tests — hit the real Lever public API.

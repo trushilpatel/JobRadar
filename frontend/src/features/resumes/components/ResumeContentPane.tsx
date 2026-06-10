@@ -34,12 +34,12 @@ export function ResumeContentPane({ content, readOnly, className, onSave }: Prop
   return (
     <div
       className={cn(
-        'rounded-xl border border-white/[0.06] bg-[#141420] flex flex-col min-h-0',
+        'rounded-xl border border-[var(--border)] bg-panel flex flex-col min-h-0',
         className
       )}
     >
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.05]">
-        <div className="flex items-center gap-2 text-xs text-slate-400">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)]">
+        <div className="flex items-center gap-2 text-xs text-muted">
           {readOnly ? <Lock size={12} /> : <Save size={12} />}
           <span>{readOnly ? 'Read-only (submitted version)' : 'Markdown / plain text'}</span>
           {dirty && !readOnly && (
@@ -54,7 +54,7 @@ export function ResumeContentPane({ content, readOnly, className, onSave }: Prop
               'text-xs px-2.5 py-1 rounded transition-colors',
               dirty
                 ? 'bg-violet-600 hover:bg-violet-500 text-white'
-                : 'bg-white/[0.04] text-slate-500 cursor-not-allowed'
+                : 'bg-subtle text-muted cursor-not-allowed'
             )}
           >
             Save version
@@ -70,8 +70,8 @@ export function ResumeContentPane({ content, readOnly, className, onSave }: Prop
         }}
         spellCheck={false}
         className={cn(
-          'flex-1 w-full p-4 text-sm leading-relaxed text-slate-200 font-mono bg-transparent',
-          'resize-none outline-none focus:bg-[#171723] transition-colors',
+          'flex-1 w-full p-4 text-sm leading-relaxed text-primary font-mono bg-transparent',
+          'resize-none outline-none focus:bg-subtle transition-colors',
           'min-h-[420px]'
         )}
       />

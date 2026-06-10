@@ -110,6 +110,11 @@ func RequireIdentity(
 // outside this file rely on the HTTP boundary instead.
 var errSuspended = errors.New("identity: account suspended")
 
+// devBypassSub is the synthetic subject returned by the dev-token bypass in
+// Auth middleware. RequireIdentity short-circuits here to avoid a UUID-typed
+// DB lookup that would always fail with "invalid input syntax for type uuid".
+const devBypassSub = "dev-bypass"
+
 // resolveIdentity is the cache-aside body of RequireIdentity. Split out for
 // testability — tests can drive the resolution path without an HTTP request.
 func resolveIdentity(
@@ -121,6 +126,16 @@ func resolveIdentity(
 	ttl time.Duration,
 	log logger.Logger,
 ) (identity.Identity, error) {
+	// Dev-token bypass — Auth middleware already verified the secret; return a
+	// synthetic identity without touching the DB (sub is not a UUID).
+	if sub == devBypassSub {
+		return identity.Identity{
+			UserID: devBypassSub,
+			Email:  "",
+			Roles:  []string{"user", "admin"},
+		}, nil
+	}
+
 	cacheKey := userCacheKey(sub)
 
 	// Cache fast path. A cached suspended user is still rejected — never

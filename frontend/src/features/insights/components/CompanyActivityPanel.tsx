@@ -21,16 +21,16 @@ function ActivityContent({ data }: { data: CompanyWeekCount[] }) {
     <div className="space-y-2">
       {stats.map(({ company_name, total }) => (
         <div key={company_name} className="flex items-center gap-3">
-          <p className="w-40 shrink-0 text-sm text-slate-300 truncate" title={company_name}>
+          <p className="w-40 shrink-0 text-sm text-secondary truncate" title={company_name}>
             {company_name}
           </p>
-          <div className="flex-1 bg-white/[0.04] rounded-full h-2 overflow-hidden">
+          <div className="flex-1 bg-subtle rounded-full h-2 overflow-hidden">
             <div
               style={{ '--bar-pct': `${(total / max) * 100}%` } as CSSProperties}
               className="h-full bg-violet-600 rounded-full transition-all [width:var(--bar-pct)]"
             />
           </div>
-          <span className="w-8 text-right text-xs text-slate-400 shrink-0">{total}</span>
+          <span className="w-8 text-right text-xs text-muted shrink-0">{total}</span>
         </div>
       ))}
     </div>

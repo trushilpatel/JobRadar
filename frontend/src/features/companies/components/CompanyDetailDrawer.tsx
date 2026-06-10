@@ -79,9 +79,9 @@ export function CompanyDetailDrawer({
       : null
 
   return (
-    <div className="flex flex-col h-full bg-[#0d0d14]">
+    <div className="flex flex-col h-full bg-panel">
       {/* Header */}
-      <div className="relative px-5 pt-4 pb-3 border-b border-white/[0.07]">
+      <div className="relative px-5 pt-4 pb-3 border-b border-[var(--border)]">
         <div className="absolute top-3 right-3 flex items-center gap-1">
           <button
             type="button"
@@ -95,7 +95,7 @@ export function CompanyDetailDrawer({
             type="button"
             onClick={() => onEdit(company)}
             title="Edit"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+            className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-hover transition-colors"
           >
             <Pencil size={14} />
           </button>
@@ -103,7 +103,7 @@ export function CompanyDetailDrawer({
             type="button"
             onClick={() => setDeleteConfirmOpen(true)}
             title="Delete"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-white/[0.06] transition-colors"
+            className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-hover transition-colors"
           >
             <Trash2 size={14} />
           </button>
@@ -112,7 +112,7 @@ export function CompanyDetailDrawer({
             onClick={onClose}
             title="Close"
             aria-label="Close drawer"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+            className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-hover transition-colors"
           >
             <X size={14} />
           </button>
@@ -120,13 +120,13 @@ export function CompanyDetailDrawer({
         <div className="flex items-start gap-3 pr-36">
           <CompanyAvatar name={company.name} size="md" />
           <div className="min-w-0 flex-1">
-            <p className="text-base font-semibold text-white leading-tight">{company.name}</p>
-            <p className="text-sm text-slate-400 mt-0.5 truncate">
+            <p className="text-base font-semibold text-primary leading-tight">{company.name}</p>
+            <p className="text-sm text-muted mt-0.5 truncate">
               <a
                 href={company.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-white transition-colors"
+                className="hover:text-primary transition-colors"
               >
                 {safeHost(company.url)}
               </a>
@@ -168,39 +168,39 @@ export function CompanyDetailDrawer({
 
         <Section title="Recent scans">
           <div className="flex gap-2">
-            <div className="flex-1 border border-white/[0.07] rounded-lg px-3 py-2.5 flex flex-col justify-between gap-2">
+            <div className="flex-1 border border-[var(--border)] rounded-lg px-3 py-2.5 flex flex-col justify-between gap-2">
               {isLoading ? (
                 <div className="h-4 bg-white/5 rounded animate-pulse" />
               ) : (
                 <>
                   <ScanHistoryBar history={history} className="w-full justify-between" />
-                  <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                  <span className="text-[10px] uppercase tracking-wider text-muted">
                     {successRate}% success
                   </span>
                 </>
               )}
             </div>
-            <div className="border border-white/[0.07] rounded-lg px-3 py-2.5 flex flex-col justify-between shrink-0 w-24">
-              <div className="text-sm font-semibold text-white">
+            <div className="border border-[var(--border)] rounded-lg px-3 py-2.5 flex flex-col justify-between shrink-0 w-24">
+              <div className="text-sm font-semibold text-primary">
                 {company.last_scan_at ? formatRelativeTime(company.last_scan_at) : '—'}
               </div>
-              <div className="text-[10px] uppercase tracking-wider text-slate-500">Last scan</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted">Last scan</div>
             </div>
-            <div className="border border-white/[0.07] rounded-lg px-3 py-2.5 flex flex-col justify-between shrink-0 w-20">
-              <div className="text-sm font-semibold text-white">
+            <div className="border border-[var(--border)] rounded-lg px-3 py-2.5 flex flex-col justify-between shrink-0 w-20">
+              <div className="text-sm font-semibold text-primary">
                 {isLoading
                   ? '—'
                   : stats?.avg_duration_ms != null
                     ? formatMs(stats.avg_duration_ms)
                     : '—'}
               </div>
-              <div className="text-[10px] uppercase tracking-wider text-slate-500">Avg time</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted">Avg time</div>
             </div>
           </div>
           <button
             type="button"
             onClick={() => setLogsOpen((v) => !v)}
-            className="mt-2 w-full flex items-center justify-between px-3 py-2 border border-white/[0.07] rounded-lg text-xs text-slate-400 hover:text-white hover:border-white/20 transition-colors"
+            className="mt-2 w-full flex items-center justify-between px-3 py-2 border border-[var(--border)] rounded-lg text-xs text-muted hover:text-primary hover:border-[var(--border-strong)] transition-colors"
           >
             <span>Logs</span>
             {logsOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -212,11 +212,11 @@ export function CompanyDetailDrawer({
                 <div className="h-4 bg-white/5 rounded animate-pulse" />
               </div>
             ) : (stats?.recent_runs ?? []).length === 0 ? (
-              <p className="mt-2 text-xs text-slate-500">No runs yet</p>
+              <p className="mt-2 text-xs text-muted">No runs yet</p>
             ) : (
               <div className="mt-2 text-xs">
                 {(stats?.recent_runs ?? []).slice(0, 10).map((r) => (
-                  <div key={r.scanned_at} className="border-b border-white/[0.04]">
+                  <div key={r.scanned_at} className="border-b border-[var(--border)]">
                     <div
                       className={cn(
                         'flex items-center justify-between py-1.5',
@@ -224,10 +224,10 @@ export function CompanyDetailDrawer({
                       )}
                       onClick={() => r.error && toggleError(r.scanned_at)}
                     >
-                      <span className="text-slate-300 flex items-center gap-1.5">
+                      <span className="text-secondary flex items-center gap-1.5">
                         {formatRelativeTime(r.scanned_at)}
                         {r.duration_ms != null && (
-                          <span className="text-slate-600">{formatMs(r.duration_ms)}</span>
+                          <span className="text-placeholder">{formatMs(r.duration_ms)}</span>
                         )}
                       </span>
                       <span
@@ -273,10 +273,10 @@ export function CompanyDetailDrawer({
             <button
               type="button"
               onClick={() => onViewJobs?.(company.name)}
-              className="mt-2 w-full flex items-center justify-between px-3 py-2 border border-white/[0.07] rounded-lg text-xs text-slate-300 hover:text-white hover:border-white/20 transition-colors"
+              className="mt-2 w-full flex items-center justify-between px-3 py-2 border border-[var(--border)] rounded-lg text-xs text-secondary hover:text-primary hover:border-[var(--border-strong)] transition-colors"
             >
               <span>View {stats.total_new} new jobs</span>
-              <span className="text-slate-500">→</span>
+              <span className="text-muted">→</span>
             </button>
           )}
         </Section>
@@ -290,11 +290,11 @@ export function CompanyDetailDrawer({
           }
         >
           {analyticsError ? (
-            <p className="text-xs text-slate-500">Failed to load hiring data</p>
+            <p className="text-xs text-muted">Failed to load hiring data</p>
           ) : !analytics ? (
             <div className="h-28 bg-white/5 rounded animate-pulse" />
           ) : analytics.monthly.every((p) => p.new === 0 && p.removed === 0) ? (
-            <p className="text-xs text-slate-500">No hiring data yet</p>
+            <p className="text-xs text-muted">No hiring data yet</p>
           ) : (
             <div className="h-28">
               <ResponsiveContainer width="100%" height="100%">
@@ -355,11 +355,11 @@ export function CompanyDetailDrawer({
       <Dialog.Root open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/60 z-50" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-[#13131a] border border-white/10 rounded-xl shadow-2xl p-6">
-            <Dialog.Title className="text-base font-semibold text-white mb-2">
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-sm bg-panel border border-[var(--border-strong)] rounded-xl shadow-2xl p-6">
+            <Dialog.Title className="text-base font-semibold text-primary mb-2">
               Delete company?
             </Dialog.Title>
-            <Dialog.Description className="text-sm text-slate-400 mb-5">
+            <Dialog.Description className="text-sm text-muted mb-5">
               This will permanently delete {company.name} and all its scan history. This cannot be
               undone.
             </Dialog.Description>
@@ -367,7 +367,7 @@ export function CompanyDetailDrawer({
               <button
                 type="button"
                 onClick={() => setDeleteConfirmOpen(false)}
-                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-subtle hover:bg-hover text-secondary transition-colors"
               >
                 Cancel
               </button>
@@ -403,8 +403,8 @@ function Section({
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">{title}</h3>
-        {aside && <span className="text-[10px] text-slate-500">{aside}</span>}
+        <h3 className="text-[10px] font-medium text-muted uppercase tracking-wider">{title}</h3>
+        {aside && <span className="text-[10px] text-muted">{aside}</span>}
       </div>
       {children}
     </div>
@@ -413,9 +413,9 @@ function Section({
 
 function StatTile({ value, label }: { value: string | number; label: string }) {
   return (
-    <div className="border border-white/[0.07] rounded-lg px-3 py-2.5">
+    <div className="border border-[var(--border)] rounded-lg px-3 py-2.5">
       <div className="text-lg font-semibold text-white">{value}</div>
-      <div className="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">{label}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted mt-0.5">{label}</div>
     </div>
   )
 }
@@ -447,12 +447,12 @@ function HiringTooltip({
   const removed = payload.find((p) => p.name === 'Removed')?.value ?? 0
   const net = newCount - removed
   return (
-    <div className="bg-[#13131a] border border-white/10 rounded-lg px-3 py-2 text-xs shadow-xl">
-      <p className="text-slate-400 mb-1.5 font-medium">{label}</p>
+    <div className="bg-panel border border-[var(--border-strong)] rounded-lg px-3 py-2 text-xs shadow-xl">
+      <p className="text-muted mb-1.5 font-medium">{label}</p>
       <div className="flex flex-col gap-1">
         <span className="text-emerald-400">+{newCount} new</span>
         {removed > 0 && <span className="text-red-400">−{removed} removed</span>}
-        <span className={cn('font-semibold mt-0.5', net >= 0 ? 'text-white' : 'text-red-300')}>
+        <span className={cn('font-semibold mt-0.5', net >= 0 ? 'text-primary' : 'text-red-300')}>
           net {net >= 0 ? '+' : ''}
           {net}
         </span>

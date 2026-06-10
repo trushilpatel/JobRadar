@@ -1,3 +1,5 @@
+//go:build integration
+
 package rippling
 
 // Integration tests — hit the real Rippling careers and ATS pages.

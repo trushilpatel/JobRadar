@@ -8,6 +8,8 @@ interface CompanyAvatarProps {
 export function CompanyAvatar({ name, size = 'sm' }: CompanyAvatarProps) {
   return (
     <div
+      role="img"
+      aria-label={name}
       className={cn(
         'rounded-md flex items-center justify-center font-semibold text-white shrink-0',
         avatarColor(name),

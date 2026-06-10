@@ -8,23 +8,27 @@ import { cn } from '@/lib/utils/utils'
 import { dashboardQueryKeys } from '../queryKeys'
 import { useInterviewStage } from '../hooks/useInterviewStage'
 
+const DOT_COLOR_WAITING = '#888780'
+const DOT_COLOR_INTERVIEWING = '#7f77dd'
+const DOT_COLOR_OFFER = '#1d9e75'
+
 const STAGES = [
   {
     key: 'applied',
     label: 'Waiting',
-    dotColor: '#888780',
-    pillClass: 'bg-white/[0.06] text-slate-400',
+    dotColor: DOT_COLOR_WAITING,
+    pillClass: 'bg-subtle text-muted',
   },
   {
     key: 'phone_screen',
     label: 'Interviewing',
-    dotColor: '#7f77dd',
+    dotColor: DOT_COLOR_INTERVIEWING,
     pillClass: 'bg-violet-500/15 text-violet-300',
   },
   {
     key: 'offer',
     label: 'Offer received',
-    dotColor: '#1d9e75',
+    dotColor: DOT_COLOR_OFFER,
     pillClass: 'bg-emerald-500/15 text-emerald-400',
   },
 ]
@@ -34,8 +38,8 @@ function pillConfig(stage: string) {
     STAGES.find((s) => s.key === stage) ?? {
       key: stage,
       label: stage,
-      dotColor: '#888780',
-      pillClass: 'bg-white/[0.06] text-slate-400',
+      dotColor: DOT_COLOR_WAITING,
+      pillClass: 'bg-subtle text-muted',
     }
   )
 }
@@ -64,7 +68,7 @@ function StageSelect({
       </Select.Trigger>
       <Select.Portal>
         <Select.Content
-          className="z-50 min-w-[160px] overflow-hidden bg-[#141418] border border-white/[0.12] rounded-lg shadow-xl"
+          className="z-50 min-w-[160px] overflow-hidden bg-panel border border-[var(--border-strong)] rounded-lg shadow-xl"
           position="popper"
           sideOffset={4}
         >
@@ -73,7 +77,7 @@ function StageSelect({
               <Select.Item
                 key={opt.key}
                 value={opt.key}
-                className="flex items-center gap-2 px-3 py-2 text-[11px] text-slate-300 rounded cursor-pointer hover:bg-white/[0.05] focus:bg-white/[0.05] focus:outline-none data-[state=checked]:text-white data-[state=checked]:bg-white/[0.06]"
+                className="flex items-center gap-2 px-3 py-2 text-[11px] text-secondary rounded cursor-pointer hover:bg-hover focus:bg-hover focus:outline-none data-[state=checked]:text-primary data-[state=checked]:bg-hover"
               >
                 <span
                   style={{ '--dot-bg': opt.dotColor } as CSSProperties}
@@ -105,21 +109,21 @@ export function InterviewingPanel() {
   const mutation = useInterviewStage()
 
   return (
-    <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-5">
-      <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-slate-500 mb-4">
+    <div className="bg-subtle border border-[var(--border)] rounded-xl p-5">
+      <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-muted mb-4">
         interviewing
       </p>
 
       {isLoading ? (
         <div className="space-y-3 animate-pulse">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-10 bg-white/[0.04] rounded-lg" />
+            <div key={i} className="h-10 bg-subtle rounded-lg" />
           ))}
         </div>
       ) : isError ? (
-        <p className="text-sm text-slate-500 py-2">Failed to load interviews</p>
+        <p className="text-sm text-muted py-2">Failed to load interviews</p>
       ) : !rows || rows.length === 0 ? (
-        <p className="text-sm text-slate-600 py-2">No active applications</p>
+        <p className="text-sm text-placeholder py-2">No active applications</p>
       ) : (
         <div>
           {rows.map((row, i) => (
@@ -127,12 +131,12 @@ export function InterviewingPanel() {
               key={row.application_id}
               className={cn(
                 'flex items-center gap-3 py-2.5',
-                i < rows.length - 1 && 'border-b border-white/[0.05]'
+                i < rows.length - 1 && 'border-b border-[var(--border)]'
               )}
             >
               <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-medium text-white truncate">{row.company_name}</p>
-                <p className="text-[11px] text-slate-500 truncate mt-0.5">{row.job_title}</p>
+                <p className="text-[13px] font-medium text-primary truncate">{row.company_name}</p>
+                <p className="text-[11px] text-muted truncate mt-0.5">{row.job_title}</p>
               </div>
               <StageSelect
                 row={row}

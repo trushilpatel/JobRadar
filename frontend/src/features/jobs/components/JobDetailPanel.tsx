@@ -71,6 +71,7 @@ export function JobDetailPanel({
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [lastSaved, setLastSaved] = useState(job.notes ?? '')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Re-seed the draft when switching to a different job. prev-state-during-
   // render is React's recommended alternative to a setState-in-useEffect.
@@ -89,6 +90,14 @@ export function JobDetailPanel({
     }
   }, [])
 
+  // Clear save timer on unmount.
+  useEffect(
+    () => () => {
+      if (saveTimerRef.current != null) clearTimeout(saveTimerRef.current)
+    },
+    []
+  )
+
   const save = useCallback(
     async (text: string) => {
       if (text === lastSaved) return
@@ -97,6 +106,8 @@ export function JobDetailPanel({
         await setJobNotes(job.id, text)
         setLastSaved(text)
         setSaveState('saved')
+        if (saveTimerRef.current != null) clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = setTimeout(() => setSaveState('idle'), 2000)
         queryClient.invalidateQueries({ queryKey: ['jobs'] })
       } catch {
         setSaveState('error')
@@ -137,18 +148,14 @@ export function JobDetailPanel({
           : ''
 
   return (
-    <div
-      role="region"
-      aria-label="Job details"
-      className="flex flex-col flex-1 min-h-0 bg-[#0d0d14]"
-    >
-      <div className="px-5 pt-4 pb-3 border-b border-white/[0.07]">
+    <div role="region" aria-label="Job details" className="flex flex-col flex-1 min-h-0 bg-panel">
+      <div className="px-5 pt-4 pb-3 border-b border-[var(--border)]">
         {isRoute && (
           <button
             type="button"
             onClick={onClose}
             aria-label="Back to jobs"
-            className="mb-3 flex min-h-[44px] items-center gap-1 px-2 py-2 text-sm text-slate-300 hover:text-white rounded-lg hover:bg-white/[0.06] transition-colors"
+            className="mb-3 flex min-h-[44px] items-center gap-1 px-2 py-2 text-sm text-secondary hover:text-primary rounded-lg hover:bg-hover transition-colors"
           >
             <ChevronLeft size={18} />
             Back
@@ -159,10 +166,10 @@ export function JobDetailPanel({
         <div className="flex items-start gap-3 mb-3">
           <CompanyAvatar name={companyName} size="md" />
           <div className="min-w-0 flex-1">
-            <p className="text-base font-semibold text-white leading-tight">{job.title}</p>
-            <p className="text-sm text-slate-400 mt-0.5">
+            <p className="text-base font-semibold text-primary leading-tight">{job.title}</p>
+            <p className="text-sm text-muted mt-0.5">
               {companyName}
-              <span className="text-slate-600"> · added {formatRelativeTime(job.added_at)}</span>
+              <span className="text-placeholder"> · added {formatRelativeTime(job.added_at)}</span>
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
@@ -173,7 +180,7 @@ export function JobDetailPanel({
                 'p-1.5 rounded-lg transition-colors',
                 isSaved
                   ? 'text-amber-400 hover:bg-amber-500/10'
-                  : 'text-slate-400 hover:text-amber-300 hover:bg-white/[0.06]'
+                  : 'text-muted hover:text-amber-300 hover:bg-hover'
               )}
               title={isSaved ? 'Remove from saved' : 'Save'}
               aria-label={isSaved ? 'Remove from saved' : 'Save job'}
@@ -183,7 +190,7 @@ export function JobDetailPanel({
             </button>
             <button
               onClick={() => onDismiss(job)}
-              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+              className="p-1.5 text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
               title="Dismiss"
               aria-label="Dismiss job"
             >
@@ -193,7 +200,7 @@ export function JobDetailPanel({
               <button
                 onClick={onClose}
                 aria-label="Close job details"
-                className="p-1.5 text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-lg transition-colors"
+                className="p-1.5 text-muted hover:text-primary hover:bg-hover rounded-lg transition-colors"
               >
                 <X size={15} />
               </button>
@@ -203,7 +210,7 @@ export function JobDetailPanel({
 
         <div className="flex flex-wrap gap-2 mb-3">
           {job.experience_years != null && (
-            <span className="text-xs text-slate-400 bg-white/[0.05] border border-white/[0.07] px-2.5 py-1 rounded-lg">
+            <span className="text-xs text-muted bg-subtle border border-[var(--border)] px-2.5 py-1 rounded-lg">
               {job.experience_years}+ yrs exp
             </span>
           )}
@@ -212,7 +219,7 @@ export function JobDetailPanel({
               <Wifi size={11} /> Remote
             </span>
           ) : job.location ? (
-            <span className="flex items-center gap-1 text-xs text-slate-400 bg-white/[0.05] border border-white/[0.07] px-2.5 py-1 rounded-lg">
+            <span className="flex items-center gap-1 text-xs text-muted bg-subtle border border-[var(--border)] px-2.5 py-1 rounded-lg">
               <MapPin size={11} /> {job.location}
             </span>
           ) : null}
@@ -222,7 +229,7 @@ export function JobDetailPanel({
             </span>
           )}
           {job.employ_type && (
-            <span className="flex items-center gap-1 text-xs text-slate-400 bg-white/[0.05] border border-white/[0.07] px-2.5 py-1 rounded-lg">
+            <span className="flex items-center gap-1 text-xs text-muted bg-subtle border border-[var(--border)] px-2.5 py-1 rounded-lg">
               <Briefcase size={11} /> {job.employ_type.replaceAll('_', ' ')}
             </span>
           )}
@@ -248,7 +255,7 @@ export function JobDetailPanel({
             href={job.url}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-violet-300 bg-white/5 border border-white/10 px-2.5 py-1.5 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 text-xs text-secondary hover:text-violet-300 bg-subtle border border-[var(--border-strong)] px-2.5 py-1.5 rounded-lg transition-colors"
           >
             <ExternalLink size={12} /> Open posting
           </a>
@@ -261,10 +268,10 @@ export function JobDetailPanel({
       <div className={cn('flex-1 overflow-y-auto px-5 py-4 space-y-5', isRoute && 'pb-24')}>
         {(job.role_brief || job.llm_summary) && (
           <div>
-            <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+            <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-2">
               Summary
             </h3>
-            <p className="text-sm text-slate-300 leading-relaxed">
+            <p className="text-sm text-secondary leading-relaxed">
               {job.role_brief ?? job.llm_summary}
             </p>
           </div>
@@ -272,12 +279,12 @@ export function JobDetailPanel({
 
         {job.responsibilities && job.responsibilities.length > 0 && (
           <div>
-            <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+            <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-2">
               Responsibilities
             </h3>
             <ul className="list-disc list-inside space-y-1">
               {job.responsibilities.map((r, i) => (
-                <li key={i} className="text-sm text-slate-300">
+                <li key={i} className="text-sm text-secondary">
                   {r}
                 </li>
               ))}
@@ -287,14 +294,14 @@ export function JobDetailPanel({
 
         {techStack.length > 0 && (
           <div>
-            <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+            <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-2">
               Tech stack
             </h3>
             <div className="flex flex-wrap gap-1.5">
               {techStack.map((t) => (
                 <span
                   key={t}
-                  className="text-xs bg-white/[0.07] text-slate-300 px-2 py-0.5 rounded-md font-mono"
+                  className="text-xs bg-subtle text-secondary px-2 py-0.5 rounded-md font-mono"
                 >
                   {t}
                 </span>
@@ -309,7 +316,7 @@ export function JobDetailPanel({
           <label
             id={notesLabelId}
             htmlFor="job-notes"
-            className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2"
+            className="block text-xs font-medium text-muted uppercase tracking-wider mb-2"
           >
             Your notes
           </label>
@@ -323,14 +330,14 @@ export function JobDetailPanel({
             placeholder="Private notes about this job (only you can see these)…"
             aria-labelledby={notesLabelId}
             aria-describedby={notesStatusId}
-            className="w-full resize-y rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus-visible:border-violet-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+            className="w-full resize-y rounded-lg border border-[var(--border)] bg-subtle px-3 py-2 text-sm text-primary placeholder:text-placeholder focus-visible:border-violet-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
           />
           <p
             id={notesStatusId}
             aria-live="polite"
             className={cn(
               'mt-1 text-[10px] transition-opacity',
-              saveState === 'error' ? 'text-red-400' : 'text-slate-500',
+              saveState === 'error' ? 'text-red-400' : 'text-muted',
               saveState === 'idle' ? 'opacity-0' : 'opacity-100'
             )}
           >
@@ -340,7 +347,7 @@ export function JobDetailPanel({
       </div>
 
       {isRoute && (
-        <div className="sticky bottom-0 flex gap-2 border-t border-white/[0.08] bg-[#0d0d14] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="sticky bottom-0 flex gap-2 border-t border-[var(--border-strong)] bg-panel px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
             onClick={() => onToggleSave(job)}
@@ -358,7 +365,7 @@ export function JobDetailPanel({
           <button
             type="button"
             onClick={() => onStatusChange(job, JOB_STATUS.APPLIED)}
-            className="flex-1 min-h-[44px] rounded-lg bg-white/[0.06] px-4 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/[0.12]"
+            className="flex-1 min-h-[44px] rounded-lg bg-subtle px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-hover"
           >
             Applied
           </button>
