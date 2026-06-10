@@ -28,19 +28,17 @@ export function MarketPanel() {
   }
 
   return (
-    <div className="bg-white/[0.04] border border-white/[0.07] rounded-xl p-5">
-      <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-slate-500 mb-4">
-        market
-      </p>
+    <div className="bg-subtle border border-[var(--border)] rounded-xl p-5">
+      <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-muted mb-4">market</p>
 
       {isLoading ? (
         <div className="flex gap-4 animate-pulse">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="flex-1 h-14 bg-white/[0.04] rounded-lg" />
+            <div key={i} className="flex-1 h-14 bg-subtle rounded-lg" />
           ))}
         </div>
       ) : isError || !data ? (
-        <p className="text-sm text-slate-500 py-2">Failed to load market data</p>
+        <p className="text-sm text-muted py-2">Failed to load market data</p>
       ) : (
         <div className="flex items-stretch">
           <StatCol
@@ -51,12 +49,12 @@ export function MarketPanel() {
             onClick={handleNavClick}
             onKeyDown={handleNavKeyDown}
           />
-          <div className="w-px bg-white/[0.07] self-stretch" />
+          <div className="w-px bg-[var(--border)] self-stretch" />
           <StatCol
             label="Total open"
             value={data.total_open}
             sub={weeklyDeltaLabel}
-            valueClass="text-white"
+            valueClass="text-primary"
           />
         </div>
       )}

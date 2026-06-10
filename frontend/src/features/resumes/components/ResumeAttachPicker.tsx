@@ -46,23 +46,23 @@ export function ResumeAttachPicker({ jobId, jobTitle, triggerLabel = 'Attach res
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 z-40" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-[#141420] border border-white/[0.08] rounded-xl shadow-xl">
-          <div className="flex items-start justify-between gap-4 p-5 border-b border-white/[0.05]">
+        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-panel border border-[var(--border-strong)] rounded-xl shadow-xl">
+          <div className="flex items-start justify-between gap-4 p-5 border-b border-[var(--border)]">
             <div className="min-w-0">
-              <Dialog.Title className="text-base font-semibold text-white">
+              <Dialog.Title className="text-base font-semibold text-primary">
                 Attach resume
               </Dialog.Title>
-              <Dialog.Description className="text-xs text-slate-400 mt-1 truncate">
+              <Dialog.Description className="text-xs text-muted mt-1 truncate">
                 For: {jobTitle}
               </Dialog.Description>
             </div>
-            <Dialog.Close className="text-slate-400 hover:text-white">
+            <Dialog.Close className="text-muted hover:text-primary">
               <X size={16} />
             </Dialog.Close>
           </div>
           <div className="max-h-[380px] overflow-y-auto p-2">
             {resumes.length === 0 && (
-              <div className="text-sm text-slate-400 px-3 py-4 text-center">
+              <div className="text-sm text-muted px-3 py-4 text-center">
                 No resumes yet — upload one first.
               </div>
             )}
@@ -70,14 +70,14 @@ export function ResumeAttachPicker({ jobId, jobTitle, triggerLabel = 'Attach res
               <button
                 key={r.id}
                 onClick={() => pick(r.id)}
-                className="w-full text-left rounded-lg px-3 py-2.5 hover:bg-white/[0.04] transition-colors"
+                className="w-full text-left rounded-lg px-3 py-2.5 hover:bg-hover transition-colors"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-sm text-white truncate">{r.name}</div>
-                    <div className="text-[11px] text-slate-500 font-mono mt-0.5">{r.label}</div>
+                    <div className="text-sm text-primary truncate">{r.name}</div>
+                    <div className="text-[11px] text-muted font-mono mt-0.5">{r.label}</div>
                   </div>
-                  <div className="text-[10px] text-slate-500 shrink-0 whitespace-nowrap">
+                  <div className="text-[10px] text-muted shrink-0 whitespace-nowrap">
                     v{r.version_count} · {r.attached_job_count} attached
                   </div>
                 </div>

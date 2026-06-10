@@ -13,7 +13,7 @@ export { ResumePickerInline } from './components/ResumePickerInline'
 export { ResumeAttachPicker } from './components/ResumeAttachPicker'
 export { AttachedJobsList } from './components/AttachedJobsList'
 export type * from './types'
-export { RESUME_LIMIT_PER_USER } from './types'
+export { RESUME_LIMIT_PER_USER, VERSION_LIMIT_PER_RESUME } from './types'
 export { resumeQueryKeys } from './queryKeys'
 // TODO: remove once real useJobAttachment(jobId) backend hook is wired
 export { getMockAttachmentForJob, getMockJob } from './mockData'

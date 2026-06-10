@@ -20,8 +20,8 @@ function RoleContent({ data }: { data: RoleCategoryCount[] }) {
     <div className="space-y-2.5">
       {data.map(({ category, count }) => (
         <div key={category} className="flex items-center gap-3">
-          <span className="w-20 shrink-0 text-xs text-slate-300 capitalize">{category}</span>
-          <div className="flex-1 bg-white/[0.04] rounded-full h-2 overflow-hidden">
+          <span className="w-20 shrink-0 text-xs text-secondary capitalize">{category}</span>
+          <div className="flex-1 bg-subtle rounded-full h-2 overflow-hidden">
             <div
               style={
                 {
@@ -32,7 +32,7 @@ function RoleContent({ data }: { data: RoleCategoryCount[] }) {
               className="h-full rounded-full transition-all [width:var(--bar-pct)] [background-color:var(--bar-color)]"
             />
           </div>
-          <span className="w-8 text-right text-xs text-slate-400 shrink-0">{count}</span>
+          <span className="w-8 text-right text-xs text-muted shrink-0">{count}</span>
         </div>
       ))}
     </div>

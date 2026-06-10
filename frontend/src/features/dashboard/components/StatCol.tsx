@@ -23,7 +23,7 @@ export function StatCol({ label, value, sub, valueClass, onClick, onKeyDown }: S
       onClick={onClick}
       onKeyDown={onKeyDown}
     >
-      <span className="text-[10px] font-medium uppercase tracking-[0.07em] text-slate-500">
+      <span className="text-[10px] font-medium uppercase tracking-[0.07em] text-muted">
         {label}
       </span>
       <span
@@ -37,8 +37,8 @@ export function StatCol({ label, value, sub, valueClass, onClick, onKeyDown }: S
       </span>
       <span
         className={cn(
-          'text-[11px] text-slate-500',
-          isInteractive && 'group-hover:text-slate-400 transition-colors'
+          'text-[11px] text-muted',
+          isInteractive && 'group-hover:text-secondary transition-colors'
         )}
       >
         {sub}

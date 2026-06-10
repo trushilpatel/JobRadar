@@ -14,7 +14,7 @@ export function ResumeStorageMeter({ count, className }: Props) {
   return (
     <div className={cn('flex items-center gap-3', className)}>
       <div className="flex-1 max-w-xs">
-        <div className="h-1.5 w-full rounded-full bg-white/[0.05] overflow-hidden">
+        <div className="h-1.5 w-full rounded-full bg-subtle overflow-hidden">
           <div
             className={cn(
               'h-full transition-all',
@@ -24,11 +24,11 @@ export function ResumeStorageMeter({ count, className }: Props) {
           />
         </div>
       </div>
-      <div className="text-xs tabular-nums text-slate-400">
-        <span className={cn(full ? 'text-red-300' : near ? 'text-amber-300' : 'text-white')}>
+      <div className="text-xs tabular-nums text-muted">
+        <span className={cn(full ? 'text-red-300' : near ? 'text-amber-300' : 'text-primary')}>
           {count}
         </span>
-        <span className="text-slate-500"> / {RESUME_LIMIT_PER_USER}</span>
+        <span className="text-muted"> / {RESUME_LIMIT_PER_USER}</span>
       </div>
     </div>
   )

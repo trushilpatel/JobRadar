@@ -62,10 +62,10 @@ export function ResumePickerInline({
           'flex items-center gap-1.5 rounded-lg border outline-none cursor-pointer transition-colors',
           size === 'sm' ? 'text-xs px-2 py-1' : 'text-sm px-2.5 py-1.5',
           empty
-            ? 'border-white/[0.05] bg-white/[0.02] text-slate-500 cursor-not-allowed'
+            ? 'border-[var(--border)] bg-subtle text-muted cursor-not-allowed'
             : selectedResumeId
               ? 'border-violet-500/30 bg-violet-500/[0.06] text-violet-200 hover:bg-violet-500/[0.1]'
-              : 'border-white/[0.08] bg-white/[0.03] text-slate-300 hover:bg-white/[0.06]',
+              : 'border-[var(--border-strong)] bg-subtle text-secondary hover:bg-hover',
           className
         )}
       >
@@ -85,7 +85,7 @@ export function ResumePickerInline({
         <Select.Content
           position="popper"
           sideOffset={4}
-          className="z-50 min-w-[220px] max-h-[340px] rounded-lg border border-white/[0.1] bg-[#13131f] shadow-xl overflow-hidden"
+          className="z-50 min-w-[220px] max-h-[340px] rounded-lg border border-[var(--border-strong)] bg-panel shadow-xl overflow-hidden"
         >
           <Select.Viewport className="p-1">
             {list.map((r) => (
@@ -94,13 +94,13 @@ export function ResumePickerInline({
                 value={r.id}
                 className={cn(
                   'flex items-center justify-between gap-3 text-xs px-2.5 py-2 rounded outline-none cursor-pointer',
-                  'text-slate-200 data-[highlighted]:bg-violet-500/[0.12] data-[highlighted]:text-white'
+                  'text-primary data-[highlighted]:bg-violet-500/[0.12] data-[highlighted]:text-primary'
                 )}
               >
                 <Select.ItemText>
                   <div className="min-w-0">
                     <div className="truncate">{r.name}</div>
-                    <div className="text-[10px] text-slate-500 mt-0.5">
+                    <div className="text-[10px] text-muted mt-0.5">
                       v{r.version_count} · {r.attached_job_count} attached
                     </div>
                   </div>
@@ -110,10 +110,10 @@ export function ResumePickerInline({
                 </Select.ItemIndicator>
               </Select.Item>
             ))}
-            <div className="border-t border-white/[0.05] mt-1 pt-1 px-1">
+            <div className="border-t border-[var(--border)] mt-1 pt-1 px-1">
               <Link
                 to={routes.resumeLibrary()}
-                className="block text-[11px] text-slate-400 hover:text-white px-2 py-1.5 rounded hover:bg-white/[0.04]"
+                className="block text-[11px] text-muted hover:text-primary px-2 py-1.5 rounded hover:bg-hover"
               >
                 Manage resumes →
               </Link>

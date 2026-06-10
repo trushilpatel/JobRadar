@@ -89,7 +89,7 @@ export function AdapterConfigCell({ value, min, max, unit, onSave }: AdapterConf
 
   if (state === 'saving') {
     return (
-      <div className="flex items-center gap-1.5 text-sm text-white/70">
+      <div className="flex items-center gap-1.5 text-sm text-secondary">
         <Loader2 size={13} className="animate-spin text-violet-400" />
         <span>
           {draft}
@@ -116,11 +116,11 @@ export function AdapterConfigCell({ value, min, max, unit, onSave }: AdapterConf
           onBlur={() => void commit()}
           onKeyDown={handleKeyDown}
           className={cn(
-            'w-20 bg-white/10 border rounded px-2 py-0.5 text-sm text-white focus:outline-none transition-colors',
+            'w-20 bg-subtle border rounded px-2 py-0.5 text-sm text-primary focus:outline-none transition-colors',
             state === 'error' ? 'border-red-500' : 'border-violet-500'
           )}
         />
-        {unit && <span className="ml-1 text-xs text-white/50">{unit}</span>}
+        {unit && <span className="ml-1 text-xs text-muted">{unit}</span>}
         {state === 'error' && errorMsg && (
           <p className="text-[11px] text-red-400 mt-0.5">{errorMsg}</p>
         )}
@@ -137,11 +137,11 @@ export function AdapterConfigCell({ value, min, max, unit, onSave }: AdapterConf
         'cursor-text text-sm transition-colors rounded px-1.5 py-0.5 -mx-1.5',
         state === 'success'
           ? 'text-emerald-400 bg-emerald-500/10'
-          : 'text-white/70 hover:text-white hover:bg-white/[0.08]'
+          : 'text-secondary hover:text-primary hover:bg-hover'
       )}
     >
       {value}
-      {unit && <span className="ml-1 text-white/40 text-xs">{unit}</span>}
+      {unit && <span className="ml-1 text-muted text-xs">{unit}</span>}
     </button>
   )
 }

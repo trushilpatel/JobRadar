@@ -35,7 +35,7 @@ export function SegmentedSwitch<T extends string>({
     <div
       role="radiogroup"
       aria-label={rest['aria-label']}
-      className="inline-flex bg-white/[0.03] border border-white/[0.08] rounded-lg p-0.5"
+      className="inline-flex bg-subtle border border-[var(--border)] rounded-lg p-0.5"
     >
       {options.map((opt) => {
         const on = opt.value === value
@@ -49,7 +49,7 @@ export function SegmentedSwitch<T extends string>({
             onClick={() => onChange(opt.value)}
             className={cn(
               'inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md transition-colors whitespace-nowrap',
-              on ? ACCENT_ON[accent] : 'text-slate-400 hover:text-slate-200',
+              on ? ACCENT_ON[accent] : 'text-muted hover:text-primary',
               on && 'shadow-[0_1px_2px_rgba(0,0,0,0.25)]'
             )}
           >

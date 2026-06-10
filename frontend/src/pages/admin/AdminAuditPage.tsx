@@ -27,7 +27,7 @@ export function AdminAuditPage() {
     setPage(1)
   }
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin-audit', filter, page, limit],
     queryFn: () => fetchAuditLog(filter, page, limit),
     staleTime: 15_000,
@@ -37,45 +37,56 @@ export function AdminAuditPage() {
   const total = data?.total ?? 0
 
   return (
-    <div className="flex flex-col h-full bg-[#0d0d14] overflow-y-auto">
-      <div className="border-b border-white/[0.07] px-6 py-4 shrink-0">
-        <h1 className="text-lg font-semibold text-white">Audit Log</h1>
+    <div className="flex flex-col h-full bg-panel overflow-y-auto">
+      <div className="border-b border-[var(--border)] px-6 py-4 shrink-0">
+        <h1 className="text-lg font-semibold text-primary">Audit Log</h1>
       </div>
 
       {/* Filters */}
-      <div className="px-6 py-3 border-b border-white/[0.07] flex items-center gap-3 shrink-0 flex-wrap">
+      <div className="px-6 py-3 border-b border-[var(--border)] flex items-center gap-3 shrink-0 flex-wrap">
         <input
           type="text"
           placeholder="Actor user ID or email…"
           value={actorInput}
           onChange={(e) => setActorInput(e.target.value)}
-          className="w-64 rounded-md bg-white/[0.04] border border-white/[0.1] px-3 py-1.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          className="w-64 rounded-md bg-subtle border border-[var(--border-strong)] px-3 py-1.5 text-sm text-primary placeholder:text-placeholder focus:outline-none focus:ring-1 focus:ring-violet-500"
         />
         <input
           type="text"
           placeholder="Action (e.g. user.delete)…"
           value={actionInput}
           onChange={(e) => setActionInput(e.target.value)}
-          className="w-56 rounded-md bg-white/[0.04] border border-white/[0.1] px-3 py-1.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          className="w-56 rounded-md bg-subtle border border-[var(--border-strong)] px-3 py-1.5 text-sm text-primary placeholder:text-placeholder focus:outline-none focus:ring-1 focus:ring-violet-500"
         />
-        <span className="text-xs text-slate-500 ml-auto">{total} entries</span>
+        <span className="text-xs text-muted ml-auto">{total} entries</span>
       </div>
+
+      {isError && (
+        <div className="flex flex-col items-center justify-center py-16 gap-3 text-secondary">
+          <p className="text-sm">Failed to load audit log.</p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="text-xs text-violet-400 hover:text-violet-300 underline"
+          >
+            Try again
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       <ErrorBoundary>
         <div className="flex-1 overflow-auto">
           {isLoading ? (
-            <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
-              Loading…
-            </div>
+            <div className="flex items-center justify-center h-32 text-muted text-sm">Loading…</div>
           ) : entries.length === 0 ? (
-            <div className="flex items-center justify-center h-32 text-slate-500 text-sm">
+            <div className="flex items-center justify-center h-32 text-muted text-sm">
               No entries found.
             </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/[0.07] text-xs text-slate-500 text-left">
+                <tr className="border-b border-[var(--border)] text-xs text-muted text-left">
                   <th className="px-4 py-2 font-medium">Time</th>
                   <th className="px-4 py-2 font-medium">Actor</th>
                   <th className="px-4 py-2 font-medium">Action</th>
@@ -86,22 +97,23 @@ export function AdminAuditPage() {
                 {entries.map((e) => (
                   <tr
                     key={e.id}
-                    className="border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors"
+                    className="border-b border-[var(--border)] hover:bg-hover transition-colors"
                   >
-                    <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">
-                      {new Date(e.created_at).toLocaleString()}
+                    <td className="px-4 py-2.5 text-xs text-muted whitespace-nowrap">
+                      {new Intl.DateTimeFormat('en-US', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                        hour12: false,
+                      }).format(new Date(e.created_at))}
                     </td>
                     <td
-                      className="px-4 py-2.5 text-xs text-slate-400 truncate max-w-[200px]"
+                      className="px-4 py-2.5 text-xs text-secondary truncate max-w-[200px]"
                       title={e.actor_user_id ?? undefined}
                     >
                       {e.actor_email ?? e.actor_user_id ?? '—'}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-violet-300 font-medium">{e.action}</td>
-                    <td
-                      className="px-4 py-2.5 text-xs text-slate-500"
-                      title={e.target_id ?? undefined}
-                    >
+                    <td className="px-4 py-2.5 text-xs text-muted" title={e.target_id ?? undefined}>
                       {e.target_type
                         ? e.target_id
                           ? `${e.target_type} · ${e.target_id.slice(0, 8)}…`
@@ -116,7 +128,7 @@ export function AdminAuditPage() {
         </div>
       </ErrorBoundary>
 
-      <div className="border-t border-white/[0.07] shrink-0">
+      <div className="border-t border-[var(--border)] shrink-0">
         <Pagination
           mode="offset"
           page={page}

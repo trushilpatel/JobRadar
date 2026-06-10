@@ -16,7 +16,7 @@ const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn('sticky top-0 bg-[#0a0a0f] z-10', className)} {...props} />
+  <thead ref={ref} className={cn('sticky top-0 bg-page z-10', className)} {...props} />
 ))
 TableHeader.displayName = 'TableHeader'
 
@@ -42,7 +42,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      'py-3 text-xs font-medium text-slate-400 uppercase tracking-wider text-left pr-4',
+      'py-3 text-xs font-medium text-muted uppercase tracking-wider text-left pr-4',
       className
     )}
     {...props}

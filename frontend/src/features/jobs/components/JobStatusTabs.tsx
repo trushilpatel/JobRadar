@@ -35,10 +35,10 @@ function CountPill({ count, active }: { count: number; active: boolean }) {
       data-testid="job-tab-count"
       className={cn(
         'ml-1.5 text-xs px-1.5 py-0.5 rounded-full',
-        active ? 'bg-violet-500/20 text-violet-300' : 'bg-white/[0.08] text-slate-500'
+        active ? 'bg-violet-500/20 text-violet-300' : 'bg-subtle text-muted'
       )}
     >
-      {count}
+      {count > 999 ? '999+' : count}
     </span>
   )
 }
@@ -55,7 +55,7 @@ function DesktopTabs({
       className="flex items-end"
       data-testid="job-status-tabs-desktop"
     >
-      <TabsList className="flex h-auto items-end gap-0.5 bg-transparent p-0 text-slate-400 dark:bg-transparent dark:text-slate-400">
+      <TabsList className="flex h-auto items-end gap-0.5 bg-transparent p-0 text-muted dark:bg-transparent dark:text-muted">
         {TABS.map((t) => {
           const active = tab === t.key
           const count = counts[t.key]
@@ -66,7 +66,7 @@ function DesktopTabs({
               className={cn(
                 'rounded-none rounded-t-lg border-b-2 -mb-px px-4 py-2 text-sm font-medium transition-colors',
                 'shadow-none ring-offset-transparent focus-visible:ring-violet-500',
-                'data-[state=inactive]:border-transparent data-[state=inactive]:text-slate-400 data-[state=inactive]:hover:text-white data-[state=inactive]:hover:bg-white/[0.03]',
+                'data-[state=inactive]:border-transparent data-[state=inactive]:text-muted data-[state=inactive]:hover:text-primary data-[state=inactive]:hover:bg-hover',
                 'data-[state=active]:text-violet-300 data-[state=active]:border-violet-500 data-[state=active]:bg-violet-500/5 data-[state=active]:shadow-none',
                 'dark:data-[state=active]:bg-violet-500/5 dark:data-[state=active]:text-violet-300'
               )}
@@ -115,7 +115,7 @@ function MobileTabSelect({
         <Select.Content
           position="popper"
           sideOffset={4}
-          className="z-50 min-w-[180px] rounded-lg border border-white/[0.1] bg-[#13131f] shadow-xl overflow-hidden"
+          className="z-50 min-w-[180px] rounded-lg border border-[var(--border-strong)] bg-panel shadow-xl overflow-hidden"
         >
           <Select.Viewport className="p-1">
             {TABS.map((t) => {
@@ -127,8 +127,8 @@ function MobileTabSelect({
                   value={t.key}
                   className={cn(
                     'flex items-center justify-between gap-2 px-3 py-1.5 text-sm rounded-md cursor-pointer outline-none',
-                    'data-[highlighted]:bg-white/[0.06]',
-                    isActive ? 'text-violet-300' : 'text-slate-300'
+                    'data-[highlighted]:bg-hover',
+                    isActive ? 'text-violet-300' : 'text-secondary'
                   )}
                 >
                   <Select.ItemText>
@@ -154,7 +154,7 @@ export function JobStatusTabs({ tab, onChange, counts, leftSlot, rightSlot }: Jo
   const isMobile = useIsMobile()
 
   return (
-    <div className="flex items-end gap-0.5 px-6 border-b border-white/[0.07]">
+    <div className="flex items-end gap-0.5 px-6 border-b border-[var(--border)]">
       {leftSlot && <div className="flex items-center pb-2 mr-4 shrink-0">{leftSlot}</div>}
       {isMobile ? (
         <div className="flex items-center py-2">

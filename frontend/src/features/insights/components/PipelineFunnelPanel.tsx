@@ -30,13 +30,13 @@ function FunnelContent({ data }: { data: FunnelStep[] }) {
         return (
           <div key={stage}>
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs text-slate-400">{LABELS[stage]}</span>
-              <span className="text-xs font-medium text-white tabular-nums">
+              <span className="text-xs text-muted">{LABELS[stage]}</span>
+              <span className="text-xs font-medium text-primary tabular-nums">
                 {count}
-                <span className="text-slate-500 ml-1.5">({pct}%)</span>
+                <span className="text-muted ml-1.5">({pct}%)</span>
               </span>
             </div>
-            <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+            <div className="h-1.5 bg-subtle rounded-full overflow-hidden">
               <div
                 style={{ '--bar-pct': `${Math.max(pct, count > 0 ? 2 : 0)}%` } as CSSProperties}
                 className={cn(

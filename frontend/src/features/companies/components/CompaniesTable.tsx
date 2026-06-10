@@ -72,7 +72,7 @@ export function CompaniesTable({
         />
       </div>
 
-      <div className="border-t border-white/[0.07] shrink-0">
+      <div className="border-t border-[var(--border)] shrink-0">
         <Pagination
           mode="cursor"
           page={page}

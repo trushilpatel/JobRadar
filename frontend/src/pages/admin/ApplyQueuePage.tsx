@@ -25,7 +25,7 @@ const EMPTY_BY_TAB: Record<ApplyQueueFilter, string> = {
 
 export function ApplyQueuePage() {
   const [filter, setFilter] = useState<ApplyQueueFilter>('all')
-  const { data, isLoading } = useApplyQueue(filter)
+  const { data, isLoading, isError, refetch } = useApplyQueue(filter)
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-auto">
@@ -33,31 +33,32 @@ export function ApplyQueuePage() {
         {/* Header */}
         <div className="flex items-start justify-between gap-6 flex-wrap">
           <div>
-            <h1 className="text-2xl font-semibold text-white">Apply Queue</h1>
-            <p className="text-sm text-slate-400 mt-1">
+            <h1 className="text-2xl font-semibold text-primary">Apply Queue</h1>
+            <p className="text-sm text-muted mt-1">
               Every job sitting between <em>saved</em> and <em>submitted</em>. Click a row to open
               the job on the Jobs page; pick a resume inline to attach it.
             </p>
           </div>
           <Link
             to={routes.resumeLibrary()}
-            className="text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded bg-white/[0.04] hover:bg-white/[0.08]"
+            className="text-xs text-muted hover:text-primary px-2.5 py-1 rounded bg-subtle hover:bg-hover"
           >
             ← Resume library
           </Link>
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 border-b border-white/[0.07] overflow-x-auto">
+        <div className="flex items-center gap-1 border-b border-[var(--border)] overflow-x-auto">
           {FILTER_TABS.map((t) => (
             <button
+              type="button"
               key={t.key}
               onClick={() => setFilter(t.key)}
               className={cn(
                 'text-sm px-3 py-2 -mb-px border-b-2 transition-colors whitespace-nowrap',
                 filter === t.key
-                  ? 'border-violet-500 text-white'
-                  : 'border-transparent text-slate-400 hover:text-white'
+                  ? 'border-violet-500 text-primary'
+                  : 'border-transparent text-muted hover:text-primary'
               )}
             >
               {t.label}
@@ -66,11 +67,24 @@ export function ApplyQueuePage() {
         </div>
 
         <ErrorBoundary>
-          <ApplyQueueTable
-            items={data ?? []}
-            isLoading={isLoading}
-            emptyMessage={EMPTY_BY_TAB[filter]}
-          />
+          {isError ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-secondary">
+              <p className="text-sm">Failed to load. Please try again.</p>
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="text-xs text-violet-400 hover:text-violet-300 underline"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <ApplyQueueTable
+              items={data ?? []}
+              isLoading={isLoading}
+              emptyMessage={EMPTY_BY_TAB[filter]}
+            />
+          )}
         </ErrorBoundary>
       </div>
     </div>

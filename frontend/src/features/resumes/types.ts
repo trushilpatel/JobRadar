@@ -75,6 +75,11 @@ export interface ApplyQueueItem {
     saved_at: string
     // From user_job_state — drives whether row appears in Interviewing tab.
     lifecycle_status: JobLifecycleStatus
+    // Analyzer-populated fields — undefined until the job has been processed.
+    responsibilities?: string[]
+    requirements?: string[]
+    role_brief?: string
+    tech_stack?: string[]
   }
   resume: {
     id: string
