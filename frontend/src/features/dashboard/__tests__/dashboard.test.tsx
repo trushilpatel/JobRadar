@@ -75,7 +75,8 @@ describe('ProgressPanel', () => {
   it('renders offer count when data is present', async () => {
     vi.mocked(dashboardApi.fetchProgress).mockResolvedValue(sampleProgress)
     render(<ProgressPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('decision pending')).toBeInTheDocument())
+    // sampleProgress.offer_count = 0 → sub-label is 'no offers yet'
+    await waitFor(() => expect(screen.getByText('no offers yet')).toBeInTheDocument())
   })
 
   it('renders stat columns when data is zero-valued', async () => {
@@ -87,8 +88,7 @@ describe('ProgressPanel', () => {
       offer_count: 0,
     })
     render(<ProgressPanel />, { wrapper: makeWrapper() })
-    // Once data resolves, the stat labels are visible
-    await waitFor(() => expect(screen.getByText('decision pending')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('no offers yet')).toBeInTheDocument())
     expect(document.querySelector('.animate-pulse')).not.toBeInTheDocument()
   })
 })

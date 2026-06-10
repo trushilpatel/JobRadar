@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import type { Company } from '@/types'
 import { useCompanyScanStats } from '@/features/companies/hooks/useCompanyScanStats'
 import { useCompanyAnalytics } from '@/features/companies/hooks/useCompanyAnalytics'
@@ -7,6 +8,10 @@ import { CompanyDetailDrawer } from '../CompanyDetailDrawer'
 
 vi.mock('@/features/companies/hooks/useCompanyScanStats')
 vi.mock('@/features/companies/hooks/useCompanyAnalytics')
+
+function renderDrawer(ui: React.ReactElement) {
+  return render(<TooltipProvider>{ui}</TooltipProvider>)
+}
 
 const company: Company = {
   id: 'stripe',
@@ -42,7 +47,7 @@ beforeEach(() => {
 describe('CompanyDetailDrawer — View new jobs navigation', () => {
   it('calls onViewJobs with the company name when the button is clicked', () => {
     const onViewJobs = vi.fn()
-    render(<CompanyDetailDrawer {...baseProps} onViewJobs={onViewJobs} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} onViewJobs={onViewJobs} />)
 
     fireEvent.click(screen.getByRole('button', { name: /view 5 new jobs/i }))
 
@@ -51,7 +56,7 @@ describe('CompanyDetailDrawer — View new jobs navigation', () => {
   })
 
   it('does not throw when onViewJobs is not provided', () => {
-    render(<CompanyDetailDrawer {...baseProps} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} />)
 
     // Button is only shown when total_new > 0; clicking it should be a no-op
     expect(() =>
@@ -74,7 +79,7 @@ describe('CompanyDetailDrawer — header actions', () => {
   it('invokes onScan and onEdit from the header buttons', () => {
     const onScan = vi.fn()
     const onEdit = vi.fn()
-    render(<CompanyDetailDrawer {...baseProps} onScan={onScan} onEdit={onEdit} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} onScan={onScan} onEdit={onEdit} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Scan now' }))
     expect(onScan).toHaveBeenCalledWith(company)
@@ -85,17 +90,17 @@ describe('CompanyDetailDrawer — header actions', () => {
 
   it('invokes onClose from the close button', () => {
     const onClose = vi.fn()
-    render(<CompanyDetailDrawer {...baseProps} onClose={onClose} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} onClose={onClose} />)
     fireEvent.click(screen.getByRole('button', { name: 'Close drawer' }))
     expect(onClose).toHaveBeenCalledOnce()
   })
 
   it('renders the host from the company url, falling back to the raw url when invalid', () => {
-    const { unmount } = render(<CompanyDetailDrawer {...baseProps} />)
+    const { unmount } = renderDrawer(<CompanyDetailDrawer {...baseProps} />)
     expect(screen.getByText('stripe.com')).toBeInTheDocument()
     unmount()
 
-    render(<CompanyDetailDrawer {...baseProps} company={{ ...company, url: 'not a url' }} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} company={{ ...company, url: 'not a url' }} />)
     expect(screen.getByText('not a url')).toBeInTheDocument()
   })
 })
@@ -103,7 +108,7 @@ describe('CompanyDetailDrawer — header actions', () => {
 describe('CompanyDetailDrawer — delete confirmation', () => {
   it('opens the confirm dialog and calls onDelete on confirm', () => {
     const onDelete = vi.fn()
-    render(<CompanyDetailDrawer {...baseProps} onDelete={onDelete} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} onDelete={onDelete} />)
 
     fireEvent.click(screen.getByTitle('Delete'))
     expect(screen.getByText('Delete company?')).toBeInTheDocument()
@@ -114,7 +119,7 @@ describe('CompanyDetailDrawer — delete confirmation', () => {
 
   it('closes the confirm dialog on cancel without deleting', () => {
     const onDelete = vi.fn()
-    render(<CompanyDetailDrawer {...baseProps} onDelete={onDelete} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} onDelete={onDelete} />)
 
     fireEvent.click(screen.getByTitle('Delete'))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -126,7 +131,7 @@ describe('CompanyDetailDrawer — recent scans + stats', () => {
   it('renders a loading skeleton while scan stats load', () => {
     setScanStats({ data: undefined, isLoading: true })
     setAnalytics({ data: undefined, isError: false })
-    const { container } = render(<CompanyDetailDrawer {...baseProps} />)
+    const { container } = renderDrawer(<CompanyDetailDrawer {...baseProps} />)
     expect(container.querySelector('.animate-pulse')).toBeInTheDocument()
   })
 
@@ -145,7 +150,7 @@ describe('CompanyDetailDrawer — recent scans + stats', () => {
       isLoading: false,
     })
     setAnalytics({ data: undefined, isError: false })
-    render(
+    renderDrawer(
       <CompanyDetailDrawer
         {...baseProps}
         company={{ ...company, last_scan_at: '2024-01-01T00:00:00Z' }}
@@ -170,7 +175,7 @@ describe('CompanyDetailDrawer — recent scans + stats', () => {
       isLoading: false,
     })
     setAnalytics({ data: undefined, isError: false })
-    render(<CompanyDetailDrawer {...baseProps} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} />)
     expect(screen.getByText('450ms')).toBeInTheDocument()
   })
 })
@@ -182,7 +187,7 @@ describe('CompanyDetailDrawer — logs section', () => {
 
   it('renders log skeletons while scan stats are loading', () => {
     setScanStats({ data: undefined, isLoading: true })
-    const { container } = render(<CompanyDetailDrawer {...baseProps} />)
+    const { container } = renderDrawer(<CompanyDetailDrawer {...baseProps} />)
     fireEvent.click(screen.getByText('Logs'))
     // Skeleton rows appear inside the expanded logs region while loading.
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(1)
@@ -202,7 +207,7 @@ describe('CompanyDetailDrawer — logs section', () => {
       },
       isLoading: false,
     })
-    render(<CompanyDetailDrawer {...baseProps} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} />)
     fireEvent.click(screen.getByText('Logs'))
     expect(screen.getByText('No runs yet')).toBeInTheDocument()
   })
@@ -238,7 +243,7 @@ describe('CompanyDetailDrawer — logs section', () => {
       },
       isLoading: false,
     })
-    render(<CompanyDetailDrawer {...baseProps} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} />)
     fireEvent.click(screen.getByText('Logs'))
 
     expect(screen.getByText(/OK · 12 fetched · 4 new/)).toBeInTheDocument()
@@ -273,7 +278,7 @@ describe('CompanyDetailDrawer — hiring activity', () => {
 
   it('shows an error message when analytics fail to load', () => {
     setAnalytics({ data: undefined, isError: true })
-    render(<CompanyDetailDrawer {...baseProps} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} />)
     expect(screen.getByText('Failed to load hiring data')).toBeInTheDocument()
   })
 
@@ -288,7 +293,7 @@ describe('CompanyDetailDrawer — hiring activity', () => {
       },
       isError: false,
     })
-    render(<CompanyDetailDrawer {...baseProps} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} />)
     expect(screen.getByText('No hiring data yet')).toBeInTheDocument()
   })
 
@@ -303,7 +308,7 @@ describe('CompanyDetailDrawer — hiring activity', () => {
       },
       isError: false,
     })
-    render(<CompanyDetailDrawer {...baseProps} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} />)
     // velocity label: this_week 8 vs last_week 3 → ↑ 5
     expect(screen.getByText(/↑ 5 · 8 this week/)).toBeInTheDocument()
   })
@@ -316,7 +321,7 @@ describe('CompanyDetailDrawer — hiring activity', () => {
       },
       isError: false,
     })
-    render(<CompanyDetailDrawer {...baseProps} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} />)
     expect(screen.getByText('4 new this week')).toBeInTheDocument()
   })
 
@@ -328,7 +333,7 @@ describe('CompanyDetailDrawer — hiring activity', () => {
       },
       isError: false,
     })
-    render(<CompanyDetailDrawer {...baseProps} />)
+    renderDrawer(<CompanyDetailDrawer {...baseProps} />)
     expect(screen.getByText(/↓ 5 · 1 this week/)).toBeInTheDocument()
   })
 })
