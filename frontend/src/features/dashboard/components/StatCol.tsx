@@ -42,6 +42,11 @@ export function StatCol({ label, value, sub, valueClass, onClick, onKeyDown }: S
         )}
       >
         {sub}
+        {isInteractive && (
+          <span className="ml-1 opacity-0 group-hover:opacity-60 transition-opacity text-[10px]">
+            →
+          </span>
+        )}
       </span>
     </div>
   )

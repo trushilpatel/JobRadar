@@ -25,8 +25,11 @@ function Sparkline({ row }: { row: CompanyVelocityRow }) {
         return (
           <div
             key={i}
-            className={cn('rounded-[2px] w-2', isCurrent ? 'bg-emerald-600' : 'bg-emerald-950')}
-            style={{ height: `${h}px` }}
+            className="rounded-[2px] w-2"
+            style={{
+              height: `${h}px`,
+              background: isCurrent ? '#1d9e75' : 'var(--sparkline-bar-prev)',
+            }}
           />
         )
       })}

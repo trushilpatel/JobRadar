@@ -4,9 +4,9 @@ import type { TechTrendRow } from '@/types'
 import { dashboardQueryKeys } from '../queryKeys'
 
 const RISING_ACTIVE_COLOR = '#534ab7'
-const RISING_DIM_COLOR = '#221f4a'
+const RISING_DIM_COLOR = 'var(--sparkline-dim-purple)'
 const NEW_ENTRANT_ACTIVE_COLOR = '#1d9e75'
-const NEW_ENTRANT_DIM_COLOR = '#083426'
+const NEW_ENTRANT_DIM_COLOR = 'var(--sparkline-dim-green)'
 
 // Sparkline for a tech row — 4 monthly bars
 function TechSparkline({
@@ -101,7 +101,7 @@ export function TechTrendsPanel() {
       {isLoading ? (
         <div className="h-40 animate-pulse bg-subtle rounded-lg" />
       ) : isError ? (
-        <p className="text-sm text-muted py-4">Failed to load tech trends</p>
+        <p className="text-sm text-placeholder py-4">No tech data yet</p>
       ) : !data ? (
         <p className="text-sm text-placeholder py-4">No tech data yet</p>
       ) : (

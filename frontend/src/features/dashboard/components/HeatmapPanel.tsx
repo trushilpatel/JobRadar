@@ -5,7 +5,13 @@ import { fetchHeatmap } from '../api/dashboard.api'
 import type { WeeklyCount } from '@/types'
 import { dashboardQueryKeys } from '../queryKeys'
 
-const HEAT_COLORS = ['#1c1c1e', '#085041', '#0f6e56', '#1d9e75', '#5dcaa5']
+const HEAT_CSS_VARS = [
+  'var(--heat-zero)',
+  'var(--heat-1)',
+  'var(--heat-2)',
+  'var(--heat-3)',
+  'var(--heat-4)',
+]
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const HALF = 26
 
@@ -88,7 +94,7 @@ function HeatRow({
             <TooltipPrimitive.Root key={offset + col}>
               <TooltipPrimitive.Trigger asChild>
                 <div
-                  style={{ '--cell-bg': HEAT_COLORS[ci] } as CSSProperties}
+                  style={{ '--cell-bg': HEAT_CSS_VARS[ci] } as CSSProperties}
                   className="rounded-[3px] cursor-pointer transition-opacity hover:opacity-75 aspect-square [background:var(--cell-bg)]"
                 />
               </TooltipPrimitive.Trigger>
@@ -158,7 +164,7 @@ export function HeatmapPanel() {
             <div className="flex items-center justify-end gap-1.5">
               <span className="text-[11px] text-placeholder">fewer</span>
               <div className="flex gap-[3px]">
-                {HEAT_COLORS.map((c, i) => (
+                {HEAT_CSS_VARS.map((c, i) => (
                   <span
                     key={i}
                     style={{ '--cell-bg': c } as CSSProperties}
