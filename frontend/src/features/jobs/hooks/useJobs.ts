@@ -67,6 +67,7 @@ export function useJobs() {
       companies: urlState.companies.length > 0 ? urlState.companies : undefined,
       remote: urlState.loc === 'remote' || undefined,
       onSite: urlState.loc === 'onsite' || undefined,
+      hybrid: urlState.loc === 'hybrid' || undefined,
       experienceRanges: urlState.exp.length > 0 ? urlState.exp : undefined,
       daysAdded:
         urlState.since === '24h'
@@ -106,6 +107,11 @@ export function useJobs() {
   const currentPage = fetchedPages[pageIndex]
   const jobs = useMemo(() => currentPage?.items ?? [], [currentPage])
   const itemsOnPage = jobs.length
+
+  // True when we've eagerly advanced pageIndex beyond what's been fetched yet.
+  // The DataTable should show its loading skeleton rather than the empty-state
+  // message while the in-flight fetch resolves.
+  const isLoadingPage = pageIndex > fetchedPages.length - 1 && (query.isFetchingNextPage ?? false)
 
   // Auto-snap: if a refetch returns fewer pages than the cursor (e.g. the
   // last item was dismissed off the current page), bounce the user to the
@@ -230,6 +236,7 @@ export function useJobs() {
     itemsBeforePage,
     companies,
     isLoading: query.isLoading,
+    isLoadingPage,
     isError: query.isError,
     isFetching: query.isFetching,
     isFetchingNextPage: query.isFetchingNextPage,

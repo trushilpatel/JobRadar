@@ -134,6 +134,7 @@ export interface JobFilters {
   companies?: string[]
   remote?: boolean
   onSite?: boolean
+  hybrid?: boolean
   experienceRanges?: string[]
   daysAdded?: number
   sortBy?: string
@@ -183,6 +184,7 @@ export async function fetchJobs(
   filters.companies?.forEach((c) => p.append('companies', c))
   if (filters.remote) p.set('remote', 'true')
   if (filters.onSite) p.set('on_site', 'true')
+  if (filters.hybrid) p.set('hybrid', 'true')
   filters.experienceRanges?.forEach((r) => p.append('experience_ranges', r))
   if (filters.daysAdded) p.set('days_added', String(filters.daysAdded))
   if (filters.sortBy) p.set('sort_by', filters.sortBy)

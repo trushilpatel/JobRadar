@@ -380,7 +380,7 @@ func TestRepository_RoleCategories_SQL(t *testing.T) {
 		t.Fatal("no SQL captured")
 	}
 	mustContain(t, captured, "COALESCE(role_category, 'other')")
-	mustContain(t, captured, "GROUP BY role_category")
+	mustContain(t, captured, "GROUP BY COALESCE(role_category, 'other')")
 	mustContain(t, captured, "LIMIT 25")
 }
 

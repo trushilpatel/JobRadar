@@ -11,11 +11,11 @@ import {
 import { JOB_STATUS, TAB_KEYS, type TabKey } from '@/config/constants/jobStatus'
 import { routes } from '@/config/routes'
 
-export type LocationFilter = 'any' | 'remote' | 'onsite'
+export type LocationFilter = 'any' | 'remote' | 'onsite' | 'hybrid'
 export type DateFilter = 'all' | '24h' | '7d' | '30d'
 export type SortDir = 'asc' | 'desc'
 
-const LOCATION_VALUES = ['any', 'remote', 'onsite'] as const
+const LOCATION_VALUES = ['any', 'remote', 'onsite', 'hybrid'] as const
 const DATE_VALUES = ['all', '24h', '7d', '30d'] as const
 const DIR_VALUES = ['asc', 'desc'] as const
 
