@@ -1,0 +1,32 @@
+# Node 1 — Serving only (API + Console).
+# Pipeline workers are disabled so this node handles only user-facing traffic.
+# Image tags are NOT committed here — passed at deploy time via --set images.<name>.tag=<sha>
+
+nats:
+  enabled: false
+  external: true
+
+scheduler:
+  enabled: false
+crawler:
+  enabled: false
+orchestrator:
+  enabled: false
+crawlerNode:
+  enabled: false
+filter:
+  enabled: false
+enricher:
+  enabled: false
+
+imagePullSecret: ghcr-pull-secret
+
+images:
+  backend:
+    repository: ghcr.io/trushilpatel/jobradar-backend
+    tag: latest # overridden at deploy time via --set
+    pullPolicy: IfNotPresent
+  console:
+    repository: ghcr.io/trushilpatel/jobradar-console
+    tag: latest # overridden at deploy time via --set
+    pullPolicy: IfNotPresent
