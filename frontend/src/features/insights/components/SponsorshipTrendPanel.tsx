@@ -13,7 +13,8 @@ import { tooltipStyle } from '../insightStyles'
 import { useSponsorshipTrend } from '../hooks/useInsights'
 
 function SponsorshipContent({ data }: { data: SponsorshipDay[] }) {
-  if (data.length === 0) return <InsightEmpty />
+  if (data.length === 0)
+    return <InsightEmpty reason="Requires enriched jobs with sponsorship data (last 30 days)" />
   const chartData = data.map((d) => ({
     date: d.date.slice(5),
     total: d.total,

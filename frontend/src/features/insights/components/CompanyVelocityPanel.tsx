@@ -36,7 +36,8 @@ function Sparkline({ row }: { row: CompanyVelocityInsight }) {
 }
 
 function VelocityContent({ data }: { data: CompanyVelocityInsight[] }) {
-  if (data.length === 0) return <InsightEmpty />
+  if (data.length === 0)
+    return <InsightEmpty reason="Requires 2+ weeks of scan history to compute velocity" />
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
