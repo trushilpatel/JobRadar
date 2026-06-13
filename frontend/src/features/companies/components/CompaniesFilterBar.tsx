@@ -16,7 +16,7 @@ import {
 import * as Dialog from '@radix-ui/react-dialog'
 import { cn } from '@/lib/utils/utils'
 import { SegmentedSwitch } from '@/components/ui/segmented-switch'
-import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
+import { MultiSelect } from '@/components/ui/multi-select'
 import type { ActiveFilter, ScanStatusFilter } from '../constants'
 import { SCAN_STATUS_FILTER, ACTIVE_FILTER } from '../constants'
 
@@ -101,6 +101,15 @@ function Divider() {
 export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
   const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false)
   const [runAllConfirmOpen, setRunAllConfirmOpen] = useState(false)
+  const [newAdapter, setNewAdapter] = useState('')
+
+  function handleAddAdapter() {
+    const v = newAdapter.trim().toLowerCase()
+    if (!v) return
+    p.onAddAdapter(v)
+    if (!p.adapters.includes(v)) p.onAdaptersChange([...p.adapters, v])
+    setNewAdapter('')
+  }
 
   return (
     <div className="px-6 py-3 border-b border-[var(--border)] flex items-center gap-2">
@@ -127,19 +136,35 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
         </div>
 
         {/* Adapter multi-select */}
-        <MultiSelectDropdown
-          aria-label="Filter by adapter"
-          options={p.adapterOptions}
-          selected={p.adapters}
-          onChange={p.onAdaptersChange}
-          placeholder="All adapters"
-          singularLabel={(n) => `${n} adapters`}
-          searchPlaceholder="Search adapters…"
-          addable
-          onAdd={p.onAddAdapter}
-          addPlaceholder="Add new adapter…"
-          leadingIcon={<Filter size={12} />}
-        />
+        <div className="flex items-center gap-1.5">
+          <Filter size={12} className="text-muted shrink-0" />
+          <MultiSelect
+            options={p.adapterOptions}
+            selected={p.adapters}
+            onChange={p.onAdaptersChange}
+            placeholder="All adapters"
+          />
+        </div>
+
+        {/* Add new adapter */}
+        <div className="flex items-center gap-1">
+          <input
+            value={newAdapter}
+            onChange={(e) => setNewAdapter(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleAddAdapter()
+            }}
+            placeholder="Add new adapter…"
+            className="py-1.5 px-2 text-xs bg-subtle border border-[var(--border)] rounded-lg placeholder:text-placeholder focus:outline-none focus:border-violet-500 w-36 text-primary"
+          />
+          <button
+            type="button"
+            onClick={handleAddAdapter}
+            className="text-[11px] px-2 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+          >
+            + Add
+          </button>
+        </div>
 
         <Divider />
 
