@@ -94,7 +94,7 @@ mappings:
 | `crawler_changed` | `backend/apps/crawler/**`, `backend/service/**`, `backend/platform/**`, `backend/common/**`, `go.mod`, `go.sum`, `infra/Dockerfile.crawler`                                                                                                           |
 | `orch_changed`    | `backend/apps/orchestrator/**`, `backend/service/**`, `backend/platform/**`, `backend/common/**`, `go.mod`, `go.sum`, `infra/Dockerfile.orchestrator`                                                                                                 |
 | `node_changed`    | `backend/apps/crawler-node/**`, `backend/service/**`, `backend/platform/**`, `backend/common/**`, `go.mod`, `go.sum`, `infra/Dockerfile.crawler-node`                                                                                                 |
-| `console_changed` | `frontend/**`, `infra/Dockerfile.console`                                                                                                                                                                                                             |
+| `console_changed` | `frontend/**`, `frontend/Dockerfile`                                                                                                                                                                                                                  |
 
 `backend/service/`, `backend/platform/`, `backend/common/`, and `go.mod` changes set **all four**
 backend image filters to `true` — shared code changes trigger a full backend rebuild.
@@ -116,7 +116,7 @@ Five independent images, dual-tagged on every build:
 | `images.crawler`      | `ghcr.io/trushilpatel/jobradar-crawler`      | `Dockerfile.crawler`      | crawler                                   |
 | `images.orchestrator` | `ghcr.io/trushilpatel/jobradar-orchestrator` | `Dockerfile.orchestrator` | orchestrator                              |
 | `images.crawlerNode`  | `ghcr.io/trushilpatel/jobradar-crawler-node` | `Dockerfile.crawler-node` | crawler-node                              |
-| `images.console`      | `ghcr.io/trushilpatel/jobradar-console`      | `Dockerfile.console`      | React + nginx                             |
+| `images.console`      | `ghcr.io/trushilpatel/jobradar-console`      | `frontend/Dockerfile`     | React + nginx                             |
 
 Every build pushes two tags:
 
