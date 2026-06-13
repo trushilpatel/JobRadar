@@ -22,8 +22,8 @@ spec:
       labels:
         {{- include "jobradar.labels" . | nindent 8 }}
         component: api
-        annotations:
-          deploy/backend-sha: {{ .Values.images.backend.tag | quote }}
+      annotations:
+        deploy/backend-sha: {{ .Values.images.backend.tag | quote }}
     spec:
       {{- with .Values.imagePullSecret }}
       imagePullSecrets:
