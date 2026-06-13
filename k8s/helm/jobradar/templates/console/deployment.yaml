@@ -1,3 +1,4 @@
+{{- if .Values.console.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,7 +22,13 @@ spec:
       labels:
         {{- include "jobradar.labels" . | nindent 8 }}
         component: console
+      annotations:
+        deploy/console-sha: {{ .Values.images.console.tag | quote }}
     spec:
+      {{- with .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
       containers:
         - name: console
           image: {{ .Values.images.console.repository }}:{{ .Values.images.console.tag }}
@@ -86,3 +93,4 @@ spec:
             sizeLimit: 4Mi
       securityContext:
         runAsNonRoot: true
+{{- end }}

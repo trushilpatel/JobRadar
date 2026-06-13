@@ -136,3 +136,89 @@ For crawler-node, the per-pod limit is 64Mi. At 3 replicas = 192Mi total. If rai
 | filter/enricher `CrashLoopBackOff`           | `secrets/jobradar_NATS.creds` empty or wrong, or NATS secret not recreated | Fill creds file, run `make k8s-bootstrap`, then restart pods                                                                                                                                                              |
 | `TLS handshake timeout`                      | k3d API server still starting after restart                                | Wait ~30s; `until kubectl get nodes 2>/dev/null \| grep -q Ready; do sleep 3; done`                                                                                                                                       |
 | Namespace stuck `Terminating`                | Finalizers not cleared                                                     | Force-clear: `kubectl get ns <name> -o json \| python3 -c "import sys,json; d=json.load(sys.stdin); d['spec']['finalizers']=[]; print(json.dumps(d))" \| kubectl replace --raw "/api/v1/namespaces/<name>/finalize" -f -` |
+
+## OCI Production Deployment
+
+Two Oracle Cloud Free Tier A1 ARM instances (1 GB each). Deployed automatically on every push to `main` via `.github/workflows/deploy.yml`. Only changed images are rebuilt; only affected nodes are deployed; only pods whose image tag annotation changed are restarted.
+
+**Node 1 — Serving:** API + Console (`values.prod-node1.yaml`)
+**Node 2 — Pipeline:** Scheduler + Orchestrator + CrawlerNode (×3) + Filter + Enricher (`values.prod-node2.yaml`)
+
+### One-time bootstrap (run once per OCI instance over SSH)
+
+```bash
+# 1. Install k3s
+curl -sfL https://get.k3s.io | sh -
+
+# 2. Install Helm (k3s does not include helm CLI)
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# 3. Install jq (used by deploy workflow to read current image tags)
+apt-get install -y jq        # Ubuntu/Debian
+# or: yum install -y jq      # Oracle Linux
+
+# 4. Install Doppler CLI and authenticate
+curl -Ls https://cli.doppler.com/install.sh | sh
+doppler login
+doppler setup   # select job-radar / prod
+
+# 5. Create GHCR imagePullSecret (needs a GitHub PAT with read:packages scope)
+KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl create namespace jobradar-local
+KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl create secret docker-registry ghcr-pull-secret \
+  --docker-server=ghcr.io \
+  --docker-username=<your-github-username> \
+  --docker-password=<PAT-with-read:packages> \
+  --namespace jobradar-local
+
+# 6. Open OCI Security List ports
+#    Node 1: 22 (SSH), 30080 (API NodePort), 30300 (Console NodePort)
+#    Node 2: 22 (SSH) only — no inbound user traffic
+
+# 7. Run first deploy manually (subsequent deploys are automated)
+#    On Node 1:
+KUBECONFIG=/etc/rancher/k3s/k3s.yaml doppler run -- helm upgrade --install jobradar /tmp/jobradar-chart \
+  -f /tmp/values.prod-node1.yaml \
+  --set images.backend.tag=<sha> \
+  --set images.console.tag=<sha> \
+  --namespace jobradar-local --create-namespace --wait
+#    On Node 2:
+KUBECONFIG=/etc/rancher/k3s/k3s.yaml doppler run -- helm upgrade --install jobradar /tmp/jobradar-chart \
+  -f /tmp/values.prod-node2.yaml \
+  --set images.backend.tag=<sha> \
+  --set images.crawler.tag=<sha> \
+  --set images.orchestrator.tag=<sha> \
+  --set images.crawlerNode.tag=<sha> \
+  --namespace jobradar-local --create-namespace --wait
+```
+
+### GitHub secrets required
+
+Add in GitHub repo → Settings → Secrets and variables → Actions:
+
+| Secret                   | Value                                                      |
+| ------------------------ | ---------------------------------------------------------- |
+| `OCI_NODE1_HOST`         | Public IP of Node 1                                        |
+| `OCI_NODE2_HOST`         | Public IP of Node 2                                        |
+| `OCI_SSH_USER`           | SSH username (`ubuntu` for Ubuntu, `opc` for Oracle Linux) |
+| `OCI_SSH_KEY`            | Content of the SSH private key (Ed25519, no passphrase)    |
+| `VITE_SUPABASE_URL`      | Supabase project URL (same as Doppler `SUPABASE_URL`)      |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key (same as Doppler `SUPABASE_ANON_KEY`)    |
+
+`GITHUB_TOKEN` for GHCR push is injected by GitHub automatically — no extra secret needed.
+
+### Deploy observability (Grafana Alloy) on each node
+
+```bash
+KUBECONFIG=/etc/rancher/k3s/k3s.yaml doppler run -- helm upgrade --install obs k8s/helm/obs \
+  --namespace jobradar-local
+```
+
+### OCI failure modes
+
+| Symptom                        | Cause                              | Fix                                                         |
+| ------------------------------ | ---------------------------------- | ----------------------------------------------------------- |
+| `ErrImagePull` on all pods     | `ghcr-pull-secret` missing         | Re-run bootstrap step 5                                     |
+| `helm: command not found`      | Helm not installed on OCI instance | Re-run bootstrap step 2                                     |
+| `jq: command not found`        | jq not installed                   | Re-run bootstrap step 3                                     |
+| Pods not restarting after push | Image tag annotation unchanged     | Confirm the build job ran; check deploy workflow logs       |
+| `doppler run` not found        | Doppler CLI not installed          | Re-run bootstrap step 4; ensure `/usr/local/bin` is in PATH |

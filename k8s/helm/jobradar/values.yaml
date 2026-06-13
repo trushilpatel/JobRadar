@@ -1,3 +1,5 @@
+imagePullSecret: ""   # prod: ghcr-pull-secret
+
 namespace: jobradar-local
 environment: local
 
@@ -30,6 +32,7 @@ images:
   # Redis is external (Upstash) — no in-cluster deployment
 
 api:
+  enabled: true
   nodePort: 30080
   metricsAddr: ":9100"
   devToken: ""          # Set locally to enable dev auth bypass. Leave empty in production.
@@ -48,9 +51,11 @@ api:
   apiMaxBodyBytes: "1048576"
 
 console:
+  enabled: true
   nodePort: 30300
 
 filter:
+  enabled: true
   natsUrl: "tls://connect.ngs.global"
   natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
   batchSize: "50"
@@ -68,6 +73,7 @@ filter:
   dbPort: "6543"
 
 enricher:
+  enabled: true
   natsUrl: "tls://connect.ngs.global"
   natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
   fetchConcurrency: "15"
@@ -90,6 +96,7 @@ enricher:
   dbPort: "6543"
 
 crawler:
+  enabled: true
   natsUrl: "tls://connect.ngs.global"
   natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
   pollIntervalSeconds: "60"
@@ -105,6 +112,7 @@ crawler:
   dbPort: "6543"
 
 scheduler:
+  enabled: true
   scanIntervalMinutes: "1440"
   stuckTimeoutMinutes: "30"
   checkIntervalSeconds: "60"
@@ -116,6 +124,7 @@ scheduler:
   dbPort: "6543"
 
 orchestrator:
+  enabled: true
   natsUrl: "tls://connect.ngs.global"
   natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
   logLevel: info
@@ -128,6 +137,7 @@ orchestrator:
 # crawlerNode: stateless HTTP workers that poll the orchestrator.
 # Increase replicas to scale out concurrent crawling capacity.
 crawlerNode:
+  enabled: true
   replicas: 1
   # orchestratorUrl is the in-cluster Service address of the orchestrator.
   orchestratorUrl: "http://jobradar-orchestrator.jobradar-local.svc.cluster.local:8082"
@@ -140,4 +150,5 @@ crawlerNode:
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
 
 nats:
+  enabled: true
   external: true   # Synadia Cloud is the broker — no in-cluster NATS deployed
