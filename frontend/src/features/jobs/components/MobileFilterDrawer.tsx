@@ -6,7 +6,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/components/ui/drawer'
-import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
+import { MultiSelect } from '@/components/ui/multi-select'
 import { cn } from '@/lib/utils/utils'
 import type { DateFilter, LocationFilter } from '../hooks/useJobs'
 import { EXP_OPTIONS, DATE_OPTIONS, LOCATION_OPTIONS } from '../constants/filterOptions'
@@ -93,14 +93,11 @@ export function MobileFilterDrawer({
               <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-secondary">
                 Companies
               </h4>
-              <MultiSelectDropdown
-                aria-label="Filter by company"
+              <MultiSelect
                 options={companies}
                 selected={selectedCompanies}
                 onChange={onCompaniesChange}
                 placeholder="All companies"
-                singularLabel={(n) => `${n} companies`}
-                searchPlaceholder="Search companies…"
               />
             </section>
           )}

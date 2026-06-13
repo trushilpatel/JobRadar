@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { fetchJobs, fetchJobCounts, fetchJobCompanies, type JobFilters } from '../api/jobs.api'
 import type { SortingState } from '@/components/ui/data-table'
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
@@ -14,6 +14,45 @@ import {
 
 export type { TabKey } from '@/config/constants/jobStatus'
 export type { DateFilter, LocationFilter } from './useJobUrlState'
+
+// ── Cursor history helpers ────────────────────────────────────────────────────
+//
+// cursorHistory[i] is the cursor string that fetches page (i+1).
+// Index 0 always holds '' (first page, no cursor needed).
+// Persisted to sessionStorage keyed by a filter fingerprint so same-session
+// back/forward navigation restores page data without refetching.
+
+const CURSOR_STORAGE_KEY_PREFIX = 'jobradar:cursor-history:'
+
+function restoreHistory(key: string): string[] {
+  try {
+    const stored = sessionStorage.getItem(CURSOR_STORAGE_KEY_PREFIX + key)
+    if (!stored) return ['']
+    const parsed = JSON.parse(stored) as unknown
+    if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) {
+      return parsed as string[]
+    }
+  } catch {
+    // ignore — sessionStorage may be unavailable or contain corrupt data
+  }
+  return ['']
+}
+
+function persistHistory(key: string, history: string[]): void {
+  try {
+    sessionStorage.setItem(CURSOR_STORAGE_KEY_PREFIX + key, JSON.stringify(history))
+  } catch {
+    // ignore — sessionStorage may be unavailable
+  }
+}
+
+function clearHistory(key: string): void {
+  try {
+    sessionStorage.removeItem(CURSOR_STORAGE_KEY_PREFIX + key)
+  } catch {
+    // ignore
+  }
+}
 
 export function useJobs() {
   const urlState = useJobUrlState()
@@ -50,10 +89,9 @@ export function useJobs() {
     [urlState.sort, urlState.dir]
   )
 
-  // Cursor-based pagination via useInfiniteQuery: pages are walked one at a
-  // time; pageIndex is the currently displayed page within the fetched pages
-  // array. Sourced from the URL so refresh and share-links land on the same
-  // page.
+  // Cursor-based pagination via useQuery + explicit cursor history.
+  // pageIndex is the currently displayed page (0-indexed). Sourced from the
+  // URL so refresh and share-links land on the same page.
   const pageIndex = urlState.page
   const setPageIndex = urlState.setPage
 
@@ -92,52 +130,63 @@ export function useJobs() {
     ]
   )
 
-  // Filters/limit changing is the URL setters' responsibility now (they each
-  // reset `page` to 0). No local-state catch-up needed.
+  // ── Cursor history (replaces useInfiniteQuery) ────────────────────────────
+  //
+  // Build a stable fingerprint from filters + limit for sessionStorage key.
+  const filterFingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        tab: filters.status,
+        q: filters.search ?? '',
+        companies: (filters.companies ?? []).slice().sort(),
+        loc: filters.remote
+          ? 'remote'
+          : filters.onSite
+            ? 'onsite'
+            : filters.hybrid
+              ? 'hybrid'
+              : 'any',
+        exp: (filters.experienceRanges ?? []).slice().sort(),
+        since: filters.daysAdded ?? 0,
+        sort: filters.sortBy ?? '',
+        dir: filters.sortDir ?? 'asc',
+        limit: urlState.limit,
+      }),
+    [filters, urlState.limit]
+  )
 
-  const query = useInfiniteQuery({
-    queryKey: jobQueryKeys.list(filters, urlState.limit),
-    queryFn: ({ pageParam, signal }) => fetchJobs(filters, pageParam, urlState.limit, signal),
-    initialPageParam: '',
-    getNextPageParam: (last) => (last.next_cursor ? last.next_cursor : undefined),
+  // Cursor history in React state, seeded from sessionStorage on mount.
+  // Reset to [''] whenever filters change (fingerprint changes).
+  const [cursorHistory, setCursorHistory] = useState<string[]>(() =>
+    restoreHistory(filterFingerprint)
+  )
+
+  // When filters change, reset cursor history. The useEffect compares the
+  // fingerprint so this only fires on genuine filter/limit changes, not on
+  // every render.
+  useEffect(() => {
+    setCursorHistory(restoreHistory(filterFingerprint))
+  }, [filterFingerprint])
+
+  const currentCursor = cursorHistory[pageIndex] ?? ''
+
+  const query = useQuery({
+    queryKey: jobQueryKeys.list(filters, urlState.limit, currentCursor),
+    queryFn: ({ signal }) => fetchJobs(filters, currentCursor, urlState.limit, signal),
     staleTime: 30_000,
   })
 
-  const fetchedPages = useMemo(() => query.data?.pages ?? [], [query.data])
-  const currentPage = fetchedPages[pageIndex]
+  const currentPage = query.data
   const jobs = useMemo(() => currentPage?.items ?? [], [currentPage])
   const itemsOnPage = jobs.length
 
-  // True when we've eagerly advanced pageIndex beyond what's been fetched yet.
-  // The DataTable should show its loading skeleton rather than the empty-state
-  // message while the in-flight fetch resolves.
-  const isLoadingPage = pageIndex > fetchedPages.length - 1 && (query.isFetchingNextPage ?? false)
-
-  // Auto-snap: if a refetch returns fewer pages than the cursor (e.g. the
-  // last item was dismissed off the current page), bounce the user to the
-  // last available page rather than leaving them on a phantom empty page.
-  useEffect(() => {
-    if (query.isFetching) return
-    if (fetchedPages.length === 0) {
-      if (pageIndex !== 0) void setPageIndex(0)
-      return
-    }
-    if (pageIndex > fetchedPages.length - 1) {
-      void setPageIndex(Math.max(0, fetchedPages.length - 1))
-    }
-  }, [fetchedPages.length, pageIndex, query.isFetching, setPageIndex])
-
-  // Cumulative number of items in pages BEFORE the current page. Drives the
-  // pagination "Showing X–Y" display. Pages on the "new" tab are sparse
-  // (per-user overlay filters items out after cursor pagination), so the
-  // theoretical (page-1)*limit math under-counts. This is exact.
-  const itemsBeforePage = useMemo(
-    () => fetchedPages.slice(0, pageIndex).reduce((sum, p) => sum + (p.items?.length ?? 0), 0),
-    [fetchedPages, pageIndex]
-  )
+  // Approximate number of items before the current page.
+  // With useQuery we don't accumulate pages, so pageIndex * limit is used
+  // as an approximation. This is exact on non-sparse tabs and close on "new".
+  const itemsBeforePage = useMemo(() => pageIndex * urlState.limit, [pageIndex, urlState.limit])
 
   const hasPrevPage = pageIndex > 0
-  const hasNextPage = pageIndex < fetchedPages.length - 1 || (query.hasNextPage ?? false)
+  const hasNextPage = currentPage?.next_cursor ? currentPage.next_cursor !== '' : false
 
   const countsQuery = useQuery({
     queryKey: jobQueryKeys.counts(),
@@ -174,25 +223,24 @@ export function useJobs() {
       void urlState.setDir(dir)
     }
     // urlState setters already reset page to 0.
+    // filterFingerprint will change → useEffect resets cursorHistory.
   }
 
   function goToNextPage() {
-    // Pre-fetched next page — advance immediately.
-    if (pageIndex < fetchedPages.length - 1) {
-      void setPageIndex(pageIndex + 1)
-      return
-    }
-    // At the boundary — initiate fetch and advance eagerly. The new page lands
-    // at fetchedPages[pageIndex+1] when the fetch resolves; until then the
-    // table renders the loading state (currentPage is undefined).
-    if (query.hasNextPage && !query.isFetchingNextPage) {
-      void query.fetchNextPage()
-      void setPageIndex(pageIndex + 1)
-    }
+    const nextCursor = query.data?.next_cursor
+    if (!nextCursor) return // last page — no-op
+
+    // Slice to current position + 1 to handle the case where the user went
+    // back and is now going forward again (discards any stale future cursors).
+    const extended = cursorHistory.slice(0, pageIndex + 1).concat(nextCursor)
+    setCursorHistory(extended)
+    persistHistory(filterFingerprint, extended)
+    void setPageIndex(pageIndex + 1)
   }
 
   function goToPrevPage() {
     if (pageIndex > 0) void setPageIndex(pageIndex - 1)
+    // The cursor for the previous page is already in cursorHistory — no fetch needed.
   }
 
   function goToFirstPage() {
@@ -200,6 +248,8 @@ export function useJobs() {
   }
 
   function resetFilters() {
+    clearHistory(filterFingerprint)
+    setCursorHistory([''])
     urlState.resetFilters()
     setSearchInput('')
     // urlState.resetFilters already writes page: 0
@@ -207,11 +257,13 @@ export function useJobs() {
 
   // Wrappers that proxy URL-state setters but keep the existing useJobs
   // public surface so consumers (JobsPage, JobFilters) don't change shape.
+  // Each of these changes filters → filterFingerprint changes → useEffect
+  // resets cursorHistory automatically.
   function setTab(tab: TabKey) {
     void urlState.setTab(tab)
   }
-  function setSelectedCompanies(companies: string[]) {
-    void urlState.setCompanies(companies)
+  function setSelectedCompanies(cos: string[]) {
+    void urlState.setCompanies(cos)
   }
   function setLocationFilter(loc: LocationFilter) {
     void urlState.setLoc(loc)
@@ -236,10 +288,8 @@ export function useJobs() {
     itemsBeforePage,
     companies,
     isLoading: query.isLoading,
-    isLoadingPage,
     isError: query.isError,
     isFetching: query.isFetching,
-    isFetchingNextPage: query.isFetchingNextPage,
     refetch: query.refetch,
     counts,
 

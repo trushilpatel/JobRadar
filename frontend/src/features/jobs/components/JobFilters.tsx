@@ -2,7 +2,7 @@ import { forwardRef } from 'react'
 import { Search, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
 import { useIsMobile } from '@/lib/hooks/use-media-query'
-import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
+import { MultiSelect } from '@/components/ui/multi-select'
 import { MobileFilterDrawer } from './MobileFilterDrawer'
 import type { DateFilter, LocationFilter } from '../hooks/useJobs'
 import { COPY } from '@/config/copy'
@@ -163,14 +163,11 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
         />
       </div>
 
-      <MultiSelectDropdown
-        aria-label="Filter by company"
+      <MultiSelect
         options={companies}
         selected={selectedCompanies}
         onChange={onCompaniesChange}
         placeholder="All companies"
-        singularLabel={(n) => `${n} companies`}
-        searchPlaceholder="Search companies…"
       />
 
       <Divider />

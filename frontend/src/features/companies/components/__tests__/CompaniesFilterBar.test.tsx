@@ -157,14 +157,12 @@ describe('CompaniesFilterBar — search', () => {
 })
 
 describe('CompaniesFilterBar — add adapter', () => {
-  it('fires onAddAdapter from the adapter multi-select', async () => {
+  it('fires onAddAdapter from the inline add-adapter input', async () => {
     const user = userEvent.setup()
     const onAddAdapter = vi.fn()
     render(<CompaniesFilterBar {...makeProps({ onAddAdapter })} />)
 
-    // Open the multi-select.
-    await user.click(screen.getByRole('button', { name: 'Filter by adapter' }))
-    // The dropdown exposes a dedicated "Add new adapter…" input + "+ Add" button.
+    // The "Add new adapter…" input is always visible (inline in the filter bar).
     await user.type(screen.getByPlaceholderText('Add new adapter…'), 'customats')
     await user.click(screen.getByRole('button', { name: '+ Add' }))
 

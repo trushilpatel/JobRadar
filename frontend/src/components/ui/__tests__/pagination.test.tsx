@@ -95,6 +95,46 @@ describe('Pagination — cursor mode (V4 layout)', () => {
     render(<Pagination {...baseProps} />)
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
+
+  it('does NOT auto-call onFirst when itemsOnPage=0, hasPrev=true, loading=false', () => {
+    const onFirst = vi.fn()
+    render(
+      <Pagination
+        mode="cursor"
+        page={2}
+        limit={20}
+        itemsOnPage={0}
+        itemsBeforePage={20}
+        hasNext={false}
+        hasPrev={true}
+        onNext={vi.fn()}
+        onPrev={vi.fn()}
+        onFirst={onFirst}
+        loading={false}
+      />
+    )
+    // Component should render without calling onFirst — navigation decisions belong in the hook
+    expect(onFirst).not.toHaveBeenCalled()
+  })
+
+  it('disables prev and next buttons when loading=true', () => {
+    render(
+      <Pagination
+        mode="cursor"
+        page={2}
+        limit={20}
+        itemsOnPage={10}
+        itemsBeforePage={20}
+        hasNext={true}
+        hasPrev={true}
+        onNext={vi.fn()}
+        onPrev={vi.fn()}
+        loading={true}
+      />
+    )
+    expect(screen.getByRole('button', { name: /previous page/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /next page/i })).toBeDisabled()
+  })
 })
 
 describe('Pagination — offset mode', () => {

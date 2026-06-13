@@ -108,6 +108,9 @@ Frontend rule highlights (full set in `frontend/CLAUDE.md`):
 - Shared UI state: Zustand; local-only: `useState` / `useReducer`
 - Styling: Tailwind composed via `cn()` (`clsx` + `tailwind-merge`) — no inline styles
 - Radix UI primitives for accessible complex components (dialogs, selects, tooltips, switches)
+- **UI component boundary:** `components/ui/` = shadcn/ui origin OR pure custom (data in → render out → callbacks out). Zero `useEffect` with side effects. Zero business logic. Domain/navigation decisions belong in hooks.
+- **New component decision tree:** (1) shadcn has it → `npx shadcn@latest add`; (2) Radix has a headless primitive → thin styled wrapper; (3) neither → pure custom with PR justification.
+- **Forbidden:** `createPortal` directly (use Radix Portal/shadcn Popover); `useInfiniteQuery` for page-by-page cursor nav (use `useQuery` + cursor history — see `features/jobs/hooks/useJobs.ts`); dropdowns/multi-selects built from scratch (use `Popover + Command + Checkbox`).
 
 ## Git policy
 
