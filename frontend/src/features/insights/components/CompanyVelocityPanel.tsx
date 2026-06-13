@@ -24,7 +24,7 @@ function Sparkline({ row }: { row: CompanyVelocityInsight }) {
             style={
               {
                 '--bar-h': `${h}px`,
-                '--bar-bg': isCurrent ? '#1d9e75' : '#1c3c34',
+                '--bar-bg': isCurrent ? '#1d9e75' : 'var(--sparkline-bar-prev)',
               } as CSSProperties
             }
             className="w-[7px] rounded-[2px] [height:var(--bar-h)] [background:var(--bar-bg)]"

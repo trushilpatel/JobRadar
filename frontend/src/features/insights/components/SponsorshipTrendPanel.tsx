@@ -23,15 +23,15 @@ function SponsorshipContent({ data }: { data: SponsorshipDay[] }) {
   return (
     <ResponsiveContainer width="100%" height={180}>
       <LineChart data={chartData} margin={{ left: 0, right: 16, top: 4, bottom: 4 }}>
-        <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+        <CartesianGrid stroke="var(--border)" vertical={false} />
         <XAxis
           dataKey="date"
-          tick={{ fill: '#64748b', fontSize: 11 }}
+          tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
           tickLine={false}
           axisLine={false}
         />
         <YAxis
-          tick={{ fill: '#64748b', fontSize: 11 }}
+          tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
           tickLine={false}
           axisLine={false}
           width={30}

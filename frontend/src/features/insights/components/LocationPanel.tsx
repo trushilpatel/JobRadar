@@ -3,6 +3,60 @@ import type { LocationData } from '@/types'
 import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
 import { useLocation } from '../hooks/useInsights'
 
+const STATE_NAMES: Record<string, string> = {
+  AL: 'Alabama',
+  AK: 'Alaska',
+  AZ: 'Arizona',
+  AR: 'Arkansas',
+  CA: 'California',
+  CO: 'Colorado',
+  CT: 'Connecticut',
+  DE: 'Delaware',
+  FL: 'Florida',
+  GA: 'Georgia',
+  HI: 'Hawaii',
+  ID: 'Idaho',
+  IL: 'Illinois',
+  IN: 'Indiana',
+  IA: 'Iowa',
+  KS: 'Kansas',
+  KY: 'Kentucky',
+  LA: 'Louisiana',
+  ME: 'Maine',
+  MD: 'Maryland',
+  MA: 'Massachusetts',
+  MI: 'Michigan',
+  MN: 'Minnesota',
+  MS: 'Mississippi',
+  MO: 'Missouri',
+  MT: 'Montana',
+  NE: 'Nebraska',
+  NV: 'Nevada',
+  NH: 'New Hampshire',
+  NJ: 'New Jersey',
+  NM: 'New Mexico',
+  NY: 'New York',
+  NC: 'North Carolina',
+  ND: 'North Dakota',
+  OH: 'Ohio',
+  OK: 'Oklahoma',
+  OR: 'Oregon',
+  PA: 'Pennsylvania',
+  RI: 'Rhode Island',
+  SC: 'South Carolina',
+  SD: 'South Dakota',
+  TN: 'Tennessee',
+  TX: 'Texas',
+  UT: 'Utah',
+  VT: 'Vermont',
+  VA: 'Virginia',
+  WA: 'Washington',
+  WV: 'West Virginia',
+  WI: 'Wisconsin',
+  WY: 'Wyoming',
+  DC: 'Washington D.C.',
+}
+
 function LocationContent({ data }: { data: LocationData }) {
   const countries = data.countries
   const states = data.states
@@ -36,7 +90,12 @@ function LocationContent({ data }: { data: LocationData }) {
           <div className="space-y-2">
             {states.slice(0, 8).map(({ state, count }) => (
               <div key={state} className="flex items-center gap-3">
-                <span className="w-12 shrink-0 text-xs text-secondary">{state}</span>
+                <span
+                  className="w-12 shrink-0 text-xs text-secondary"
+                  title={STATE_NAMES[state] ?? state}
+                >
+                  {state}
+                </span>
                 <div className="flex-1 bg-subtle rounded-full h-1.5 overflow-hidden">
                   <div
                     style={{ '--bar-pct': `${(count / maxS) * 100}%` } as CSSProperties}
