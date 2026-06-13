@@ -8,13 +8,18 @@
 
 ## Goal
 
-Deploy the full JobRadar stack across two Oracle Cloud Free Tier ARM A1 instances (1 GB RAM each), with automated CI/CD on every push to `main` and full observability via the existing Grafana Cloud stack.
+Deploy the full JobRadar stack across two Oracle Cloud Free Tier ARM A1 instances (1 GB RAM each),
+with automated CI/CD on every push to `main` and full observability via the existing Grafana Cloud
+stack. Optimize so only changed images are rebuilt, only affected nodes are deployed, and only pods
+whose image tag changed are restarted.
 
 ---
 
 ## Instance Roles
 
-All inter-service communication routes through external managed services (Supabase, Synadia Cloud NATS, Upstash Redis). The only in-cluster dependency is `crawler-node → orchestrator` — both live on Node 2. The two nodes therefore have zero cross-node traffic.
+All inter-service communication routes through external managed services (Supabase, Synadia Cloud
+NATS, Upstash Redis). The only in-cluster dependency is `crawler-node → orchestrator` — both live on
+Node 2. The two nodes therefore have zero cross-node traffic.
 
 ### Node 1 — Serving
 
@@ -30,7 +35,8 @@ Hosts user-facing services. Needs low latency and stable uptime.
 
 ### Node 2 — Pipeline
 
-Hosts the background job engine. Downtime here does not affect the UI; NATS buffers messages and the scheduler re-enqueues on next tick.
+Hosts the background job engine. Downtime here does not affect the UI; NATS buffers messages and the
+scheduler re-enqueues on next tick.
 
 | Service             | Memory request | Memory limit |
 | ------------------- | -------------- | ------------ |
@@ -43,7 +49,9 @@ Hosts the background job engine. Downtime here does not affect the UI; NATS buff
 | k3s + OS            | ~250 MB        | —            |
 | **Estimated total** | **~784 MB**    | —            |
 
-Note: sum of pod limits (~1,088 Mi) exceeds the 1 GB ceiling. This is intentional — Go binaries are lean and actual CrawlerNode RSS is ~20–30 MB each. If OOM events appear in Grafana, drop CrawlerNode replicas from 3 → 2.
+Note: sum of pod limits (~1,088 Mi) exceeds the 1 GB ceiling. This is intentional — Go binaries are
+lean and actual CrawlerNode RSS is ~20–30 MB each. If OOM events appear in Grafana, drop CrawlerNode
+replicas from 3 → 2.
 
 ---
 
@@ -51,29 +59,56 @@ Note: sum of pod limits (~1,088 Mi) exceeds the 1 GB ceiling. This is intentiona
 
 **Trigger:** push to `main`
 
-**Approach:** GitHub Actions builds multi-arch images, pushes to GHCR, then SSHes into each OCI node and runs `helm upgrade`. Node 1 and Node 2 deploy in parallel (independent releases).
+**Principle:** build only what changed, deploy only nodes affected, restart only pods whose image tag
+changed.
+
+### Workflow job graph
 
 ```
-push to main
-     │
-     ▼
-[build] GitHub Actions (ubuntu-latest, arm64 via buildx + QEMU)
-  • docker buildx build --platform linux/arm64
-  • images: jobradar-backend, jobradar-crawler, jobradar-console
-  • tags: ghcr.io/trushilpatel/jobradar-<name>:<sha> + :latest
-  • auth: GITHUB_TOKEN (OIDC, auto-expires, no PAT needed)
-     │
-     ▼ (parallel)
-[deploy-node1]                    [deploy-node2]
-SSH → OCI Node 1                  SSH → OCI Node 2
-helm upgrade jobradar             helm upgrade jobradar
-  -f values.prod-node1.yaml         -f values.prod-node2.yaml
-  --set image.tag=<sha>             --set image.tag=<sha>
+[detect-changes]
+      │
+      ├─ backend_changed? ──► [build-backend]      ─┐
+      ├─ crawler_changed? ──► [build-crawler]      ─┤ all parallel,
+      ├─ orch_changed?    ──► [build-orchestrator] ─┤ each conditional
+      ├─ node_changed?    ──► [build-crawler-node] ─┤ on its filter
+      └─ console_changed? ──► [build-console]      ─┘
+                                                    │
+                     ┌──────────────────────────────┤
+                     ▼ if node1_changed             ▼ if node2_changed
+               [deploy-node1]               [deploy-node2]
+               SSH → helm upgrade           SSH → helm upgrade
+               (parallel, independent)
 ```
 
-### Image registry
+A push that only touches `frontend/` rebuilds only `jobradar-console`, deploys only Node 1, and
+restarts only Console pods. Node 2 is never touched.
 
-The existing chart tracks five independent images, each with its own Dockerfile:
+### Change detection paths
+
+The `detect-changes` job uses `dorny/paths-filter` (already used in `backend.yml`) with these path
+mappings:
+
+| Filter output     | Paths that trigger it                                                                                                                                                                                                                                 |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backend_changed` | `backend/apps/api/**`, `backend/apps/filter/**`, `backend/apps/enricher/**`, `backend/apps/scheduler/**`, `backend/apps/migrate/**`, `backend/service/**`, `backend/platform/**`, `backend/common/**`, `go.mod`, `go.sum`, `infra/Dockerfile.backend` |
+| `crawler_changed` | `backend/apps/crawler/**`, `backend/service/**`, `backend/platform/**`, `backend/common/**`, `go.mod`, `go.sum`, `infra/Dockerfile.crawler`                                                                                                           |
+| `orch_changed`    | `backend/apps/orchestrator/**`, `backend/service/**`, `backend/platform/**`, `backend/common/**`, `go.mod`, `go.sum`, `infra/Dockerfile.orchestrator`                                                                                                 |
+| `node_changed`    | `backend/apps/crawler-node/**`, `backend/service/**`, `backend/platform/**`, `backend/common/**`, `go.mod`, `go.sum`, `infra/Dockerfile.crawler-node`                                                                                                 |
+| `console_changed` | `frontend/**`, `infra/Dockerfile.console`                                                                                                                                                                                                             |
+
+`backend/service/`, `backend/platform/`, `backend/common/`, and `go.mod` changes set **all four**
+backend image filters to `true` — shared code changes trigger a full backend rebuild.
+
+Derived node-level flags (computed as `detect-changes` job outputs):
+
+```
+node1_changed = backend_changed OR console_changed
+node2_changed = backend_changed OR crawler_changed OR orch_changed OR node_changed
+```
+
+### Image registry and tags
+
+Five independent images, dual-tagged on every build:
 
 | `values.yaml` key     | GHCR path                                    | Dockerfile                | Contains                                  |
 | --------------------- | -------------------------------------------- | ------------------------- | ----------------------------------------- |
@@ -83,7 +118,57 @@ The existing chart tracks five independent images, each with its own Dockerfile:
 | `images.crawlerNode`  | `ghcr.io/trushilpatel/jobradar-crawler-node` | `Dockerfile.crawler-node` | crawler-node                              |
 | `images.console`      | `ghcr.io/trushilpatel/jobradar-console`      | `Dockerfile.console`      | React + nginx                             |
 
-No new Dockerfiles needed. Console image bakes `VITE_*` vars at build time via Doppler.
+Every build pushes two tags:
+
+- `:<sha>` (7-char git SHA) — immutable, used in `helm upgrade --set`, enables `helm rollback`
+- `:latest` — convenience alias, always points to the newest build of that image
+
+`pullPolicy` is `IfNotPresent` in prod — k3s only pulls when the SHA tag isn't locally cached.
+
+### Build cache
+
+Each build job uses `docker/build-push-action` with GHA layer cache:
+
+```yaml
+cache-from: type=gha,scope=<image-name>
+cache-to: type=gha,scope=<image-name>,mode=max
+```
+
+Go's build cache is already in the Dockerfiles via `--mount=type=cache,target=/root/.cache/go-build`.
+Each image has its own GHA cache scope so a console build never evicts backend cache. On cache hit,
+Go compile time drops from ~3 min to ~20 sec.
+
+### Partial deploy — reading current tag state
+
+For images that did not change on a given push, the deploy job reads their current pinned SHA from the
+live Helm release rather than hardcoding them:
+
+```bash
+CURRENT=$(helm get values jobradar --all -o json 2>/dev/null || echo '{}')
+BACKEND_TAG=$(echo "$CURRENT" | jq -r '.images.backend.tag // "latest"')
+# only override the tag if this image was rebuilt this run
+helm upgrade --install jobradar k8s/helm/jobradar \
+  -f k8s/helm/jobradar/values.prod-node1.yaml \
+  --set images.backend.tag="${NEW_BACKEND_TAG:-$BACKEND_TAG}" \
+  --set images.console.tag="${NEW_CONSOLE_TAG:-$CONSOLE_TAG}"
+```
+
+Unchanged images keep their existing pinned SHA. Only rebuilt images get a new tag. This prevents
+spurious pod restarts.
+
+### Pod restart precision — deploy annotation
+
+Each Deployment template carries per-image deploy annotations in its pod spec:
+
+```yaml
+annotations:
+  deploy/backend-sha: '{{ .Values.images.backend.tag }}'
+  deploy/console-sha: '{{ .Values.images.console.tag }}'
+```
+
+When `helm upgrade` runs with a changed `images.backend.tag` but the same `images.console.tag`,
+Kubernetes computes a new pod spec hash only for Deployments that reference the backend annotation —
+only those pods roll. Console pods stay up with zero downtime.
 
 ### GitHub secrets required
 
@@ -100,9 +185,12 @@ No new Dockerfiles needed. Console image bakes `VITE_*` vars at build time via D
 
 ## Helm Chart Changes
 
-The existing chart deploys all services unconditionally. We need per-service `enabled` flags so each node only runs its assigned subset.
+The existing chart deploys all services unconditionally and has no pod restart annotations. Two
+changes are needed.
 
-### New `enabled` flags (values.yaml defaults)
+### 1. Per-service `enabled` flags
+
+Add `enabled: true` default to each service in `values.yaml`:
 
 ```yaml
 api:
@@ -110,6 +198,8 @@ api:
 console:
   enabled: true
 scheduler:
+  enabled: true
+crawler:
   enabled: true
 orchestrator:
   enabled: true
@@ -121,12 +211,31 @@ enricher:
   enabled: true
 ```
 
-Each Deployment template gains a top-level `{{- if .Values.<service>.enabled }}` guard. This is the only chart change — no template logic otherwise changes.
-
-### values.prod-node1.yaml (committed)
+Each Deployment template gains a top-level guard:
 
 ```yaml
-# Node 1: Serving only
+{{- if .Values.<service>.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+...
+{{- end }}
+```
+
+### 2. Deploy annotations on pod specs
+
+Each Deployment's pod template gets annotations referencing the image tags it uses. This is what
+makes Kubernetes restart only the pods that actually changed:
+
+- API, Scheduler, Filter, Enricher → `deploy/backend-sha: "{{ .Values.images.backend.tag }}"`
+- Crawler → `deploy/crawler-sha: "{{ .Values.images.crawler.tag }}"`
+- Orchestrator → `deploy/orchestrator-sha: "{{ .Values.images.orchestrator.tag }}"`
+- CrawlerNode → `deploy/crawler-node-sha: "{{ .Values.images.crawlerNode.tag }}"`
+- Console → `deploy/console-sha: "{{ .Values.images.console.tag }}"`
+
+### values.prod-node1.yaml (committed, tag-agnostic)
+
+```yaml
+# Node 1: Serving only — pipeline workers disabled
 nats:
   external: true
 scheduler:
@@ -145,16 +254,16 @@ enricher:
 images:
   backend:
     repository: ghcr.io/trushilpatel/jobradar-backend
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
   console:
     repository: ghcr.io/trushilpatel/jobradar-console
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
 ```
 
-### values.prod-node2.yaml (committed)
+### values.prod-node2.yaml (committed, tag-agnostic)
 
 ```yaml
-# Node 2: Pipeline only
+# Node 2: Pipeline only — serving layer disabled
 nats:
   external: true
 api:
@@ -167,94 +276,97 @@ crawlerNode:
 images:
   backend:
     repository: ghcr.io/trushilpatel/jobradar-backend
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
   crawler:
     repository: ghcr.io/trushilpatel/jobradar-crawler
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
   orchestrator:
     repository: ghcr.io/trushilpatel/jobradar-orchestrator
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
   crawlerNode:
     repository: ghcr.io/trushilpatel/jobradar-crawler-node
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
 ```
 
-Image tags are passed at deploy time — not committed to these files:
-
-```bash
-helm upgrade jobradar k8s/helm/jobradar \
-  -f values.prod-node1.yaml \
-  --set images.backend.tag=abc1234 \
-  --set images.console.tag=abc1234
-```
-
-This keeps the prod values files tag-agnostic in git while the SHA is the deploy-time source of truth.
+Image tags are never committed to these files. They are passed at deploy time via `--set
+images.<name>.tag=<sha>` (for rebuilt images) or carried over from the current release state (for
+unchanged images).
 
 ---
 
 ## Observability
 
-Both nodes run the existing `obs` Helm chart (Grafana Alloy DaemonSet). No changes to the chart needed — Alloy scrapes pod metrics, tails logs, and forwards OTLP traces to Grafana Cloud exactly as it does locally.
+Both nodes run the existing `obs` Helm chart (Grafana Alloy). No chart changes needed — Alloy scrapes
+pod metrics, tails logs, and forwards OTLP traces to Grafana Cloud exactly as today.
 
-The OTLP endpoint inside each cluster remains `http://obs-alloy.jobradar-local.svc.cluster.local:4318` — the same value already in `values.yaml`. No per-node config change needed.
-
-Grafana Cloud will show metrics/logs/traces from both nodes in the same dashboards, distinguished by the `instance` and `pod` label that Alloy attaches automatically.
+The OTLP in-cluster endpoint `http://obs-alloy.jobradar-local.svc.cluster.local:4318` is already in
+`values.yaml` — no per-node override needed. Grafana Cloud distinguishes both nodes by the `instance`
+and `pod` labels Alloy attaches automatically.
 
 ---
 
 ## One-Time OCI Bootstrap (per node)
 
-Manual steps run once per instance before the first deploy. These are not automated — they require SSH access and Doppler login.
+Manual steps, run once per instance before the first automated deploy. Not automated — requires SSH
+access and Doppler login on the instance.
 
 1. Install k3s: `curl -sfL https://get.k3s.io | sh -`
-2. Install Doppler CLI and run `doppler login && doppler setup`
-3. Create GHCR imagePullSecret: `kubectl create secret docker-registry ghcr-pull-secret --docker-server=ghcr.io --docker-username=<github-user> --docker-password=<PAT with read:packages>`
-4. Open OCI firewall: port 30080 (API, Node 1 only), 30300 (Console, Node 1 only), 22 (SSH both)
-5. Copy SSH public key to `~/.ssh/authorized_keys`
-6. Run `doppler run -- helm upgrade --install jobradar k8s/helm/jobradar -f values.prod-node1.yaml` (or node2) for the initial deploy
+2. Install Doppler CLI and authenticate: `doppler login && doppler setup`
+3. Create GHCR imagePullSecret:
+   `kubectl create secret docker-registry ghcr-pull-secret --docker-server=ghcr.io --docker-username=<github-user> --docker-password=<PAT read:packages>`
+4. Open OCI Security List: port 30080 (Node 1 API), port 30300 (Node 1 Console), port 22 (both)
+5. Add SSH public key to `~/.ssh/authorized_keys` for the `OCI_SSH_USER` account
+6. Run initial deploy manually: `doppler run -- helm upgrade --install jobradar k8s/helm/jobradar -f values.prod-node1.yaml --set images.backend.tag=<sha> --set images.console.tag=<sha>`
 
 ---
 
 ## Local Dev Compatibility
 
-`make k8s-build && make k8s-up` is unaffected. The new `values.prod-*.yaml` files are only used in CI. Local dev continues to use `values.local.yaml` (gitignored) with `:local` image tags and in-cluster NATS.
+`make k8s-build && make k8s-up` is unaffected. The `values.prod-*.yaml` files are only used in CI.
+Local dev continues to use `values.local.yaml` (gitignored) with `:local` image tags and in-cluster
+NATS. The new `enabled` flags all default to `true` in `values.yaml` so local deploys run the full
+stack as before.
 
 ---
 
 ## Files to Create
 
-| File                                       | Purpose                                                        |
-| ------------------------------------------ | -------------------------------------------------------------- |
-| `.github/workflows/deploy.yml`             | Build multi-arch images + deploy to both nodes on push to main |
-| `k8s/helm/jobradar/values.prod-node1.yaml` | Serving node Helm overrides                                    |
-| `k8s/helm/jobradar/values.prod-node2.yaml` | Pipeline node Helm overrides                                   |
+| File                                       | Purpose                                                       |
+| ------------------------------------------ | ------------------------------------------------------------- |
+| `.github/workflows/deploy.yml`             | Change detection + conditional builds + parallel node deploys |
+| `k8s/helm/jobradar/values.prod-node1.yaml` | Serving node Helm overrides (committed, tag-agnostic)         |
+| `k8s/helm/jobradar/values.prod-node2.yaml` | Pipeline node Helm overrides (committed, tag-agnostic)        |
 
 ## Files to Modify
 
-| File                                                       | Change                                                                         |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `k8s/helm/jobradar/templates/api/deployment.yaml`          | Add `enabled` guard                                                            |
-| `k8s/helm/jobradar/templates/console/deployment.yaml`      | Add `enabled` guard                                                            |
-| `k8s/helm/jobradar/templates/scheduler/deployment.yaml`    | Add `enabled` guard                                                            |
-| `k8s/helm/jobradar/templates/orchestrator/deployment.yaml` | Add `enabled` guard                                                            |
-| `k8s/helm/jobradar/templates/crawler/deployment.yaml`      | Add `enabled` guard                                                            |
-| `k8s/helm/jobradar/templates/crawler-node/deployment.yaml` | Add `enabled` guard                                                            |
-| `k8s/helm/jobradar/templates/filter/deployment.yaml`       | Add `enabled` guard                                                            |
-| `k8s/helm/jobradar/templates/enricher/deployment.yaml`     | Add `enabled` guard                                                            |
-| `k8s/helm/jobradar/values.yaml`                            | Add `enabled: true` defaults for all services; update `images.*` repos to GHCR |
-| `infra/CLAUDE.md`                                          | Document OCI bootstrap steps and prod deploy workflow                          |
+| File                                                       | Change                                                        |
+| ---------------------------------------------------------- | ------------------------------------------------------------- |
+| `k8s/helm/jobradar/templates/api/deployment.yaml`          | Add `enabled` guard + `deploy/backend-sha` annotation         |
+| `k8s/helm/jobradar/templates/console/deployment.yaml`      | Add `enabled` guard + `deploy/console-sha` annotation         |
+| `k8s/helm/jobradar/templates/scheduler/deployment.yaml`    | Add `enabled` guard + `deploy/backend-sha` annotation         |
+| `k8s/helm/jobradar/templates/crawler/deployment.yaml`      | Add `enabled` guard + `deploy/crawler-sha` annotation         |
+| `k8s/helm/jobradar/templates/orchestrator/deployment.yaml` | Add `enabled` guard + `deploy/orchestrator-sha` annotation    |
+| `k8s/helm/jobradar/templates/crawler-node/deployment.yaml` | Add `enabled` guard + `deploy/crawler-node-sha` annotation    |
+| `k8s/helm/jobradar/templates/filter/deployment.yaml`       | Add `enabled` guard + `deploy/backend-sha` annotation         |
+| `k8s/helm/jobradar/templates/enricher/deployment.yaml`     | Add `enabled` guard + `deploy/backend-sha` annotation         |
+| `k8s/helm/jobradar/values.yaml`                            | Add `enabled: true` defaults; update `images.*` to GHCR repos |
+| `infra/CLAUDE.md`                                          | Document OCI bootstrap and prod deploy workflow               |
 
 ---
 
 ## Design Decisions
 
-| Decision                      | Choice                                             | Rationale                                                                                   |
-| ----------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Flux CD vs SSH + helm upgrade | SSH + helm upgrade                                 | Flux uses ~150 MB RAM — too costly on 1 GB nodes                                            |
-| Image registry                | GHCR                                               | Free, OIDC-backed from GHA, no external account                                             |
-| Image architecture            | linux/arm64 only                                   | OCI Free Tier A1 is Ampere ARM; Go CGO_ENABLED=0 cross-compiles trivially                   |
-| Image tags                    | Git SHA (7 chars)                                  | Immutable per commit; `helm rollback` works cleanly                                         |
-| Service split                 | Serving vs Pipeline                                | Only in-cluster dep (crawler-node→orchestrator) stays on Node 2; zero cross-node traffic    |
-| CrawlerNode replicas          | 3 (Node 2)                                         | Fits in practice (Go RSS ~25 MB each); sum-of-limits exceeds 1 GB but actual usage does not |
-| Secrets                       | Doppler on each node + GitHub repo secrets for SSH | Existing Doppler workflow unchanged; only SSH key is a new secret                           |
-| values files                  | Two committed prod overrides                       | Auditable in git; tag passed at deploy time so files are tag-agnostic                       |
+| Decision                                   | Choice                                             | Rationale                                                                                    |
+| ------------------------------------------ | -------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Flux CD vs SSH + helm upgrade              | SSH + helm upgrade                                 | Flux uses ~150 MB RAM — too costly on 1 GB nodes                                             |
+| Image registry                             | GHCR                                               | Free, OIDC-backed from GHA, no PAT to manage                                                 |
+| Image architecture                         | `linux/arm64` only                                 | OCI Free Tier A1 is Ampere ARM; `CGO_ENABLED=0` cross-compiles trivially via buildx + QEMU   |
+| Image tags                                 | SHA (7 chars) + `:latest` alias                    | SHA is immutable and enables `helm rollback`; `:latest` for convenience                      |
+| Rebuild scope                              | Per-image path filters + shared-code catch-all     | Service changes → one image; shared code (`service/`, `platform/`) → all backend images      |
+| Deploy scope                               | Per-node conditional on image change flags         | A frontend-only push never SSHes into Node 2                                                 |
+| Pod restart precision                      | Deploy annotation with image SHA baked in          | Only pods referencing a changed annotation get a new pod spec hash → zero spurious restarts  |
+| Current-tag retrieval for unchanged images | `helm get values` on the live release              | Deploy job always knows the exact running SHA; no separate state file needed                 |
+| Service split                              | Serving vs Pipeline                                | Only in-cluster dep (`crawler-node → orchestrator`) stays on Node 2; zero cross-node traffic |
+| CrawlerNode replicas                       | 3 (Node 2)                                         | Fits in practice (Go RSS ~25 MB each); drop to 2 if OOM events appear in Grafana             |
+| Secrets                                    | Doppler on each node + GitHub repo secrets for SSH | Existing Doppler workflow unchanged; SSH key is the only new secret                          |
+| Values files                               | Two committed prod overrides, tag-agnostic         | Auditable in git; tags are runtime state, not source code                                    |
