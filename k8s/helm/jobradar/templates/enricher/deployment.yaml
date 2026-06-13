@@ -1,3 +1,4 @@
+{{- if .Values.enricher.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,7 +19,13 @@ spec:
       labels:
         {{- include "jobradar.labels" . | nindent 8 }}
         component: enricher
+      annotations:
+        deploy/backend-sha: {{ .Values.images.backend.tag | quote }}
     spec:
+      {{- with .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
       volumes:
         - name: llm-slots
           configMap:
@@ -78,3 +85,4 @@ spec:
             {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
       securityContext:
         runAsNonRoot: true
+{{- end }}
