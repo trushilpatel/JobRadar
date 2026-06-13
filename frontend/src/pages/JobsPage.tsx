@@ -315,7 +315,7 @@ export function JobsPage() {
           <div ref={tableScrollRef} className="flex flex-1 min-w-0 overflow-hidden">
             <JobsTable
               jobs={visibleJobs}
-              loading={jobs.isLoading && !jobs.isFetchingNextPage}
+              loading={(jobs.isLoading && !jobs.isFetchingNextPage) || jobs.isLoadingPage}
               isFetchingMore={jobs.isFetchingNextPage}
               isError={jobs.isError}
               onRetry={() => void jobs.refetch()}

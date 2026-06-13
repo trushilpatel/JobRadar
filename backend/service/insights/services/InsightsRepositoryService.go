@@ -211,7 +211,7 @@ func (s *repositoryService) RoleCategories(ctx context.Context) (_ []dto.RoleCat
 	err = s.db.WithContext(ctx).Raw(`
 		SELECT COALESCE(role_category, 'other') AS category, COUNT(*) AS count
 		FROM job_analytics
-		GROUP BY role_category
+		GROUP BY COALESCE(role_category, 'other')
 		ORDER BY count DESC
 		LIMIT 25
 	`).Scan(&results).Error

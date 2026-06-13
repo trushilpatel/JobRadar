@@ -15,7 +15,7 @@ function FilterPill({
   children,
 }: {
   active: boolean
-  color?: 'violet' | 'emerald'
+  color?: 'violet' | 'emerald' | 'amber'
   onClick: () => void
   children: React.ReactNode
 }) {
@@ -28,6 +28,7 @@ function FilterPill({
         'px-2.5 py-1.5 text-xs rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500',
         active && color === 'violet' && 'bg-violet-500/15 border-violet-500/30 text-violet-300',
         active && color === 'emerald' && 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
+        active && color === 'amber' && 'bg-amber-500/15 border-amber-500/30 text-amber-400',
         !active && 'bg-subtle border-[var(--border)] text-muted hover:text-primary hover:bg-hover'
       )}
     >

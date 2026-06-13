@@ -151,6 +151,38 @@ describe('useJobs — pagination + sorting branches', () => {
     expect(r2.current.jobs[0]?.id).toBe('b')
   })
 
+  it('isLoadingPage is true while eagerly advanced beyond fetched pages', async () => {
+    type PageResult = { items: ReturnType<typeof makeJob>[]; next_cursor: string }
+    let resolveNextPage!: (v: PageResult) => void
+    const nextPagePromise = new Promise<PageResult>((res) => {
+      resolveNextPage = res
+    })
+
+    vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
+      if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
+      return nextPagePromise
+    })
+
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    // Advance to page 2 — fetch is now in-flight.
+    act(() => {
+      result.current.goToNextPage()
+    })
+
+    // isLoadingPage must be true while the in-flight fetch hasn't resolved yet.
+    await waitFor(() => expect(result.current.isLoadingPage).toBe(true))
+    expect(result.current.jobs).toHaveLength(0)
+
+    // Resolve the fetch — isLoadingPage should clear and jobs appear.
+    act(() => {
+      resolveNextPage({ items: [makeJob('b')], next_cursor: '' })
+    })
+    await waitFor(() => expect(result.current.isLoadingPage).toBe(false))
+    await waitFor(() => expect(result.current.jobs[0]?.id).toBe('b'))
+  })
+
   it('goToNextPage is a no-op when there is no next page', async () => {
     vi.mocked(jobsApi.fetchJobs).mockResolvedValue({ items: [makeJob('a')], next_cursor: '' })
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
