@@ -40,8 +40,8 @@ function ShortcutReference() {
                 const keys: readonly KeySpec[] = def.keys
                 return (
                   <div key={id} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1">
-                    <dd className="text-sm text-secondary">{def.label}</dd>
-                    <dt className="flex items-center gap-2 justify-self-end">
+                    <dt className="text-sm text-secondary">{def.label}</dt>
+                    <dd className="flex items-center gap-2 justify-self-end">
                       {keys.length === 0 ? (
                         <span className="text-xs text-placeholder">—</span>
                       ) : (
@@ -58,7 +58,7 @@ function ShortcutReference() {
                           </span>
                         ))
                       )}
-                    </dt>
+                    </dd>
                   </div>
                 )
               })}
@@ -151,7 +151,7 @@ export function AccountPage() {
         <h1 className="text-lg font-semibold text-primary">Account</h1>
       </div>
 
-      <div className="flex-1 px-6 py-6 max-w-lg space-y-8">
+      <div className="flex-1 px-6 py-6 max-w-2xl space-y-8">
         {/* Profile */}
         <ErrorBoundary>
           <section>
@@ -159,6 +159,9 @@ export function AccountPage() {
             <div className="mb-3">
               <p className="text-xs text-muted mb-1">Email</p>
               <p className="text-sm text-secondary">{identity?.email ?? '—'}</p>
+              <p className="text-xs text-placeholder mt-0.5">
+                Email is managed by your login provider and cannot be changed here.
+              </p>
             </div>
             <form onSubmit={handleSave} className="space-y-3">
               <div>
@@ -224,14 +227,14 @@ export function AccountPage() {
 
         {/* Danger zone */}
         <ErrorBoundary>
-          <section className="border border-red-300/60 dark:border-red-900/40 rounded-lg p-4">
+          <section className="border border-red-400/30 rounded-lg p-4">
             <h2 className="text-sm font-semibold text-red-400 mb-2">Danger zone</h2>
             <p className="text-xs text-muted mb-4">
               Permanently delete your account and all associated data. This cannot be undone.
             </p>
             <Dialog.Root open={deleteOpen} onOpenChange={setDeleteOpen}>
               <Dialog.Trigger asChild>
-                <button className="px-4 py-2 rounded-md text-sm font-medium border border-red-400/70 hover:bg-red-50 dark:border-red-700/60 dark:hover:bg-red-900/20 text-red-400 transition-colors">
+                <button className="px-4 py-2 rounded-md text-sm font-medium border border-red-400/50 hover:bg-red-500/8 text-red-400 transition-colors">
                   Delete account
                 </button>
               </Dialog.Trigger>
