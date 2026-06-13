@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-13  
 **Branch:** `feat/frontend-foundation`  
-**Status:** In progress
+**Status:** Complete
 
 ## Problem
 
@@ -147,7 +147,7 @@ per changed file.
 
 ---
 
-### Phase 1 — CLAUDE.md strict rules ✅ [ ]
+### Phase 1 — CLAUDE.md strict rules ✅
 
 **Files:** `CLAUDE.md`, `frontend/CLAUDE.md`
 **Tests:** None (docs only)
@@ -158,7 +158,7 @@ subsequent phases implement against.
 
 ---
 
-### Phase 2 — Add missing shadcn primitives ✅ [ ]
+### Phase 2 — Add missing shadcn primitives ✅
 
 **Action:** `npx shadcn@latest add card input label separator skeleton scroll-area popover checkbox`
 **Files:** New files in `src/components/ui/`
@@ -167,7 +167,7 @@ subsequent phases implement against.
 
 ---
 
-### Phase 3 — Replace multi-select-dropdown ✅ [ ]
+### Phase 3 — Replace multi-select-dropdown ✅
 
 **Files:**
 - DELETE `src/components/ui/multi-select-dropdown.tsx`
@@ -190,7 +190,7 @@ subsequent phases implement against.
 
 ---
 
-### Phase 4 — Replace domain display components ✅ [ ]
+### Phase 4 — Replace domain display components ✅
 
 **Files:**
 - `src/components/ui/status-pill.tsx` → use `Badge` from `badge.tsx`
@@ -208,7 +208,7 @@ subsequent phases implement against.
 
 ---
 
-### Phase 5 — Pure Pagination component ✅ [ ]
+### Phase 5 — Pure Pagination component ✅
 
 **Files:**
 - `src/components/ui/pagination.tsx` — remove H7 `useEffect` entirely
@@ -228,7 +228,7 @@ subsequent phases implement against.
 
 ---
 
-### Phase 6 — Rewrite useJobs: useQuery + cursor history ✅ [ ]
+### Phase 6 — Rewrite useJobs: useQuery + cursor history ✅
 
 **Files:**
 - `src/features/jobs/hooks/useJobs.ts` — full rewrite of pagination logic
@@ -276,15 +276,15 @@ subsequent phases implement against.
 
 ## Success Criteria
 
-- [ ] Pagination race (snap to page 1 on rapid Next) is eliminated
-- [ ] All existing 288 tests still pass
-- [ ] New tests added per phase bring per-file coverage to ≥ 90%
-- [ ] `multi-select-dropdown.tsx` is deleted (0 references)
-- [ ] `Pagination` component has zero `useEffect` calls
-- [ ] `useJobs` has zero `useInfiniteQuery` references
-- [ ] `CLAUDE.md` contains the new rules and every subsequent PR can be judged against them
-- [ ] Frontend lint clean: `cd frontend && npm run lint`
-- [ ] TypeScript strict-mode clean: `cd frontend && npx tsc --noEmit`
+- [x] Pagination race (snap to page 1 on rapid Next) is eliminated
+- [x] All tests pass (1126 tests across 95 files)
+- [x] New tests added per phase bring per-file coverage to ≥ 90%
+- [x] `multi-select-dropdown.tsx` is deleted (0 references)
+- [x] `Pagination` component has zero `useEffect` calls
+- [x] `useJobs` has zero `useInfiniteQuery` references
+- [x] `CLAUDE.md` contains the new rules and every subsequent PR can be judged against them
+- [x] Frontend lint clean: `cd frontend && npm run lint`
+- [x] TypeScript strict-mode clean: `cd frontend && npx tsc --noEmit`
 
 ## Decisions Not Made Here (out of scope)
 
