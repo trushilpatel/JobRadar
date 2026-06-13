@@ -22,8 +22,8 @@ spec:
       labels:
         {{- include "jobradar.labels" . | nindent 8 }}
         component: console
-        annotations:
-          deploy/console-sha: {{ .Values.images.console.tag | quote }}
+      annotations:
+        deploy/console-sha: {{ .Values.images.console.tag | quote }}
     spec:
       {{- with .Values.imagePullSecret }}
       imagePullSecrets:
