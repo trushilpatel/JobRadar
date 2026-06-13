@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { ChevronLeft, ChevronRight, ChevronsLeft, MoreHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
 
@@ -86,14 +85,6 @@ function CursorPagination({
 }: CursorProps) {
   const from = itemsOnPage === 0 ? 0 : itemsBeforePage + 1
   const to = itemsBeforePage + itemsOnPage
-
-  // H7: If we land on a page with no items but there IS a previous page,
-  // auto-reset to first page so the user doesn't see a blank paginated view.
-  useEffect(() => {
-    if (itemsOnPage === 0 && hasPrev && !loading && onFirst) {
-      onFirst()
-    }
-  }, [itemsOnPage, hasPrev, loading, onFirst])
 
   // Middle-text logic. The range IS the position indicator — no separate
   // "Page N" label. See Pagination JSDoc for why.
