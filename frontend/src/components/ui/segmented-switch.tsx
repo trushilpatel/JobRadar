@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils/utils'
 
 export type SegmentedAccent = 'violet' | 'emerald' | 'red' | 'blue' | 'amber'
@@ -14,52 +15,57 @@ interface SegmentedSwitchProps<T extends string> {
   options: SegmentedOption<T>[]
   value: string
   onChange: (v: T) => void
+  disabled?: boolean
   'aria-label'?: string
 }
 
 const ACCENT_ON: Record<SegmentedAccent, string> = {
-  violet: 'bg-violet-500/20 text-violet-300',
-  emerald: 'bg-emerald-500/[0.18] text-emerald-300',
-  red: 'bg-red-500/[0.18] text-red-300',
-  blue: 'bg-blue-500/20 text-blue-300',
-  amber: 'bg-amber-500/20 text-amber-300',
+  violet: 'data-[state=on]:bg-violet-500/20 data-[state=on]:text-violet-300',
+  emerald: 'data-[state=on]:bg-emerald-500/[0.18] data-[state=on]:text-emerald-300',
+  red: 'data-[state=on]:bg-red-500/[0.18] data-[state=on]:text-red-300',
+  blue: 'data-[state=on]:bg-blue-500/20 data-[state=on]:text-blue-300',
+  amber: 'data-[state=on]:bg-amber-500/20 data-[state=on]:text-amber-300',
 }
 
 export function SegmentedSwitch<T extends string>({
   options,
   value,
   onChange,
+  disabled = false,
   ...rest
 }: SegmentedSwitchProps<T>) {
   return (
-    <div
-      role="radiogroup"
+    <ToggleGroup
+      type="single"
+      value={value}
+      onValueChange={(v) => {
+        // ToggleGroup fires '' when the active item is clicked again; ignore to keep exactly one selected
+        if (v) onChange(v as T)
+      }}
       aria-label={rest['aria-label']}
-      className="inline-flex bg-subtle border border-[var(--border)] rounded-lg p-0.5"
+      className="inline-flex bg-subtle border border-[var(--border)] rounded-lg p-0.5 gap-0"
     >
       {options.map((opt) => {
-        const on = opt.value === value
         const accent = opt.accent ?? 'violet'
         return (
-          <button
+          <ToggleGroupItem
             key={opt.value}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            onClick={() => onChange(opt.value)}
+            value={opt.value}
+            disabled={disabled}
             className={cn(
-              'inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md transition-colors whitespace-nowrap',
-              on ? ACCENT_ON[accent] : 'text-muted hover:text-primary',
-              on && 'shadow-[0_1px_2px_rgba(0,0,0,0.25)]'
+              'inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md transition-colors whitespace-nowrap h-auto min-w-0',
+              'text-muted hover:text-primary hover:bg-transparent',
+              'data-[state=on]:shadow-[0_1px_2px_rgba(0,0,0,0.25)]',
+              ACCENT_ON[accent]
             )}
           >
             {opt.label}
             {opt.count !== undefined && (
               <span className="text-[10px] bg-black/25 px-1.5 py-px rounded-full">{opt.count}</span>
             )}
-          </button>
+          </ToggleGroupItem>
         )
       })}
-    </div>
+    </ToggleGroup>
   )
 }
