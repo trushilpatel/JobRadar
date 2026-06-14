@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	crawlernodecommon "github.com/trushilpatel/jobradar/service/crawlernode/common"
 	"github.com/trushilpatel/jobradar/service/crawlernode/dto"
@@ -85,7 +86,7 @@ func TestValidationService_SubmitResults_EmptyAdapterTypeReturnsBadRequest(t *te
 
 func TestValidationService_SubmitResults_TooManyJobsReturnsBadRequest(t *testing.T) {
 	svc := newValidationSvc()
-	jobs := make([]dto.CrawledJob, crawlernodecommon.MaxJobsPerBatch+1)
+	jobs := make([]core.JobSummary, crawlernodecommon.MaxJobsPerBatch+1)
 	_, err := svc.SubmitResults(context.Background(), "node-1", dto.ResultsRequest{
 		CompanyID: "co-1", AdapterType: "greenhouse", Jobs: jobs,
 	})
