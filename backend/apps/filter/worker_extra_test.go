@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
@@ -178,8 +178,8 @@ func TestProcessChunk_PassThrough_NoTitle(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	item1, _ := makeChunkItem(ats.RawJob{ID: "no-title-1", Title: ""}, 1)
-	item2, _ := makeChunkItem(ats.RawJob{ID: "no-title-2", Title: ""}, 1)
+	item1, _ := makeChunkItem(core.JobSummary{ID: "no-title-1", Title: ""}, 1)
+	item2, _ := makeChunkItem(core.JobSummary{ID: "no-title-2", Title: ""}, 1)
 	chunk := []chunkItem{item1, item2}
 	_ = w.processChunk(context.Background(), chunk, "fetch-1", 0, 1)
 
@@ -207,8 +207,8 @@ func TestProcessChunk_PassThroughMixed(t *testing.T) {
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	item1, _ := makeChunkItem(ats.RawJob{ID: "no-title-x", Title: ""}, 1)
-	item2, _ := makeChunkItem(ats.RawJob{ID: "titled-1", Title: "Engineer"}, 1)
+	item1, _ := makeChunkItem(core.JobSummary{ID: "no-title-x", Title: ""}, 1)
+	item2, _ := makeChunkItem(core.JobSummary{ID: "titled-1", Title: "Engineer"}, 1)
 	chunk := []chunkItem{item1, item2}
 	_ = w.processChunk(context.Background(), chunk, "fetch-1", 0, 1)
 
@@ -410,7 +410,7 @@ func TestProcessChunk_PassThroughPublishFailure(t *testing.T) {
 		clock:     &fakeClock{now: time.Now()},
 		log:       logger.NewNoop(),
 	}
-	item, _ := makeChunkItem(ats.RawJob{ID: "no-title", Title: ""}, 1)
+	item, _ := makeChunkItem(core.JobSummary{ID: "no-title", Title: ""}, 1)
 	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-1", 0, 1)
 	// No assertion beyond "didn't panic".
 }
@@ -598,8 +598,8 @@ func TestProcessChunk_PassThrough_AcksAfterLedger(t *testing.T) {
 	scorer := &fakeScorer{}
 	pub := &fakePublisher{}
 
-	item1, state1 := makeChunkItem(ats.RawJob{ID: "pt-order-1", Title: ""}, 1)
-	item2, state2 := makeChunkItem(ats.RawJob{ID: "pt-order-2", Title: ""}, 1)
+	item1, state1 := makeChunkItem(core.JobSummary{ID: "pt-order-1", Title: ""}, 1)
+	item2, state2 := makeChunkItem(core.JobSummary{ID: "pt-order-2", Title: ""}, 1)
 
 	ledger := newOrderingLedger(state1, state2)
 
@@ -636,8 +636,8 @@ func TestProcessChunk_PassThrough_LedgerErrorNaks(t *testing.T) {
 	scorer := &fakeScorer{}
 	pub := &fakePublisher{}
 
-	item1, state1 := makeChunkItem(ats.RawJob{ID: "pt-err-1", Title: ""}, 1)
-	item2, state2 := makeChunkItem(ats.RawJob{ID: "pt-err-2", Title: ""}, 1)
+	item1, state1 := makeChunkItem(core.JobSummary{ID: "pt-err-1", Title: ""}, 1)
+	item2, state2 := makeChunkItem(core.JobSummary{ID: "pt-err-2", Title: ""}, 1)
 
 	ledger := newOrderingLedger(state1, state2)
 	ledger.errOnCall = 1 // first call returns error
@@ -743,7 +743,7 @@ func TestFilter_CrawlerRaceScenario_NoPhantomRow(t *testing.T) {
 	}
 
 	// Phase 1 — ledger row does NOT exist yet (publish raced ahead of INSERT).
-	item, state := makeChunkItem(ats.RawJob{ID: "race-1", Adapter: "greenhouse", Title: "Engineer"}, 1)
+	item, state := makeChunkItem(core.JobSummary{ID: "race-1", Adapter: "greenhouse", Title: "Engineer"}, 1)
 	_ = w.processChunk(context.Background(), []chunkItem{item}, "fetch-race", 0, 1)
 
 	if !state.Naked {
@@ -764,7 +764,7 @@ func TestFilter_CrawlerRaceScenario_NoPhantomRow(t *testing.T) {
 	if err := store.MarkSeenBatch(context.Background(), []string{"race-1"}, "co-race", string(jobcommon.SeenReasonFetch)); err != nil {
 		t.Fatalf("crawler MarkSeenBatch: %v", err)
 	}
-	item2, state2 := makeChunkItem(ats.RawJob{ID: "race-1", Adapter: "greenhouse", Title: "Engineer"}, 2)
+	item2, state2 := makeChunkItem(core.JobSummary{ID: "race-1", Adapter: "greenhouse", Title: "Engineer"}, 2)
 	_ = w.processChunk(context.Background(), []chunkItem{item2}, "fetch-race", 0, 1)
 
 	if !state2.Acked {
@@ -784,14 +784,14 @@ func TestFilter_CrawlerRaceScenario_NoPhantomRow(t *testing.T) {
 func TestMergedLocations(t *testing.T) {
 	tests := []struct {
 		name     string
-		job      ats.RawJob
+		job      core.JobSummary
 		wantLen  int
 		wantNil  bool
 		contains string // non-empty: assert result[0] == this value
 	}{
 		{
 			name: "AllLocations populated — returned directly",
-			job: ats.RawJob{
+			job: core.JobSummary{
 				Location:     "New York, NY",
 				AllLocations: []string{"New York, NY", "London, UK"},
 			},
@@ -800,7 +800,7 @@ func TestMergedLocations(t *testing.T) {
 		},
 		{
 			name: "AllLocations nil, Location set — wrapped in single-element slice",
-			job: ats.RawJob{
+			job: core.JobSummary{
 				Location:     "San Francisco, CA",
 				AllLocations: nil,
 			},
@@ -809,7 +809,7 @@ func TestMergedLocations(t *testing.T) {
 		},
 		{
 			name: "AllLocations empty slice, Location set — wrapped in single-element slice",
-			job: ats.RawJob{
+			job: core.JobSummary{
 				Location:     "Austin, TX",
 				AllLocations: []string{},
 			},
@@ -818,12 +818,12 @@ func TestMergedLocations(t *testing.T) {
 		},
 		{
 			name:    "Both AllLocations and Location empty — returns nil",
-			job:     ats.RawJob{},
+			job:     core.JobSummary{},
 			wantNil: true,
 		},
 		{
 			name: "AllLocations populated, Location also set — AllLocations takes precedence",
-			job: ats.RawJob{
+			job: core.JobSummary{
 				Location:     "Remote",
 				AllLocations: []string{"Boston, MA"},
 			},
@@ -919,7 +919,7 @@ func TestProcessChunk_NonUSA_LedgerError_NaksNotAcks(t *testing.T) {
 
 	w := makeWorker(scorer, ledger, pub)
 
-	item, state := makeChunkItem(ats.RawJob{
+	item, state := makeChunkItem(core.JobSummary{
 		ID:            "uk-fail",
 		Title:         "SWE",
 		Location:      "London, UK",
@@ -952,7 +952,7 @@ func TestProcessChunk_NonUSA_LedgerRowMissing_NaksAndIncrementsMissing(t *testin
 	w := makeWorker(scorer, ledger, pub)
 	before := promtestutil.ToFloat64(metrics.FilterLedgerMissing.WithLabelValues(string(jobcommon.SeenReasonNonUSA)))
 
-	item, state := makeChunkItem(ats.RawJob{
+	item, state := makeChunkItem(core.JobSummary{
 		ID:            "uk-missing",
 		Title:         "SWE",
 		Location:      "London, UK",
