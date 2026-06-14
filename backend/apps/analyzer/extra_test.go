@@ -35,7 +35,8 @@ func (l *capturingLogger) Error(msg string, _ error, _ ...logger.Field) {
 	l.errors = append(l.errors, msg)
 	l.mu.Unlock()
 }
-func (l *capturingLogger) With(_ ...logger.Field) logger.Logger { return l }
+func (l *capturingLogger) With(_ ...logger.Field) logger.Logger        { return l }
+func (l *capturingLogger) WithContext(_ context.Context) logger.Logger { return l }
 
 func (l *capturingLogger) hasError(substr string) bool {
 	l.mu.Lock()

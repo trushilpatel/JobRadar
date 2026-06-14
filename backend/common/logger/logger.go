@@ -1,5 +1,7 @@
 package logger
 
+import "context"
+
 // Logger is the logging interface used across all workers and the API.
 // Workers receive this via constructor injection — never a concrete type.
 //
@@ -23,4 +25,9 @@ type Logger interface {
 	// With returns a child logger with the given fields baked into every future event.
 	// Use this at the start of a job-processing loop to attach job_id and company_id.
 	With(fields ...Field) Logger
+
+	// WithContext returns a child logger with trace_id + span_id from the active
+	// OTel span in ctx baked into every future event. No-ops (returns the receiver
+	// unchanged) when ctx carries no valid span.
+	WithContext(ctx context.Context) Logger
 }
