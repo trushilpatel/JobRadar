@@ -2,7 +2,9 @@ import { useState, useEffect, type ComponentType } from 'react'
 import { toast } from 'sonner'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Sun, Moon, Monitor } from 'lucide-react'
-import { useAuthStore, updateMe, deleteMe } from '@/features/auth'
+import { useClerk } from '@clerk/react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useIdentity, updateMe, deleteMe } from '@/features/auth'
 import { JOB_COMMANDS, type JobCommandId } from '@/features/jobs'
 import { formatKeys } from '@/lib/commands/formatKeys'
 import type { CommandCategory, KeySpec } from '@/lib/commands/types'
@@ -116,9 +118,12 @@ function ThemeToggle() {
 }
 
 export function AccountPage() {
-  const identity = useAuthStore((s) => s.identity)
-  const refreshIdentity = useAuthStore((s) => s.refreshIdentity)
-  const signOut = useAuthStore((s) => s.signOut)
+  const { identity } = useIdentity()
+  const { signOut } = useClerk()
+  const queryClient = useQueryClient()
+  async function refreshIdentity() {
+    await queryClient.invalidateQueries({ queryKey: ['me'] })
+  }
 
   const { data: userConfig, isLoading: configLoading } = useUserConfig()
   const patchConfig = usePatchUserConfig()
@@ -150,7 +155,7 @@ export function AccountPage() {
     setDeleting(true)
     try {
       await deleteMe()
-      signOut()
+      await signOut()
     } catch {
       toast.error('Failed to delete account.')
       setDeleting(false)
