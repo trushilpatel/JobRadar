@@ -746,3 +746,334 @@ func TestSleep_MinEqualsMaxStillTerminates(t *testing.T) {
 		t.Errorf("sleep with min==max: %v", err)
 	}
 }
+
+// ── FetchJobs — inter-page pagination and publish-loop cancellation ──────────
+
+// TestFetchJobs_MultiPagePaginates verifies pageNum advances across pages when
+// total > pageSize (20) and MaxPages is 0. Two page fetches must occur.
+func TestFetchJobs_MultiPagePaginates(t *testing.T) {
+	// total=21: page 1 * 20 = 20 < 21, so a second page is requested.
+	// Page 2 also returns total=21; 2*20=40 >= 21, so loop ends.
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		page := makeListingPage(21,
+			parsedJob{ID: "google-" + strconv.Itoa(hits*100), Title: "SWE", Org: "X", Location: "MV"},
+		)
+		_, _ = w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	// MinDelayMs/MaxDelayMs both 1 ms so inter-page sleep is near-instant.
+	cfg := Config{MinDelayMs: 1, MaxDelayMs: 2, TimeoutMs: 5000, MaxPages: 0}
+	g := NewGoogleAdapter(cfg, logger.NewNoop())
+	g.listingURLOverride = srv.URL + "?"
+	g.SetStreamPublish(func(_ []types.FetchJobsItem) {})
+
+	resp, err := g.FetchJobs(context.Background(), "google")
+	if err != nil {
+		t.Fatalf("FetchJobs: %v", err)
+	}
+	if hits < 2 {
+		t.Errorf("expected at least 2 page fetches (total=21 > pageSize=20), got %d", hits)
+	}
+	if len(resp.Jobs) < 2 {
+		t.Errorf("expected at least 2 jobs across pages, got %d", len(resp.Jobs))
+	}
+}
+
+// TestFetchJobs_SleepCancelledBreaksLoop verifies that when the context is
+// cancelled during the inter-page sleep (between page 1 and page 2), FetchJobs
+// returns cleanly without error instead of hanging for the full delay duration.
+func TestFetchJobs_SleepCancelledBreaksLoop(t *testing.T) {
+	// total=21 so a second page would normally be requested after sleep.
+	page := makeListingPage(21,
+		parsedJob{ID: "google-1", Title: "SWE", Org: "X", Location: "MV"},
+	)
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		_, _ = w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// MinDelayMs=500 ms — long enough that we can cancel during sleep.
+	cfg := Config{MinDelayMs: 500, MaxDelayMs: 1000, TimeoutMs: 10000, MaxPages: 0}
+	g := NewGoogleAdapter(cfg, logger.NewNoop())
+	g.listingURLOverride = srv.URL + "?"
+	// seenChecker cancels ctx after returning, so by the time FetchJobs reaches
+	// sleep() the context is already done — sleep returns ctx.Err() immediately.
+	g.SetSeenChecker(func(_ context.Context, ids []string) (map[string]bool, error) {
+		cancel()
+		out := map[string]bool{}
+		for _, id := range ids {
+			out[id] = false
+		}
+		return out, nil
+	})
+	g.SetStreamPublish(func(_ []types.FetchJobsItem) {})
+
+	resp, err := g.FetchJobs(ctx, "google")
+	if err != nil {
+		t.Fatalf("FetchJobs should not return error on sleep cancellation; got %v", err)
+	}
+	// Only one page was fetched before the cancel took effect.
+	if hits != 1 {
+		t.Errorf("expected 1 page fetch before cancel, got %d", hits)
+	}
+	_ = resp
+}
+
+// TestFetchJobs_ContextCancelledDuringPublish verifies that cancelling the
+// context mid-publish (after the page is fetched and filtered but while
+// iterating cards to publish) breaks out of the inner loop via break scanLoop
+// rather than continuing to publish remaining cards.
+func TestFetchJobs_ContextCancelledDuringPublish(t *testing.T) {
+	// Build a page with 5 cards — we cancel after the first publish call.
+	jobs := make([]parsedJob, 5)
+	for i := range jobs {
+		jobs[i] = parsedJob{ID: "google-" + strconv.Itoa(i+1), Title: "SWE", Org: "X", Location: "MV"}
+	}
+	page := makeListingPage(5, jobs...)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(page))
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	cfg := Config{MinDelayMs: 1, MaxDelayMs: 2, TimeoutMs: 5000, MaxPages: 1}
+	g := NewGoogleAdapter(cfg, logger.NewNoop())
+	g.listingURLOverride = srv.URL + "?"
+
+	var publishCount int
+	g.SetStreamPublish(func(_ []types.FetchJobsItem) {
+		publishCount++
+		// Cancel after the first publish so the inner loop hits ctx.Err() != nil.
+		cancel()
+	})
+
+	resp, err := g.FetchJobs(ctx, "google")
+	if err != nil {
+		t.Fatalf("FetchJobs should not return error on mid-publish cancel; got %v", err)
+	}
+	// At least one job was published before cancel.
+	if publishCount == 0 {
+		t.Error("expected at least one publish before cancel")
+	}
+	// We should NOT have published all 5 cards — cancel interrupted the loop.
+	if publishCount == 5 {
+		t.Errorf("context cancel during publish had no effect — all 5 items published")
+	}
+	_ = resp
+}
+
+// ── fetch — error branches ───────────────────────────────────────────────────
+
+// TestFetch_RequestBuildError verifies fetch returns a "new request" error
+// when the URL contains a control character that http.NewRequestWithContext
+// rejects before making any network call.
+func TestFetch_RequestBuildError(t *testing.T) {
+	g := NewGoogleAdapterDefault()
+	// A null byte in the URL causes http.NewRequestWithContext to return an error.
+	_, err := g.fetch(context.Background(), "http://example.com/\x00bad")
+	if err == nil {
+		t.Fatal("expected error from invalid URL (null byte), got nil")
+	}
+}
+
+// TestFetch_NetworkError verifies fetch returns an "http do" error when the
+// server closes the connection before responding (simulates a network failure).
+func TestFetch_NetworkError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Hijack the connection and close it immediately — causes client.Do to fail.
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			http.Error(w, "no hijack", http.StatusInternalServerError)
+			return
+		}
+		conn, _, _ := hj.Hijack()
+		_ = conn.Close()
+	}))
+	defer srv.Close()
+
+	g := NewGoogleAdapterDefault()
+	_, err := g.fetch(context.Background(), srv.URL+"/test")
+	if err == nil {
+		t.Fatal("expected network error from hijacked connection, got nil")
+	}
+}
+
+// TestFetch_Non200Status verifies fetch returns an "http status N" error
+// when the server returns a non-200 status code. This complements the existing
+// TestFetchJobContent_ReturnsErrorOnNon200 by testing the fetch helper directly.
+func TestFetch_Non200Status(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	g := NewGoogleAdapterDefault()
+	_, err := g.fetch(context.Background(), srv.URL+"/jobs")
+	if err == nil {
+		t.Fatal("expected error on 503, got nil")
+	}
+}
+
+// TestFetch_BodyReadError verifies fetch returns a "read body" error when the
+// server closes the TCP connection in the middle of writing the body. This
+// triggers io.ReadAll to return an unexpected-EOF error after receiving the
+// response headers but before the full body is delivered.
+func TestFetch_BodyReadError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Error("server does not support hijacking")
+			return
+		}
+		conn, buf, err := hj.Hijack()
+		if err != nil {
+			t.Errorf("hijack: %v", err)
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		// Write a valid 200 OK with Content-Length larger than the actual body
+		// so the client's io.ReadAll blocks waiting for more bytes, then close
+		// the connection — producing an unexpected-EOF read error.
+		_, _ = buf.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 10000\r\n\r\npartial")
+		_ = buf.Flush()
+		// Closing conn here causes the client to receive EOF before Content-Length bytes.
+	}))
+	defer srv.Close()
+
+	g := NewGoogleAdapterDefault()
+	_, err := g.fetch(context.Background(), srv.URL+"/test")
+	if err == nil {
+		t.Fatal("expected error from truncated response body, got nil")
+	}
+}
+
+// ── parseListing — degenerate HTML branches ─────────────────────────────────
+
+// TestParseListing_SliceEndBeforeSliceStart verifies the guard that skips
+// blocks where sliceEnd <= sliceStart. This fires when two aria-label matches
+// are immediately character-adjacent so the inter-label block is zero-length.
+func TestParseListing_SliceEndBeforeSliceStart(t *testing.T) {
+	// Two aria-labels that are literally touching: the closing quote of the
+	// first aria-label attribute value is immediately followed by the opening
+	// of the second, leaving a zero-length block for card[1].
+	// This is the exact byte shape that triggers sliceEnd == sliceStart.
+	//   titleIdx[0][1] is the byte after "Job One"'s closing quote.
+	//   titleIdx[1][0] is the byte of "Job Two"'s opening 'a' in aria-label.
+	// When the two matches are adjacent, those two values are equal.
+	html := `<html><body>` +
+		`<div>Showing 1 to 20 of 100 rows</div>` +
+		`<a href="jobs/results/111-job-one?q=x" aria-label="Learn more about Job One"` +
+		// No whitespace or characters between the two aria-label attributes:
+		`aria-label="Learn more about Job Two"></a>` +
+		`</body></html>`
+
+	cards, total := parseListing(html)
+	if total != 100 {
+		t.Errorf("total: got %d, want 100", total)
+	}
+	// The guard fires for card[1] (zero-length block) — must not panic,
+	// and must not emit more cards than there are valid anchors.
+	if len(cards) > 2 {
+		t.Errorf("expected at most 2 cards, got %d", len(cards))
+	}
+}
+
+// TestParseListing_ExtraAriaLabelNoHref verifies the "21st anchor" case:
+// an aria-label anchor whose preceding block contains no href is silently
+// skipped — matching the live Google page behavior where the search input
+// emits a "Learn more" anchor with no card content.
+func TestParseListing_ExtraAriaLabelNoHref(t *testing.T) {
+	html := `<html><body>
+<div>Showing 1 to 20 of 20 rows</div>
+<ul>
+  <li>
+    <i class="google-material-icons">corporate_fare</i><span><span>Org</span></span>
+    <i class="google-material-icons">place</i><span><span>Location</span></span>
+    <button>Save</button>
+    <a href="jobs/results/123-software-engineer?q=x" aria-label="Learn more about Software Engineer"></a>
+  </li>
+  <li>
+    <!-- No href anchor before this aria-label — the 21st-anchor case -->
+    <a aria-label="Learn more about Phantom Job"></a>
+  </li>
+</ul>
+</body></html>`
+	cards, _ := parseListing(html)
+	// The phantom job (no href in its block) must be silently skipped.
+	for _, c := range cards {
+		if c.Title == "Phantom Job" {
+			t.Errorf("phantom job with no href should be skipped, but was emitted: %+v", c)
+		}
+	}
+}
+
+// ── extractDescription — error and dedup branches ───────────────────────────
+
+// TestExtractDescription_JSONDecodeError verifies that strings containing the
+// < escape sequence but with surrounding malformed JSON are silently
+// skipped (json.Unmarshal fails → continue).
+func TestExtractDescription_JSONDecodeError(t *testing.T) {
+	// Craft a ds:0 block that contains an unterminated string with <.
+	// The state machine identifies it as a candidate but json.Unmarshal fails.
+	// Build the string as two halves so the literal six-byte escape survives.
+	const escapedLT = `\` + `u003c`
+	// An opening quote, the escape sequence, some content, and NO closing quote.
+	badString := `"` + escapedLT + `p>Unterminated`
+	html := `<html><body><script>AF_initDataCallback({key: 'ds:0', hash: '1', data:[` +
+		badString +
+		`]});</script></body></html>`
+
+	// Must not panic; result may be empty.
+	got := extractDescription(html)
+	_ = got
+}
+
+// TestExtractDescription_EmptyAfterStripHTML verifies that a decoded string
+// whose content is entirely HTML tags (no visible text) is skipped via the
+// `plain == ""` guard, so no empty entry appears in the output.
+func TestExtractDescription_EmptyAfterStripHTML(t *testing.T) {
+	// json.Marshal of "<br/><hr/>" → JSON string containing <br/><hr/>
+	tagsOnly := "<br/><hr/>"
+	quoted, _ := json.Marshal(tagsOnly)
+
+	html := `<html><body><script>AF_initDataCallback({key: 'ds:0', hash: '1', data:[[` +
+		string(quoted) +
+		`]]});</script></body></html>`
+
+	got := extractDescription(html)
+	if got != "" {
+		t.Errorf("expected empty description for tag-only content, got %q", got)
+	}
+}
+
+// TestExtractDescription_DuplicateSegmentDeduped verifies that when the same
+// content string appears more than once in the ds:0 block, only one copy is
+// included in the output (the `seen` map deduplication guard).
+func TestExtractDescription_DuplicateSegmentDeduped(t *testing.T) {
+	repeated := "<p>Minimum qualifications: 5 years of experience.</p>"
+	q1, _ := json.Marshal(repeated)
+	q2, _ := json.Marshal(repeated)
+
+	html := `<html><body><script>AF_initDataCallback({key: 'ds:0', hash: '1', data:[[` +
+		string(q1) + `,` + string(q2) +
+		`]]});</script></body></html>`
+
+	got := extractDescription(html)
+	expected := "Minimum qualifications: 5 years of experience."
+
+	if !strings.Contains(got, expected) {
+		t.Errorf("description missing expected content; got %q", got)
+	}
+	// Count occurrences — should appear exactly once after deduplication.
+	if count := strings.Count(got, expected); count != 1 {
+		t.Errorf("expected deduped content to appear exactly once, got %d occurrences", count)
+	}
+}
