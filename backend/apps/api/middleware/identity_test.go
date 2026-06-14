@@ -364,3 +364,294 @@ func TestRequireIdentity_GetError_500(t *testing.T) {
 		t.Fatalf("got %d want 500", rr.Code)
 	}
 }
+
+// ── Additional edge-case tests for RequireIdentity / resolveIdentity ──────────
+
+// TestRequireIdentity_JWKSUnavailable_503 verifies that an errJWKSUnavailable
+// JWT error maps to 503 with Retry-After — not 401.
+func TestRequireIdentity_JWKSUnavailable_503(t *testing.T) {
+	// Use a JWKS server that is down so the keyfunc can't fetch keys.
+	b := &jwksBehaviour{}
+	b.fail503.Store(true)
+	srv := startJWKSServer(t, b)
+
+	cfg := baseESConfig(srv.URL)
+	if _, err := Auth(cfg, "", logger.NewNoop()); err != nil {
+		t.Fatalf("Auth: %v", err)
+	}
+
+	usr := newFakeUserService()
+	rls := newFakeRoleService()
+	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), 60*time.Second, logger.NewNoop())
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Sign with a key the JWKS server won't serve (it returns 503 on refresh).
+	kp := newECKeypair(t, "kid-503-identity")
+	tok := signToken(t, tokenOptions{
+		alg: "ES256", kid: kp.kid, ecKey: kp.priv,
+		issuer: testIssuer, audience: testAudience, email: testAllowedEml,
+		expiresAt: time.Now().Add(5 * time.Minute), subject: "u-503",
+	})
+	req := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("got %d want 503 when JWKS unavailable", rr.Code)
+	}
+	if got := rr.Header().Get("Retry-After"); got != "30" {
+		t.Fatalf("Retry-After=%q want 30", got)
+	}
+}
+
+// errorCache is a cache.Cache that returns a configurable error from Get/Set.
+type errorCache struct{ getErr error }
+
+func (e *errorCache) Get(_ context.Context, _ string, _ any) (bool, error) {
+	return false, e.getErr
+}
+func (e *errorCache) Set(_ context.Context, _ string, _ any, _ time.Duration) error { return nil }
+func (e *errorCache) Delete(_ context.Context, _ ...string) error                   { return nil }
+
+// TestResolveIdentity_CacheGetError_StillResolvesViaDB confirms that a cache
+// transport error is non-fatal: the identity is resolved from the DB even when
+// cache.Get returns an error.
+func TestResolveIdentity_CacheGetError_StillResolvesViaDB(t *testing.T) {
+	initIdentityTestPipelineHS(t)
+	usr := newFakeUserService()
+	usr.seed("u-cacheerr", "ce@example.com", usermodel.StatusActive, nil)
+	rls := newFakeRoleService()
+	rls.seed("u-cacheerr", rolemodel.RoleUser)
+
+	badCache := &errorCache{getErr: errors.New("redis timeout")}
+	mw := RequireIdentity(usr, rls, badCache, 60*time.Second, logger.NewNoop())
+	var got identity.Identity
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = identity.MustFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, signedRequest(t, "u-cacheerr", "ce@example.com"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got %d want 200 even on cache error", rr.Code)
+	}
+	if got.UserID != "u-cacheerr" {
+		t.Fatalf("identity=%+v", got)
+	}
+}
+
+// TestResolveIdentity_CachedSuspendedUser_403 verifies that a suspended user
+// stored in cache is still rejected — the cache is never trusted blindly for
+// suspended accounts.
+func TestResolveIdentity_CachedSuspendedUser_403(t *testing.T) {
+	initIdentityTestPipelineHS(t)
+	usr := newFakeUserService()
+	usr.seed("u-susp-cached", "s@example.com", usermodel.StatusSuspended, nil)
+	rls := newFakeRoleService()
+	rls.seed("u-susp-cached", rolemodel.RoleUser)
+
+	c := cache.NewMemoryCache()
+	mw := RequireIdentity(usr, rls, c, 60*time.Second, logger.NewNoop())
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// First request: populates the cache with the suspended identity.
+	rr1 := httptest.NewRecorder()
+	h.ServeHTTP(rr1, signedRequest(t, "u-susp-cached", "s@example.com"))
+	if rr1.Code != http.StatusForbidden {
+		t.Fatalf("first request: got %d want 403", rr1.Code)
+	}
+
+	// Second request: the suspended identity is in cache — must still get 403.
+	rr2 := httptest.NewRecorder()
+	h.ServeHTTP(rr2, signedRequest(t, "u-susp-cached", "s@example.com"))
+	if rr2.Code != http.StatusForbidden {
+		t.Fatalf("cached suspended user: got %d want 403", rr2.Code)
+	}
+}
+
+// TestResolveIdentity_DisplayName_NonNil exercises the derefString(user.DisplayName)
+// branch when DisplayName is a non-nil pointer.
+func TestResolveIdentity_DisplayName_NonNil(t *testing.T) {
+	initIdentityTestPipelineHS(t)
+	usr := newFakeUserService()
+	name := "Alice"
+	usr.seed("u-named", "alice@example.com", usermodel.StatusActive, &name)
+	rls := newFakeRoleService()
+	rls.seed("u-named", rolemodel.RoleUser)
+
+	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), 60*time.Second, logger.NewNoop())
+	var got identity.Identity
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = identity.MustFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, signedRequest(t, "u-named", "alice@example.com"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got %d want 200", rr.Code)
+	}
+	if got.DisplayName != "Alice" {
+		t.Fatalf("DisplayName=%q want Alice", got.DisplayName)
+	}
+}
+
+// TestDerefString covers both branches of the helper explicitly.
+func TestDerefString(t *testing.T) {
+	if got := derefString(nil); got != "" {
+		t.Fatalf("derefString(nil) = %q, want \"\"", got)
+	}
+	s := "hello"
+	if got := derefString(&s); got != "hello" {
+		t.Fatalf("derefString(&%q) = %q, want \"hello\"", s, got)
+	}
+}
+
+// TestIsNotFound covers the non-ServiceError and nil branches.
+func TestIsNotFound_NonServiceError(t *testing.T) {
+	if isNotFound(errors.New("some other error")) {
+		t.Fatal("expected false for a non-ServiceError")
+	}
+}
+
+func TestIsNotFound_Nil(t *testing.T) {
+	if isNotFound(nil) {
+		t.Fatal("expected false for nil error")
+	}
+}
+
+// ── Additional resolveIdentity path coverage ──────────────────────────────────
+
+// provisionErrorUserService returns ErrNotFound from Get (triggering provision)
+// and an error from Provision.
+type provisionErrorUserService struct{}
+
+func (e *provisionErrorUserService) Get(_ context.Context, _ string) (*usermodel.User, error) {
+	return nil, domainerrs.ErrNotFound.WithMessage("not found")
+}
+func (e *provisionErrorUserService) Provision(_ context.Context, _, _ string) (*usermodel.User, error) {
+	return nil, errors.New("provision: db constraint violation")
+}
+
+// TestResolveIdentity_ProvisionError_500 verifies that an error from Provision
+// on first login maps to a 500 response.
+func TestResolveIdentity_ProvisionError_500(t *testing.T) {
+	initIdentityTestPipelineHS(t)
+	usr := &provisionErrorUserService{}
+	rls := newFakeRoleService()
+	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), time.Second, logger.NewNoop())
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, signedRequest(t, "u-prov-err", "p@example.com"))
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("got %d want 500 on provision error", rr.Code)
+	}
+}
+
+// errorRoleService returns an error from ListForUser.
+type errorRoleService struct{ listErr error }
+
+func (e *errorRoleService) ListForUser(_ context.Context, _ string) ([]string, error) {
+	return nil, e.listErr
+}
+func (e *errorRoleService) Grant(_ context.Context, _, _ string, _ *string) error { return nil }
+
+// TestResolveIdentity_ListForUserError_500 verifies that a ListForUser error
+// maps to a 500 response.
+func TestResolveIdentity_ListForUserError_500(t *testing.T) {
+	initIdentityTestPipelineHS(t)
+	usr := newFakeUserService()
+	usr.seed("u-role-err", "re@example.com", usermodel.StatusActive, nil)
+	rls := &errorRoleService{listErr: errors.New("role db error")}
+	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), time.Second, logger.NewNoop())
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, signedRequest(t, "u-role-err", "re@example.com"))
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("got %d want 500 on ListForUser error", rr.Code)
+	}
+}
+
+// grantErrorRoleService returns an error from Grant so the backfill warning
+// log path is exercised.
+type grantErrorRoleService struct {
+	fakeRoleService
+	grantErr error
+}
+
+func (g *grantErrorRoleService) Grant(_ context.Context, _, _ string, _ *string) error {
+	return g.grantErr
+}
+
+// TestResolveIdentity_GrantBackfillError_StillSucceeds verifies that when the
+// role backfill Grant call fails, the request still succeeds (best-effort).
+func TestResolveIdentity_GrantBackfillError_StillSucceeds(t *testing.T) {
+	initIdentityTestPipelineHS(t)
+	usr := newFakeUserService()
+	usr.seed("u-grant-err", "g@example.com", usermodel.StatusActive, nil)
+	// No roles seeded → backfill triggered. Grant returns error.
+	rls := &grantErrorRoleService{
+		fakeRoleService: *newFakeRoleService(),
+		grantErr:        errors.New("grant db error"),
+	}
+	mw := RequireIdentity(usr, rls, cache.NewMemoryCache(), time.Second, logger.NewNoop())
+	var got identity.Identity
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = identity.MustFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, signedRequest(t, "u-grant-err", "g@example.com"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got %d want 200 — grant error must not block request", rr.Code)
+	}
+	// User should still be accessible even without the role backfill.
+	if got.UserID != "u-grant-err" {
+		t.Fatalf("identity=%+v", got)
+	}
+}
+
+// writeErrorCache implements cache.Cache with a Set method that returns an
+// error, exercising the cache-set-failure log path for non-suspended users.
+type writeErrorCache struct{ setErr error }
+
+func (w *writeErrorCache) Get(_ context.Context, _ string, _ any) (bool, error) { return false, nil }
+func (w *writeErrorCache) Set(_ context.Context, _ string, _ any, _ time.Duration) error {
+	return w.setErr
+}
+func (w *writeErrorCache) Delete(_ context.Context, _ ...string) error { return nil }
+
+// TestResolveIdentity_CacheSetError_StillSucceeds verifies that a cache.Set
+// failure on the happy path is non-fatal — the response is still 200.
+func TestResolveIdentity_CacheSetError_StillSucceeds(t *testing.T) {
+	initIdentityTestPipelineHS(t)
+	usr := newFakeUserService()
+	usr.seed("u-setcache-err", "sc@example.com", usermodel.StatusActive, nil)
+	rls := newFakeRoleService()
+	rls.seed("u-setcache-err", rolemodel.RoleUser)
+
+	badWrite := &writeErrorCache{setErr: errors.New("redis write error")}
+	mw := RequireIdentity(usr, rls, badWrite, 60*time.Second, logger.NewNoop())
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, signedRequest(t, "u-setcache-err", "sc@example.com"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got %d want 200 — cache set error must not fail the request", rr.Code)
+	}
+}

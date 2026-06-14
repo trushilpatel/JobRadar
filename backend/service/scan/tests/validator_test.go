@@ -37,6 +37,9 @@ func (n *noopService) UpdateScanIntervalOverride(_ context.Context, _ string, _ 
 	return nil
 }
 func (n *noopService) RetryDueJobs(_ context.Context) error { return nil }
+func (n *noopService) EscalateStuckRetryJobs(_ context.Context) (int64, error) {
+	return 0, nil
+}
 
 var _ svc.Service = (*noopService)(nil)
 

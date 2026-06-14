@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
 )
@@ -33,6 +34,26 @@ func TestApp_PipelineSvc_ReturnsWiredSvc(t *testing.T) {
 	app := NewApp(nil, nil, nil, nil, nil, nil, nil, pipe, nil)
 	if got := app.PipelineSvc(); got != pipe {
 		t.Fatalf("PipelineSvc() = %p, want %p", got, pipe)
+	}
+}
+
+// TestApp_AtsHandler_ReturnsWiredRouter asserts the getter surfaces the exact
+// ATS router passed into NewApp — main.go relies on this to mount ATS admin
+// routes under /admin via buildMultiUser.
+func TestApp_AtsHandler_ReturnsWiredRouter(t *testing.T) {
+	ats := &atssvc.AtsRestRouter{}
+	app := NewApp(nil, nil, ats, nil, nil, nil, nil, &fakePipelineService{}, nil)
+	if got := app.AtsHandler(); got != ats {
+		t.Fatalf("AtsHandler() = %p, want %p", got, ats)
+	}
+}
+
+// TestApp_AtsHandler_NilWhenNotWired ensures AtsHandler returns nil safely
+// when no ATS router was injected.
+func TestApp_AtsHandler_NilWhenNotWired(t *testing.T) {
+	app := NewApp(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	if app.AtsHandler() != nil {
+		t.Error("AtsHandler should be nil when not wired")
 	}
 }
 

@@ -95,6 +95,15 @@ func runCycle(ctx context.Context, log logger.Logger, svc SchedulerService, inte
 		log.Error("retry due jobs failed", rerr)
 	}
 
+	if n, eerr := svc.EscalateStuckRetryJobs(ctx); eerr != nil {
+		metrics.SchedulerErrorsTotal.WithLabelValues("escalate_stuck_retry").Inc()
+		log.Error("escalate stuck retry jobs failed", eerr)
+	} else if n > 0 {
+		log.Info("escalated stuck retry jobs to error",
+			logger.Int(logger.FieldCount, int(n)),
+		)
+	}
+
 	res, err := svc.EnqueueDue(ctx, intervalMinutes)
 	if err != nil {
 		metrics.SchedulerErrorsTotal.WithLabelValues("enqueue_due").Inc()

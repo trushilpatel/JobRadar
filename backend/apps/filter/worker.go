@@ -6,6 +6,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"runtime/debug"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,6 +36,12 @@ const filterMaxRetries = 2
 // next_attempt_at field stays meaningful for dashboards on the infra-error path.
 // Must match the BackOff slice in ConsumerFilterWorkers (common/jetstream/streams.go).
 var filterBackOff = []time.Duration{30 * time.Second, 2 * time.Minute}
+
+// filterRPDExhaustionRetryAfter is the minimum next_attempt_at applied when
+// the LLM router reports zero RetryAfter on an LLMAllExhaustedError (RPD cap
+// hit — quota resets at midnight UTC). Four hours prevents thundering-herd
+// retries that would immediately re-exhaust the daily budget.
+const filterRPDExhaustionRetryAfter = 4 * time.Hour
 
 // Worker consumes JOBS_RAW via NATS pull consumer, splits each fetch into
 // chunks of batchSize, and scores each chunk serially via ScoreBatch. An
@@ -160,7 +167,7 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 			job: jobWithCtx{
 				ctx:        ctx,
 				job:        job,
-				retryCount: msg.DeliveryCount() - 1,
+				retryCount: getRetryCount(msg),
 			},
 			msg: msg,
 		})
@@ -559,9 +566,13 @@ func (w *Worker) routeFailedChunk(ctx context.Context, chunk []chunkItem, scoreE
 	var exhausted *domainerr.LLMAllExhaustedError
 	if stderrors.As(scoreErr, &exhausted) {
 		retryAfter := exhausted.RetryAfter
-		if retryAfter.IsZero() {
-			// No specific retry time: fall back to the first BackOff tier.
-			retryAfter = w.clock.Now().Add(filterBackOff[0])
+		// Floor next_attempt_at to filterRPDExhaustionRetryAfter (4h). This
+		// applies when RetryAfter is zero (RPD cap with no cooldown time from
+		// the provider) or when it is unreasonably short (< 4h), both of which
+		// would cause a thundering-herd retry storm that re-exhausts daily quota.
+		floorRetryAfter := w.clock.Now().Add(filterRPDExhaustionRetryAfter)
+		if retryAfter.IsZero() || retryAfter.Before(floorRetryAfter) {
+			retryAfter = floorRetryAfter
 		}
 
 		// Phase 1: marshal each job's payload. Items that fail marshal are
@@ -729,4 +740,26 @@ func (w *Worker) publishDetail(ctx context.Context, job ats.RawJob) error {
 		return fmt.Errorf("publish job %s: %w", job.ID, err)
 	}
 	return nil
+}
+
+// getRetryCount returns the monotonic retry count for a NATS message.
+//
+// Priority order:
+//  1. X-Retry-Count header (set by the sweeper on re-injected messages, AC-1).
+//     This value is the true cumulative count across all sweeper cycles and must
+//     take precedence so the ledger's retry_count never resets to zero.
+//  2. DeliveryCount - 1 (NATS-native delivery count minus the initial delivery).
+//     Used for messages that arrive from the crawler directly (no sweeper header).
+//
+// Malformed header values fall through to the delivery-count path.
+func getRetryCount(msg *js.Msg) int {
+	h := msg.Headers()
+	if h != nil {
+		if v := h.Get(js.HeaderRetryCount); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				return n
+			}
+		}
+	}
+	return msg.DeliveryCount() - 1
 }

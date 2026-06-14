@@ -72,6 +72,10 @@ func TestStartHeartbeat_StopsOnContextCancel(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 	cancel()
+	// A tick may have already been selected before the context cancellation was
+	// observed. Wait one short window so any in-flight UpdateHeartbeat completes
+	// before snapshotting, then assert no further ticks fire.
+	time.Sleep(5 * time.Millisecond)
 	countAtCancel := q.calls.Load()
 
 	time.Sleep(60 * time.Millisecond)

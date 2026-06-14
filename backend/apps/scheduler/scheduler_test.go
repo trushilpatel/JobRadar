@@ -267,3 +267,32 @@ func TestRunCycle_AllStepsRun_OnAllErrors(t *testing.T) {
 		t.Errorf("EnqueueDue calls = %d, want 1", svc.enqueueCalls.Load())
 	}
 }
+
+// ── RC-7: EscalateStuckRetryJobs in runCycle ─────────────────────────────────
+
+// TestRunCycle_EscalateStuckRetryJobs_CalledEachCycle asserts that
+// EscalateStuckRetryJobs is invoked in every runCycle pass.
+func TestRunCycle_EscalateStuckRetryJobs_CalledEachCycle(t *testing.T) {
+	svc := &fakeSchedulerService{}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+	if svc.escalateStuckCalls.Load() != 1 {
+		t.Errorf("EscalateStuckRetryJobs calls = %d, want 1", svc.escalateStuckCalls.Load())
+	}
+}
+
+// TestRunCycle_EscalateStuckRetryJobs_ErrorContinues asserts that an error from
+// EscalateStuckRetryJobs does not abort subsequent steps in runCycle.
+func TestRunCycle_EscalateStuckRetryJobs_ErrorContinues(t *testing.T) {
+	svc := &fakeSchedulerService{
+		escalateStuckErr: errors.New("db down"),
+		enqueueCount:     1,
+	}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+
+	if svc.escalateStuckCalls.Load() != 1 {
+		t.Errorf("EscalateStuckRetryJobs calls = %d, want 1", svc.escalateStuckCalls.Load())
+	}
+	if svc.enqueueCalls.Load() != 1 {
+		t.Errorf("EnqueueDue calls = %d, want 1 (must run even after escalateStuck error)", svc.enqueueCalls.Load())
+	}
+}

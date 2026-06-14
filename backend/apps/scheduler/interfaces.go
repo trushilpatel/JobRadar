@@ -17,10 +17,14 @@ type SchedulerService interface {
 	ResetStuck(ctx context.Context, staleDur time.Duration) (int, error)
 	PurgeInactive(ctx context.Context) (int, error)
 	// RetryDueJobs fetches ledger rows where reason='retry' and
-	// next_attempt_at <= now(), then either re-publishes them to
-	// jobs.raw.{adapter} (resetting the row to reason='fetch') or escalates
-	// them to reason='error' when retry_count >= max.
+	// next_attempt_at <= now() with a non-null payload, re-publishes them to
+	// jobs.raw.{adapter} (leaving the row at reason='retry' while in-flight),
+	// or escalates to reason='error' when retry_count >= max.
 	RetryDueJobs(ctx context.Context) error
+	// EscalateStuckRetryJobs promotes reason='retry' rows that have not been
+	// re-published within 4 hours of their next_attempt_at to reason='error'.
+	// Returns the number of rows escalated — zero is not an error.
+	EscalateStuckRetryJobs(ctx context.Context) (int64, error)
 }
 
 // RetryPublisher is the narrow NATS publishing contract the sweeper needs.

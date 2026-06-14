@@ -117,6 +117,10 @@ func (f *fakePublisher) PublishWithMsgID(_ context.Context, subject string, valu
 	return f.Publish(context.Background(), subject, value)
 }
 
+func (f *fakePublisher) PublishWithHeaders(_ context.Context, subject string, value []byte, _ map[string]string) error {
+	return f.Publish(context.Background(), subject, value)
+}
+
 // recordsOnSubject returns all publishes whose subject contains needle.
 func (f *fakePublisher) recordsOnSubject(needle string) []publishedRecord {
 	var out []publishedRecord
@@ -905,7 +909,9 @@ func TestPublishToDLQ_TermError_OnSuccess(t *testing.T) {
 // The infra retry path (Nak + RetryLedgerEntry) must not be used.
 func TestRouteFailedChunk_LLMExhausted_TermsAndWritesPayload(t *testing.T) {
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
-	retryAfter := now.Add(5 * time.Minute)
+	// Use 6h ahead so AC-5's 4h floor does not alter the value (floor only applies
+	// when RetryAfter < 4h from now).
+	retryAfter := now.Add(6 * time.Hour)
 	exhaustedErr := &domainerr.LLMAllExhaustedError{RetryAfter: retryAfter}
 
 	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
@@ -968,8 +974,10 @@ func TestRouteFailedChunk_LLMExhausted_TermsAndWritesPayload(t *testing.T) {
 	}
 }
 
-// TestRouteFailedChunk_LLMExhausted_ZeroRetryAfter falls back to filterBackOff[0]
-// when RetryAfter is the zero time.
+// TestRouteFailedChunk_LLMExhausted_ZeroRetryAfter floors to
+// filterRPDExhaustionRetryAfter (4h) when RetryAfter is the zero time.
+// This prevents thundering-herd retries that would immediately re-exhaust
+// the daily quota. (AC-5)
 func TestRouteFailedChunk_LLMExhausted_ZeroRetryAfter(t *testing.T) {
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	exhaustedErr := &domainerr.LLMAllExhaustedError{} // zero RetryAfter
@@ -986,9 +994,9 @@ func TestRouteFailedChunk_LLMExhausted_ZeroRetryAfter(t *testing.T) {
 	if len(outcome.RetriedWithPayload) != 1 {
 		t.Fatalf("expected 1 RetriedWithPayload entry, got %d", len(outcome.RetriedWithPayload))
 	}
-	want := now.Add(filterBackOff[0])
+	want := now.Add(filterRPDExhaustionRetryAfter) // 4h floor (AC-5)
 	if !outcome.RetriedWithPayload[0].NextAttemptAt.Equal(want) {
-		t.Errorf("next_attempt_at = %v, want %v (filterBackOff[0])", outcome.RetriedWithPayload[0].NextAttemptAt, want)
+		t.Errorf("next_attempt_at = %v, want %v (4h floor per AC-5)", outcome.RetriedWithPayload[0].NextAttemptAt, want)
 	}
 }
 

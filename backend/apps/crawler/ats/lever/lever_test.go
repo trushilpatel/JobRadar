@@ -362,3 +362,167 @@ func TestLever_FetchJobContent_InvalidURL(t *testing.T) {
 		t.Fatal("expected error for invalid URL, got nil")
 	}
 }
+
+func TestLever_FetchJobContent_MalformedJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`not valid json`))
+	}))
+	defer srv.Close()
+
+	l := &Lever{baseURL: srv.URL}
+	job := types.RawJob{
+		Adapter: "lever",
+		URL:     "https://jobs.lever.co/acme/abc-123",
+	}
+	_, err := l.FetchJobContent(context.Background(), job)
+	if err == nil {
+		t.Fatal("expected error on malformed JSON in FetchJobContent, got nil")
+	}
+	if !strings.Contains(err.Error(), "decode") {
+		t.Errorf("error should mention decode, got: %v", err)
+	}
+}
+
+func TestLever_FetchJobs_ContextCancelled(t *testing.T) {
+	// Server that blocks indefinitely — context cancel must surface as an error.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	l := &Lever{baseURL: srv.URL}
+	_, err := l.FetchJobs(ctx, "acme")
+	if err == nil {
+		t.Fatal("expected error when context is cancelled, got nil")
+	}
+}
+
+func TestLever_FetchJobContent_ContextCancelled(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	l := &Lever{baseURL: srv.URL}
+	job := types.RawJob{
+		Adapter: "lever",
+		URL:     "https://jobs.lever.co/acme/abc-123",
+	}
+	_, err := l.FetchJobContent(ctx, job)
+	if err == nil {
+		t.Fatal("expected error when context is cancelled, got nil")
+	}
+}
+
+// ── toFetchJobContentResponse — uncovered branches ────────────────────────────
+
+func TestToFetchJobContentResponse_EmptyDeptFallsBackToTeam(t *testing.T) {
+	r := &fetchJobContentResponse{
+		ID:   "xyz",
+		Text: "SRE",
+		Categories: struct {
+			Location     string   `json:"location"`
+			Commitment   string   `json:"commitment"`
+			Team         string   `json:"team"`
+			Department   string   `json:"department"`
+			AllLocations []string `json:"allLocations"`
+		}{
+			Team:       "Infrastructure",
+			Department: "", // empty — should fall back to Team
+		},
+	}
+	resp := r.toFetchJobContentResponse()
+	if resp.Department != "Infrastructure" {
+		t.Errorf("Department fallback: got %q, want Infrastructure", resp.Department)
+	}
+}
+
+func TestToFetchJobContentResponse_ZeroCreatedAt(t *testing.T) {
+	r := &fetchJobContentResponse{
+		ID:        "xyz",
+		Text:      "SRE",
+		CreatedAt: 0, // must produce empty PublishedDate
+	}
+	resp := r.toFetchJobContentResponse()
+	if resp.PublishedDate != "" {
+		t.Errorf("PublishedDate should be empty when CreatedAt=0, got %q", resp.PublishedDate)
+	}
+}
+
+func TestToFetchJobContentResponse_NonZeroCreatedAt(t *testing.T) {
+	r := &fetchJobContentResponse{
+		ID:        "xyz",
+		Text:      "SRE",
+		CreatedAt: 1714521600000, // Unix-ms timestamp — must appear in PublishedDate
+	}
+	resp := r.toFetchJobContentResponse()
+	if resp.PublishedDate != "1714521600000" {
+		t.Errorf("PublishedDate: got %q, want 1714521600000", resp.PublishedDate)
+	}
+}
+
+func TestToFetchJobContentResponse_EmptyListSectionSkipped(t *testing.T) {
+	// A list section whose HTML content strips to empty must be omitted
+	// from Requirements (not contribute empty "Header: " lines).
+	r := &fetchJobContentResponse{
+		ID:   "xyz",
+		Text: "SRE",
+		Lists: []struct {
+			Text    string `json:"text"`
+			Content string `json:"content"`
+		}{
+			{Text: "Empty section", Content: "<li></li>"},
+			{Text: "Real section", Content: "<li>Go experience</li>"},
+		},
+	}
+	resp := r.toFetchJobContentResponse()
+	if strings.Contains(resp.Requirements, "Empty section") {
+		t.Errorf("empty list section should be omitted from Requirements, got: %q", resp.Requirements)
+	}
+	if !strings.Contains(resp.Requirements, "Real section") {
+		t.Errorf("non-empty list section should be in Requirements, got: %q", resp.Requirements)
+	}
+}
+
+func TestToFetchJobContentResponse_NoSalary(t *testing.T) {
+	// Neither SalaryDescriptionPlain nor SalaryRange present — Compensation must be empty.
+	r := &fetchJobContentResponse{
+		ID:   "xyz",
+		Text: "SRE",
+	}
+	resp := r.toFetchJobContentResponse()
+	if resp.Compensation != "" {
+		t.Errorf("Compensation should be empty when no salary info, got: %q", resp.Compensation)
+	}
+}
+
+func TestToFetchJobContentResponse_SalaryRangeFallbackFormat(t *testing.T) {
+	// Explicit salary range with no SalaryDescriptionPlain must format as
+	// "min – max CURRENCY / INTERVAL".
+	r := &fetchJobContentResponse{
+		ID:   "xyz",
+		Text: "Engineer",
+		SalaryRange: &salaryRange{
+			Currency: "USD",
+			Interval: "per-year-salary",
+			Min:      100000,
+			Max:      150000,
+		},
+	}
+	resp := r.toFetchJobContentResponse()
+	if !strings.Contains(resp.Compensation, "USD") {
+		t.Errorf("Compensation should include currency, got: %q", resp.Compensation)
+	}
+	if !strings.Contains(resp.Compensation, "per-year-salary") {
+		t.Errorf("Compensation should include interval, got: %q", resp.Compensation)
+	}
+}
