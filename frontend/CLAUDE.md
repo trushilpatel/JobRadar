@@ -119,6 +119,9 @@ const setStatus = useMutation({
 - **Only** `cn()` (clsx + tailwind-merge) for `className` composition — never string concat
 - Tailwind classes only — no inline styles
 - Radix UI for accessible primitives (dialogs, selects, tooltips, switches)
+- **Theme-adaptive colors in JS must use CSS custom properties** — when a color value is used in a JS/TS context (inline `style` prop, Recharts `stroke`/`fill`, sparkline background arrays), it cannot reference Tailwind's `dark:` prefix. Define the color pair in `index.css` (`:root` = light, `.dark` = dark) and reference it as `'var(--name)'`. The `dark:` prefix is acceptable only inside Tailwind `className` strings on DOM elements.
+- **Recharts accepts CSS variable strings** — `stroke`, `fill`, and tick `fill` props accept `'var(--text-muted)'`, `'var(--border)'`, etc. Use them instead of hardcoded hex to keep charts readable in both themes.
+- **`InsightEmpty` vs `InsightError` must be visually distinct** — empty state uses `text-placeholder`; error state uses an `AlertCircle` icon + `bg-red-500/5 border-red-500/10` background. Never style them identically.
 
 ---
 

@@ -137,7 +137,7 @@ describe('AdminPipelinePage', () => {
     render(<AdminPipelinePage />, { wrapper: makeWrapper() })
     expect(screen.getByText('Failed to load ATS configs.')).toBeInTheDocument()
     // Multiple Retry buttons exist (ATS + pipeline retry tiers); verify at least one renders.
-    expect(screen.getAllByRole('button', { name: 'Retry' }).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByRole('button', { name: /Retry/ }).length).toBeGreaterThanOrEqual(1)
   })
 
   it('shows pipeline health stats when pipeline data resolves', async () => {

@@ -111,7 +111,7 @@ export function InterviewingPanel() {
   return (
     <div className="bg-subtle border border-[var(--border)] rounded-xl p-5">
       <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-muted mb-4">
-        interviewing
+        active applications
       </p>
 
       {isLoading ? (

@@ -111,6 +111,7 @@ Frontend rule highlights (full set in `frontend/CLAUDE.md`):
 - **UI component boundary:** `components/ui/` = shadcn/ui origin OR pure custom (data in → render out → callbacks out). Zero `useEffect` with side effects. Zero business logic. Domain/navigation decisions belong in hooks.
 - **New component decision tree:** (1) shadcn has it → `npx shadcn@latest add`; (2) Radix has a headless primitive → thin styled wrapper; (3) neither → pure custom with PR justification.
 - **Forbidden:** `createPortal` directly (use Radix Portal/shadcn Popover); `useInfiniteQuery` for page-by-page cursor nav (use `useQuery` + cursor history — see `features/jobs/hooks/useJobs.ts`); dropdowns/multi-selects built from scratch (use `Popover + Command + Checkbox`).
+- **Theme-adaptive colors in JS must use CSS custom properties** — colors used in inline `style` props, Recharts `stroke`/`fill`, or JS color arrays must be `'var(--name)'` strings referencing pairs defined in `index.css` (`:root` = light, `.dark` = dark). The `dark:` Tailwind prefix is only valid inside `className` strings, never in JS values.
 
 ## Git policy
 

@@ -13,7 +13,8 @@ import { tooltipStyle } from '../insightStyles'
 import { useSponsorshipTrend } from '../hooks/useInsights'
 
 function SponsorshipContent({ data }: { data: SponsorshipDay[] }) {
-  if (data.length === 0) return <InsightEmpty />
+  if (data.length === 0)
+    return <InsightEmpty reason="Requires enriched jobs with sponsorship data (last 30 days)" />
   const chartData = data.map((d) => ({
     date: d.date.slice(5),
     total: d.total,
@@ -23,15 +24,15 @@ function SponsorshipContent({ data }: { data: SponsorshipDay[] }) {
   return (
     <ResponsiveContainer width="100%" height={180}>
       <LineChart data={chartData} margin={{ left: 0, right: 16, top: 4, bottom: 4 }}>
-        <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+        <CartesianGrid stroke="var(--border)" vertical={false} />
         <XAxis
           dataKey="date"
-          tick={{ fill: '#64748b', fontSize: 11 }}
+          tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
           tickLine={false}
           axisLine={false}
         />
         <YAxis
-          tick={{ fill: '#64748b', fontSize: 11 }}
+          tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
           tickLine={false}
           axisLine={false}
           width={30}

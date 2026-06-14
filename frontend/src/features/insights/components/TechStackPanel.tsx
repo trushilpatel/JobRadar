@@ -11,22 +11,22 @@ function TechContent({ data }: { data: TechCount[] }) {
       <BarChart layout="vertical" data={data} margin={{ left: 10, right: 24, top: 4, bottom: 4 }}>
         <XAxis
           type="number"
-          stroke="#334155"
-          tick={{ fill: '#94a3b8', fontSize: 11 }}
+          stroke="var(--border)"
+          tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
           tickLine={false}
           axisLine={false}
         />
         <YAxis
           type="category"
           dataKey="tech"
-          stroke="#334155"
-          tick={{ fill: '#94a3b8', fontSize: 12 }}
+          stroke="var(--border)"
+          tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
           width={90}
           tickLine={false}
           axisLine={false}
         />
         <Tooltip
-          cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+          cursor={{ fill: 'rgba(127,127,127,0.06)' }}
           contentStyle={tooltipStyle}
           formatter={(value) => [value ?? 0, 'Jobs']}
         />

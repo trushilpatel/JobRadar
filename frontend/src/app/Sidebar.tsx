@@ -68,14 +68,14 @@ function NavItem({
           'w-full flex items-center rounded-lg text-sm transition-colors',
           collapsed ? 'justify-center p-2.5' : 'gap-2.5 px-3 py-2.5',
           isActive
-            ? 'bg-[var(--sidebar-active)] text-violet-300 font-medium'
-            : 'text-muted hover:text-white hover:bg-[var(--sidebar-hover)]'
+            ? 'bg-[var(--sidebar-active)] text-[var(--accent-text)] font-medium'
+            : 'text-muted hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)]'
         )
       }
     >
       {({ isActive }) => (
         <>
-          <span className={cn('shrink-0', isActive ? 'text-violet-400' : '')}>{icon}</span>
+          <span className={cn('shrink-0', isActive ? 'text-[var(--accent)]' : '')}>{icon}</span>
           {!collapsed && <span>{label}</span>}
         </>
       )}
@@ -114,7 +114,7 @@ export function Sidebar() {
         <button
           type="button"
           onClick={() => setCollapsed((v) => !v)}
-          className="p-1.5 text-muted hover:text-white hover:bg-[var(--sidebar-hover)] rounded-md transition-colors shrink-0"
+          className="p-1.5 text-muted hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)] rounded-md transition-colors shrink-0"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {collapsed ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
@@ -179,8 +179,8 @@ export function Sidebar() {
                 cn(
                   'flex-1 flex items-center gap-2 rounded-lg px-1 py-1 -mx-1 transition-colors min-w-0',
                   isActive
-                    ? 'text-violet-300'
-                    : 'text-muted hover:text-white hover:bg-[var(--sidebar-hover)]'
+                    ? 'text-[var(--accent-text)]'
+                    : 'text-muted hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)]'
                 )
               }
             >
@@ -192,7 +192,7 @@ export function Sidebar() {
             <button
               onClick={signOut}
               title="Sign out"
-              className="p-1 text-muted hover:text-white hover:bg-[var(--sidebar-hover)] rounded-md transition-colors shrink-0"
+              className="p-1 text-muted hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)] rounded-md transition-colors shrink-0"
             >
               <LogOut size={13} />
             </button>

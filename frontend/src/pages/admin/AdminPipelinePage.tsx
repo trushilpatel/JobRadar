@@ -90,20 +90,34 @@ function RetryBreakdown({ label, worker, counts }: RetryBreakdownProps) {
               type="button"
               disabled={counts[key] === 0 || isPending}
               onClick={() => mutate({ tier: key })}
+              title={
+                key === 'dlq'
+                  ? 'Recovery operation: re-queues permanently failed jobs. Use with care.'
+                  : undefined
+              }
               className={cn(
                 'text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0',
                 counts[key] === 0 || isPending
                   ? 'border-[var(--border)] text-placeholder cursor-not-allowed'
-                  : 'border-violet-500/50 text-violet-500 dark:text-violet-400 hover:bg-violet-500/10 cursor-pointer'
+                  : key === 'dlq'
+                    ? 'border-amber-500/50 text-amber-500 dark:text-amber-400 hover:bg-amber-500/10 cursor-pointer'
+                    : 'border-violet-500/50 text-violet-500 dark:text-violet-400 hover:bg-violet-500/10 cursor-pointer'
               )}
             >
-              Retry
+              {key === 'dlq' ? 'Retry ⚠' : 'Retry'}
             </button>
           </div>
         ))}
       </div>
     </div>
   )
+}
+
+function backlogVariant(count: number): MetricCardProps['variant'] {
+  if (count === 0) return 'neutral'
+  if (count < 50) return 'violet'
+  if (count < 200) return 'amber'
+  return 'red'
 }
 
 // ── Pipeline health panel ─────────────────────────────────────────────────────
@@ -126,7 +140,7 @@ function PipelineHealthSkeleton() {
 }
 
 function PipelineHealthPanel() {
-  const { data, isLoading, isError, dataUpdatedAt } = useQuery({
+  const { data, isLoading, isError, dataUpdatedAt, refetch } = useQuery({
     queryKey: PIPELINE_QUERY_KEY,
     queryFn: fetchPipelineStats,
     refetchInterval: POLL_INTERVAL_MS,
@@ -181,10 +195,15 @@ function PipelineHealthPanel() {
           </span>
         </div>
         {lastUpdated && (
-          <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer"
+            title="Click to refresh"
+          >
             <RefreshCw size={10} />
             <span>Last updated {lastUpdated} · every 30s</span>
-          </div>
+          </button>
         )}
       </div>
 
@@ -193,8 +212,16 @@ function PipelineHealthPanel() {
         <MetricCard label="Active companies" value={data.active_companies} variant="green" />
         <MetricCard label="Queued" value={data.queued} variant="amber" />
         <MetricCard label="Crawling" value={data.crawling} variant="blue" />
-        <MetricCard label="Awaiting filter" value={data.awaiting_filter} variant="violet" />
-        <MetricCard label="Awaiting enrichment" value={data.awaiting_enrichment} variant="violet" />
+        <MetricCard
+          label="Awaiting filter"
+          value={data.awaiting_filter}
+          variant={backlogVariant(data.awaiting_filter)}
+        />
+        <MetricCard
+          label="Awaiting enrichment"
+          value={data.awaiting_enrichment}
+          variant={backlogVariant(data.awaiting_enrichment)}
+        />
       </div>
 
       {/* Output metrics */}
@@ -223,7 +250,7 @@ export function AdminPipelinePage() {
   const mutation = useAtsActions()
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full space-y-10">
+    <div className="flex-1 overflow-y-auto p-6 max-w-6xl mx-auto w-full space-y-6">
       <div>
         <h1 className="text-lg font-semibold text-primary">Pipeline</h1>
         <p className="text-sm text-muted mt-1">

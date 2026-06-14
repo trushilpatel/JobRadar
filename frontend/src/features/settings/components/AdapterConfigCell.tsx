@@ -2,6 +2,13 @@ import { useState, useRef, useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
 
+function formatMinutes(n: number): string {
+  if (n < 60) return `${n}min`
+  const h = Math.floor(n / 60)
+  const m = n % 60
+  return m === 0 ? `${h}h` : `${h}h ${m}m`
+}
+
 interface AdapterConfigCellProps {
   value: number
   min: number
@@ -92,8 +99,7 @@ export function AdapterConfigCell({ value, min, max, unit, onSave }: AdapterConf
       <div className="flex items-center gap-1.5 text-sm text-secondary">
         <Loader2 size={13} className="animate-spin text-violet-400" />
         <span>
-          {draft}
-          {unit ? ` ${unit}` : ''}
+          {unit === 'min' ? formatMinutes(Number(draft)) : `${draft}${unit ? ` ${unit}` : ''}`}
         </span>
       </div>
     )
@@ -140,8 +146,7 @@ export function AdapterConfigCell({ value, min, max, unit, onSave }: AdapterConf
           : 'text-secondary hover:text-primary hover:bg-hover'
       )}
     >
-      {value}
-      {unit && <span className="ml-1 text-muted text-xs">{unit}</span>}
+      {unit === 'min' ? formatMinutes(value) : `${value}${unit ? ` ${unit}` : ''}`}
     </button>
   )
 }

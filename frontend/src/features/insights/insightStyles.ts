@@ -1,7 +1,7 @@
 export const tooltipStyle = {
-  background: '#13131e',
-  border: '1px solid rgba(255,255,255,0.07)',
+  background: 'var(--bg-panel)',
+  border: '1px solid var(--border-strong)',
   borderRadius: 8,
-  color: '#e2e8f0',
+  color: 'var(--text-primary)',
   fontSize: 12,
 }

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import * as insightsApi from '@/features/insights/api/insights.api'
 
@@ -100,7 +101,11 @@ describe('CompanyVelocityPanel', () => {
   it('shows InsightEmpty when data is an empty array', async () => {
     vi.mocked(insightsApi.fetchVelocity).mockResolvedValue([])
     render(<CompanyVelocityPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByText('Requires 2+ weeks of scan history to compute velocity')
+      ).toBeInTheDocument()
+    )
   })
 
   it('shows error state when response is null', async () => {
@@ -227,7 +232,11 @@ describe('SponsorshipTrendPanel', () => {
   it('shows InsightEmpty when data is an empty array', async () => {
     vi.mocked(insightsApi.fetchSponsorshipTrend).mockResolvedValue([])
     render(<SponsorshipTrendPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByText('Requires enriched jobs with sponsorship data (last 30 days)')
+      ).toBeInTheDocument()
+    )
   })
 
   it('shows error state when response is null', async () => {
@@ -288,6 +297,30 @@ describe('CompanyActivityPanel', () => {
     vi.mocked(insightsApi.fetchCompanyActivity).mockRejectedValue(new Error('network error'))
     render(<CompanyActivityPanel />, { wrapper: makeWrapper() })
     await waitFor(() => expect(screen.getByText('Failed to load data')).toBeInTheDocument())
+  })
+
+  it('shows Show all button when more than 30 companies', async () => {
+    const manyCompanies = Array.from({ length: 35 }, (_, i) => ({
+      company_name: `Company ${i}`,
+      week: '2024-01-01',
+      count: 10 - (i % 5),
+    }))
+    vi.mocked(insightsApi.fetchCompanyActivity).mockResolvedValue(manyCompanies)
+    render(<CompanyActivityPanel />, { wrapper: makeWrapper() })
+    await waitFor(() => expect(screen.getByText('Show all (35)')).toBeInTheDocument())
+  })
+
+  it('expands list on Show all click', async () => {
+    const manyCompanies = Array.from({ length: 35 }, (_, i) => ({
+      company_name: `Company ${i}`,
+      week: '2024-01-01',
+      count: 10 - (i % 5),
+    }))
+    vi.mocked(insightsApi.fetchCompanyActivity).mockResolvedValue(manyCompanies)
+    render(<CompanyActivityPanel />, { wrapper: makeWrapper() })
+    const btn = await screen.findByText('Show all (35)')
+    await userEvent.click(btn)
+    expect(screen.getByText('Show less')).toBeInTheDocument()
   })
 })
 
