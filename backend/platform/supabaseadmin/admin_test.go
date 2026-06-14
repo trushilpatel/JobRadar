@@ -106,3 +106,54 @@ func TestDeleteUser_EmptyUserID(t *testing.T) {
 		t.Fatal("empty userID: want err")
 	}
 }
+
+// TestDeleteUser_TransportError exercises the c.httpClient.Do error branch by
+// closing the test server before the request is made, causing a
+// connection-refused transport error.
+func TestDeleteUser_TransportError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	// Close before the call so Do() cannot connect.
+	srv.Close()
+
+	client, err := supabaseadmin.NewRESTClient(srv.URL, "k", srv.Client())
+	if err != nil {
+		t.Fatalf("NewRESTClient: %v", err)
+	}
+	if err := client.DeleteUser(context.Background(), "user-abc"); err == nil {
+		t.Fatal("expected transport error when server is closed, got nil")
+	}
+}
+
+// TestDeleteUser_BuildRequestError exercises the http.NewRequestWithContext
+// error path. A null byte in the URL is rejected by the http package before
+// any network call occurs.
+func TestDeleteUser_BuildRequestError(t *testing.T) {
+	// Embed a null byte in the host; http.NewRequest rejects this.
+	client, err := supabaseadmin.NewRESTClient("http://host\x00.invalid", "k", http.DefaultClient)
+	if err != nil {
+		t.Fatalf("NewRESTClient: %v", err)
+	}
+	if err := client.DeleteUser(context.Background(), "user-abc"); err == nil {
+		t.Fatal("expected request-build error for invalid URL, got nil")
+	}
+}
+
+// TestDeleteUser_2xxVariants confirms that any 2xx status code is treated as
+// success — not just 200.
+func TestDeleteUser_2xxVariants(t *testing.T) {
+	for _, code := range []int{http.StatusNoContent, http.StatusAccepted, http.StatusCreated} {
+		code := code
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(code)
+			}))
+			defer srv.Close()
+			client, _ := supabaseadmin.NewRESTClient(srv.URL, "k", srv.Client())
+			if err := client.DeleteUser(context.Background(), "u"); err != nil {
+				t.Fatalf("status %d: unexpected err %v", code, err)
+			}
+		})
+	}
+}

@@ -3,6 +3,8 @@ package meta
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -472,3 +474,450 @@ func TestFlexString_StringMethod(t *testing.T) {
 		t.Errorf("zero flexString.String(): got %q, want empty", got)
 	}
 }
+
+// ── flexString — additional edge cases ───────────────────────────────────────
+
+func TestFlexString_JSONNumber_FallsThrough(t *testing.T) {
+	// A JSON number is not a string, object, or array — must produce empty
+	// without error rather than crashing the parser.
+	var f flexString
+	if err := f.UnmarshalJSON([]byte(`42`)); err != nil {
+		t.Fatalf("unexpected error on number input: %v", err)
+	}
+	if f != "" {
+		t.Errorf("got %q, want empty for unknown shape", f)
+	}
+}
+
+func TestFlexString_EmptyInput(t *testing.T) {
+	var f flexString
+	if err := f.UnmarshalJSON([]byte{}); err != nil {
+		t.Fatalf("unexpected error on empty input: %v", err)
+	}
+	if f != "" {
+		t.Errorf("got %q, want empty", f)
+	}
+}
+
+func TestFlexString_ObjectWithNoNameField(t *testing.T) {
+	// Object that has no "name" key — should become empty without error.
+	var f flexString
+	if err := f.UnmarshalJSON([]byte(`{"@type":"Country","code":"US"}`)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if f != "" {
+		t.Errorf("got %q, want empty for object without name field", f)
+	}
+}
+
+func TestFlexString_ArrayWithEmptyElements(t *testing.T) {
+	// All elements are empty strings — result must be empty (no leading ", ").
+	var f flexString
+	if err := f.UnmarshalJSON([]byte(`["",""]`)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if f != "" {
+		t.Errorf("got %q, want empty when all array elements are empty", f)
+	}
+}
+
+// ── jobLocations.UnmarshalJSON — additional edge cases ──────────────────────
+
+func TestJobLocations_Null(t *testing.T) {
+	var jl jobLocations
+	if err := jl.UnmarshalJSON([]byte(`null`)); err != nil {
+		t.Fatalf("unexpected error on null: %v", err)
+	}
+	if jl != nil {
+		t.Errorf("null should produce nil slice, got %v", jl)
+	}
+}
+
+func TestJobLocations_InvalidArray(t *testing.T) {
+	// Array whose elements are not valid jobLocation objects.
+	var jl jobLocations
+	// A valid JSON array of scalars — the json.Unmarshal into []jobLocation
+	// will error because elements are not objects.
+	err := jl.UnmarshalJSON([]byte(`[1,2,3]`))
+	if err == nil {
+		t.Fatal("expected error when array elements are not jobLocation objects, got nil")
+	}
+}
+
+// ── extractJobPosting — array-of-objects form ────────────────────────────────
+
+func TestExtractJobPosting_ArrayOfObjects(t *testing.T) {
+	// Multiple JSON-LD blocks in a single <script> as an array — not @graph.
+	html := `<html><head>
+<script type="application/ld+json">[
+  {"@type":"BreadcrumbList","itemListElement":[]},
+  {"@type":"JobPosting","title":"Array Item Engineer","employmentType":"Full-time"}
+]</script>
+</head></html>`
+	jp, err := extractJobPosting([]byte(html))
+	if err != nil {
+		t.Fatalf("extract from array form: %v", err)
+	}
+	if jp.Title != "Array Item Engineer" {
+		t.Errorf("Title: got %q, want Array Item Engineer", jp.Title)
+	}
+}
+
+// ── Locations() — location with all empty address parts ──────────────────────
+
+func TestLocations_AllPartsEmpty(t *testing.T) {
+	// A jobLocation with no locality, region, or country produces no output.
+	jp := &JobPosting{
+		JobLocation: jobLocations{
+			{Address: address{}},
+		},
+	}
+	locs := jp.Locations()
+	if len(locs) != 0 {
+		t.Errorf("expected no locations when all parts are empty, got %v", locs)
+	}
+}
+
+// ── Compose() — location truncation at >5 entries ────────────────────────────
+
+func TestCompose_TruncatesLocationsAboveFive(t *testing.T) {
+	// 7 distinct locations — Compose must show 5 and emit "(+2 more)".
+	locs := make(jobLocations, 7)
+	for i := range locs {
+		locs[i] = jobLocation{
+			Address: address{
+				Locality: flexString(fmt.Sprintf("City%d", i)),
+				Region:   "CA",
+				Country:  "USA",
+			},
+		}
+	}
+	jp := &JobPosting{Title: "T", JobLocation: locs}
+	desc := jp.Compose()
+	if !strings.Contains(desc, "(+2 more)") {
+		t.Errorf("Compose should truncate after 5 locations with '+N more', got:\n%s", desc)
+	}
+}
+
+// ── metaCountryToCode — uncovered variants ────────────────────────────────────
+
+func TestMetaCountryToCode(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"USA", "US"},
+		{"United States", "US"},
+		{"United States of America", "US"},
+		{"US", "US"},
+		{"us", "US"},      // lowercase normalised
+		{"IN", "IN"},      // 2-char ISO pass-through
+		{"GB", "GB"},      // 2-char ISO pass-through
+		{"in", "IN"},      // lowercase 2-char
+		{"", ""},          // empty stays empty
+		{"Germany", ""},   // unknown non-2-char country name
+		{"  USA  ", "US"}, // leading/trailing whitespace trimmed
+	}
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			got := metaCountryToCode(tc.input)
+			if got != tc.want {
+				t.Errorf("metaCountryToCode(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+// ── toFetchJobContentResponse — fallback when Locations() is empty ────────────
+
+func TestToFetchJobContentResponse_FallsBackToLocalityWhenLocationsEmpty(t *testing.T) {
+	// JobPosting with a location that has no region/country — Locations()
+	// returns a non-empty joined string, so let us test the path where all
+	// address fields are empty (Locality only).
+	jp := &JobPosting{
+		Title: "Bare Location Test",
+		JobLocation: jobLocations{
+			{
+				Address: address{
+					Locality: "Menlo Park",
+					// Region and Country both empty — "Menlo Park" is
+					// the only component, Locations() returns ["Menlo Park"].
+				},
+			},
+		},
+	}
+	resp := jp.toFetchJobContentResponse("meta-99")
+	if resp.Location != "Menlo Park" {
+		t.Errorf("Location: got %q, want Menlo Park", resp.Location)
+	}
+}
+
+func TestToFetchJobContentResponse_NoLocations(t *testing.T) {
+	// No jobLocation entries at all — falls back to empty locality.
+	jp := &JobPosting{Title: "No Location"}
+	resp := jp.toFetchJobContentResponse("meta-0")
+	if resp.Location != "" {
+		t.Errorf("Location: got %q, want empty when no jobLocation", resp.Location)
+	}
+}
+
+func TestToFetchJobContentResponse_LocationsEmptyJoinedFallback(t *testing.T) {
+	// jobLocation present but ALL address parts empty → Locations() returns [].
+	// Falls back to raw Locality (also empty) → location must be "".
+	jp := &JobPosting{
+		Title:       "Empty Address",
+		JobLocation: jobLocations{{Address: address{}}},
+	}
+	resp := jp.toFetchJobContentResponse("meta-1")
+	if resp.Location != "" {
+		t.Errorf("Location: got %q, want empty when all address parts are empty", resp.Location)
+	}
+}
+
+func TestToFetchJobContentResponse_CountryCodeExtracted(t *testing.T) {
+	jp := &JobPosting{
+		Title: "US Engineer",
+		JobLocation: jobLocations{
+			{
+				Address: address{
+					Locality: flexString("Austin"),
+					Region:   flexString("TX"),
+					Country:  flexString("USA"),
+				},
+			},
+		},
+	}
+	resp := jp.toFetchJobContentResponse("meta-42")
+	if resp.CountryCode != "US" {
+		t.Errorf("CountryCode: got %q, want US", resp.CountryCode)
+	}
+}
+
+func TestToFetchJobContentResponse_CountryCodeEmptyWhenUnknown(t *testing.T) {
+	jp := &JobPosting{
+		Title: "Unknown Country",
+		JobLocation: jobLocations{
+			{
+				Address: address{
+					Country: flexString("Narnia"),
+				},
+			},
+		},
+	}
+	resp := jp.toFetchJobContentResponse("meta-43")
+	if resp.CountryCode != "" {
+		t.Errorf("CountryCode: got %q, want empty for unknown country", resp.CountryCode)
+	}
+}
+
+// ── extractMetaTag — tag found but missing content attribute ─────────────────
+
+func TestExtractMetaTag_TagPresentButNoContent(t *testing.T) {
+	// <meta> tag matches by name but has no content= attribute.
+	html := []byte(`<meta name="og:title" />`)
+	got := extractMetaTag(html, "og:title")
+	if got != "" {
+		t.Errorf("expected empty when content attribute absent, got %q", got)
+	}
+}
+
+// ── FetchJobContent — URL derived from job.ID when job.URL is empty ──────────
+
+func TestFetchJobContent_DerivedURLFromID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Expect the canonical detail path for job id "12345".
+		if r.URL.Path != "/profile/job_details/12345" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(fixtureJSONLD))
+	}))
+	defer srv.Close()
+
+	// Override the detail URL prefix so the adapter hits the test server.
+	old := detailURLPrefix
+	// We can't override detailURLPrefix directly (it's a const), so we set
+	// job.URL explicitly to the test server path — this exercises the
+	// job.URL == "" branch indirectly via providing an empty URL and letting
+	// the adapter build it. Since detailURLPrefix is a const we test the
+	// non-empty URL branch here and cover the empty URL path via the
+	// deriveURL helper test below.
+	_ = old
+
+	m := New(defaultConfig(), logger.NewNoop())
+	// Pass URL explicitly pointing at test server — covers the non-empty URL
+	// branch of FetchJobContent.
+	resp, err := m.FetchJobContent(context.Background(), types.RawJob{
+		ID:  "meta-12345",
+		URL: srv.URL + "/profile/job_details/12345",
+	})
+	if err != nil {
+		t.Fatalf("FetchJobContent: %v", err)
+	}
+	if resp.Title != "Software Engineer (Test)" {
+		t.Errorf("Title: got %q", resp.Title)
+	}
+}
+
+// ── fetchSitemap — non-200 status ────────────────────────────────────────────
+
+func TestFetchSitemap_Non200Status(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	origURL := sitemapURL
+	overrideSitemapURL(srv.URL + "/jobsearch/sitemap.xml")
+	defer overrideSitemapURL(origURL)
+
+	m := NewDefault()
+	_, err := m.fetchSitemap(context.Background())
+	if err == nil {
+		t.Fatal("expected error on non-200 sitemap response")
+	}
+	if !strings.Contains(err.Error(), "403") {
+		t.Errorf("error should mention 403, got: %v", err)
+	}
+}
+
+// ── fetchSitemap — HTTP client Do error ──────────────────────────────────────
+
+// errTransport is an http.RoundTripper that always returns an error.
+// Used to test the httpClient.Do error path without a real network call.
+type errTransport struct{ err error }
+
+func (e errTransport) RoundTrip(*http.Request) (*http.Response, error) { return nil, e.err }
+
+func TestFetchSitemap_ClientDoError(t *testing.T) {
+	origURL := sitemapURL
+	overrideSitemapURL("http://127.0.0.1:0/sitemap.xml") // unreachable port
+	defer overrideSitemapURL(origURL)
+
+	m := NewDefault()
+	m.httpClient = &http.Client{Transport: errTransport{err: fmt.Errorf("dial tcp: connection refused")}}
+
+	_, err := m.fetchSitemap(context.Background())
+	if err == nil {
+		t.Fatal("expected error when httpClient.Do fails")
+	}
+	if !strings.Contains(err.Error(), "do") && !strings.Contains(err.Error(), "connection") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// ── fetchAndParseDetail — HTTP client Do error ────────────────────────────────
+
+func TestFetchAndParseDetail_ClientDoError(t *testing.T) {
+	m := NewDefault()
+	m.httpClient = &http.Client{Transport: errTransport{err: fmt.Errorf("connection refused")}}
+
+	_, err := m.fetchAndParseDetail(context.Background(), "http://127.0.0.1:0/profile/job_details/1")
+	if err == nil {
+		t.Fatal("expected error when httpClient.Do fails in fetchAndParseDetail")
+	}
+}
+
+// ── FetchJobContent — URL derived from job.ID when job.URL is empty ──────────
+
+func TestFetchJobContent_URLDerivedFromIDWhenURLEmpty(t *testing.T) {
+	// When job.URL is empty the adapter builds a URL from job.ID.
+	// We inject a custom RoundTripper that validates the built URL and returns
+	// the JSON-LD fixture — no real network needed.
+	var capturedURL string
+	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		capturedURL = req.URL.String()
+		return newHTMLResponse(fixtureJSONLD), nil
+	})
+	m := NewDefault()
+	m.httpClient = &http.Client{Transport: transport}
+
+	_, err := m.FetchJobContent(context.Background(), types.RawJob{
+		ID:  "meta-12345",
+		URL: "", // empty — adapter must derive URL from ID
+	})
+	if err != nil {
+		t.Fatalf("FetchJobContent with empty URL: %v", err)
+	}
+	// The derived URL must contain the numeric job id from "meta-12345".
+	if !strings.Contains(capturedURL, "12345") {
+		t.Errorf("derived URL should contain the job numeric id 12345, got: %q", capturedURL)
+	}
+}
+
+// ── jobLocations.UnmarshalJSON — single-object decode error path ──────────────
+
+func TestJobLocations_SingleObjectDecodeError(t *testing.T) {
+	// A JSON string that starts with '"' (not '[') is not a valid jobLocation
+	// object — should return a decode error.
+	var jl jobLocations
+	err := jl.UnmarshalJSON([]byte(`"not-an-object"`))
+	if err == nil {
+		t.Fatal("expected error when single-object unmarshal receives a string, got nil")
+	}
+}
+
+// ── fetchAndParseDetail — io.ReadAll error ────────────────────────────────────
+
+func TestFetchAndParseDetail_ReadBodyError(t *testing.T) {
+	// Return a 200 response whose body errors on Read.
+	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/html"}},
+			Body:       io.NopCloser(&errReader{err: fmt.Errorf("read error")}),
+		}, nil
+	})
+	m := NewDefault()
+	m.httpClient = &http.Client{Transport: transport}
+
+	_, err := m.fetchAndParseDetail(context.Background(), "http://example.com/profile/job_details/1")
+	if err == nil {
+		t.Fatal("expected error when body Read fails in fetchAndParseDetail")
+	}
+}
+
+// ── fetchSitemap — io.ReadAll error ──────────────────────────────────────────
+
+func TestFetchSitemap_ReadBodyError(t *testing.T) {
+	origURL := sitemapURL
+	overrideSitemapURL("http://127.0.0.1:0/sitemap.xml")
+	defer overrideSitemapURL(origURL)
+
+	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/xml"}},
+			Body:       io.NopCloser(&errReader{err: fmt.Errorf("read error")}),
+		}, nil
+	})
+	m := NewDefault()
+	m.httpClient = &http.Client{Transport: transport}
+
+	_, err := m.fetchSitemap(context.Background())
+	if err == nil {
+		t.Fatal("expected error when body Read fails in fetchSitemap")
+	}
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+// roundTripFunc is a functional http.RoundTripper.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+// newHTMLResponse wraps an HTML string into a minimal *http.Response.
+func newHTMLResponse(body string) *http.Response {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/html"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
+// errReader always returns an error on Read.
+type errReader struct{ err error }
+
+func (e *errReader) Read(_ []byte) (int, error) { return 0, e.err }

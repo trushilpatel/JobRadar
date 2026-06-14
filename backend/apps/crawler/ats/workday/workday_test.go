@@ -874,6 +874,240 @@ func TestFetchJobContent_Real(t *testing.T) {
 	t.Logf("title=%q location=%q desc-len=%d", content.Title, content.Location, len(content.Description))
 }
 
+// ── adapterConfig.tenant() edge cases ──────────────────────────────────────
+
+// TestAdapterConfigTenant_EmptyHost covers the idx <= 0 branch when host is
+// the empty string after TrimSpace.
+func TestAdapterConfigTenant_EmptyHost(t *testing.T) {
+	cfg := adapterConfig{Host: ""}
+	if got := cfg.tenant(); got != "" {
+		t.Errorf("tenant() on empty host = %q, want empty string", got)
+	}
+}
+
+// TestAdapterConfigTenant_HostStartingWithDot covers idx == 0 (dot is the
+// first character so there is no leftmost subdomain).
+func TestAdapterConfigTenant_HostStartingWithDot(t *testing.T) {
+	cfg := adapterConfig{Host: ".wd5.myworkdayjobs.com"}
+	if got := cfg.tenant(); got != "" {
+		t.Errorf("tenant() on dot-prefixed host = %q, want empty string", got)
+	}
+}
+
+// TestAdapterConfigTenant_WhitespaceOnlyHost covers the TrimSpace path: "   "
+// becomes "" which has no dot → returns "".
+func TestAdapterConfigTenant_WhitespaceOnlyHost(t *testing.T) {
+	cfg := adapterConfig{Host: "   "}
+	if got := cfg.tenant(); got != "" {
+		t.Errorf("tenant() on whitespace-only host = %q, want empty string", got)
+	}
+}
+
+// ── postJSON — marshal error ───────────────────────────────────────────────
+
+// TestPostJSON_MarshalError covers the json.Marshal failure branch inside
+// postJSON. Channels are not JSON-serialisable and trigger the error.
+func TestPostJSON_MarshalError(t *testing.T) {
+	w := &Workday{httpClient: http.DefaultClient}
+	_, _, err := w.postJSON(context.Background(), "http://localhost", map[string]any{
+		"bad": make(chan int),
+	})
+	if err == nil || !strings.Contains(err.Error(), "marshal") {
+		t.Fatalf("expected marshal error, got %v", err)
+	}
+}
+
+// ── postJSON / getJSON — body read error ──────────────────────────────────
+
+// brokenBodyTransport returns an HTTP 200 whose body always errors on Read.
+// This exercises the io.ReadAll failure branch in both postJSON and getJSON.
+type brokenBodyTransport struct{}
+
+func (brokenBodyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(&errorReader{}),
+		Request:    req,
+	}, nil
+}
+
+// errorReader always returns an error on Read.
+type errorReader struct{}
+
+func (*errorReader) Read(_ []byte) (int, error) {
+	return 0, fmt.Errorf("simulated read error")
+}
+
+func TestPostJSON_ReadBodyError(t *testing.T) {
+	w := &Workday{httpClient: &http.Client{Transport: brokenBodyTransport{}}}
+	_, _, err := w.postJSON(context.Background(), "http://localhost/test", map[string]any{"k": "v"})
+	if err == nil || !strings.Contains(err.Error(), "read") {
+		t.Fatalf("expected read error, got %v", err)
+	}
+}
+
+// TestPostJSON_BuildRequestError covers the http.NewRequestWithContext failure
+// branch in postJSON. A null byte in the URL causes the standard library to
+// reject request construction before any network call is made.
+func TestPostJSON_BuildRequestError(t *testing.T) {
+	w := &Workday{httpClient: http.DefaultClient}
+	_, _, err := w.postJSON(context.Background(), "http://localhost/\x00bad", map[string]any{"k": "v"})
+	if err == nil || !strings.Contains(err.Error(), "build request") {
+		t.Fatalf("expected build request error, got %v", err)
+	}
+}
+
+// ── getJSON — network errors ───────────────────────────────────────────────
+
+// TestGetJSON_InvalidURL covers the http.NewRequestWithContext error branch.
+// A null byte in the URL causes the standard library to reject request creation.
+func TestGetJSON_InvalidURL(t *testing.T) {
+	w := &Workday{httpClient: http.DefaultClient}
+	_, _, err := w.getJSON(context.Background(), "http://localhost/\x00bad")
+	if err == nil || !strings.Contains(err.Error(), "build request") {
+		t.Fatalf("expected build request error, got %v", err)
+	}
+}
+
+// failingTransport is an http.RoundTripper that always returns an error,
+// exercising the client.Do error branch in getJSON.
+type failingTransport struct{}
+
+func (failingTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("simulated connection refused")
+}
+
+func TestGetJSON_DoError(t *testing.T) {
+	w := &Workday{httpClient: &http.Client{Transport: failingTransport{}}}
+	_, _, err := w.getJSON(context.Background(), "http://localhost/test")
+	if err == nil || !strings.Contains(err.Error(), "do") {
+		t.Fatalf("expected do error, got %v", err)
+	}
+}
+
+func TestGetJSON_ReadBodyError(t *testing.T) {
+	w := &Workday{httpClient: &http.Client{Transport: brokenBodyTransport{}}}
+	_, _, err := w.getJSON(context.Background(), "http://localhost/test")
+	if err == nil || !strings.Contains(err.Error(), "read") {
+		t.Fatalf("expected read error, got %v", err)
+	}
+}
+
+// ── extractWorkdayCountryCode ──────────────────────────────────────────────
+
+func TestExtractWorkdayCountryCode_NilRaw(t *testing.T) {
+	if got := extractWorkdayCountryCode(nil); got != "" {
+		t.Errorf("nil raw: got %q, want empty", got)
+	}
+}
+
+func TestExtractWorkdayCountryCode_NullJSON(t *testing.T) {
+	if got := extractWorkdayCountryCode(json.RawMessage("null")); got != "" {
+		t.Errorf("null json: got %q, want empty", got)
+	}
+}
+
+func TestExtractWorkdayCountryCode_ValidObject(t *testing.T) {
+	raw := json.RawMessage(`{"descriptor":"United States of America","id":"US"}`)
+	if got := extractWorkdayCountryCode(raw); got != "US" {
+		t.Errorf("valid country object: got %q, want US", got)
+	}
+}
+
+func TestExtractWorkdayCountryCode_EmptyID(t *testing.T) {
+	raw := json.RawMessage(`{"descriptor":"Unknown","id":""}`)
+	if got := extractWorkdayCountryCode(raw); got != "" {
+		t.Errorf("empty id field: got %q, want empty", got)
+	}
+}
+
+// TestExtractWorkdayCountryCode_ArrayInput passes a JSON array — structurally
+// valid JSON but not an object — exercises the json.Unmarshal error branch.
+func TestExtractWorkdayCountryCode_ArrayInput(t *testing.T) {
+	raw := json.RawMessage(`[1,2,3]`)
+	if got := extractWorkdayCountryCode(raw); got != "" {
+		t.Errorf("array input: got %q, want empty", got)
+	}
+}
+
+func TestExtractWorkdayCountryCode_MalformedJSON(t *testing.T) {
+	raw := json.RawMessage(`{bad json`)
+	if got := extractWorkdayCountryCode(raw); got != "" {
+		t.Errorf("malformed JSON: got %q, want empty", got)
+	}
+}
+
+// ── FetchJobContent with country code field ────────────────────────────────
+
+// TestFetchJobContent_WithCountryCode verifies that the CountryCode field is
+// correctly populated from a well-formed country object in the detail response.
+func TestFetchJobContent_WithCountryCode(t *testing.T) {
+	detail := detailResponse{
+		JobPostingInfo: rawJobPostingInfo{
+			Title:          "Staff Eng",
+			JobDescription: "<p>Build things.</p>",
+			Location:       "Santa Clara, CA",
+			StartDate:      "2026-01-15",
+			TimeType:       "Full time",
+			JobReqID:       "R-77777",
+			Country:        json.RawMessage(`{"descriptor":"United States of America","id":"US"}`),
+		},
+	}
+	srv := newDetailServer(t, detail)
+	defer srv.Close()
+
+	host := hostFromServer(srv)
+	rawURL := fmt.Sprintf("https://%s/NVIDIAExternalCareerSite/job/SC/Staff-Eng_R-77777", host)
+	w := newTestWorkdayNoDelay(srv)
+	got, err := w.FetchJobContent(context.Background(), types.RawJob{URL: rawURL})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.CountryCode != "US" {
+		t.Errorf("CountryCode = %q, want US", got.CountryCode)
+	}
+}
+
+// TestFetchJobContent_FallsBackToPostedOn verifies PublishedDate falls back to
+// PostedOn when StartDate is absent.
+func TestFetchJobContent_FallsBackToPostedOn(t *testing.T) {
+	detail := detailResponse{
+		JobPostingInfo: rawJobPostingInfo{
+			PostedOn:  "Posted Today",
+			StartDate: "",
+			JobReqID:  "R-55555",
+		},
+	}
+	srv := newDetailServer(t, detail)
+	defer srv.Close()
+
+	host := hostFromServer(srv)
+	rawURL := fmt.Sprintf("https://%s/S/job/x_R-55555", host)
+	w := newTestWorkdayNoDelay(srv)
+	got, err := w.FetchJobContent(context.Background(), types.RawJob{URL: rawURL})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.PublishedDate != "Posted Today" {
+		t.Errorf("PublishedDate = %q, want 'Posted Today'", got.PublishedDate)
+	}
+}
+
+// TestFetchJobContent_GetJSONDoError verifies the "detail fetch" error path
+// when the HTTP transport fails inside FetchJobContent.
+func TestFetchJobContent_GetJSONDoError(t *testing.T) {
+	w := &Workday{
+		httpClient:     &http.Client{Transport: failingTransport{}},
+		interPageDelay: 0,
+	}
+	rawURL := "https://test-tenant.wd5.myworkdayjobs.com/S/job/x_R-1"
+	_, err := w.FetchJobContent(context.Background(), types.RawJob{URL: rawURL})
+	if err == nil || !strings.Contains(err.Error(), "detail fetch") {
+		t.Fatalf("expected detail fetch error, got %v", err)
+	}
+}
+
 // ── Test helpers ────────────────────────────────────────────────────────────
 
 type pageResp struct {

@@ -6,6 +6,7 @@ export GIT_SHA
         run-crawler run-filter run-enricher run-scheduler \
         migrate scan-google db-truncate lint lint-go tsc \
         test test-short test-adapters test-watch test-watch-backend \
+        coverage coverage-frontend \
         fmt \
         k8s-build k8s-build-backend k8s-build-crawler k8s-build-orchestrator k8s-build-crawler-node k8s-build-console \
         k8s-up k8s-down k8s-migrate k8s-status k8s-forward k8s-unforward \
@@ -115,6 +116,12 @@ test-watch: ## Run frontend tests in watch mode (vitest)
 test-watch-backend: ## Re-run backend tests on every .go save (requires entr: brew install entr)
 	@command -v entr >/dev/null 2>&1 || { echo "install entr: brew install entr"; exit 1; }
 	find backend -name '*.go' | entr -c sh -c 'cd backend && go test -short -count=1 ./...'
+
+coverage: ## Run backend unit tests with coverage and enforce 95% per-package gate
+	cd backend && go test -short -count=1 -coverpkg=./... -coverprofile=/tmp/cov.out ./... && ../scripts/check-coverage.sh /tmp/cov.out 95
+
+coverage-frontend: ## Run frontend tests with coverage and enforce 90% statement gate
+	cd frontend && npm run test:coverage
 
 # ── Kubernetes (local k3d) ────────────────────────────────────────────────────
 

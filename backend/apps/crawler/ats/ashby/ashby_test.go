@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/trushilpatel/jobradar/apps/crawler/ats/types"
@@ -435,5 +436,385 @@ func TestAshby_FetchJobContentViaAPI_NotFound(t *testing.T) {
 	_, err := a.FetchJobContentViaAPI(context.Background(), "ashby-job-missing")
 	if err == nil {
 		t.Fatal("expected error for not found job")
+	}
+}
+
+// ── toAPIFetchJobsResponse — ExternalName fallback ────────────────────────────
+
+// TestToAPIFetchJobsResponse_ExternalNameFallback verifies that when
+// Location.ExternalName is empty, the converter falls back to Location.Name.
+func TestToAPIFetchJobsResponse_ExternalNameFallback(t *testing.T) {
+	fakeResp := map[string]any{
+		"success":           true,
+		"moreDataAvailable": false,
+		"results": []any{
+			map[string]any{
+				"id": "job-001", "title": "Engineer",
+				"employmentType": "FullTime",
+				"location": map[string]any{
+					"id": "loc-1", "name": "Remote HQ",
+					"externalName":  "", // empty — should fall back to Name
+					"workplaceType": "Remote",
+				},
+			},
+		},
+	}
+	fakeJSON, _ := json.Marshal(fakeResp)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(fakeJSON)
+	}))
+	defer srv.Close()
+
+	a := &Ashby{apiBaseURL: srv.URL, apiKey: "test-key"}
+	result, err := a.FetchJobsViaAPI(context.Background())
+	if err != nil {
+		t.Fatalf("FetchJobsViaAPI error: %v", err)
+	}
+	if len(result.Jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(result.Jobs))
+	}
+	if result.Jobs[0].Location != "Remote HQ" {
+		t.Errorf("Location = %q, want fallback to Name %q", result.Jobs[0].Location, "Remote HQ")
+	}
+}
+
+// ── toAPIFetchJobContentResponse — ExternalName fallback ─────────────────────
+
+// TestToAPIFetchJobContentResponse_ExternalNameFallback verifies that when
+// Location.ExternalName is empty, the converter falls back to Location.Name.
+func TestToAPIFetchJobContentResponse_ExternalNameFallback(t *testing.T) {
+	fakeResp := map[string]any{
+		"success": true,
+		"results": map[string]any{
+			"id": "job-002", "title": "Designer",
+			"employmentType": "FullTime",
+			"location": map[string]any{
+				"id": "loc-2", "name": "London Office",
+				"externalName":  "", // empty — should fall back to Name
+				"workplaceType": "OnSite",
+			},
+		},
+	}
+	fakeJSON, _ := json.Marshal(fakeResp)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(fakeJSON)
+	}))
+	defer srv.Close()
+
+	a := &Ashby{apiBaseURL: srv.URL, apiKey: "test-key"}
+	content, err := a.FetchJobContentViaAPI(context.Background(), "ashby-job-002")
+	if err != nil {
+		t.Fatalf("FetchJobContentViaAPI error: %v", err)
+	}
+	if content.Location != "London Office" {
+		t.Errorf("Location = %q, want fallback to Name %q", content.Location, "London Office")
+	}
+	if content.WorkplaceType != "OnSite" {
+		t.Errorf("WorkplaceType = %q, want OnSite", content.WorkplaceType)
+	}
+}
+
+// ── FetchJobs — error paths ───────────────────────────────────────────────────
+
+// TestAshby_FetchJobs_DoError verifies that FetchJobs returns an error when
+// the HTTP request fails (server closes before a response is sent).
+func TestAshby_FetchJobs_DoError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Close the connection immediately to cause a Do() error.
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		conn, _, _ := hj.Hijack()
+		_ = conn.Close()
+	}))
+	defer srv.Close()
+
+	a := &Ashby{baseURL: srv.URL}
+	_, err := a.FetchJobs(context.Background(), "openai")
+	if err == nil {
+		t.Fatal("expected error when HTTP Do fails")
+	}
+	if !strings.Contains(err.Error(), "ashby: fetch") {
+		t.Errorf("error should mention 'ashby: fetch', got: %v", err)
+	}
+}
+
+// TestAshby_FetchJobs_DecodeError verifies that FetchJobs returns an error
+// when the server returns 200 but with non-JSON body.
+func TestAshby_FetchJobs_DecodeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("this is not json"))
+	}))
+	defer srv.Close()
+
+	a := &Ashby{baseURL: srv.URL}
+	_, err := a.FetchJobs(context.Background(), "openai")
+	if err == nil {
+		t.Fatal("expected error for non-JSON response body")
+	}
+	if !strings.Contains(err.Error(), "ashby: decode") {
+		t.Errorf("error should mention 'ashby: decode', got: %v", err)
+	}
+}
+
+// TestAshby_FetchJobs_InvalidBaseURL verifies that FetchJobs returns an error
+// when the base URL makes NewRequestWithContext fail.
+func TestAshby_FetchJobs_InvalidBaseURL(t *testing.T) {
+	// A URL with a control character in it is rejected by http.NewRequest.
+	a := &Ashby{baseURL: "http://\x00invalid"}
+	_, err := a.FetchJobs(context.Background(), "openai")
+	if err == nil {
+		t.Fatal("expected error for invalid base URL")
+	}
+	if !strings.Contains(err.Error(), "ashby: build request") {
+		t.Errorf("error should mention 'ashby: build request', got: %v", err)
+	}
+}
+
+// ── FetchJobContent — error paths ─────────────────────────────────────────────
+
+// TestAshby_FetchJobContent_InvalidJobURL verifies that FetchJobContent
+// returns an error when job.URL has an invalid scheme that url.Parse rejects.
+func TestAshby_FetchJobContent_InvalidJobURL(t *testing.T) {
+	a := &Ashby{}
+	// url.Parse accepts almost everything, but a truly mangled URL with a
+	// control character triggers an error.
+	_, err := a.FetchJobContent(context.Background(), types.RawJob{
+		URL: "://\x00bad",
+	})
+	if err == nil {
+		t.Fatal("expected error for unparseable job URL")
+	}
+	if !strings.Contains(err.Error(), "ashby: parse job URL") {
+		t.Errorf("error should mention 'ashby: parse job URL', got: %v", err)
+	}
+}
+
+// TestAshby_FetchJobContent_InvalidContentBaseURL verifies the
+// NewRequestWithContext error path in FetchJobContent.
+func TestAshby_FetchJobContent_InvalidContentBaseURL(t *testing.T) {
+	a := &Ashby{baseURL: "http://\x00invalid"}
+	_, err := a.FetchJobContent(context.Background(), types.RawJob{
+		URL: "https://jobs.ashbyhq.com/company/job-id-123",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid base URL in FetchJobContent")
+	}
+	if !strings.Contains(err.Error(), "ashby: build content request") {
+		t.Errorf("error should mention 'ashby: build content request', got: %v", err)
+	}
+}
+
+// TestAshby_FetchJobContent_DoError verifies that FetchJobContent returns
+// an error when the HTTP request fails.
+func TestAshby_FetchJobContent_DoError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		conn, _, _ := hj.Hijack()
+		_ = conn.Close()
+	}))
+	defer srv.Close()
+
+	a := &Ashby{baseURL: srv.URL}
+	_, err := a.FetchJobContent(context.Background(), types.RawJob{
+		URL: "https://jobs.ashbyhq.com/company/job-id-123",
+	})
+	if err == nil {
+		t.Fatal("expected error when HTTP Do fails in FetchJobContent")
+	}
+	if !strings.Contains(err.Error(), "ashby: fetch content") {
+		t.Errorf("error should mention 'ashby: fetch content', got: %v", err)
+	}
+}
+
+// TestAshby_FetchJobContent_DecodeError verifies that FetchJobContent returns
+// an error when the server returns 200 with non-JSON body.
+func TestAshby_FetchJobContent_DecodeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("not json at all"))
+	}))
+	defer srv.Close()
+
+	a := &Ashby{baseURL: srv.URL}
+	_, err := a.FetchJobContent(context.Background(), types.RawJob{
+		URL: "https://jobs.ashbyhq.com/company/job-id-123",
+	})
+	if err == nil {
+		t.Fatal("expected error for non-JSON content response")
+	}
+	if !strings.Contains(err.Error(), "ashby: decode content") {
+		t.Errorf("error should mention 'ashby: decode content', got: %v", err)
+	}
+}
+
+// ── FetchJobsViaAPI — additional error paths ──────────────────────────────────
+
+// TestAshby_FetchJobsViaAPI_InvalidBaseURL verifies the
+// NewRequestWithContext error path in FetchJobsViaAPI.
+func TestAshby_FetchJobsViaAPI_InvalidBaseURL(t *testing.T) {
+	a := &Ashby{apiBaseURL: "http://\x00invalid", apiKey: "test-key"}
+	_, err := a.FetchJobsViaAPI(context.Background())
+	if err == nil {
+		t.Fatal("expected error for invalid API base URL in FetchJobsViaAPI")
+	}
+	if !strings.Contains(err.Error(), "ashby: build job.list request") {
+		t.Errorf("error should mention 'ashby: build job.list request', got: %v", err)
+	}
+}
+
+// TestAshby_FetchJobsViaAPI_DoError verifies that FetchJobsViaAPI returns an
+// error when the HTTP request fails.
+func TestAshby_FetchJobsViaAPI_DoError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		conn, _, _ := hj.Hijack()
+		_ = conn.Close()
+	}))
+	defer srv.Close()
+
+	a := &Ashby{apiBaseURL: srv.URL, apiKey: "test-key"}
+	_, err := a.FetchJobsViaAPI(context.Background())
+	if err == nil {
+		t.Fatal("expected error when HTTP Do fails in FetchJobsViaAPI")
+	}
+	if !strings.Contains(err.Error(), "ashby: fetch job.list") {
+		t.Errorf("error should mention 'ashby: fetch job.list', got: %v", err)
+	}
+}
+
+// TestAshby_FetchJobsViaAPI_DecodeError verifies that FetchJobsViaAPI returns
+// an error when the server returns 200 with non-JSON body.
+func TestAshby_FetchJobsViaAPI_DecodeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+
+	a := &Ashby{apiBaseURL: srv.URL, apiKey: "test-key"}
+	_, err := a.FetchJobsViaAPI(context.Background())
+	if err == nil {
+		t.Fatal("expected error for non-JSON body in FetchJobsViaAPI")
+	}
+	if !strings.Contains(err.Error(), "ashby: decode job.list") {
+		t.Errorf("error should mention 'ashby: decode job.list', got: %v", err)
+	}
+}
+
+// TestAshby_FetchJobsViaAPI_SuccessFalse verifies that FetchJobsViaAPI returns
+// an error when the response body decodes successfully but success=false.
+func TestAshby_FetchJobsViaAPI_SuccessFalse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":false,"results":[]}`))
+	}))
+	defer srv.Close()
+
+	a := &Ashby{apiBaseURL: srv.URL, apiKey: "test-key"}
+	_, err := a.FetchJobsViaAPI(context.Background())
+	if err == nil {
+		t.Fatal("expected error when success=false in FetchJobsViaAPI")
+	}
+	if !strings.Contains(err.Error(), "success=false") {
+		t.Errorf("error should mention 'success=false', got: %v", err)
+	}
+}
+
+// ── FetchJobContentViaAPI — additional error paths ───────────────────────────
+
+// TestAshby_FetchJobContentViaAPI_InvalidBaseURL verifies the
+// NewRequestWithContext error path in FetchJobContentViaAPI.
+func TestAshby_FetchJobContentViaAPI_InvalidBaseURL(t *testing.T) {
+	a := &Ashby{apiBaseURL: "http://\x00invalid", apiKey: "test-key"}
+	_, err := a.FetchJobContentViaAPI(context.Background(), "ashby-job-001")
+	if err == nil {
+		t.Fatal("expected error for invalid API base URL in FetchJobContentViaAPI")
+	}
+	if !strings.Contains(err.Error(), "ashby: build job.info request") {
+		t.Errorf("error should mention 'ashby: build job.info request', got: %v", err)
+	}
+}
+
+// TestAshby_FetchJobContentViaAPI_DoError verifies that FetchJobContentViaAPI
+// returns an error when the HTTP request fails.
+func TestAshby_FetchJobContentViaAPI_DoError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		conn, _, _ := hj.Hijack()
+		_ = conn.Close()
+	}))
+	defer srv.Close()
+
+	a := &Ashby{apiBaseURL: srv.URL, apiKey: "test-key"}
+	_, err := a.FetchJobContentViaAPI(context.Background(), "ashby-job-001")
+	if err == nil {
+		t.Fatal("expected error when HTTP Do fails in FetchJobContentViaAPI")
+	}
+	if !strings.Contains(err.Error(), "ashby: fetch job.info") {
+		t.Errorf("error should mention 'ashby: fetch job.info', got: %v", err)
+	}
+}
+
+// TestAshby_FetchJobContentViaAPI_HTTPError verifies that FetchJobContentViaAPI
+// returns an error on a non-200 status from the server.
+func TestAshby_FetchJobContentViaAPI_HTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	a := &Ashby{apiBaseURL: srv.URL, apiKey: "test-key"}
+	_, err := a.FetchJobContentViaAPI(context.Background(), "ashby-job-001")
+	if err == nil {
+		t.Fatal("expected error on HTTP 403 in FetchJobContentViaAPI")
+	}
+	if !strings.Contains(err.Error(), "job.info unexpected status 403") {
+		t.Errorf("error should mention status 403, got: %v", err)
+	}
+}
+
+// TestAshby_FetchJobContentViaAPI_DecodeError verifies that FetchJobContentViaAPI
+// returns an error when the server returns 200 with non-JSON body.
+func TestAshby_FetchJobContentViaAPI_DecodeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("not json at all"))
+	}))
+	defer srv.Close()
+
+	a := &Ashby{apiBaseURL: srv.URL, apiKey: "test-key"}
+	_, err := a.FetchJobContentViaAPI(context.Background(), "ashby-job-001")
+	if err == nil {
+		t.Fatal("expected error for non-JSON body in FetchJobContentViaAPI")
+	}
+	if !strings.Contains(err.Error(), "ashby: decode job.info") {
+		t.Errorf("error should mention 'ashby: decode job.info', got: %v", err)
 	}
 }

@@ -264,3 +264,85 @@ func TestGreenhouse_FetchJobContent_InvalidURL(t *testing.T) {
 		t.Fatal("expected error for invalid URL, got nil")
 	}
 }
+
+// ── Error branches not covered by existing tests ──────────────────────────────
+
+// TestGreenhouse_FetchJobs_RequestBuildError verifies FetchJobs returns a
+// "build request" error when the constructed request URL is invalid.
+// Setting listBaseURL to an invalid scheme causes http.NewRequestWithContext to fail.
+func TestGreenhouse_FetchJobs_RequestBuildError(t *testing.T) {
+	g := &Greenhouse{listBaseURL: "://invalid-scheme"}
+	_, err := g.FetchJobs(context.Background(), "stripe")
+	if err == nil {
+		t.Fatal("expected build request error for invalid listBaseURL, got nil")
+	}
+}
+
+// TestGreenhouse_FetchJobs_NetworkError verifies FetchJobs returns a "fetch"
+// error when the HTTP request fails at the network level (connection refused).
+func TestGreenhouse_FetchJobs_NetworkError(t *testing.T) {
+	// Start and immediately close a server so the port is known but refuses connections.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close() // close before the call so client.Do gets connection refused
+
+	g := &Greenhouse{listBaseURL: addr}
+	_, err := g.FetchJobs(context.Background(), "stripe")
+	if err == nil {
+		t.Fatal("expected network error for closed server, got nil")
+	}
+}
+
+// TestGreenhouse_FetchJobContent_RequestBuildError verifies FetchJobContent
+// returns a "build content request" error when the content URL is invalid.
+func TestGreenhouse_FetchJobContent_RequestBuildError(t *testing.T) {
+	g := &Greenhouse{contentBaseURL: "://invalid-scheme"}
+	job := types.RawJob{
+		Adapter: "greenhouse",
+		URL:     "https://job-boards.greenhouse.io/stripe/jobs/12345",
+	}
+	_, err := g.FetchJobContent(context.Background(), job)
+	if err == nil {
+		t.Fatal("expected build content request error for invalid contentBaseURL, got nil")
+	}
+}
+
+// TestGreenhouse_FetchJobContent_NetworkError verifies FetchJobContent returns
+// a "fetch content" error when the content HTTP request fails at the network level.
+func TestGreenhouse_FetchJobContent_NetworkError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close() // close before call so connection is refused
+
+	g := &Greenhouse{contentBaseURL: addr}
+	job := types.RawJob{
+		Adapter: "greenhouse",
+		URL:     "https://job-boards.greenhouse.io/stripe/jobs/12345",
+	}
+	_, err := g.FetchJobContent(context.Background(), job)
+	if err == nil {
+		t.Fatal("expected network error for closed server, got nil")
+	}
+}
+
+// TestGreenhouse_FetchJobContent_MalformedJSONContent verifies FetchJobContent
+// returns a "decode content" error when the content endpoint returns 200 OK
+// but the response body is not valid JSON.
+func TestGreenhouse_FetchJobContent_MalformedJSONContent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{not valid json`))
+	}))
+	defer srv.Close()
+
+	g := &Greenhouse{contentBaseURL: srv.URL}
+	job := types.RawJob{
+		Adapter: "greenhouse",
+		URL:     "https://job-boards.greenhouse.io/stripe/jobs/12345",
+	}
+	_, err := g.FetchJobContent(context.Background(), job)
+	if err == nil {
+		t.Fatal("expected decode error for malformed JSON content response, got nil")
+	}
+}

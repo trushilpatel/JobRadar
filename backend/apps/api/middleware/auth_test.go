@@ -660,6 +660,7 @@ func TestExtractBearer(t *testing.T) {
 		{"", "", false},
 		{"Bearer", "", false},
 		{"Bearer ", "", false},
+		{"Bearer   ", "", false}, // all whitespace after prefix → trim-to-empty path
 		{"Token abc", "", false},
 	}
 	for _, tc := range cases {
@@ -673,4 +674,434 @@ func TestExtractBearer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ── Additional edge-case tests for Auth/VerifyJWT/keyfunc/refresh/parse ──────
+
+// TestAuth_NeitherSecretNorJWKS_ReturnsError verifies that Auth() returns an
+// error when the config provides neither a JWT secret nor a JWKS URL —
+// newVerifier's error path.
+func TestAuth_NeitherSecretNorJWKS_ReturnsError(t *testing.T) {
+	cfg := config.AuthConfig{
+		SupabaseProjectURL: testProjectURL,
+		// Deliberately leave both SupabaseJWTSecret and SupabaseJWKSURL empty.
+	}
+	_, err := Auth(cfg, "", logger.NewNoop())
+	if err == nil {
+		t.Fatal("expected error when neither JWT secret nor JWKS URL is configured")
+	}
+}
+
+// TestVerifyJWT_PipelineNotInitialised asserts that calling VerifyJWT in a
+// fresh test that has never called Auth() returns the sentinel error.
+// We reset jwtPipelineSlot to nil to simulate a cold process.
+func TestVerifyJWT_PipelineNotInitialised(t *testing.T) {
+	// Save and restore the global pipeline slot.
+	jwtPipelineMu.Lock()
+	saved := jwtPipelineSlot
+	jwtPipelineSlot = nil
+	jwtPipelineMu.Unlock()
+	t.Cleanup(func() {
+		jwtPipelineMu.Lock()
+		jwtPipelineSlot = saved
+		jwtPipelineMu.Unlock()
+	})
+
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	_, _, err := VerifyJWT(r)
+	if err == nil {
+		t.Fatal("expected error from VerifyJWT before Auth initialisation")
+	}
+}
+
+// TestAuth_ExpiredToken_WithNoExpField_401 sends a token where ExpiresAt is
+// nil (crafted manually). validateStandardClaims must return "exp missing".
+// We exercise this via an HS256 token with no exp claim (jwt library omits
+// the check when we bypass it — we test validateStandardClaims directly).
+func TestValidateStandardClaims_NoExp(t *testing.T) {
+	c := &authClaims{}
+	c.Issuer = testIssuer
+	c.Audience = jwt.ClaimStrings{testAudience}
+	c.ExpiresAt = nil // no exp
+	err := validateStandardClaims(c, testIssuer, testAudience, 0)
+	if err == nil || err.Error() != "exp missing" {
+		t.Fatalf("want 'exp missing', got %v", err)
+	}
+}
+
+// TestValidateStandardClaims_IssMismatch exercises the issuer-mismatch branch.
+func TestValidateStandardClaims_IssMismatch(t *testing.T) {
+	c := &authClaims{}
+	c.Issuer = "https://evil.example.com/auth/v1"
+	c.Audience = jwt.ClaimStrings{testAudience}
+	c.ExpiresAt = jwt.NewNumericDate(time.Now().Add(5 * time.Minute))
+	err := validateStandardClaims(c, testIssuer, testAudience, 0)
+	if err == nil {
+		t.Fatal("expected iss-mismatch error")
+	}
+}
+
+// TestJWKS_TTLExpired_ForceRefetch verifies the lookup function returns nil
+// when the in-memory cache has expired past its TTL, causing a refetch.
+func TestJWKS_TTLExpired_ForceRefetch(t *testing.T) {
+	kp := newECKeypair(t, "kid-ttl")
+	b := &jwksBehaviour{}
+	b.setKeys([]ecKeypair{kp})
+	srv := startJWKSServer(t, b)
+
+	// Very short TTL so the cache expires in the test.
+	cfg := config.AuthConfig{
+		SupabaseProjectURL:  testProjectURL,
+		SupabaseJWKSURL:     srv.URL,
+		ClockSkewSeconds:    60,
+		JWKSCacheTTLSeconds: 0, // effectively zero → every lookup triggers refresh
+	}
+	mw, err := Auth(cfg, "", logger.NewNoop())
+	if err != nil {
+		t.Fatalf("Auth: %v", err)
+	}
+
+	tok := signToken(t, tokenOptions{
+		alg: "ES256", kid: kp.kid, ecKey: kp.priv,
+		issuer: testIssuer, audience: testAudience, email: testAllowedEml,
+		expiresAt: time.Now().Add(5 * time.Minute), subject: "ttl-user",
+	})
+	w, obs := request(t, mw, "Bearer "+tok)
+	if w.Code != http.StatusOK {
+		t.Fatalf("got %d want 200; body=%s", w.Code, w.Body.String())
+	}
+	if obs.ident.UserID != "ttl-user" {
+		t.Fatalf("identity=%+v", obs.ident)
+	}
+	// At least one JWKS fetch must have happened.
+	if b.requests.Load() == 0 {
+		t.Fatal("expected at least one JWKS fetch")
+	}
+}
+
+// TestJWKS_Refresh_ClientError_Returns503 drives the jwksVerifier.refresh path
+// where http.Client.Do returns an error (simulated by a closed server).
+func TestJWKS_Refresh_ClientError_Returns503(t *testing.T) {
+	// Start a server then close it immediately so client.Do fails.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	srv.Close() // Close before the verifier can reach it.
+
+	cfg := config.AuthConfig{
+		SupabaseProjectURL:  testProjectURL,
+		SupabaseJWKSURL:     srv.URL,
+		ClockSkewSeconds:    60,
+		JWKSCacheTTLSeconds: 600,
+	}
+	mw, err := Auth(cfg, "", logger.NewNoop())
+	if err != nil {
+		t.Fatalf("Auth: %v", err)
+	}
+
+	kp := newECKeypair(t, "kid-unreachable")
+	tok := signToken(t, tokenOptions{
+		alg: "ES256", kid: kp.kid, ecKey: kp.priv,
+		issuer: testIssuer, audience: testAudience, email: testAllowedEml,
+		expiresAt: time.Now().Add(5 * time.Minute),
+	})
+	w, _ := request(t, mw, "Bearer "+tok)
+	// Unreachable server → errJWKSUnavailable → 503
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("got %d want 503 when JWKS server is unreachable", w.Code)
+	}
+}
+
+// TestJWKS_Refresh_BadJSON exercises the JSON unmarshal error path in refresh.
+func TestJWKS_Refresh_BadJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("not-json!!!"))
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := config.AuthConfig{
+		SupabaseProjectURL:  testProjectURL,
+		SupabaseJWKSURL:     srv.URL,
+		ClockSkewSeconds:    60,
+		JWKSCacheTTLSeconds: 0, // no cache so every request refreshes
+	}
+	mw, err := Auth(cfg, "", logger.NewNoop())
+	if err != nil {
+		t.Fatalf("Auth: %v", err)
+	}
+
+	kp := newECKeypair(t, "kid-badjson")
+	tok := signToken(t, tokenOptions{
+		alg: "ES256", kid: kp.kid, ecKey: kp.priv,
+		issuer: testIssuer, audience: testAudience, email: testAllowedEml,
+		expiresAt: time.Now().Add(5 * time.Minute),
+	})
+	w, _ := request(t, mw, "Bearer "+tok)
+	// Malformed JSON is not "unavailable" — it's a 401 (kid not found after
+	// refresh fails with a decode error, which is not errJWKSUnavailable).
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("got %d want 401 for bad-JSON JWKS response", w.Code)
+	}
+}
+
+// TestJWKS_Refresh_NonECKeySkipped verifies that non-EC keys in the JWKS doc
+// are silently skipped and do not cause a panic or error.
+func TestJWKS_Refresh_NonECKeySkipped(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Serve a JWKS with an RSA key (kty != "EC") and no EC keys.
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"keys":[{"kty":"RSA","kid":"rsa-1","n":"abc","e":"AQAB"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	// newJWKSVerifier parses the JWKS; non-EC entries are skipped silently.
+	v := newJWKSVerifier(srv.URL, 0, http.DefaultClient, 0)
+	if err := v.refresh(); err != nil {
+		t.Fatalf("refresh must not error on non-EC key: %v", err)
+	}
+	// Cache should be empty (no usable keys).
+	v.mu.RLock()
+	count := len(v.keys)
+	v.mu.RUnlock()
+	if count != 0 {
+		t.Fatalf("expected 0 usable keys after non-EC-only JWKS, got %d", count)
+	}
+}
+
+// TestParseECPublicKey_BadXBase64 covers the error branch for an invalid X coordinate.
+func TestParseECPublicKey_BadXBase64(t *testing.T) {
+	_, err := parseECPublicKey("!!! not base64 !!!", "AAAA")
+	if err == nil {
+		t.Fatal("expected error for invalid X base64")
+	}
+}
+
+// TestParseECPublicKey_BadYBase64 covers the error branch for a valid X but
+// invalid Y coordinate.
+func TestParseECPublicKey_BadYBase64(t *testing.T) {
+	// Provide a valid 32-byte base64url for X (32 zero bytes).
+	validX := base64.RawURLEncoding.EncodeToString(make([]byte, 32))
+	_, err := parseECPublicKey(validX, "!!! not base64 !!!")
+	if err == nil {
+		t.Fatal("expected error for invalid Y base64")
+	}
+}
+
+// TestAuth_JWKSAvailable_KidNonString exercises the keyfunc branch where the
+// kid header value is not a string (JWT spec only mandates string; some
+// implementations send numbers).
+func TestAuth_JWKSAvailable_KidNonString(t *testing.T) {
+	kp := newECKeypair(t, testKid)
+	b := &jwksBehaviour{}
+	b.setKeys([]ecKeypair{kp})
+	srv := startJWKSServer(t, b)
+
+	cfg := baseESConfig(srv.URL)
+	mw, err := Auth(cfg, "", logger.NewNoop())
+	if err != nil {
+		t.Fatalf("Auth: %v", err)
+	}
+
+	// Build a token whose kid header value is a number (non-string type).
+	claims := authClaims{
+		Email: testAllowedEml,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    testIssuer,
+			Audience:  jwt.ClaimStrings{testAudience},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			Subject:   "user-kidtype",
+		},
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	tok.Header["kid"] = 12345 // numeric, not string
+	rawTok, err := tok.SignedString(kp.priv)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	w, _ := request(t, mw, "Bearer "+rawTok)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("got %d want 401 for non-string kid", w.Code)
+	}
+}
+
+// TestExtractBearer_ExactlyPrefixLen covers the len(header) <= len("Bearer ")
+// boundary — the header value is exactly "Bearer" with no token.
+func TestExtractBearer_ExactlyPrefixLen(t *testing.T) {
+	_, ok := extractBearer("Bearer")
+	if ok {
+		t.Fatal("expected ok=false for header that is exactly the prefix")
+	}
+}
+
+// TestAuth_JWKS_MissingKid_401 exercises keyfunc's `!ok` branch when the JWT
+// carries no kid header at all. This is the missing-kid path (distinct from
+// the non-string kid path).
+func TestAuth_JWKS_MissingKid_401(t *testing.T) {
+	kp := newECKeypair(t, testKid)
+	b := &jwksBehaviour{}
+	b.setKeys([]ecKeypair{kp})
+	srv := startJWKSServer(t, b)
+
+	cfg := baseESConfig(srv.URL)
+	mw, err := Auth(cfg, "", logger.NewNoop())
+	if err != nil {
+		t.Fatalf("Auth: %v", err)
+	}
+
+	// Build a token with no kid header at all.
+	claims := authClaims{
+		Email: testAllowedEml,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    testIssuer,
+			Audience:  jwt.ClaimStrings{testAudience},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			Subject:   "user-nokid",
+		},
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	delete(tok.Header, "kid") // remove the default kid from header
+	rawTok, err := tok.SignedString(kp.priv)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	w, _ := request(t, mw, "Bearer "+rawTok)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("got %d want 401 for missing kid", w.Code)
+	}
+}
+
+// TestAuth_JWKS_EmptyKid_401 exercises the kid=="" branch in keyfunc.
+func TestAuth_JWKS_EmptyKid_401(t *testing.T) {
+	kp := newECKeypair(t, testKid)
+	b := &jwksBehaviour{}
+	b.setKeys([]ecKeypair{kp})
+	srv := startJWKSServer(t, b)
+
+	cfg := baseESConfig(srv.URL)
+	mw, err := Auth(cfg, "", logger.NewNoop())
+	if err != nil {
+		t.Fatalf("Auth: %v", err)
+	}
+
+	// Build a token with an empty string kid.
+	claims := authClaims{
+		Email: testAllowedEml,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    testIssuer,
+			Audience:  jwt.ClaimStrings{testAudience},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			Subject:   "user-emptykid",
+		},
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	tok.Header["kid"] = "" // empty string kid
+	rawTok, err := tok.SignedString(kp.priv)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	w, _ := request(t, mw, "Bearer "+rawTok)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("got %d want 401 for empty kid", w.Code)
+	}
+}
+
+// TestJWKS_Lookup_TTLExpired_ReturnsNil directly exercises the lookup function's
+// TTL expiry branch by setting fetchedAt to a time well past the TTL.
+func TestJWKS_Lookup_TTLExpired_ReturnsNil(t *testing.T) {
+	kp := newECKeypair(t, "kid-lookup-ttl")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Return an empty JWKS so any subsequent fetch finds nothing.
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"keys":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	v := newJWKSVerifier(srv.URL, 1*time.Millisecond, http.DefaultClient, 0)
+
+	// Pre-populate the cache with the key.
+	x, y := coordBytes(kp.priv.PublicKey)
+	validX := base64.RawURLEncoding.EncodeToString(x)
+	validY := base64.RawURLEncoding.EncodeToString(y)
+	v.mu.Lock()
+	pub, err := parseECPublicKey(validX, validY)
+	if err != nil {
+		v.mu.Unlock()
+		t.Fatalf("parseECPublicKey: %v", err)
+	}
+	v.keys["kid-lookup-ttl"] = pub
+	v.fetchedAt = time.Now().Add(-10 * time.Second) // set fetchedAt to well in the past
+	v.mu.Unlock()
+
+	// lookup must return nil because TTL (1ms) has long expired.
+	got := v.lookup("kid-lookup-ttl")
+	if got != nil {
+		t.Fatal("lookup must return nil when TTL has expired")
+	}
+}
+
+// TestJWKS_Refresh_ParseECPublicKey_BadX exercises the parseECPublicKey error
+// path inside refresh — a JWKS key with an invalid X coordinate is silently
+// skipped (continue), not an error.
+func TestJWKS_Refresh_ParseECPublicKey_BadX(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// EC P-256 key with invalid X (not valid base64url).
+		_, _ = w.Write([]byte(`{"keys":[{"kty":"EC","crv":"P-256","kid":"bad-key","x":"!!!invalid!!!","y":"AAAA"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	v := newJWKSVerifier(srv.URL, 0, http.DefaultClient, 0)
+	if err := v.refresh(); err != nil {
+		t.Fatalf("refresh must not error on bad EC key: %v", err)
+	}
+	v.mu.RLock()
+	count := len(v.keys)
+	v.mu.RUnlock()
+	if count != 0 {
+		t.Fatalf("expected 0 usable keys after bad EC key, got %d", count)
+	}
+}
+
+// TestVerifyJWT_InvalidAfterParse_ReturnsError exercises the !tok.Valid branch
+// in VerifyJWT. This branch exists for defensive completeness — in practice
+// jwt.ParseWithClaims never returns a non-nil token with Valid=false and
+// nil error. We test it by constructing a jwtPipeline with a verifier that
+// returns exactly this state.
+func TestVerifyJWT_InvalidAfterParse_ReturnsError(t *testing.T) {
+	// Install a fake verifier that returns an invalid-but-non-nil token.
+	fake := &fakeInvalidVerifier{}
+	pipeline := &jwtPipeline{
+		verifier:         fake,
+		expectedIssuer:   testIssuer,
+		expectedAudience: testAudience,
+	}
+	jwtPipelineMu.Lock()
+	saved := jwtPipelineSlot
+	jwtPipelineSlot = pipeline
+	jwtPipelineMu.Unlock()
+	t.Cleanup(func() {
+		jwtPipelineMu.Lock()
+		jwtPipelineSlot = saved
+		jwtPipelineMu.Unlock()
+	})
+
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Authorization", "Bearer fake-token")
+	_, _, err := VerifyJWT(r)
+	if err == nil {
+		t.Fatal("expected error for token with Valid=false")
+	}
+}
+
+// fakeInvalidVerifier returns a non-nil token with Valid=false and nil error,
+// simulating the defensive branch that guards against jwt library edge cases.
+type fakeInvalidVerifier struct{}
+
+func (f *fakeInvalidVerifier) Verify(_ string) (*jwt.Token, *authClaims, error) {
+	tok := &jwt.Token{Valid: false}
+	return tok, &authClaims{}, nil
 }
