@@ -115,8 +115,8 @@ func TestWorkday_FetchJobListingWithConfig_HappyPath(t *testing.T) {
 	if j0.EmployType != core.EmployFullTime {
 		t.Errorf("jobs[0].EmployType = %q, want %q", j0.EmployType, core.EmployFullTime)
 	}
-	if !j0.LocationKnown {
-		t.Error("jobs[0].LocationKnown should be true")
+	if j0.LocationKnown {
+		t.Error("jobs[0].LocationKnown should be false; Workday location is deferred to enrich-time country gate")
 	}
 
 	j1 := result.Jobs[1]
