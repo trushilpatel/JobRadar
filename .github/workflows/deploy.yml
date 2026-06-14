@@ -34,6 +34,8 @@ jobs:
       node2_changed: ${{ steps.flags.outputs.node2 }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - uses: dorny/paths-filter@v3
         id: filter
@@ -77,6 +79,7 @@ jobs:
               - 'infra/Dockerfile.crawler-node.ci'
             console:
               - 'frontend/**'
+              - 'infra/Dockerfile.console.ci'
 
       - name: Derive compile-go flag
         id: goflags
@@ -109,44 +112,135 @@ jobs:
             echo "node2=false" >> $GITHUB_OUTPUT
           fi
 
-  # ── 2. Cross-compile all Go binaries natively (linux/arm64) ───────────────
+  # ── 2-4. Quality gates (run before any build) ─────────────────────────────
+  frontend-check:
+    name: frontend check (lint + types + tests)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.console_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-frontend
+
+      - name: Lint
+        run: npm run lint
+        working-directory: frontend
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+        working-directory: frontend
+
+      - name: Run full tests with coverage
+        run: npm run test:coverage
+        working-directory: frontend
+
+      - name: Verify Codecov token is configured
+        if: always()
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: |
+          if [ -z "$CODECOV_TOKEN" ]; then
+            echo "::error::CODECOV_TOKEN secret is not set"
+            exit 1
+          fi
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: frontend/coverage/lcov.info
+          flags: console
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload test results to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: frontend/coverage/junit.xml
+          flags: console
+          report_type: test_results
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # ── 3. Backend quality gates (lint + full test suite + codecov) ───────────
+  backend-lint:
+    name: backend lint
+    needs: detect-changes
+    if: needs.detect-changes.outputs.any_go_changed == 'true'
+    uses: ./.github/workflows/backend-lint.yml
+    secrets: inherit
+
+  backend-check:
+    name: backend tests + coverage
+    needs: detect-changes
+    if: needs.detect-changes.outputs.any_go_changed == 'true'
+    uses: ./.github/workflows/backend-test.yml
+    with:
+      packages: ./apps/... ./service/... ./platform/... ./common/...
+      flags: backend
+      artifact-name: coverage-backend
+      upload: true
+    secrets: inherit
+
+  # ── 4. Quality gate aggregator ─────────────────────────────────────────────
+  #
+  # Explicit fan-in: succeeds only when every quality gate that ran passed.
+  # Skipped gates (path not changed) are treated as passed — only `failure`
+  # blocks the build.  All build jobs depend on this job so the first failing
+  # test or lint error stops the pipeline before any image is built or pushed.
+  quality-gate:
+    name: quality gate
+    needs: [detect-changes, frontend-check, backend-lint, backend-check]
+    if: always() && !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all quality gates passed
+        run: |
+          for result in \
+            "${{ needs.frontend-check.result }}" \
+            "${{ needs.backend-lint.result }}" \
+            "${{ needs.backend-check.result }}"; do
+            if [[ "$result" == "failure" ]]; then
+              echo "A quality gate failed — blocking build and deploy."
+              exit 1
+            fi
+          done
+          echo "All quality gates passed (or were not triggered by this change)."
+
+  # ── 5-6. Build assets (run after quality gate passes) ─────────────────────
   #
   # Runs on an x86 runner at full native CPU speed — no QEMU involved.
   # All 8 binaries are compiled in one job so the module + build caches are
   # shared, eliminating redundant dependency downloads and recompilation of
   # unchanged shared packages across the four image build jobs.
   compile-go:
-    name: compile go binaries (arm64)
-    needs: detect-changes
-    if: needs.detect-changes.outputs.any_go_changed == 'true'
+    name: compile go binaries (amd64)
+    needs: [detect-changes, quality-gate]
+    if: needs.detect-changes.outputs.any_go_changed == 'true' && needs.quality-gate.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
+      # cache: true persists both ~/go/pkg/mod (module downloads) and
+      # ~/.cache/go-build (compiled package cache) keyed on go.sum.
+      # Module downloads vanish on warm runs; only changed packages recompile.
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
           cache: true
           cache-dependency-path: backend/go.sum
 
-      # Persist the compiled package cache between CI runs so only changed
-      # packages are recompiled (saves ~60% on incremental pushes).
-      - name: Restore Go build cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/go-build
-          key: go-build-arm64-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            go-build-arm64-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}-
-            go-build-arm64-${{ runner.os }}-
-
-      - name: Cross-compile all binaries (GOARCH=arm64)
+      - name: Compile all binaries (GOARCH=amd64)
         working-directory: backend
         env:
           GOOS: linux
-          GOARCH: arm64
+          GOARCH: amd64
           CGO_ENABLED: "0"
         run: |
           mkdir -p /tmp/go-binaries
@@ -162,34 +256,26 @@ jobs:
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: go-binaries-arm64
+          name: go-binaries-amd64
           path: /tmp/go-binaries/
           retention-days: 1
 
-  # ── 3. Build frontend assets natively ─────────────────────────────────────
+  # ── 6. Build frontend assets ───────────────────────────────────────────────
   #
-  # npm ci + Vite build run on x86 without QEMU.  The built dist/ is uploaded
-  # as an artifact; the Docker job just COPYs it into nginx (no Node under
-  # QEMU, no secrets baked into image layers).
+  # Vite bundle built natively on x86 — no QEMU, no secrets baked into layers.
+  # Uses setup-frontend action for the node_modules direct cache (same key as
+  # frontend-check, so the cache is always warm when both run in parallel).
   build-frontend-assets:
     name: build frontend assets
-    needs: detect-changes
-    if: needs.detect-changes.outputs.console_changed == 'true'
+    needs: [detect-changes, quality-gate]
+    if: needs.detect-changes.outputs.console_changed == 'true' && needs.quality-gate.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci
+      - uses: ./.github/actions/setup-frontend
 
       - name: Build Vite bundle
         working-directory: frontend
@@ -205,7 +291,7 @@ jobs:
           path: frontend/dist/
           retention-days: 1
 
-  # ── 4. Build backend image ─────────────────────────────────────────────────
+  # ── 7-11. Build images (parallel, after quality gate + asset build) ────────
   build-backend:
     name: build backend image
     needs: [detect-changes, compile-go]
@@ -218,7 +304,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: go-binaries-arm64
+          name: go-binaries-amd64
           path: /tmp/go-binaries
 
       - name: Stage build context
@@ -244,7 +330,7 @@ jobs:
         with:
           context: /tmp/backend-ctx
           file: infra/Dockerfile.backend.ci
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-backend:${{ env.SHORT_SHA }}
@@ -253,7 +339,7 @@ jobs:
           cache-from: type=gha,scope=backend-ci
           cache-to: type=gha,scope=backend-ci,mode=max
 
-  # ── 5. Build crawler image ─────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
   build-crawler:
     name: build crawler image
     needs: [detect-changes, compile-go]
@@ -266,7 +352,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: go-binaries-arm64
+          name: go-binaries-amd64
           path: /tmp/go-binaries
 
       - name: Stage build context
@@ -290,7 +376,7 @@ jobs:
         with:
           context: /tmp/crawler-ctx
           file: infra/Dockerfile.crawler.ci
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-crawler:${{ env.SHORT_SHA }}
@@ -299,7 +385,7 @@ jobs:
           cache-from: type=gha,scope=crawler-ci
           cache-to: type=gha,scope=crawler-ci,mode=max
 
-  # ── 6. Build orchestrator image ────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
   build-orchestrator:
     name: build orchestrator image
     needs: [detect-changes, compile-go]
@@ -312,7 +398,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: go-binaries-arm64
+          name: go-binaries-amd64
           path: /tmp/go-binaries
 
       - name: Stage build context
@@ -336,7 +422,7 @@ jobs:
         with:
           context: /tmp/orchestrator-ctx
           file: infra/Dockerfile.orchestrator.ci
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-orchestrator:${{ env.SHORT_SHA }}
@@ -345,7 +431,7 @@ jobs:
           cache-from: type=gha,scope=orchestrator-ci
           cache-to: type=gha,scope=orchestrator-ci,mode=max
 
-  # ── 7. Build crawler-node image ────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
   build-crawler-node:
     name: build crawler-node image
     needs: [detect-changes, compile-go]
@@ -358,7 +444,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: go-binaries-arm64
+          name: go-binaries-amd64
           path: /tmp/go-binaries
 
       - name: Stage build context
@@ -382,7 +468,7 @@ jobs:
         with:
           context: /tmp/crawler-node-ctx
           file: infra/Dockerfile.crawler-node.ci
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-crawler-node:${{ env.SHORT_SHA }}
@@ -391,7 +477,7 @@ jobs:
           cache-from: type=gha,scope=crawler-node-ci
           cache-to: type=gha,scope=crawler-node-ci,mode=max
 
-  # ── 8. Build console image ─────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
   build-console:
     name: build console image
     needs: [detect-changes, build-frontend-assets]
@@ -428,8 +514,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: /tmp/console-ctx
-          file: frontend/Dockerfile.ci
-          platforms: linux/arm64
+          file: infra/Dockerfile.console.ci
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-console:${{ env.SHORT_SHA }}
@@ -438,16 +524,18 @@ jobs:
           cache-from: type=gha,scope=console-ci
           cache-to: type=gha,scope=console-ci,mode=max
 
-  # ── 9. Deploy Node 1 (API + Console) ──────────────────────────────────────
+  # ── 12. Deploy Node 1 (API + Console) ─────────────────────────────────────
   deploy-node1:
     name: deploy node1 (serving)
     needs:
       - detect-changes
+      - quality-gate
       - build-backend
       - build-console
     if: |
       always() &&
       needs.detect-changes.outputs.node1_changed == 'true' &&
+      needs.quality-gate.result == 'success' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
@@ -493,6 +581,7 @@ jobs:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
         run: |
+          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" "rm -rf /tmp/jobradar-chart /tmp/values.prod-infra.yaml"
           scp -i ~/.ssh/id_ed25519 -r k8s/helm/jobradar "$USER@$HOST:/tmp/jobradar-chart"
           scp -i ~/.ssh/id_ed25519 k8s/helm/jobradar/values.prod-infra.yaml "$USER@$HOST:/tmp/"
 
@@ -511,11 +600,12 @@ jobs:
               --set api.supabaseProjectUrl=${{ secrets.VITE_SUPABASE_URL }} \
               --wait --timeout 5m"
 
-  # ── 10. Deploy Node 2 (Pipeline) ──────────────────────────────────────────
+  # ── 13. Deploy Node 2 (Pipeline) ──────────────────────────────────────────
   deploy-node2:
     name: deploy node2 (pipeline)
     needs:
       - detect-changes
+      - quality-gate
       - build-backend
       - build-crawler
       - build-orchestrator
@@ -523,6 +613,7 @@ jobs:
     if: |
       always() &&
       needs.detect-changes.outputs.node2_changed == 'true' &&
+      needs.quality-gate.result == 'success' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
@@ -566,6 +657,7 @@ jobs:
           HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
         run: |
+          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" "rm -rf /tmp/jobradar-chart /tmp/values.prod-app.yaml"
           scp -i ~/.ssh/id_ed25519 -r k8s/helm/jobradar "$USER@$HOST:/tmp/jobradar-chart"
           scp -i ~/.ssh/id_ed25519 k8s/helm/jobradar/values.prod-app.yaml "$USER@$HOST:/tmp/"
 

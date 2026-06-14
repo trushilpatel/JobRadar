@@ -1,3 +1,4 @@
+{{- if .Values.api.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -18,3 +19,4 @@ spec:
       targetPort: 9100
   selector:
     {{- include "jobradar.selectorLabels" (dict "component" "api") | nindent 4 }}
+{{- end }}
