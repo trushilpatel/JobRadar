@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	stderrors "errors"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
-	atstypes "github.com/trushilpatel/jobradar/apps/crawler/ats/types"
+	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
@@ -127,7 +128,7 @@ func TestRealClock_NowIsRecent(t *testing.T) {
 func TestProcessResult_SaveSuccessIncrementsSavedAndPersists(t *testing.T) {
 	pipeline := &fakePipelineService{}
 	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
-	job := baseRawJob()
+	job := baseSummary()
 	result := baseEnrichResult()
 	result.RoleMatch = true
 
@@ -141,7 +142,7 @@ func TestProcessResult_SaveSuccessIncrementsSavedAndPersists(t *testing.T) {
 	if len(pipeline.savedInputs) != 1 {
 		t.Fatalf("expected 1 saved input, got %d", len(pipeline.savedInputs))
 	}
-	if got := pipeline.savedInputs[0]; got.Raw.ID != job.ID || got.Enriched != result {
+	if got := pipeline.savedInputs[0]; got.Summary.ID != job.ID || got.Enriched != result {
 		t.Errorf("save input mismatch: %+v", got)
 	}
 	if stats.saved != 1 {
@@ -152,7 +153,7 @@ func TestProcessResult_SaveSuccessIncrementsSavedAndPersists(t *testing.T) {
 func TestProcessResult_RoleMismatchMarksIrrelevant(t *testing.T) {
 	pipeline := &fakePipelineService{}
 	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
-	job := baseRawJob()
+	job := baseSummary()
 	result := &llmdto.JobPostEnrichResult{RoleMatch: false, Sponsorship: true}
 
 	fj, state := makeTestFetchedJob(t, job, 0)
@@ -178,7 +179,7 @@ func TestProcessResult_DropReasonMarksError(t *testing.T) {
 	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
 	result := &llmdto.JobPostEnrichResult{RoleMatch: true, Sponsorship: false}
 
-	fj, state := makeTestFetchedJob(t, baseRawJob(), 0)
+	fj, state := makeTestFetchedJob(t, baseSummary(), 0)
 	stats := &groupOutcomeStats{}
 	w.processResult(context.Background(), fj, result, stats)
 
@@ -199,7 +200,7 @@ func TestProcessResult_SaveErrorIncrementsRouteFailure(t *testing.T) {
 	result := baseEnrichResult()
 	result.RoleMatch = true
 
-	fj, state := makeTestFetchedJob(t, baseRawJob(), 0)
+	fj, state := makeTestFetchedJob(t, baseSummary(), 0)
 	stats := &groupOutcomeStats{}
 	w.processResult(context.Background(), fj, result, stats)
 
@@ -223,7 +224,7 @@ func TestProcessResult_MarkLedgerErrorTolerated(t *testing.T) {
 	result := baseEnrichResult()
 	result.RoleMatch = true
 
-	fj, _ := makeTestFetchedJob(t, baseRawJob(), 0)
+	fj, _ := makeTestFetchedJob(t, baseSummary(), 0)
 	stats := &groupOutcomeStats{}
 	w.processResult(context.Background(), fj, result, stats)
 	if stats.routeFailures != 1 {
@@ -261,7 +262,7 @@ func TestMarkNonUSA_DirectCallSuccess(t *testing.T) {
 // ── marshalContent ────────────────────────────────────────────────────────────
 
 func TestMarshalContent_EmptyResponse(t *testing.T) {
-	s, err := marshalContent(ats.FetchJobContentResponse{})
+	s, err := marshalContent(core.JobPost{})
 	if err != nil {
 		t.Fatalf("marshalContent: %v", err)
 	}
@@ -271,7 +272,7 @@ func TestMarshalContent_EmptyResponse(t *testing.T) {
 }
 
 func TestMarshalContent_RoundTripsFields(t *testing.T) {
-	resp := ats.FetchJobContentResponse{
+	resp := core.JobPost{
 		ID:          "x",
 		Title:       "Senior",
 		Description: "A description with special chars: \" & < >",
@@ -288,7 +289,7 @@ func TestMarshalContent_RoundTripsFields(t *testing.T) {
 // ── chunkFetched edge cases ───────────────────────────────────────────────────
 
 func TestChunkFetched_SizeZeroOrNegativeDefaultsToOne(t *testing.T) {
-	in := []fetchedJob{{job: ats.RawJob{ID: "a"}}, {job: ats.RawJob{ID: "b"}}}
+	in := []fetchedJob{{summary: core.JobSummary{ID: "a"}}, {summary: core.JobSummary{ID: "b"}}}
 	for _, size := range []int{0, -3} {
 		groups := chunkFetched(in, size)
 		if len(groups) != 2 {
@@ -305,7 +306,7 @@ func TestChunkFetched_EmptyInputProducesNoGroups(t *testing.T) {
 
 func TestChunkFetched_PartialLastGroup(t *testing.T) {
 	in := []fetchedJob{
-		{job: ats.RawJob{ID: "a"}}, {job: ats.RawJob{ID: "b"}}, {job: ats.RawJob{ID: "c"}},
+		{summary: core.JobSummary{ID: "a"}}, {summary: core.JobSummary{ID: "b"}}, {summary: core.JobSummary{ID: "c"}},
 	}
 	groups := chunkFetched(in, 2)
 	if len(groups) != 2 {
@@ -323,7 +324,7 @@ func TestDistributeResults_DuplicateAndUnknownIDsHandled(t *testing.T) {
 	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
 
 	group := []fetchedJob{
-		makeFetchedJob(t, ats.RawJob{ID: "real-a"}, 0),
+		makeFetchedJob(t, core.JobSummary{ID: "real-a"}, 0),
 	}
 	results := []*llmdto.JobPostEnrichResult{
 		{JobID: "real-a", RoleMatch: true, Sponsorship: true},
@@ -349,7 +350,7 @@ func TestDistributeResults_MissingResultRoutedToRetryEarly(t *testing.T) {
 	w.clock = &fakeClock{now: time.Now()}
 
 	group := []fetchedJob{
-		makeFetchedJob(t, ats.RawJob{ID: "lost"}, 0),
+		makeFetchedJob(t, core.JobSummary{ID: "lost"}, 0),
 	}
 	stats := &groupOutcomeStats{}
 	all := w.distributeResults(context.Background(), logger.NewNoop(), group, nil, stats)
@@ -372,7 +373,7 @@ func TestRouteMissingResult_CtxCancelReturnsFalse(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	fj := makeFetchedJob(t, ats.RawJob{ID: "x"}, 0)
+	fj := makeFetchedJob(t, core.JobSummary{ID: "x"}, 0)
 	if ok := w.routeMissingResult(ctx, logger.NewNoop(), fj, stderrors.New("missing")); ok {
 		t.Errorf("expected routeMissingResult to return false on cancelled ctx")
 	}
@@ -390,7 +391,7 @@ func TestSendToDLQ_PublishFailureReturnsFalse(t *testing.T) {
 	w := makeWorker(&fakeScorer{}, pipeline, publisher, &fakeLedger{})
 	w.clock = &fakeClock{now: time.Now()}
 
-	fj, state := makeTestFetchedJob(t, baseRawJob(), 5)
+	fj, state := makeTestFetchedJob(t, baseSummary(), 5)
 	ok := w.sendToDLQ(context.Background(), logger.NewNoop(), fj, "validation", stderrors.New("bad"))
 	if ok {
 		t.Errorf("expected sendToDLQ=false on publish error")
@@ -445,9 +446,12 @@ func TestProcessFetch_FetchFailureRoutesToNakAndExcludesFromGroup(t *testing.T) 
 	ledger := &fakeLedger{}
 	clk := &fakeClock{now: time.Now()}
 	w := makeWorkerFull(scorer, pipeline, publisher, ledger, clk, 5)
-	w.client = badHTTPClient()
+	// Unknown adapter → bundle resolution fails → stage-1 fetch failure.
+	w.bundleFn = func(_ string, _ logger.Logger, _ *http.Client) (adapters.AdapterBundle, error) {
+		return adapters.AdapterBundle{}, stderrors.New("unknown adapter")
+	}
 
-	msg, state := makeTestMsg(t, ats.RawJob{ID: "job-fail", Adapter: "unknown-adp", URL: "http://nope.invalid/"}, 1)
+	msg, state := makeTestMsg(t, core.JobSummary{ID: "job-fail", Adapter: "unknown-adp", URL: "http://nope.invalid/"}, 1)
 	if err := w.processFetch(context.Background(), []*js.Msg{msg}); err != nil {
 		t.Fatalf("processFetch: %v", err)
 	}
@@ -473,8 +477,8 @@ func TestProcessFetch_BackfillsEmptyTitleFromContent(t *testing.T) {
 	clk := &fakeClock{now: time.Now()}
 	w := makeWorkerFull(scorer, pipeline, &fakePublisher{}, &fakeLedger{}, clk, 5)
 
-	full := &atstypes.FullJobContent{Description: "x"}
-	msg, _ := makeTestMsg(t, ats.RawJob{ID: "thin-1", Title: "", Location: "", FullContent: full}, 1)
+	full := &core.JobContent{Description: "x"}
+	msg, _ := makeTestMsg(t, core.JobSummary{ID: "thin-1", Title: "", Location: "", JobContent: full}, 1)
 	if err := w.processFetch(context.Background(), []*js.Msg{msg}); err != nil {
 		t.Fatalf("processFetch: %v", err)
 	}
@@ -497,7 +501,7 @@ func TestProcessFetch_SaveSuccessAcksMsg(t *testing.T) {
 	clk := &fakeClock{now: time.Now()}
 	w := makeWorkerFull(scorer, pipeline, &fakePublisher{}, &fakeLedger{}, clk, 5)
 
-	msg, state := makeTestMsg(t, ats.RawJob{ID: "job-z", FullContent: fullContent("hello")}, 1)
+	msg, state := makeTestMsg(t, core.JobSummary{ID: "job-z", JobContent: fullContent("hello")}, 1)
 	if err := w.processFetch(context.Background(), []*js.Msg{msg}); err != nil {
 		t.Fatalf("processFetch: %v", err)
 	}
@@ -509,9 +513,9 @@ func TestProcessFetch_SaveSuccessAcksMsg(t *testing.T) {
 	}
 }
 
-// fullContent is a tiny helper to build a FullJobContent with a description.
-func fullContent(desc string) *atstypes.FullJobContent {
-	return &atstypes.FullJobContent{Description: desc}
+// fullContent is a tiny helper to build inline JobContent with a description.
+func fullContent(desc string) *core.JobContent {
+	return &core.JobContent{Description: desc}
 }
 
 // ── sendToDLQ — NATS error path assertions ────────────────────────────────────
@@ -525,7 +529,7 @@ func TestSendToDLQ_NATSPublishError_ErrorLogged(t *testing.T) {
 	pipeline := &fakePipelineService{}
 	w := makeWorker(&fakeScorer{}, pipeline, publisher, &fakeLedger{})
 
-	fj, state := makeTestFetchedJob(t, baseRawJob(), 2)
+	fj, state := makeTestFetchedJob(t, baseSummary(), 2)
 	ok := w.sendToDLQ(context.Background(), log, fj, "exhausted", stderrors.New("LLM failed"))
 	if ok {
 		t.Errorf("expected sendToDLQ=false when NATS publish fails")
@@ -549,7 +553,7 @@ func TestSendToDLQ_SuccessPath_JobTermedAndLogged(t *testing.T) {
 	pipeline := &fakePipelineService{}
 	w := makeWorker(&fakeScorer{}, pipeline, publisher, &fakeLedger{})
 
-	fj, state := makeTestFetchedJob(t, baseRawJob(), 3)
+	fj, state := makeTestFetchedJob(t, baseSummary(), 3)
 	before := dlqCount("exhausted")
 	origErr := stderrors.New("LLM failed after max retries")
 	ok := w.sendToDLQ(context.Background(), log, fj, "exhausted", origErr)
@@ -559,8 +563,8 @@ func TestSendToDLQ_SuccessPath_JobTermedAndLogged(t *testing.T) {
 	if !state.Termed {
 		t.Errorf("msg must be Termed after successful DLQ publish; got %+v", state)
 	}
-	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != fj.job.ID {
-		t.Errorf("expected markError for job %q; got %v", fj.job.ID, pipeline.markCalls)
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != fj.summary.ID {
+		t.Errorf("expected markError for job %q; got %v", fj.summary.ID, pipeline.markCalls)
 	}
 	if got := dlqCount("exhausted") - before; got != 1 {
 		t.Errorf("expected enricher_dlq_publishes_total{exhausted} +1; got +%v", got)

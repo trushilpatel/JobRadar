@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -58,11 +59,11 @@ func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.Enriche
 		// writes (they key off row.ID, a UUID that was never persisted) and
 		// still advance the ledger to 'saved' so it reflects terminal state.
 		if stderrors.Is(err, domainerrs.ErrJobAlreadyExists) {
-			metrics.EnricherJobsDuplicate.WithLabelValues(input.Raw.Adapter).Inc()
+			metrics.EnricherJobsDuplicate.WithLabelValues(input.Summary.Adapter).Inc()
 			p.logger.Info("enriched job already exists; skipping snapshot + tech-tags",
-				logger.Str(logger.FieldJobID, input.Raw.ID),
-				logger.Str(logger.FieldAdapter, input.Raw.Adapter))
-			return p.markSavedTolerant(ctx, input.Raw.ID)
+				logger.Str(logger.FieldJobID, input.Summary.ID),
+				logger.Str(logger.FieldAdapter, input.Summary.Adapter))
+			return p.markSavedTolerant(ctx, input.Summary.ID)
 		}
 		return fmt.Errorf("insert job: %w", err)
 	}
@@ -70,14 +71,14 @@ func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.Enriche
 	// Non-fatal: snapshot write failure is logged but does not block the saved job.
 	if err := p.snapshot.InsertSnapshot(ctx, dto.SnapshotInput{
 		ID:                row.ID,
-		CompanyID:         input.Raw.CompanyID,
+		CompanyID:         input.Summary.CompanyID,
 		Country:           input.Enriched.Country,
 		State:             input.Enriched.State,
 		Remote:            input.Enriched.Remote,
 		Sponsorship:       input.Enriched.Sponsorship,
 		RequiresCitizen:   input.Enriched.RequiresCitizen,
 		SecurityClearance: input.Enriched.SecurityClearance,
-		EmployType:        input.Raw.EmployType,
+		EmployType:        employType(input),
 		ExperienceYears:   input.Enriched.ExperienceYears,
 		TechStack:         []byte(row.TechStack), // already marshalled by buildJobRow
 		RoleCategory:      input.Enriched.RoleCategory,
@@ -87,12 +88,12 @@ func (p *pipelineService) SaveEnrichedJob(ctx context.Context, input dto.Enriche
 
 	// Non-fatal: write validated+normalized tech tags for trend analysis.
 	if cleaned := techtag.Clean(input.Enriched.TechStack); len(cleaned) > 0 {
-		if err := p.techTags.InsertTechTags(ctx, row.ID, input.Raw.CompanyID, cleaned, time.Now()); err != nil {
+		if err := p.techTags.InsertTechTags(ctx, row.ID, input.Summary.CompanyID, cleaned, time.Now()); err != nil {
 			p.logger.Warn("tech tags insert failed", logger.Str(logger.FieldJobID, row.ID), logger.Err(err))
 		}
 	}
 
-	return p.markSavedTolerant(ctx, input.Raw.ID)
+	return p.markSavedTolerant(ctx, input.Summary.ID)
 }
 
 // markSavedTolerant advances the ledger row for jobID to 'saved'. A missing
@@ -143,8 +144,15 @@ func (p *pipelineService) HasSeenJob(ctx context.Context, jobID string) (_ bool,
 }
 
 // buildJobRow maps EnrichedJobInput into a jobmodel.Job ready for DB insert.
+//
+// Authority precedence: the fetched JobPost is authoritative for the display
+// fields it provides (Title, Location, EmploymentType) — falling back to the
+// JobSummary only when the Post field is empty. This fixes empty-title rows for
+// thin-listing adapters (Meta, Workday) whose summaries lack title/location at
+// listing time. URL, JobPostID, and CompanyID always come from the Summary
+// (stable identity from the crawler). Derived/structured fields (Country, State,
+// tech stack, salary, …) come from the LLM enrich result.
 func buildJobRow(input dto.EnrichedJobInput) (*jobmodel.Job, error) {
-	raw := input.Raw
 	enriched := input.Enriched
 
 	techStack, err := json.Marshal(enriched.TechStack)
@@ -168,15 +176,15 @@ func buildJobRow(input dto.EnrichedJobInput) (*jobmodel.Job, error) {
 
 	return &jobmodel.Job{
 		ID:                uuid.New().String(),
-		JobPostID:         raw.ID,
-		CompanyID:         raw.CompanyID,
-		Title:             raw.Title,
-		Location:          nullableStr(raw.Location),
+		JobPostID:         input.Summary.ID,
+		CompanyID:         input.Summary.CompanyID,
+		Title:             title(input),
+		Location:          nullableStr(jobLocation(input)),
 		Remote:            enriched.Remote,
 		Country:           nullableStr(enriched.Country),
 		State:             nullableStr(enriched.State),
-		URL:               raw.URL,
-		EmployType:        nullableStr(raw.EmployType),
+		URL:               input.Summary.URL,
+		EmployType:        nullableStr(employType(input)),
 		ExperienceYears:   enriched.ExperienceYears,
 		TechStack:         datatypes.JSON(techStack),
 		SalaryRange:       datatypes.JSON(salaryRange),
@@ -187,6 +195,34 @@ func buildJobRow(input dto.EnrichedJobInput) (*jobmodel.Job, error) {
 		RoleBrief:         nullableStr(enriched.RoleBrief),
 		Responsibilities:  datatypes.JSON(responsibilities),
 	}, nil
+}
+
+// title returns the authoritative job title: the fetched Post.Title when
+// non-empty (after trimming), otherwise the Summary.Title. Thin-listing
+// adapters publish empty summary titles, so the Post value wins.
+func title(input dto.EnrichedJobInput) string {
+	return preferPost(input.Post.Title, input.Summary.Title)
+}
+
+// jobLocation returns the authoritative location: Post.Location when non-empty,
+// otherwise Summary.Location.
+func jobLocation(input dto.EnrichedJobInput) string {
+	return preferPost(input.Post.Location, input.Summary.Location)
+}
+
+// employType returns the authoritative employment type: Post.EmploymentType
+// when non-empty, otherwise Summary.EmployType.
+func employType(input dto.EnrichedJobInput) string {
+	return preferPost(input.Post.EmploymentType, input.Summary.EmployType)
+}
+
+// preferPost returns the trimmed post value when it is non-empty, otherwise the
+// summary fallback. Encodes the JobPost-over-JobSummary authority precedence.
+func preferPost(post, summary string) string {
+	if trimmed := strings.TrimSpace(post); trimmed != "" {
+		return trimmed
+	}
+	return summary
 }
 
 // nullableStr returns nil if s is empty, otherwise returns a pointer to s.

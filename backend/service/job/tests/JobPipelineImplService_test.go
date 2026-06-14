@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/logger"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
@@ -87,13 +87,20 @@ func makeInput() jobdto.EnrichedJobInput {
 	salMin := 100000
 	salMax := 150000
 	return jobdto.EnrichedJobInput{
-		Raw: ats.RawJob{
+		Summary: core.JobSummary{
 			ID:         "greenhouse-123",
 			CompanyID:  "company-abc",
 			Title:      "Software Engineer",
 			Location:   "San Francisco, CA",
 			URL:        "https://example.com/jobs/123",
 			EmployType: jobcommon.EmployFullTime,
+		},
+		Post: core.JobPost{
+			ID:             "greenhouse-123",
+			Title:          "Software Engineer",
+			Location:       "San Francisco, CA",
+			URL:            "https://example.com/jobs/123",
+			EmploymentType: jobcommon.EmployFullTime,
 		},
 		Enriched: &llmdto.JobPostEnrichResult{
 			ExperienceYears:   &expYears,
@@ -133,8 +140,8 @@ func TestSaveEnrichedJob_HappyPath(t *testing.T) {
 	if jobs.inserted == nil {
 		t.Fatal("expected InsertJob to be called, got nil")
 	}
-	if jobs.inserted.JobPostID != input.Raw.ID {
-		t.Errorf("JobPostID = %q, want %q", jobs.inserted.JobPostID, input.Raw.ID)
+	if jobs.inserted.JobPostID != input.Summary.ID {
+		t.Errorf("JobPostID = %q, want %q", jobs.inserted.JobPostID, input.Summary.ID)
 	}
 	if jobs.inserted.ID == "" {
 		t.Error("expected a non-empty job ID (uuid)")
@@ -146,8 +153,8 @@ func TestSaveEnrichedJob_HappyPath(t *testing.T) {
 	}
 
 	// Ledger was marked.
-	if ledger.updateReasonJobID != input.Raw.ID {
-		t.Errorf("ledger marked job ID = %q, want %q", ledger.updateReasonJobID, input.Raw.ID)
+	if ledger.updateReasonJobID != input.Summary.ID {
+		t.Errorf("ledger marked job ID = %q, want %q", ledger.updateReasonJobID, input.Summary.ID)
 	}
 	if ledger.updateReasonVal != jobcommon.SeenReasonSaved {
 		t.Errorf("ledger marked reason = %q, want %q", ledger.updateReasonVal, jobcommon.SeenReasonSaved)
@@ -203,8 +210,10 @@ func TestSaveEnrichedJob_NullableFields_EmptyStrings(t *testing.T) {
 	svc := jobsvc.NewPipelineService(jobs, ledger, snapshot, &pipelineTechTagWriter{}, logger.NewNoop())
 
 	input := makeInput()
-	input.Raw.Location = ""
-	input.Raw.EmployType = ""
+	input.Summary.Location = ""
+	input.Summary.EmployType = ""
+	input.Post.Location = ""
+	input.Post.EmploymentType = ""
 	input.Enriched.Country = ""
 	input.Enriched.State = ""
 	input.Enriched.Summary = ""
@@ -359,5 +368,95 @@ func TestHasSeenJob_PropagatesError(t *testing.T) {
 	_, err := svc.HasSeenJob(context.Background(), "job-abc")
 	if err == nil {
 		t.Fatal("expected error from HasSeenJob when ledger fails")
+	}
+}
+
+// --- buildJobRow authority precedence (via SaveEnrichedJob) ---
+
+// TestSaveEnrichedJob_PostAuthority_ThinAdapterBackfill verifies the
+// JobPost-over-JobSummary precedence: when a thin-listing adapter (Meta/Workday)
+// publishes an empty summary Title/Location/EmployType, the fetched Post values
+// win for the persisted row, while URL/job_post_id/CompanyID come from the
+// Summary and Country/State come from the LLM result.
+func TestSaveEnrichedJob_PostAuthority_ThinAdapterBackfill(t *testing.T) {
+	jobs := &pipelineJobWriter{}
+	ledger := &pipelineLedgerStore{}
+	svc := jobsvc.NewPipelineService(jobs, ledger, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{}, logger.NewNoop())
+
+	input := makeInput()
+	// Thin adapter: empty summary display fields.
+	input.Summary.Title = ""
+	input.Summary.Location = ""
+	input.Summary.EmployType = ""
+	// Fetched post carries the authoritative values.
+	input.Post.Title = "Senior Engineer"
+	input.Post.Location = "Boston, MA"
+	input.Post.EmploymentType = jobcommon.EmployFullTime
+	// LLM-derived structured fields.
+	input.Enriched.Country = "USA"
+	input.Enriched.State = "MA"
+
+	if err := svc.SaveEnrichedJob(context.Background(), input); err != nil {
+		t.Fatalf("SaveEnrichedJob err = %v", err)
+	}
+	j := jobs.inserted
+	if j == nil {
+		t.Fatal("expected job inserted")
+	}
+	if j.Title != "Senior Engineer" {
+		t.Errorf("Title = %q, want Post.Title 'Senior Engineer'", j.Title)
+	}
+	if j.Location == nil || *j.Location != "Boston, MA" {
+		t.Errorf("Location = %v, want Post.Location 'Boston, MA'", j.Location)
+	}
+	if j.EmployType == nil || *j.EmployType != jobcommon.EmployFullTime {
+		t.Errorf("EmployType = %v, want Post.EmploymentType", j.EmployType)
+	}
+	// Stable identity from Summary.
+	if j.JobPostID != input.Summary.ID {
+		t.Errorf("JobPostID = %q, want Summary.ID %q", j.JobPostID, input.Summary.ID)
+	}
+	if j.CompanyID != input.Summary.CompanyID {
+		t.Errorf("CompanyID = %q, want Summary.CompanyID %q", j.CompanyID, input.Summary.CompanyID)
+	}
+	if j.URL != input.Summary.URL {
+		t.Errorf("URL = %q, want Summary.URL %q", j.URL, input.Summary.URL)
+	}
+	// Derived fields from LLM.
+	if j.Country == nil || *j.Country != "USA" {
+		t.Errorf("Country = %v, want LLM 'USA'", j.Country)
+	}
+	if j.State == nil || *j.State != "MA" {
+		t.Errorf("State = %v, want LLM 'MA'", j.State)
+	}
+}
+
+// TestSaveEnrichedJob_SummaryFallback_WhenPostEmpty verifies that when the Post
+// display fields are empty (e.g. fat adapter that only populated description),
+// the Summary values are used for the row.
+func TestSaveEnrichedJob_SummaryFallback_WhenPostEmpty(t *testing.T) {
+	jobs := &pipelineJobWriter{}
+	svc := jobsvc.NewPipelineService(jobs, &pipelineLedgerStore{}, &pipelineSnapshotWriter{}, &pipelineTechTagWriter{}, logger.NewNoop())
+
+	input := makeInput()
+	input.Summary.Title = "Summary Title"
+	input.Summary.Location = "Austin, TX"
+	input.Summary.EmployType = jobcommon.EmployFullTime
+	input.Post.Title = "   " // whitespace → treated as empty
+	input.Post.Location = ""
+	input.Post.EmploymentType = ""
+
+	if err := svc.SaveEnrichedJob(context.Background(), input); err != nil {
+		t.Fatalf("SaveEnrichedJob err = %v", err)
+	}
+	j := jobs.inserted
+	if j.Title != "Summary Title" {
+		t.Errorf("Title = %q, want Summary fallback 'Summary Title'", j.Title)
+	}
+	if j.Location == nil || *j.Location != "Austin, TX" {
+		t.Errorf("Location = %v, want Summary fallback 'Austin, TX'", j.Location)
+	}
+	if j.EmployType == nil || *j.EmployType != jobcommon.EmployFullTime {
+		t.Errorf("EmployType = %v, want Summary fallback", j.EmployType)
 	}
 }
