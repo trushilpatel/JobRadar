@@ -4,12 +4,11 @@ import "time"
 
 // WorkUnit is the assignment handed to a crawler node by the orchestrator.
 type WorkUnit struct {
-	AssignmentID  string   `json:"id"`
-	CompanyID     string   `json:"company_id"`
-	AdapterType   string   `json:"adapter_type"`
-	AdapterConfig *string  `json:"adapter_config"` // JSON blob for ConfigurableAdapter; nil for simple adapters
-	KnownIDs      []string `json:"known_ids"`      // ledger snapshot for dedup optimisation
-	Source        string   `json:"source"`
+	AssignmentID  string  `json:"id"`
+	CompanyID     string  `json:"company_id"`
+	AdapterType   string  `json:"adapter_type"`
+	AdapterConfig *string `json:"adapter_config"` // JSON blob for ConfigurableAdapter; nil for simple adapters
+	Source        string  `json:"source"`
 }
 
 // WorkResponse is returned by GET /node/work.
