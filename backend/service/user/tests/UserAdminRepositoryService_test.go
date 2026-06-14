@@ -8,7 +8,6 @@ import (
 	"time"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
-	rolemodel "github.com/trushilpatel/jobradar/service/role/models"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
 	"gorm.io/driver/sqlite"
@@ -68,14 +67,8 @@ func TestAdminRepo_List_HappyPath(t *testing.T) {
 	if err := db.Create(&seed).Error; err != nil {
 		t.Fatalf("seed users: %v", err)
 	}
-	// Grant u2 the admin role, u1 the user role. u3 has no role row.
-	if err := db.Create(&[]rolemodel.UserRole{
-		{UserID: "u1", RoleID: rolemodel.RoleUser, GrantedAt: now},
-		{UserID: "u2", RoleID: rolemodel.RoleAdmin, GrantedAt: now},
-		{UserID: "u2", RoleID: rolemodel.RoleUser, GrantedAt: now},
-	}).Error; err != nil {
-		t.Fatalf("seed roles: %v", err)
-	}
+	// Roles are no longer stored in DB (migration 081 dropped roles/user_roles).
+	// List always returns Roles: []string{} for all users.
 
 	repo := usersvc.NewAdminRepositoryService(db)
 	res, err := repo.List(context.Background(), usersvc.AdminUserFilter{}, 1, 10)
@@ -93,21 +86,14 @@ func TestAdminRepo_List_HappyPath(t *testing.T) {
 		t.Errorf("order = [%s,%s,%s], want [u3,u2,u1]",
 			res.Items[0].ID, res.Items[1].ID, res.Items[2].ID)
 	}
-	// u3 has no roles → must be an empty slice (never nil) so JSON encodes []
-	// rather than null.
-	if res.Items[0].Roles == nil {
-		t.Error("u3.Roles is nil; want empty slice for JSON [] output")
-	}
-	if len(res.Items[0].Roles) != 0 {
-		t.Errorf("u3.Roles = %v, want empty", res.Items[0].Roles)
-	}
-	// u2 has both admin and user.
-	roleSet := map[string]bool{}
-	for _, r := range res.Items[1].Roles {
-		roleSet[r] = true
-	}
-	if !roleSet[rolemodel.RoleAdmin] || !roleSet[rolemodel.RoleUser] {
-		t.Errorf("u2.Roles = %v, want admin+user", res.Items[1].Roles)
+	// All users have empty roles slice (not nil) — roles are in Clerk JWT claims.
+	for _, item := range res.Items {
+		if item.Roles == nil {
+			t.Errorf("%s.Roles is nil; want empty slice for JSON [] output", item.ID)
+		}
+		if len(item.Roles) != 0 {
+			t.Errorf("%s.Roles = %v, want empty (roles now in JWT claims)", item.ID, item.Roles)
+		}
 	}
 }
 
@@ -246,12 +232,7 @@ func TestAdminRepo_GetWithRoles_HappyPath(t *testing.T) {
 	if err := db.Create(&usermodel.User{ID: "u1", Email: "a@b.com", Status: usermodel.StatusActive, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
-	if err := db.Create(&[]rolemodel.UserRole{
-		{UserID: "u1", RoleID: rolemodel.RoleUser, GrantedAt: now},
-		{UserID: "u1", RoleID: rolemodel.RoleAdmin, GrantedAt: now},
-	}).Error; err != nil {
-		t.Fatalf("seed roles: %v", err)
-	}
+	// No role rows to seed — roles are in Clerk JWT claims after migration 081.
 
 	repo := usersvc.NewAdminRepositoryService(db)
 	view, err := repo.GetWithRoles(context.Background(), "u1")
@@ -261,8 +242,12 @@ func TestAdminRepo_GetWithRoles_HappyPath(t *testing.T) {
 	if view.ID != "u1" {
 		t.Errorf("id = %q, want u1", view.ID)
 	}
-	if len(view.Roles) != 2 {
-		t.Fatalf("roles = %v, want 2", view.Roles)
+	// Roles are always an empty slice — carried in Clerk JWT, not in DB.
+	if view.Roles == nil {
+		t.Error("roles is nil; want non-nil empty slice for JSON [] output")
+	}
+	if len(view.Roles) != 0 {
+		t.Errorf("roles = %v, want empty (roles now in JWT claims)", view.Roles)
 	}
 }
 
@@ -315,77 +300,43 @@ func TestAdminRepo_GetWithRoles_DBError(t *testing.T) {
 
 // ---------- SetRoles ----------
 
-func TestAdminRepo_SetRoles_ReplacesExisting(t *testing.T) {
+// SetRoles is a no-op in the Clerk auth model — roles are managed via
+// Clerk publicMetadata. Any call must return nil without touching the DB.
+func TestAdminRepo_SetRoles_IsNoOp(t *testing.T) {
 	t.Parallel()
 	db := newUserTestDB(t)
 	now := time.Now().UTC()
 	if err := db.Create(&usermodel.User{ID: "u1", Email: "a@b.com", Status: usermodel.StatusActive, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
-	if err := db.Create(&[]rolemodel.UserRole{
-		{UserID: "u1", RoleID: rolemodel.RoleUser, GrantedAt: now},
-	}).Error; err != nil {
-		t.Fatalf("seed initial roles: %v", err)
-	}
 	repo := usersvc.NewAdminRepositoryService(db)
 
-	if err := repo.SetRoles(context.Background(), "u1", []string{rolemodel.RoleAdmin}, "actor"); err != nil {
-		t.Fatalf("SetRoles: %v", err)
+	// Non-empty role slice — must succeed without error.
+	if err := repo.SetRoles(context.Background(), "u1", []string{"admin"}, "actor"); err != nil {
+		t.Fatalf("SetRoles with roles: %v", err)
 	}
-
-	var got []rolemodel.UserRole
-	if err := db.Where("user_id = ?", "u1").Find(&got).Error; err != nil {
-		t.Fatalf("read back: %v", err)
-	}
-	if len(got) != 1 || got[0].RoleID != rolemodel.RoleAdmin {
-		t.Fatalf("rows = %v, want only [admin]", got)
-	}
-	if got[0].GrantedBy == nil || *got[0].GrantedBy != "actor" {
-		t.Errorf("granted_by = %v, want actor", got[0].GrantedBy)
-	}
-}
-
-// SetRoles with an empty slice must delete all existing role rows and leave
-// the table empty for that user — used to demote an admin to no roles.
-func TestAdminRepo_SetRoles_EmptySliceClears(t *testing.T) {
-	t.Parallel()
-	db := newUserTestDB(t)
-	now := time.Now().UTC()
-	if err := db.Create(&usermodel.User{ID: "u1", Email: "a@b.com", Status: usermodel.StatusActive, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	if err := db.Create(&[]rolemodel.UserRole{
-		{UserID: "u1", RoleID: rolemodel.RoleAdmin, GrantedAt: now},
-	}).Error; err != nil {
-		t.Fatalf("seed roles: %v", err)
-	}
-	repo := usersvc.NewAdminRepositoryService(db)
-
+	// Empty/nil role slice — must also succeed.
 	if err := repo.SetRoles(context.Background(), "u1", nil, "actor"); err != nil {
 		t.Fatalf("SetRoles nil: %v", err)
 	}
-	var count int64
-	if err := db.Model(&rolemodel.UserRole{}).Where("user_id = ?", "u1").Count(&count).Error; err != nil {
-		t.Fatalf("count: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("row count = %d, want 0", count)
+	// Unknown user — still must succeed (no-op means no DB check).
+	if err := repo.SetRoles(context.Background(), "ghost", []string{"user"}, "actor"); err != nil {
+		t.Fatalf("SetRoles unknown user: %v", err)
 	}
 }
 
-// SetRoles wraps the writes in db.Transaction. When the transaction itself
-// fails to begin (closed DB), GORM returns the raw transport error before the
-// callback runs. Pin this behaviour: a non-nil error surfaces, even if it is
-// not the *ServiceError that the inner callback would have produced.
-func TestAdminRepo_SetRoles_DBError(t *testing.T) {
+// SetRoles with a closed DB must still return nil — the method is a pure
+// no-op and must not issue any DB call regardless of the DB state.
+func TestAdminRepo_SetRoles_ClosedDB_StillSucceeds(t *testing.T) {
 	t.Parallel()
 	db := newUserTestDB(t)
 	sqlDB, _ := db.DB()
 	_ = sqlDB.Close()
 	repo := usersvc.NewAdminRepositoryService(db)
-	err := repo.SetRoles(context.Background(), "u1", []string{rolemodel.RoleUser}, "actor")
-	if err == nil {
-		t.Fatal("expected DB error")
+	// A closed DB would cause any real DB call to fail; nil return proves no
+	// DB call is issued.
+	if err := repo.SetRoles(context.Background(), "u1", []string{"user"}, "actor"); err != nil {
+		t.Fatalf("expected nil from no-op SetRoles on closed DB; got %v", err)
 	}
 }
 

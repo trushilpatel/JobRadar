@@ -28,49 +28,36 @@ func TestDatabaseConfig_DSN(t *testing.T) {
 	}
 }
 
-// ---------- AuthConfig.Validate ----------
+// ---------- AuthConfig.Validate (Clerk) ----------
 
-func TestAuthConfig_Validate(t *testing.T) {
-	t.Run("both secret and JWKS set", func(t *testing.T) {
-		c := config.AuthConfig{SupabaseProjectURL: "x", SupabaseJWTSecret: "s", SupabaseJWKSURL: "u", JWKSCacheTTLSeconds: 1}
-		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "only one") {
-			t.Fatalf("want both-set error, got %v", err)
+func TestAuthConfig_ClerkValidate(t *testing.T) {
+	t.Run("valid clerk config", func(t *testing.T) {
+		cfg := config.AuthConfig{
+			ClerkJWKSURL:   "https://example.clerk.accounts.dev/.well-known/jwks.json",
+			ClerkIssuerURL: "https://example.clerk.accounts.dev",
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("valid clerk config returned error: %v", err)
 		}
 	})
-	t.Run("neither set", func(t *testing.T) {
-		c := config.AuthConfig{SupabaseProjectURL: "x", JWKSCacheTTLSeconds: 1}
-		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "exactly one") {
-			t.Fatalf("want neither-set error, got %v", err)
+	t.Run("missing JWKS URL", func(t *testing.T) {
+		cfg := config.AuthConfig{ClerkIssuerURL: "https://example.clerk.accounts.dev"}
+		err := cfg.Validate()
+		if err == nil || !strings.Contains(err.Error(), "CLERK_JWKS_URL") {
+			t.Fatalf("want CLERK_JWKS_URL error, got %v", err)
 		}
 	})
-	t.Run("missing project URL", func(t *testing.T) {
-		c := config.AuthConfig{SupabaseJWTSecret: "s", JWKSCacheTTLSeconds: 1}
-		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "SUPABASE_PROJECT_URL") {
-			t.Fatalf("want project-url error, got %v", err)
+	t.Run("missing issuer URL", func(t *testing.T) {
+		cfg := config.AuthConfig{ClerkJWKSURL: "https://x.clerk.accounts.dev/.well-known/jwks.json"}
+		err := cfg.Validate()
+		if err == nil || !strings.Contains(err.Error(), "CLERK_ISSUER_URL") {
+			t.Fatalf("want CLERK_ISSUER_URL error, got %v", err)
 		}
 	})
-	t.Run("negative clock skew", func(t *testing.T) {
-		c := config.AuthConfig{SupabaseProjectURL: "x", SupabaseJWTSecret: "s", ClockSkewSeconds: -1, JWKSCacheTTLSeconds: 1}
-		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "JWT_CLOCK_SKEW_SECONDS") {
-			t.Fatalf("want clock-skew error, got %v", err)
-		}
-	})
-	t.Run("zero JWKS cache TTL", func(t *testing.T) {
-		c := config.AuthConfig{SupabaseProjectURL: "x", SupabaseJWTSecret: "s", JWKSCacheTTLSeconds: 0}
-		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "JWKS_CACHE_TTL_SECONDS") {
-			t.Fatalf("want jwks-ttl error, got %v", err)
-		}
-	})
-	t.Run("happy path with JWT secret", func(t *testing.T) {
-		c := config.AuthConfig{SupabaseProjectURL: "x", SupabaseJWTSecret: "s", JWKSCacheTTLSeconds: 1}
-		if err := c.Validate(); err != nil {
-			t.Fatalf("happy path returned error: %v", err)
-		}
-	})
-	t.Run("happy path with JWKS URL", func(t *testing.T) {
-		c := config.AuthConfig{SupabaseProjectURL: "x", SupabaseJWKSURL: "u", ClockSkewSeconds: 0, JWKSCacheTTLSeconds: 1}
-		if err := c.Validate(); err != nil {
-			t.Fatalf("happy path returned error: %v", err)
+	t.Run("both empty", func(t *testing.T) {
+		cfg := config.AuthConfig{}
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("expected error when both Clerk fields are empty")
 		}
 	})
 }
@@ -244,10 +231,8 @@ func clearConfigEnv(t *testing.T) {
 		"GOOGLE_SCRAPER_TIMEOUT_MS", "GOOGLE_SCRAPER_MAX_PAGES",
 		"SCAN_INTERVAL_MINUTES", "SCHEDULER_STUCK_TIMEOUT_MINUTES", "SCHEDULER_CHECK_INTERVAL_SECONDS",
 		"METRICS_ADDR", "OTEL_EXPORTER_OTLP_ENDPOINT",
-		"SUPABASE_PROJECT_URL", "SUPABASE_JWKS_URL", "SUPABASE_JWT_SECRET",
-		"JWT_CLOCK_SKEW_SECONDS", "JWKS_CACHE_TTL_SECONDS",
+		"CLERK_JWKS_URL", "CLERK_ISSUER_URL", "CLERK_SECRET_KEY",
 		"API_MAX_BODY_BYTES", "DEV_TOKEN",
-		"SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY",
 		"RATE_LIMIT_READ_RPM", "RATE_LIMIT_WRITE_RPM", "RATE_LIMIT_ADMIN_RPM",
 		"CACHE_TTL_USER_SECONDS", "CACHE_TTL_COMPANY_SECONDS",
 	}
@@ -303,8 +288,8 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 	if cfg.Observability.MetricsAddr != "127.0.0.1:9100" || cfg.Observability.OTelEndpoint != "http://localhost:4318" {
 		t.Errorf("Observability defaults wrong: %+v", cfg.Observability)
 	}
-	if cfg.Auth.ClockSkewSeconds != 60 || cfg.Auth.JWKSCacheTTLSeconds != 600 {
-		t.Errorf("Auth defaults wrong: %+v", cfg.Auth)
+	if cfg.Auth.ClerkJWKSURL != "" || cfg.Auth.ClerkIssuerURL != "" {
+		t.Errorf("Auth defaults should be empty strings: %+v", cfg.Auth)
 	}
 	if cfg.API.MaxBodyBytes != 1048576 || cfg.API.DevToken != "" {
 		t.Errorf("API defaults wrong: %+v", cfg.API)
@@ -360,14 +345,11 @@ func TestLoad_OverridesApplied(t *testing.T) {
 	t.Setenv("SCHEDULER_CHECK_INTERVAL_SECONDS", "33")
 	t.Setenv("METRICS_ADDR", ":9999")
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel:4318")
-	t.Setenv("SUPABASE_PROJECT_URL", "https://x.supabase.co")
-	t.Setenv("SUPABASE_JWT_SECRET", "secret")
-	t.Setenv("JWT_CLOCK_SKEW_SECONDS", "30")
-	t.Setenv("JWKS_CACHE_TTL_SECONDS", "120")
+	t.Setenv("CLERK_JWKS_URL", "https://x.clerk.accounts.dev/.well-known/jwks.json")
+	t.Setenv("CLERK_ISSUER_URL", "https://x.clerk.accounts.dev")
+	t.Setenv("CLERK_SECRET_KEY", "sk_test_abc123")
 	t.Setenv("API_MAX_BODY_BYTES", "2000000")
 	t.Setenv("DEV_TOKEN", "devtoken")
-	t.Setenv("SUPABASE_URL", "https://x.supabase.co")
-	t.Setenv("SUPABASE_SERVICE_ROLE_KEY", "srk")
 	t.Setenv("RATE_LIMIT_READ_RPM", "31")
 	t.Setenv("RATE_LIMIT_WRITE_RPM", "32")
 	t.Setenv("RATE_LIMIT_ADMIN_RPM", "33")
@@ -405,18 +387,17 @@ func TestLoad_OverridesApplied(t *testing.T) {
 	if cfg.Scheduler.ScanIntervalMinutes != 111 || cfg.Scheduler.CheckIntervalSeconds != 33 {
 		t.Errorf("Scheduler overrides wrong: %+v", cfg.Scheduler)
 	}
-	if cfg.Auth.SupabaseProjectURL != "https://x.supabase.co" || cfg.Auth.SupabaseJWTSecret != "secret" {
-		t.Errorf("Auth overrides wrong: %+v", cfg.Auth)
+	if cfg.Auth.ClerkJWKSURL != "https://x.clerk.accounts.dev/.well-known/jwks.json" {
+		t.Errorf("Auth JWKS URL override wrong: %+v", cfg.Auth)
 	}
-	// JWT secret set → derived JWKS URL stays empty.
-	if cfg.Auth.SupabaseJWKSURL != "" {
-		t.Errorf("expected JWKS URL empty when JWT secret set, got %q", cfg.Auth.SupabaseJWKSURL)
-	}
-	if cfg.Auth.ClockSkewSeconds != 30 || cfg.Auth.JWKSCacheTTLSeconds != 120 {
-		t.Errorf("Auth numeric overrides wrong: %+v", cfg.Auth)
+	if cfg.Auth.ClerkIssuerURL != "https://x.clerk.accounts.dev" {
+		t.Errorf("Auth issuer URL override wrong: %+v", cfg.Auth)
 	}
 	if cfg.API.MaxBodyBytes != 2000000 || cfg.API.DevToken != "devtoken" {
 		t.Errorf("API overrides wrong: %+v", cfg.API)
+	}
+	if cfg.MultiUser.ClerkSecretKey != "sk_test_abc123" {
+		t.Errorf("MultiUser ClerkSecretKey override wrong: %+v", cfg.MultiUser)
 	}
 	if cfg.MultiUser.RateLimitReadRPM != 31 || cfg.MultiUser.RateLimitWriteRPM != 32 ||
 		cfg.MultiUser.RateLimitAdminRPM != 33 || cfg.MultiUser.CacheTTLUserSeconds != 61 || cfg.MultiUser.CacheTTLCompanySeconds != 62 ||
@@ -440,24 +421,16 @@ func TestLoad_InvalidIntFallsBackToDefault(t *testing.T) {
 	}
 }
 
-func TestLoad_DerivesJWKSURLFromProjectURL(t *testing.T) {
+func TestLoad_ClerkURLsFromEnv(t *testing.T) {
 	clearConfigEnv(t)
-	// Neither JWT secret nor explicit JWKS URL → derive from project URL.
-	t.Setenv("SUPABASE_PROJECT_URL", "https://x.supabase.co/")
+	t.Setenv("CLERK_JWKS_URL", "https://example.clerk.accounts.dev/.well-known/jwks.json")
+	t.Setenv("CLERK_ISSUER_URL", "https://example.clerk.accounts.dev")
 	cfg := config.Load()
-	want := "https://x.supabase.co/auth/v1/.well-known/jwks.json"
-	if cfg.Auth.SupabaseJWKSURL != want {
-		t.Errorf("derived JWKS URL wrong: got %q want %q", cfg.Auth.SupabaseJWKSURL, want)
+	if cfg.Auth.ClerkJWKSURL != "https://example.clerk.accounts.dev/.well-known/jwks.json" {
+		t.Errorf("CLERK_JWKS_URL not loaded: %q", cfg.Auth.ClerkJWKSURL)
 	}
-}
-
-func TestLoad_ExplicitJWKSURLWinsOverProjectURL(t *testing.T) {
-	clearConfigEnv(t)
-	t.Setenv("SUPABASE_PROJECT_URL", "https://x.supabase.co")
-	t.Setenv("SUPABASE_JWKS_URL", "https://override.example/jwks.json")
-	cfg := config.Load()
-	if cfg.Auth.SupabaseJWKSURL != "https://override.example/jwks.json" {
-		t.Errorf("explicit JWKS_URL did not win: %q", cfg.Auth.SupabaseJWKSURL)
+	if cfg.Auth.ClerkIssuerURL != "https://example.clerk.accounts.dev" {
+		t.Errorf("CLERK_ISSUER_URL not loaded: %q", cfg.Auth.ClerkIssuerURL)
 	}
 }
 

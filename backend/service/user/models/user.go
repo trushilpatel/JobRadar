@@ -4,7 +4,7 @@ import "time"
 
 // User mirrors the `users` table created in migration 043.
 type User struct {
-	ID          string    `gorm:"primaryKey;type:uuid"          json:"id"`
+	ID          string    `gorm:"primaryKey;type:text"          json:"id"`
 	Email       string    `gorm:"uniqueIndex;type:citext;not null" json:"email"`
 	DisplayName *string   `json:"display_name"`
 	Status      string    `gorm:"not null;default:active"       json:"status"`

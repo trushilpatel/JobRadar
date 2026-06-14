@@ -2,20 +2,14 @@ package middleware
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"math/big"
 	"net/http"
-	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	keyfunc "github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/common/config"
@@ -39,182 +33,149 @@ func FromContext(ctx context.Context) (Identity, bool) {
 	return v, ok
 }
 
-// authClaims is the subset of Supabase JWT claims the middleware verifies.
-// Extra claims (role, app_metadata, etc.) are ignored.
+// authClaims holds the Clerk JWT claim set. email and role are custom claims
+// injected by the Clerk JWT template. A single "role" claim is used because
+// Clerk publicMetadata stores one role string; multi-role would require a []string claim.
 type authClaims struct {
 	Email string `json:"email"`
+	Role  string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-// tokenVerifier abstracts the signature-verification strategy so the middleware
-// body is algorithm-agnostic. At boot exactly one verifier is selected by
-// config — never both, per spec §6.
-type tokenVerifier interface {
-	Verify(tokenString string) (*jwt.Token, *authClaims, error)
+// VerifiedClaims is returned by VerifyJWT — the full verified identity from the token.
+type VerifiedClaims struct {
+	Subject string
+	Email   string
+	Role    string
 }
 
-// errJWKSUnavailable is a sentinel returned by the JWKS verifier when the
-// remote JWKS endpoint cannot be reached. Maps to HTTP 503 Retry-After.
-var errJWKSUnavailable = errors.New("auth: jwks unavailable")
-
-// ErrJWKSUnavailable is the exported alias of errJWKSUnavailable so callers of
-// the public VerifyJWT helper can `errors.Is` it without seeing the
-// internals of this package.
-var ErrJWKSUnavailable = errJWKSUnavailable
-
-// jwtPipeline holds the verifier + per-instance config used by both the
-// classic Auth middleware and the public VerifyJWT helper. It is built once
-// at boot via SetupJWT and read concurrently — never mutated after init.
+// jwtPipeline holds the JWKS keyfunc + per-instance config used by both the
+// Auth middleware and the public VerifyJWT helper. It is built once at boot
+// via Auth() and read concurrently — never mutated after init.
 type jwtPipeline struct {
-	verifier         tokenVerifier
-	devToken         string
-	expectedIssuer   string
-	expectedAudience string
-	skew             time.Duration
+	jwks     keyfunc.Keyfunc
+	devToken string
+	issuer   string
+	// clockSkew is hard-coded at 60s — Clerk's recommended tolerance.
+	// TODO: make configurable in AuthConfig if a non-standard environment requires it.
+	clockSkew time.Duration
 }
 
-// jwtPipelineSlot stores the most recent pipeline initialised in this process.
-// The classic Auth middleware closes over its own copy via authHandler — this
-// slot is only used by VerifyJWT, which has no closure to capture config in.
-// Synchronised via mu because Auth() is normally called once at boot but tests
-// call it many times in the same process.
+// pipelineMu / pipelineSlot stores the most recent pipeline initialised in
+// this process. Auth() closes over its own copy; this slot is used by
+// VerifyJWT, which has no closure to capture config in.
 var (
-	jwtPipelineMu   sync.RWMutex
-	jwtPipelineSlot *jwtPipeline
+	pipelineMu   sync.RWMutex
+	pipelineSlot *jwtPipeline
 )
 
-func storeJWTPipeline(p *jwtPipeline) {
-	jwtPipelineMu.Lock()
-	defer jwtPipelineMu.Unlock()
-	jwtPipelineSlot = p
+func storePipeline(p *jwtPipeline) {
+	pipelineMu.Lock()
+	defer pipelineMu.Unlock()
+	pipelineSlot = p
 }
 
-func loadJWTPipeline() *jwtPipeline {
-	jwtPipelineMu.RLock()
-	defer jwtPipelineMu.RUnlock()
-	return jwtPipelineSlot
+func loadPipeline() *jwtPipeline {
+	pipelineMu.RLock()
+	defer pipelineMu.RUnlock()
+	return pipelineSlot
 }
 
-// Auth builds the authentication middleware. Selects a single verifier at
-// boot (ES256 via JWKS OR HS256 via shared secret — never both) and verifies
-// signature, iss, aud, and exp (with skew). Open signup is gated by
-// RequireIdentity + RequireRole — no email allowlist.
+// Auth builds the authentication middleware. Fetches Clerk JWKS once at
+// startup and refreshes automatically via MicahParks/keyfunc. Validates
+// RS256 (or ES256) signature, iss, and exp with 60s clock skew.
 func Auth(cfg config.AuthConfig, devToken string, log logger.Logger) (func(http.Handler) http.Handler, error) {
-	skew := time.Duration(cfg.ClockSkewSeconds) * time.Second
-	verifier, err := newVerifier(cfg, skew)
+	jwks, err := keyfunc.NewDefaultCtx(context.Background(), []string{cfg.ClerkJWKSURL})
 	if err != nil {
-		return nil, fmt.Errorf("auth middleware: init verifier: %w", err)
+		return nil, fmt.Errorf("auth: fetch JWKS from %s: %w", cfg.ClerkJWKSURL, err)
 	}
-	pipeline := &jwtPipeline{
-		verifier:         verifier,
-		devToken:         devToken,
-		expectedIssuer:   strings.TrimRight(cfg.SupabaseProjectURL, "/") + "/auth/v1",
-		expectedAudience: "authenticated",
-		skew:             skew,
+	p := &jwtPipeline{
+		jwks:      jwks,
+		devToken:  devToken,
+		issuer:    cfg.ClerkIssuerURL,
+		clockSkew: 60 * time.Second,
 	}
-	storeJWTPipeline(pipeline)
-	return authHandler(cfg, devToken, verifier, log), nil
+	storePipeline(p)
+	return authHandler(p, log), nil
 }
 
-// errJWTPipelineNotInitialised is returned by VerifyJWT when no Auth
-// middleware has been built in this process — a programmer error in wiring.
-var errJWTPipelineNotInitialised = errors.New("auth: VerifyJWT called before Auth was initialised")
+// errPipelineNotInit is returned by VerifyJWT when no Auth middleware has been
+// built in this process — a programmer error in wiring.
+var errPipelineNotInit = errors.New("auth: VerifyJWT called before Auth was initialised")
 
 // VerifyJWT runs the same JWT verification the Auth middleware does — bearer
-// extraction, signature, iss, aud, exp (with skew) — and returns the JWT
-// `sub` and `email` claims.
+// extraction, signature, iss, and exp (with skew) — and returns VerifiedClaims.
 //
 // The dev-token bypass mirrors Auth: a request carrying a matching X-Dev-Token
-// header short-circuits to (subject="dev-bypass", email="") without touching
-// the verifier. This keeps RequireIdentity usable in dev environments without
-// a real Supabase session.
+// header short-circuits to (Subject="dev-bypass", Role="admin") without
+// touching the JWKS verifier.
 //
-// Auth must have been called once before VerifyJWT — typically at process
-// boot. Calling VerifyJWT in a process that never built Auth returns
-// errJWTPipelineNotInitialised.
-func VerifyJWT(r *http.Request) (subject, email string, err error) {
-	p := loadJWTPipeline()
+// Auth must have been called once before VerifyJWT — typically at process boot.
+func VerifyJWT(r *http.Request) (VerifiedClaims, error) {
+	p := loadPipeline()
 	if p == nil {
-		return "", "", errJWTPipelineNotInitialised
+		return VerifiedClaims{}, errPipelineNotInit
 	}
-
-	// Dev bypass — only active when DEV_TOKEN is configured for this process.
 	if p.devToken != "" && r.Header.Get("X-Dev-Token") == p.devToken {
-		return "dev-bypass", "", nil
+		return VerifiedClaims{Subject: "dev-bypass", Email: "", Role: "admin"}, nil
 	}
-
 	raw, ok := extractBearer(r.Header.Get("Authorization"))
 	if !ok {
-		return "", "", errors.New("auth: missing or malformed bearer")
+		return VerifiedClaims{}, errors.New("auth: missing or malformed bearer")
 	}
-	tok, claims, err := p.verifier.Verify(raw)
+	claims, err := verifyToken(p, raw)
 	if err != nil {
-		return "", "", err
+		return VerifiedClaims{}, err
 	}
-	if !tok.Valid {
-		return "", "", errors.New("auth: token invalid after parse")
-	}
-	if err := validateStandardClaims(claims, p.expectedIssuer, p.expectedAudience, p.skew); err != nil {
-		return "", "", err
-	}
-	return claims.Subject, claims.Email, nil
+	return VerifiedClaims{Subject: claims.Subject, Email: claims.Email, Role: claims.Role}, nil
 }
 
-func authHandler(cfg config.AuthConfig, devToken string, verifier tokenVerifier, log logger.Logger) func(http.Handler) http.Handler {
-	expectedIssuer := strings.TrimRight(cfg.SupabaseProjectURL, "/") + "/auth/v1"
-	const expectedAudience = "authenticated"
-	skew := time.Duration(cfg.ClockSkewSeconds) * time.Second
-
+func authHandler(p *jwtPipeline, log logger.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Dev bypass — only active when DEV_TOKEN env var is configured.
-			if devToken != "" && r.Header.Get("X-Dev-Token") == devToken {
-				ctx := context.WithValue(r.Context(), identityCtxKey{}, Identity{
-					UserID: "dev-bypass",
-					Email:  "",
-				})
+			if p.devToken != "" && r.Header.Get("X-Dev-Token") == p.devToken {
+				ctx := context.WithValue(r.Context(), identityCtxKey{}, Identity{UserID: "dev-bypass"})
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
-
 			raw, ok := extractBearer(r.Header.Get("Authorization"))
 			if !ok {
 				log.Warn("auth: missing or malformed bearer")
 				handler.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required")
 				return
 			}
-
-			tok, claims, err := verifier.Verify(raw)
+			claims, err := verifyToken(p, raw)
 			if err != nil {
-				if errors.Is(err, errJWKSUnavailable) {
-					log.Error("auth: jwks unavailable", err)
-					w.Header().Set("Retry-After", "30")
-					handler.RespondError(w, http.StatusServiceUnavailable, "AUTH_UNAVAILABLE", "authentication service unavailable")
-					return
-				}
 				log.Warn("auth: token verification failed", logger.Err(err))
 				handler.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid token")
 				return
 			}
-			if !tok.Valid {
-				log.Warn("auth: token invalid after parse")
-				handler.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid token")
-				return
-			}
-
-			if err := validateStandardClaims(claims, expectedIssuer, expectedAudience, skew); err != nil {
-				log.Warn("auth: claims rejected", logger.Err(err))
-				handler.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid token")
-				return
-			}
-
-			// Phase 2: email allowlist removed — RequireIdentity handles identity
-			// enrichment, provisioning, and status checks per-route.
-			ident := Identity{UserID: claims.Subject, Email: claims.Email}
-			ctx := context.WithValue(r.Context(), identityCtxKey{}, ident)
+			ctx := context.WithValue(r.Context(), identityCtxKey{}, Identity{
+				UserID: claims.Subject,
+				Email:  claims.Email,
+			})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func verifyToken(p *jwtPipeline, raw string) (*authClaims, error) {
+	claims := &authClaims{}
+	_, err := jwt.ParseWithClaims(raw, claims, p.jwks.Keyfunc,
+		jwt.WithValidMethods([]string{"RS256", "ES256"}),
+		jwt.WithLeeway(p.clockSkew),
+		jwt.WithIssuedAt(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if claims.Issuer != p.issuer {
+		return nil, fmt.Errorf("iss mismatch: got %q want %q", claims.Issuer, p.issuer)
+	}
+	if claims.ExpiresAt == nil {
+		return nil, errors.New("token missing exp")
+	}
+	return claims, nil
 }
 
 func extractBearer(header string) (string, bool) {
@@ -230,195 +191,4 @@ func extractBearer(header string) (string, bool) {
 		return "", false
 	}
 	return tok, true
-}
-
-func validateStandardClaims(c *authClaims, issuer, audience string, skew time.Duration) error {
-	if c.Issuer != issuer {
-		return fmt.Errorf("iss mismatch: got %q want %q", c.Issuer, issuer)
-	}
-	if !audienceContains(c.Audience, audience) {
-		return fmt.Errorf("aud mismatch: got %v want %q", c.Audience, audience)
-	}
-	if c.ExpiresAt == nil {
-		return errors.New("exp missing")
-	}
-	if time.Now().After(c.ExpiresAt.Add(skew)) {
-		return errors.New("token expired")
-	}
-	return nil
-}
-
-func audienceContains(aud jwt.ClaimStrings, want string) bool {
-	return slices.Contains(aud, want)
-}
-
-// newVerifier picks ES256-via-JWKS or HS256-via-secret based on cfg. The
-// caller has already validated that exactly one of the two is set
-// (config.AuthConfig.Validate). skew is applied as jwt.WithLeeway so the
-// library's own exp check matches our explicit one.
-func newVerifier(cfg config.AuthConfig, skew time.Duration) (tokenVerifier, error) {
-	if cfg.SupabaseJWTSecret != "" {
-		return newHMACVerifier(cfg.SupabaseJWTSecret, skew), nil
-	}
-	if cfg.SupabaseJWKSURL == "" {
-		return nil, errors.New("neither SUPABASE_JWT_SECRET nor SUPABASE_JWKS_URL set")
-	}
-	ttl := time.Duration(cfg.JWKSCacheTTLSeconds) * time.Second
-	return newJWKSVerifier(cfg.SupabaseJWKSURL, ttl, http.DefaultClient, skew), nil
-}
-
-// hmacVerifier verifies HS256 tokens using a shared secret. Rejects any other
-// algorithm via jwt.WithValidMethods.
-type hmacVerifier struct {
-	secret []byte
-	skew   time.Duration
-}
-
-func newHMACVerifier(secret string, skew time.Duration) *hmacVerifier {
-	return &hmacVerifier{secret: []byte(secret), skew: skew}
-}
-
-func (v *hmacVerifier) Verify(tokenString string) (*jwt.Token, *authClaims, error) {
-	claims := &authClaims{}
-	tok, err := jwt.ParseWithClaims(tokenString, claims, func(_ *jwt.Token) (any, error) {
-		return v.secret, nil
-	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithLeeway(v.skew))
-	if err != nil {
-		return nil, nil, err
-	}
-	return tok, claims, nil
-}
-
-// jwksVerifier verifies ES256 tokens using keys fetched from a JWKS endpoint.
-// Rejects any other algorithm via jwt.WithValidMethods. Caches keys in-memory
-// with a TTL; on unknown kid refetches once before rejecting.
-type jwksVerifier struct {
-	url    string
-	ttl    time.Duration
-	skew   time.Duration
-	client *http.Client
-
-	mu        sync.RWMutex
-	keys      map[string]*ecdsa.PublicKey
-	fetchedAt time.Time
-}
-
-func newJWKSVerifier(url string, ttl time.Duration, client *http.Client, skew time.Duration) *jwksVerifier {
-	return &jwksVerifier{url: url, ttl: ttl, skew: skew, client: client, keys: map[string]*ecdsa.PublicKey{}}
-}
-
-func (v *jwksVerifier) Verify(tokenString string) (*jwt.Token, *authClaims, error) {
-	claims := &authClaims{}
-	tok, err := jwt.ParseWithClaims(tokenString, claims, v.keyfunc, jwt.WithValidMethods([]string{"ES256"}), jwt.WithLeeway(v.skew))
-	if err != nil {
-		return nil, nil, err
-	}
-	return tok, claims, nil
-}
-
-// keyfunc resolves the signing key by kid. Cache misses trigger a single
-// refetch; if the kid is still unknown after the refetch, returns an error.
-// Network failures on fetch surface as errJWKSUnavailable.
-func (v *jwksVerifier) keyfunc(tok *jwt.Token) (any, error) {
-	kidRaw, ok := tok.Header["kid"]
-	if !ok {
-		return nil, errors.New("jwks: token missing kid")
-	}
-	kid, ok := kidRaw.(string)
-	if !ok || kid == "" {
-		return nil, errors.New("jwks: token kid not a string")
-	}
-
-	if k := v.lookup(kid); k != nil {
-		return k, nil
-	}
-	if err := v.refresh(); err != nil {
-		return nil, err
-	}
-	if k := v.lookup(kid); k != nil {
-		return k, nil
-	}
-	return nil, fmt.Errorf("jwks: unknown kid %q after refresh", kid)
-}
-
-func (v *jwksVerifier) lookup(kid string) *ecdsa.PublicKey {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-	if v.ttl > 0 && !v.fetchedAt.IsZero() && time.Since(v.fetchedAt) > v.ttl {
-		return nil
-	}
-	return v.keys[kid]
-}
-
-// refresh fetches the JWKS document and replaces the in-memory cache. Network
-// or non-2xx responses return errJWKSUnavailable so the middleware can fail
-// closed with 503.
-func (v *jwksVerifier) refresh() error {
-	req, err := http.NewRequest(http.MethodGet, v.url, nil)
-	if err != nil {
-		return fmt.Errorf("jwks request: %w", err)
-	}
-	resp, err := v.client.Do(req)
-	if err != nil {
-		return errJWKSUnavailable
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return errJWKSUnavailable
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return errJWKSUnavailable
-	}
-	var doc jwksDoc
-	if err := json.Unmarshal(body, &doc); err != nil {
-		return fmt.Errorf("jwks decode: %w", err)
-	}
-
-	newKeys := make(map[string]*ecdsa.PublicKey, len(doc.Keys))
-	for _, k := range doc.Keys {
-		if k.Kty != "EC" || k.Crv != "P-256" || k.Kid == "" {
-			continue
-		}
-		pub, err := parseECPublicKey(k.X, k.Y)
-		if err != nil {
-			continue
-		}
-		newKeys[k.Kid] = pub
-	}
-
-	v.mu.Lock()
-	v.keys = newKeys
-	v.fetchedAt = time.Now()
-	v.mu.Unlock()
-	return nil
-}
-
-type jwksDoc struct {
-	Keys []jwksKey `json:"keys"`
-}
-
-type jwksKey struct {
-	Kid string `json:"kid"`
-	Kty string `json:"kty"`
-	Crv string `json:"crv"`
-	X   string `json:"x"`
-	Y   string `json:"y"`
-	Alg string `json:"alg"`
-}
-
-func parseECPublicKey(xB64, yB64 string) (*ecdsa.PublicKey, error) {
-	xBytes, err := base64.RawURLEncoding.DecodeString(xB64)
-	if err != nil {
-		return nil, fmt.Errorf("jwks: decode x: %w", err)
-	}
-	yBytes, err := base64.RawURLEncoding.DecodeString(yB64)
-	if err != nil {
-		return nil, fmt.Errorf("jwks: decode y: %w", err)
-	}
-	return &ecdsa.PublicKey{
-		Curve: elliptic.P256(),
-		X:     new(big.Int).SetBytes(xBytes),
-		Y:     new(big.Int).SetBytes(yBytes),
-	}, nil
 }
