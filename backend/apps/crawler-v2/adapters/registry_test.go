@@ -6,8 +6,7 @@ import (
 	"testing"
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters"
-	crawlerrors "github.com/trushilpatel/jobradar/apps/crawler-v2/common/errors"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 var allAdapterTypes = []string{
@@ -54,7 +53,7 @@ func TestNew_ReturnsErrInvalidAdapterForUnknownType(t *testing.T) {
 }
 
 func isErrInvalidAdapter(err error) bool {
-	return errors.Is(err, crawlerrors.ErrInvalidAdapter)
+	return errors.Is(err, adapters.ErrInvalidAdapter)
 }
 
 func TestNew_ReturnsValidBundleForKnownType(t *testing.T) {

@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -18,10 +19,13 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/rippling"
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/uber"
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/workday"
-	crawlerrors "github.com/trushilpatel/jobradar/apps/crawler-v2/common/errors"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
 	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
+
+// ErrInvalidAdapter is returned when an adapter type string does not map to
+// any registered adapter in the registry.
+var ErrInvalidAdapter = errors.New("crawler node: invalid adapter")
 
 // AdapterBundle groups the interfaces an adapter may implement.
 // At least one of Listing or ConfigListing is always non-nil.
@@ -106,7 +110,7 @@ func Registry() map[string]Constructor {
 func New(adapterType string, log logger.Logger, httpClient *http.Client) (AdapterBundle, error) {
 	ctor, ok := Registry()[adapterType]
 	if !ok {
-		return AdapterBundle{}, fmt.Errorf("adapters.New %q: %w", adapterType, crawlerrors.ErrInvalidAdapter)
+		return AdapterBundle{}, fmt.Errorf("adapters.New %q: %w", adapterType, ErrInvalidAdapter)
 	}
 	return ctor(log, httpClient), nil
 }

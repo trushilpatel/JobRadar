@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 // newTestAdapter builds a Gem adapter pointed at the given test server URL.

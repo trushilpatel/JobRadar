@@ -10,8 +10,8 @@ import (
 	"time"
 
 	ghapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/greenhouse/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
 	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 const defaultBaseURL = "https://boards-api.greenhouse.io"
@@ -47,7 +47,7 @@ func (g *Greenhouse) FetchJobListing(ctx context.Context, companyID string) (cor
 	listing := mapJobListing(raw)
 	log.Info("listing fetched",
 		logger.Int(logger.FieldJobCount, len(listing.Jobs)),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 	return listing, nil
 }
@@ -74,7 +74,7 @@ func (g *Greenhouse) FetchJobPost(ctx context.Context, summary core.JobSummary) 
 	}
 
 	post := mapJobPost(raw)
-	log.Info("job post fetched", logger.Dur(logger.FieldDuration, time.Since(start)))
+	log.Info("job post fetched", logger.Dur(logger.FieldDurationMs, time.Since(start)))
 	return post, nil
 }
 
