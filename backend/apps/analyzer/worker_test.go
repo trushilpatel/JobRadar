@@ -152,6 +152,10 @@ func (f *fakePublisher) PublishWithMsgID(_ context.Context, subject string, valu
 	return f.Publish(context.Background(), subject, value)
 }
 
+func (f *fakePublisher) PublishWithHeaders(_ context.Context, subject string, value []byte, _ map[string]string) error {
+	return f.Publish(context.Background(), subject, value)
+}
+
 func (f *fakePublisher) messagesOnSubject(subject string) []publishedRecord {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -64,7 +64,7 @@ func ensureJobsRaw(ctx context.Context, js natsjs.JetStream) error {
 		Name:       ConsumerFilterWorkers,
 		Durable:    ConsumerFilterWorkers,
 		AckPolicy:  natsjs.AckExplicitPolicy,
-		AckWait:    2 * time.Minute,
+		AckWait:    10 * time.Minute,
 		MaxDeliver: 3,
 		BackOff:    []time.Duration{30 * time.Second, 2 * time.Minute},
 	}); err != nil {

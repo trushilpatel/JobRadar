@@ -47,24 +47,27 @@ func main() {
 	defer stop()
 	defer shutdownTracing()
 
-	// Connect to NATS and wire the sweeper publisher.
-	// If NATS is unavailable the sweeper is disabled (no-op) so the scheduler
-	// can still enqueue/reset stuck rows — a NATS outage must not stop scans.
-	var sweeperOpts scansvc.SchedulerServiceOptions
-	njs, natsErr := js.ConnectManaged(ctx, js.Config{URL: cfg.NATS.URL, CredsFile: cfg.NATS.CredsFile})
-	if natsErr != nil {
-		log.Error("nats connect failed — sweeper disabled, scan scheduling continues", natsErr)
-	} else {
-		if streamErr := js.EnsureStreams(ctx, njs); streamErr != nil {
-			log.Error("nats ensure streams failed — sweeper disabled", streamErr)
-		} else {
-			sweeperOpts = scansvc.SchedulerServiceOptions{
-				Ledger:     jobsvc.NewSeenLedgerStore(database),
-				Publisher:  js.NewPublisher(njs),
-				MaxRetries: cfg.Scheduler.SweeperMaxRetries,
-				Log:        log,
-			}
+	// Build a lazy publisher that dials NATS on first use and re-dials after
+	// failures. The sweeper is always enabled — a NATS outage causes the
+	// publisher to return an error (increments SweeperNATSUnavailableTotal) but
+	// does not prevent the scheduler from enqueuing or resetting stuck rows
+	// (AC-2 / RC-2). Jobs stay at reason='retry' until NATS recovers.
+	lazyPub := newLazyPublisher(func(pubCtx context.Context) (scansvc.SweeperPublisher, error) {
+		njs, err := js.ConnectManaged(pubCtx, js.Config{URL: cfg.NATS.URL, CredsFile: cfg.NATS.CredsFile})
+		if err != nil {
+			return nil, err
 		}
+		if streamErr := js.EnsureStreams(pubCtx, njs); streamErr != nil {
+			return nil, streamErr
+		}
+		return js.NewPublisher(njs), nil
+	}, log)
+
+	sweeperOpts := scansvc.SchedulerServiceOptions{
+		Ledger:     jobsvc.NewSeenLedgerStore(database),
+		Publisher:  lazyPub,
+		MaxRetries: cfg.Scheduler.SweeperMaxRetries,
+		Log:        log,
 	}
 
 	svc := scansvc.NewSchedulerServiceWithSweeper(scansvc.NewQueueStore(database), sweeperOpts)
@@ -72,13 +75,12 @@ func main() {
 	stuckTimeout := time.Duration(cfg.Scheduler.StuckTimeoutMinutes) * time.Minute
 	jitter := computeJitter(checkInterval, rand.New(rand.NewSource(time.Now().UnixNano())))
 
-	sweeperEnabled := sweeperOpts.Publisher != nil
 	log.Info("started",
 		logger.Int(logger.FieldScanIntervalMinutes, cfg.Scheduler.ScanIntervalMinutes),
 		logger.Dur(logger.FieldCheckInterval, checkInterval),
 		logger.Dur(logger.FieldStuckTimeout, stuckTimeout),
 		logger.Dur(logger.FieldJitter, jitter),
-		logger.Bool(logger.FieldSweeperEnabled, sweeperEnabled),
+		logger.Bool(logger.FieldSweeperEnabled, true),
 	)
 
 	Run(ctx, log, svc, cfg.Scheduler.ScanIntervalMinutes, checkInterval+jitter, stuckTimeout)

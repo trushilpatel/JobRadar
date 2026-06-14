@@ -16,6 +16,19 @@ func NewTestMsg(data []byte, deliveryCount int) (*Msg, *TestMsgState) {
 	return &Msg{inner: inner}, state
 }
 
+// NewTestMsgWithHeaders creates a Msg with the given NATS headers set.
+// Use this to test code that reads message headers (e.g. X-Retry-Count).
+// The returned TestMsgState can be inspected after the test to verify Ack/Nak/Term.
+func NewTestMsgWithHeaders(data []byte, deliveryCount int, headers map[string]string) (*Msg, *TestMsgState) {
+	state := &TestMsgState{}
+	h := make(nats.Header, len(headers))
+	for k, v := range headers {
+		h.Set(k, v)
+	}
+	inner := &testMsg{data: data, deliveryCount: uint64(deliveryCount), headers: h, state: state}
+	return &Msg{inner: inner}, state
+}
+
 // TestMsgState records which disposition was called on a test message.
 // NakErr, when set, is returned by Nak() so tests can exercise the Nak-failure
 // path; the Naked flag is still set so the call is observable.
@@ -35,12 +48,13 @@ type TestMsgState struct {
 type testMsg struct {
 	data          []byte
 	deliveryCount uint64
+	headers       nats.Header
 	state         *TestMsgState
 }
 
 func (m *testMsg) Data() []byte                      { return m.data }
 func (m *testMsg) Subject() string                   { return "test.subject" }
-func (m *testMsg) Headers() nats.Header              { return nil }
+func (m *testMsg) Headers() nats.Header              { return m.headers }
 func (m *testMsg) Reply() string                     { return "" }
 func (m *testMsg) Ack() error                        { m.state.Acked = true; return m.state.AckErr }
 func (m *testMsg) DoubleAck(_ context.Context) error { m.state.Acked = true; return m.state.AckErr }

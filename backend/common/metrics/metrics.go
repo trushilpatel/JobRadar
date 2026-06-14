@@ -263,6 +263,22 @@ var SweeperRetriesFailedTotal = prometheus.NewCounter(prometheus.CounterOpts{
 	Help: "Total retry jobs the sweeper failed to publish (ledger re-set to retry, 1m delay).",
 })
 
+// SweeperStuckEscalatedTotal counts retry-ledger rows that were stuck past the
+// 4-hour threshold and escalated to reason='error' by EscalateStuckRetryJobs.
+// Alert on this counter: stuck rows indicate the sweeper is not healthy.
+var SweeperStuckEscalatedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "jobradar_sweeper_stuck_escalated_total",
+	Help: "Total retry ledger rows escalated to error because next_attempt_at was stuck > 4h.",
+})
+
+// SweeperNATSUnavailableTotal counts scheduler cycles where NATS was unavailable
+// and the lazy publisher could not connect. Used to alert on prolonged NATS outages
+// that block the sweeper from re-publishing due retry jobs.
+var SweeperNATSUnavailableTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "jobradar_sweeper_nats_unavailable_total",
+	Help: "Total scheduler cycles where the sweeper publisher was unavailable (NATS down).",
+})
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 func init() {
@@ -306,6 +322,8 @@ func init() {
 		SweeperRetriesPublishedTotal,
 		SweeperRetriesEscalatedTotal,
 		SweeperRetriesFailedTotal,
+		SweeperStuckEscalatedTotal,
+		SweeperNATSUnavailableTotal,
 	)
 }
 

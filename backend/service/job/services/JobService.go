@@ -170,12 +170,23 @@ type SeenLedgerWriter interface {
 	// FetchDueRetryJobs returns up to limit ledger rows where reason='retry' and
 	// next_attempt_at <= now(), ordered by next_attempt_at ASC.
 	FetchDueRetryJobs(ctx context.Context, limit int) ([]RetryJobRecord, error)
+	// FetchDueRetryJobsWithPayload is like FetchDueRetryJobs but additionally
+	// filters to rows where payload IS NOT NULL and adapter IS NOT NULL and
+	// adapter != ''. This prevents the sweeper from attempting to re-publish
+	// rows that were written before payload persistence was added (AC-3).
+	FetchDueRetryJobsWithPayload(ctx context.Context, limit int) ([]RetryJobRecord, error)
 	// ResetRetryToFetch transitions a single row to reason='fetch', clearing
 	// payload, adapter, and next_attempt_at. ErrLedgerRowMissing on 0 rows.
 	ResetRetryToFetch(ctx context.Context, jobID string) error
 	// EscalateRetryToError transitions a row from reason='retry' to reason='error'.
 	// ErrLedgerRowMissing when no row matched (missing row or wrong reason).
 	EscalateRetryToError(ctx context.Context, jobID string) error
+	// EscalateStuckRetryJobs finds rows where reason='retry' and
+	// next_attempt_at < NOW() - stuckThreshold, updates them to reason='error',
+	// and returns the number of rows escalated. Capped to limit rows per call.
+	// Used by the scheduler to recover jobs whose sweeper publish never happened
+	// (e.g. persistent NATS outage). Returns (0, nil) when no rows are stuck.
+	EscalateStuckRetryJobs(ctx context.Context, stuckThreshold time.Duration, limit int) (int64, error)
 	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
 }
 

@@ -208,9 +208,15 @@ func (f *fakeLedgerWriter) UpdateRetryBatchWithPayload(_ context.Context, _ []jo
 func (f *fakeLedgerWriter) FetchDueRetryJobs(_ context.Context, _ int) ([]jobsvc.RetryJobRecord, error) {
 	return nil, nil
 }
+func (f *fakeLedgerWriter) FetchDueRetryJobsWithPayload(_ context.Context, _ int) ([]jobsvc.RetryJobRecord, error) {
+	return nil, nil
+}
 func (f *fakeLedgerWriter) ResetRetryToFetch(_ context.Context, _ string) error    { return nil }
 func (f *fakeLedgerWriter) EscalateRetryToError(_ context.Context, _ string) error { return nil }
-func (f *fakeLedgerWriter) MarkRemovedBatch(_ context.Context, _ []string) error   { return nil }
+func (f *fakeLedgerWriter) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
+	return 0, nil
+}
+func (f *fakeLedgerWriter) MarkRemovedBatch(_ context.Context, _ []string) error { return nil }
 
 // helper — wires the impl service for tests with a memory cache.
 func newSvc(reader *fakeJobReader, state *fakeUserState, app *fakeAppWriter, led *fakeLedgerWriter, c cache.Cache) jobsvc.JobService {
