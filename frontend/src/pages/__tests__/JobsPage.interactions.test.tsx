@@ -27,16 +27,24 @@ vi.mock('sonner', () => {
   toast.dismiss = vi.fn()
   return { toast, Toaster: () => null }
 })
-vi.mock('@/features/auth/store/auth.store', () => ({
-  useAuthStore: vi.fn((sel: (s: unknown) => unknown) =>
-    sel({
-      session: { access_token: 'tok', user: { id: 'u1', email: 'test@test.com' } },
-      identity: { user_id: 'u1', email: 'test@test.com', roles: ['user'] },
-      loading: false,
-      initialized: true,
-      isAdmin: false,
-    })
-  ),
+vi.mock('@clerk/react', () => ({
+  useAuth: () => ({ isSignedIn: true, isLoaded: true }),
+  useUser: () => ({
+    user: {
+      publicMetadata: { role: 'user' },
+      primaryEmailAddress: { emailAddress: 'test@test.com' },
+    },
+    isLoaded: true,
+  }),
+  useClerk: () => ({ signOut: vi.fn().mockResolvedValue(undefined) }),
+}))
+vi.mock('@/features/auth/hooks/useIdentity', () => ({
+  useIdentity: vi.fn(() => ({
+    identity: { user_id: 'u1', email: 'test@test.com', roles: ['user'] },
+    isAdmin: false,
+    isSignedIn: true,
+    isLoaded: true,
+  })),
 }))
 vi.mock('@/lib/hooks/use-media-query', () => ({
   useIsMobile: () => false,

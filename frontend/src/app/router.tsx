@@ -12,7 +12,7 @@ import { ResumeLibraryPage } from '@/pages/admin/ResumeLibraryPage'
 import { ResumeDetailPage } from '@/pages/admin/ResumeDetailPage'
 import { ResumeEditorPage } from '@/pages/admin/ResumeEditorPage'
 import { ApplyQueuePage } from '@/pages/admin/ApplyQueuePage'
-import { LoginPage, AuthCallback, RequireAuth, RequireAdmin } from '@/features/auth'
+import { SignInPage, RequireAuth, RequireAdmin } from '@/features/auth'
 import { MobileJobDetailRoute } from '@/features/jobs'
 import { routes } from '@/config/routes'
 
@@ -48,8 +48,7 @@ function ProtectedLayout() {
 export function AppRouter() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/login" element={<SignInPage />} />
       <Route element={<RequireAuth />}>
         <Route path="/*" element={<ProtectedLayout />} />
       </Route>

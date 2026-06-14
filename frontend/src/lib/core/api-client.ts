@@ -1,44 +1,39 @@
 import { toast } from 'sonner'
-import { supabase } from './supabase'
-import { sessionRef } from './session-ref'
 import { parseApiError } from './api-error'
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 const BASE = '/api'
 
-let pendingRefresh: Promise<boolean> | null = null
+// Clerk is loaded by ClerkProvider and exposes session on window.Clerk.
+// We access it here (non-React context) without importing @clerk/react,
+// which avoids a React hook call outside a component.
+interface ClerkWindow {
+  Clerk?: {
+    session?: { getToken: () => Promise<string | null> }
+    signOut: () => Promise<void>
+  }
+}
 
-async function refreshOnce(): Promise<boolean> {
-  if (pendingRefresh) return pendingRefresh
-  pendingRefresh = (async () => {
-    try {
-      const { data, error } = await supabase.auth.refreshSession()
-      return !error && !!data.session
-    } catch {
-      return false
-    } finally {
-      setTimeout(() => {
-        pendingRefresh = null
-      }, 0)
-    }
-  })()
-  return pendingRefresh
+function getClerkWindow(): ClerkWindow {
+  return window as unknown as ClerkWindow
+}
+
+async function getClerkToken(): Promise<string | null> {
+  return getClerkWindow().Clerk?.session?.getToken() ?? null
 }
 
 function signOutAndRedirect(): void {
-  // Fire-and-forget — don't await signOut so the redirect is never blocked by a slow/hanging network call
-  supabase.auth.signOut({ scope: 'global' }).catch(() => {})
+  getClerkWindow()
+    .Clerk?.signOut()
+    .catch(() => {})
   if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
     window.location.assign('/login')
   }
 }
 
-function authHeader(): Record<string, string> {
-  // Read from sessionRef (written by the auth store's onAuthStateChange) rather than
-  // calling supabase.auth.getSession(), which acquires an internal lock and can hang
-  // indefinitely if autoRefreshToken holds that lock during a background refresh.
-  const token = sessionRef.get()?.access_token
+async function authHeader(): Promise<Record<string, string>> {
+  const token = await getClerkToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
@@ -78,8 +73,10 @@ const REQUEST_TIMEOUT_MS = 15_000
 
 async function rawFetch(method: HttpMethod, path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers)
-  const auth = authHeader()
-  for (const [k, v] of Object.entries(auth)) headers.set(k, v)
+  const auth = await authHeader()
+  for (const [k, v] of Object.entries(auth)) {
+    headers.set(k, v)
+  }
   if (init?.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
@@ -130,20 +127,8 @@ async function request<T>(method: HttpMethod, path: string, init?: RequestInit):
   }
 
   if (res.status === 401) {
-    const refreshed = await refreshOnce()
-    if (!refreshed) {
-      signOutAndRedirect()
-      throw new Error('Unauthorized')
-    }
-    try {
-      res = await rawFetch(method, path, init)
-    } catch (err) {
-      throw err instanceof Error ? err : new Error('Network error')
-    }
-    if (res.status === 401) {
-      signOutAndRedirect()
-      throw new Error('Unauthorized')
-    }
+    signOutAndRedirect()
+    throw new Error('Unauthorized')
   }
 
   if (res.status === 429) {
@@ -190,11 +175,5 @@ export const apiClient = {
       ...init,
       body: body === undefined ? undefined : JSON.stringify(body),
     })
-  },
-}
-
-export const __testing = {
-  resetPendingRefresh: () => {
-    pendingRefresh = null
   },
 }

@@ -1,15 +1,10 @@
+import { useAuth } from '@clerk/react'
 import { Navigate, Outlet } from 'react-router-dom'
-import { useAuthStore } from '../store/auth.store'
 
 export function RequireAuth() {
-  const session = useAuthStore((s) => s.session)
-  const loading = useAuthStore((s) => s.loading)
+  const { isSignedIn, isLoaded } = useAuth()
 
-  if (loading) {
-    return null
-  }
-  if (!session) {
-    return <Navigate to="/login" replace />
-  }
+  if (!isLoaded) return null
+  if (!isSignedIn) return <Navigate to="/login" replace />
   return <Outlet />
 }

@@ -7,7 +7,7 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { cn } from '@/lib/utils/utils'
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 import { Pagination } from '@/components/ui/pagination'
-import { useAuthStore } from '@/features/auth'
+import { useIdentity } from '@/features/auth'
 import {
   fetchAdminUsers,
   setUserRoles,
@@ -217,7 +217,8 @@ function UserRow({
 }
 
 export function AdminUsersPage() {
-  const selfId = useAuthStore((s) => s.identity?.user_id)
+  const { identity } = useIdentity()
+  const selfId = identity?.user_id
   const [emailInput, setEmailInput] = useState('')
   const debouncedEmail = useDebouncedValue(emailInput, 300)
   const [statusFilter, setStatusFilter] = useState<AdminUserFilter['status']>(undefined)

@@ -10,6 +10,5 @@ function required(key: string): string {
 }
 
 export const ENV = {
-  SUPABASE_URL: required('VITE_SUPABASE_URL'),
-  SUPABASE_ANON_KEY: required('VITE_SUPABASE_ANON_KEY'),
+  CLERK_PUBLISHABLE_KEY: required('VITE_CLERK_PUBLISHABLE_KEY'),
 } as const

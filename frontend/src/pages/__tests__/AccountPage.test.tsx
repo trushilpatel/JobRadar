@@ -6,36 +6,31 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 
 vi.mock('@/lib/hooks/useUserConfig')
-vi.mock('@/lib/core/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn(),
-      signOut: vi.fn(),
-      onAuthStateChange: vi.fn(() => ({
-        data: { subscription: { unsubscribe: vi.fn() } },
-      })),
-    },
-  },
+
+const refreshIdentityMock = vi.fn().mockResolvedValue(undefined)
+const signOutMock = vi.fn().mockResolvedValue(undefined)
+
+vi.mock('@clerk/react', () => ({
+  useClerk: () => ({ signOut: signOutMock }),
 }))
-const refreshIdentityMock = vi.fn()
-const signOutMock = vi.fn()
+
 vi.mock('@/features/auth', () => ({
-  useAuthStore: vi.fn((selector: (s: unknown) => unknown) =>
-    selector({
-      identity: {
-        user_id: 'u1',
-        email: 'test@test.com',
-        display_name: 'Test User',
-        status: 'active',
-        roles: [],
-      },
-      refreshIdentity: refreshIdentityMock,
-      signOut: signOutMock,
-    })
-  ),
+  useIdentity: vi.fn(() => ({
+    identity: {
+      user_id: 'u1',
+      email: 'test@test.com',
+      display_name: 'Test User',
+      status: 'active',
+      roles: [],
+    },
+    isAdmin: false,
+    isSignedIn: true,
+    isLoaded: true,
+  })),
   updateMe: vi.fn(),
   deleteMe: vi.fn(),
 }))
+
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import * as useUserConfigModule from '@/lib/hooks/useUserConfig'
@@ -73,6 +68,8 @@ function mockUserConfig(show = false, isPending = false, configLoading = false) 
 describe('AccountPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    refreshIdentityMock.mockResolvedValue(undefined)
+    signOutMock.mockResolvedValue(undefined)
   })
 
   it('renders Show keyboard shortcut hints toggle', () => {
@@ -157,7 +154,6 @@ describe('AccountPage', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(vi.mocked(authModule.updateMe)).toHaveBeenCalledWith('New Name')
-    expect(refreshIdentityMock).toHaveBeenCalled()
     expect(vi.mocked(toast.success)).toHaveBeenCalledWith('Profile updated.')
   })
 

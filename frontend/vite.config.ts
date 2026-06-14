@@ -57,8 +57,7 @@ export default defineConfig(({ mode }) => {
       // CI has no repo-root `.env` (gitignored), and every test mocks the API /
       // auth layer, so the Supabase client built from these is never called.
       env: {
-        VITE_SUPABASE_URL: 'http://localhost:54321',
-        VITE_SUPABASE_ANON_KEY: 'test-anon-key',
+        VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_fake_key_for_testing',
       },
       setupFiles: ['./src/test/setup.ts'],
       globals: true,
@@ -89,7 +88,7 @@ export default defineConfig(({ mode }) => {
           'src/App.tsx',
           'src/app/router.tsx',
           'src/app/providers.tsx',
-          'src/app/auth-bootstrap.tsx',
+          'src/features/auth/components/SignInPage.tsx',
           'src/lib/core/queryClient.ts',
           // resumes feature is mock-data WIP (no real api/ layer) — excluded until wired to the backend
           'src/features/resumes/**',
