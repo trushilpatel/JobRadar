@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
 	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 // newTestAdapter builds a Greenhouse pointed at the given test server URL.

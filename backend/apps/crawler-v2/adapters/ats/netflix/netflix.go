@@ -9,8 +9,8 @@ import (
 	"time"
 
 	nfapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/netflix/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
 	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 const (
@@ -83,7 +83,7 @@ func (n *Netflix) FetchJobListing(ctx context.Context, _ string) (core.JobListin
 
 	log.Info("listing fetched",
 		logger.Int(logger.FieldJobCount, len(allJobs)),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 	return core.JobListing{Jobs: allJobs}, nil
 }
@@ -112,7 +112,7 @@ func (n *Netflix) FetchJobPost(ctx context.Context, summary core.JobSummary) (co
 	}
 
 	post := mapJobPost(pos)
-	log.Info("job post fetched", logger.Dur(logger.FieldDuration, time.Since(start)))
+	log.Info("job post fetched", logger.Dur(logger.FieldDurationMs, time.Since(start)))
 	return post, nil
 }
 

@@ -21,8 +21,8 @@ import (
 	"time"
 
 	deelapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/deel/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
 	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 
 	"encoding/json"
 )
@@ -84,7 +84,7 @@ func (d *Deel) FetchJobListing(ctx context.Context, companyID string) (core.JobL
 
 	log.Info("listing fetched",
 		logger.Int(logger.FieldJobCount, len(jobs)),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 	return core.JobListing{Jobs: jobs}, nil
 }

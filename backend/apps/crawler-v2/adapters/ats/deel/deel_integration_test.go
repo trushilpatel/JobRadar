@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 // klarna maintains a large job board on jobs.deel.com and is a stable
