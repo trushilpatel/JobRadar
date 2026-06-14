@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	rapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/rippling/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 const testATSBase = "https://ats.rippling.com"

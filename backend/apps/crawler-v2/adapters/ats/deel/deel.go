@@ -22,7 +22,7 @@ import (
 
 	deelapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/deel/api"
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 
 	"encoding/json"
 )

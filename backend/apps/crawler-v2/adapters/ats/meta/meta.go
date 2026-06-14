@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // sitemapURL is the public sitemap of every active Meta job posting.

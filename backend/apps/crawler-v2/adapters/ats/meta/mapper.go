@@ -7,7 +7,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats"
 	metaapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/meta/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 const adapterPrefix = "meta"

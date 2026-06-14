@@ -20,7 +20,7 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/workday"
 	crawlerrors "github.com/trushilpatel/jobradar/apps/crawler-v2/common/errors"
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // AdapterBundle groups the interfaces an adapter may implement.

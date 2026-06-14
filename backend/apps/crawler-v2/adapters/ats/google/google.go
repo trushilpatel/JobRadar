@@ -15,7 +15,7 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats"
 	googleapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/google/api"
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // defaultListingURL is the filtered careers search URL. Pagination is achieved

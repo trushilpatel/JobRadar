@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	metaapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/meta/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // ── mapJobSummary ─────────────────────────────────────────────────────────────

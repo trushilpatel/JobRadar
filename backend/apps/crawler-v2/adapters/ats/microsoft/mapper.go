@@ -9,7 +9,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats"
 	msapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/microsoft/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // msReqIDSuffix matches Microsoft internal req-ID suffixes appended to job
