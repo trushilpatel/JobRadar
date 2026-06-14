@@ -1,5 +1,7 @@
 package logger
 
+import "context"
+
 // noopLogger discards all log output. Use in unit tests to suppress noise.
 type noopLogger struct{}
 
@@ -11,3 +13,4 @@ func (noopLogger) Info(msg string, fields ...Field)             {}
 func (noopLogger) Warn(msg string, fields ...Field)             {}
 func (noopLogger) Error(msg string, err error, fields ...Field) {}
 func (n noopLogger) With(fields ...Field) Logger                { return n }
+func (n noopLogger) WithContext(_ context.Context) Logger       { return n }
