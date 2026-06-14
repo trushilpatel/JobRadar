@@ -740,3 +740,98 @@ func assertEqual(t *testing.T, field, got, want string) {
 		t.Errorf("%s: got %q, want %q", field, got, want)
 	}
 }
+
+// ── resolveDomain — non-empty override branch ──────────────────────────────
+
+// TestResolveDomain_OverrideHonoured verifies that a non-empty domain value
+// is returned as-is (not replaced by the default).
+func TestResolveDomain_OverrideHonoured(t *testing.T) {
+	m := &Microsoft{domain: "contoso.com"}
+	if got := m.resolveDomain(); got != "contoso.com" {
+		t.Errorf("resolveDomain: got %q, want %q", got, "contoso.com")
+	}
+}
+
+// ── resolvePageSize — positive override branch ─────────────────────────────
+
+// TestResolvePageSize_OverrideHonoured verifies that a positive pageSize
+// value is returned as-is (not replaced by the default).
+func TestResolvePageSize_OverrideHonoured(t *testing.T) {
+	m := &Microsoft{pageSize: 50}
+	if got := m.resolvePageSize(); got != 50 {
+		t.Errorf("resolvePageSize: got %d, want 50", got)
+	}
+}
+
+// ── FetchJobs — build request fails (bad base URL) ─────────────────────────
+
+// TestFetchJobs_InvalidBaseURL exercises the http.NewRequestWithContext error
+// branch. A URL with an embedded NUL byte is rejected by net/http during
+// request construction, before any network call is made.
+func TestFetchJobs_InvalidBaseURL(t *testing.T) {
+	m := &Microsoft{baseURL: "http://\x00invalid"}
+	_, err := m.FetchJobs(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected error on invalid base URL, got nil")
+	}
+	if !strings.Contains(err.Error(), "build request") {
+		t.Errorf("error should mention 'build request': %v", err)
+	}
+}
+
+// ── FetchJobContent — context cancelled ────────────────────────────────────
+
+// TestFetchJobContent_ContextCancelled exercises the http.Do error branch in
+// FetchJobContent by cancelling the context before the request is dispatched.
+func TestFetchJobContent_ContextCancelled(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	m := &Microsoft{baseURL: srv.URL}
+	job := types.RawJob{
+		URL: fmt.Sprintf("%s/careers/job/1812345678", srv.URL),
+	}
+	_, err := m.FetchJobContent(ctx, job)
+	if err == nil {
+		t.Fatal("expected error when context is cancelled, got nil")
+	}
+}
+
+// TestFetchJobContent_InvalidBaseURL exercises the http.NewRequestWithContext
+// error branch in FetchJobContent via a base URL that fails request construction.
+func TestFetchJobContent_InvalidBaseURL(t *testing.T) {
+	m := &Microsoft{baseURL: "http://\x00invalid"}
+	// URL must yield a valid integer position ID so we reach the request-build step.
+	job := types.RawJob{
+		URL: "https://apply.careers.microsoft.com/careers/job/1812345678",
+	}
+	_, err := m.FetchJobContent(context.Background(), job)
+	if err == nil {
+		t.Fatal("expected error on invalid base URL, got nil")
+	}
+	if !strings.Contains(err.Error(), "build detail request") {
+		t.Errorf("error should mention 'build detail request': %v", err)
+	}
+}
+
+// TestFetchJobContent_ZeroPositionID exercises the positionID == 0 guard in
+// FetchJobContent. A URL whose last path segment is not a numeric ID causes
+// extractPositionID to return 0, which must be rejected immediately.
+func TestFetchJobContent_ZeroPositionID(t *testing.T) {
+	m := &Microsoft{baseURL: "https://apply.careers.microsoft.com"}
+	job := types.RawJob{
+		URL: "https://apply.careers.microsoft.com/careers/job/not-a-number",
+	}
+	_, err := m.FetchJobContent(context.Background(), job)
+	if err == nil {
+		t.Fatal("expected error when position ID cannot be extracted, got nil")
+	}
+	if !strings.Contains(err.Error(), "could not extract position ID") {
+		t.Errorf("error should mention position ID extraction: %v", err)
+	}
+}
