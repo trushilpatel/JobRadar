@@ -82,7 +82,9 @@ All secrets and config values are managed in **Doppler** (project `job-radar`, c
 - **Changing a secret:** update it in the Doppler dashboard or via `doppler secrets set KEY=value --config dev`. The next `doppler run --` picks it up — no file edits, no restarts of other processes.
 - **Local snapshot (rare):** `doppler secrets download --format env-no-quotes --no-file > .env.local` (gitignored) for tools that can't use `doppler run --`.
 - Never create or commit a `.env` file with real values. `.env.example` (committed) is the canonical list of keys — values live in Doppler only.
-- **Frontend proxy target:** `API_PROXY_TARGET` in Doppler controls where the Vite dev server forwards `/api` calls. Default `http://localhost:30080` (local k3d). Change it in Doppler to point at a remote cluster without touching any code.
+- **Frontend proxy target:** `API_PROXY_TARGET` in Doppler controls where the Vite dev server forwards `/api` calls. Dev default: `http://localhost:8080` (local Go API via air). Set to `http://localhost:30080` to target k3d instead.
+- **Vite proxy routing rule:** user API routes (`/api/*`) are forwarded **with** the `/api` prefix intact (Go chi router mounts at `/api/`). Admin routes (`/api/admin/*`) have the prefix stripped (Go registers admin groups at root `/admin/*`). Never add a blanket rewrite that strips `/api` from all paths — it breaks every user-facing endpoint.
+- **Local dev stack:** `make dev` is the single entry point — kills stale port processes, migrates, starts API (air hot-reload on :8080) and Vite HMR (:5173) in parallel. No Docker or k3d needed for UI+API work. See `.claude/skills/run/SKILL.md` for the full runbook.
 
 ## Key rules
 

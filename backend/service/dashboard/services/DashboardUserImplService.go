@@ -163,7 +163,8 @@ func (s *userDashboardImplService) GetTechTrends(ctx context.Context) (_ *dto.Te
 		totalJobs = rows[0].TotalJobs
 	}
 
-	var rising, newEntrants []dto.TechTrendRow
+	rising := make([]dto.TechTrendRow, 0)
+	newEntrants := make([]dto.TechTrendRow, 0)
 
 	for _, r := range rows {
 		if totalJobs == 0 {

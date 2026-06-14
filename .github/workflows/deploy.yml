@@ -270,12 +270,12 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.OCI_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "${{ secrets.OCI_NODE1_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "${{ secrets.OCI_INFRA_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Resolve image tags for Node 1
         id: tags
         env:
-          HOST: ${{ secrets.OCI_NODE1_HOST }}
+          HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
         run: |
           SHORT_SHA="${GITHUB_SHA:0:7}"
@@ -301,7 +301,7 @@ jobs:
 
       - name: Copy chart and values to Node 1
         env:
-          HOST: ${{ secrets.OCI_NODE1_HOST }}
+          HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
         run: |
           scp -i ~/.ssh/id_ed25519 -r k8s/helm/jobradar "$USER@$HOST:/tmp/jobradar-chart"
@@ -309,7 +309,7 @@ jobs:
 
       - name: Helm upgrade Node 1
         env:
-          HOST: ${{ secrets.OCI_NODE1_HOST }}
+          HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
         run: |
           ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
@@ -344,12 +344,12 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.OCI_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "${{ secrets.OCI_NODE2_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "${{ secrets.OCI_APP_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Resolve image tags for Node 2
         id: tags
         env:
-          HOST: ${{ secrets.OCI_NODE2_HOST }}
+          HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
         run: |
           SHORT_SHA="${GITHUB_SHA:0:7}"
@@ -373,7 +373,7 @@ jobs:
 
       - name: Copy chart and values to Node 2
         env:
-          HOST: ${{ secrets.OCI_NODE2_HOST }}
+          HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
         run: |
           scp -i ~/.ssh/id_ed25519 -r k8s/helm/jobradar "$USER@$HOST:/tmp/jobradar-chart"
@@ -381,7 +381,7 @@ jobs:
 
       - name: Helm upgrade Node 2
         env:
-          HOST: ${{ secrets.OCI_NODE2_HOST }}
+          HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
         run: |
           ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
