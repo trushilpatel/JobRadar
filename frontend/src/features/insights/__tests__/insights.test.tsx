@@ -101,7 +101,11 @@ describe('CompanyVelocityPanel', () => {
   it('shows InsightEmpty when data is an empty array', async () => {
     vi.mocked(insightsApi.fetchVelocity).mockResolvedValue([])
     render(<CompanyVelocityPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByText('Requires 2+ weeks of scan history to compute velocity')
+      ).toBeInTheDocument()
+    )
   })
 
   it('shows error state when response is null', async () => {
@@ -228,7 +232,11 @@ describe('SponsorshipTrendPanel', () => {
   it('shows InsightEmpty when data is an empty array', async () => {
     vi.mocked(insightsApi.fetchSponsorshipTrend).mockResolvedValue([])
     render(<SponsorshipTrendPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('Not enough data yet')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByText('Requires enriched jobs with sponsorship data (last 30 days)')
+      ).toBeInTheDocument()
+    )
   })
 
   it('shows error state when response is null', async () => {

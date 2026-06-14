@@ -113,6 +113,13 @@ function RetryBreakdown({ label, worker, counts }: RetryBreakdownProps) {
   )
 }
 
+function backlogVariant(count: number): MetricCardProps['variant'] {
+  if (count === 0) return 'neutral'
+  if (count < 50) return 'violet'
+  if (count < 200) return 'amber'
+  return 'red'
+}
+
 // ── Pipeline health panel ─────────────────────────────────────────────────────
 
 function PipelineHealthSkeleton() {
@@ -205,8 +212,16 @@ function PipelineHealthPanel() {
         <MetricCard label="Active companies" value={data.active_companies} variant="green" />
         <MetricCard label="Queued" value={data.queued} variant="amber" />
         <MetricCard label="Crawling" value={data.crawling} variant="blue" />
-        <MetricCard label="Awaiting filter" value={data.awaiting_filter} variant="violet" />
-        <MetricCard label="Awaiting enrichment" value={data.awaiting_enrichment} variant="violet" />
+        <MetricCard
+          label="Awaiting filter"
+          value={data.awaiting_filter}
+          variant={backlogVariant(data.awaiting_filter)}
+        />
+        <MetricCard
+          label="Awaiting enrichment"
+          value={data.awaiting_enrichment}
+          variant={backlogVariant(data.awaiting_enrichment)}
+        />
       </div>
 
       {/* Output metrics */}

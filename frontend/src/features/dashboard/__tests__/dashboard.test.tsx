@@ -302,7 +302,11 @@ describe('VelocityPanel', () => {
   it('shows empty state when data is an empty array', async () => {
     vi.mocked(dashboardApi.fetchVelocity).mockResolvedValue([])
     render(<VelocityPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('No velocity data yet')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByText('No velocity data yet — requires 2+ weeks of scan history to compute')
+      ).toBeInTheDocument()
+    )
   })
 
   it('renders normal velocity tag as dash', async () => {
