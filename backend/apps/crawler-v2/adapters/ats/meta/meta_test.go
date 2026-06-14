@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // newTestAdapter constructs a Meta adapter pointed at the given base URL.

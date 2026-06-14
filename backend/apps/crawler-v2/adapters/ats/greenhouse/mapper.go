@@ -5,7 +5,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats"
 	ghapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/greenhouse/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 func mapJobListing(g ghapi.JobListing) core.JobListing {

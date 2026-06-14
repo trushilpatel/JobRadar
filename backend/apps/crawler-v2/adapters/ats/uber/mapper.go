@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	uberapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/uber/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // mapJobSummary converts a single UberJob (from the search-results API) into

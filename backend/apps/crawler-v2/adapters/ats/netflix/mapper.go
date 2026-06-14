@@ -7,7 +7,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats"
 	nfapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/netflix/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // mapJobSummary converts a Position from the listing response to a core.JobSummary.

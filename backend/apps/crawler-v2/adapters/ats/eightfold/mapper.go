@@ -7,7 +7,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats"
 	efapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/eightfold/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // mapJobSummary converts a Position from the listing response to a core.JobSummary.

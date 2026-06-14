@@ -5,7 +5,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats"
 	gemapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/gem/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 func mapJobListing(posts []gemapi.JobPost) core.JobListing {
