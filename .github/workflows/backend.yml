@@ -1,17 +1,6 @@
 name: Backend
 
 on:
-  # Run on merges to the default branch so Codecov gets a baseline coverage
-  # report and test-results upload tagged to `main` — required for the Test
-  # Analytics dashboard and for PR `target: auto` comparisons to have a base.
-  push:
-    branches: [main]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/backend.yml'
-      - '.github/workflows/backend-lint.yml'
-      - '.github/workflows/backend-test.yml'
-      - '.github/.golangci.yml'
   pull_request:
     branches: [main]
     paths:
@@ -26,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Detect which services changed ────────────────────────────────────────────
+  # ── Detect which services changed ──────────────────────────────────────────
   # Changing platform/common/go.mod triggers all test jobs — shared deps can
   # break any service.
   changes:
@@ -80,21 +69,50 @@ jobs:
               - 'backend/go.mod'
               - 'backend/go.sum'
 
-  # ── Lint (always runs — only lints changed files via --new-from-rev) ─────────
+  # ── Compile check ───────────────────────────────────────────────────────────
+  # Fast native build of every binary — catches broken imports and missing
+  # symbols before merge, without the overhead of tests or Docker.  Runs on
+  # every backend PR regardless of which files changed.
+  compile:
+    name: compile check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Build all binaries
+        working-directory: backend
+        run: |
+          go build ./apps/api/...
+          go build ./apps/migrate/...
+          go build ./apps/scheduler/...
+          go build ./apps/filter/...
+          go build ./apps/analyzer/...
+          go build ./apps/crawler/...
+          go build ./apps/orchestrator/...
+          go build ./apps/crawler-node/...
+
+  # ── Lint (always runs — only lints changed files via --new-from-rev) ────────
   lint:
     name: lint
     uses: ./.github/workflows/backend-lint.yml
     secrets: inherit
 
-  # ── PR test jobs ─────────────────────────────────────────────────────────────
-  # Parallel + change-detected for fast, granular signal. These DO NOT upload to
-  # Codecov — the coverage gate is enforced locally by check-coverage.sh. Keeping
-  # uploads off PRs is what fits the private-repo Codecov budget at high merge
-  # volume; the main-branch `coverage` job below is the single upload point.
+  # ── Per-service test jobs ───────────────────────────────────────────────────
+  # Parallel + change-detected for fast, granular signal.  No Codecov upload —
+  # the coverage gate is enforced locally by check-coverage.sh.  The full
+  # consolidated upload happens in deploy.yml on merge to main.
   test-crawler:
     name: test / crawler
     needs: changes
-    if: github.event_name == 'pull_request' && (needs.changes.outputs.crawler == 'true' || needs.changes.outputs.platform == 'true')
+    if: needs.changes.outputs.crawler == 'true' || needs.changes.outputs.platform == 'true'
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./apps/crawler/...
@@ -105,7 +123,7 @@ jobs:
   test-crawler-v2:
     name: test / crawler-v2
     needs: changes
-    if: github.event_name == 'pull_request' && (needs.changes.outputs.crawler-v2 == 'true' || needs.changes.outputs.platform == 'true')
+    if: needs.changes.outputs['crawler-v2'] == 'true' || needs.changes.outputs.platform == 'true'
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./apps/crawler-v2/...
@@ -116,7 +134,7 @@ jobs:
   test-api-server:
     name: test / api-server
     needs: changes
-    if: github.event_name == 'pull_request' && (needs.changes.outputs.api-server == 'true' || needs.changes.outputs.platform == 'true')
+    if: needs.changes.outputs.api-server == 'true' || needs.changes.outputs.platform == 'true'
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./apps/api/...
@@ -127,7 +145,7 @@ jobs:
   test-workers:
     name: test / workers
     needs: changes
-    if: github.event_name == 'pull_request' && (needs.changes.outputs.workers == 'true' || needs.changes.outputs.platform == 'true')
+    if: needs.changes.outputs.workers == 'true' || needs.changes.outputs.platform == 'true'
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./apps/scheduler/... ./apps/filter/... ./apps/analyzer/...
@@ -138,7 +156,7 @@ jobs:
   test-service-core:
     name: test / service-core
     needs: changes
-    if: github.event_name == 'pull_request' && (needs.changes.outputs.service-core == 'true' || needs.changes.outputs.platform == 'true')
+    if: needs.changes.outputs.service-core == 'true' || needs.changes.outputs.platform == 'true'
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./service/job/... ./service/scan/...
@@ -149,7 +167,7 @@ jobs:
   test-service-users:
     name: test / service-users
     needs: changes
-    if: github.event_name == 'pull_request' && (needs.changes.outputs.service-users == 'true' || needs.changes.outputs.platform == 'true')
+    if: needs.changes.outputs.service-users == 'true' || needs.changes.outputs.platform == 'true'
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./service/user/... ./service/company/... ./service/application/... ./service/role/...
@@ -160,7 +178,7 @@ jobs:
   test-service-support:
     name: test / service-support
     needs: changes
-    if: github.event_name == 'pull_request' && (needs.changes.outputs.service-support == 'true' || needs.changes.outputs.platform == 'true')
+    if: needs.changes.outputs.service-support == 'true' || needs.changes.outputs.platform == 'true'
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./service/llm/... ./service/dashboard/... ./service/insights/... ./service/audit/...
@@ -171,28 +189,10 @@ jobs:
   test-platform:
     name: test / platform
     needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.platform == 'true'
+    if: needs.changes.outputs.platform == 'true'
     uses: ./.github/workflows/backend-test.yml
     with:
       packages: ./platform/... ./common/...
       flags: platform
       artifact-name: coverage-platform
-    secrets: inherit
-
-  # ── Main-branch coverage upload ──────────────────────────────────────────────
-  # One consolidated run over ALL backend packages on push to main. Single
-  # Codecov upload under the `backend` flag (+ one test_results upload) — the
-  # per-service dashboard breakdown comes from path-based component_management in
-  # codecov.yml, not from per-service flags. This is the ONLY backend Codecov
-  # upload, which caps backend at 2 uploads/merge regardless of how many services
-  # changed (no 7× platform fan-out).
-  coverage:
-    name: coverage / backend
-    if: github.event_name == 'push'
-    uses: ./.github/workflows/backend-test.yml
-    with:
-      packages: ./apps/... ./service/... ./platform/... ./common/...
-      flags: backend
-      artifact-name: coverage-backend
-      upload: true
     secrets: inherit
