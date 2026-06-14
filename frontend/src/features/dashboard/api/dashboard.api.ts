@@ -79,8 +79,14 @@ const TechTrendRowSchema = z.object({
 const TechTrendsSchema = z
   .object({
     total_jobs: z.number().optional().default(0),
-    rising: z.array(TechTrendRowSchema).optional().default([]),
-    new_entrants: z.array(TechTrendRowSchema).optional().default([]),
+    rising: z
+      .array(TechTrendRowSchema)
+      .nullish()
+      .transform((v) => v ?? []),
+    new_entrants: z
+      .array(TechTrendRowSchema)
+      .nullish()
+      .transform((v) => v ?? []),
   })
   .nullable()
 

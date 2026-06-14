@@ -1,11 +1,11 @@
 GIT_SHA ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 export GIT_SHA
 
-.PHONY: dev dev-console dev-backend \
+.PHONY: dev dev-console dev-backend dev-stop dev-check dev-open \
         build build-console build-backend clean-console \
         run-crawler run-filter run-enricher run-scheduler \
         migrate scan-google db-truncate lint lint-go tsc \
-        test test-short test-adapters \
+        test test-short test-adapters test-watch test-watch-backend \
         fmt \
         k8s-build k8s-build-backend k8s-build-crawler k8s-build-orchestrator k8s-build-crawler-node k8s-build-console \
         k8s-up k8s-down k8s-migrate k8s-status k8s-forward k8s-unforward \
@@ -17,19 +17,31 @@ export GIT_SHA
         help
 
 # ── Dev (host) ────────────────────────────────────────────────────────────────
-# Runs the API + console on host against Supabase/Upstash (no local NATS needed).
-# Secrets are injected by Doppler (doppler.yaml binds this repo to job-radar/dev).
-# For full pipeline workers use make k8s-up instead.
+# Local dev: API on :8080 (air hot-reload) + Vite HMR on :5173.
+# Secrets come from Doppler dev — no .env files, no Docker, no k3d needed.
+# API_PROXY_TARGET=http://localhost:8080 is set in Doppler dev config.
+# For full pipeline workers (crawler/filter/enricher) use make k8s-up instead.
 
-dev: ## Migrate then start console + API on host
+dev: dev-stop ## Migrate + start API (air hot-reload on :8080) + Vite HMR (:5173)
 	doppler run -- sh -c 'cd backend && go run ./apps/migrate'
 	$(MAKE) -j2 dev-console dev-backend
 
-dev-console: ## Start Vite dev server (frontend) — proxies /api to API_PROXY_TARGET
+dev-console: ## Start Vite dev server on :5173 (HMR, proxies /api → :8080)
 	cd frontend && doppler run -- npm run dev
 
-dev-backend: ## Start API server (hot-reload via go run)
-	cd backend && doppler run -- go run ./apps/api
+dev-backend: ## Start API on :8080 with air hot-reload (recompiles on .go save)
+	cd backend && doppler run -- air
+
+dev-stop: ## Kill local dev processes (API :8080 + Vite :5173)
+	@-lsof -ti:8080 | xargs kill 2>/dev/null && echo "  killed API  (:8080)" || true
+	@-lsof -ti:5173 | xargs kill 2>/dev/null && echo "  killed Vite (:5173)" || true
+
+dev-check: ## Check whether local dev services are up
+	@printf "  API  :8080  "; curl -sf http://localhost:9100/health > /dev/null && echo "UP" || echo "DOWN (make dev-backend)"
+	@printf "  Vite :5173  "; curl -sf http://localhost:5173/  > /dev/null && echo "UP" || echo "DOWN (make dev-console)"
+
+dev-open: ## Open app in browser at localhost:5173
+	open http://localhost:5173/
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 
@@ -96,6 +108,13 @@ test-short: ## Run unit tests only — no real HTTP calls, fast
 
 test-adapters: ## Run all adapter integration tests (Greenhouse + Lever + Ashby hit real APIs)
 	cd backend && go test -v -run "Integration" ./apps/crawler/ats/greenhouse/... ./apps/crawler/ats/lever/... ./apps/crawler/ats/ashby/...
+
+test-watch: ## Run frontend tests in watch mode (vitest)
+	cd frontend && npx vitest --watch
+
+test-watch-backend: ## Re-run backend tests on every .go save (requires entr: brew install entr)
+	@command -v entr >/dev/null 2>&1 || { echo "install entr: brew install entr"; exit 1; }
+	find backend -name '*.go' | entr -c sh -c 'cd backend && go test -short -count=1 ./...'
 
 # ── Kubernetes (local k3d) ────────────────────────────────────────────────────
 
