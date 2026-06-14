@@ -11,6 +11,7 @@
     "scaffold": "plop",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:changed": "vitest run --changed origin/main",
     "test:watch": "vitest"
   },
   "dependencies": {

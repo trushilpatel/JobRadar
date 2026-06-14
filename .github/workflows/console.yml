@@ -1,9 +1,6 @@
 name: Console
 
 on:
-  # Run on merges to the default branch so Codecov gets a baseline coverage
-  # report and test-results upload tagged to `main` — required for the Test
-  # Analytics dashboard and for PR `target: auto` comparisons to have a base.
   push:
     branches: [main]
     paths:
@@ -22,56 +19,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: console / lint
+  check:
+    name: console / check
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          # Full history required so vitest --changed origin/main can compute the
+          # merge base between the PR branch and main.
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup-frontend
 
-      - name: Run ESLint
+      - name: Lint
         run: npm run lint
         working-directory: frontend
-
-  typecheck:
-    name: console / typecheck
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - uses: ./.github/actions/setup-frontend
 
       - name: TypeScript check
         run: npx tsc --noEmit
         working-directory: frontend
 
-  test:
-    name: console / test
-    runs-on: ubuntu-latest
+      # PRs: vitest walks the module import graph from every file changed vs
+      # origin/main and runs only the transitively-affected test files.
+      # No coverage flag — the full-coverage gate runs on main push only.
+      - name: Run affected tests
+        if: github.event_name == 'pull_request'
+        run: npm run test:changed
+        working-directory: frontend
 
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - uses: ./.github/actions/setup-frontend
-
-      - name: Run tests with coverage
+      # Main branch: full suite + coverage for the Codecov baseline.
+      - name: Run full tests with coverage
+        if: github.event_name == 'push'
         run: npm run test:coverage
         working-directory: frontend
 
-      # Codecov uploads happen ONLY on push to main. PRs are gated locally by the
-      # vitest statement threshold (see vite.config.ts) — no upload needed — which
-      # keeps the monthly Codecov upload count within the private-repo budget at
-      # high merge volume. New-line coverage feedback on PRs comes from the
-      # zero-upload diff-cover comment instead.
       - name: Verify Codecov token is configured
         if: always() && github.event_name == 'push'
         env:
