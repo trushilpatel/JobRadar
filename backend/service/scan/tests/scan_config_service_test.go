@@ -436,6 +436,9 @@ func (m *mockScanService) UpdateScanIntervalOverride(_ context.Context, _ string
 	return m.err
 }
 func (m *mockScanService) RetryDueJobs(_ context.Context) error { return m.err }
+func (m *mockScanService) EscalateStuckRetryJobs(_ context.Context) (int64, error) {
+	return 0, m.err
+}
 
 var _ svc.Service = (*mockScanService)(nil)
 

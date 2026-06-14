@@ -80,7 +80,9 @@ func (s *rateLimitService) EnrichBatch(ctx context.Context, inputs []dto.JobPost
 // reserve asks the store for quota and returns a single error. Local-quota
 // denials are translated to errors wrapping llmerr.ErrLLMLocalQuotaExceeded so
 // callers (e.g. the router) can discriminate via errors.Is. Transport/infra
-// failures are returned wrapped with context but without that sentinel.
+// failures from the store are also mapped to ErrLLMLocalQuotaExceeded (RC-6):
+// this lets the router skip to the next slot rather than propagating an infra
+// error that would abort all LLM calls during a Redis outage.
 func (s *rateLimitService) reserve(ctx context.Context, reqID string, tokens int) error {
 	r, err := s.store.Reserve(ctx, store.ReserveReq{
 		SlotID: s.slot.SlotID,
@@ -91,7 +93,17 @@ func (s *rateLimitService) reserve(ctx context.Context, reqID string, tokens int
 		Tokens: tokens,
 	})
 	if err != nil {
-		return fmt.Errorf("ratelimit reserve slot=%s: %w", s.slot.SlotID, err)
+		// Treat Redis / infra errors as a local-quota denial so the router
+		// continues to the next slot. A Redis outage must not silence all LLM
+		// calls; the router will try remaining slots and surface
+		// LLMAllExhaustedError only when every slot is unavailable.
+		if s.log != nil {
+			s.log.Warn("ratelimit reserve store error, treating as local quota denial",
+				logger.Str("slot", s.slot.SlotID),
+				logger.Err(err),
+			)
+		}
+		return fmt.Errorf("redis unavailable for slot %s: %w", s.slot.SlotID, llmerr.ErrLLMLocalQuotaExceeded)
 	}
 
 	switch r {

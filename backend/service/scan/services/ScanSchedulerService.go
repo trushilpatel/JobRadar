@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
@@ -14,11 +15,27 @@ import (
 	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 )
 
+// stuckRetryThreshold is how far past next_attempt_at a row must be before
+// EscalateStuckRetryJobs promotes it to reason='error'. 4 hours is chosen to
+// match the minimum next_attempt_at floor set by the filter (AC-5) — any row
+// still at reason='retry' after 4h has clearly not been re-published.
+const stuckRetryThreshold = 4 * time.Hour
+
+// stuckRetryLimit caps the number of rows escalated per scheduler tick to
+// bound the DB work per cycle and prevent thundering-herd escalations after
+// a prolonged outage.
+const stuckRetryLimit = 100
+
 // SweeperPublisher is the narrow NATS publishing contract the sweeper needs.
 // Allows the scheduler service to publish without importing the full jetstream
 // package at the call site.
+//
+// PublishWithHeaders is used by the sweeper to stamp X-Retry-Count on
+// re-injected messages so the filter can read the monotonic count instead of
+// resetting to DeliveryCount-1 on each sweeper cycle (AC-1).
 type SweeperPublisher interface {
 	Publish(ctx context.Context, subject string, payload []byte) error
+	PublishWithHeaders(ctx context.Context, subject string, payload []byte, headers map[string]string) error
 }
 
 // schedulerService implements SchedulerService for the scheduler worker.
@@ -115,7 +132,9 @@ func (s *schedulerService) RetryDueJobs(ctx context.Context) (err error) {
 	// sweeperBatchLimit caps rows per tick to prevent post-outage storms
 	// when many retries become due simultaneously.
 	const sweeperBatchLimit = 50
-	jobs, ferr := s.ledger.FetchDueRetryJobs(ctx, sweeperBatchLimit)
+	// AC-3: use the payload-filtered variant so the sweeper never tries to
+	// publish rows that lack a stored payload or adapter.
+	jobs, ferr := s.ledger.FetchDueRetryJobsWithPayload(ctx, sweeperBatchLimit)
 	if ferr != nil {
 		return fmt.Errorf("RetryDueJobs: fetch: %w", ferr)
 	}
@@ -142,19 +161,18 @@ func (s *schedulerService) RetryDueJobs(ctx context.Context) (err error) {
 			continue
 		}
 
-		// Reset the ledger row to reason='fetch' BEFORE publishing (ordering invariant).
-		if rerr := s.ledger.ResetRetryToFetch(ctx, job.JobID); rerr != nil {
-			metrics.SweeperRetriesFailedTotal.Inc()
-			s.log.Error("sweeper: reset retry to fetch failed", rerr,
-				logger.Str(logger.FieldJobID, job.JobID),
-			)
-			continue
-		}
-
+		// AC-1: stamp X-Retry-Count = (job.RetryCount + 1) so the filter reads
+		// the monotonic count across sweeper cycles rather than resetting to
+		// DeliveryCount-1. The ledger row stays at reason='retry' while in-flight
+		// (no ResetRetryToFetch) — the filter transitions it once it processes
+		// the message. This closes the race where a filter crash between Reset
+		// and Publish left the row at reason='fetch' forever.
+		nextRetry := job.RetryCount + 1
 		subject := fmt.Sprintf(js.SubjectJobsRawFmt, job.Adapter)
-		if perr := s.publisher.Publish(ctx, subject, job.Payload); perr != nil {
-			// Publish failed: re-set the row to reason='retry' with a short delay
-			// so the next sweeper tick can retry the publish.
+		headers := map[string]string{js.HeaderRetryCount: strconv.Itoa(nextRetry)}
+		if perr := s.publisher.PublishWithHeaders(ctx, subject, job.Payload, headers); perr != nil {
+			// Publish failed: re-queue with a short delay so the next sweeper
+			// tick can retry. Row stays at reason='retry' — no state transition.
 			metrics.SweeperRetriesFailedTotal.Inc()
 			s.log.Error("sweeper: publish failed; re-queuing retry", perr,
 				logger.Str(logger.FieldJobID, job.JobID),
@@ -180,8 +198,36 @@ func (s *schedulerService) RetryDueJobs(ctx context.Context) (err error) {
 		s.log.Info("sweeper: retry re-published",
 			logger.Str(logger.FieldJobID, job.JobID),
 			logger.Str(logger.FieldAdapter, job.Adapter),
-			logger.Int(logger.FieldRetryCount, job.RetryCount),
+			logger.Int(logger.FieldRetryCount, nextRetry),
 		)
 	}
 	return nil
+}
+
+// EscalateStuckRetryJobs promotes reason='retry' ledger rows whose
+// next_attempt_at is more than stuckRetryThreshold (4h) overdue to
+// reason='error'. This is a safety net for persistent NATS outages where the
+// sweeper cannot re-publish — jobs eventually surface as errors so they can be
+// inspected rather than silently remaining at reason='retry' forever.
+//
+// Returns (0, nil) when no ledger was configured (no-op) or no stuck rows exist.
+func (s *schedulerService) EscalateStuckRetryJobs(ctx context.Context) (_ int64, err error) {
+	if s.ledger == nil {
+		return 0, nil
+	}
+
+	ctx, span := tracing.Start(ctx, "scan.service.EscalateStuckRetryJobs")
+	defer tracing.End(span, &err)
+
+	n, serr := s.ledger.EscalateStuckRetryJobs(ctx, stuckRetryThreshold, stuckRetryLimit)
+	if serr != nil {
+		return 0, fmt.Errorf("EscalateStuckRetryJobs: %w", serr)
+	}
+	if n > 0 {
+		metrics.SweeperStuckEscalatedTotal.Add(float64(n))
+		s.log.Info("sweeper: stuck retry jobs escalated to error",
+			logger.Int(logger.FieldCount, int(n)),
+		)
+	}
+	return n, nil
 }

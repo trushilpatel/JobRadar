@@ -183,6 +183,12 @@ func (f *fakePublisher) PublishWithMsgID(_ context.Context, subject string, payl
 	return f.doPublish(subject, payload)
 }
 
+func (f *fakePublisher) PublishWithHeaders(_ context.Context, subject string, payload []byte, _ map[string]string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.doPublish(subject, payload)
+}
+
 var _ js.Publisher = (*fakePublisher)(nil)
 
 func newTestEngine(settings *fakeSettingsReader, ledger *fakeLedger, rec *fakeRecorder, pub *fakePublisher) *Engine {

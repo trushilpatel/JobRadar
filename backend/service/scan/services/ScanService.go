@@ -31,6 +31,10 @@ type SchedulerService interface {
 	// is due, then re-publishes them to jobs.raw.{adapter} or escalates to
 	// reason='error' when the retry budget is exhausted.
 	RetryDueJobs(ctx context.Context) error
+	// EscalateStuckRetryJobs finds reason='retry' rows that have not been
+	// re-published within 4 hours of their next_attempt_at and sets them to
+	// reason='error'. Returns the number of rows escalated.
+	EscalateStuckRetryJobs(ctx context.Context) (int64, error)
 }
 
 // Service defines all business operations for the scan domain.
@@ -45,6 +49,9 @@ type Service interface {
 	PurgeInactive(ctx context.Context) (int, error)
 	// RetryDueJobs re-publishes due retry-ledger jobs or escalates them.
 	RetryDueJobs(ctx context.Context) error
+	// EscalateStuckRetryJobs promotes reason='retry' rows that are stuck past
+	// the 4-hour threshold to reason='error'.
+	EscalateStuckRetryJobs(ctx context.Context) (int64, error)
 	TriggerScan(ctx context.Context, companyID string) error
 	TriggerScanAll(ctx context.Context) (int, error)
 	GetStats(ctx context.Context, companyID string) (*dto.ScanStatsView, error)
@@ -88,6 +95,10 @@ func (b *BaseService) PurgeInactive(ctx context.Context) (int, error) {
 
 func (b *BaseService) RetryDueJobs(ctx context.Context) error {
 	return b.next.RetryDueJobs(ctx)
+}
+
+func (b *BaseService) EscalateStuckRetryJobs(ctx context.Context) (int64, error) {
+	return b.next.EscalateStuckRetryJobs(ctx)
 }
 
 func (b *BaseService) TriggerScan(ctx context.Context, companyID string) error {

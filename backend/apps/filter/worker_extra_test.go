@@ -228,7 +228,11 @@ func TestProcessChunk_PassThroughMixed(t *testing.T) {
 // routes through the exhaustion path: Term (not Nak) and payload-bearing ledger
 // entry written via UpdateRetryBatchWithPayload (not UpdateRetryBatch).
 func TestProcessChunk_LLMExhaustedLogsAndRetries(t *testing.T) {
-	retryAfter := time.Date(2026, 4, 22, 13, 0, 0, 0, time.UTC)
+	// Use a retryAfter that is > 4h from now so AC-5's 4h floor doesn't alter it.
+	// This test focuses on the routing path (Term + UpdateRetryBatchWithPayload),
+	// not on the floor logic (which is tested in TestRouteFailedChunk_LLMExhausted_*).
+	now := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
+	retryAfter := now.Add(6 * time.Hour)
 	cd := time.Date(2026, 4, 22, 12, 30, 0, 0, time.UTC)
 	scoreErr := &domainerr.LLMAllExhaustedError{
 		RetryAfter: retryAfter,
@@ -239,8 +243,6 @@ func TestProcessChunk_LLMExhaustedLogsAndRetries(t *testing.T) {
 	scorer := &fakeScorer{err: scoreErr}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
-
-	now := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 	w := makeWorker(scorer, ledger, pub)
 	w.clock = &fakeClock{now: now}
 
@@ -270,8 +272,9 @@ func TestProcessChunk_LLMExhaustedLogsAndRetries(t *testing.T) {
 	}
 }
 
-// TestProcessChunk_LLMExhaustedZeroRetryAfter verifies zero RetryAfter falls
-// back to filterBackOff[0] and still uses Term + UpdateRetryBatchWithPayload.
+// TestProcessChunk_LLMExhaustedZeroRetryAfter verifies zero RetryAfter is
+// floored to filterRPDExhaustionRetryAfter (4h) and still uses Term +
+// UpdateRetryBatchWithPayload. (AC-5)
 func TestProcessChunk_LLMExhaustedZeroRetryAfter(t *testing.T) {
 	// Zero RetryAfter time skips the retry_after log fields but path still works.
 	scoreErr := &domainerr.LLMAllExhaustedError{}
@@ -299,10 +302,10 @@ func TestProcessChunk_LLMExhaustedZeroRetryAfter(t *testing.T) {
 		t.Errorf("UpdateRetryBatch must not be called on exhaustion path")
 	}
 	if len(ledger.retryBatchesWithPayload) == 1 {
-		want := now.Add(filterBackOff[0])
+		want := now.Add(filterRPDExhaustionRetryAfter) // 4h floor (AC-5)
 		e := ledger.retryBatchesWithPayload[0][0]
 		if !e.NextAttemptAt.Equal(want) {
-			t.Errorf("next_attempt_at = %v, want filterBackOff[0]=%v", e.NextAttemptAt, want)
+			t.Errorf("next_attempt_at = %v, want 4h floor=%v (AC-5)", e.NextAttemptAt, want)
 		}
 	}
 }
@@ -325,6 +328,10 @@ func (f *failingPublisher) Publish(_ context.Context, subject string, value []by
 }
 
 func (f *failingPublisher) PublishWithMsgID(_ context.Context, subject string, value []byte, _ string) error {
+	return f.Publish(context.Background(), subject, value)
+}
+
+func (f *failingPublisher) PublishWithHeaders(_ context.Context, subject string, value []byte, _ map[string]string) error {
 	return f.Publish(context.Background(), subject, value)
 }
 

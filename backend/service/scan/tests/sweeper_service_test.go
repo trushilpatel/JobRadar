@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
@@ -59,6 +60,9 @@ func (f *fakeSweeperLedger) UpdateRetryBatchWithPayload(_ context.Context, entri
 func (f *fakeSweeperLedger) FetchDueRetryJobs(_ context.Context, _ int) ([]jobsvc.RetryJobRecord, error) {
 	return f.dueJobs, f.fetchErr
 }
+func (f *fakeSweeperLedger) FetchDueRetryJobsWithPayload(_ context.Context, _ int) ([]jobsvc.RetryJobRecord, error) {
+	return f.dueJobs, f.fetchErr
+}
 func (f *fakeSweeperLedger) ResetRetryToFetch(_ context.Context, jobID string) error {
 	f.resetCalls = append(f.resetCalls, jobID)
 	return f.resetErr
@@ -70,6 +74,9 @@ func (f *fakeSweeperLedger) EscalateRetryToError(_ context.Context, jobID string
 func (f *fakeSweeperLedger) MarkRemovedBatch(_ context.Context, _ []string) error { return nil }
 func (f *fakeSweeperLedger) GetActiveJobIDsByCompany(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
+}
+func (f *fakeSweeperLedger) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
+	return 0, nil
 }
 
 var _ jobsvc.SeenLedgerStore = (*fakeSweeperLedger)(nil)
@@ -88,6 +95,12 @@ type sweeperPublishCall struct {
 }
 
 func (p *fakeSweeperPublisher) Publish(_ context.Context, subject string, payload []byte) error {
+	p.callCount.Add(1)
+	p.calls = append(p.calls, sweeperPublishCall{subject: subject, payload: payload})
+	return p.publishErr
+}
+
+func (p *fakeSweeperPublisher) PublishWithHeaders(_ context.Context, subject string, payload []byte, _ map[string]string) error {
 	p.callCount.Add(1)
 	p.calls = append(p.calls, sweeperPublishCall{subject: subject, payload: payload})
 	return p.publishErr
@@ -218,9 +231,9 @@ func TestRetryDueJobs_FetchError_ReturnsWrappedError(t *testing.T) {
 	}
 }
 
-// TestRetryDueJobs_UnderBudget_ResetsAndPublishes asserts that a job with
-// retryCount < maxRetries gets ResetRetryToFetch → Publish in that order.
-func TestRetryDueJobs_UnderBudget_ResetsAndPublishes(t *testing.T) {
+// TestRetryDueJobs_UnderBudget_Publishes asserts that a job with
+// retryCount < maxRetries is published via PublishWithHeaders (AC-1: no reset step).
+func TestRetryDueJobs_UnderBudget_Publishes(t *testing.T) {
 	job := sweeperRetryRecord("job-1", "greenhouse", 0)
 	ledger := &fakeSweeperLedger{dueJobs: []jobsvc.RetryJobRecord{job}}
 	pub := &fakeSweeperPublisher{}
@@ -230,8 +243,9 @@ func TestRetryDueJobs_UnderBudget_ResetsAndPublishes(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(ledger.resetCalls) != 1 || ledger.resetCalls[0] != "job-1" {
-		t.Errorf("expected reset for job-1, got %v", ledger.resetCalls)
+	// AC-1: no ResetRetryToFetch call — ledger stays at reason='retry' in-flight.
+	if len(ledger.resetCalls) != 0 {
+		t.Errorf("expected no reset calls (AC-1), got %v", ledger.resetCalls)
 	}
 	if pub.callCount.Load() != 1 {
 		t.Errorf("expected 1 publish, got %d", pub.callCount.Load())
@@ -264,8 +278,9 @@ func TestRetryDueJobs_AtMaxRetries_Escalates(t *testing.T) {
 	if pub.callCount.Load() != 0 {
 		t.Error("no publish expected for budget-exhausted job")
 	}
+	// AC-1: no ResetRetryToFetch ever (applies to all paths).
 	if len(ledger.resetCalls) != 0 {
-		t.Error("no reset expected for budget-exhausted job")
+		t.Errorf("expected no reset calls (AC-1), got %v", ledger.resetCalls)
 	}
 }
 
@@ -286,14 +301,16 @@ func TestRetryDueJobs_AboveMaxRetries_Escalates(t *testing.T) {
 	}
 }
 
-// TestRetryDueJobs_ResetFailure_SkipsPublish asserts that when ResetRetryToFetch
-// fails, the job is skipped (no publish) and the loop continues.
-func TestRetryDueJobs_ResetFailure_SkipsPublish(t *testing.T) {
+// TestRetryDueJobs_NoReset_PublishesDirectly asserts that RetryDueJobs goes
+// directly to PublishWithHeaders without calling ResetRetryToFetch first (AC-1).
+// The ledger row stays at reason='retry' while the message is in-flight.
+func TestRetryDueJobs_NoReset_PublishesDirectly(t *testing.T) {
 	ledger := &fakeSweeperLedger{
 		dueJobs: []jobsvc.RetryJobRecord{
-			sweeperRetryRecord("job-bad-reset", "greenhouse", 0),
+			sweeperRetryRecord("job-direct", "greenhouse", 0),
 		},
-		resetErr: errors.New("reset failed"),
+		// resetErr is set but should never be called.
+		resetErr: errors.New("reset should not be called"),
 	}
 
 	pub := &fakeSweeperPublisher{}
@@ -303,9 +320,12 @@ func TestRetryDueJobs_ResetFailure_SkipsPublish(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Job skipped due to reset failure — no publish
-	if pub.callCount.Load() != 0 {
-		t.Errorf("expected 0 publishes after reset failure, got %d", pub.callCount.Load())
+	// AC-1: no reset call, but publish proceeds.
+	if len(ledger.resetCalls) != 0 {
+		t.Errorf("expected no reset calls (AC-1), got %v", ledger.resetCalls)
+	}
+	if pub.callCount.Load() != 1 {
+		t.Errorf("expected 1 publish (direct, no reset gate), got %d", pub.callCount.Load())
 	}
 }
 
@@ -324,9 +344,9 @@ func TestRetryDueJobs_PublishFailure_ReQueuesWithDelay(t *testing.T) {
 	}
 	after := time.Now()
 
-	// Reset must have been called (ordering invariant: reset before publish)
-	if len(ledger.resetCalls) != 1 || ledger.resetCalls[0] != "job-publish-fail" {
-		t.Errorf("expected reset for job-publish-fail, got %v", ledger.resetCalls)
+	// AC-1: no reset call — ledger row stays at reason='retry'.
+	if len(ledger.resetCalls) != 0 {
+		t.Errorf("expected no reset calls (AC-1), got %v", ledger.resetCalls)
 	}
 	// Re-queue must have been called
 	if len(ledger.retryEntries) != 1 {
@@ -389,20 +409,19 @@ func TestRetryDueJobs_EscalateFailure_ContinuesLoop(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// job2 should still be processed (reset + publish)
-	if len(ledger.resetCalls) != 1 || ledger.resetCalls[0] != "job-ok" {
-		t.Errorf("expected reset for job-ok after escalate failure, got %v", ledger.resetCalls)
+	// job2 should still be processed (published, no reset — AC-1).
+	if len(ledger.resetCalls) != 0 {
+		t.Errorf("expected no reset calls (AC-1), got %v", ledger.resetCalls)
 	}
 	if pub.callCount.Load() != 1 {
 		t.Errorf("expected 1 publish for job-ok, got %d", pub.callCount.Load())
 	}
 }
 
-// TestRetryDueJobs_OrderingInvariant_ResetBeforePublish verifies the critical
-// ordering invariant: ResetRetryToFetch must be called before Publish for
-// every successfully processed job. We verify this by asserting reset was
-// called for each job and all publishes arrived after all resets.
-func TestRetryDueJobs_OrderingInvariant_ResetBeforePublish(t *testing.T) {
+// TestRetryDueJobs_AllUnderBudget_AllPublished verifies that every under-budget
+// job in a batch is published via PublishWithHeaders, and that no reset calls are
+// made (AC-1: ledger row stays at reason='retry' while in-flight).
+func TestRetryDueJobs_AllUnderBudget_AllPublished(t *testing.T) {
 	const nJobs = 5
 	jobs := make([]jobsvc.RetryJobRecord, nJobs)
 	for i := range jobs {
@@ -416,20 +435,22 @@ func TestRetryDueJobs_OrderingInvariant_ResetBeforePublish(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(ledger.resetCalls) != nJobs {
-		t.Errorf("expected %d reset calls, got %d", nJobs, len(ledger.resetCalls))
+	// AC-1: no reset calls at all.
+	if len(ledger.resetCalls) != 0 {
+		t.Errorf("expected no reset calls (AC-1), got %v", ledger.resetCalls)
 	}
 	if pub.callCount.Load() != int64(nJobs) {
 		t.Errorf("expected %d publishes, got %d", nJobs, pub.callCount.Load())
 	}
-	// All reset job IDs appear (every job must be reset)
-	resetSet := make(map[string]bool, len(ledger.resetCalls))
-	for _, id := range ledger.resetCalls {
-		resetSet[id] = true
+	// All job IDs appear in the publish call list.
+	publishedSubjects := make(map[string]bool, len(pub.calls))
+	for _, c := range pub.calls {
+		publishedSubjects[c.subject] = true
 	}
 	for _, j := range jobs {
-		if !resetSet[j.JobID] {
-			t.Errorf("missing reset call for %s", j.JobID)
+		want := fmt.Sprintf("jobs.raw.%s", j.Adapter)
+		if !publishedSubjects[want] {
+			t.Errorf("missing publish call for %s", j.JobID)
 		}
 	}
 }
@@ -568,35 +589,59 @@ func TestRetryDueJobs_MaxRetries_DefaultsTo10(t *testing.T) {
 	}
 }
 
-// TestRetryDueJobs_PerJobIsolation_OnJobErrors asserts that a reset failure on
-// one job does not prevent subsequent jobs from being processed.
-func TestRetryDueJobs_PerJobIsolation_OnJobErrors(t *testing.T) {
-	job2 := sweeperRetryRecord("job-isolation-ok", "greenhouse", 0)
+// TestRetryDueJobs_PerJobIsolation_PublishFailure asserts that a publish failure
+// for one job does not prevent subsequent jobs from being processed (per-job
+// error isolation). The failing job is re-queued; the succeeding job is published.
+func TestRetryDueJobs_PerJobIsolation_PublishFailure(t *testing.T) {
+	job1 := sweeperRetryRecord("job-isolation-fail", "greenhouse", 0)
+	job2 := sweeperRetryRecord("job-isolation-ok", "lever", 0)
 
-	ledger := &conditionalSweeperLedger{
-		failJobID: "job-isolation-fail",
-		successJobs: []jobsvc.RetryJobRecord{
-			sweeperRetryRecord("job-isolation-fail", "greenhouse", 0),
-			job2,
+	// Publish fails for the first call only.
+	callIdx := 0
+	pub := &conditionalPublisher{
+		failOn: func() bool {
+			idx := callIdx
+			callIdx++
+			return idx == 0 // first call fails
 		},
 	}
-	pub := &fakeSweeperPublisher{}
+	ledger := &fakeSweeperLedger{dueJobs: []jobsvc.RetryJobRecord{job1, job2}}
 	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
 
 	if err := s.RetryDueJobs(context.Background()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// job2 must have been published despite job-isolation-fail's reset failure
-	published := false
-	for _, c := range pub.calls {
-		if string(c.payload) == string(job2.Payload) {
-			published = true
-		}
+	// job2 must have been published despite job1's publish failure.
+	if pub.callCount < 2 {
+		t.Errorf("expected at least 2 publish calls (one fail + one ok), got %d", pub.callCount)
 	}
-	if !published {
-		t.Errorf("expected job-isolation-ok to be published, publish calls=%v", pub.calls)
+	// Re-queue entry for job1 (the failed one).
+	if len(ledger.retryEntries) != 1 {
+		t.Errorf("expected 1 re-queue entry for failed job, got %d", len(ledger.retryEntries))
 	}
+}
+
+// conditionalPublisher calls failOn() for each publish to decide whether to fail.
+type conditionalPublisher struct {
+	failOn    func() bool
+	callCount int
+}
+
+func (p *conditionalPublisher) Publish(_ context.Context, _ string, _ []byte) error {
+	p.callCount++
+	if p.failOn() {
+		return errors.New("publish failed")
+	}
+	return nil
+}
+
+func (p *conditionalPublisher) PublishWithHeaders(_ context.Context, _ string, _ []byte, _ map[string]string) error {
+	p.callCount++
+	if p.failOn() {
+		return errors.New("publish failed")
+	}
+	return nil
 }
 
 // conditionalSweeperLedger fails ResetRetryToFetch for a specific job ID only.
@@ -635,6 +680,9 @@ func (l *conditionalSweeperLedger) UpdateRetryBatchWithPayload(_ context.Context
 func (l *conditionalSweeperLedger) FetchDueRetryJobs(_ context.Context, _ int) ([]jobsvc.RetryJobRecord, error) {
 	return l.successJobs, nil
 }
+func (l *conditionalSweeperLedger) FetchDueRetryJobsWithPayload(_ context.Context, _ int) ([]jobsvc.RetryJobRecord, error) {
+	return l.successJobs, nil
+}
 func (l *conditionalSweeperLedger) ResetRetryToFetch(_ context.Context, jobID string) error {
 	l.resetCalls = append(l.resetCalls, jobID)
 	if jobID == l.failJobID {
@@ -650,5 +698,218 @@ func (l *conditionalSweeperLedger) MarkRemovedBatch(_ context.Context, _ []strin
 func (l *conditionalSweeperLedger) GetActiveJobIDsByCompany(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
+func (l *conditionalSweeperLedger) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
+	return 0, nil
+}
 
 var _ jobsvc.SeenLedgerStore = (*conditionalSweeperLedger)(nil)
+
+// ── RC-7: EscalateStuckRetryJobs tests ───────────────────────────────────────
+
+// TestEscalateStuckRetryJobs_CallsLedger asserts that the scheduler service's
+// EscalateStuckRetryJobs method delegates to the ledger store with the expected
+// stuckThreshold and limit, and returns the count.
+func TestEscalateStuckRetryJobs_CallsLedger(t *testing.T) {
+	ledger := &trackingSweeperLedger{}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	n, err := s.EscalateStuckRetryJobs(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 escalations, got %d", n)
+	}
+	if !ledger.escalateStuckCalled {
+		t.Error("expected EscalateStuckRetryJobs to be called on ledger")
+	}
+}
+
+// TestEscalateStuckRetryJobs_ReturnsCount asserts the count from the ledger is
+// returned to the caller so scheduler.go can log and metric it.
+func TestEscalateStuckRetryJobs_ReturnsCount(t *testing.T) {
+	ledger := &trackingSweeperLedger{escalateStuckCount: 3}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	n, err := s.EscalateStuckRetryJobs(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 3 {
+		t.Errorf("expected 3 escalations, got %d", n)
+	}
+}
+
+// TestEscalateStuckRetryJobs_LedgerError_Propagates asserts that a ledger error
+// is returned wrapped so the caller can log and metric it.
+func TestEscalateStuckRetryJobs_LedgerError_Propagates(t *testing.T) {
+	ledger := &trackingSweeperLedger{escalateStuckErr: errors.New("db down")}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	_, err := s.EscalateStuckRetryJobs(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+// TestEscalateStuckRetryJobs_MetricIncremented asserts SweeperStuckEscalatedTotal
+// is incremented when rows are escalated.
+func TestEscalateStuckRetryJobs_MetricIncremented(t *testing.T) {
+	before := testutil.ToFloat64(metrics.SweeperStuckEscalatedTotal)
+
+	ledger := &trackingSweeperLedger{escalateStuckCount: 2}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	n, err := s.EscalateStuckRetryJobs(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("expected 2, got %d", n)
+	}
+
+	after := testutil.ToFloat64(metrics.SweeperStuckEscalatedTotal)
+	if after-before < 2 {
+		t.Errorf("SweeperStuckEscalatedTotal delta = %.0f, want ≥2", after-before)
+	}
+}
+
+// TestEscalateStuckRetryJobs_NoOp_WhenLedgerNil asserts that when no ledger is
+// configured, EscalateStuckRetryJobs is a no-op returning 0, nil.
+func TestEscalateStuckRetryJobs_NoOp_WhenLedgerNil(t *testing.T) {
+	s := svc.NewSchedulerServiceWithSweeper(&sweeperFakeQueue{}, svc.SchedulerServiceOptions{
+		Ledger:    nil,
+		Publisher: &fakeSweeperPublisher{},
+		Log:       logger.NewNoop(),
+	})
+
+	n, err := s.EscalateStuckRetryJobs(context.Background())
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0, got %d", n)
+	}
+}
+
+// trackingSweeperLedger extends fakeSweeperLedger with EscalateStuckRetryJobs tracking.
+type trackingSweeperLedger struct {
+	fakeSweeperLedger
+	escalateStuckCalled bool
+	escalateStuckCount  int64
+	escalateStuckErr    error
+}
+
+func (l *trackingSweeperLedger) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
+	l.escalateStuckCalled = true
+	return l.escalateStuckCount, l.escalateStuckErr
+}
+
+// ── RC-3: FetchDueRetryJobsWithPayload ────────────────────────────────────────
+
+// TestRetryDueJobs_UsesWithPayloadFetch asserts that RetryDueJobs calls
+// FetchDueRetryJobsWithPayload (not FetchDueRetryJobs), verified by the
+// tracking ledger which records which method was called (AC-3).
+func TestRetryDueJobs_UsesWithPayloadFetch(t *testing.T) {
+	ledger := &payloadFetchTrackingLedger{}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	if err := s.RetryDueJobs(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !ledger.withPayloadCalled {
+		t.Error("RetryDueJobs must call FetchDueRetryJobsWithPayload (AC-3), but it did not")
+	}
+	if ledger.withoutPayloadCalled {
+		t.Error("RetryDueJobs must NOT call FetchDueRetryJobs (AC-3), but it did")
+	}
+}
+
+// payloadFetchTrackingLedger records which FetchDueRetryJobs variant was called.
+type payloadFetchTrackingLedger struct {
+	fakeSweeperLedger
+	withPayloadCalled    bool
+	withoutPayloadCalled bool
+}
+
+func (l *payloadFetchTrackingLedger) FetchDueRetryJobs(_ context.Context, _ int) ([]jobsvc.RetryJobRecord, error) {
+	l.withoutPayloadCalled = true
+	return nil, nil
+}
+
+func (l *payloadFetchTrackingLedger) FetchDueRetryJobsWithPayload(_ context.Context, _ int) ([]jobsvc.RetryJobRecord, error) {
+	l.withPayloadCalled = true
+	return nil, nil
+}
+
+// ── RC-1: X-Retry-Count header stamping ──────────────────────────────────────
+
+// TestRetryDueJobs_StampsRetryCountHeader verifies AC-1: the sweeper calls
+// PublishWithHeaders with X-Retry-Count = job.RetryCount + 1 so the filter
+// can use the correct monotonic count rather than NATS DeliveryCount.
+func TestRetryDueJobs_StampsRetryCountHeader(t *testing.T) {
+	job := sweeperRetryRecord("job-header", "greenhouse", 2) // RetryCount=2
+	ledger := &fakeSweeperLedger{dueJobs: []jobsvc.RetryJobRecord{job}}
+	pub := &headerCapturingPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	if err := s.RetryDueJobs(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(pub.calls) != 1 {
+		t.Fatalf("expected 1 publish call, got %d", len(pub.calls))
+	}
+	call := pub.calls[0]
+	got := call.headers[js.HeaderRetryCount]
+	want := "3" // RetryCount + 1
+	if got != want {
+		t.Errorf("X-Retry-Count header = %q, want %q (AC-1)", got, want)
+	}
+}
+
+// TestRetryDueJobs_NoResetBeforePublish verifies AC-1: the sweeper must NOT
+// call ResetRetryToFetch before publishing. The ledger row stays at reason='retry'
+// while in-flight so EscalateStuckRetryJobs can detect it.
+func TestRetryDueJobs_NoResetBeforePublish(t *testing.T) {
+	job := sweeperRetryRecord("job-no-reset", "greenhouse", 1)
+	ledger := &fakeSweeperLedger{dueJobs: []jobsvc.RetryJobRecord{job}}
+	pub := &headerCapturingPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	if err := s.RetryDueJobs(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(ledger.resetCalls) != 0 {
+		t.Errorf("sweeper must NOT call ResetRetryToFetch (AC-1), got calls: %v", ledger.resetCalls)
+	}
+}
+
+// headerCapturingPublisher captures PublishWithHeaders calls for header assertions.
+type headerCapturingPublisher struct {
+	publishErr error
+	calls      []headerPublishCall
+}
+
+type headerPublishCall struct {
+	subject string
+	payload []byte
+	headers map[string]string
+}
+
+func (p *headerCapturingPublisher) Publish(_ context.Context, _ string, _ []byte) error {
+	// RC-1: sweeper must use PublishWithHeaders, not Publish.
+	return p.publishErr
+}
+
+func (p *headerCapturingPublisher) PublishWithHeaders(_ context.Context, subject string, payload []byte, headers map[string]string) error {
+	p.calls = append(p.calls, headerPublishCall{subject: subject, payload: payload, headers: headers})
+	return p.publishErr
+}

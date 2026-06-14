@@ -211,20 +211,35 @@ func TestRateLimit_DenyRPDReturnsLocalQuotaRPD(t *testing.T) {
 	}
 }
 
-func TestRateLimit_ReserveStoreErrorBubbles(t *testing.T) {
+// TestRateLimit_ReserveStoreError_TreatedAsLocalQuota verifies AC-6 (RC-6):
+// when store.Reserve returns an infra error (Redis unavailable), the error is
+// treated as a local-quota denial (ErrLLMLocalQuotaExceeded) so the router
+// continues to the next slot rather than propagating the infra error. This
+// prevents a Redis outage from blocking all LLM calls.
+func TestRateLimit_ReserveStoreError_TreatedAsLocalQuota(t *testing.T) {
 	inner := &fakeScorer{}
 	rl := services.NewLLMRateLimitService(services.RateLimitSlot{SlotID: "s1", RPM: 1, RPD: 100},
 		inner, errStore{reserveErr: errors.New("redis down")})
 
 	_, err := rl.ScoreBatch(context.Background(), nil)
 	if err == nil {
-		t.Fatal("expected store error to bubble")
+		t.Fatal("expected an error")
 	}
-	if errors.Is(err, llmerr.ErrLLMLocalQuotaExceeded) {
-		t.Fatalf("store transport error must NOT surface as local quota: %v", err)
+	if !errors.Is(err, llmerr.ErrLLMLocalQuotaExceeded) {
+		t.Fatalf("Redis infra error must surface as ErrLLMLocalQuotaExceeded (AC-6), got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "ratelimit reserve slot=s1") {
-		t.Fatalf("expected wrapped reserve error, got %v", err)
+}
+
+// TestRateLimit_ReserveStoreError_EnrichBatch_TreatedAsLocalQuota verifies AC-6
+// for the EnrichBatch path: same Redis-as-local-quota behavior.
+func TestRateLimit_ReserveStoreError_EnrichBatch_TreatedAsLocalQuota(t *testing.T) {
+	inner := &fakeScorer{}
+	rl := services.NewLLMRateLimitService(services.RateLimitSlot{SlotID: "s1", RPM: 1, RPD: 100},
+		inner, errStore{reserveErr: errors.New("redis conn refused")})
+
+	_, err := rl.EnrichBatch(context.Background(), []dto.JobPostEnrichInput{{ID: "j", RawText: "x"}})
+	if !errors.Is(err, llmerr.ErrLLMLocalQuotaExceeded) {
+		t.Fatalf("Redis infra error must surface as ErrLLMLocalQuotaExceeded (AC-6), got: %v", err)
 	}
 }
 

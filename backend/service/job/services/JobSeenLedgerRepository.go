@@ -236,6 +236,30 @@ func (s *seenLedgerStore) FetchDueRetryJobs(ctx context.Context, limit int) (_ [
 	return rows, nil
 }
 
+// FetchDueRetryJobsWithPayload returns up to limit ledger rows where
+// reason='retry', next_attempt_at <= now(), payload IS NOT NULL, adapter IS
+// NOT NULL, and adapter != ”. This excludes legacy rows written before payload
+// persistence was added (AC-3) so the sweeper never tries to publish a nil
+// payload.
+func (s *seenLedgerStore) FetchDueRetryJobsWithPayload(ctx context.Context, limit int) (_ []RetryJobRecord, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.FetchDueRetryJobsWithPayload")
+	defer tracing.End(span, &err)
+	var rows []RetryJobRecord
+	res := s.db.WithContext(ctx).Raw(`
+		SELECT job_id, COALESCE(adapter, '') AS adapter, payload, retry_count
+		FROM job_pipeline_ledger
+		WHERE reason = ? AND next_attempt_at <= CURRENT_TIMESTAMP
+		  AND payload IS NOT NULL
+		  AND adapter IS NOT NULL AND adapter != ''
+		ORDER BY next_attempt_at ASC
+		LIMIT ?
+	`, string(jobcommon.SeenReasonRetry), limit).Scan(&rows)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	return rows, nil
+}
+
 func (s *seenLedgerStore) ResetRetryToFetch(ctx context.Context, jobID string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.ResetRetryToFetch")
 	defer tracing.End(span, &err)
@@ -270,6 +294,29 @@ func (s *seenLedgerStore) EscalateRetryToError(ctx context.Context, jobID string
 			fmt.Sprintf("EscalateRetryToError: no retry ledger row for job_id=%s", jobID))
 	}
 	return nil
+}
+
+// EscalateStuckRetryJobs transitions up to limit ledger rows from
+// reason='retry' to reason='error' when their next_attempt_at is older than
+// now() - stuckThreshold. This recovers jobs that were never re-published by
+// the sweeper (e.g. sustained NATS outage). Returns the number of rows updated.
+func (s *seenLedgerStore) EscalateStuckRetryJobs(ctx context.Context, stuckThreshold time.Duration, limit int) (_ int64, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.EscalateStuckRetryJobs")
+	defer tracing.End(span, &err)
+	res := s.db.WithContext(ctx).Exec(`
+		UPDATE job_pipeline_ledger
+		SET reason = ?
+		WHERE job_id IN (
+			SELECT job_id FROM job_pipeline_ledger
+			WHERE reason = ? AND next_attempt_at < NOW() - (? * INTERVAL '1 second')
+			LIMIT ?
+		)
+	`, string(jobcommon.SeenReasonError), string(jobcommon.SeenReasonRetry),
+		int64(stuckThreshold.Seconds()), limit)
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
 }
 
 func (s *seenLedgerStore) MarkRemovedBatch(ctx context.Context, jobIDs []string) (err error) {

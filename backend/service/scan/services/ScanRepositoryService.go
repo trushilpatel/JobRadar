@@ -494,6 +494,13 @@ func (s *repositoryService) RetryDueJobs(_ context.Context) error {
 	return nil
 }
 
+// EscalateStuckRetryJobs is a no-op on the repository service for the same
+// reason as RetryDueJobs — the scheduler-only sweeper path is never wired
+// through the REST decorator chain.
+func (s *repositoryService) EscalateStuckRetryJobs(_ context.Context) (int64, error) {
+	return 0, nil
+}
+
 func (s *repositoryService) UpdateScanIntervalOverride(ctx context.Context, companyID string, override *int) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.repository.UpdateScanIntervalOverride")
 	defer tracing.End(span, &err)

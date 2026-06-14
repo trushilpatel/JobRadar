@@ -207,7 +207,8 @@ func (f *fakeScanService) GetEffectiveScanConfig(_ context.Context, _ string) (s
 func (f *fakeScanService) UpdateScanIntervalOverride(_ context.Context, _ string, _ *int) error {
 	return nil
 }
-func (f *fakeScanService) RetryDueJobs(_ context.Context) error { return nil }
+func (f *fakeScanService) RetryDueJobs(_ context.Context) error                    { return nil }
+func (f *fakeScanService) EscalateStuckRetryJobs(_ context.Context) (int64, error) { return 0, nil }
 
 type fakeJobService struct{}
 
