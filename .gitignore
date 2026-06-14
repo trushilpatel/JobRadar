@@ -69,3 +69,4 @@ values.local.yaml
 # Helm chart dependencies (downloaded, not committed)
 k8s/helm/observability/charts/*.tgz
 k8s/helm/observability/charts/alloy/
+.worktrees/

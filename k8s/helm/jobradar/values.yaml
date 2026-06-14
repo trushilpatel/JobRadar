@@ -40,7 +40,7 @@ api:
   logFormat: json
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
-  dbPort: "6543"
+  dbPort: "5432"
   rateLimitReadRpm: "300"
   rateLimitWriteRpm: "60"
   rateLimitAdminRpm: "300"
@@ -70,7 +70,7 @@ filter:
   metricsAddr: ":9101"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
-  dbPort: "6543"
+  dbPort: "5432"
 
 enricher:
   enabled: true
@@ -93,7 +93,7 @@ enricher:
   metricsAddr: ":9101"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
-  dbPort: "6543"
+  dbPort: "5432"
 
 crawler:
   enabled: true
@@ -109,7 +109,7 @@ crawler:
   metricsAddr: ":9102"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
-  dbPort: "6543"
+  dbPort: "5432"
 
 scheduler:
   enabled: true
@@ -121,7 +121,7 @@ scheduler:
   metricsAddr: ":9103"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
-  dbPort: "6543"
+  dbPort: "5432"
 
 orchestrator:
   enabled: true
@@ -132,7 +132,7 @@ orchestrator:
   metricsAddr: ":9104"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
-  dbPort: "6543"
+  dbPort: "5432"
 
 # crawlerNode: stateless HTTP workers that poll the orchestrator.
 # Increase replicas to scale out concurrent crawling capacity.
