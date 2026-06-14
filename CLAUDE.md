@@ -38,7 +38,6 @@ Each binary lives in `backend/apps/<name>/` (wiring + worker loop only) and depe
 | `job_analytics`           | Append-only snapshot from analyzer; survives job dismissal                                                                                                                                                                                                                      |
 | `job_application_tracker` | Application stage tracking; `user_id NOT NULL`                                                                                                                                                                                                                                  |
 | `users`                   | Registered users (id, email citext, display_name, status, timestamps)                                                                                                                                                                                                           |
-| `roles`, `user_roles`     | RBAC0 catalog + join. Cascades: `user_id` CASCADE, `role_id` RESTRICT, `granted_by` SET NULL. Seeded by migration 043                                                                                                                                                           |
 | `admin_audit_log`         | Append-only audit trail for admin mutations                                                                                                                                                                                                                                     |
 
 ## Job status flow
@@ -63,14 +62,14 @@ All three phases shipped.
 
 - **Decorator chain:** `Rest → Validation → Cache → Impl → Repo`. `CacheService` is optional per slice.
 - **Identity flow:** repos take `userID` explicitly; services pull from ctx via `identity.FromContext` / `UserIDFrom` / `IsAdmin`.
-- **RBAC0:** `roles` + `user_roles` join only, no permissions table. Source of truth is Postgres — never JWT custom claims.
+- **RBAC:** roles come from Clerk `publicMetadata.role` (a scalar string injected into the JWT via a Clerk JWT template). Source of truth is Clerk dashboard — never a DB roles table. Set admin: Clerk dashboard → User → publicMetadata → `{"role":"admin"}`. `RequireRole("admin")` reads `identity.Roles` set by `RequireIdentity` from the JWT claim; no DB lookup.
 - **Route split:** `/api/*` uses `RequireIdentity` + `RateLimit`; `/admin/*` adds `RequireRole("admin")` + `AuditAdminMutation`.
 - **Job feed:** "new" = global feed + per-user overlay; other tabs = `user_job_state` INNER JOIN; cursor (keyset) pagination.
 - **Company slice:** split into public `CompanyService` and admin `CompanyAdminService` paths. List endpoint returns `CompanyAdminListView` (no `adapter_config`); detail endpoint returns full `CompanyAdminView` — never expose adapter credentials in paginated list responses.
 - **Cursor (keyset) pagination:** all list endpoints use `next_cursor` / `cursor` params, not `page` / `offset`. Frontend uses a `cursorHistory` stack for prev/next navigation.
-- **Frontend:** identity-aware Zustand store, role-gated admin nav (pipeline / companies / users / audit log / insights), 429 toast.
+- **Frontend:** identity via `useIdentity()` hook (wraps Clerk `useAuth`/`useUser` + TanStack Query `fetchMe`), role-gated admin nav (pipeline / companies / users / audit log / insights), 429 toast.
 
-Env vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RATE_LIMIT_{READ,WRITE,ADMIN}_RPM`, `CACHE_TTL_USER_SECONDS`.
+Env vars: `CLERK_JWKS_URL`, `CLERK_ISSUER_URL`, `CLERK_SECRET_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`, `RATE_LIMIT_{READ,WRITE,ADMIN}_RPM`, `CACHE_TTL_USER_SECONDS`.
 
 ## Secret management
 
