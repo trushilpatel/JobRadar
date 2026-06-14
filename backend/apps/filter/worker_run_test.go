@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
@@ -332,7 +332,7 @@ func TestMarkSeenOrNak_LedgerFails_NakFails_LogsWarn(t *testing.T) {
 
 	w := makeWorkerWithClock(scorer, ledger, pub, clk, 5)
 
-	p, _ := json.Marshal(ats.RawJob{ID: "mson-nak-fail", Title: ""})
+	p, _ := json.Marshal(core.JobSummary{ID: "mson-nak-fail", Title: ""})
 	msg, state := js.NewTestMsg(p, 1)
 	state.NakErr = errors.New("nak failed")
 
@@ -353,7 +353,7 @@ func TestMarkSeenOrNak_AckFails_LogsWarn(t *testing.T) {
 	w := makeWorkerWithClock(scorer, ledger, pub, clk, 5)
 
 	// A job with no title goes to passThrough → scored irrelevant.
-	p, _ := json.Marshal(ats.RawJob{ID: "mson-ack-fail", Title: ""})
+	p, _ := json.Marshal(core.JobSummary{ID: "mson-ack-fail", Title: ""})
 	msg, _ := js.NewTestMsg(p, 1)
 
 	if err := w.processFetch(context.Background(), []*js.Msg{msg}); err != nil {
@@ -426,7 +426,7 @@ func TestMarkSeenOrNak_GenericLedgerError_NakFails(t *testing.T) {
 
 	w := makeWorkerWithClock(scorer, ledger, pub, clk, 5)
 
-	p, _ := json.Marshal(ats.RawJob{ID: "irrelevant-nak-fail", Title: "SWE"})
+	p, _ := json.Marshal(core.JobSummary{ID: "irrelevant-nak-fail", Title: "SWE"})
 	msg, state := js.NewTestMsg(p, 1)
 	state.NakErr = errors.New("nak failed after ledger error")
 
