@@ -1,12 +1,6 @@
 name: Console
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/console.yml'
-      - '.github/actions/setup-frontend/**'
   pull_request:
     branches: [main]
     paths:
@@ -26,8 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history required so vitest --changed origin/main can compute the
-          # merge base between the PR branch and main.
+          # Full history required so vitest --changed origin/main can compute
+          # the merge base between the PR branch and main.
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-frontend
@@ -40,45 +34,9 @@ jobs:
         run: npx tsc --noEmit
         working-directory: frontend
 
-      # PRs: vitest walks the module import graph from every file changed vs
-      # origin/main and runs only the transitively-affected test files.
-      # No coverage flag — the full-coverage gate runs on main push only.
+      # PRs: vitest walks the import graph from every changed file and runs
+      # only the transitively-affected tests — fast signal without full suite.
+      # Full coverage runs on main push inside deploy.yml (frontend-check job).
       - name: Run affected tests
-        if: github.event_name == 'pull_request'
         run: npm run test:changed
         working-directory: frontend
-
-      # Main branch: full suite + coverage for the Codecov baseline.
-      - name: Run full tests with coverage
-        if: github.event_name == 'push'
-        run: npm run test:coverage
-        working-directory: frontend
-
-      - name: Verify Codecov token is configured
-        if: always() && github.event_name == 'push'
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        run: |
-          if [ -z "$CODECOV_TOKEN" ]; then
-            echo "::error::CODECOV_TOKEN secret is not set — coverage and test results will NOT reach Codecov. Add it under Settings → Secrets and variables → Actions."
-            exit 1
-          fi
-
-      - name: Upload coverage to Codecov
-        if: always() && github.event_name == 'push'
-        uses: codecov/codecov-action@v5
-        with:
-          files: frontend/coverage/lcov.info
-          flags: console
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Upload test results to Codecov
-        if: always() && github.event_name == 'push'
-        uses: codecov/codecov-action@v5
-        with:
-          files: frontend/coverage/junit.xml
-          flags: console
-          report_type: test_results
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
