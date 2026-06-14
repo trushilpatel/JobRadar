@@ -43,7 +43,15 @@ jobs:
 
       # gotestsum runs the suite and emits a JUnit report alongside the coverage
       # profile so Codecov Test Analytics can annotate failed/flaky tests.
+      - name: Cache gotestsum binary
+        id: gotestsum-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin/gotestsum
+          key: gotestsum-v1.13.0-${{ runner.os }}
+
       - name: Install gotestsum
+        if: steps.gotestsum-cache.outputs.cache-hit != 'true'
         run: go install gotest.tools/gotestsum@v1.13.0
 
       - name: Run unit tests (race + coverage)
