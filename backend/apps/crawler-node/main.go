@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
-	ats "github.com/trushilpatel/jobradar/apps/crawler/ats"
-	googleats "github.com/trushilpatel/jobradar/apps/crawler/ats/google"
+	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/tracing"
 )
@@ -28,15 +29,14 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	googleCfg := googleats.Config{
-		MinDelayMs: cfg.AdapterTimeoutSeconds * 33, // sensible defaults derived from timeout
-		MaxDelayMs: cfg.AdapterTimeoutSeconds * 67,
-		TimeoutMs:  cfg.AdapterTimeoutSeconds * 1000,
-		MaxPages:   0,
+	// adapterHTTPClient is the HTTP client passed to crawler-v2 adapters; its
+	// timeout caps a single adapter fetch. Separate from the orchestrator client.
+	adapterHTTPClient := &http.Client{
+		Timeout: time.Duration(cfg.AdapterTimeoutSeconds) * time.Second,
 	}
 
 	client := newHTTPClient(cfg)
-	exec := newAdapterExecutor(client, ats.RegistryWithGoogleConfig, googleCfg, log)
+	exec := newAdapterExecutor(client, adapters.New, adapterHTTPClient, log)
 	loop := NewPollLoop(cfg, client, exec)
 	loop.log = log
 

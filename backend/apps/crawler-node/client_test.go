@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // orchestratorWorkResponse mirrors the orchestrator's dto.WorkResponse JSON shape.
@@ -60,7 +62,6 @@ func TestHTTPClient_GetWork_WithAssignment_ReturnsUnit(t *testing.T) {
 		AssignmentID: "assign-1",
 		CompanyID:    "company-1",
 		AdapterType:  "lever",
-		KnownIDs:     []string{"lever-abc", "lever-def"},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := orchestratorWorkResponse{Assignment: unit}
@@ -193,7 +194,7 @@ func TestHTTPClient_SubmitBatch_SendsJSON(t *testing.T) {
 		AssignmentID: "assign-1",
 		CompanyID:    "company-1",
 		AdapterType:  "lever",
-		Jobs:         []CrawledJob{{ID: "lever-abc", Title: "SWE"}},
+		Jobs:         []core.JobSummary{{ID: "lever-abc", Title: "SWE"}},
 		Final:        true,
 	}
 	if err := client.SubmitBatch(context.Background(), batch); err != nil {
