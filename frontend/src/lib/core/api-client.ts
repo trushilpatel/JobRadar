@@ -20,7 +20,7 @@ function getClerkWindow(): ClerkWindow {
 }
 
 async function getClerkToken(): Promise<string | null> {
-  return getClerkWindow().Clerk?.session?.getToken() ?? null
+  return getClerkWindow().Clerk?.session?.getToken({ template: 'job-radar-jwt-template' }) ?? null
 }
 
 function signOutAndRedirect(): void {

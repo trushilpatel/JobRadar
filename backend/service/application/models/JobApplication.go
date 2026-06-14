@@ -10,7 +10,7 @@ import "time"
 // the column comes in NOT NULL with no backfill.
 type JobApplication struct {
 	ID          int64     `gorm:"primaryKey;autoIncrement"                                json:"id"`
-	UserID      string    `gorm:"type:uuid;not null;index;index:idx_user_job,priority:1"  json:"user_id"`
+	UserID      string    `gorm:"type:text;not null;index;index:idx_user_job,priority:1"  json:"user_id"`
 	JobResultID string    `gorm:"column:job_result_id;not null;index:idx_user_job,priority:2" json:"job_result_id"`
 	Stage       string    `gorm:"not null"                                                json:"stage"`
 	StageAt     time.Time `gorm:"not null;autoCreateTime"                                 json:"stage_at"`

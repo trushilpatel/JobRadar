@@ -5,7 +5,6 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	auditsvc "github.com/trushilpatel/jobradar/service/audit/services"
-	rolesvc "github.com/trushilpatel/jobradar/service/role/services"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
 )
 
@@ -14,7 +13,6 @@ import (
 // admin service handlers. Construction lives in wire_multiuser.go.
 type multiUser struct {
 	userSvc     usersvc.Service
-	roleSvc     rolesvc.Service
 	auditSvc    auditsvc.Service
 	identityMW  func(http.Handler) http.Handler
 	rateLimitMW func(http.Handler) http.Handler

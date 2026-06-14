@@ -8,7 +8,6 @@ import (
 	"time"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
-	rolemodel "github.com/trushilpatel/jobradar/service/role/models"
 	userdto "github.com/trushilpatel/jobradar/service/user/dto"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
@@ -17,8 +16,10 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// newUserTestDB returns an in-memory sqlite DB with `users` and `user_roles`
-// migrated. SQLite supports the GORM features the repo uses (OnConflict /
+// newUserTestDB returns an in-memory sqlite DB with `users` and `user_preferences`
+// migrated. The `roles` and `user_roles` tables are intentionally absent —
+// migration 081 dropped them; roles are now carried in Clerk JWT claims.
+// SQLite supports the GORM features the repo uses (OnConflict /
 // DoNothing → INSERT OR IGNORE), so the happy paths can be exercised
 // directly. The `citext` type collapses to TEXT on sqlite — the column still
 // works, only case-insensitive matching is lost (which the repo handles via
@@ -44,20 +45,6 @@ func newUserTestDB(t *testing.T) *gorm.DB {
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL
 		)`,
-		`CREATE TABLE roles (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			description TEXT,
-			created_at DATETIME,
-			updated_at DATETIME
-		)`,
-		`CREATE TABLE user_roles (
-			user_id TEXT NOT NULL,
-			role_id TEXT NOT NULL,
-			granted_at DATETIME,
-			granted_by TEXT,
-			PRIMARY KEY (user_id, role_id)
-		)`,
 		`CREATE TABLE user_preferences (
 			user_id TEXT PRIMARY KEY,
 			data TEXT NOT NULL DEFAULT '{}',
@@ -68,14 +55,6 @@ func newUserTestDB(t *testing.T) *gorm.DB {
 		if err := db.Exec(s).Error; err != nil {
 			t.Fatalf("schema: %v", err)
 		}
-	}
-	// Seed the two roles migration 043 inserts so the provision read-back of
-	// the `user` role grant has a parent row if FKs are enabled.
-	if err := db.Create(&[]rolemodel.Role{
-		{ID: rolemodel.RoleUser, Name: "Regular User"},
-		{ID: rolemodel.RoleAdmin, Name: "Administrator"},
-	}).Error; err != nil {
-		t.Fatalf("seed roles: %v", err)
 	}
 	return db
 }
@@ -211,17 +190,8 @@ func TestUserRepo_Provision_InsertsNew(t *testing.T) {
 	if u.Status != usermodel.StatusActive {
 		t.Errorf("status = %q, want active", u.Status)
 	}
-
-	// Baseline `user` role row must have been inserted.
-	var roleCount int64
-	if err := db.Model(&rolemodel.UserRole{}).
-		Where("user_id = ? AND role_id = ?", "u1", rolemodel.RoleUser).
-		Count(&roleCount).Error; err != nil {
-		t.Fatalf("count roles: %v", err)
-	}
-	if roleCount != 1 {
-		t.Errorf("user role row count = %d, want 1", roleCount)
-	}
+	// No role row write — roles are carried in Clerk JWT claims (migration 081
+	// dropped the roles and user_roles tables).
 }
 
 func TestUserRepo_Provision_Idempotent_KeepsExistingRow(t *testing.T) {
@@ -271,15 +241,7 @@ func TestUserRepo_Provision_RepeatedSameID(t *testing.T) {
 	if count != 1 {
 		t.Errorf("user row count = %d, want 1 (idempotent upsert)", count)
 	}
-	// Same for the role grant — repeated provisions must not duplicate.
-	if err := db.Model(&rolemodel.UserRole{}).
-		Where("user_id = ? AND role_id = ?", "u1", rolemodel.RoleUser).
-		Count(&count).Error; err != nil {
-		t.Fatalf("count roles: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("role row count = %d, want 1 (idempotent grant)", count)
-	}
+	// No user_roles table — role idempotence is not applicable after migration 081.
 }
 
 func TestUserRepo_Provision_DBError(t *testing.T) {
