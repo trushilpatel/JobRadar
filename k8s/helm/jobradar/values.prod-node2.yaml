@@ -1,0 +1,35 @@
+# Node 2 — Pipeline only (Scheduler + Orchestrator + CrawlerNode×3 + Filter + Enricher).
+# Serving layer is disabled so this node runs only background workers.
+# Image tags are NOT committed here — passed at deploy time via --set images.<name>.tag=<sha>
+
+nats:
+  enabled: false
+  external: true
+
+api:
+  enabled: false
+console:
+  enabled: false
+
+crawlerNode:
+  replicas: 3
+
+imagePullSecret: ghcr-pull-secret
+
+images:
+  backend:
+    repository: ghcr.io/trushilpatel/jobradar-backend
+    tag: latest # overridden at deploy time via --set
+    pullPolicy: IfNotPresent
+  crawler:
+    repository: ghcr.io/trushilpatel/jobradar-crawler
+    tag: latest # overridden at deploy time via --set
+    pullPolicy: IfNotPresent
+  orchestrator:
+    repository: ghcr.io/trushilpatel/jobradar-orchestrator
+    tag: latest # overridden at deploy time via --set
+    pullPolicy: IfNotPresent
+  crawlerNode:
+    repository: ghcr.io/trushilpatel/jobradar-crawler-node
+    tag: latest # overridden at deploy time via --set
+    pullPolicy: IfNotPresent

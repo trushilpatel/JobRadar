@@ -82,7 +82,9 @@ All secrets and config values are managed in **Doppler** (project `job-radar`, c
 - **Changing a secret:** update it in the Doppler dashboard or via `doppler secrets set KEY=value --config dev`. The next `doppler run --` picks it up — no file edits, no restarts of other processes.
 - **Local snapshot (rare):** `doppler secrets download --format env-no-quotes --no-file > .env.local` (gitignored) for tools that can't use `doppler run --`.
 - Never create or commit a `.env` file with real values. `.env.example` (committed) is the canonical list of keys — values live in Doppler only.
-- **Frontend proxy target:** `API_PROXY_TARGET` in Doppler controls where the Vite dev server forwards `/api` calls. Default `http://localhost:30080` (local k3d). Change it in Doppler to point at a remote cluster without touching any code.
+- **Frontend proxy target:** `API_PROXY_TARGET` in Doppler controls where the Vite dev server forwards `/api` calls. Dev default: `http://localhost:8080` (local Go API via air). Set to `http://localhost:30080` to target k3d instead.
+- **Vite proxy routing rule:** user API routes (`/api/*`) are forwarded **with** the `/api` prefix intact (Go chi router mounts at `/api/`). Admin routes (`/api/admin/*`) have the prefix stripped (Go registers admin groups at root `/admin/*`). Never add a blanket rewrite that strips `/api` from all paths — it breaks every user-facing endpoint.
+- **Local dev stack:** `make dev` is the single entry point — kills stale port processes, migrates, starts API (air hot-reload on :8080) and Vite HMR (:5173) in parallel. No Docker or k3d needed for UI+API work. See `.claude/skills/run/SKILL.md` for the full runbook.
 
 ## Key rules
 
@@ -108,6 +110,10 @@ Frontend rule highlights (full set in `frontend/CLAUDE.md`):
 - Shared UI state: Zustand; local-only: `useState` / `useReducer`
 - Styling: Tailwind composed via `cn()` (`clsx` + `tailwind-merge`) — no inline styles
 - Radix UI primitives for accessible complex components (dialogs, selects, tooltips, switches)
+- **UI component boundary:** `components/ui/` = shadcn/ui origin OR pure custom (data in → render out → callbacks out). Zero `useEffect` with side effects. Zero business logic. Domain/navigation decisions belong in hooks.
+- **New component decision tree:** (1) shadcn has it → `npx shadcn@latest add`; (2) Radix has a headless primitive → thin styled wrapper; (3) neither → pure custom with PR justification.
+- **Forbidden:** `createPortal` directly (use Radix Portal/shadcn Popover); `useInfiniteQuery` for page-by-page cursor nav (use `useQuery` + cursor history — see `features/jobs/hooks/useJobs.ts`); dropdowns/multi-selects built from scratch (use `Popover + Command + Checkbox`).
+- **Theme-adaptive colors in JS must use CSS custom properties** — colors used in inline `style` props, Recharts `stroke`/`fill`, or JS color arrays must be `'var(--name)'` strings referencing pairs defined in `index.css` (`:root` = light, `.dark` = dark). The `dark:` Tailwind prefix is only valid inside `className` strings, never in JS values.
 
 ## Git policy
 
@@ -157,7 +163,7 @@ This file and the project's skill files evolve as the codebase is worked on. Whe
 
 ## See also
 
-- `infra/CLAUDE.md` — k8s deployment + iteration (k3d is the only deployment target; no Docker Compose)
+- `infra/CLAUDE.md` — k8s deployment + iteration (k3d for local dev) **and OCI production deployment** (two ARM A1 nodes: INFRA=serving, APP=pipeline). Full CI/CD cycle, bootstrap script, GitHub secrets, and failure modes documented there.
 - `docs/QUALITY.md` — quality attributes reference (`.claude/rules/quality-attributes.md` auto-loads on backend files; `frontend-quality-attributes.md` on frontend files). Covers intrinsic qualities incl. Scalability + Performance — _"is the code good?"_
 - `.claude/rules/engineering-principles.md` — hard rules applied globally: SOLID (strict), loose coupling, no magic values, extensibility by design, test-first, formatting — _"how must the code be written?"_
 - `.claude/rules/dev-ergonomics.md` — developer-ergonomics model: friction to change, consistency, extensibility, agent-legibility — _"is it ergonomic to keep it good?"_ Audited by the `dev-ergonomics` skill (read-only, recommends; never edits) via the `dev-ergonomics-auditor` agent

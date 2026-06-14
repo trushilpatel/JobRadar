@@ -1,3 +1,4 @@
+{{- if .Values.orchestrator.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,7 +22,13 @@ spec:
       labels:
         {{- include "jobradar.labels" . | nindent 8 }}
         component: orchestrator
+      annotations:
+        deploy/orchestrator-sha: {{ .Values.images.orchestrator.tag | quote }}
     spec:
+      {{- with .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
       volumes:
         {{- if .Values.orchestrator.natsCredsFile }}
         - name: nats-creds
@@ -75,3 +82,4 @@ spec:
             {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
       securityContext:
         runAsNonRoot: true
+{{- end }}

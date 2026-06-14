@@ -14,6 +14,9 @@ backend/analyzer
 backend/enricher
 backend/migrate
 
+# air hot-reload build artifacts
+backend/tmp/
+
 # Go build cache
 /vendor/
 

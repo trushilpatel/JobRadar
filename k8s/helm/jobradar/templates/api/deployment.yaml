@@ -1,3 +1,4 @@
+{{- if .Values.api.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,7 +22,13 @@ spec:
       labels:
         {{- include "jobradar.labels" . | nindent 8 }}
         component: api
+      annotations:
+        deploy/backend-sha: {{ .Values.images.backend.tag | quote }}
     spec:
+      {{- with .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
       containers:
         - name: api
           image: {{ .Values.images.backend.repository }}:{{ .Values.images.backend.tag }}
@@ -63,3 +70,4 @@ spec:
             {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
       securityContext:
         runAsNonRoot: true
+{{- end }}

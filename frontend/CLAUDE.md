@@ -119,6 +119,9 @@ const setStatus = useMutation({
 - **Only** `cn()` (clsx + tailwind-merge) for `className` composition — never string concat
 - Tailwind classes only — no inline styles
 - Radix UI for accessible primitives (dialogs, selects, tooltips, switches)
+- **Theme-adaptive colors in JS must use CSS custom properties** — when a color value is used in a JS/TS context (inline `style` prop, Recharts `stroke`/`fill`, sparkline background arrays), it cannot reference Tailwind's `dark:` prefix. Define the color pair in `index.css` (`:root` = light, `.dark` = dark) and reference it as `'var(--name)'`. The `dark:` prefix is acceptable only inside Tailwind `className` strings on DOM elements.
+- **Recharts accepts CSS variable strings** — `stroke`, `fill`, and tick `fill` props accept `'var(--text-muted)'`, `'var(--border)'`, etc. Use them instead of hardcoded hex to keep charts readable in both themes.
+- **`InsightEmpty` vs `InsightError` must be visually distinct** — empty state uses `text-placeholder`; error state uses an `AlertCircle` icon + `bg-red-500/5 border-red-500/10` background. Never style them identically.
 
 ---
 
@@ -184,3 +187,94 @@ global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
 | Query key files | `queryKeys.ts`                         | `src/features/insights/queryKeys.ts` |
 | Test files      | `<subject>.test.ts(x)` in `__tests__/` | `TechStackPanel.test.tsx`            |
 | Constants       | camelCase                              | `jobStatus.ts`                       |
+
+---
+
+## UI Component Rules (enforced for all contributors)
+
+### The boundary: `components/ui/` is display-only
+
+Every file in `src/components/ui/` must satisfy one of two conditions:
+
+**a. shadcn/ui origin** — added via `npx shadcn@latest add <name>` and styled to match this project's design tokens. Do not restructure shadcn components; only restyle with Tailwind classes and `cn()`. If the shadcn component needs new behaviour, wrap it in a feature-level component — never edit the shadcn source.
+
+**b. Pure custom** — wraps a Radix primitive or is hand-built. Must satisfy ALL of the following:
+
+- No `useEffect` that calls a prop callback (no `onFirst()`, no `onReset()`, no parent mutations)
+- No internal state that drives parent navigation or data decisions
+- No business logic ("if itemsOnPage === 0 call onFirst()" is business logic)
+- Contract: **data in → render out → event callbacks out**. Nothing else.
+
+Any component that does not satisfy (a) or (b) is a design error. The fix is always the same: move the logic to the hook or service that owns the domain.
+
+### New component decision tree (mandatory — no exceptions)
+
+1. **Does shadcn/ui have it?** → `npx shadcn@latest add <name>`. Done. Do not write a custom version.
+2. **Does Radix UI have a headless primitive?** → write a thin styled wrapper using Tailwind + `cn()`. Done.
+3. **Neither?** → write a pure custom component. The PR description MUST include one sentence explaining why shadcn and Radix do not cover this use case.
+
+When in doubt: check https://ui.shadcn.com/docs/components (no account needed).
+
+### Forbidden patterns
+
+These are hard rules. Violations block merge.
+
+| Pattern                                                          | Forbidden because                                                                       | Correct alternative                                                                                  |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `createPortal` directly in a component                           | Accessibility, z-index, focus management bugs                                           | Radix `Portal` or shadcn `Popover`/`Dialog` which handle this correctly                              |
+| `useInfiniteQuery` for page-by-page cursor navigation            | Designed for infinite scroll; creates async race between cursor and loading state       | `useQuery` + explicit `cursorHistory: string[]` in hook state (see `features/jobs/hooks/useJobs.ts`) |
+| Multi-select / combobox / filterable dropdown built from scratch | Broken keyboard nav, missing ARIA roles, brittle portal logic                           | shadcn `Popover + Command + Checkbox` — the canonical pattern for this project                       |
+| `useEffect` with a side effect inside `components/ui/`           | Makes the component non-pure; test coverage becomes incomplete; creates hidden coupling | Move the logic to the feature hook that owns the domain (`useJobs`, `useCompanies`, etc.)            |
+| `data = useQuery(...)?.data ?? []` to default in the component   | Hides `undefined` from TypeScript; impossible to distinguish loading from empty         | Handle in the API function normaliser; guard with `isLoading / isError / !data` in the component     |
+
+### Cursor pagination — canonical pattern
+
+All paginated list views use `useQuery` with an explicit cursor history. Do not use `useInfiniteQuery` for navigation.
+
+```ts
+// hooks/useXxx.ts  ← hooks own ALL pagination state and decisions
+
+// cursorHistory[pageIndex] is the cursor for the currently displayed page.
+// Stored in sessionStorage (keyed by filter fingerprint) so same-session
+// back/forward works without refetching. Resets to [''] on any filter change.
+const [cursorHistory, setCursorHistory] = useState<string[]>(() =>
+  restoreHistory(filterFingerprint)
+)
+const currentCursor = cursorHistory[pageIndex] ?? ''
+
+const query = useQuery({
+  queryKey: [...filters, currentCursor, limit],
+  queryFn: ({ signal }) => fetchXxx(filters, currentCursor, limit, signal),
+  staleTime: 30_000,
+})
+
+function goToNextPage() {
+  const nextCursor = query.data?.next_cursor
+  if (!nextCursor) return // last page — no-op
+  const extended = cursorHistory.slice(0, pageIndex + 1).concat(nextCursor)
+  setCursorHistory(extended)
+  persistHistory(filterFingerprint, extended)
+  void setPageIndex(pageIndex + 1)
+}
+
+function goToPrevPage() {
+  if (pageIndex > 0) void setPageIndex(pageIndex - 1) // cursor already in history
+}
+
+function resetCursor() {
+  // call on any filter/sort/limit change
+  setCursorHistory([''])
+  clearHistory(filterFingerprint)
+  void setPageIndex(0)
+}
+```
+
+The `Pagination` component is a **pure display component**: it receives `hasNext`, `hasPrev`, `page`, `itemsOnPage`, `itemsBeforePage` and fires `onNext`/`onPrev`/`onFirst` callbacks. It makes no decisions. The hook decides when to call `goToFirstPage`.
+
+### shadcn component registry (currently installed)
+
+Run `npx shadcn@latest add <name>` to install. Do not copy-paste from shadcn docs manually.
+
+Already installed: `alert-dialog` · `badge` · `button` · `card` · `checkbox` · `command` · `dialog` · `drawer` · `input` · `label` · `popover` · `scroll-area` · `separator` · `sheet` · `skeleton` · `switch` · `tabs` · `toggle` · `toggle-group` · `tooltip`
+
+Custom (no shadcn equivalent, stays custom): `pagination` · `data-table` · `resize-handle` · `dismiss-stripe` · `scan-history-bar` · `kbd`

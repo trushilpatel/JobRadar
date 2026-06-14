@@ -1469,15 +1469,6 @@ func TestRun_FetchError_ContinuesLoop(t *testing.T) {
 	}
 }
 
-// callbackFetcher is a MessageFetcher that calls a user-supplied function.
-type callbackFetcher struct {
-	fn func(n int, maxWait time.Duration) ([]*js.Msg, error)
-}
-
-func (c *callbackFetcher) Fetch(n int, maxWait time.Duration) ([]*js.Msg, error) {
-	return c.fn(n, maxWait)
-}
-
 // ── Additional coverage tests ─────────────────────────────────────────────────
 
 // TestProcessFetch_MalformedMessage_TermFail_NoPanic verifies that when a

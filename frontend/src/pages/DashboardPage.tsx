@@ -27,7 +27,7 @@ export function DashboardPage() {
           </ErrorBoundary>
         </div>
 
-        {/* Row 3: Interviewing + Velocity */}
+        {/* Row 2: Interviewing + Velocity */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ErrorBoundary>
             <InterviewingPanel />
@@ -37,7 +37,7 @@ export function DashboardPage() {
           </ErrorBoundary>
         </div>
 
-        {/* Row 4: Tech Stack Trends */}
+        {/* Row 3: Tech Stack Trends */}
         <ErrorBoundary>
           <TechTrendsPanel />
         </ErrorBoundary>

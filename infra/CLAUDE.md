@@ -136,3 +136,102 @@ For crawler-node, the per-pod limit is 64Mi. At 3 replicas = 192Mi total. If rai
 | filter/enricher `CrashLoopBackOff`           | `secrets/jobradar_NATS.creds` empty or wrong, or NATS secret not recreated | Fill creds file, run `make k8s-bootstrap`, then restart pods                                                                                                                                                              |
 | `TLS handshake timeout`                      | k3d API server still starting after restart                                | Wait ~30s; `until kubectl get nodes 2>/dev/null \| grep -q Ready; do sleep 3; done`                                                                                                                                       |
 | Namespace stuck `Terminating`                | Finalizers not cleared                                                     | Force-clear: `kubectl get ns <name> -o json \| python3 -c "import sys,json; d=json.load(sys.stdin); d['spec']['finalizers']=[]; print(json.dumps(d))" \| kubectl replace --raw "/api/v1/namespaces/<name>/finalize" -f -` |
+
+## OCI Production Deployment
+
+Two Oracle Cloud Free Tier ARM A1 instances (1 OCPU, 1 GB RAM each + 2 GB swap). Deployed automatically on every push to `main` via `.github/workflows/deploy.yml`. Only changed images are rebuilt; only affected nodes are deployed; only pods whose image tag annotation changed are restarted.
+
+**Node roles:**
+
+| Node  | Name     | IP                | Services                                                      | Values file              |
+| ----- | -------- | ----------------- | ------------------------------------------------------------- | ------------------------ |
+| INFRA | Serving  | `161.153.66.17`   | API + Console                                                 | `values.prod-node1.yaml` |
+| APP   | Pipeline | `147.224.253.250` | Scheduler + Orchestrator + CrawlerNode ×3 + Filter + Enricher | `values.prod-node2.yaml` |
+
+Node IPs and usernames are stored in Doppler prod as `OCI_INFRA_IP`, `OCI_INFRA_USERNAME`, `OCI_APP_IP`, `OCI_APP_USERNAME`. GitHub PAT (read:packages) is stored as `GITHUB_PAT`.
+
+### CI/CD cycle — how every push to `main` deploys
+
+```
+push to main
+     │
+     ▼
+[detect-changes]  ← dorny/paths-filter checks which files changed
+     │
+     ├─ backend/ changed?      → [build-backend]      → ghcr.io/trushilpatel/jobradar-backend:<sha>
+     ├─ crawler/ changed?      → [build-crawler]      → ghcr.io/trushilpatel/jobradar-crawler:<sha>
+     ├─ orchestrator/ changed? → [build-orchestrator] → ghcr.io/trushilpatel/jobradar-orchestrator:<sha>
+     ├─ crawler-node/ changed? → [build-crawler-node] → ghcr.io/trushilpatel/jobradar-crawler-node:<sha>
+     └─ frontend/ changed?     → [build-console]      → ghcr.io/trushilpatel/jobradar-console:<sha>
+                                          │
+                   ┌──────────────────────┤
+                   ▼                      ▼
+          [deploy-node1]          [deploy-node2]
+          (if backend or          (if backend, crawler,
+           console changed)        orch, or node changed)
+          SSH → helm upgrade      SSH → helm upgrade
+          INFRA node only         APP node only
+```
+
+Key properties:
+
+- A frontend-only push rebuilds only `jobradar-console` and deploys only to INFRA — APP node is never touched
+- For images not rebuilt, the deploy job reads the currently running tag from `helm get values` on the live release so no pods restart unnecessarily
+- Each Deployment has a `deploy/<image>-sha` annotation baked into its pod spec — Kubernetes only rolls pods whose annotation changed
+- All five images are ARM64 (`linux/arm64`) built via buildx + QEMU on GitHub-hosted x86 runners
+
+### One-time bootstrap per node
+
+Use `scripts/oci-node-bootstrap.sh` — idempotent, safe to re-run on any node (including a third node in future):
+
+```bash
+# Copy to node and run
+scp scripts/oci-node-bootstrap.sh ubuntu@<node-ip>:~/
+ssh ubuntu@<node-ip>
+
+# Optional: pass GitHub PAT to skip the interactive prompt
+GH_USER=trushilpatel GH_PAT=$(doppler secrets get GITHUB_PAT --plain) bash ~/oci-node-bootstrap.sh
+```
+
+The script handles in order: swap (2 GB), k3s config (traefik/servicelb/metrics-server disabled), k3s install, Helm, jq, Doppler CLI, namespace, ghcr-pull-secret.
+
+After the script: run `doppler login && doppler setup` (project: `job-radar`, config: `prod`) — this is interactive and cannot be scripted.
+
+### GitHub Actions secrets required
+
+| Secret                   | Value                                                        |
+| ------------------------ | ------------------------------------------------------------ |
+| `OCI_INFRA_HOST`         | `161.153.66.17`                                              |
+| `OCI_APP_HOST`           | `147.224.253.250`                                            |
+| `OCI_SSH_USER`           | `ubuntu`                                                     |
+| `OCI_SSH_KEY`            | Private key content (Ed25519)                                |
+| `VITE_SUPABASE_URL`      | Supabase project URL (same as Doppler `SUPABASE_URL`)        |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key (same as Doppler `VITE_SUPABASE_ANON_KEY`) |
+
+`GITHUB_TOKEN` for GHCR push is injected automatically — no extra secret needed.
+
+### OCI Security List ports
+
+| Node  | Ports                                                        |
+| ----- | ------------------------------------------------------------ |
+| INFRA | TCP 22 (SSH), 30080 (API NodePort), 30300 (Console NodePort) |
+| APP   | TCP 22 (SSH) only                                            |
+
+### Why swap is required
+
+The 1 GB nodes have no swap by default. k3s alone uses ~600–700 MB, leaving ~140–200 MB for the OS and pods. Without swap, the kernel OOM-kills processes during bootstrap (particularly Doppler CLI install + k3s startup together). The 2 GB swapfile added by the bootstrap script prevents this. The swapfile persists across reboots via `/etc/fstab`.
+
+### Why traefik/servicelb/metrics-server are disabled
+
+k3s installs Traefik ingress, service load balancer, and metrics-server by default. These consume ~150–200 MB of RAM we cannot spare on 1 GB nodes. JobRadar uses NodePort services (not Ingress or LoadBalancer), so none of these components are needed. Disabled via `/etc/rancher/k3s/config.yaml` (written before k3s install by the bootstrap script).
+
+### OCI failure modes
+
+| Symptom                              | Cause                                  | Fix                                                          |
+| ------------------------------------ | -------------------------------------- | ------------------------------------------------------------ |
+| Node SSH unreachable after bootstrap | OOM during install — SSH daemon killed | Hard reboot from OCI Console; re-run bootstrap script        |
+| `ErrImagePull` on all pods           | `ghcr-pull-secret` missing or expired  | Re-run bootstrap step 6; rotate GitHub PAT if expired        |
+| `TLS handshake timeout` on kubectl   | k3s API not ready yet                  | Wait 30s; k3s is still starting                              |
+| `helm: command not found` on node    | Helm not installed                     | Re-run bootstrap script                                      |
+| Pods not restarting after push       | Image tag annotation unchanged         | Confirm the build job ran in GHA; check deploy workflow logs |
+| `connection refused` on 30080/30300  | Pods not scheduled yet                 | Check `kubectl get pods -n jobradar-local`                   |

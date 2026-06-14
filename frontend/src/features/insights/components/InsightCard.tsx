@@ -1,3 +1,5 @@
+import { AlertCircle } from 'lucide-react'
+
 export function InsightCard({
   title,
   subtitle,
@@ -18,17 +20,20 @@ export function InsightCard({
   )
 }
 
-export function InsightEmpty() {
+export function InsightEmpty({ reason }: { reason?: string }) {
   return (
-    <div className="flex items-center justify-center h-32 text-muted text-sm">
-      Not enough data yet
+    <div className="flex items-center justify-center h-32 text-placeholder text-sm">
+      {reason ?? 'Not enough data yet'}
     </div>
   )
 }
 
 export function InsightError({ message = 'Failed to load data' }: { message?: string }) {
   return (
-    <div className="flex items-center justify-center h-32 text-red-400/70 text-sm">{message}</div>
+    <div className="flex items-center justify-center gap-2 h-32 rounded-lg bg-red-500/5 border border-red-500/10">
+      <AlertCircle size={14} className="text-red-400 shrink-0" />
+      <span className="text-red-400 text-sm">{message}</span>
+    </div>
   )
 }
 

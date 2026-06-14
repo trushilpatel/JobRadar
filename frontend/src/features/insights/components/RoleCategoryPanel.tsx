@@ -9,7 +9,7 @@ const ROLE_COLORS: Record<string, string> = {
   fullstack: '#0891b2',
   devops: '#059669',
   ml: '#d97706',
-  data: '#dc2626',
+  data: '#0284c7',
   other: '#475569',
   unknown: '#475569',
 }

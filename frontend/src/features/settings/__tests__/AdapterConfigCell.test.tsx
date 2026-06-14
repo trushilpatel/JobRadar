@@ -3,11 +3,28 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AdapterConfigCell } from '../components/AdapterConfigCell'
 
+const onSaveMock = vi.fn()
+
 describe('AdapterConfigCell', () => {
-  it('renders the current value with unit', () => {
-    render(<AdapterConfigCell value={1440} min={1} max={10080} unit="min" onSave={vi.fn()} />)
-    expect(screen.getByText('1440')).toBeInTheDocument()
-    expect(screen.getByText('min')).toBeInTheDocument()
+  it('displays minutes as hours when value is 60 or more', async () => {
+    vi.mocked(onSaveMock).mockResolvedValue(undefined)
+    render(<AdapterConfigCell value={1440} min={1} max={10080} unit="min" onSave={onSaveMock} />)
+    expect(screen.getByText('24h')).toBeInTheDocument()
+  })
+
+  it('displays mixed hours and minutes when not a round hour', async () => {
+    render(<AdapterConfigCell value={90} min={1} max={10080} unit="min" onSave={onSaveMock} />)
+    expect(screen.getByText('1h 30m')).toBeInTheDocument()
+  })
+
+  it('displays minutes directly when under 60', async () => {
+    render(<AdapterConfigCell value={30} min={1} max={10080} unit="min" onSave={onSaveMock} />)
+    expect(screen.getByText('30min')).toBeInTheDocument()
+  })
+
+  it('renders non-minute unit values without formatting', () => {
+    render(<AdapterConfigCell value={30} min={0} max={3600} unit="s" onSave={vi.fn()} />)
+    expect(screen.getByText('30 s')).toBeInTheDocument()
   })
 
   it('enters edit mode when clicked', async () => {

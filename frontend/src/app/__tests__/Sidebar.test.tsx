@@ -67,7 +67,7 @@ describe('Sidebar', () => {
   it('highlights the active route', () => {
     renderSidebar(['/jobs'])
     const jobsLink = screen.getByRole('link', { name: /Jobs/i })
-    expect(jobsLink.className).toContain('text-violet-300')
+    expect(jobsLink.className).toContain('text-[var(--accent-text)]')
   })
 
   it('shows the user email and a sign-out button when expanded', async () => {

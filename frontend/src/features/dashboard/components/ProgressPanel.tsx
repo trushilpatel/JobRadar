@@ -10,9 +10,6 @@ export function ProgressPanel() {
     refetchInterval: 60_000,
   })
 
-  const hasActivity =
-    data && (data.applied_count > 0 || data.interviewing_count > 0 || data.offer_count > 0)
-
   return (
     <div className="bg-subtle border border-[var(--border)] rounded-xl p-5">
       <p className="text-[10px] font-medium uppercase tracking-[0.07em] text-muted mb-4">
@@ -31,21 +28,27 @@ export function ProgressPanel() {
         <div className="flex items-stretch">
           <StatCol
             label="Applied"
-            value={hasActivity ? data.applied_count : '—'}
-            sub={`${data.awaiting_reply} awaiting reply`}
+            value={data.applied_count}
+            sub={
+              data.awaiting_reply === 0
+                ? 'all replied'
+                : data.awaiting_reply === data.applied_count
+                  ? 'none replied yet'
+                  : `${data.awaiting_reply} no reply`
+            }
             valueClass="text-emerald-400"
           />
           <div className="w-px bg-[var(--border)] self-stretch" />
           <StatCol
             label="Interviewing"
-            value={hasActivity ? data.interviewing_count : '—'}
+            value={data.interviewing_count}
             sub={`${data.interviewing_this_week} this week`}
             valueClass="text-violet-400"
           />
           <div className="w-px bg-[var(--border)] self-stretch" />
           <StatCol
             label="Offer"
-            value={hasActivity ? data.offer_count : '—'}
+            value={data.offer_count}
             sub={
               data.offer_count === 1
                 ? 'decision pending'

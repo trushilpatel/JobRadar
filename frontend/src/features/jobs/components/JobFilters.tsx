@@ -2,7 +2,7 @@ import { forwardRef } from 'react'
 import { Search, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
 import { useIsMobile } from '@/lib/hooks/use-media-query'
-import { MultiSelectDropdown } from '@/components/ui/multi-select-dropdown'
+import { MultiSelect } from '@/components/ui/multi-select'
 import { MobileFilterDrawer } from './MobileFilterDrawer'
 import type { DateFilter, LocationFilter } from '../hooks/useJobs'
 import { COPY } from '@/config/copy'
@@ -15,7 +15,7 @@ function FilterPill({
   children,
 }: {
   active: boolean
-  color?: 'violet' | 'emerald'
+  color?: 'violet' | 'emerald' | 'amber'
   onClick: () => void
   children: React.ReactNode
 }) {
@@ -28,6 +28,7 @@ function FilterPill({
         'px-2.5 py-1.5 text-xs rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500',
         active && color === 'violet' && 'bg-violet-500/15 border-violet-500/30 text-violet-300',
         active && color === 'emerald' && 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
+        active && color === 'amber' && 'bg-amber-500/15 border-amber-500/30 text-amber-400',
         !active && 'bg-subtle border-[var(--border)] text-muted hover:text-primary hover:bg-hover'
       )}
     >
@@ -162,14 +163,11 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
         />
       </div>
 
-      <MultiSelectDropdown
-        aria-label="Filter by company"
+      <MultiSelect
         options={companies}
         selected={selectedCompanies}
         onChange={onCompaniesChange}
         placeholder="All companies"
-        singularLabel={(n) => `${n} companies`}
-        searchPlaceholder="Search companies…"
       />
 
       <Divider />

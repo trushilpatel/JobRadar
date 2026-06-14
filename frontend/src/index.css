@@ -32,6 +32,14 @@
     --accent-text: #7c3aed;
     --destructive: #dc2626;
     --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+    --heat-zero: #e8eaf0;
+    --heat-1: #6ee7b7;
+    --heat-2: #34d399;
+    --heat-3: #10b981;
+    --heat-4: #059669;
+    --sparkline-dim-purple: rgba(109, 40, 217, 0.2);
+    --sparkline-dim-green: rgba(16, 185, 129, 0.2);
+    --sparkline-bar-prev: #d1fae5;
   }
 
   /* ── Dark theme ──────────────────────────────────── */
@@ -57,6 +65,14 @@
     --accent-text: #a78bfa;
     --destructive: #ef4444;
     --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+    --heat-zero: #1c1c1e;
+    --heat-1: #085041;
+    --heat-2: #0f6e56;
+    --heat-3: #1d9e75;
+    --heat-4: #5dcaa5;
+    --sparkline-dim-purple: #221f4a;
+    --sparkline-dim-green: #083426;
+    --sparkline-bar-prev: #1c3c34;
   }
 
   html {

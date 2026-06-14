@@ -24,7 +24,7 @@ function Sparkline({ row }: { row: CompanyVelocityInsight }) {
             style={
               {
                 '--bar-h': `${h}px`,
-                '--bar-bg': isCurrent ? '#1d9e75' : '#1c3c34',
+                '--bar-bg': isCurrent ? '#1d9e75' : 'var(--sparkline-bar-prev)',
               } as CSSProperties
             }
             className="w-[7px] rounded-[2px] [height:var(--bar-h)] [background:var(--bar-bg)]"
@@ -36,7 +36,8 @@ function Sparkline({ row }: { row: CompanyVelocityInsight }) {
 }
 
 function VelocityContent({ data }: { data: CompanyVelocityInsight[] }) {
-  if (data.length === 0) return <InsightEmpty />
+  if (data.length === 0)
+    return <InsightEmpty reason="Requires 2+ weeks of scan history to compute velocity" />
   return (
     <div className="overflow-x-auto">
       <table className="w-full">

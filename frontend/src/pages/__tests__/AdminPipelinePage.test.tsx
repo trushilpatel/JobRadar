@@ -6,12 +6,27 @@ import { MemoryRouter } from 'react-router-dom'
 // ── Mock dependencies ─────────────────────────────────────────────────────────
 vi.mock('@/features/ats')
 vi.mock('@/features/settings/api/adapterConfigs.api')
+vi.mock('@/lib/api/pipeline')
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 // ── Lazy imports after mocks are registered ───────────────────────────────────
 import { useAts, useAtsActions } from '@/features/ats'
+import * as pipelineApi from '@/lib/api/pipeline'
 import { AdminPipelinePage } from '@/pages/admin/AdminPipelinePage'
-import type { ATS } from '@/types'
+import type { ATS, PipelineStats } from '@/types'
+
+const emptyPipelineStats: PipelineStats = {
+  total_companies: 5,
+  active_companies: 5,
+  queued: 0,
+  crawling: 0,
+  awaiting_filter: 0,
+  filter_retries: { '1m': 0, '10m': 0, '1h': 0, dlq: 0 },
+  awaiting_enrichment: 0,
+  enricher_retries: { '1m': 0, '10m': 0, '1h': 0, dlq: 0 },
+  new_jobs_24h: 12,
+  errors_24h: 0,
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function makeWrapper() {
@@ -61,9 +76,10 @@ describe('AdminPipelinePage', () => {
       isSuccess: false,
       mutate: vi.fn(),
     } as never)
+    vi.mocked(pipelineApi.fetchPipelineStats).mockResolvedValue(emptyPipelineStats)
   })
 
-  it('renders the Pipeline Config heading', () => {
+  it('renders the Pipeline heading', () => {
     vi.mocked(useAts).mockReturnValue({
       data: undefined,
       isLoading: true,
@@ -71,7 +87,7 @@ describe('AdminPipelinePage', () => {
       refetch: vi.fn(),
     } as never)
     render(<AdminPipelinePage />, { wrapper: makeWrapper() })
-    expect(screen.getByRole('heading', { name: 'Pipeline Config' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Pipeline' })).toBeInTheDocument()
   })
 
   it('renders the Adapter Configuration section heading', () => {
@@ -120,6 +136,70 @@ describe('AdminPipelinePage', () => {
     } as never)
     render(<AdminPipelinePage />, { wrapper: makeWrapper() })
     expect(screen.getByText('Failed to load ATS configs.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    // Multiple Retry buttons exist (ATS + pipeline retry tiers); verify at least one renders.
+    expect(screen.getAllByRole('button', { name: /Retry/ }).length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('shows pipeline health stats when pipeline data resolves', async () => {
+    vi.mocked(useAts).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never)
+    vi.mocked(pipelineApi.fetchPipelineStats).mockResolvedValue({
+      ...emptyPipelineStats,
+      queued: 3,
+      new_jobs_24h: 42,
+    })
+    render(<AdminPipelinePage />, { wrapper: makeWrapper() })
+    await waitFor(() => {
+      expect(screen.getByText('Pipeline Health')).toBeInTheDocument()
+      expect(screen.getByText('42')).toBeInTheDocument()
+    })
+  })
+
+  it('shows pipeline error state when pipeline fetch fails', async () => {
+    vi.mocked(useAts).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never)
+    vi.mocked(pipelineApi.fetchPipelineStats).mockRejectedValue(new Error('network'))
+    render(<AdminPipelinePage />, { wrapper: makeWrapper() })
+    await waitFor(() => {
+      expect(screen.getByText(/Pipeline stats unavailable/)).toBeInTheDocument()
+    })
+  })
+
+  it('shows healthy status indicator when no errors or retries', async () => {
+    vi.mocked(useAts).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never)
+    render(<AdminPipelinePage />, { wrapper: makeWrapper() })
+    await waitFor(() => {
+      expect(screen.getByText('Pipeline healthy')).toBeInTheDocument()
+    })
+  })
+
+  it('shows unhealthy status when errors_24h > 0', async () => {
+    vi.mocked(useAts).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never)
+    vi.mocked(pipelineApi.fetchPipelineStats).mockResolvedValue({
+      ...emptyPipelineStats,
+      errors_24h: 7,
+    })
+    render(<AdminPipelinePage />, { wrapper: makeWrapper() })
+    await waitFor(() => {
+      expect(screen.getByText(/7 errors in 24h/)).toBeInTheDocument()
+    })
   })
 })

@@ -62,7 +62,7 @@ describe('ProgressPanel', () => {
     vi.mocked(dashboardApi.fetchProgress).mockResolvedValue(sampleProgress)
     render(<ProgressPanel />, { wrapper: makeWrapper() })
     await waitFor(() => expect(screen.getByText('5')).toBeInTheDocument())
-    expect(screen.getByText('3 awaiting reply')).toBeInTheDocument()
+    expect(screen.getByText('3 no reply')).toBeInTheDocument()
   })
 
   it('renders interviewing count when data is present', async () => {
@@ -89,6 +89,8 @@ describe('ProgressPanel', () => {
     })
     render(<ProgressPanel />, { wrapper: makeWrapper() })
     await waitFor(() => expect(screen.getByText('no offers yet')).toBeInTheDocument())
+    expect(screen.getAllByText('0').length).toBeGreaterThan(0)
+    expect(screen.getByText('all replied')).toBeInTheDocument()
     expect(document.querySelector('.animate-pulse')).not.toBeInTheDocument()
   })
 })
@@ -300,7 +302,11 @@ describe('VelocityPanel', () => {
   it('shows empty state when data is an empty array', async () => {
     vi.mocked(dashboardApi.fetchVelocity).mockResolvedValue([])
     render(<VelocityPanel />, { wrapper: makeWrapper() })
-    await waitFor(() => expect(screen.getByText('No velocity data yet')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByText('No velocity data yet — requires 2+ weeks of scan history to compute')
+      ).toBeInTheDocument()
+    )
   })
 
   it('renders normal velocity tag as dash', async () => {

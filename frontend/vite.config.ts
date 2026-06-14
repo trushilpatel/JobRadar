@@ -40,9 +40,14 @@ export default defineConfig(({ mode }) => {
     server: {
       host: true,
       proxy: {
-        '/api': {
+        // Admin routes: strip /api prefix — Go router registers /admin/* at root
+        '/api/admin': {
           target: apiProxyTarget,
           rewrite: (p) => p.replace(/^\/api/, ''),
+        },
+        // User API routes: preserve /api prefix — Go router registers under /api/
+        '/api': {
+          target: apiProxyTarget,
         },
       },
     },

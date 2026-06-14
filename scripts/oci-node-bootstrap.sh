@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# oci-node-bootstrap.sh — one-time setup for a fresh OCI ARM A1 instance.
+# Identical software stack on every node; which services run is controlled by
+# the Helm values files (values.prod-node1.yaml / values.prod-node2.yaml).
+#
+# Usage:
+#   bash oci-node-bootstrap.sh
+#
+# Optional env overrides (skip interactive prompts):
+#   GH_USER=<github-username> GH_PAT=<read:packages PAT> bash oci-node-bootstrap.sh
+#
+# Idempotent — safe to re-run on the same node at any time.
+set -euo pipefail
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BOLD='\033[1m'; NC='\033[0m'
+
+ok()   { echo -e "${GREEN}  ✓${NC} $*"; }
+warn() { echo -e "${YELLOW}  !${NC} $*"; }
+die()  { echo -e "${RED}  ✗${NC} $*"; exit 1; }
+step() { echo -e "\n${BOLD}$*${NC}"; }
+
+NS="jobradar-local"
+KUBECONFIG_PATH="/etc/rancher/k3s/k3s.yaml"
+
+# ── 0. Swap (2 GB) ────────────────────────────────────────────────────────────
+step "[0/6] Swap"
+if swapon --show | grep -q '/swapfile'; then
+  ok "swapfile already active"
+elif [[ -f /swapfile ]]; then
+  sudo swapon /swapfile
+  ok "swapfile activated"
+else
+  echo "  Creating 2 GB swapfile..."
+  sudo fallocate -l 2G /swapfile
+  sudo chmod 600 /swapfile
+  sudo mkswap /swapfile
+  sudo swapon /swapfile
+  grep -q swapfile /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+  ok "2 GB swap created and persisted"
+fi
+
+# ── 1. k3s ────────────────────────────────────────────────────────────────────
+step "[1/6] k3s"
+
+# Write config before installing — disables components we don't need (saves ~200MB RAM)
+sudo mkdir -p /etc/rancher/k3s
+if [[ ! -f /etc/rancher/k3s/config.yaml ]]; then
+  sudo tee /etc/rancher/k3s/config.yaml >/dev/null <<'EOF'
+disable:
+  - traefik
+  - servicelb
+  - metrics-server
+EOF
+  ok "k3s config written (traefik/servicelb/metrics-server disabled)"
+else
+  ok "k3s config already exists"
+fi
+
+if command -v k3s >/dev/null 2>&1; then
+  ok "k3s already installed ($(k3s --version | head -1))"
+else
+  echo "  Installing k3s..."
+  curl -sfL https://get.k3s.io | sh -
+  ok "k3s installed"
+fi
+
+echo "  Waiting for node to become Ready..."
+until sudo KUBECONFIG="$KUBECONFIG_PATH" kubectl get nodes 2>/dev/null | grep -q " Ready"; do sleep 2; done
+ok "Node is Ready"
+
+# Allow the current user to read the kubeconfig without sudo
+sudo chmod 644 "$KUBECONFIG_PATH"
+ok "kubeconfig permissions set (644)"
+export KUBECONFIG="$KUBECONFIG_PATH"
+
+# Persist for future sessions
+if ! grep -q "KUBECONFIG=$KUBECONFIG_PATH" ~/.bashrc 2>/dev/null; then
+  echo "export KUBECONFIG=$KUBECONFIG_PATH" >> ~/.bashrc
+  ok "KUBECONFIG added to ~/.bashrc"
+else
+  ok "KUBECONFIG already in ~/.bashrc"
+fi
+
+# ── 2. Helm ───────────────────────────────────────────────────────────────────
+step "[2/6] Helm"
+if command -v helm >/dev/null 2>&1; then
+  ok "helm already installed ($(helm version --short))"
+else
+  echo "  Installing Helm..."
+  curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  ok "helm installed"
+fi
+
+# ── 3. jq ─────────────────────────────────────────────────────────────────────
+step "[3/6] jq"
+if command -v jq >/dev/null 2>&1; then
+  ok "jq already installed ($(jq --version))"
+else
+  echo "  Installing jq..."
+  if command -v apt-get >/dev/null 2>&1; then
+    sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y jq
+  elif command -v yum >/dev/null 2>&1; then
+    sudo yum install -y jq
+  else
+    die "Unknown package manager — install jq manually then re-run"
+  fi
+  ok "jq installed"
+fi
+
+# ── 4. Doppler CLI ────────────────────────────────────────────────────────────
+step "[4/6] Doppler CLI"
+if command -v doppler >/dev/null 2>&1; then
+  ok "doppler already installed ($(doppler --version))"
+else
+  echo "  Installing Doppler CLI..."
+  curl -Ls https://cli.doppler.com/install.sh | sudo sh
+  ok "doppler installed"
+fi
+
+if doppler secrets get SUPABASE_URL >/dev/null 2>&1; then
+  ok "Doppler already authenticated and configured"
+else
+  warn "Doppler not yet authenticated. Run these commands manually after bootstrap:"
+  echo "    doppler login"
+  echo "    doppler setup   # select project: job-radar, config: prod"
+fi
+
+# ── 5. Kubernetes namespace ───────────────────────────────────────────────────
+step "[5/6] Kubernetes namespace"
+# k3s API server may still be starting after a reboot — wait until it accepts connections
+echo "  Waiting for k3s API server..."
+until kubectl get nodes >/dev/null 2>&1; do sleep 3; done
+ok "k3s API server is ready"
+if kubectl get namespace "$NS" >/dev/null 2>&1; then
+  ok "Namespace '$NS' already exists"
+else
+  kubectl create namespace "$NS"
+  ok "Namespace '$NS' created"
+fi
+
+# ── 6. GHCR imagePullSecret ───────────────────────────────────────────────────
+step "[6/6] GHCR imagePullSecret"
+if kubectl get secret ghcr-pull-secret -n "$NS" >/dev/null 2>&1; then
+  ok "ghcr-pull-secret already exists in $NS"
+else
+  # Use env vars if provided, otherwise prompt interactively
+  if [[ -z "${GH_USER:-}" || -z "${GH_PAT:-}" ]]; then
+    echo ""
+    echo "  A GitHub PAT with 'read:packages' scope is required."
+    echo "  Create one at: https://github.com/settings/tokens/new"
+    echo "  Or re-run with:  GH_USER=<user> GH_PAT=<token> bash oci-node-bootstrap.sh"
+    echo ""
+    read -rp "  GitHub username: " GH_USER
+    read -rsp "  GitHub PAT (hidden): " GH_PAT
+    echo ""
+  fi
+
+  kubectl create secret docker-registry ghcr-pull-secret \
+    --docker-server=ghcr.io \
+    --docker-username="$GH_USER" \
+    --docker-password="$GH_PAT" \
+    --namespace "$NS"
+  ok "ghcr-pull-secret created in $NS"
+fi
+
+# ── Done ──────────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}Bootstrap complete.${NC}"
+echo ""
+echo "Remaining manual steps:"
+echo "  1. If Doppler auth was skipped:  doppler login && doppler setup"
+echo "  2. Open OCI Security List ports in the OCI Console:"
+echo "       INFRA node: TCP 22, 30080, 30300"
+echo "       APP node:   TCP 22 only"
+echo "  3. Add GitHub repo secrets (Settings → Secrets → Actions):"
+echo "       OCI_INFRA_HOST, OCI_APP_HOST, OCI_SSH_USER, OCI_SSH_KEY"
+echo "       VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY"
+echo ""
