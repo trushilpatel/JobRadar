@@ -70,7 +70,9 @@ export function VelocityPanel() {
       ) : isError ? (
         <p className="text-sm text-muted py-4">Failed to load velocity data</p>
       ) : !rows || rows.length === 0 ? (
-        <p className="text-sm text-placeholder py-4">No velocity data yet</p>
+        <p className="text-sm text-placeholder py-4">
+          No velocity data yet — requires 2+ weeks of scan history to compute
+        </p>
       ) : (
         <div>
           {rows.map((row, i) => (

@@ -70,7 +70,7 @@ function LocationContent({ data }: { data: LocationData }) {
         <div className="space-y-2">
           {countries.slice(0, 8).map(({ country, count }) => (
             <div key={country} className="flex items-center gap-3">
-              <span className="w-20 shrink-0 text-xs text-secondary truncate">{country}</span>
+              <span className="w-28 shrink-0 text-xs text-secondary truncate">{country}</span>
               <div className="flex-1 bg-subtle rounded-full h-1.5 overflow-hidden">
                 <div
                   style={{ '--bar-pct': `${(count / maxC) * 100}%` } as CSSProperties}

@@ -11,7 +11,7 @@ import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { Switch } from '@/components/ui/switch'
 import { useUserConfig, usePatchUserConfig } from '@/lib/hooks/useUserConfig'
 import { cn } from '@/lib/utils/utils'
-import { useTheme } from '@/app/ThemeContext'
+import { useTheme, resolveSystemTheme } from '@/app/ThemeContext'
 import type { ThemePreference } from '@/types'
 
 const SHORTCUT_CATEGORIES: { category: CommandCategory; title: string }[] = [
@@ -72,6 +72,15 @@ function ShortcutReference() {
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme()
+  const [systemResolved, setSystemResolved] = useState<'light' | 'dark'>(resolveSystemTheme)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => setSystemResolved(mq.matches ? 'dark' : 'light')
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
   const options: Array<{
     value: ThemePreference
     label: string
@@ -82,23 +91,26 @@ function ThemeToggle() {
     { value: 'system', label: 'System', icon: Monitor },
   ]
   return (
-    <div className="flex rounded-lg border border-[var(--border)] bg-panel p-1 gap-1">
-      {options.map(({ value, label, icon: Icon }) => (
-        <button
-          key={value}
-          type="button"
-          onClick={() => setTheme(value)}
-          className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-            theme === value
-              ? 'bg-violet-600 text-white'
-              : 'text-muted hover:text-primary hover:bg-hover'
-          )}
-        >
-          <Icon size={14} />
-          {label}
-        </button>
-      ))}
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex rounded-lg border border-[var(--border)] bg-panel p-1 gap-1">
+        {options.map(({ value, label, icon: Icon }) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setTheme(value)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+              theme === value
+                ? 'bg-violet-600 text-white'
+                : 'text-muted hover:text-primary hover:bg-hover'
+            )}
+          >
+            <Icon size={14} />
+            {label}
+          </button>
+        ))}
+      </div>
+      {theme === 'system' && <p className="text-xs text-placeholder">Currently {systemResolved}</p>}
     </div>
   )
 }

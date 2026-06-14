@@ -101,9 +101,11 @@ export function TechTrendsPanel() {
       {isLoading ? (
         <div className="h-40 animate-pulse bg-subtle rounded-lg" />
       ) : isError ? (
-        <p className="text-sm text-placeholder py-4">No tech data yet</p>
+        <p className="text-sm text-muted py-4">Failed to load tech trends</p>
       ) : !data ? (
-        <p className="text-sm text-placeholder py-4">No tech data yet</p>
+        <p className="text-sm text-placeholder py-4">
+          No tech data yet — requires jobs with technology tags to appear here
+        </p>
       ) : (
         <div className="flex items-stretch gap-0">
           {/* Rising column */}
