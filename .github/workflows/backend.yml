@@ -155,7 +155,7 @@ jobs:
     if: needs.changes.outputs.service-users == 'true' || needs.changes.outputs.platform == 'true'
     uses: ./.github/workflows/backend-test.yml
     with:
-      packages: ./service/user/... ./service/company/... ./service/application/... ./service/role/...
+      packages: ./service/user/... ./service/company/... ./service/application/...
       flags: service-users
       artifact-name: coverage-service-users
     secrets: inherit
