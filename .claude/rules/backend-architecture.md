@@ -26,3 +26,15 @@ All data access goes through the service layer. No component queries the databas
 
 - All service and store dependencies are wired via interfaces in `wire.go`
 - Concrete types are never referenced outside their own package except in wire setup
+
+## SOLID — Go application
+
+These are the hard rules from `engineering-principles.md` applied concretely to Go:
+
+- **Single Responsibility** — one struct/service, one reason to change. Split when a service does unrelated things (e.g. scanning AND analytics).
+- **Open/Closed** — new ATS providers, LLM backends, etc. are addable without touching existing ones. Extend via new implementations, not by modifying working code.
+- **Liskov Substitution** — implementations of an interface must be fully interchangeable. Don't add methods to a concrete type that callers depend on — put them in the interface.
+- **Interface Segregation** — keep interfaces small and focused. Prefer multiple small interfaces over one large one. Don't force a type to implement methods it doesn't need.
+- **Dependency Inversion** — high-level components (workers, handlers) depend on abstractions (interfaces). Low-level components (stores, HTTP clients) implement those abstractions. Already enforced by the service layer rule — keep it that way.
+
+**Practical reminders:** prefer composition over embedding; a function that does one thing beats a flexible one that does three; new behaviour via new types/functions, not optional parameters on existing ones.
