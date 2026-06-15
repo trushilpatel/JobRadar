@@ -106,11 +106,11 @@ Tuned for a single-node k3d cluster on an 8 GB M1. Never raise limits without ch
 | Component    | Req mem | Limit mem      | Req CPU | Limit CPU |
 | ------------ | ------- | -------------- | ------- | --------- |
 | api          | 64Mi    | 128Mi          | 100m    | 500m      |
-| orchestrator | 64Mi    | 128Mi          | 50m     | 300m      |
+| orchestrator | 64Mi    | 64Mi           | 50m     | 300m      |
 | crawler-node | 64Mi    | 64Mi (per pod) | 50m     | 200m      |
-| filter       | 32Mi    | 128Mi          | 100m    | 500m      |
-| enricher     | 32Mi    | 128Mi          | 100m    | 500m      |
-| scheduler    | 64Mi    | 128Mi          | 50m     | 200m      |
+| filter       | 32Mi    | 64Mi           | 100m    | 500m      |
+| enricher     | 32Mi    | 64Mi           | 100m    | 500m      |
+| scheduler    | 64Mi    | 64Mi           | 50m     | 200m      |
 | console      | 32Mi    | 64Mi           | 25m     | 100m      |
 | migrate      | 32Mi    | 128Mi          | 50m     | —         |
 
@@ -136,8 +136,8 @@ Two Oracle Cloud Free Tier ARM A1 instances (1 OCPU, 1 GB RAM each + 2 GB swap).
 
 | Node  | Name     | IP                | Services                                                      | Values file              |
 | ----- | -------- | ----------------- | ------------------------------------------------------------- | ------------------------ |
-| INFRA | Serving  | `161.153.66.17`   | API + Console                                                 | `values.prod-node1.yaml` |
-| APP   | Pipeline | `147.224.253.250` | Scheduler + Orchestrator + CrawlerNode ×3 + Filter + Enricher | `values.prod-node2.yaml` |
+| INFRA | Serving  | `161.153.66.17`   | API + Console                                                 | `values.prod-infra.yaml` |
+| APP   | Pipeline | `147.224.253.250` | Scheduler + Orchestrator + CrawlerNode ×3 + Filter + Enricher | `values.prod-app.yaml`   |
 
 Node IPs and usernames are stored in Doppler prod as `OCI_INFRA_IP`, `OCI_INFRA_USERNAME`, `OCI_APP_IP`, `OCI_APP_USERNAME`. GitHub PAT (read:packages) is stored as `GITHUB_PAT`.
 
@@ -156,7 +156,7 @@ push to main
                                           │
                    ┌──────────────────────┤
                    ▼                      ▼
-          [deploy-node1]          [deploy-node2]
+          [deploy-infra]          [deploy-app]
           (if backend or          (if backend, orch,
            console changed)        or crawler-node changed)
           SSH → helm upgrade      SSH → helm upgrade
@@ -183,20 +183,24 @@ ssh ubuntu@<node-ip>
 GH_USER=trushilpatel GH_PAT=$(doppler secrets get GITHUB_PAT --plain) bash ~/oci-node-bootstrap.sh
 ```
 
-The script handles in order: swap (2 GB), k3s config (traefik/servicelb/metrics-server disabled), k3s install, Helm, jq, Doppler CLI, namespace, ghcr-pull-secret.
+The script handles in order: swap (2 GB), k3s config (traefik/servicelb/metrics-server disabled, `write-kubeconfig-mode: 0644`, OCI resolv.conf), k3s install, jobradar-iptables.service (clears stale KUBE-ROUTER chains on reboot), Helm, jq, Doppler CLI, namespace, ghcr-pull-secret.
+
+**Remediation for existing nodes**: if a node is failing with `TLS handshake timeout` after a reboot, run `scripts/oci-k3s-netfix.sh` on it — idempotent, safe to re-run.
 
 After the script: run `doppler login && doppler setup` (project: `job-radar`, config: `prod`) — this is interactive and cannot be scripted.
 
 ### GitHub Actions secrets required
 
-| Secret                   | Value                                                        |
-| ------------------------ | ------------------------------------------------------------ |
-| `OCI_INFRA_HOST`         | `161.153.66.17`                                              |
-| `OCI_APP_HOST`           | `147.224.253.250`                                            |
-| `OCI_SSH_USER`           | `ubuntu`                                                     |
-| `OCI_SSH_KEY`            | Private key content (Ed25519)                                |
-| `VITE_SUPABASE_URL`      | Supabase project URL (same as Doppler `SUPABASE_URL`)        |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anon key (same as Doppler `VITE_SUPABASE_ANON_KEY`) |
+| Secret                       | Value                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| `OCI_INFRA_HOST`             | `161.153.66.17`                                                                  |
+| `OCI_APP_HOST`               | `147.224.253.250`                                                                |
+| `OCI_SSH_USER`               | `ubuntu`                                                                         |
+| `OCI_SSH_KEY`                | Private key content (Ed25519)                                                    |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key (same as Doppler `VITE_CLERK_PUBLISHABLE_KEY`) — for build |
+| `CLERK_JWKS_URL`             | Clerk JWKS URL (same as Doppler `CLERK_JWKS_URL`) — passed at deploy time        |
+| `CLERK_ISSUER_URL`           | Clerk issuer URL (same as Doppler `CLERK_ISSUER_URL`) — passed at deploy time    |
+| `CODECOV_TOKEN`              | Codecov upload token                                                             |
 
 `GITHUB_TOKEN` for GHCR push is injected automatically — no extra secret needed.
 

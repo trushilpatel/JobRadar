@@ -29,8 +29,8 @@ jobs:
       node_changed: ${{ steps.filter.outputs.crawler_node }}
       console_changed: ${{ steps.filter.outputs.console }}
       any_go_changed: ${{ steps.goflags.outputs.any_go }}
-      node1_changed: ${{ steps.flags.outputs.node1 }}
-      node2_changed: ${{ steps.flags.outputs.node2 }}
+      infra_changed: ${{ steps.flags.outputs.infra }}
+      app_changed: ${{ steps.flags.outputs.app }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,17 +88,17 @@ jobs:
         run: |
           if [[ "${{ steps.filter.outputs.backend }}" == "true" || \
                 "${{ steps.filter.outputs.console }}"  == "true" ]]; then
-            echo "node1=true" >> $GITHUB_OUTPUT
+            echo "infra=true" >> $GITHUB_OUTPUT
           else
-            echo "node1=false" >> $GITHUB_OUTPUT
+            echo "infra=false" >> $GITHUB_OUTPUT
           fi
 
           if [[ "${{ steps.filter.outputs.backend }}"      == "true" || \
                 "${{ steps.filter.outputs.orchestrator }}" == "true" || \
                 "${{ steps.filter.outputs.crawler_node }}" == "true" ]]; then
-            echo "node2=true" >> $GITHUB_OUTPUT
+            echo "app=true" >> $GITHUB_OUTPUT
           else
-            echo "node2=false" >> $GITHUB_OUTPUT
+            echo "app=false" >> $GITHUB_OUTPUT
           fi
 
   # ── 2-4. Quality gates (run before any build) ─────────────────────────────
@@ -465,9 +465,9 @@ jobs:
           cache-from: type=gha,scope=console-ci
           cache-to: type=gha,scope=console-ci,mode=max
 
-  # ── 12. Deploy Node 1 (API + Console) ─────────────────────────────────────
-  deploy-node1:
-    name: deploy node1 (serving)
+  # ── 12. Deploy INFRA node (API + Console) ─────────────────────────────────
+  deploy-infra:
+    name: deploy infra (serving)
     needs:
       - detect-changes
       - quality-gate
@@ -475,7 +475,7 @@ jobs:
       - build-console
     if: |
       always() &&
-      needs.detect-changes.outputs.node1_changed == 'true' &&
+      needs.detect-changes.outputs.infra_changed == 'true' &&
       needs.quality-gate.result == 'success' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
@@ -490,7 +490,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "${{ secrets.OCI_INFRA_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Resolve image tags for Node 1
+      - name: Resolve image tags for INFRA
         id: tags
         env:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
@@ -517,7 +517,7 @@ jobs:
           echo "backend=$BACKEND_TAG" >> $GITHUB_OUTPUT
           echo "console=$CONSOLE_TAG" >> $GITHUB_OUTPUT
 
-      - name: Copy chart and values to Node 1
+      - name: Copy chart and values to INFRA
         env:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
@@ -526,7 +526,16 @@ jobs:
           scp -i ~/.ssh/id_ed25519 -r k8s/helm/jobradar "$USER@$HOST:/tmp/jobradar-chart"
           scp -i ~/.ssh/id_ed25519 k8s/helm/jobradar/values.prod-infra.yaml "$USER@$HOST:/tmp/"
 
-      - name: Helm upgrade Node 1
+      - name: Wait for k3s API (INFRA)
+        env:
+          HOST: ${{ secrets.OCI_INFRA_HOST }}
+          USER: ${{ secrets.OCI_SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
+            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml timeout 300 bash -c \
+              'until kubectl get nodes 2>/dev/null | grep -q Ready; do sleep 5; done'"
+
+      - name: Helm upgrade INFRA
         env:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
@@ -542,9 +551,9 @@ jobs:
               --set api.clerkIssuerUrl=${{ secrets.CLERK_ISSUER_URL }} \
               --wait --timeout 5m"
 
-  # ── 13. Deploy Node 2 (Pipeline) ──────────────────────────────────────────
-  deploy-node2:
-    name: deploy node2 (pipeline)
+  # ── 13. Deploy APP node (Pipeline) ────────────────────────────────────────
+  deploy-app:
+    name: deploy app (pipeline)
     needs:
       - detect-changes
       - quality-gate
@@ -553,7 +562,7 @@ jobs:
       - build-crawler-node
     if: |
       always() &&
-      needs.detect-changes.outputs.node2_changed == 'true' &&
+      needs.detect-changes.outputs.app_changed == 'true' &&
       needs.quality-gate.result == 'success' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
@@ -568,7 +577,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "${{ secrets.OCI_APP_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Resolve image tags for Node 2
+      - name: Resolve image tags for APP
         id: tags
         env:
           HOST: ${{ secrets.OCI_APP_HOST }}
@@ -592,7 +601,7 @@ jobs:
           echo "orchestrator=$(get_tag '${{ needs.build-orchestrator.result }}' orchestrator)" >> $GITHUB_OUTPUT
           echo "crawler_node=$(get_tag '${{ needs.build-crawler-node.result }}' crawlerNode)" >> $GITHUB_OUTPUT
 
-      - name: Copy chart and values to Node 2
+      - name: Copy chart and values to APP
         env:
           HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
@@ -601,7 +610,16 @@ jobs:
           scp -i ~/.ssh/id_ed25519 -r k8s/helm/jobradar "$USER@$HOST:/tmp/jobradar-chart"
           scp -i ~/.ssh/id_ed25519 k8s/helm/jobradar/values.prod-app.yaml "$USER@$HOST:/tmp/"
 
-      - name: Helm upgrade Node 2
+      - name: Wait for k3s API (APP)
+        env:
+          HOST: ${{ secrets.OCI_APP_HOST }}
+          USER: ${{ secrets.OCI_SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
+            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml timeout 300 bash -c \
+              'until kubectl get nodes 2>/dev/null | grep -q Ready; do sleep 5; done'"
+
+      - name: Helm upgrade APP
         env:
           HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
