@@ -6,15 +6,15 @@ k8s (k3d) is the only deployment target. There is no Docker Compose setup.
 
 ## Crawler images are pure Go
 
-`Dockerfile.crawler` and `Dockerfile.orchestrator` are **pure Go** — no Node.js, no Chromium, no Playwright. All adapters speak plain HTTP. Do not add browser dependencies to either image.
+`Dockerfile.crawler-node` and `Dockerfile.orchestrator` are **pure Go** — no Node.js, no Chromium, no Playwright. All adapters speak plain HTTP. Do not add browser dependencies to either image.
 
-All ATS adapters (Greenhouse, Lever, Ashby, Apple, Microsoft, Netflix, Rippling, Uber, Google, Meta) work over HTTP / JSON / GraphQL / sitemap. Google uses HTTP + RE2 regex over server-rendered HTML (`backend/apps/crawler/ats/google/http.go`); Meta uses sitemap-driven listing + JSON-LD detail (`backend/apps/crawler/ats/meta/*.go`).
+All ATS adapters (Greenhouse, Lever, Ashby, Apple, Microsoft, Netflix, Rippling, Uber, Google, Meta) live in `backend/apps/crawler-v2/adapters/ats/` and work over HTTP / JSON / GraphQL / sitemap. Google uses HTTP + RE2 regex over server-rendered HTML (`backend/apps/crawler-v2/adapters/ats/google/`); Meta uses sitemap-driven listing + JSON-LD detail (`backend/apps/crawler-v2/adapters/ats/meta/`).
 
 Base image is `alpine:3.20` (CGO_ENABLED=0 binary has no glibc dependency; ~8 MB vs ~80 MB for debian). Non-root user UID 65532 (`jobradar`) matches the k8s `securityContext.runAsUser`.
 
 ## Security hardening
 
-All pods run with `runAsNonRoot: true`. Worker pods (api, crawler, filter, enricher, scheduler, migrate) use the shared `jobradar.workerSecurityContext` helper (`readOnlyRootFilesystem: true`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, UID 65532).
+All pods run with `runAsNonRoot: true`. Worker pods (api, crawler-node, orchestrator, filter, enricher, scheduler, migrate) use the shared `jobradar.workerSecurityContext` helper (`readOnlyRootFilesystem: true`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, UID 65532).
 
 Console (nginx) also has `readOnlyRootFilesystem: true`. Nginx needs three writable paths at runtime — all three are mounted as in-memory `emptyDir` volumes:
 
@@ -31,7 +31,7 @@ Do not add writable host-path mounts. If a new workload needs temporary storage,
 - **Doppler CLI must be authenticated** — `doppler login` once per machine. All `make k8s-bootstrap` and `make k8s-build-console` targets pull secrets from Doppler at runtime; no `.env` file is read. To bootstrap for production: `DOPPLER_CONFIG=prod make k8s-bootstrap`.
 - **kubectl context must be `k3d-jobradar`**, never `docker-desktop`. Check: `kubectl config current-context`. Switch: `kubectl config use-context k3d-jobradar`
 - **Storage class is `local-path`** in both Helm charts — the only class k3d provides. Never change it to `standard` (that's Docker Desktop)
-- **Images must be built and imported into k3d** before deploying — `make k8s-build` or `make k8s-build-{backend,crawler,console}`. Images imported into k3d are NOT available in Docker Desktop's Kubernetes and vice versa
+- **Images must be built and imported into k3d** before deploying — `make k8s-build` or `make k8s-build-{backend,crawler-node,orchestrator,console}`. Images imported into k3d are NOT available in Docker Desktop's Kubernetes and vice versa
 - **`k8s/helm/jobradar/values.local.yaml` is required** — copy it from `values.local.yaml.example` and fill in `api.supabaseProjectUrl`. `make k8s-up` aborts if the file is missing, and the chart aborts at render time if the value is empty (otherwise the api pod CrashLoopBackOffs with `SUPABASE_PROJECT_URL must be set`). The file is gitignored and lives only in the main checkout — in a **git worktree** symlink it in first (the `make k8s-up` error prints the exact `ln -s` command)
 - Redis is **external (Upstash)** — not deployed in-cluster
 - NATS is **external (Synadia Cloud)** in prod; local k3d runs an **in-cluster** NATS (`nats.external: false` in `values.local.yaml`)
@@ -41,18 +41,10 @@ Do not add writable host-path mounts. If a new workload needs temporary storage,
 ```bash
 kubectl config use-context k3d-jobradar    # verify context first
 make k8s-redeploy                           # build + import + helm sync + roll all app pods
-make k8s-logs-crawler                       # verify
+make k8s-logs-crawler-node                   # verify
 ```
 
 `make k8s-redeploy` is the blessed full-redeploy command. It chains `k8s-build` → `k8s-up` → `kubectl rollout restart` of every app deployment (nats excluded). The explicit rollout is **required**: images use the fixed `:local` tag, so a re-import is invisible to Helm (no pod-template diff) and the old image keeps running — see the `k3d stale image snapshot` memory. Use `make k8s-up` alone only for config/values changes that don't need new images.
-
-## Iterate on the crawler only
-
-```bash
-make k8s-build-crawler                      # rebuild + reimport crawler image only
-make k8s-restart-crawler                    # rolling restart crawler pod
-make k8s-logs-crawler
-```
 
 ## Iterate on the orchestrator / crawler-node
 
@@ -92,7 +84,7 @@ For the 8 GB M1 k3d node, `replicas: 3` with `maxConcurrent: 3` is a safe defaul
 
 ```bash
 curl -X POST http://localhost:30080/companies/<company-id>/scan
-make k8s-logs-crawler
+make k8s-logs-crawler-node
 ```
 
 ## Change the LLM models (filter / enricher)
@@ -114,7 +106,6 @@ Tuned for a single-node k3d cluster on an 8 GB M1. Never raise limits without ch
 | Component    | Req mem | Limit mem      | Req CPU | Limit CPU |
 | ------------ | ------- | -------------- | ------- | --------- |
 | api          | 64Mi    | 128Mi          | 100m    | 500m      |
-| crawler      | 128Mi   | 256Mi          | 100m    | 300m      |
 | orchestrator | 64Mi    | 128Mi          | 50m     | 300m      |
 | crawler-node | 64Mi    | 64Mi (per pod) | 50m     | 200m      |
 | filter       | 32Mi    | 128Mi          | 100m    | 500m      |
@@ -159,7 +150,6 @@ push to main
 [detect-changes]  ← dorny/paths-filter checks which files changed
      │
      ├─ backend/ changed?      → [build-backend]      → ghcr.io/trushilpatel/jobradar-backend:<sha>
-     ├─ crawler/ changed?      → [build-crawler]      → ghcr.io/trushilpatel/jobradar-crawler:<sha>
      ├─ orchestrator/ changed? → [build-orchestrator] → ghcr.io/trushilpatel/jobradar-orchestrator:<sha>
      ├─ crawler-node/ changed? → [build-crawler-node] → ghcr.io/trushilpatel/jobradar-crawler-node:<sha>
      └─ frontend/ changed?     → [build-console]      → ghcr.io/trushilpatel/jobradar-console:<sha>
@@ -167,8 +157,8 @@ push to main
                    ┌──────────────────────┤
                    ▼                      ▼
           [deploy-node1]          [deploy-node2]
-          (if backend or          (if backend, crawler,
-           console changed)        orch, or node changed)
+          (if backend or          (if backend, orch,
+           console changed)        or crawler-node changed)
           SSH → helm upgrade      SSH → helm upgrade
           INFRA node only         APP node only
 ```
@@ -227,11 +217,12 @@ k3s installs Traefik ingress, service load balancer, and metrics-server by defau
 
 ### OCI failure modes
 
-| Symptom                              | Cause                                  | Fix                                                          |
-| ------------------------------------ | -------------------------------------- | ------------------------------------------------------------ |
-| Node SSH unreachable after bootstrap | OOM during install — SSH daemon killed | Hard reboot from OCI Console; re-run bootstrap script        |
-| `ErrImagePull` on all pods           | `ghcr-pull-secret` missing or expired  | Re-run bootstrap step 6; rotate GitHub PAT if expired        |
-| `TLS handshake timeout` on kubectl   | k3s API not ready yet                  | Wait 30s; k3s is still starting                              |
-| `helm: command not found` on node    | Helm not installed                     | Re-run bootstrap script                                      |
-| Pods not restarting after push       | Image tag annotation unchanged         | Confirm the build job ran in GHA; check deploy workflow logs |
-| `connection refused` on 30080/30300  | Pods not scheduled yet                 | Check `kubectl get pods -n jobradar-local`                   |
+| Symptom                                              | Cause                                                                                                                                                                                                                                                                                                                                                                                                                    | Fix                                                                                                                                                                                                                                  |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Node SSH unreachable after bootstrap                 | OOM during install — SSH daemon killed                                                                                                                                                                                                                                                                                                                                                                                   | Hard reboot from OCI Console; re-run bootstrap script                                                                                                                                                                                |
+| `ErrImagePull` on all pods                           | `ghcr-pull-secret` missing or expired                                                                                                                                                                                                                                                                                                                                                                                    | Re-run bootstrap step 6; rotate GitHub PAT if expired                                                                                                                                                                                |
+| `TLS handshake timeout` on kubectl                   | k3s API not ready yet                                                                                                                                                                                                                                                                                                                                                                                                    | Wait 30s; k3s is still starting                                                                                                                                                                                                      |
+| `helm: command not found` on node                    | Helm not installed                                                                                                                                                                                                                                                                                                                                                                                                       | Re-run bootstrap script                                                                                                                                                                                                              |
+| Pods not restarting after push                       | Image tag annotation unchanged                                                                                                                                                                                                                                                                                                                                                                                           | Confirm the build job ran in GHA; check deploy workflow logs                                                                                                                                                                         |
+| `connection refused` on 30080/30300                  | Pods not scheduled yet                                                                                                                                                                                                                                                                                                                                                                                                   | Check `kubectl get pods -n jobradar-local`                                                                                                                                                                                           |
+| Pods can't reach k3s API; CoreDNS `CrashLoopBackOff` | Stale `KUBE-ROUTER-*` iptables chains restored by `netfilter-persistent` after reboot block pod→API connections. The INPUT chain REJECT drops NEW packets from the pod CIDR because ClusterIP DNAT routes pod→API connections through INPUT (not FORWARD). OCI `/etc/resolv.conf` → `127.0.0.53` (systemd-resolved stub) causes CoreDNS `forward . /etc/resolv.conf` to forward to the pod's own loopback (unreachable). | Run `bash scripts/oci-k3s-netfix.sh` on the node — installs `jobradar-iptables.service` (removes stale chains, adds pod CIDR ACCEPT to INPUT before every k3s start) and `/etc/rancher/k3s/resolv.conf` (OCI DNS). Then restart k3s. |

@@ -22,7 +22,6 @@ jobs:
     name: detect changes
     runs-on: ubuntu-latest
     outputs:
-      crawler:         ${{ steps.filter.outputs.crawler }}
       crawler-v2:      ${{ steps.filter.outputs.crawler-v2 }}
       api-server:      ${{ steps.filter.outputs.api-server }}
       workers:         ${{ steps.filter.outputs.workers }}
@@ -40,8 +39,6 @@ jobs:
         id: filter
         with:
           filters: |
-            crawler:
-              - 'backend/apps/crawler/**'
             crawler-v2:
               - 'backend/apps/crawler-v2/**'
             api-server:
@@ -95,7 +92,6 @@ jobs:
           go build ./apps/scheduler/...
           go build ./apps/filter/...
           go build ./apps/analyzer/...
-          go build ./apps/crawler/...
           go build ./apps/orchestrator/...
           go build ./apps/crawler-node/...
 
@@ -109,17 +105,6 @@ jobs:
   # Parallel + change-detected for fast, granular signal.  No Codecov upload —
   # the coverage gate is enforced locally by check-coverage.sh.  The full
   # consolidated upload happens in deploy.yml on merge to main.
-  test-crawler:
-    name: test / crawler
-    needs: changes
-    if: needs.changes.outputs.crawler == 'true' || needs.changes.outputs.platform == 'true'
-    uses: ./.github/workflows/backend-test.yml
-    with:
-      packages: ./apps/crawler/...
-      flags: crawler
-      artifact-name: coverage-crawler
-    secrets: inherit
-
   test-crawler-v2:
     name: test / crawler-v2
     needs: changes

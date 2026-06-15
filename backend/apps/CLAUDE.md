@@ -4,16 +4,16 @@ Each subdirectory is a self-contained app: one `main.go` entry point, its worker
 
 ## Apps
 
-| Binary         | Role                                                                                                  |
-| -------------- | ----------------------------------------------------------------------------------------------------- |
-| `scheduler`    | Enqueues companies into `company_scan_queue` on schedule                                              |
-| `orchestrator` | HTTP server — assigns `company_scan_queue` rows to crawler-nodes; receives results; publishes to NATS |
-| `crawler-node` | Stateless HTTP worker — polls orchestrator for work, runs ATS adapters, submits results back          |
-| `crawler`      | Legacy single-process crawler (being superseded by orchestrator + crawler-node)                       |
-| `filter`       | Consumes `jobs.raw.*` from NATS; runs LLM relevance filter; publishes to `jobs.filtered.*`            |
-| `analyzer`     | Consumes `jobs.filtered.*`; enriches + writes to `jobs` DB                                            |
-| `api`          | REST API server                                                                                       |
-| `migrate`      | One-shot DB migration runner                                                                          |
+| Binary         | Role                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
+| `scheduler`    | Enqueues companies into `company_scan_queue` on schedule                                                |
+| `orchestrator` | HTTP server — assigns `company_scan_queue` rows to crawler-nodes; receives results; publishes to NATS   |
+| `crawler-node` | Stateless HTTP worker — polls orchestrator for work, runs crawler-v2 ATS adapters, submits results back |
+| `crawler-v2`   | ATS adapter library (not a binary) — listing + detail fetch; used by crawler-node and the analyzer      |
+| `filter`       | Consumes `jobs.raw.*` from NATS; runs LLM relevance filter; publishes to `jobs.filtered.*`              |
+| `analyzer`     | Consumes `jobs.filtered.*`; enriches + writes to `jobs` DB                                              |
+| `api`          | REST API server                                                                                         |
+| `migrate`      | One-shot DB migration runner                                                                            |
 
 ## Rules
 

@@ -11,6 +11,20 @@ api:
 console:
   enabled: false
 
+# NATS credentials file path — mounted from the nats-creds secret (key: jobradar.creds)
+# via the deployment template volume at /etc/nats when natsCredsFile is non-empty.
+filter:
+  natsUrl: "tls://connect.ngs.global"
+  natsCredsFile: "/etc/nats/jobradar.creds"
+
+enricher:
+  natsUrl: "tls://connect.ngs.global"
+  natsCredsFile: "/etc/nats/jobradar.creds"
+
+orchestrator:
+  natsUrl: "tls://connect.ngs.global"
+  natsCredsFile: "/etc/nats/jobradar.creds"
+
 crawlerNode:
   replicas: 3
 
@@ -19,10 +33,6 @@ imagePullSecret: ghcr-pull-secret
 images:
   backend:
     repository: ghcr.io/trushilpatel/jobradar-backend
-    tag: latest # overridden at deploy time via --set
-    pullPolicy: IfNotPresent
-  crawler:
-    repository: ghcr.io/trushilpatel/jobradar-crawler
     tag: latest # overridden at deploy time via --set
     pullPolicy: IfNotPresent
   orchestrator:

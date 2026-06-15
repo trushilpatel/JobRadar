@@ -8,8 +8,6 @@ nats:
 
 scheduler:
   enabled: false
-crawler:
-  enabled: false
 orchestrator:
   enabled: false
 crawlerNode:
