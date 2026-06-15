@@ -268,8 +268,7 @@ jobs:
       - name: Build Vite bundle
         working-directory: frontend
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
         run: npm run build
 
       - name: Upload dist
@@ -539,7 +538,8 @@ jobs:
               -f /tmp/values.prod-infra.yaml \
               --set images.backend.tag=${{ steps.tags.outputs.backend }} \
               --set images.console.tag=${{ steps.tags.outputs.console }} \
-              --set api.supabaseProjectUrl=${{ secrets.VITE_SUPABASE_URL }} \
+              --set api.clerkJwksUrl=${{ secrets.CLERK_JWKS_URL }} \
+              --set api.clerkIssuerUrl=${{ secrets.CLERK_ISSUER_URL }} \
               --wait --timeout 5m"
 
   # ── 13. Deploy Node 2 (Pipeline) ──────────────────────────────────────────
