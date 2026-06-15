@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
@@ -85,7 +85,7 @@ func NewWorker(
 // jobWithCtx pairs a raw job with its retry delivery count.
 type jobWithCtx struct {
 	ctx        context.Context
-	job        ats.RawJob
+	job        core.JobSummary
 	retryCount int
 }
 
@@ -152,7 +152,7 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 	items := make([]chunkItem, 0, len(msgs))
 	// TODO: extract W3C trace context from msg headers via tracing.ExtractNATS once available
 	for _, msg := range msgs {
-		var job ats.RawJob
+		var job core.JobSummary
 		if jerr := json.Unmarshal(msg.Data(), &job); jerr != nil {
 			fetchLog.Warn("malformed message, routing to DLQ", logger.Err(jerr))
 			if perr := w.publisher.Publish(ctx, js.SubjectJobsDLQ, msg.Data()); perr != nil {
@@ -728,7 +728,7 @@ func (w *Worker) publishToDLQ(ctx context.Context, item chunkItem, scoreErr erro
 // on marshal or publish failure so the caller can keep ledger + NATS state
 // consistent: a publish-failed job is Nak'd (NATS redelivers) and is NOT marked
 // 'filtered' in the ledger.
-func (w *Worker) publishDetail(ctx context.Context, job ats.RawJob) error {
+func (w *Worker) publishDetail(ctx context.Context, job core.JobSummary) error {
 	payload, err := json.Marshal(job)
 	if err != nil {
 		w.log.Error("marshal failed", err, logger.Str(logger.FieldJobID, job.ID))

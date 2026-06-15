@@ -74,11 +74,13 @@ REQUIRED_VARS=(
   DB_PASSWORD
   DB_NAME
   REDIS_URL
-  SUPABASE_URL
   GEMINI_KEY
   GEMINI_KEY_JP
   CRAWLER_TOKEN_SECRET
   CRAWLER_TOKEN
+  CLERK_JWKS_URL
+  CLERK_ISSUER_URL
+  CLERK_SECRET_KEY
 )
 
 for var in "${REQUIRED_VARS[@]}"; do
@@ -89,22 +91,6 @@ for var in "${REQUIRED_VARS[@]}"; do
     ok "$var"
   fi
 done
-
-# Auth: exactly one of SUPABASE_JWKS_URL or SUPABASE_JWT_SECRET must be set
-JWKS="$(env_val SUPABASE_JWKS_URL)"
-JWT="$(env_val SUPABASE_JWT_SECRET)"
-if [ -n "$JWKS" ] && [ -n "$JWT" ]; then
-  fail "Both SUPABASE_JWKS_URL and SUPABASE_JWT_SECRET are set in Doppler — only one is allowed"
-elif [ -z "$JWKS" ] && [ -z "$JWT" ]; then
-  fail "Neither SUPABASE_JWKS_URL nor SUPABASE_JWT_SECRET is set in Doppler — one is required"
-else
-  ok "Supabase auth (${JWKS:+SUPABASE_JWKS_URL}${JWT:+SUPABASE_JWT_SECRET})"
-fi
-
-SRK="$(env_val SUPABASE_SERVICE_ROLE_KEY)"
-if [ -z "$SRK" ]; then
-  warn "SUPABASE_SERVICE_ROLE_KEY is empty — multi-user admin features will not work"
-fi
 
 # ── 3. Required values.local.yaml fields ─────────────────────────────────────
 echo -e "\n${BOLD}[3/5] Checking k8s/helm/jobradar/values.local.yaml${NC}"
@@ -119,7 +105,7 @@ check_yaml_key() {
 }
 
 check_yaml_key "natsCredsFile"
-check_yaml_key "supabaseProjectUrl"
+check_yaml_key "clerkJwksUrl"
 
 # ── 4. Abort on any failure ───────────────────────────────────────────────────
 if [ "$ERRORS" -gt 0 ]; then
@@ -180,12 +166,11 @@ DB_USER="$(env_val DB_USER)"
 DB_PASSWORD="$(env_val DB_PASSWORD)"
 DB_NAME="$(env_val DB_NAME)"
 REDIS_URL="$(env_val REDIS_URL)"
-SUPABASE_URL="$(env_val SUPABASE_URL)"
 GEMINI_KEY="$(env_val GEMINI_KEY)"
 GEMINI_KEY_JP="$(env_val GEMINI_KEY_JP)"
-SUPABASE_SERVICE_ROLE_KEY="$(env_val SUPABASE_SERVICE_ROLE_KEY)"
-SUPABASE_JWKS_URL="$(env_val SUPABASE_JWKS_URL)"
-SUPABASE_JWT_SECRET="$(env_val SUPABASE_JWT_SECRET)"
+CLERK_JWKS_URL="$(env_val CLERK_JWKS_URL)"
+CLERK_ISSUER_URL="$(env_val CLERK_ISSUER_URL)"
+CLERK_SECRET_KEY="$(env_val CLERK_SECRET_KEY)"
 CRAWLER_TOKEN_SECRET="$(env_val CRAWLER_TOKEN_SECRET)"
 CRAWLER_TOKEN="$(env_val CRAWLER_TOKEN)"
 
@@ -200,10 +185,9 @@ apply_secret jobradar-api-secret \
   --from-literal="DB_PASSWORD=$DB_PASSWORD" \
   --from-literal="DB_NAME=$DB_NAME" \
   --from-literal="REDIS_URL=$REDIS_URL" \
-  --from-literal="SUPABASE_URL=$SUPABASE_URL" \
-  --from-literal="SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" \
-  --from-literal="SUPABASE_JWKS_URL=$SUPABASE_JWKS_URL" \
-  --from-literal="SUPABASE_JWT_SECRET=$SUPABASE_JWT_SECRET"
+  --from-literal="CLERK_JWKS_URL=$CLERK_JWKS_URL" \
+  --from-literal="CLERK_ISSUER_URL=$CLERK_ISSUER_URL" \
+  --from-literal="CLERK_SECRET_KEY=$CLERK_SECRET_KEY"
 
 # Migrate secret
 apply_secret jobradar-migrate-secret \

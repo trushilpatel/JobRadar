@@ -5,22 +5,31 @@ import { MemoryRouter } from 'react-router-dom'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Sidebar } from '@/app/Sidebar'
 
-// ── Configurable auth-store mock (Sidebar imports from the feature barrel) ────
-interface MockAuthState {
-  session: { user?: { email?: string } } | null
-  isAdmin: boolean
-  signOut: () => void
+// ── Configurable Clerk mock ───────────────────────────────────────────────────
+const signOut = vi.fn().mockResolvedValue(undefined)
+
+interface MockUserState {
+  user: {
+    primaryEmailAddress: { emailAddress: string } | null
+    publicMetadata: { role?: string }
+  } | null
+  isLoaded: boolean
 }
 
-const signOut = vi.fn()
-let authState: MockAuthState = {
-  session: { user: { email: 'jane@example.com' } },
-  isAdmin: false,
-  signOut,
+let userState: MockUserState = {
+  user: {
+    primaryEmailAddress: { emailAddress: 'jane@example.com' },
+    publicMetadata: {},
+  },
+  isLoaded: true,
 }
 
-vi.mock('@/features/auth', () => ({
-  useAuthStore: (selector: (s: MockAuthState) => unknown) => selector(authState),
+let isSignedIn = true
+
+vi.mock('@clerk/react', () => ({
+  useAuth: () => ({ isSignedIn }),
+  useUser: () => userState,
+  useClerk: () => ({ signOut }),
 }))
 
 function renderSidebar(initialEntries = ['/dashboard']) {
@@ -35,10 +44,13 @@ function renderSidebar(initialEntries = ['/dashboard']) {
 
 beforeEach(() => {
   signOut.mockClear()
-  authState = {
-    session: { user: { email: 'jane@example.com' } },
-    isAdmin: false,
-    signOut,
+  isSignedIn = true
+  userState = {
+    user: {
+      primaryEmailAddress: { emailAddress: 'jane@example.com' },
+      publicMetadata: {},
+    },
+    isLoaded: true,
   }
 })
 
@@ -52,7 +64,13 @@ describe('Sidebar', () => {
   })
 
   it('renders the Admin section and admin links for an admin', () => {
-    authState.isAdmin = true
+    userState = {
+      ...userState,
+      user: {
+        primaryEmailAddress: { emailAddress: 'jane@example.com' },
+        publicMetadata: { role: 'admin' },
+      },
+    }
     renderSidebar()
     expect(screen.getByText('Admin')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Companies/i })).toBeInTheDocument()
@@ -90,7 +108,13 @@ describe('Sidebar', () => {
   })
 
   it('renders the avatar initial from the email and an account link when collapsed', async () => {
-    authState.isAdmin = true
+    userState = {
+      ...userState,
+      user: {
+        primaryEmailAddress: { emailAddress: 'jane@example.com' },
+        publicMetadata: { role: 'admin' },
+      },
+    }
     renderSidebar()
     await userEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
     // Initial of "jane@example.com" → "J"
@@ -101,7 +125,11 @@ describe('Sidebar', () => {
   })
 
   it('falls back to "?" initial when there is no email', () => {
-    authState.session = null
+    isSignedIn = false
+    userState = {
+      user: null,
+      isLoaded: true,
+    }
     renderSidebar()
     expect(screen.getByText('?')).toBeInTheDocument()
   })

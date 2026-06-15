@@ -11,8 +11,8 @@ import (
 	"time"
 
 	ashbyapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/ashby/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 const (
@@ -93,7 +93,7 @@ func (a *Ashby) FetchJobListing(ctx context.Context, companyID string) (core.Job
 	listing := mapJobListing(raw, companyID)
 	log.Info("listing fetched",
 		logger.Int(logger.FieldJobCount, len(listing.Jobs)),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 	return listing, nil
 }
@@ -132,7 +132,7 @@ func (a *Ashby) FetchJobPost(ctx context.Context, summary core.JobSummary) (core
 	}
 
 	post := mapJobPost(raw.Data.JobPosting)
-	log.Info("job post fetched", logger.Dur(logger.FieldDuration, time.Since(start)))
+	log.Info("job post fetched", logger.Dur(logger.FieldDurationMs, time.Since(start)))
 	return post, nil
 }
 

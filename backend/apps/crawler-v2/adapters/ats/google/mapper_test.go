@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	googleapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/google/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // ── mapParsedJobToSummary ─────────────────────────────────────────────────────

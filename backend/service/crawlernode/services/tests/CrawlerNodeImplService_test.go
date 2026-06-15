@@ -2,11 +2,14 @@ package tests
 
 import (
 	"context"
+	"encoding/json"
 	stderrors "errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	crawlernodecommon "github.com/trushilpatel/jobradar/service/crawlernode/common"
 	"github.com/trushilpatel/jobradar/service/crawlernode/dto"
@@ -159,18 +162,18 @@ func TestImplService_GetWork_PropagatesHeartbeatMissed(t *testing.T) {
 	}
 }
 
-func TestImplService_GetWork_PopulatesKnownIDsFromLedger(t *testing.T) {
+// GetWork no longer touches the ledger — known-ID dedup moved server-side into
+// SubmitResults. Confirm the ledger is never consulted during assignment.
+func TestImplService_GetWork_DoesNotConsultLedger(t *testing.T) {
 	queueItem := &dto.ScanQueueItem{ID: "q-1", CompanyID: "co-1", AdapterType: "greenhouse"}
 	assignStore := defaultAssignStore()
 	assignStore.claimFn = func(_ context.Context, _, _ string) (*dto.ScanQueueItem, error) {
 		return queueItem, nil
 	}
 	ledger := defaultLedgerStore()
-	ledger.getActiveIDsFn = func(_ context.Context, companyID string) ([]string, error) {
-		if companyID != "co-1" {
-			t.Errorf("GetActiveJobIDsByCompany companyID = %q, want co-1", companyID)
-		}
-		return []string{"gh-1", "gh-2"}, nil
+	ledger.getActiveIDsFn = func(_ context.Context, _ string) ([]string, error) {
+		t.Error("GetWork() must not call GetActiveJobIDsByCompany — known-ID dedup is server-side now")
+		return nil, nil
 	}
 	svc := newImpl(defaultNodeStore(), assignStore, ledger, defaultScanLogStore(), defaultPublisher(), defaultScanSettings(), "secret")
 
@@ -178,8 +181,8 @@ func TestImplService_GetWork_PopulatesKnownIDsFromLedger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetWork() error = %v", err)
 	}
-	if len(resp.Assignment.KnownIDs) != 2 {
-		t.Errorf("GetWork() known_ids len = %d, want 2", len(resp.Assignment.KnownIDs))
+	if resp.Assignment == nil {
+		t.Fatal("GetWork() assignment is nil, want non-nil")
 	}
 }
 
@@ -205,7 +208,7 @@ func TestImplService_SubmitResults_LedgerBeforePublishInvariant(t *testing.T) {
 		AssignmentID: "q-1",
 		CompanyID:    "co-1",
 		AdapterType:  "greenhouse",
-		Jobs:         []dto.CrawledJob{{ID: "gh-1", Title: "Eng"}},
+		Jobs:         []core.JobSummary{{ID: "gh-1", Title: "Eng"}},
 		Final:        true,
 	}
 	_, err := svc.SubmitResults(context.Background(), "node-1", req)
@@ -230,7 +233,7 @@ func TestImplService_SubmitResults_FinalFalse_DoesNotComplete(t *testing.T) {
 		AssignmentID: "q-1",
 		CompanyID:    "co-1",
 		AdapterType:  "greenhouse",
-		Jobs:         []dto.CrawledJob{{ID: "gh-1"}},
+		Jobs:         []core.JobSummary{{ID: "gh-1"}},
 		Final:        false, // streaming — NOT final
 	}
 	_, err := svc.SubmitResults(context.Background(), "node-1", req)
@@ -258,7 +261,7 @@ func TestImplService_SubmitResults_FinalTrue_Completes(t *testing.T) {
 		AssignmentID: "q-1",
 		CompanyID:    "co-1",
 		AdapterType:  "greenhouse",
-		Jobs:         []dto.CrawledJob{{ID: "gh-1"}},
+		Jobs:         []core.JobSummary{{ID: "gh-1"}},
 		Final:        true,
 	}
 	resp, err := svc.SubmitResults(context.Background(), "node-1", req)
@@ -273,9 +276,17 @@ func TestImplService_SubmitResults_FinalTrue_Completes(t *testing.T) {
 	}
 }
 
+// Removed-job detection is a SERVER-SIDE diff on a final submission:
+// previousActive (from the ledger) ∖ submittedIDs = removed.
 func TestImplService_SubmitResults_RemovedJobDetection(t *testing.T) {
 	var removedIDs []string
 	ledger := defaultLedgerStore()
+	ledger.getActiveIDsFn = func(_ context.Context, companyID string) ([]string, error) {
+		if companyID != "co-1" {
+			t.Errorf("GetActiveJobIDsByCompany companyID = %q, want co-1", companyID)
+		}
+		return []string{"gh-1", "gh-2"}, nil // gh-2 was previously active
+	}
 	ledger.markRemovedFn = func(_ context.Context, ids []string) error {
 		removedIDs = ids
 		return nil
@@ -283,19 +294,113 @@ func TestImplService_SubmitResults_RemovedJobDetection(t *testing.T) {
 	svc := newImpl(defaultNodeStore(), defaultAssignStore(), ledger, defaultScanLogStore(), defaultPublisher(), defaultScanSettings(), "secret")
 
 	req := dto.ResultsRequest{
-		AssignmentID:     "q-1",
-		CompanyID:        "co-1",
-		AdapterType:      "greenhouse",
-		Jobs:             []dto.CrawledJob{{ID: "gh-1"}}, // gh-2 is gone
-		PreviousKnownIDs: []string{"gh-1", "gh-2"},       // gh-2 was previously known
-		Final:            true,
+		AssignmentID: "q-1",
+		CompanyID:    "co-1",
+		AdapterType:  "greenhouse",
+		Jobs:         []core.JobSummary{{ID: "gh-1"}}, // gh-2 is gone from this submission
+		Final:        true,
 	}
-	_, err := svc.SubmitResults(context.Background(), "node-1", req)
+	resp, err := svc.SubmitResults(context.Background(), "node-1", req)
 	if err != nil {
 		t.Fatalf("SubmitResults() error = %v", err)
 	}
 	if len(removedIDs) != 1 || removedIDs[0] != "gh-2" {
 		t.Errorf("SubmitResults() removed = %v, want [gh-2]", removedIDs)
+	}
+	if resp.Removed != 1 {
+		t.Errorf("SubmitResults() resp.Removed = %d, want 1", resp.Removed)
+	}
+}
+
+// Removed-job detection must NOT run on a non-final (streaming) submission —
+// a partial view would falsely drop jobs still arriving in later batches.
+func TestImplService_SubmitResults_RemovedDiffSkippedWhenNotFinal(t *testing.T) {
+	activeCalled := false
+	markRemovedCalled := false
+	ledger := defaultLedgerStore()
+	ledger.getActiveIDsFn = func(_ context.Context, _ string) ([]string, error) {
+		activeCalled = true
+		return []string{"gh-1", "gh-2"}, nil
+	}
+	ledger.markRemovedFn = func(_ context.Context, _ []string) error {
+		markRemovedCalled = true
+		return nil
+	}
+	svc := newImpl(defaultNodeStore(), defaultAssignStore(), ledger, defaultScanLogStore(), defaultPublisher(), defaultScanSettings(), "secret")
+
+	req := dto.ResultsRequest{
+		AssignmentID: "q-1",
+		CompanyID:    "co-1",
+		AdapterType:  "greenhouse",
+		Jobs:         []core.JobSummary{{ID: "gh-1"}},
+		Final:        false, // partial batch — removed-diff must not run
+	}
+	resp, err := svc.SubmitResults(context.Background(), "node-1", req)
+	if err != nil {
+		t.Fatalf("SubmitResults(non-final) error = %v", err)
+	}
+	if activeCalled {
+		t.Error("SubmitResults(non-final): GetActiveJobIDsByCompany must not be called for removed-diff")
+	}
+	if markRemovedCalled {
+		t.Error("SubmitResults(non-final): MarkRemovedBatch must not be called on a partial batch")
+	}
+	if resp.Removed != 0 {
+		t.Errorf("SubmitResults(non-final) resp.Removed = %d, want 0", resp.Removed)
+	}
+}
+
+// A failing GetActiveJobIDsByCompany during the removed-diff is non-fatal.
+func TestImplService_SubmitResults_RemovedDiffActiveErrorNonFatal(t *testing.T) {
+	ledger := defaultLedgerStore()
+	ledger.getActiveIDsFn = func(_ context.Context, _ string) ([]string, error) {
+		return nil, domainerrs.ErrInternal.WithMessage("ledger down")
+	}
+	ledger.markRemovedFn = func(_ context.Context, _ []string) error {
+		t.Error("MarkRemovedBatch must not be called when the active set could not be loaded")
+		return nil
+	}
+	svc := newImpl(defaultNodeStore(), defaultAssignStore(), ledger, defaultScanLogStore(), defaultPublisher(), defaultScanSettings(), "secret")
+
+	resp, err := svc.SubmitResults(context.Background(), "node-1", dto.ResultsRequest{
+		AssignmentID: "q-1",
+		CompanyID:    "co-1",
+		AdapterType:  "greenhouse",
+		Jobs:         []core.JobSummary{{ID: "gh-1"}},
+		Final:        true,
+	})
+	if err != nil {
+		t.Fatalf("SubmitResults(active error) error = %v, want nil (non-fatal)", err)
+	}
+	if resp.Removed != 0 {
+		t.Errorf("SubmitResults(active error) resp.Removed = %d, want 0", resp.Removed)
+	}
+}
+
+// MarkRemovedBatch failure during the removed-diff is non-fatal (best-effort).
+func TestImplService_SubmitResults_RemovedDiffMarkErrorNonFatal(t *testing.T) {
+	ledger := defaultLedgerStore()
+	ledger.getActiveIDsFn = func(_ context.Context, _ string) ([]string, error) {
+		return []string{"gh-1", "gh-2"}, nil
+	}
+	ledger.markRemovedFn = func(_ context.Context, _ []string) error {
+		return domainerrs.ErrInternal.WithMessage("mark removed failed")
+	}
+	svc := newImpl(defaultNodeStore(), defaultAssignStore(), ledger, defaultScanLogStore(), defaultPublisher(), defaultScanSettings(), "secret")
+
+	resp, err := svc.SubmitResults(context.Background(), "node-1", dto.ResultsRequest{
+		AssignmentID: "q-1",
+		CompanyID:    "co-1",
+		AdapterType:  "greenhouse",
+		Jobs:         []core.JobSummary{{ID: "gh-1"}},
+		Final:        true,
+	})
+	if err != nil {
+		t.Fatalf("SubmitResults(mark removed error) error = %v, want nil (non-fatal)", err)
+	}
+	// resp.Removed is still set even though the ledger write failed (best-effort count).
+	if resp.Removed != 1 {
+		t.Errorf("SubmitResults(mark removed error) resp.Removed = %d, want 1", resp.Removed)
 	}
 }
 
@@ -322,7 +427,7 @@ func TestImplService_SubmitResults_NonUSAGate_DropsNonUSAJobs(t *testing.T) {
 		AssignmentID: "q-1",
 		CompanyID:    "co-1",
 		AdapterType:  "greenhouse",
-		Jobs: []dto.CrawledJob{
+		Jobs: []core.JobSummary{
 			{ID: "gh-1", LocationKnown: true, AllLocations: []string{"US"}},     // keep
 			{ID: "gh-2", LocationKnown: true, AllLocations: []string{"India"}},  // drop
 			{ID: "gh-3", LocationKnown: false, AllLocations: []string{"India"}}, // keep (unknown)
@@ -360,7 +465,7 @@ func TestImplService_SubmitResults_FinalTrue_IdempotentOnErrQueueRowMissing(t *t
 		AssignmentID: "q-1",
 		CompanyID:    "co-1",
 		AdapterType:  "greenhouse",
-		Jobs:         []dto.CrawledJob{{ID: "gh-1"}},
+		Jobs:         []core.JobSummary{{ID: "gh-1"}},
 		Final:        true,
 	}
 	// Should not fail — second call is idempotent
@@ -716,7 +821,7 @@ func TestImplService_SubmitResults_PropagatesHasSeenBatchError(t *testing.T) {
 	_, err := svc.SubmitResults(context.Background(), "node-1", dto.ResultsRequest{
 		CompanyID:   "co-1",
 		AdapterType: "greenhouse",
-		Jobs:        []dto.CrawledJob{{ID: "gh-1", LocationKnown: false}},
+		Jobs:        []core.JobSummary{{ID: "gh-1", LocationKnown: false}},
 	})
 	if err == nil {
 		t.Fatal("SubmitResults() expected HasSeenBatch error, got nil")
@@ -737,7 +842,7 @@ func TestImplService_SubmitResults_PropagatesNonUSAMarkError(t *testing.T) {
 		CompanyID:   "co-1",
 		AdapterType: "greenhouse",
 		// LocationKnown=true + non-USA location → goes to non-USA mark path
-		Jobs: []dto.CrawledJob{{
+		Jobs: []core.JobSummary{{
 			ID: "gh-1", LocationKnown: true,
 			AllLocations: []string{"India"},
 		}},
@@ -778,12 +883,17 @@ func TestImplService_ReportError_ReturnsFatalFailError(t *testing.T) {
 	}
 }
 
-// SubmitResults with a job that has FullContent set covers the marshalJob FullContent branch.
-func TestImplService_SubmitResults_WithFullContent_Publishes(t *testing.T) {
-	publishCalled := false
+// SubmitResults with JobContent set publishes a payload whose job_content key is
+// present, with CompanyID/Adapter stamped and the subject jobs.raw.<adapter>.
+func TestImplService_SubmitResults_WithJobContent_PublishesStampedPayload(t *testing.T) {
+	var gotSubject string
+	var gotPayload []byte
+	var gotMsgID string
 	publisher := &mockStreamPublisher{
-		publishFn: func(_ context.Context, _ string, _ []byte, _ string) error {
-			publishCalled = true
+		publishFn: func(_ context.Context, subject string, payload []byte, msgID string) error {
+			gotSubject = subject
+			gotPayload = payload
+			gotMsgID = msgID
 			return nil
 		},
 	}
@@ -792,13 +902,15 @@ func TestImplService_SubmitResults_WithFullContent_Publishes(t *testing.T) {
 		AssignmentID: "q-1",
 		CompanyID:    "co-1",
 		AdapterType:  "greenhouse",
-		Jobs: []dto.CrawledJob{{
+		Jobs: []core.JobSummary{{
+			// CompanyID/Adapter deliberately empty — v2 mappers leave them blank;
+			// the orchestrator must stamp them before publishing.
 			ID:    "gh-1",
 			Title: "SWE",
-			FullContent: &dto.CrawledJobContent{
+			JobContent: &core.JobContent{
 				Description:  "Build things",
 				Requirements: "5yr exp",
-				Salary:       "200k",
+				Compensation: "200k",
 				Department:   "Engineering",
 			},
 		}},
@@ -806,13 +918,65 @@ func TestImplService_SubmitResults_WithFullContent_Publishes(t *testing.T) {
 	}
 	resp, err := svc.SubmitResults(context.Background(), "node-1", req)
 	if err != nil {
-		t.Fatalf("SubmitResults(FullContent) error = %v", err)
+		t.Fatalf("SubmitResults(JobContent) error = %v", err)
 	}
-	if !publishCalled {
-		t.Error("SubmitResults(FullContent): publish not called")
+	if gotPayload == nil {
+		t.Fatal("SubmitResults(JobContent): publish not called")
 	}
 	if resp.New != 1 {
-		t.Errorf("SubmitResults(FullContent) New = %d, want 1", resp.New)
+		t.Errorf("SubmitResults(JobContent) New = %d, want 1", resp.New)
+	}
+	if gotSubject != "jobs.raw.greenhouse" {
+		t.Errorf("subject = %q, want jobs.raw.greenhouse", gotSubject)
+	}
+	if gotMsgID != "gh-1" {
+		t.Errorf("msgID = %q, want gh-1", gotMsgID)
+	}
+
+	var published core.JobSummary
+	if err := json.Unmarshal(gotPayload, &published); err != nil {
+		t.Fatalf("payload not valid core.JobSummary JSON: %v", err)
+	}
+	if published.CompanyID != "co-1" {
+		t.Errorf("published company_id = %q, want co-1 (stamped)", published.CompanyID)
+	}
+	if published.Adapter != "greenhouse" {
+		t.Errorf("published adapter = %q, want greenhouse (stamped)", published.Adapter)
+	}
+	if published.JobContent == nil {
+		t.Fatal("published job_content is nil, want present")
+	}
+	if published.JobContent.Compensation != "200k" {
+		t.Errorf("published job_content.compensation = %q, want 200k", published.JobContent.Compensation)
+	}
+	// job_content key must literally appear in the wire JSON when content exists.
+	if !strings.Contains(string(gotPayload), `"job_content"`) {
+		t.Errorf("payload missing job_content key: %s", gotPayload)
+	}
+}
+
+// When a job has no JobContent, the omitempty job_content key must be absent.
+func TestImplService_SubmitResults_NoJobContent_OmitsKey(t *testing.T) {
+	var gotPayload []byte
+	publisher := &mockStreamPublisher{
+		publishFn: func(_ context.Context, _ string, payload []byte, _ string) error {
+			gotPayload = payload
+			return nil
+		},
+	}
+	svc := newImpl(defaultNodeStore(), defaultAssignStore(), defaultLedgerStore(), defaultScanLogStore(), publisher, defaultScanSettings(), "secret")
+	_, err := svc.SubmitResults(context.Background(), "node-1", dto.ResultsRequest{
+		AssignmentID: "q-1",
+		CompanyID:    "co-1",
+		AdapterType:  "greenhouse",
+		Jobs:         []core.JobSummary{{ID: "gh-1", Title: "SWE"}},
+		Final:        false,
+	})
+	if err != nil {
+		t.Fatalf("SubmitResults(no content) error = %v", err)
+	}
+	if strings.Contains(string(gotPayload), `"job_content"`) {
+		t.Errorf("payload should omit job_content when absent: %s", gotPayload)
 	}
 }
 
@@ -859,7 +1023,7 @@ func TestImplService_SubmitResults_NonUSA_EmptyLocations_PassesThrough(t *testin
 	req := dto.ResultsRequest{
 		CompanyID:   "co-1",
 		AdapterType: "greenhouse",
-		Jobs: []dto.CrawledJob{{
+		Jobs: []core.JobSummary{{
 			ID:            "gh-1",
 			LocationKnown: true,
 			AllLocations:  []string{}, // empty — not definitively non-USA

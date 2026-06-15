@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	metaapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/meta/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // ── mapJobSummary ─────────────────────────────────────────────────────────────
@@ -24,6 +24,21 @@ func TestMapJobSummary(t *testing.T) {
 	}
 	if s.Location != "" {
 		t.Errorf("Location should be empty at listing time, got %q", s.Location)
+	}
+}
+
+// TestMapJobSummary_LocationDeferred locks the invariant that Meta listing
+// summaries never claim a known location. Meta's sitemap listing exposes only
+// the numeric job ID and URL — no location at all — so the non-USA decision is
+// deferred to enrich-time via FetchJobPost.CountryCode. Matches v1 parity
+// (FetchJobsItem.LocationKnown left at its false zero value).
+func TestMapJobSummary_LocationDeferred(t *testing.T) {
+	s := mapJobSummary("1234567890")
+	if s.LocationKnown {
+		t.Error("LocationKnown must be false at listing time; Meta location is deferred to enrich-time")
+	}
+	if s.AllLocations != nil {
+		t.Errorf("AllLocations = %v, want nil (no locations available at listing time)", s.AllLocations)
 	}
 }
 

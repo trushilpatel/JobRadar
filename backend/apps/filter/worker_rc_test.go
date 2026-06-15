@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 )
@@ -51,7 +51,7 @@ func TestRouteFailedChunk_LLMExhausted_SmallRetryAfter_FlooredAt4h(t *testing.T)
 	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
 	w.clock = &fakeClock{now: now}
 
-	item, _ := makeChunkItem(ats.RawJob{ID: "rc5-small", Title: "SWE", Adapter: "greenhouse"}, 1)
+	item, _ := makeChunkItem(core.JobSummary{ID: "rc5-small", Title: "SWE", Adapter: "greenhouse"}, 1)
 	outcome := w.routeFailedChunk(context.Background(), []chunkItem{item}, exhaustedErr)
 
 	if len(outcome.RetriedWithPayload) != 1 {
@@ -75,7 +75,7 @@ func TestRouteFailedChunk_LLMExhausted_LargeRetryAfter_Unchanged(t *testing.T) {
 	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
 	w.clock = &fakeClock{now: now}
 
-	item, _ := makeChunkItem(ats.RawJob{ID: "rc5-large", Title: "SWE", Adapter: "greenhouse"}, 1)
+	item, _ := makeChunkItem(core.JobSummary{ID: "rc5-large", Title: "SWE", Adapter: "greenhouse"}, 1)
 	outcome := w.routeFailedChunk(context.Background(), []chunkItem{item}, exhaustedErr)
 
 	if len(outcome.RetriedWithPayload) != 1 {
@@ -97,7 +97,7 @@ func TestRouteFailedChunk_LLMExhausted_ExactFloor_Unchanged(t *testing.T) {
 	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
 	w.clock = &fakeClock{now: now}
 
-	item, _ := makeChunkItem(ats.RawJob{ID: "rc5-exact", Title: "SWE", Adapter: "greenhouse"}, 1)
+	item, _ := makeChunkItem(core.JobSummary{ID: "rc5-exact", Title: "SWE", Adapter: "greenhouse"}, 1)
 	outcome := w.routeFailedChunk(context.Background(), []chunkItem{item}, exhaustedErr)
 
 	if len(outcome.RetriedWithPayload) != 1 {

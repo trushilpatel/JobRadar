@@ -14,7 +14,7 @@ Prefer the right solution, even when it means rewriting the entire component. A 
 
 ## SOLID — applied strictly
 
-SOLID is a hard rule, not a guideline. See `.claude/rules/backend-solid.md` for Go-specific patterns. Universal application:
+SOLID is a hard rule, not a guideline. Go-specific application is in `.claude/rules/backend-architecture.md` (SOLID section). Universal application:
 
 - **Single Responsibility** — every module, function, or component has exactly one reason to change. If a file fetches data _and_ transforms it _and_ renders it, split it into three.
 - **Open/Closed** — new behaviour arrives via new types or new implementations, never by modifying working code.

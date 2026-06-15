@@ -11,8 +11,8 @@ import (
 	"time"
 
 	rapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/rippling/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 const (
@@ -72,7 +72,7 @@ func (r *Rippling) FetchJobListing(ctx context.Context, _ string) (core.JobListi
 	listing := mapJobListing(data.Props.PageProps.Jobs.Items, r.resolveATSBaseURL())
 	log.Info("listing fetched",
 		logger.Int(logger.FieldJobCount, len(listing.Jobs)),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 	return listing, nil
 }
@@ -111,7 +111,7 @@ func (r *Rippling) FetchJobPost(ctx context.Context, summary core.JobSummary) (c
 	}
 
 	post := mapJobPost(data.Props.PageProps.APIData, postURL)
-	log.Info("job post fetched", logger.Dur(logger.FieldDuration, time.Since(start)))
+	log.Info("job post fetched", logger.Dur(logger.FieldDurationMs, time.Since(start)))
 	return post, nil
 }
 

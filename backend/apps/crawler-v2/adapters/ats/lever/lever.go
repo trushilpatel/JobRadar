@@ -10,8 +10,8 @@ import (
 	"time"
 
 	leverapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/lever/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 const defaultBaseURL = "https://api.lever.co"
@@ -48,7 +48,7 @@ func (l *Lever) FetchJobListing(ctx context.Context, companyID string) (core.Job
 	listing := mapJobListing(raw)
 	log.Info("listing fetched",
 		logger.Int(logger.FieldJobCount, len(listing.Jobs)),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 	return listing, nil
 }
@@ -75,7 +75,7 @@ func (l *Lever) FetchJobPost(ctx context.Context, summary core.JobSummary) (core
 	}
 
 	post := mapJobPost(raw)
-	log.Info("job post fetched", logger.Dur(logger.FieldDuration, time.Since(start)))
+	log.Info("job post fetched", logger.Dur(logger.FieldDurationMs, time.Since(start)))
 	return post, nil
 }
 

@@ -9,7 +9,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
@@ -65,7 +65,7 @@ func (w *Worker) processGroup(ctx context.Context, fetchLog logger.Logger, group
 
 	jobIDs := make([]string, len(group))
 	for i, fj := range group {
-		jobIDs[i] = fj.job.ID
+		jobIDs[i] = fj.summary.ID
 	}
 	groupLog.Info("LLM batch sent",
 		logger.Int(logger.FieldBatch, len(group)),
@@ -115,12 +115,12 @@ func (w *Worker) processGroup(ctx context.Context, fetchLog logger.Logger, group
 func (w *Worker) buildEnrichInputs(group []fetchedJob) ([]llmdto.JobPostEnrichInput, error) {
 	inputs := make([]llmdto.JobPostEnrichInput, 0, len(group))
 	for _, fj := range group {
-		raw, err := marshalContent(fj.content)
+		raw, err := marshalContent(fj.post)
 		if err != nil {
-			return nil, fmt.Errorf("marshal content for %s: %w", fj.job.ID, err)
+			return nil, fmt.Errorf("marshal content for %s: %w", fj.summary.ID, err)
 		}
 		inputs = append(inputs, llmdto.JobPostEnrichInput{
-			ID:      fj.job.ID,
+			ID:      fj.summary.ID,
 			RawText: raw,
 		})
 	}
@@ -146,7 +146,7 @@ func (w *Worker) distributeResults(ctx context.Context, groupLog logger.Logger, 
 
 	groupIDs := make(map[string]struct{}, len(group))
 	for _, fj := range group {
-		groupIDs[fj.job.ID] = struct{}{}
+		groupIDs[fj.summary.ID] = struct{}{}
 	}
 	for id := range resultByID {
 		if _, ok := groupIDs[id]; !ok {
@@ -158,15 +158,15 @@ func (w *Worker) distributeResults(ctx context.Context, groupLog logger.Logger, 
 
 	allRouted := true
 	for _, fj := range group {
-		result, ok := resultByID[fj.job.ID]
+		result, ok := resultByID[fj.summary.ID]
 		if !ok {
 			groupLog.Error("LLM result missing for job, routing to retry",
-				fmt.Errorf("missing job_id %s in EnrichBatch response", fj.job.ID),
-				logger.Str(logger.FieldJobID, fj.job.ID),
+				fmt.Errorf("missing job_id %s in EnrichBatch response", fj.summary.ID),
+				logger.Str(logger.FieldJobID, fj.summary.ID),
 			)
 			metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 			stats.markRouteFailure()
-			missingErr := fmt.Errorf("llm_result_missing: %s", fj.job.ID)
+			missingErr := fmt.Errorf("llm_result_missing: %s", fj.summary.ID)
 			if !w.routeMissingResult(fj.ctx, groupLog, fj, missingErr) {
 				allRouted = false
 			}
@@ -185,7 +185,7 @@ func (w *Worker) routeMissingResult(ctx context.Context, fetchLog logger.Logger,
 	}
 	if fj.retryCount >= analyzerMaxRetries {
 		jobLog := fetchLog.With(
-			logger.Str(logger.FieldJobID, fj.job.ID),
+			logger.Str(logger.FieldJobID, fj.summary.ID),
 			logger.Int(logger.FieldRetryCount, fj.retryCount),
 		)
 		return w.sendToDLQ(ctx, jobLog, fj, "llm_result_missing", err)
@@ -198,13 +198,13 @@ func (w *Worker) routeMissingResult(ctx context.Context, fetchLog logger.Logger,
 // the NATS message.
 func (w *Worker) processResult(ctx context.Context, fj fetchedJob, result *llmdto.JobPostEnrichResult, stats *groupOutcomeStats) {
 	jobLog := w.log.With(
-		logger.Str(logger.FieldJobID, fj.job.ID),
-		logger.Str(logger.FieldTitle, fj.job.Title),
+		logger.Str(logger.FieldJobID, fj.summary.ID),
+		logger.Str(logger.FieldTitle, jobTitle(fj)),
 	)
 
 	if !result.RoleMatch {
 		jobLog.Debug("job dropped: role mismatch")
-		w.markIrrelevant(ctx, fj.job.ID)
+		w.markIrrelevant(ctx, fj.summary.ID)
 		if aerr := fj.msg.Ack(); aerr != nil {
 			jobLog.Warn("msg ack failed", logger.Err(aerr))
 		}
@@ -215,7 +215,7 @@ func (w *Worker) processResult(ctx context.Context, fj fetchedJob, result *llmdt
 
 	if reason := w.dropJob(result); reason != "" {
 		jobLog.Info("job dropped", logger.Str(logger.FieldDropReason, reason))
-		w.markIrrelevant(ctx, fj.job.ID)
+		w.markIrrelevant(ctx, fj.summary.ID)
 		if aerr := fj.msg.Ack(); aerr != nil {
 			jobLog.Warn("msg ack failed", logger.Err(aerr))
 		}
@@ -224,10 +224,10 @@ func (w *Worker) processResult(ctx context.Context, fj fetchedJob, result *llmdt
 		return
 	}
 
-	input := toEnrichedInput(fj.job, result)
+	input := toEnrichedInput(fj.summary, fj.post, result)
 	if err := w.pipeline.SaveEnrichedJob(ctx, input); err != nil {
 		jobLog.Error("save enriched job failed", err)
-		w.markError(ctx, fj.job.ID)
+		w.markError(ctx, fj.summary.ID)
 		if aerr := fj.msg.Ack(); aerr != nil {
 			jobLog.Warn("msg ack failed", logger.Err(aerr))
 		}
@@ -294,19 +294,30 @@ func (w *Worker) dropJob(e *llmdto.JobPostEnrichResult) string {
 	return ""
 }
 
-// toEnrichedInput builds a jobdto.EnrichedJobInput from the raw job and LLM result.
-func toEnrichedInput(job ats.RawJob, result *llmdto.JobPostEnrichResult) jobdto.EnrichedJobInput {
+// toEnrichedInput builds a jobdto.EnrichedJobInput from the canonical summary,
+// the fetched post, and the LLM result.
+func toEnrichedInput(summary core.JobSummary, post core.JobPost, result *llmdto.JobPostEnrichResult) jobdto.EnrichedJobInput {
 	return jobdto.EnrichedJobInput{
-		Raw:      job,
+		Summary:  summary,
+		Post:     post,
 		Enriched: result,
 	}
 }
 
-// marshalContent serializes the structured content to JSON for the LLM.
-func marshalContent(content ats.FetchJobContentResponse) (string, error) {
-	bytes, err := json.Marshal(content)
+// jobTitle returns the authoritative title for log context: the fetched
+// Post.Title when non-empty, otherwise the Summary.Title.
+func jobTitle(fj fetchedJob) string {
+	if t := strings.TrimSpace(fj.post.Title); t != "" {
+		return t
+	}
+	return fj.summary.Title
+}
+
+// marshalContent serializes the fetched JobPost to JSON for the LLM.
+func marshalContent(post core.JobPost) (string, error) {
+	bytes, err := json.Marshal(post)
 	if err != nil {
-		return "", fmt.Errorf("json marshal FetchJobContentResponse: %w", err)
+		return "", fmt.Errorf("json marshal JobPost: %w", err)
 	}
 	return string(bytes), nil
 }

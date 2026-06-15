@@ -1,11 +1,13 @@
 package logger
 
 import (
+	"context"
 	"io"
 	"os"
 	"time"
 
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // zerologLogger wraps zerolog.Logger and implements the Logger interface.
@@ -90,6 +92,22 @@ func (z zerologLogger) Error(msg string, err error, fields ...Field) {
 
 func (z zerologLogger) With(fields ...Field) Logger {
 	return zerologLogger{l: applyContext(z.l.With(), fields).Logger()}
+}
+
+// WithContext returns a child logger with trace_id + span_id baked in
+// from the active OTel span in ctx. No-op if ctx carries no valid span.
+func (z zerologLogger) WithContext(ctx context.Context) Logger {
+	span := trace.SpanFromContext(ctx)
+	if !span.SpanContext().IsValid() {
+		return z
+	}
+	sc := span.SpanContext()
+	return zerologLogger{
+		l: z.l.With().
+			Str(FieldTraceID, sc.TraceID().String()).
+			Str(FieldSpanID, sc.SpanID().String()).
+			Logger(),
+	}
 }
 
 // applyFields attaches the given fields to a zerolog Event before Msg() is called.

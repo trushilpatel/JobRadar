@@ -5,37 +5,36 @@ import (
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
-	"github.com/trushilpatel/jobradar/platform/supabaseadmin"
+	"github.com/trushilpatel/jobradar/platform/clerkadmin"
 )
 
 // implService is the business-logic layer of the user chain. It owns:
 //
-//   - Delete orchestration: Supabase auth row first, then the DB row. The
-//     order matters — if the Supabase call fails we still have a useful
-//     application row; if the DB call fails after Supabase succeeded the
-//     caller can retry and the Supabase delete is idempotent (404 → success).
+//   - Delete orchestration: Clerk auth user first, then the DB row. The
+//     order matters — if the Clerk call fails we still have a useful
+//     application row; if the DB call fails after Clerk succeeded the
+//     caller can retry and the Clerk delete is idempotent (404 → success).
 //
 // Every other Service method auto-delegates to the repository via BaseService.
 type implService struct {
 	BaseService
-	supabase supabaseadmin.Client
+	clerk clerkadmin.Client
 }
 
-// NewImplService constructs the orchestration layer. The supabase client may
+// NewImplService constructs the orchestration layer. The clerk client may
 // be nil in tests that do not exercise Delete; production callers always pass
 // a real client because /api/me DELETE depends on it.
-func NewImplService(next Service, supabase supabaseadmin.Client) Service {
+func NewImplService(next Service, clerk clerkadmin.Client) Service {
 	return &implService{
 		BaseService: NewBaseService(next),
-		supabase:    supabase,
+		clerk:       clerk,
 	}
 }
 
-// Delete removes the Supabase auth identity first, then the DB row. A
-// Supabase failure aborts the chain so we never leave the application's
-// users row referencing a now-orphaned auth identity. A nil supabase client
-// is a programmer error — we panic at construction in production wiring,
-// but tolerate it here so unit tests can exercise the DB-only path.
+// Delete removes the Clerk auth user first, then the DB row. A Clerk failure
+// aborts the chain so we never leave the application users row referencing a
+// now-orphaned auth identity. A nil clerk client is tolerated so unit tests
+// can exercise the DB-only path.
 func (s *implService) Delete(ctx context.Context, id string) (err error) {
 	ctx, span := tracing.Start(ctx, "user.impl.Delete")
 	defer tracing.End(span, &err)
@@ -43,9 +42,9 @@ func (s *implService) Delete(ctx context.Context, id string) (err error) {
 	if id == "" {
 		return domainerrs.ErrBadRequest.WithMessage("user id required")
 	}
-	if s.supabase != nil {
-		if err := s.supabase.DeleteUser(ctx, id); err != nil {
-			return domainerrs.ErrInternal.WithMessage("user delete: supabase: " + err.Error())
+	if s.clerk != nil {
+		if err := s.clerk.DeleteUser(ctx, id); err != nil {
+			return domainerrs.ErrInternal.WithMessage("user delete: clerk: " + err.Error())
 		}
 	}
 	return s.next.Delete(ctx, id)

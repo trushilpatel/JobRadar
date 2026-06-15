@@ -1,33 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const getSession = vi.fn()
-const refreshSession = vi.fn()
-const signOut = vi.fn()
+const clerkSignOut = vi.fn()
 const toastWarning = vi.fn()
-
-vi.mock('@/lib/core/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: (...args: unknown[]) => getSession(...args),
-      refreshSession: (...args: unknown[]) => refreshSession(...args),
-      signOut: (...args: unknown[]) => signOut(...args),
-    },
-  },
-}))
 
 vi.mock('sonner', () => ({ toast: { warning: (...args: unknown[]) => toastWarning(...args) } }))
 
 const originalFetch = globalThis.fetch
 const originalLocation = window.location
 
-function mockLocation() {
+function mockLocation(pathname = '/dashboard') {
   const assign = vi.fn()
   Object.defineProperty(window, 'location', {
     configurable: true,
     value: {
       ...originalLocation,
       assign,
-      pathname: '/dashboard',
+      pathname,
       origin: 'http://localhost',
     },
   })
@@ -48,24 +36,38 @@ function jsonResponse(status: number, body: unknown): Response {
   })
 }
 
+function setClerk(token: string | null) {
+  if (token === null) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).Clerk
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).Clerk = {
+      session: { getToken: vi.fn().mockResolvedValue(token) },
+      signOut: clerkSignOut,
+    }
+  }
+}
+
 beforeEach(() => {
   vi.resetModules()
-  getSession.mockReset()
-  refreshSession.mockReset()
-  signOut.mockReset()
+  clerkSignOut.mockReset()
+  clerkSignOut.mockResolvedValue(undefined)
   toastWarning.mockReset()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  delete (window as any).Clerk
 })
 
 afterEach(() => {
   restoreLocation()
   globalThis.fetch = originalFetch
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  delete (window as any).Clerk
 })
 
-describe('apiClient', () => {
-  it('attaches bearer header when session present', async () => {
-    const { sessionRef } = await import('@/lib/core/session-ref')
-    sessionRef.set({ access_token: 'tok-123' } as never)
-
+describe('apiClient — Clerk token attachment', () => {
+  it('attaches Bearer token from window.Clerk session', async () => {
+    setClerk('clerk-session-token-xyz')
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { hello: 'world' } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
@@ -76,134 +78,108 @@ describe('apiClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const init = fetchMock.mock.calls[0]![1] as RequestInit
     const headers = init.headers as Headers
-    expect(headers.get('Authorization')).toBe('Bearer tok-123')
+    expect(headers.get('Authorization')).toBe('Bearer clerk-session-token-xyz')
   })
 
-  it('retries once on 401 after refreshing session', async () => {
-    getSession
-      .mockResolvedValueOnce({ data: { session: { access_token: 'old-token' } } })
-      .mockResolvedValueOnce({ data: { session: { access_token: 'new-token' } } })
-    refreshSession.mockResolvedValue({
-      data: { session: { access_token: 'new-token' } },
-      error: null,
-    })
-
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(401, { error: { message: 'expired' } }))
-      .mockResolvedValueOnce(jsonResponse(200, { data: { ok: true } }))
+  it('sends no Authorization header when Clerk session is absent', async () => {
+    setClerk(null)
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: {} }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const { apiClient } = await import('@/lib/core/api-client')
-    const result = await apiClient.get<{ ok: boolean }>('/secure')
+    await apiClient.get('/test')
 
-    expect(result).toEqual({ ok: true })
-    expect(refreshSession).toHaveBeenCalledTimes(1)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const init = fetchMock.mock.calls[0]![1] as RequestInit
+    const headers = init.headers as Headers
+    expect(headers.get('Authorization')).toBeNull()
   })
 
-  it('dedupes concurrent refresh calls', async () => {
-    const { sessionRef } = await import('@/lib/core/session-ref')
-    sessionRef.set({ access_token: 'stale' } as never)
-
-    const refreshHandle: { resolve: (() => void) | null } = { resolve: null }
-    refreshSession.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          refreshHandle.resolve = () => {
-            // Simulate what onAuthStateChange does after a token refresh
-            sessionRef.set({ access_token: 'fresh' } as never)
-            resolve({ data: { session: { access_token: 'fresh' } }, error: null })
-          }
-        })
-    )
-
-    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
-      const auth = (init.headers as Headers).get('Authorization')
-      if (auth === 'Bearer stale') {
-        return Promise.resolve(jsonResponse(401, { error: { message: 'expired' } }))
-      }
-      return Promise.resolve(jsonResponse(200, { data: { ok: true } }))
-    })
+  it('sends no Authorization header when Clerk session token is null', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).Clerk = {
+      session: { getToken: vi.fn().mockResolvedValue(null) },
+      signOut: clerkSignOut,
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: {} }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const { apiClient, __testing } = await import('@/lib/core/api-client')
-    __testing.resetPendingRefresh()
+    const { apiClient } = await import('@/lib/core/api-client')
+    await apiClient.get('/test')
 
-    const p1 = apiClient.get<{ ok: boolean }>('/a')
-    const p2 = apiClient.get<{ ok: boolean }>('/b')
-    const p3 = apiClient.get<{ ok: boolean }>('/c')
-
-    // Wait until all three requests have triggered a refresh attempt.
-    await vi.waitFor(() => {
-      expect(refreshSession).toHaveBeenCalled()
-      expect(refreshHandle.resolve).not.toBeNull()
-    })
-    refreshHandle.resolve?.()
-    const [r1, r2, r3] = await Promise.all([p1, p2, p3])
-
-    expect(r1).toEqual({ ok: true })
-    expect(r2).toEqual({ ok: true })
-    expect(r3).toEqual({ ok: true })
-    expect(refreshSession).toHaveBeenCalledTimes(1)
+    const init = fetchMock.mock.calls[0]![1] as RequestInit
+    const headers = init.headers as Headers
+    expect(headers.get('Authorization')).toBeNull()
   })
+})
 
-  it('signs out and redirects when refresh fails', async () => {
+describe('apiClient — 401 handling', () => {
+  it('calls Clerk.signOut and redirects to /login on 401', async () => {
     const assign = mockLocation()
-    getSession.mockResolvedValue({ data: { session: { access_token: 'stale' } } })
-    refreshSession.mockResolvedValue({ data: { session: null }, error: { message: 'nope' } })
-    signOut.mockResolvedValue({ error: null })
+    setClerk('valid-token')
 
     const fetchMock = vi
       .fn()
       .mockResolvedValue(jsonResponse(401, { error: { message: 'expired' } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const { apiClient, __testing } = await import('@/lib/core/api-client')
-    __testing.resetPendingRefresh()
+    const { apiClient } = await import('@/lib/core/api-client')
+    await expect(apiClient.get('/secure')).rejects.toThrow('Unauthorized')
 
-    await expect(apiClient.get('/secure')).rejects.toThrow()
-    expect(signOut).toHaveBeenCalledWith({ scope: 'global' })
+    expect(clerkSignOut).toHaveBeenCalledOnce()
     expect(assign).toHaveBeenCalledWith('/login')
   })
 
-  it('does NOT trigger refresh on 403', async () => {
-    getSession.mockResolvedValue({ data: { session: { access_token: 't' } } })
+  it('does not redirect when already on /login', async () => {
+    const assign = mockLocation('/login')
+    setClerk('valid-token')
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(401, { error: { message: 'expired' } }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { apiClient } = await import('@/lib/core/api-client')
+    await expect(apiClient.get('/secure')).rejects.toThrow('Unauthorized')
+
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('does NOT retry on 401 — signs out immediately', async () => {
+    mockLocation()
+    setClerk('valid-token')
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(401, { error: { message: 'expired' } }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { apiClient } = await import('@/lib/core/api-client')
+    await expect(apiClient.get('/secure')).rejects.toThrow()
+
+    // Only one fetch call — no retry
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('apiClient — 403 handling', () => {
+  it('does NOT trigger signOut on 403', async () => {
+    setClerk('valid-token')
     const fetchMock = vi
       .fn()
       .mockResolvedValue(jsonResponse(403, { error: { message: 'forbidden' } }))
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const { apiClient, __testing } = await import('@/lib/core/api-client')
-    __testing.resetPendingRefresh()
-
+    const { apiClient } = await import('@/lib/core/api-client')
     await expect(apiClient.get('/secure')).rejects.toThrow('forbidden')
-    expect(refreshSession).not.toHaveBeenCalled()
+
+    expect(clerkSignOut).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+})
 
-  it('never calls refreshSession from authHeader — relies on Supabase autoRefreshToken', async () => {
-    // authHeader() reads from sessionRef (written by onAuthStateChange), not getSession().
-    // Calling getSession() from authHeader() races with Supabase's internal autoRefreshToken timer
-    // and can burn the refresh token. sessionRef avoids acquiring the Supabase internal lock.
-    const { sessionRef } = await import('@/lib/core/session-ref')
-    sessionRef.set({ access_token: 'valid-token' } as never)
-
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { ok: true } }))
-    globalThis.fetch = fetchMock as unknown as typeof fetch
-
-    const { apiClient, __testing } = await import('@/lib/core/api-client')
-    __testing.resetPendingRefresh()
-    await apiClient.get('/secure')
-
-    expect(refreshSession).not.toHaveBeenCalled()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    const init = fetchMock.mock.calls[0]![1] as RequestInit
-    expect((init.headers as Headers).get('Authorization')).toBe('Bearer valid-token')
-  })
-
+describe('apiClient — 429 handling', () => {
   it('shows a warning toast on 429 with Retry-After header', async () => {
-    getSession.mockResolvedValue({ data: { session: { access_token: 't' } } })
+    setClerk('valid-token')
     const res = new Response(
       JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'slow down' } }),
       {
@@ -214,10 +190,9 @@ describe('apiClient', () => {
     const fetchMock = vi.fn().mockResolvedValue(res)
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
-    const { apiClient, __testing } = await import('@/lib/core/api-client')
-    __testing.resetPendingRefresh()
-
+    const { apiClient } = await import('@/lib/core/api-client')
     await expect(apiClient.get('/fast-endpoint')).rejects.toThrow()
+
     expect(toastWarning).toHaveBeenCalledWith('Rate limit exceeded. Try again in 30s.')
   })
 })

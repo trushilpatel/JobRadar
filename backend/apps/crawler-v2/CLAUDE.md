@@ -1,6 +1,6 @@
 # crawler-v2
 
-Go module for the orchestration-based crawler (formerly `jobingest`). Fetches job listings and details from ATS providers and maps them to canonical types consumed by the filter + analyzer pipeline.
+**Status: wired in** — the canonical ATS adapter library for the pipeline. Crawler-node uses it for listing fetches and the analyzer uses it for `FetchJobPost` (single-post detail). The standalone v1 monolith crawler has been removed; this package (formerly `jobingest`) is the only ATS adapter source. Fetches job listings and details from ATS providers and maps them to canonical types consumed by the filter + analyzer pipeline.
 
 ## Module path
 

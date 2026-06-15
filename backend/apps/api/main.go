@@ -16,8 +16,8 @@ import (
 	commonredis "github.com/trushilpatel/jobradar/common/redis"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/platform/cache"
+	clerkadmin "github.com/trushilpatel/jobradar/platform/clerkadmin"
 	"github.com/trushilpatel/jobradar/platform/ratelimit"
-	"github.com/trushilpatel/jobradar/platform/supabaseadmin"
 	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 )
 
@@ -70,21 +70,20 @@ func main() {
 	// back to in-memory implementations when Redis is unreachable so the API
 	// still boots in test/dev environments without a live Redis.
 	muCache, muLimiter := buildMultiUserPlatform(cfg, log)
-	var supabaseClient supabaseadmin.Client
-	if cfg.MultiUser.SupabaseURL != "" && cfg.MultiUser.SupabaseServiceRoleKey != "" {
-		c, err := supabaseadmin.NewRESTClient(cfg.MultiUser.SupabaseURL, cfg.MultiUser.SupabaseServiceRoleKey, nil)
-		if err != nil {
-			// Non-fatal: in dev / test we ship without Supabase admin creds
-			// and /api/me DELETE fails loudly when invoked. GET + PATCH
-			// still work without Supabase.
-			log.Warn("supabase admin client unavailable", logger.Err(err))
-		} else {
-			supabaseClient = c
-		}
-	} else {
-		log.Warn("supabase admin client disabled — SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing")
+
+	// Clerk admin client — required for /api/me DELETE and /admin/users DELETE.
+	// Non-fatal: in dev / test environments CLERK_SECRET_KEY may be unset;
+	// delete endpoints fail loudly when invoked. GET + PATCH still work without it.
+	clerkClient, clerkErr := clerkadmin.NewRESTClient(
+		"https://api.clerk.dev",
+		cfg.MultiUser.ClerkSecretKey,
+		nil,
+	)
+	if clerkErr != nil {
+		log.Warn("clerk admin client unavailable — account deletion degraded", logger.Err(clerkErr))
 	}
-	mu := buildMultiUser(database, cfg, muCache, muLimiter, supabaseClient, log, app.PipelineSvc(), app.InsightsHandler(), app.CompanyAdminHandler(), app.AtsHandler())
+
+	mu := buildMultiUser(database, cfg, muCache, muLimiter, clerkClient, log, app.PipelineSvc(), app.InsightsHandler(), app.CompanyAdminHandler(), app.AtsHandler())
 
 	apiGroups := append(app.Handlers(), mu.APIHandlers()...)
 	apiRouter := NewRouter(log, cfg, authMW, mu.IdentityMW(), mu.RateLimitMW(), apiGroups, mu.AdminHandlers())

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	wdapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/workday/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // ── adapterConfig.validate ────────────────────────────────────────────────────
@@ -115,12 +115,16 @@ func TestMapJobSummary_AllFields(t *testing.T) {
 	got := mapJobSummary(jp, cfg)
 
 	want := core.JobSummary{
-		ID:            "workday-R-12345",
-		Title:         "Senior Software Engineer",
-		Location:      "San Jose, CA",
-		URL:           "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/San-Jose/Senior-Software-Engineer_R-12345",
-		EmployType:    core.EmployFullTime,
-		LocationKnown: true,
+		ID:         "workday-R-12345",
+		Title:      "Senior Software Engineer",
+		Location:   "San Jose, CA",
+		URL:        "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/San-Jose/Senior-Software-Engineer_R-12345",
+		EmployType: core.EmployFullTime,
+		// LocationKnown is intentionally false: the CXS listing carries only a
+		// coarse LocationsText that cannot be trusted for string-based non-USA
+		// rejection. The real location decision is deferred to enrich-time, where
+		// FetchJobPost supplies a reliable CountryCode.
+		LocationKnown: false,
 	}
 
 	if got.ID != want.ID {
@@ -140,6 +144,31 @@ func TestMapJobSummary_AllFields(t *testing.T) {
 	}
 	if got.LocationKnown != want.LocationKnown {
 		t.Errorf("LocationKnown = %v, want %v", got.LocationKnown, want.LocationKnown)
+	}
+}
+
+// TestMapJobSummary_LocationDeferred locks the invariant that Workday listing
+// summaries never claim a known location. Workday's CXS listing exposes only a
+// coarse LocationsText (no structured country), so string-based non-USA
+// rejection at filter-time would mis-fire. The decision is deferred to
+// enrich-time via FetchJobPost.CountryCode. Matches v1 parity (jobToItem leaves
+// FetchJobsItem.LocationKnown at its false zero value).
+func TestMapJobSummary_LocationDeferred(t *testing.T) {
+	jp := wdapi.JobPosting{
+		Title:         "Engineer",
+		ExternalPath:  "/job/Bengaluru/Engineer_R-99",
+		LocationsText: "Bengaluru, India",
+		BulletFields:  []string{"R-99"},
+	}
+	cfg := adapterConfig{Host: "nvidia.wd5.myworkdayjobs.com", Site: "NVIDIAExternalCareerSite"}
+
+	got := mapJobSummary(jp, cfg)
+
+	if got.LocationKnown {
+		t.Error("LocationKnown must be false at listing time; Workday location is deferred to enrich-time")
+	}
+	if got.AllLocations != nil {
+		t.Errorf("AllLocations = %v, want nil (no reliable structured locations at listing time)", got.AllLocations)
 	}
 }
 

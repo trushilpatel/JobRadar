@@ -25,8 +25,8 @@ import (
 	"time"
 
 	wdapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/workday/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 const (
@@ -143,7 +143,7 @@ func (w *Workday) FetchJobListingWithConfig(ctx context.Context, companyID strin
 			if len(jobs) >= maxJobs {
 				log.Info("listing fetched (max cap)",
 					logger.Int(logger.FieldJobCount, len(jobs)),
-					logger.Dur(logger.FieldDuration, time.Since(start)),
+					logger.Dur(logger.FieldDurationMs, time.Since(start)),
 				)
 				return core.JobListing{Jobs: jobs}, nil
 			}
@@ -165,7 +165,7 @@ func (w *Workday) FetchJobListingWithConfig(ctx context.Context, companyID strin
 
 	log.Info("listing fetched",
 		logger.Int(logger.FieldJobCount, len(jobs)),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 	return core.JobListing{Jobs: jobs}, nil
 }
@@ -206,7 +206,7 @@ func (w *Workday) FetchJobPost(ctx context.Context, summary core.JobSummary) (co
 	}
 
 	post := mapJobPost(d.JobPostingInfo, summary.URL)
-	log.Info("job post fetched", logger.Dur(logger.FieldDuration, time.Since(start)))
+	log.Info("job post fetched", logger.Dur(logger.FieldDurationMs, time.Since(start)))
 	return post, nil
 }
 

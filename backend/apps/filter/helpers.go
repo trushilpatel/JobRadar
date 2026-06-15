@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/logger"
 )
@@ -57,7 +57,7 @@ func splitBySize(s []chunkItem, size int) [][]chunkItem {
 // If AllLocations is populated it is used directly; otherwise the single
 // Location string is wrapped in a one-element slice for backward compatibility
 // with thin-listing adapters that pre-date the AllLocations field.
-func mergedLocations(job ats.RawJob) []string {
+func mergedLocations(job core.JobSummary) []string {
 	if len(job.AllLocations) > 0 {
 		return job.AllLocations
 	}

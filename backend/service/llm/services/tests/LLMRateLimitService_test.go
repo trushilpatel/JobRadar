@@ -41,12 +41,13 @@ type recordingLogger struct {
 	warned atomic.Bool
 }
 
-func (r *recordingLogger) Warn(_ string, _ ...logger.Field)           { r.warned.Store(true) }
-func (r *recordingLogger) Info(_ string, _ ...logger.Field)           {}
-func (r *recordingLogger) Debug(_ string, _ ...logger.Field)          {}
-func (r *recordingLogger) Error(_ string, _ error, _ ...logger.Field) {}
-func (r *recordingLogger) With(_ ...logger.Field) logger.Logger       { return r }
-func (r *recordingLogger) Warned() bool                               { return r.warned.Load() }
+func (r *recordingLogger) Warn(_ string, _ ...logger.Field)            { r.warned.Store(true) }
+func (r *recordingLogger) Info(_ string, _ ...logger.Field)            {}
+func (r *recordingLogger) Debug(_ string, _ ...logger.Field)           {}
+func (r *recordingLogger) Error(_ string, _ error, _ ...logger.Field)  {}
+func (r *recordingLogger) With(_ ...logger.Field) logger.Logger        { return r }
+func (r *recordingLogger) WithContext(_ context.Context) logger.Logger { return r }
+func (r *recordingLogger) Warned() bool                                { return r.warned.Load() }
 
 type fakeScorer struct {
 	scoreErr  error

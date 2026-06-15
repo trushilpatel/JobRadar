@@ -26,12 +26,11 @@ type Config struct {
 	MultiUser     MultiUserConfig
 }
 
-// MultiUserConfig holds multi-user knobs: Supabase admin client credentials,
+// MultiUserConfig holds multi-user knobs: Clerk admin client credentials,
 // per-scope rate limits, and identity cache TTL. All values have sensible
 // defaults so a stock dev environment boots without needing to set them.
 type MultiUserConfig struct {
-	SupabaseURL            string
-	SupabaseServiceRoleKey string
+	ClerkSecretKey         string
 	RateLimitReadRPM       int
 	RateLimitWriteRPM      int
 	RateLimitAdminRPM      int
@@ -46,35 +45,21 @@ type MultiUserConfig struct {
 	IdentityCacheLocalMaxEntries int
 }
 
-// AuthConfig holds Supabase auth verification settings. Exactly one of
-// SupabaseJWTSecret (HS256) or SupabaseJWKSURL (ES256 via JWKS) must be set.
+// AuthConfig holds Clerk auth verification settings. Both CLERK_JWKS_URL and
+// CLERK_ISSUER_URL must be set for the API to start.
 type AuthConfig struct {
-	SupabaseProjectURL  string
-	SupabaseJWKSURL     string
-	SupabaseJWTSecret   string
-	ClockSkewSeconds    int
-	JWKSCacheTTLSeconds int
+	ClerkJWKSURL   string
+	ClerkIssuerURL string
 }
 
-// Validate enforces boot-time auth invariants. Refuses to start if both JWT
-// secret and JWKS URL are set, or if neither is set.
+// Validate enforces boot-time auth invariants. Both Clerk JWKS and issuer
+// URLs must be set.
 func (c AuthConfig) Validate() error {
-	hasSecret := c.SupabaseJWTSecret != ""
-	hasJWKS := c.SupabaseJWKSURL != ""
-	if hasSecret && hasJWKS {
-		return fmt.Errorf("config: only one of SUPABASE_JWT_SECRET or SUPABASE_JWKS_URL may be set, not both")
+	if c.ClerkJWKSURL == "" {
+		return fmt.Errorf("config: CLERK_JWKS_URL must be set")
 	}
-	if !hasSecret && !hasJWKS {
-		return fmt.Errorf("config: exactly one of SUPABASE_JWT_SECRET or SUPABASE_JWKS_URL must be set")
-	}
-	if c.SupabaseProjectURL == "" {
-		return fmt.Errorf("config: SUPABASE_PROJECT_URL must be set")
-	}
-	if c.ClockSkewSeconds < 0 {
-		return fmt.Errorf("config: JWT_CLOCK_SKEW_SECONDS must be >= 0, got %d", c.ClockSkewSeconds)
-	}
-	if c.JWKSCacheTTLSeconds <= 0 {
-		return fmt.Errorf("config: JWKS_CACHE_TTL_SECONDS must be > 0, got %d", c.JWKSCacheTTLSeconds)
+	if c.ClerkIssuerURL == "" {
+		return fmt.Errorf("config: CLERK_ISSUER_URL must be set")
 	}
 	return nil
 }
@@ -314,19 +299,15 @@ func Load() *Config {
 			OTelEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 		},
 		Auth: AuthConfig{
-			SupabaseProjectURL:  getEnv("SUPABASE_PROJECT_URL", ""),
-			SupabaseJWKSURL:     deriveJWKSURL(getEnv("SUPABASE_PROJECT_URL", ""), getEnv("SUPABASE_JWKS_URL", ""), getEnv("SUPABASE_JWT_SECRET", "")),
-			SupabaseJWTSecret:   getEnv("SUPABASE_JWT_SECRET", ""),
-			ClockSkewSeconds:    getEnvInt("JWT_CLOCK_SKEW_SECONDS", 60),
-			JWKSCacheTTLSeconds: getEnvInt("JWKS_CACHE_TTL_SECONDS", 600),
+			ClerkJWKSURL:   getEnv("CLERK_JWKS_URL", ""),
+			ClerkIssuerURL: getEnv("CLERK_ISSUER_URL", ""),
 		},
 		API: APIConfig{
 			MaxBodyBytes: int64(getEnvInt("API_MAX_BODY_BYTES", 1048576)),
 			DevToken:     os.Getenv("DEV_TOKEN"),
 		},
 		MultiUser: MultiUserConfig{
-			SupabaseURL:                  getEnv("SUPABASE_URL", ""),
-			SupabaseServiceRoleKey:       getEnv("SUPABASE_SERVICE_ROLE_KEY", ""),
+			ClerkSecretKey:               getEnv("CLERK_SECRET_KEY", ""),
 			RateLimitReadRPM:             getEnvInt("RATE_LIMIT_READ_RPM", 30),
 			RateLimitWriteRPM:            getEnvInt("RATE_LIMIT_WRITE_RPM", 20),
 			RateLimitAdminRPM:            getEnvInt("RATE_LIMIT_ADMIN_RPM", 120),
@@ -336,22 +317,6 @@ func Load() *Config {
 			IdentityCacheLocalMaxEntries: getEnvInt("IDENTITY_CACHE_LOCAL_MAX_ENTRIES", 10000),
 		},
 	}
-}
-
-// deriveJWKSURL returns the explicit JWKS URL when set, otherwise derives it
-// from the project URL. Returns "" when HS256 mode is selected (JWT secret is
-// set) so the "exactly one of secret/JWKS" invariant stays satisfied.
-func deriveJWKSURL(projectURL, explicit, jwtSecret string) string {
-	if explicit != "" {
-		return explicit
-	}
-	if jwtSecret != "" {
-		return ""
-	}
-	if projectURL == "" {
-		return ""
-	}
-	return strings.TrimRight(projectURL, "/") + "/auth/v1/.well-known/jwks.json"
 }
 
 func getEnv(key, fallback string) string {

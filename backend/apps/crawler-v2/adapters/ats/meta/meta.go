@@ -18,8 +18,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 // sitemapURL is the public sitemap of every active Meta job posting.
@@ -76,7 +76,7 @@ func (m *Meta) FetchJobListing(ctx context.Context, _ string) (core.JobListing, 
 	ids := parseSitemap(body)
 	log.Info("sitemap parsed",
 		logger.Int(logger.FieldJobCount, len(ids)),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 
 	jobs := make([]core.JobSummary, 0, len(ids))
@@ -111,7 +111,7 @@ func (m *Meta) FetchJobPost(ctx context.Context, summary core.JobSummary) (core.
 	}
 
 	post := mapJobPost(jp, summary.ID)
-	log.Info("job post fetched", logger.Dur(logger.FieldDuration, time.Since(start)))
+	log.Info("job post fetched", logger.Dur(logger.FieldDurationMs, time.Since(start)))
 	return post, nil
 }
 

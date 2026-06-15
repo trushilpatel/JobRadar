@@ -25,13 +25,14 @@ vi.mock('sonner', () => ({
   },
 }))
 
-// ── Auth store mock ───────────────────────────────────────────────────────────
-vi.mock('@/features/auth/store/auth.store', () => ({
-  useAuthStore: vi.fn((selector: (s: unknown) => unknown) =>
-    selector({
-      identity: { user_id: 'admin-self', email: 'admin@test.com', roles: ['admin'] },
-    })
-  ),
+// ── Auth identity mock ────────────────────────────────────────────────────────
+vi.mock('@/features/auth/hooks/useIdentity', () => ({
+  useIdentity: vi.fn(() => ({
+    identity: { user_id: 'admin-self', email: 'admin@test.com', roles: ['admin'] },
+    isAdmin: true,
+    isSignedIn: true,
+    isLoaded: true,
+  })),
 }))
 
 // Import via feature barrel to satisfy the no-restricted-imports rule.

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	appleapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/apple/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // ── mapJobSummary ─────────────────────────────────────────────────────────────

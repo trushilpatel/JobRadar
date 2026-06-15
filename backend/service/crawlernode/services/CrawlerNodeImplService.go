@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	crawlernodecommon "github.com/trushilpatel/jobradar/service/crawlernode/common"
 	"github.com/trushilpatel/jobradar/service/crawlernode/dto"
@@ -100,19 +102,11 @@ func (s *implService) GetWork(ctx context.Context, nodeID, adapterType string, h
 		return resp, nil
 	}
 
-	// 4. Get known job IDs for dedup optimisation.
-	knownIDs, err := s.ledgerStore.GetActiveJobIDsByCompany(ctx, queueItem.CompanyID)
-	if err != nil {
-		// Non-fatal degradation — proceed with empty known IDs.
-		knownIDs = []string{}
-	}
-
 	resp.Assignment = &dto.WorkUnit{
 		AssignmentID:  queueItem.ID,
 		CompanyID:     queueItem.CompanyID,
 		AdapterType:   queueItem.AdapterType,
 		AdapterConfig: adapterConfig,
-		KnownIDs:      knownIDs,
 		Source:        queueItem.Source,
 	}
 	return resp, nil
@@ -128,7 +122,7 @@ func (s *implService) SubmitResults(ctx context.Context, nodeID string, req dto.
 	newJobs := 0
 
 	// 1. Partition jobs: non-USA gate.
-	var toPublish []dto.CrawledJob
+	var toPublish []core.JobSummary
 	var nonUSAIDs []string
 	for _, job := range req.Jobs {
 		if isNonUSA(job) {
@@ -157,7 +151,7 @@ func (s *implService) SubmitResults(ctx context.Context, nodeID string, req dto.
 			return nil, fmt.Errorf("SubmitResults: has seen batch: %w", err)
 		}
 
-		var newJobList []dto.CrawledJob
+		var newJobList []core.JobSummary
 		var newJobIDs []string
 		for _, job := range toPublish {
 			if !seen[job.ID] {
@@ -172,14 +166,19 @@ func (s *implService) SubmitResults(ctx context.Context, nodeID string, req dto.
 				return nil, fmt.Errorf("SubmitResults: mark seen: %w", err)
 			}
 
-			// 5. Publish to NATS per-job.
+			// 5. Publish to NATS per-job. Stamp CompanyID/Adapter so the payload
+			// and subject (jobs.raw.<adapter>) are authoritative — v2 mappers leave
+			// these empty.
+			subject := fmt.Sprintf(js.SubjectJobsRawFmt, req.AdapterType)
 			for _, job := range newJobList {
-				payload, pubErr := marshalJob(job, req.CompanyID, req.AdapterType)
+				summary := job
+				summary.CompanyID = req.CompanyID
+				summary.Adapter = req.AdapterType
+				payload, pubErr := json.Marshal(summary)
 				if pubErr != nil {
 					continue // skip bad serialisation — per-job isolation
 				}
-				subject := "jobs.raw." + req.AdapterType
-				if pubErr := s.publisher.PublishWithMsgID(ctx, subject, payload, job.ID); pubErr != nil {
+				if pubErr := s.publisher.PublishWithMsgID(ctx, subject, payload, summary.ID); pubErr != nil {
 					continue // publish failure — ledger row stays; re-scan picks it up
 				}
 				published++
@@ -188,24 +187,33 @@ func (s *implService) SubmitResults(ctx context.Context, nodeID string, req dto.
 		}
 	}
 
-	// 6. Removed-job detection.
-	if len(req.PreviousKnownIDs) > 0 {
-		currentSet := make(map[string]struct{}, len(req.Jobs))
-		for _, j := range req.Jobs {
-			currentSet[j.ID] = struct{}{}
+	// 6. Removed-job detection — server-side diff, gated on Final.
+	// A non-final (streaming) submission is only a partial view; marking jobs
+	// removed there would falsely drop jobs still to come in later batches.
+	if req.Final {
+		previousActive, activeErr := s.ledgerStore.GetActiveJobIDsByCompany(ctx, req.CompanyID)
+		if activeErr != nil {
+			// Non-fatal — removed-job detection is best-effort observability.
+			previousActive = nil
 		}
-		var removedIDs []string
-		for _, id := range req.PreviousKnownIDs {
-			if _, ok := currentSet[id]; !ok {
-				removedIDs = append(removedIDs, id)
+		if len(previousActive) > 0 {
+			submitted := make(map[string]struct{}, len(req.Jobs))
+			for _, j := range req.Jobs {
+				submitted[j.ID] = struct{}{}
 			}
-		}
-		if len(removedIDs) > 0 {
-			if err := s.ledgerStore.MarkRemovedBatch(ctx, removedIDs); err != nil {
-				// Non-fatal — removed-job detection is best-effort observability.
-				_ = err
+			var removedIDs []string
+			for _, id := range previousActive {
+				if _, ok := submitted[id]; !ok {
+					removedIDs = append(removedIDs, id)
+				}
 			}
-			resp.Removed = len(removedIDs)
+			if len(removedIDs) > 0 {
+				if err := s.ledgerStore.MarkRemovedBatch(ctx, removedIDs); err != nil {
+					// Non-fatal — removed-job detection is best-effort observability.
+					_ = err
+				}
+				resp.Removed = len(removedIDs)
+			}
 		}
 	}
 
@@ -358,7 +366,7 @@ func (s *implService) RetireNode(ctx context.Context, nodeID string) (err error)
 // isNonUSA returns true if a job's location is definitively non-USA:
 // LocationKnown must be true AND all locations must be non-USA.
 // If LocationKnown=false (thin adapters, Workday, Meta), the job passes through.
-func isNonUSA(job dto.CrawledJob) bool {
+func isNonUSA(job core.JobSummary) bool {
 	if !job.LocationKnown {
 		return false
 	}
@@ -401,55 +409,4 @@ func computeHMAC(message, key string) string {
 	mac := hmac.New(sha256.New, []byte(key))
 	mac.Write([]byte(message))
 	return hex.EncodeToString(mac.Sum(nil))
-}
-
-// rawJobWire mirrors apps/crawler/ats/types.RawJob JSON field names.
-// Defined here to avoid importing an apps/ package from a service/ package.
-type rawJobWire struct {
-	ID            string           `json:"id"`
-	CompanyID     string           `json:"company_id"`
-	Adapter       string           `json:"adapter"`
-	Title         string           `json:"title"`
-	Location      string           `json:"location"`
-	URL           string           `json:"url"`
-	EmployType    string           `json:"employ_type"`
-	FullContent   *fullContentWire `json:"full_content,omitempty"`
-	LocationKnown bool             `json:"location_known,omitempty"`
-	AllLocations  []string         `json:"all_locations,omitempty"`
-}
-
-type fullContentWire struct {
-	Description  string `json:"description"`
-	Requirements string `json:"requirements"`
-	Compensation string `json:"compensation"`
-	Department   string `json:"department"`
-}
-
-// marshalJob serialises a CrawledJob to the jobs.raw.<adapter> NATS wire format.
-func marshalJob(job dto.CrawledJob, companyID, adapterType string) ([]byte, error) {
-	wire := rawJobWire{
-		ID:            job.ID,
-		CompanyID:     companyID,
-		Adapter:       adapterType,
-		Title:         job.Title,
-		Location:      job.Location,
-		URL:           job.URL,
-		EmployType:    job.EmploymentType,
-		LocationKnown: job.LocationKnown,
-		AllLocations:  job.AllLocations,
-	}
-	if job.FullContent != nil {
-		wire.FullContent = &fullContentWire{
-			Description:  job.FullContent.Description,
-			Requirements: job.FullContent.Requirements,
-			Compensation: job.FullContent.Salary,
-			Department:   job.FullContent.Department,
-		}
-	}
-	return jsonMarshal(wire)
-}
-
-// jsonMarshal is a thin wrapper over encoding/json so tests can verify the payload shape.
-func jsonMarshal(v any) ([]byte, error) {
-	return json.Marshal(v)
 }

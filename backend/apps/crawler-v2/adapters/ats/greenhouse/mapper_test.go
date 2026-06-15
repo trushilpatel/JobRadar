@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	ghapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/greenhouse/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // ── mapJobSummary ─────────────────────────────────────────────────────────────

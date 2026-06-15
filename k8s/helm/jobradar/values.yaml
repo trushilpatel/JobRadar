@@ -8,10 +8,6 @@ images:
     repository: jobradar-backend
     tag: local
     pullPolicy: IfNotPresent
-  crawler:
-    repository: jobradar-crawler
-    tag: local
-    pullPolicy: IfNotPresent
   orchestrator:
     repository: jobradar-orchestrator
     tag: local
@@ -40,12 +36,13 @@ api:
   logFormat: json
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
-  dbPort: "6543"
+  dbPort: "5432"
   rateLimitReadRpm: "300"
   rateLimitWriteRpm: "60"
   rateLimitAdminRpm: "300"
   # Set in values.local.yaml — do not commit real values here
-  supabaseProjectUrl: ""
+  clerkJwksUrl: ""
+  clerkIssuerUrl: ""
   jwtClockSkewSeconds: "60"
   jwksCacheTtlSeconds: "600"
   apiMaxBodyBytes: "1048576"
@@ -70,7 +67,7 @@ filter:
   metricsAddr: ":9101"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
-  dbPort: "6543"
+  dbPort: "5432"
 
 enricher:
   enabled: true
@@ -93,23 +90,7 @@ enricher:
   metricsAddr: ":9101"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
-  dbPort: "6543"
-
-crawler:
-  enabled: true
-  natsUrl: "tls://connect.ngs.global"
-  natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
-  pollIntervalSeconds: "60"
-  stuckTimeoutSeconds: "120"
-  heartbeatIntervalSeconds: "30"
-  companyDelaySeconds: "30"
-  scanIntervalMinutes: "1440"
-  logLevel: info
-  logFormat: json
-  metricsAddr: ":9102"
-  otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
-  dbSslmode: require
-  dbPort: "6543"
+  dbPort: "5432"
 
 scheduler:
   enabled: true
@@ -121,7 +102,7 @@ scheduler:
   metricsAddr: ":9103"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
-  dbPort: "6543"
+  dbPort: "5432"
 
 orchestrator:
   enabled: true
@@ -132,7 +113,7 @@ orchestrator:
   metricsAddr: ":9104"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
-  dbPort: "6543"
+  dbPort: "5432"
 
 # crawlerNode: stateless HTTP workers that poll the orchestrator.
 # Increase replicas to scale out concurrent crawling capacity.

@@ -12,7 +12,7 @@ import { ResumeLibraryPage } from '@/pages/admin/ResumeLibraryPage'
 import { ResumeDetailPage } from '@/pages/admin/ResumeDetailPage'
 import { ResumeEditorPage } from '@/pages/admin/ResumeEditorPage'
 import { ApplyQueuePage } from '@/pages/admin/ApplyQueuePage'
-import { LoginPage, AuthCallback, RequireAuth, RequireAdmin } from '@/features/auth'
+import { SignInPage, RequireAuth, RequireAdmin } from '@/features/auth'
 import { MobileJobDetailRoute } from '@/features/jobs'
 import { routes } from '@/config/routes'
 
@@ -27,6 +27,7 @@ function ProtectedLayout() {
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:id" element={<MobileJobDetailRoute />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/insights" element={<InsightsPage />} />
           {/* Admin routes — server also enforces 403 for non-admins */}
           <Route element={<RequireAdmin />}>
             <Route path="/admin/companies" element={<CompaniesPage />} />
@@ -37,7 +38,6 @@ function ProtectedLayout() {
             <Route path="/admin/resumes/:id/edit" element={<ResumeEditorPage />} />
             <Route path="/admin/apply-queue" element={<ApplyQueuePage />} />
             <Route path="/admin/pipeline" element={<AdminPipelinePage />} />
-            <Route path="/insights" element={<InsightsPage />} />
           </Route>
         </Routes>
       </main>
@@ -48,8 +48,7 @@ function ProtectedLayout() {
 export function AppRouter() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/login" element={<SignInPage />} />
       <Route element={<RequireAuth />}>
         <Route path="/*" element={<ProtectedLayout />} />
       </Route>
