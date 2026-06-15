@@ -250,6 +250,19 @@ describe('apiClient — 401 handling', () => {
     expect(clerkSignOut).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  it('does not redirect when Clerk has not initialized yet (window.Clerk undefined)', async () => {
+    // Simulate the race-condition window: Clerk JS hasn't bootstrapped yet so
+    // window.Clerk is undefined. A 401 must NOT cause signOut or a /login
+    // redirect — the user is not logged out, Clerk simply hasn't loaded.
+    setClerk(null)
+    fetchMock.mockResolvedValue(emptyResponse(401))
+    await expect(apiClient.get('/secure')).rejects.toThrow('Unauthorized')
+    expect(clerkSignOut).not.toHaveBeenCalled()
+    expect(
+      (window.location as unknown as { assign: ReturnType<typeof vi.fn> }).assign
+    ).not.toHaveBeenCalled()
+  })
 })
 
 // ── Timeout / abort ──────────────────────────────────────────────────────────
