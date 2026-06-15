@@ -73,10 +73,10 @@ spec:
             failureThreshold: 5
           resources:
             requests:
-              memory: "64Mi"
+              memory: "32Mi"
               cpu: "50m"
             limits:
-              memory: "128Mi"
+              memory: "32Mi"
               cpu: "300m"
           securityContext:
             {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
