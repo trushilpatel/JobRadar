@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/trushilpatel/jobradar/common/ats/core"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	crawlernodecommon "github.com/trushilpatel/jobradar/service/crawlernode/common"
 	"github.com/trushilpatel/jobradar/service/crawlernode/dto"
@@ -168,7 +169,7 @@ func (s *implService) SubmitResults(ctx context.Context, nodeID string, req dto.
 			// 5. Publish to NATS per-job. Stamp CompanyID/Adapter so the payload
 			// and subject (jobs.raw.<adapter>) are authoritative — v2 mappers leave
 			// these empty.
-			subject := "jobs.raw." + req.AdapterType
+			subject := fmt.Sprintf(js.SubjectJobsRawFmt, req.AdapterType)
 			for _, job := range newJobList {
 				summary := job
 				summary.CompanyID = req.CompanyID
