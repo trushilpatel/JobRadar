@@ -254,6 +254,34 @@ describe('jobs API', () => {
       expect(url).toContain('companies=Acme')
       expect(url).toContain('companies=Stripe')
     })
+
+    it('does not drop a job when salary_range has null min/max fields', async () => {
+      // Regression: salary_range.min and .max were typed z.number().optional() which
+      // rejects null. The backend sends null for unknown salary. Jobs were silently
+      // dropped by parseItemsResilient and logged as [schema-drift].
+      // Fix: use z.number().nullish() so null is accepted.
+      const rawWithNullSalary = {
+        ...rawJob,
+        salary_range: { min: null, max: null, currency: 'USD', period: 'yearly' },
+      }
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [rawWithNullSalary],
+        next_cursor: '',
+      })
+      const result = await fetchJobs(baseFilters, '', 20)
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0]?.title).toBe('Software Engineer')
+    })
+
+    it('does not drop a job when salary_range itself is null', async () => {
+      const rawWithNullSalaryObj = { ...rawJob, salary_range: null }
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [rawWithNullSalaryObj],
+        next_cursor: '',
+      })
+      const result = await fetchJobs(baseFilters, '', 20)
+      expect(result.items).toHaveLength(1)
+    })
   })
 
   // ── setJobStatus ────────────────────────────────────────────────────────────

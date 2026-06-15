@@ -24,9 +24,12 @@ async function getClerkToken(): Promise<string | null> {
 }
 
 function signOutAndRedirect(): void {
-  getClerkWindow()
-    .Clerk?.signOut()
-    .catch(() => {})
+  const clerk = getClerkWindow().Clerk
+  // If Clerk hasn't initialized yet (e.g. a race-condition request fired before
+  // ClerkProvider bootstrapped), skip the redirect entirely — the user is not
+  // logged out; re-firing after init will re-auth correctly.
+  if (!clerk) return
+  clerk.signOut().catch(() => {})
   if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
     window.location.assign('/login')
   }

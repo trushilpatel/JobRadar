@@ -49,8 +49,8 @@ const JobRawSchema = z.object({
   tech_stack: z.array(z.string()).nullable(),
   salary_range: z
     .object({
-      min: z.number().optional(),
-      max: z.number().optional(),
+      min: z.number().nullish(),
+      max: z.number().nullish(),
       currency: z.string().optional(),
       period: z.string().optional(),
     })

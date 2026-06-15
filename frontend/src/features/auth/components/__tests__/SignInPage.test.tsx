@@ -3,8 +3,8 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 vi.mock('@clerk/react', () => ({
-  SignIn: ({ redirectUrl }: { redirectUrl: string }) => (
-    <div data-testid="clerk-sign-in" data-redirect={redirectUrl}>
+  SignIn: ({ fallbackRedirectUrl }: { fallbackRedirectUrl: string }) => (
+    <div data-testid="clerk-sign-in" data-fallback-redirect={fallbackRedirectUrl}>
       Clerk SignIn
     </div>
   ),
@@ -37,7 +37,7 @@ describe('SignInPage', () => {
         <SignInPage />
       </MemoryRouter>
     )
-    expect(screen.getByTestId('clerk-sign-in')).toHaveAttribute('data-redirect', '/')
+    expect(screen.getByTestId('clerk-sign-in')).toHaveAttribute('data-fallback-redirect', '/')
   })
 
   it('renders logo', async () => {
