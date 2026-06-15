@@ -1,3 +1,9 @@
+---
+paths:
+  - 'frontend/**/*.ts'
+  - 'frontend/**/*.tsx'
+---
+
 # Frontend Core Quality Attributes
 
 Non-negotiable qualities every frontend feature must uphold. Each attribute below lists the concrete patterns that express it in this codebase.
@@ -98,6 +104,23 @@ Every layer of the frontend can be verified in isolation.
 
 - `apiClient` is mockable — tests replace `fetch` via `vi.fn()`, not the entire HTTP stack
 - Use a test-specific `queryClient` — no global cache state leaks between tests
-- Auth is mocked via Supabase stubs — components that depend on session are tested without real auth
+- Auth is mocked via Clerk test helpers — components that depend on session are tested without real auth
 - Hooks are testable via `renderHook` — extract query/mutation logic into hooks so components stay thin and testable
 - No real network calls in unit tests — mock at the `fetch` boundary, not at the component boundary
+
+## Component decomposition
+
+Split a UI piece into its own component when any of these are true:
+
+- It appears in more than one place
+- It has its own state or data-fetching logic
+- It is complex enough that the parent becomes hard to read without it
+- It maps to a distinct user concept (a card, a panel, a form, a tab)
+
+Don't split just for splitting's sake — a tiny presentational snippet used only once can stay inline. A component should read from hooks and render — not contain raw `useEffect`/`useState` chains. Keep hooks focused: one hook per concern. Extract any non-trivial state or side-effect logic into a `use*.ts` hook.
+
+**Structure:**
+
+- `src/pages/` — route-level components, compose features, minimal logic
+- `src/features/<domain>/` — domain-specific components, hooks, helpers co-located
+- `src/components/` — fully generic, reusable, zero domain knowledge
