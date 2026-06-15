@@ -8,10 +8,6 @@ images:
     repository: jobradar-backend
     tag: local
     pullPolicy: IfNotPresent
-  crawler:
-    repository: jobradar-crawler
-    tag: local
-    pullPolicy: IfNotPresent
   orchestrator:
     repository: jobradar-orchestrator
     tag: local
@@ -45,7 +41,8 @@ api:
   rateLimitWriteRpm: "60"
   rateLimitAdminRpm: "300"
   # Set in values.local.yaml — do not commit real values here
-  supabaseProjectUrl: ""
+  clerkJwksUrl: ""
+  clerkIssuerUrl: ""
   jwtClockSkewSeconds: "60"
   jwksCacheTtlSeconds: "600"
   apiMaxBodyBytes: "1048576"
@@ -91,22 +88,6 @@ enricher:
   logLevel: info
   logFormat: json
   metricsAddr: ":9101"
-  otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
-  dbSslmode: require
-  dbPort: "5432"
-
-crawler:
-  enabled: true
-  natsUrl: "tls://connect.ngs.global"
-  natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
-  pollIntervalSeconds: "60"
-  stuckTimeoutSeconds: "120"
-  heartbeatIntervalSeconds: "30"
-  companyDelaySeconds: "30"
-  scanIntervalMinutes: "1440"
-  logLevel: info
-  logFormat: json
-  metricsAddr: ":9102"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
   dbSslmode: require
   dbPort: "5432"

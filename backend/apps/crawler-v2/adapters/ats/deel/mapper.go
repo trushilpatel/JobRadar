@@ -7,7 +7,7 @@ import (
 
 	ats "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats"
 	deelapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/deel/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // mapJobSummary converts a RawJobPosting to a core.JobSummary.

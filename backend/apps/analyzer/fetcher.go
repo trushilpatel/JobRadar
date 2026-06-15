@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,7 +11,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
@@ -21,10 +19,10 @@ import (
 	"github.com/trushilpatel/jobradar/service/job/location"
 )
 
-// fetchAll runs HTTP fetches for every message in parallel, capped by fetchConc
+// fetchAll runs detail fetches for every message in parallel, capped by fetchConc
 // and additionally rate-limited per adapter. Messages that fail to parse, fetch,
-// or whose adapter is unknown are routed to Nak/Term here (stage="fetch") — they
-// never reach stage 2.
+// or whose adapter has no post-fetcher are routed to Nak/Term here (stage="fetch")
+// — they never reach stage 2.
 //
 // The returned slice contains only successfully-fetched jobs in arbitrary order.
 func (w *Worker) fetchAll(ctx context.Context, fetchLog logger.Logger, msgs []*js.Msg) []fetchedJob {
@@ -68,13 +66,13 @@ func (w *Worker) fetchAll(ctx context.Context, fetchLog logger.Logger, msgs []*j
 
 // fetchOne handles all error routing for a single message so the caller can
 // just collect the success cases. Returns ok=false when the message was dropped
-// (malformed → Term, fetch failed → Nak/Term via handleFailure).
+// (malformed → Term, fetch failed / no post-fetcher → Nak/Term via handleFailure).
 func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.Msg) (fetchedJob, bool) {
 	msgCtx, span := tracing.Start(ctx, "analyzer.worker.fetchOne")
 	defer span.End()
 
-	var job ats.RawJob
-	if err := json.Unmarshal(msg.Data(), &job); err != nil {
+	var summary core.JobSummary
+	if err := json.Unmarshal(msg.Data(), &summary); err != nil {
 		span.SetAttributes(attribute.String("outcome", "malformed"))
 		fetchLog.Warn("malformed message, terminating", logger.Err(err))
 		if terr := msg.Term(); terr != nil {
@@ -84,28 +82,28 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.M
 	}
 
 	span.SetAttributes(
-		attribute.String("job_id", job.ID),
-		attribute.String("adapter", job.Adapter),
+		attribute.String("job_id", summary.ID),
+		attribute.String("adapter", summary.Adapter),
 	)
 
 	retryCount := msg.DeliveryCount() - 1
 	jobLog := fetchLog.With(
-		logger.Str(logger.FieldJobID, job.ID),
-		logger.Str(logger.FieldAdapter, job.Adapter),
+		logger.Str(logger.FieldJobID, summary.ID),
+		logger.Str(logger.FieldAdapter, summary.Adapter),
 		logger.Int(logger.FieldRetryCount, retryCount),
 	)
-	jobLog.Debug("fetching content")
+	jobLog.Debug("fetching job post")
 
 	// Path A early gate: when LocationKnown=true the adapter already supplied
 	// structured location data. Reject non-USA jobs here before any HTTP call.
-	if job.LocationKnown && location.AnyNonUSA(analyzerMergedLocations(job)) {
+	if summary.LocationKnown && location.AnyNonUSA(analyzerMergedLocations(summary)) {
 		span.SetAttributes(attribute.String("outcome", "non_usa_early"))
 		jobLog.Info("early reject: non-USA job (LocationKnown=true)",
-			logger.Str(logger.FieldLocation, job.Location),
+			logger.Str(logger.FieldLocation, summary.Location),
 			logger.Bool(logger.FieldLocationKnown, true),
 		)
 		metrics.EnricherJobsTotal.WithLabelValues("non_usa").Inc()
-		w.markNonUSA(msgCtx, job.ID)
+		w.markNonUSA(msgCtx, summary.ID)
 		if aerr := msg.Ack(); aerr != nil {
 			jobLog.Warn("msg ack failed", logger.Err(aerr))
 		}
@@ -113,58 +111,48 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.M
 	}
 
 	fetchStart := time.Now()
-	content, err := w.fetchContent(msgCtx, job)
+	post, err := w.resolveJobPost(msgCtx, summary)
 	span.SetAttributes(attribute.Int64("wait_ms", time.Since(fetchStart).Milliseconds()))
 	if err != nil {
 		span.SetAttributes(attribute.String("outcome", "fetch_failed"))
-		jobLog.Error("fetch content failed", err)
+		jobLog.Error("fetch job post failed", err)
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
-		fj := fetchedJob{job: job, msg: msg, retryCount: retryCount, ctx: msgCtx}
-		w.handleFailure(msgCtx, fetchLog, fj, "fetch", fmt.Errorf("fetch content: %w", err))
+		fj := fetchedJob{summary: summary, msg: msg, retryCount: retryCount, ctx: msgCtx}
+		w.handleFailure(msgCtx, fetchLog, fj, "fetch", fmt.Errorf("fetch job post: %w", err))
 		return fetchedJob{}, false
 	}
 
-	// Thin adapters (e.g. Meta) publish RawJobs with empty Title/Location at
-	// listing time — the real values are only available after fetching the
-	// detail page. Backfill so buildJobRow writes the correct title to `jobs`.
-	if job.Title == "" && content.Title != "" {
-		job.Title = content.Title
-	}
-	if job.Location == "" && content.Location != "" {
-		job.Location = content.Location
-	}
-
-	// Path B post-backfill gate: reject unambiguously non-USA jobs so they
-	// never reach the LLM enricher. CountryCode (ISO alpha-2) from the detail
-	// response is checked first — it is the most reliable signal. Falls back
-	// to string-based AnyNonUSA on the merged location slice.
-	// ACK the message (terminal — no retry).
+	// Path B post-fetch gate: reject unambiguously non-USA jobs so they never
+	// reach the LLM enricher. CountryCode (ISO alpha-2) from the fetched post is
+	// checked first — it is the most reliable signal. Falls back to string-based
+	// AnyNonUSA on the merged location slice. ACK the message (terminal — no retry).
 	var nonUSA bool
 	var rejectedBy string
 	switch {
-	case isUSCode(content.CountryCode):
+	case isUSCode(post.CountryCode):
 		// Confirmed USA via country code — keep.
-	case content.CountryCode != "" && !isUSCode(content.CountryCode):
+	case post.CountryCode != "" && !isUSCode(post.CountryCode):
 		// Non-empty, non-US country code → definite non-USA.
 		nonUSA = true
 		rejectedBy = "country_code"
 	default:
-		// No country code — fall back to string matching.
-		if location.AnyNonUSA(analyzerMergedLocations(job)) {
+		// No country code — fall back to string matching against the location
+		// authority (Post.Location preferred, else the summary locations).
+		if location.AnyNonUSA(postMergedLocations(summary, post)) {
 			nonUSA = true
 			rejectedBy = "string_match"
 		}
 	}
 	if nonUSA {
 		span.SetAttributes(attribute.String("outcome", "non_usa"))
-		jobLog.Info("rejecting non-USA job after location backfill",
-			logger.Str(logger.FieldJobID, job.ID),
-			logger.Str(logger.FieldLocation, job.Location),
-			logger.Str(logger.FieldCountryCode, content.CountryCode),
+		jobLog.Info("rejecting non-USA job after post fetch",
+			logger.Str(logger.FieldJobID, summary.ID),
+			logger.Str(logger.FieldLocation, post.Location),
+			logger.Str(logger.FieldCountryCode, post.CountryCode),
 			logger.Str(logger.FieldRejectedBy, rejectedBy),
 		)
 		metrics.EnricherJobsTotal.WithLabelValues("non_usa").Inc()
-		w.markNonUSA(msgCtx, job.ID)
+		w.markNonUSA(msgCtx, summary.ID)
 		if aerr := msg.Ack(); aerr != nil {
 			jobLog.Warn("msg ack failed", logger.Err(aerr))
 		}
@@ -172,78 +160,51 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.M
 	}
 
 	span.SetAttributes(attribute.String("outcome", "ok"))
-	jobLog.Debug("content fetched", logger.Int(logger.FieldDescriptionBytes, len(content.Description)))
+	jobLog.Debug("job post fetched", logger.Int(logger.FieldDescriptionBytes, len(post.Description)))
 	return fetchedJob{
-		job:        job,
-		content:    content,
+		summary:    summary,
+		post:       post,
 		msg:        msg,
 		retryCount: retryCount,
 		ctx:        msgCtx,
 	}, true
 }
 
-// fetchContent returns the full content of a job posting. If the message
-// already carries FullContent (full-detail adapters like Google or Uber), no
-// HTTP call is made. Otherwise it tries the adapter's native ContentFetcher
-// first and falls back to a plain HTTP GET on the hosted URL.
+// resolveJobPost returns the full JobPost for a summary using the crawler-v2
+// two-phase model:
 //
-// Per-adapter rate limiting is applied before any outbound network call so
+//   - FAT adapters (gem, uber, deel): the summary already carries inline
+//     JobContent — build the JobPost from it; NO FetchJobPost call.
+//   - THIN adapters: resolve the adapter bundle and call FetchJobPost. If the
+//     bundle has no PostFetcher (Post == nil) or the adapter is unknown, this is
+//     a per-job failure — there is no generic content fetch anymore.
+//
+// Per-adapter rate limiting is applied before the outbound FetchJobPost call so
 // concurrent fetches for the same ATS don't trip rate limits.
-func (w *Worker) fetchContent(ctx context.Context, job ats.RawJob) (ats.FetchJobContentResponse, error) {
-	if job.FullContent != nil {
-		return fullContentToResponse(job), nil
+func (w *Worker) resolveJobPost(ctx context.Context, summary core.JobSummary) (core.JobPost, error) {
+	if summary.JobContent != nil {
+		return jobContentToPost(summary), nil
 	}
 
-	if w.rateLimiter != nil && job.Adapter != "" {
-		if err := w.rateLimiter.Wait(ctx, job.Adapter); err != nil {
-			return ats.FetchJobContentResponse{}, fmt.Errorf("rate limit wait: %w", err)
+	bundle, err := w.bundleFn(summary.Adapter, w.log, w.client)
+	if err != nil {
+		return core.JobPost{}, fmt.Errorf("resolve adapter %q: %w", summary.Adapter, err)
+	}
+	if bundle.Post == nil {
+		return core.JobPost{}, fmt.Errorf("adapter %q has no post fetcher and summary carries no inline content", summary.Adapter)
+	}
+
+	if w.rateLimiter != nil && summary.Adapter != "" {
+		if rerr := w.rateLimiter.Wait(ctx, summary.Adapter); rerr != nil {
+			return core.JobPost{}, fmt.Errorf("rate limit wait: %w", rerr)
 		}
 	}
 
-	adp, err := w.registryFn(job.Adapter)
-	if err == nil {
-		if cf, ok := adp.(ats.ContentFetcher); ok {
-			return cf.FetchJobContent(ctx, job)
-		}
-	}
-
-	html, err := w.fetchPage(ctx, job.URL)
+	post, err := bundle.Post.FetchJobPost(ctx, summary)
 	if err != nil {
-		return ats.FetchJobContentResponse{}, err
+		return core.JobPost{}, fmt.Errorf("fetch job post: %w", err)
 	}
-	return ats.FetchJobContentResponse{
-		ID:          job.ID,
-		Title:       job.Title,
-		Location:    job.Location,
-		URL:         job.URL,
-		Description: ats.StripHTML(html),
-	}, nil
-}
-
-// fetchPage GETs the hosted URL and returns the raw response body (capped
-// at 50KB so a runaway page can't blow the LLM context).
-func (w *Worker) fetchPage(ctx context.Context, url string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; JobRadar/1.0)")
-
-	resp, err := w.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("get: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024))
-	if err != nil {
-		return "", fmt.Errorf("read body: %w", err)
-	}
-	return string(body), nil
+	return post, nil
 }
 
 // isUSCode reports whether code is the ISO alpha-2 code for the United States.
@@ -255,31 +216,42 @@ func isUSCode(code string) bool {
 // analyzerMergedLocations returns AllLocations if set, otherwise wraps the
 // single Location string in a slice. Mirrors the same helper in the filter
 // worker so both stages apply AnyNonUSA consistently.
-func analyzerMergedLocations(job ats.RawJob) []string {
-	if len(job.AllLocations) > 0 {
-		return job.AllLocations
+func analyzerMergedLocations(summary core.JobSummary) []string {
+	if len(summary.AllLocations) > 0 {
+		return summary.AllLocations
 	}
-	if job.Location != "" {
-		return []string{job.Location}
+	if summary.Location != "" {
+		return []string{summary.Location}
 	}
 	return nil
 }
 
-// fullContentToResponse converts a pre-fetched FullJobContent into the
-// FetchJobContentResponse shape the enrich stage expects.
-func fullContentToResponse(job ats.RawJob) ats.FetchJobContentResponse {
-	fc := job.FullContent
-	return ats.FetchJobContentResponse{
-		ID:             job.ID,
-		Title:          job.Title,
-		Location:       job.Location,
-		URL:            job.URL,
-		Description:    fc.Description,
-		EmploymentType: job.EmployType,
-		Department:     fc.Department,
-		Compensation:   fc.Compensation,
-		WorkplaceType:  fc.WorkplaceType,
-		Requirements:   fc.Requirements,
-		PublishedDate:  fc.PublishedDate,
+// postMergedLocations merges the location signal for the post-fetch non-USA gate.
+// The fetched Post.Location is the most specific signal (thin adapters backfill
+// it at detail time); when empty it falls back to the summary's locations.
+func postMergedLocations(summary core.JobSummary, post core.JobPost) []string {
+	if loc := strings.TrimSpace(post.Location); loc != "" {
+		return []string{loc}
+	}
+	return analyzerMergedLocations(summary)
+}
+
+// jobContentToPost converts a fat adapter's inline JobContent into a core.JobPost
+// for the enrich stage. Title/Location/URL/EmploymentType come from the summary;
+// description and structured detail come from the inline JobContent.
+func jobContentToPost(summary core.JobSummary) core.JobPost {
+	jc := summary.JobContent
+	return core.JobPost{
+		ID:             summary.ID,
+		Title:          summary.Title,
+		Location:       summary.Location,
+		URL:            summary.URL,
+		Description:    jc.Description,
+		EmploymentType: summary.EmployType,
+		Department:     jc.Department,
+		Compensation:   jc.Compensation,
+		WorkplaceType:  jc.WorkplaceType,
+		Requirements:   jc.Requirements,
+		PublishedDate:  jc.PublishedDate,
 	}
 }

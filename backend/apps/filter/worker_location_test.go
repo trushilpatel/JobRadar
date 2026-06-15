@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 )
@@ -14,15 +14,15 @@ import (
 // makeJobAt is like makeJob but lets the test set Location.
 // LocationKnown is false (zero value) — use makeJobKnownAt when the location
 // should be treated as structured/trusted for non-USA gating.
-func makeJobAt(id, title, loc string) ats.RawJob {
-	return ats.RawJob{ID: id, Title: title, Location: loc}
+func makeJobAt(id, title, loc string) core.JobSummary {
+	return core.JobSummary{ID: id, Title: title, Location: loc}
 }
 
-// makeJobKnownAt creates a RawJob with LocationKnown=true and AllLocations set
+// makeJobKnownAt creates a core.JobSummary with LocationKnown=true and AllLocations set
 // to the single supplied location string. Use this whenever the test intends
 // the non-USA gate to evaluate the location.
-func makeJobKnownAt(id, title, loc string) ats.RawJob {
-	return ats.RawJob{
+func makeJobKnownAt(id, title, loc string) core.JobSummary {
+	return core.JobSummary{
 		ID:            id,
 		Title:         title,
 		Location:      loc,
@@ -31,14 +31,14 @@ func makeJobKnownAt(id, title, loc string) ats.RawJob {
 	}
 }
 
-// makeJobKnownMultiAt creates a RawJob with LocationKnown=true and multiple
+// makeJobKnownMultiAt creates a core.JobSummary with LocationKnown=true and multiple
 // AllLocations. Use to test the "any USA wins" rule across multi-location jobs.
-func makeJobKnownMultiAt(id, title string, locs ...string) ats.RawJob {
+func makeJobKnownMultiAt(id, title string, locs ...string) core.JobSummary {
 	loc := locs[0]
 	if len(locs) > 1 {
 		loc = strings.Join(locs, "; ")
 	}
-	return ats.RawJob{
+	return core.JobSummary{
 		ID:            id,
 		Title:         title,
 		Location:      loc,
@@ -47,7 +47,7 @@ func makeJobKnownMultiAt(id, title string, locs ...string) ats.RawJob {
 	}
 }
 
-func chunkOf(jobs ...ats.RawJob) []chunkItem {
+func chunkOf(jobs ...core.JobSummary) []chunkItem {
 	out := make([]chunkItem, len(jobs))
 	for i, j := range jobs {
 		msg, _ := js.NewTestMsg([]byte("{}"), 1)
@@ -84,7 +84,7 @@ func TestProcessChunk_NonUSALocation_RejectedBeforeLLM(t *testing.T) {
 	if len(filtered) != 1 {
 		t.Fatalf("expected 1 publish on filtered subject, got %d", len(filtered))
 	}
-	var pubJob ats.RawJob
+	var pubJob core.JobSummary
 	if err := json.Unmarshal(filtered[0].value, &pubJob); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}

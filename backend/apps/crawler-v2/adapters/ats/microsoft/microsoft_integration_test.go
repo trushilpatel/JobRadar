@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 func newIntegrationAdapter() *Microsoft {

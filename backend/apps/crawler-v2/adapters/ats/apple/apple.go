@@ -10,8 +10,8 @@ import (
 	"time"
 
 	appleapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/apple/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 const (
@@ -85,7 +85,7 @@ func (a *Apple) FetchJobListing(ctx context.Context, _ string) (core.JobListing,
 	log.Info("listing fetched",
 		logger.Int(logger.FieldJobCount, len(allJobs)),
 		logger.Int(logger.FieldTotalPages, page-1),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 	return core.JobListing{Jobs: allJobs}, nil
 }
@@ -143,7 +143,7 @@ func (a *Apple) FetchJobPost(ctx context.Context, summary core.JobSummary) (core
 	}
 
 	post := mapJobPost(data.LoaderData.JobDetails.JobsData)
-	log.Info("job post fetched", logger.Dur(logger.FieldDuration, time.Since(start)))
+	log.Info("job post fetched", logger.Dur(logger.FieldDurationMs, time.Since(start)))
 	return post, nil
 }
 

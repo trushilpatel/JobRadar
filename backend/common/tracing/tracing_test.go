@@ -267,10 +267,11 @@ func (c *captureLogger) Warn(_ string, fields ...logger.Field) {
 		}
 	}
 }
-func (c *captureLogger) Debug(string, ...logger.Field)             {}
-func (c *captureLogger) Info(string, ...logger.Field)              {}
-func (c *captureLogger) Error(string, error, ...logger.Field)      {}
-func (c *captureLogger) With(fields ...logger.Field) logger.Logger { return c }
+func (c *captureLogger) Debug(string, ...logger.Field)               {}
+func (c *captureLogger) Info(string, ...logger.Field)                {}
+func (c *captureLogger) Error(string, error, ...logger.Field)        {}
+func (c *captureLogger) With(fields ...logger.Field) logger.Logger   { return c }
+func (c *captureLogger) WithContext(_ context.Context) logger.Logger { return c }
 
 func TestInit_ErrorHandlerLogsExportFailureOnce(t *testing.T) {
 	prevProvider := otel.GetTracerProvider()

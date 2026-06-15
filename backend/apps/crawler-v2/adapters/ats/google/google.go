@@ -14,8 +14,8 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats"
 	googleapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/google/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 // defaultListingURL is the filtered careers search URL. Pagination is achieved
@@ -144,7 +144,7 @@ func (g *Google) FetchJobListing(ctx context.Context, _ string) (core.JobListing
 
 	log.Info("listing fetch complete",
 		logger.Int(logger.FieldJobCount, len(allJobs)),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 	return core.JobListing{Jobs: allJobs}, nil
 }
@@ -172,7 +172,7 @@ func (g *Google) FetchJobPost(ctx context.Context, summary core.JobSummary) (cor
 	post := mapDetailToJobPost(summary, detail)
 	log.Info("job post fetched",
 		logger.Str(logger.FieldTitle, post.Title),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 	return post, nil
 }

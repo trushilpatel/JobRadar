@@ -2,6 +2,7 @@ package logger_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -69,6 +70,25 @@ func TestZerologLogger_ErrorIncludesErrField(t *testing.T) {
 	}
 	if entry["error"] != "connection refused" {
 		t.Errorf("expected error='connection refused', got %v", entry["error"])
+	}
+}
+
+func TestNoopLogger_WithContextDoesNotPanic(t *testing.T) {
+	logger.NewNoop().WithContext(context.Background()).Info("ok")
+}
+
+func TestZerologLogger_WithContextNoSpanStillEmits(t *testing.T) {
+	var buf bytes.Buffer
+	log := newTestLogger(&buf)
+
+	log.WithContext(context.Background()).Info("no span")
+
+	var entry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("not valid JSON: %v\nraw: %s", err, buf.String())
+	}
+	if entry["message"] != "no span" {
+		t.Errorf("expected message='no span', got %v", entry["message"])
 	}
 }
 

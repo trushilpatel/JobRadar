@@ -91,6 +91,17 @@ const (
 	FieldHasSettings         = "has_settings"
 	FieldActive              = "active"
 	FieldSweeperEnabled      = "sweeper_enabled"
+
+	// Crawler-v2 adapter fields (unified from apps/crawler-v2/common/logger)
+	FieldDepartment = "department"
+	FieldJobCount   = "job_count"
+	FieldPage       = "page"
+	FieldSpanID     = "span_id"
+	FieldStatusCode = "status_code"
+	FieldTotal      = "total"
+	FieldTotalPages = "total_pages"
+	FieldTraceID    = "trace_id"
+	FieldDurationMs = "duration_ms"
 )
 
 // Str creates a string field.

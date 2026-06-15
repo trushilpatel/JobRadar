@@ -12,7 +12,8 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
@@ -60,6 +61,11 @@ func (realClock) Sleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
+// adapterBundleFn resolves a crawler-v2 adapter bundle by type name. Injectable
+// for tests; the default is adapters.New, which consults the crawler-v2 registry.
+// Mirrors the seam used by apps/crawler-node/executor.go.
+type adapterBundleFn func(adapterType string, log logger.Logger, httpClient *http.Client) (adapters.AdapterBundle, error)
+
 // WorkerOptions collects the dependencies required to build a Worker.
 type WorkerOptions struct {
 	Consumer         MessageFetcher
@@ -74,6 +80,7 @@ type WorkerOptions struct {
 	LLMBatchSize     int
 	LLMCallInterval  time.Duration
 	FlushTimeout     time.Duration
+	PostFetchTimeout time.Duration
 }
 
 // Worker consumes job_listings.filtered (NATS JetStream), runs each fetch
@@ -95,7 +102,7 @@ type Worker struct {
 	client          *http.Client
 	log             logger.Logger
 	clock           clock
-	registryFn      func(string) (ats.Adapter, error) // defaults to ats.Registry; replaced in tests
+	bundleFn        adapterBundleFn // defaults to adapters.New; replaced in tests
 	maxExpYears     int
 	fetchConc       int
 	llmBatchSize    int
@@ -113,6 +120,9 @@ func NewWorker(opts WorkerOptions) *Worker {
 	if opts.FlushTimeout <= 0 {
 		opts.FlushTimeout = 120 * time.Second
 	}
+	if opts.PostFetchTimeout <= 0 {
+		opts.PostFetchTimeout = 15 * time.Second
+	}
 	return &Worker{
 		consumer:        opts.Consumer,
 		publisher:       opts.Publisher,
@@ -120,10 +130,10 @@ func NewWorker(opts WorkerOptions) *Worker {
 		pipeline:        opts.Pipeline,
 		ledger:          opts.Ledger,
 		rateLimiter:     opts.RateLimiter,
-		client:          &http.Client{Timeout: 15 * time.Second},
+		client:          &http.Client{Timeout: opts.PostFetchTimeout},
 		log:             opts.Log,
 		clock:           realClock{},
-		registryFn:      ats.Registry,
+		bundleFn:        adapters.New,
 		maxExpYears:     opts.MaxExpYears,
 		fetchConc:       opts.FetchConcurrency,
 		llmBatchSize:    opts.LLMBatchSize,
@@ -134,9 +144,11 @@ func NewWorker(opts WorkerOptions) *Worker {
 
 // fetchedJob carries an already-fetched job through stage 2. The NATS message
 // is retained so per-job Ack/Nak/Term can be called at terminal routing points.
+// summary is the canonical identity from the crawler; post is the fetched (thin)
+// or inline-built (fat) full job detail.
 type fetchedJob struct {
-	job        ats.RawJob
-	content    ats.FetchJobContentResponse
+	summary    core.JobSummary
+	post       core.JobPost
 	msg        *js.Msg
 	retryCount int
 	ctx        context.Context
@@ -250,7 +262,7 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 						logger.Str(logger.FieldStack, string(debug.Stack())),
 					)
 					for _, fj := range group {
-						w.markError(fetchCtx, fj.job.ID)
+						w.markError(fetchCtx, fj.summary.ID)
 						if terr := fj.msg.Term(); terr != nil {
 							w.log.Warn("msg term failed", logger.Err(terr))
 						}
@@ -308,7 +320,7 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 	}
 
 	jobLog := fetchLog.With(
-		logger.Str(logger.FieldJobID, fj.job.ID),
+		logger.Str(logger.FieldJobID, fj.summary.ID),
 		logger.Int(logger.FieldRetryCount, fj.retryCount),
 	)
 
@@ -326,7 +338,7 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 		if retryAfter.IsZero() {
 			retryAfter = w.clock.Now().Add(analyzerBackOff[0])
 		}
-		payload, merr := json.Marshal(fj.job)
+		payload, merr := json.Marshal(fj.summary)
 		if merr != nil {
 			jobLog.Error("marshal for exhaustion retry failed; terming without ledger write", merr)
 			if terr := fj.msg.Term(); terr != nil {
@@ -336,8 +348,8 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 			return true
 		}
 		entry := jobsvc.RetryLedgerEntryWithPayload{
-			JobID:         fj.job.ID,
-			Adapter:       fj.job.Adapter,
+			JobID:         fj.summary.ID,
+			Adapter:       fj.summary.Adapter,
 			Payload:       json.RawMessage(payload),
 			RetryCount:    fj.retryCount + 1,
 			NextAttemptAt: retryAfter,
@@ -382,7 +394,7 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 
 	if stage == "enrich" {
 		entry := jobsvc.RetryLedgerEntry{
-			JobID:         fj.job.ID,
+			JobID:         fj.summary.ID,
 			RetryCount:    fj.retryCount + 1,
 			NextAttemptAt: nextAttemptAt,
 		}
@@ -430,13 +442,13 @@ func (w *Worker) markLedgerRetryWithRetry(ctx context.Context, entry jobsvc.Retr
 // If the DLQ publish fails the message is NOT Termed so NATS will redeliver.
 // Returns true on successful publish + Term.
 func (w *Worker) sendToDLQ(ctx context.Context, jobLog logger.Logger, fj fetchedJob, cause string, err error) bool {
-	payload, merr := json.Marshal(fj.job)
+	payload, merr := json.Marshal(fj.summary)
 	if merr != nil {
 		jobLog.Error("marshal job for DLQ failed, terminating message", merr)
 		if terr := fj.msg.Term(); terr != nil {
 			jobLog.Warn("msg term failed", logger.Err(terr))
 		}
-		w.markError(ctx, fj.job.ID)
+		w.markError(ctx, fj.summary.ID)
 		return false
 	}
 
@@ -448,7 +460,7 @@ func (w *Worker) sendToDLQ(ctx context.Context, jobLog logger.Logger, fj fetched
 	if terr := fj.msg.Term(); terr != nil {
 		jobLog.Warn("msg term failed", logger.Err(terr))
 	}
-	w.markError(ctx, fj.job.ID)
+	w.markError(ctx, fj.summary.ID)
 	jobLog.Warn("moved to DLQ", logger.Err(err), logger.Str(logger.FieldCause, cause))
 	metrics.EnricherJobsTotal.WithLabelValues("dlq").Inc()
 	return true

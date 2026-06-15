@@ -10,7 +10,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats"
 	wdapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/workday/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 )
 
 // hostPattern matches a canonical Workday tenant host such as
@@ -64,15 +64,20 @@ func (c adapterConfig) tenant() string {
 // mapJobSummary converts one CXS listing row into a core.JobSummary.
 // The CXS listing carries minimal data; EmployType defaults to full_time and
 // JobContent is left nil — the enricher fetches the rest via FetchJobPost.
+//
+// LocationKnown is intentionally left false (the zero value): the CXS listing
+// exposes only a coarse LocationsText with no structured country, so it cannot
+// be trusted for filter-stage string-based non-USA rejection. The real location
+// decision is deferred to enrich-time, where FetchJobPost supplies a reliable
+// CountryCode. This matches v1 parity (jobToItem never set LocationKnown).
 func mapJobSummary(jp wdapi.JobPosting, cfg adapterConfig) core.JobSummary {
 	reqID := extractRequisitionID(jp)
 	return core.JobSummary{
-		ID:            fmt.Sprintf("workday-%s", reqID),
-		Title:         jp.Title,
-		Location:      jp.LocationsText,
-		URL:           fmt.Sprintf("https://%s/%s%s", cfg.Host, cfg.Site, jp.ExternalPath),
-		EmployType:    core.EmployFullTime,
-		LocationKnown: true,
+		ID:         fmt.Sprintf("workday-%s", reqID),
+		Title:      jp.Title,
+		Location:   jp.LocationsText,
+		URL:        fmt.Sprintf("https://%s/%s%s", cfg.Host, cfg.Site, jp.ExternalPath),
+		EmployType: core.EmployFullTime,
 	}
 }
 

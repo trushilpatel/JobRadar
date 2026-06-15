@@ -9,7 +9,7 @@ import (
 	"time"
 
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
@@ -179,12 +179,12 @@ func makeWorkerWithClock(scorer *fakeScorer, ledger *fakeLedger, pub *fakePublis
 	}
 }
 
-func makeJob(id string) ats.RawJob {
-	return ats.RawJob{ID: id, Title: "Software Engineer"}
+func makeJob(id string) core.JobSummary {
+	return core.JobSummary{ID: id, Title: "Software Engineer"}
 }
 
 // makeChunkItem builds a chunkItem from a job and returns its TestMsgState.
-func makeChunkItem(job ats.RawJob, deliveryCount int) (chunkItem, *js.TestMsgState) {
+func makeChunkItem(job core.JobSummary, deliveryCount int) (chunkItem, *js.TestMsgState) {
 	msg, state := js.NewTestMsg([]byte("{}"), deliveryCount)
 	return chunkItem{
 		job: jobWithCtx{ctx: context.Background(), job: job, retryCount: deliveryCount - 1},
@@ -194,7 +194,7 @@ func makeChunkItem(job ats.RawJob, deliveryCount int) (chunkItem, *js.TestMsgSta
 
 // makeBatch builds chunkItems from jobs with deliveryCount=1 (first delivery).
 // States are discarded — use makeChunkItem directly when you need state inspection.
-func makeBatch(jobs ...ats.RawJob) []chunkItem {
+func makeBatch(jobs ...core.JobSummary) []chunkItem {
 	batch := make([]chunkItem, len(jobs))
 	for i, j := range jobs {
 		item, _ := makeChunkItem(j, 1)
@@ -204,7 +204,7 @@ func makeBatch(jobs ...ats.RawJob) []chunkItem {
 }
 
 // makeBatchWithRetryCount builds chunkItems at the given retry count.
-func makeBatchWithRetryCount(retryCount int, jobs ...ats.RawJob) []chunkItem {
+func makeBatchWithRetryCount(retryCount int, jobs ...core.JobSummary) []chunkItem {
 	batch := make([]chunkItem, len(jobs))
 	for i, j := range jobs {
 		item, _ := makeChunkItem(j, retryCount+1)
@@ -271,7 +271,7 @@ func TestProcessChunk_PartialRelevant(t *testing.T) {
 		t.Errorf("expected 2 published jobs, got %d", len(pub.payloads))
 	}
 	for _, payload := range pub.payloads {
-		var job ats.RawJob
+		var job core.JobSummary
 		if err := json.Unmarshal(payload, &job); err != nil {
 			t.Fatalf("unmarshal published payload: %v", err)
 		}
@@ -827,7 +827,7 @@ func TestPublishToDLQ_Success(t *testing.T) {
 		t.Fatalf("expected 1 DLQ publish, got %d", len(dlqRecords))
 	}
 	// Verify the payload round-trips cleanly back to the original job.
-	var got ats.RawJob
+	var got core.JobSummary
 	if err := json.Unmarshal(dlqRecords[0].value, &got); err != nil {
 		t.Fatalf("unmarshal DLQ payload: %v", err)
 	}
@@ -917,8 +917,8 @@ func TestRouteFailedChunk_LLMExhausted_TermsAndWritesPayload(t *testing.T) {
 	w := makeWorker(&fakeScorer{}, &fakeLedger{}, &fakePublisher{})
 	w.clock = &fakeClock{now: now}
 
-	job1 := ats.RawJob{ID: "ex-1", Title: "SWE", Adapter: "greenhouse"}
-	job2 := ats.RawJob{ID: "ex-2", Title: "PM", Adapter: "lever"}
+	job1 := core.JobSummary{ID: "ex-1", Title: "SWE", Adapter: "greenhouse"}
+	job2 := core.JobSummary{ID: "ex-2", Title: "PM", Adapter: "lever"}
 	item1, state1 := makeChunkItem(job1, 1)
 	item2, state2 := makeChunkItem(job2, 1)
 
@@ -964,7 +964,7 @@ func TestRouteFailedChunk_LLMExhausted_TermsAndWritesPayload(t *testing.T) {
 			t.Errorf("entry %q payload must not be empty", e.JobID)
 		}
 		// Verify the payload round-trips back to the original job.
-		var got ats.RawJob
+		var got core.JobSummary
 		if err := json.Unmarshal(e.Payload, &got); err != nil {
 			t.Fatalf("unmarshal payload for %q: %v", e.JobID, err)
 		}
@@ -1013,8 +1013,8 @@ func TestProcessChunk_LLMExhausted_TermsAndCallsUpdateRetryBatchWithPayload(t *t
 
 	w := makeWorker(scorer, ledger, pub)
 
-	item1, state1 := makeChunkItem(ats.RawJob{ID: "e1", Title: "SWE", Adapter: "greenhouse"}, 1)
-	item2, state2 := makeChunkItem(ats.RawJob{ID: "e2", Title: "PM", Adapter: "lever"}, 1)
+	item1, state1 := makeChunkItem(core.JobSummary{ID: "e1", Title: "SWE", Adapter: "greenhouse"}, 1)
+	item2, state2 := makeChunkItem(core.JobSummary{ID: "e2", Title: "PM", Adapter: "lever"}, 1)
 	_ = w.processChunk(context.Background(), []chunkItem{item1, item2}, "fetch-exhaust", 0, 1)
 
 	if !state1.Termed || !state2.Termed {
@@ -1144,7 +1144,7 @@ func TestRouteFailedChunk_LLMExhausted_NakFailAfterLedgerWriteFailure(t *testing
 // routeFailedChunk handles a marshal failure for one job: the failed item is
 // Term'd immediately (no ledger entry), other items are processed normally.
 func TestProcessChunk_LLMExhausted_MarshalFailTermsWithoutLedger(t *testing.T) {
-	// We can't easily inject a marshal failure for ats.RawJob (it's a clean struct),
+	// We can't easily inject a marshal failure for core.JobSummary (it's a clean struct),
 	// so we test via the routeFailedChunk function directly with a job that would
 	// successfully marshal. This test instead validates the happy path of that branch
 	// via TestRouteFailedChunk_LLMExhausted_TermsAndWritesPayload which exercises
@@ -1234,8 +1234,8 @@ func TestPublishPartition_AllSuccess(t *testing.T) {
 	pub := &fakePublisher{}
 	w := makeWorker(&fakeScorer{}, &fakeLedger{}, pub)
 
-	item1, _ := makeChunkItem(ats.RawJob{ID: "s1", Adapter: "greenhouse"}, 1)
-	item2, _ := makeChunkItem(ats.RawJob{ID: "s2", Adapter: "lever"}, 1)
+	item1, _ := makeChunkItem(core.JobSummary{ID: "s1", Adapter: "greenhouse"}, 1)
+	item2, _ := makeChunkItem(core.JobSummary{ID: "s2", Adapter: "lever"}, 1)
 
 	published, failed := w.publishPartition(context.Background(), []chunkItem{item1, item2})
 
@@ -1532,7 +1532,7 @@ func TestProcessFetch_PanicInProcessChunk_RecoveredAndNaks(t *testing.T) {
 
 	// Title must be non-empty so the item goes into scorable (not passThrough),
 	// ensuring ScoreBatch is called and the panic occurs.
-	payload, _ := json.Marshal(ats.RawJob{ID: "panic-job", Adapter: "greenhouse", Title: "SWE"})
+	payload, _ := json.Marshal(core.JobSummary{ID: "panic-job", Adapter: "greenhouse", Title: "SWE"})
 	msg, state := js.NewTestMsg(payload, 1)
 
 	// processFetch must not propagate the panic.
@@ -1554,7 +1554,7 @@ func TestProcessFetch_PanicInProcessChunk_LedgerFail_NakFail_NoPanic(t *testing.
 	w := makeWorkerWithPanicScorer(ledger, pub, &fakeClock{now: time.Now()}, 5)
 
 	// Title must be non-empty so the item goes into scorable (not passThrough).
-	payload, _ := json.Marshal(ats.RawJob{ID: "panic-nak-fail", Adapter: "greenhouse", Title: "SWE"})
+	payload, _ := json.Marshal(core.JobSummary{ID: "panic-nak-fail", Adapter: "greenhouse", Title: "SWE"})
 	msg, state := js.NewTestMsg(payload, 1)
 	state.NakErr = errors.New("nak failed too") // Nak also fails
 

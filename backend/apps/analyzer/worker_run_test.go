@@ -6,8 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trushilpatel/jobradar/apps/crawler/ats"
-	atstypes "github.com/trushilpatel/jobradar/apps/crawler/ats/types"
+	"github.com/trushilpatel/jobradar/common/ats/core"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -25,13 +24,14 @@ func (c *callbackFetcher) Fetch(n int, maxWait time.Duration) ([]*js.Msg, error)
 	return c.fn(n, maxWait)
 }
 
-// makeRunJob builds a FullContent RawJob that skips HTTP fetching.
-func makeRunJob(id string) ats.RawJob {
-	return ats.RawJob{
-		ID:          id,
-		Title:       "Software Engineer",
-		Adapter:     "ashby",
-		FullContent: &atstypes.FullJobContent{Description: "test role"},
+// makeRunJob builds a fat-adapter summary (inline JobContent) that skips the
+// FetchJobPost call.
+func makeRunJob(id string) core.JobSummary {
+	return core.JobSummary{
+		ID:         id,
+		Title:      "Software Engineer",
+		Adapter:    "ashby",
+		JobContent: &core.JobContent{Description: "test role"},
 	}
 }
 
@@ -174,7 +174,7 @@ func TestHandleFailure_NakFails_ReturnsFalse(t *testing.T) {
 	w.clock = &fakeClock{now: time.Now()}
 	fetchLog := logger.NewNoop()
 
-	fj, state := makeTestFetchedJob(t, baseRawJob(), 0) // retryCount=0 < analyzerMaxRetries=3
+	fj, state := makeTestFetchedJob(t, baseSummary(), 0) // retryCount=0 < analyzerMaxRetries=3
 	state.NakErr = errors.New("nak failed")
 
 	ok := w.handleFailure(context.Background(), fetchLog, fj, "enrich", errors.New("llm error"))
@@ -225,7 +225,7 @@ func TestSendToDLQ_TermFails_AfterSuccessfulPublish(t *testing.T) {
 	pipeline := &fakePipelineService{}
 	w := makeWorker(&fakeScorer{}, pipeline, pub, &fakeLedger{})
 
-	fj, state := makeTestFetchedJob(t, baseRawJob(), analyzerMaxRetries)
+	fj, state := makeTestFetchedJob(t, baseSummary(), analyzerMaxRetries)
 	state.TermErr = errors.New("term failed after dlq publish")
 
 	ok := w.sendToDLQ(context.Background(), logger.NewNoop(), fj, "exhausted", errors.New("llm failed"))
@@ -356,7 +356,7 @@ func TestProcessResult_RoleMismatch_AckFails_LogsWarn(t *testing.T) {
 	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
 	result := &llmdto.JobPostEnrichResult{RoleMatch: false, Sponsorship: true}
 
-	fj, state := makeTestFetchedJob(t, baseRawJob(), 0)
+	fj, state := makeTestFetchedJob(t, baseSummary(), 0)
 	state.AckErr = errors.New("ack failed")
 	stats := &groupOutcomeStats{}
 
@@ -373,7 +373,7 @@ func TestProcessResult_DropJob_AckFails_LogsWarn(t *testing.T) {
 	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
 	result := &llmdto.JobPostEnrichResult{RoleMatch: true, Sponsorship: false}
 
-	fj, state := makeTestFetchedJob(t, baseRawJob(), 0)
+	fj, state := makeTestFetchedJob(t, baseSummary(), 0)
 	state.AckErr = errors.New("ack failed")
 	stats := &groupOutcomeStats{}
 
@@ -392,7 +392,7 @@ func TestProcessResult_SaveFail_AckFails_LogsWarn(t *testing.T) {
 		RoleMatch: true, Sponsorship: true, Country: "USA",
 	}
 
-	fj, state := makeTestFetchedJob(t, baseRawJob(), 0)
+	fj, state := makeTestFetchedJob(t, baseSummary(), 0)
 	state.AckErr = errors.New("ack failed")
 	stats := &groupOutcomeStats{}
 
@@ -411,7 +411,7 @@ func TestProcessResult_SaveSuccess_AckFails_LogsWarn(t *testing.T) {
 		RoleMatch: true, Sponsorship: true, Country: "USA",
 	}
 
-	fj, state := makeTestFetchedJob(t, baseRawJob(), 0)
+	fj, state := makeTestFetchedJob(t, baseSummary(), 0)
 	state.AckErr = errors.New("ack failed")
 	stats := &groupOutcomeStats{}
 
@@ -432,7 +432,7 @@ func TestDistributeResults_RouteMissingFails_AllRoutedFalse(t *testing.T) {
 	// Scorer returns empty result list — no result for "missing-job" → routeMissingResult called.
 	w := makeWorkerFull(&fakeScorer{results: nil}, pipeline, &fakePublisher{}, &fakeLedger{}, clk, 5)
 
-	job := baseRawJob()
+	job := baseSummary()
 	job.ID = "missing-job"
 	fj, state := makeTestFetchedJob(t, job, 0) // retryCount=0 < analyzerMaxRetries → Nak path
 	state.NakErr = errors.New("nak failed")    // handleFailure returns false → allRouted=false

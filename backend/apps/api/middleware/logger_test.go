@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -48,7 +49,8 @@ func (s *spyLogger) Error(msg string, _ error, f ...logger.Field) {
 	s.errors = append(s.errors, spyEvent{msg, f})
 }
 
-func (s *spyLogger) With(_ ...logger.Field) logger.Logger { return s }
+func (s *spyLogger) With(_ ...logger.Field) logger.Logger        { return s }
+func (s *spyLogger) WithContext(_ context.Context) logger.Logger { return s }
 
 func (s *spyLogger) infoCount() int {
 	s.mu.Lock()

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	gemapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/gem/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 const defaultBaseURL = "https://api.gem.com"
@@ -60,7 +60,7 @@ func (g *Gem) FetchJobListing(ctx context.Context, companyID string) (core.JobLi
 	listing := mapJobListing(raw)
 	log.Info("listing fetched",
 		logger.Int(logger.FieldJobCount, len(listing.Jobs)),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 	return listing, nil
 }

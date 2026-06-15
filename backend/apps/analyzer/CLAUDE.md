@@ -1,16 +1,17 @@
 # apps/analyzer/ — Job post analyzer (enricher)
 
-Consumes `jobs.filtered.*` (NATS JetStream), fetches full job content (with per-adapter rate limiting), runs LLM enrichment in batches, writes final rows to `jobs` and `job_analytics`.
+Consumes `jobs.filtered.*` (NATS JetStream) as `core.JobSummary`, fetches full job detail via the crawler-v2 two-phase model (with per-adapter rate limiting), runs LLM enrichment in batches, writes final rows to `jobs` and `job_analytics`.
 
 ## Two-stage flow per fetch
 
 ```
 FetchBatch (up to ENRICHER_FLUSH_TIMEOUT_SECONDS)
    ↓
-Stage 1 — parallel HTTP fetches (cap = ENRICHER_FETCH_CONCURRENCY)
-   - FullContent set?   → fullContentToResponse()  (no HTTP)
-   - FullContent unset? → adapter rate-limit Wait → ContentFetcher / HTTP fallback
-   - per-job failure    → handleFailure → retry/DLQ
+Stage 1 — parallel detail fetches (cap = ENRICHER_FETCH_CONCURRENCY), resolveJobPost:
+   - JobContent set? (fat adapters: gem/uber/deel)  → jobContentToPost()  (no HTTP)
+   - JobContent nil  (thin adapters)                → adapter rate-limit Wait →
+                                                       crawler-v2 adapters.Registry() bundle.Post.FetchJobPost(summary)
+   - no PostFetcher / unknown adapter / fetch error → handleFailure → retry/DLQ (never an empty enrich)
    ↓
 Stage 2 — serial: group successful (job, content) into chunks of ENRICHER_LLM_BATCH_SIZE
    - sleeps ENRICHER_LLM_CALL_INTERVAL_SECONDS between EnrichBatch calls (ctx-aware)

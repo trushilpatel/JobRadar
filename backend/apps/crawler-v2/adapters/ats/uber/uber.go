@@ -10,8 +10,8 @@ import (
 	"time"
 
 	uberapi "github.com/trushilpatel/jobradar/apps/crawler-v2/adapters/ats/uber/api"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/common/logger"
-	"github.com/trushilpatel/jobradar/apps/crawler-v2/core"
+	"github.com/trushilpatel/jobradar/common/ats/core"
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 const (
@@ -92,7 +92,7 @@ func (u *Uber) FetchJobListing(ctx context.Context, _ string) (core.JobListing, 
 
 	log.Info("listing fetched",
 		logger.Int(logger.FieldJobCount, len(summaries)),
-		logger.Dur(logger.FieldDuration, time.Since(start)),
+		logger.Dur(logger.FieldDurationMs, time.Since(start)),
 	)
 	return core.JobListing{Jobs: summaries}, nil
 }
