@@ -13,7 +13,7 @@ export function SignInPage() {
     <div className="flex h-screen w-full items-center justify-center bg-page text-primary">
       <div className="flex flex-col items-center gap-6">
         <LogoLockup size="lg" />
-        <SignIn redirectUrl="/" />
+        <SignIn fallbackRedirectUrl="/" />
       </div>
     </div>
   )

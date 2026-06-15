@@ -147,8 +147,7 @@ k8s-build-console: ## Build console image (bakes VITE_ vars from Doppler) and im
 	else \
 		doppler run -- sh -c ' \
 			docker build \
-				--build-arg VITE_SUPABASE_URL="$$VITE_SUPABASE_URL" \
-				--build-arg VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY" \
+				--build-arg VITE_CLERK_PUBLISHABLE_KEY="$$VITE_CLERK_PUBLISHABLE_KEY" \
 				--build-arg GIT_SHA=$(GIT_SHA) \
 				-t jobradar-console:local \
 				-f frontend/Dockerfile ./frontend' && \
