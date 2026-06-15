@@ -11,7 +11,7 @@ Built for job seekers who need visa sponsorship — jobs that explicitly deny sp
 ```
 company_scan_scheduler
         ↓  (DB queue)
-job_listing_crawler       ← fetches careers pages via ATS adapters
+orchestrator + crawler-node(s)  ← orchestrator assigns work; crawler-nodes fetch careers pages via crawler-v2 ATS adapters
         ↓  (NATS JetStream: jobs.raw.<adapter>)
 job_listing_relevance_filter  ← LLM batch-scores job titles
         ↓  (NATS JetStream: jobs.filtered.<adapter>)
@@ -64,22 +64,22 @@ Analytics over all enriched jobs: funnel, role categories, company hiring veloci
 
 ## Supported ATS Platforms
 
-| Platform   | Adapter                                                          |
-| ---------- | ---------------------------------------------------------------- |
-| Greenhouse | `backend/apps/crawler/ats/greenhouse`                            |
-| Lever      | `backend/apps/crawler/ats/lever`                                 |
-| Ashby      | `backend/apps/crawler/ats/ashby`                                 |
-| Apple      | `backend/apps/crawler/ats/apple`                                 |
-| Deel       | `backend/apps/crawler/ats/deel`                                  |
-| Eightfold  | `backend/apps/crawler/ats/eightfold`                             |
-| Gem        | `backend/apps/crawler/ats/gem`                                   |
-| Google     | `backend/apps/crawler/ats/google` (pure HTTP + RE2 — no browser) |
-| Meta       | `backend/apps/crawler/ats/meta`                                  |
-| Microsoft  | `backend/apps/crawler/ats/microsoft`                             |
-| Netflix    | `backend/apps/crawler/ats/netflix`                               |
-| Rippling   | `backend/apps/crawler/ats/rippling`                              |
-| Uber       | `backend/apps/crawler/ats/uber`                                  |
-| Workday    | `backend/apps/crawler/ats/workday`                               |
+| Platform   | Adapter                                                                      |
+| ---------- | ---------------------------------------------------------------------------- |
+| Greenhouse | `backend/apps/crawler-v2/adapters/ats/greenhouse`                            |
+| Lever      | `backend/apps/crawler-v2/adapters/ats/lever`                                 |
+| Ashby      | `backend/apps/crawler-v2/adapters/ats/ashby`                                 |
+| Apple      | `backend/apps/crawler-v2/adapters/ats/apple`                                 |
+| Deel       | `backend/apps/crawler-v2/adapters/ats/deel`                                  |
+| Eightfold  | `backend/apps/crawler-v2/adapters/ats/eightfold`                             |
+| Gem        | `backend/apps/crawler-v2/adapters/ats/gem`                                   |
+| Google     | `backend/apps/crawler-v2/adapters/ats/google` (pure HTTP + RE2 — no browser) |
+| Meta       | `backend/apps/crawler-v2/adapters/ats/meta`                                  |
+| Microsoft  | `backend/apps/crawler-v2/adapters/ats/microsoft`                             |
+| Netflix    | `backend/apps/crawler-v2/adapters/ats/netflix`                               |
+| Rippling   | `backend/apps/crawler-v2/adapters/ats/rippling`                              |
+| Uber       | `backend/apps/crawler-v2/adapters/ats/uber`                                  |
+| Workday    | `backend/apps/crawler-v2/adapters/ats/workday`                               |
 
 ---
 
@@ -138,7 +138,7 @@ make k8s-up      # deploy via Helm
 Each service needs a Kubernetes Secret with its sensitive env vars (DB credentials, API keys, auth secrets). The required vars mirror those in `.env.example`. `make k8s-bootstrap` creates them all — but here is the full list for reference:
 
 ```bash
-# Example for the API service — repeat for each: scheduler, crawler, filter, enricher, migrate
+# Example for the API service — repeat for each: scheduler, orchestrator, crawler-node, filter, enricher, migrate
 kubectl create secret generic jobradar-api-secret \
   --from-literal=DB_HOST="..." \
   --from-literal=DB_USER="..." \
@@ -191,7 +191,7 @@ enricher:
 ### 3. Build and import images
 
 ```bash
-make k8s-build          # builds backend + crawler + console images and imports into k3d
+make k8s-build          # builds backend + orchestrator + crawler-node + console images and imports into k3d
 ```
 
 For the Supabase audit sync image:
@@ -326,7 +326,7 @@ This is independent of the three observability pillars above — skip it if you 
 ```bash
 make k8s-status              # show all pod statuses
 make k8s-logs                # tail logs for all app services
-make k8s-logs-api            # tail a specific service (also: -crawler, -filter, -analyzer, -scheduler, -console)
+make k8s-logs-api            # tail a specific service (also: -crawler-node, -orchestrator, -filter, -enricher, -scheduler, -console)
 make k8s-restart             # rolling restart all app deployments
 make k8s-restart-api         # rolling restart one service
 make k8s-migrate             # re-run DB migrations
@@ -340,7 +340,8 @@ make k8s-obs-down            # uninstall observability chart
 
 ```bash
 make k8s-build-backend       # rebuild + reimport backend image (api/scheduler/filter/analyzer/migrate)
-make k8s-build-crawler       # rebuild + reimport crawler image
+make k8s-build-orchestrator  # rebuild + reimport orchestrator image
+make k8s-build-crawler-node  # rebuild + reimport crawler-node image
 make k8s-build-console       # rebuild + reimport console image
 make k8s-restart             # roll all deployments onto the new image
 ```
@@ -408,10 +409,10 @@ k8s/helm/
 
 Helm releases in namespace `jobradar-local`:
 
-| Release    | Chart                    | Manages                                                                         |
-| ---------- | ------------------------ | ------------------------------------------------------------------------------- |
-| `jobradar` | `k8s/helm/jobradar`      | api, console, scheduler, crawler, filter, enricher (analyzer), migrate          |
-| `obs`      | `k8s/helm/observability` | Grafana Alloy (ships metrics/logs/traces to Grafana Cloud), supabase-audit-sync |
+| Release    | Chart                    | Manages                                                                                   |
+| ---------- | ------------------------ | ----------------------------------------------------------------------------------------- |
+| `jobradar` | `k8s/helm/jobradar`      | api, console, scheduler, orchestrator, crawler-node, filter, enricher (analyzer), migrate |
+| `obs`      | `k8s/helm/observability` | Grafana Alloy (ships metrics/logs/traces to Grafana Cloud), supabase-audit-sync           |
 
 ---
 

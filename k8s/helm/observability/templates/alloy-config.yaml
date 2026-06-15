@@ -18,7 +18,7 @@ data:
       targets = [
         { __address__ = "jobradar-api.{{ .Values.namespace }}.svc.cluster.local:9100",       job = "jobradar_api" },
         { __address__ = "jobradar-scheduler.{{ .Values.namespace }}.svc.cluster.local:9101", job = "jobradar_scheduler" },
-        { __address__ = "jobradar-crawler.{{ .Values.namespace }}.svc.cluster.local:9101",   job = "jobradar_crawler" },
+        { __address__ = "jobradar-orchestrator.{{ .Values.namespace }}.svc.cluster.local:9104", job = "jobradar_orchestrator" },
         { __address__ = "jobradar-filter.{{ .Values.namespace }}.svc.cluster.local:9101",    job = "jobradar_filter" },
         { __address__ = "jobradar-enricher.{{ .Values.namespace }}.svc.cluster.local:9101",  job = "jobradar_enricher" },
       ]

@@ -18,7 +18,7 @@ This supersedes any cost/benefit argument that leans on small team size.
 scheduler → company_scan_queue (DB) → orchestrator ← crawler-node(s) → jobs.raw.<adapter> (NATS JetStream) → filter → jobs.filtered.<adapter> (NATS JetStream) → analyzer → jobs (DB) → API
 ```
 
-The crawler tier is now **distributed pull-based**: the orchestrator (`backend/apps/orchestrator/`) exposes an HTTP API; one or more stateless crawler-node workers (`backend/apps/crawler-node/`) poll it for work, crawl the assigned company, and submit results back. Concurrency is controlled entirely by the replica count — no in-process worker pool needed.
+The crawler tier is **distributed pull-based**: the orchestrator (`backend/apps/orchestrator/`) exposes an HTTP API; one or more stateless crawler-node workers (`backend/apps/crawler-node/`) poll it for work, crawl the assigned company, and submit results back. Concurrency is controlled entirely by the replica count — no in-process worker pool needed. The ATS adapter library lives in `backend/apps/crawler-v2/adapters/` (listing + detail fetch); crawler-node uses it for listing and the analyzer uses it for `FetchJobPost`. The standalone v1 monolith crawler has been removed.
 
 Each binary lives in `backend/apps/<name>/` (wiring + worker loop only) and depends on domain logic in `backend/service/<domain>/`. Subdirectory `CLAUDE.md` files auto-load when you work in that area.
 
@@ -95,10 +95,9 @@ All secrets and config values are managed in **Doppler** (project `job-radar`, c
 - Typed values (status, stage, reason) use constants from the owning service's `common/` package — never raw strings
 - Insights: `job_analytics` for historical / time-series; `user_job_state.status` for current per-user aggregations
 - Filter batch failures mark jobs `error` in `job_pipeline_ledger` — never re-queue to NATS
-- Ledger/queue UPDATE store methods check `RowsAffected` and return a sentinel (`ErrLedgerRowMissing` / `ErrQueueRowMissing`) when 0/partial rows match — never silently return nil. Workers act on it: filter Naks for redelivery (closes the crawler-INSERT vs filter-UPDATE race), analyzer treats it as non-fatal. The crawler writes the `fetch` ledger row **before** publishing to NATS so the row exists before the message can be consumed
+- Ledger/queue UPDATE store methods check `RowsAffected` and return a sentinel (`ErrLedgerRowMissing` / `ErrQueueRowMissing`) when 0/partial rows match — never silently return nil. Workers act on it: filter Naks for redelivery (closes the crawler-INSERT vs filter-UPDATE race), analyzer treats it as non-fatal. The crawler-node writes the `fetch` ledger row **before** publishing to NATS so the row exists before the message can be consumed
 - All logging goes through `platform/logger.Logger` — never stdlib `log`; field keys come from `platform/logger/fields.go` only
-- Crawler image (`infra/Dockerfile.crawler`) is **pure Go** — no Node, no Chromium, no Playwright. Do not add browser deps
-- Orchestrator + crawler-node images (`infra/Dockerfile.orchestrator`) are also **pure Go**. Same constraint applies
+- The crawler tier images — crawler-node (`infra/Dockerfile.crawler-node`) and orchestrator (`infra/Dockerfile.orchestrator`) — are **pure Go**: no Node, no Chromium, no Playwright. The ATS adapter library (`apps/crawler-v2/adapters/`) speaks plain HTTP/JSON/GraphQL/sitemap. Do not add browser deps to either image
 - Crawler-node count is controlled by `crawlerNode.replicas` in `k8s/helm/jobradar/values.local.yaml` — change the number there and run `make k8s-up` (no rebuild needed; replicas are a Deployment field). `maxConcurrent` in the same block controls how many assignments one node holds simultaneously
 - `ScanReasonNonUSA = "non_usa_location"` in `service/crawlernode/common/` — must match the DB CHECK constraint on `job_pipeline_ledger.reason`; never use the raw string
 - Each service domain follows the decorator chain — see `backend/service/CLAUDE.md`
