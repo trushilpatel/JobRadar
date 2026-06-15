@@ -17,34 +17,33 @@ vi.mock('@/features/auth/api/me.api')
 vi.mock('@/features/settings/api/adapterConfigs.api')
 vi.mock('@/features/ats')
 
-// ── Mock auth store so pages don't try to fetch identity ─────────────────────
-vi.mock('@/features/auth/store/auth.store', () => ({
-  useAuthStore: vi.fn((selector: (s: unknown) => unknown) =>
-    selector({
-      session: { access_token: 'tok', user: { id: 'u1', email: 'test@test.com' } },
-      identity: {
-        user_id: 'u1',
-        email: 'test@test.com',
-        display_name: 'Test User',
-        status: 'active',
-        roles: ['user'],
-      },
-      loading: false,
-      initialized: true,
-      isAdmin: false,
-      refreshIdentity: vi.fn(),
-      signOut: vi.fn(),
-    })
-  ),
+// ── Mock Clerk so pages don't try to resolve auth state ──────────────────────
+vi.mock('@clerk/react', () => ({
+  useAuth: () => ({ isSignedIn: true, isLoaded: true }),
+  useUser: () => ({
+    user: {
+      publicMetadata: { role: 'user' },
+      primaryEmailAddress: { emailAddress: 'test@test.com' },
+    },
+    isLoaded: true,
+  }),
+  useClerk: () => ({ signOut: vi.fn().mockResolvedValue(undefined) }),
 }))
 
-// ── Mock supabase so AccountPage doesn't blow up ──────────────────────────────
-vi.mock('@/lib/core/supabase', () => ({
-  supabase: {
-    auth: {
-      signOut: vi.fn().mockResolvedValue({ error: null }),
+// ── Mock useIdentity so pages that consume it get a stable identity ───────────
+vi.mock('@/features/auth/hooks/useIdentity', () => ({
+  useIdentity: vi.fn(() => ({
+    identity: {
+      user_id: 'u1',
+      email: 'test@test.com',
+      display_name: 'Test User',
+      status: 'active',
+      roles: ['user'],
     },
-  },
+    isAdmin: false,
+    isSignedIn: true,
+    isLoaded: true,
+  })),
 }))
 
 // ── ResizeObserver stub required for Recharts ────────────────────────────────

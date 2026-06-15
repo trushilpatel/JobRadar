@@ -1,87 +1,53 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { render } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { RequireAdmin } from '../components/RequireAdmin'
-import { useAuthStore } from '../store/auth.store'
 
-vi.mock('@/lib/core/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
-      onAuthStateChange: vi
-        .fn()
-        .mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
-      signOut: vi.fn(),
-    },
-  },
+vi.mock('@clerk/react', () => ({
+  useUser: vi.fn(),
 }))
 
-// ── Harness: wraps RequireAdmin in a minimal router ───────────────────────────
-function Harness({ initialPath }: { initialPath: string }) {
-  return (
-    <MemoryRouter initialEntries={[initialPath]}>
+async function renderAdminGuard(isLoaded: boolean, role: string | undefined) {
+  const { useUser } = await import('@clerk/react')
+  vi.mocked(useUser).mockReturnValue({
+    isLoaded,
+    user: isLoaded ? { publicMetadata: role !== undefined ? { role } : {} } : null,
+  } as never)
+  const { RequireAdmin } = await import('../components/RequireAdmin')
+  return render(
+    <MemoryRouter initialEntries={['/admin/users']}>
       <Routes>
-        <Route path="/dashboard" element={<div>DASHBOARD</div>} />
         <Route element={<RequireAdmin />}>
-          <Route path="/admin" element={<div>ADMIN CONTENT</div>} />
+          <Route path="/admin/users" element={<div data-testid="admin-content" />} />
         </Route>
+        <Route path="/dashboard" element={<div data-testid="dashboard" />} />
       </Routes>
     </MemoryRouter>
   )
 }
 
-beforeEach(() => {
-  useAuthStore.setState({
-    isAdmin: false,
-    loading: false,
-    identityLoading: false,
-    initialized: true,
-  })
+afterEach(() => {
+  vi.clearAllMocks()
+  vi.resetModules()
 })
 
 describe('RequireAdmin', () => {
-  it('renders children when user is admin', () => {
-    useAuthStore.setState({ isAdmin: true, loading: false, identityLoading: false })
-    render(<Harness initialPath="/admin" />)
-    expect(screen.getByText('ADMIN CONTENT')).toBeInTheDocument()
+  it('renders null while Clerk is loading', async () => {
+    const { container } = await renderAdminGuard(false, undefined)
+    expect(container.firstChild).toBeNull()
   })
 
-  it('redirects to /dashboard when user is not admin', () => {
-    useAuthStore.setState({ isAdmin: false, loading: false, identityLoading: false })
-    render(<Harness initialPath="/admin" />)
-    expect(screen.getByText('DASHBOARD')).toBeInTheDocument()
-    expect(screen.queryByText('ADMIN CONTENT')).not.toBeInTheDocument()
+  it('redirects non-admin to /dashboard', async () => {
+    const { getByTestId } = await renderAdminGuard(true, 'user')
+    expect(getByTestId('dashboard')).toBeInTheDocument()
   })
 
-  it('renders nothing while loading', () => {
-    useAuthStore.setState({ isAdmin: false, loading: true, identityLoading: false })
-    const { container } = render(<Harness initialPath="/admin" />)
-    expect(container.textContent).toBe('')
+  it('redirects when publicMetadata has no role', async () => {
+    const { getByTestId } = await renderAdminGuard(true, undefined)
+    expect(getByTestId('dashboard')).toBeInTheDocument()
   })
 
-  it('renders nothing (does not redirect) while identity is still loading', () => {
-    // Regression: refresh on /admin/* used to bounce to /dashboard during the
-    // brief window between session resolution and identity fetch completing.
-    useAuthStore.setState({
-      isAdmin: false,
-      loading: false,
-      identityLoading: true,
-      session: { access_token: 'tok', user: { id: 'u1' } } as unknown as never,
-    })
-    const { container } = render(<Harness initialPath="/admin" />)
-    expect(container.textContent).toBe('')
-    expect(screen.queryByText('DASHBOARD')).not.toBeInTheDocument()
-  })
-
-  it('does not render admin content for non-admin user even if session exists', () => {
-    useAuthStore.setState({
-      isAdmin: false,
-      loading: false,
-      identityLoading: false,
-      session: { access_token: 'tok', user: { id: 'u1' } } as unknown as never,
-    })
-    render(<Harness initialPath="/admin" />)
-    expect(screen.queryByText('ADMIN CONTENT')).not.toBeInTheDocument()
-    expect(screen.getByText('DASHBOARD')).toBeInTheDocument()
+  it('renders outlet for admin user', async () => {
+    const { getByTestId } = await renderAdminGuard(true, 'admin')
+    expect(getByTestId('admin-content')).toBeInTheDocument()
   })
 })

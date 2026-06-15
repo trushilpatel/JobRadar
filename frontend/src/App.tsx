@@ -1,6 +1,5 @@
 import { BrowserRouter } from 'react-router-dom'
 import { Providers } from './app/providers'
-import { AuthBootstrap } from './app/auth-bootstrap'
 import { AppRouter } from './app/router'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 
@@ -9,9 +8,7 @@ export default function App() {
     <ErrorBoundary>
       <BrowserRouter>
         <Providers>
-          <AuthBootstrap>
-            <AppRouter />
-          </AuthBootstrap>
+          <AppRouter />
         </Providers>
       </BrowserRouter>
     </ErrorBoundary>

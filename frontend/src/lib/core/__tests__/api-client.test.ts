@@ -1,32 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// ── Mocks ────────────────────────────────────────────────────────────────────
-// supabase + sessionRef are module-level dependencies of api-client. We mock
-// them so we can drive the 401-refresh path and the auth header without a real
-// Supabase client.
-const refreshSessionMock = vi.fn()
-const signOutMock = vi.fn()
-
-vi.mock('@/lib/core/supabase', () => ({
-  supabase: {
-    auth: {
-      refreshSession: () => refreshSessionMock(),
-      signOut: (opts: unknown) => signOutMock(opts),
-    },
-  },
-}))
-
-const sessionGetMock = vi.fn<() => { access_token: string } | null>()
-vi.mock('@/lib/core/session-ref', () => ({
-  sessionRef: {
-    get: () => sessionGetMock(),
-    set: vi.fn(),
-  },
-}))
-
 vi.mock('sonner', () => ({ toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn() } }))
 
-import { apiClient, __testing } from '@/lib/core/api-client'
+import { apiClient } from '@/lib/core/api-client'
 import { ApiValidationError } from '@/lib/core/api-error'
 import { toast } from 'sonner'
 
@@ -49,13 +25,25 @@ function textResponse(status: number, text: string): Response {
 }
 
 const fetchMock = vi.fn()
+const clerkSignOut = vi.fn().mockResolvedValue(undefined)
+
+function setClerk(token: string | null) {
+  if (token === null) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).Clerk
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).Clerk = {
+      session: { getToken: vi.fn().mockResolvedValue(token) },
+      signOut: clerkSignOut,
+    }
+  }
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
-  __testing.resetPendingRefresh()
-  sessionGetMock.mockReturnValue({ access_token: 'tok-123' })
-  refreshSessionMock.mockResolvedValue({ data: { session: { access_token: 'new' } }, error: null })
-  signOutMock.mockResolvedValue(undefined)
+  setClerk('tok-123')
+  clerkSignOut.mockResolvedValue(undefined)
   global.fetch = fetchMock as unknown as typeof fetch
   // window.location.assign for signOutAndRedirect
   Object.defineProperty(window, 'location', {
@@ -66,6 +54,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  delete (window as any).Clerk
 })
 
 // ── Envelope unwrapping ──────────────────────────────────────────────────────
@@ -128,15 +118,15 @@ describe('apiClient — URL building & headers', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://example.com/x', expect.anything())
   })
 
-  it('sets Authorization header from sessionRef', async () => {
+  it('sets Authorization header from Clerk session', async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, { data: null }))
     await apiClient.get('/me')
     const init = fetchMock.mock.calls[0]![1] as RequestInit
     expect((init.headers as Headers).get('Authorization')).toBe('Bearer tok-123')
   })
 
-  it('omits Authorization header when no session token', async () => {
-    sessionGetMock.mockReturnValue(null)
+  it('omits Authorization header when no Clerk session', async () => {
+    setClerk(null)
     fetchMock.mockResolvedValue(jsonResponse(200, { data: null }))
     await apiClient.get('/me')
     const init = fetchMock.mock.calls[0]![1] as RequestInit
@@ -225,44 +215,21 @@ describe('apiClient — 429 rate limiting', () => {
   })
 })
 
-// ── 401 refresh + retry ──────────────────────────────────────────────────────
-describe('apiClient — 401 refresh & retry', () => {
-  it('refreshes the session and retries once on 401, then succeeds', async () => {
-    fetchMock
-      .mockResolvedValueOnce(emptyResponse(401))
-      .mockResolvedValueOnce(jsonResponse(200, { data: { ok: true } }))
-    const res = await apiClient.get<{ ok: boolean }>('/secure')
-    expect(res).toEqual({ ok: true })
-    expect(refreshSessionMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-  })
-
-  it('signs out and throws Unauthorized when refresh fails', async () => {
+// ── 401 handling (Clerk: sign out immediately, no retry) ─────────────────────
+describe('apiClient — 401 handling', () => {
+  it('signs out via Clerk and throws Unauthorized on 401', async () => {
     fetchMock.mockResolvedValue(emptyResponse(401))
-    refreshSessionMock.mockResolvedValue({ data: { session: null }, error: { message: 'nope' } })
     await expect(apiClient.get('/secure')).rejects.toThrow('Unauthorized')
-    expect(signOutMock).toHaveBeenCalledWith({ scope: 'global' })
+    expect(clerkSignOut).toHaveBeenCalledOnce()
     expect(
       (window.location as unknown as { assign: ReturnType<typeof vi.fn> }).assign
     ).toHaveBeenCalledWith('/login')
   })
 
-  it('returns false from refresh when refreshSession throws', async () => {
+  it('does NOT retry on 401 — only one fetch call', async () => {
     fetchMock.mockResolvedValue(emptyResponse(401))
-    refreshSessionMock.mockRejectedValue(new Error('lock'))
     await expect(apiClient.get('/secure')).rejects.toThrow('Unauthorized')
-    expect(signOutMock).toHaveBeenCalled()
-  })
-
-  it('signs out and throws when the retried request is also 401', async () => {
-    fetchMock.mockResolvedValueOnce(emptyResponse(401)).mockResolvedValueOnce(emptyResponse(401))
-    await expect(apiClient.get('/secure')).rejects.toThrow('Unauthorized')
-    expect(signOutMock).toHaveBeenCalled()
-  })
-
-  it('wraps a non-Error thrown by the retried fetch as Network error', async () => {
-    fetchMock.mockResolvedValueOnce(emptyResponse(401)).mockRejectedValueOnce('boom')
-    await expect(apiClient.get('/secure')).rejects.toThrow('Network error')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('does not redirect when already on /login', async () => {
@@ -271,36 +238,17 @@ describe('apiClient — 401 refresh & retry', () => {
       writable: true,
     })
     fetchMock.mockResolvedValue(emptyResponse(401))
-    refreshSessionMock.mockResolvedValue({ data: { session: null }, error: { message: 'no' } })
     await expect(apiClient.get('/secure')).rejects.toThrow('Unauthorized')
     expect(
       (window.location as unknown as { assign: ReturnType<typeof vi.fn> }).assign
     ).not.toHaveBeenCalled()
   })
 
-  it('dedupes concurrent refreshes into a single refreshSession call', async () => {
-    // Both requests get a 401 first, then succeed; a single in-flight refresh
-    // should be shared between them. Each call returns a FRESH response so the
-    // body is never read twice.
-    let n = 0
-    fetchMock.mockImplementation(() => {
-      n += 1
-      return Promise.resolve(
-        n <= 2 ? emptyResponse(401) : jsonResponse(200, { data: { ok: true } })
-      )
-    })
-    let resolveRefresh!: (v: unknown) => void
-    refreshSessionMock.mockReturnValue(
-      new Promise((r) => {
-        resolveRefresh = r
-      })
-    )
-    const p1 = apiClient.get('/a')
-    const p2 = apiClient.get('/b')
-    await Promise.resolve()
-    resolveRefresh({ data: { session: { access_token: 'new' } }, error: null })
-    await Promise.all([p1, p2])
-    expect(refreshSessionMock).toHaveBeenCalledTimes(1)
+  it('does NOT trigger sign-out on 403', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(403, { error: { message: 'forbidden' } }))
+    await expect(apiClient.get('/secure')).rejects.toThrow('forbidden')
+    expect(clerkSignOut).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })
 

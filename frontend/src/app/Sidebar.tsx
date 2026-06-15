@@ -15,10 +15,10 @@ import {
   FileText,
   Send,
 } from 'lucide-react'
+import { useAuth, useUser, useClerk } from '@clerk/react'
 import { cn } from '@/lib/utils/utils'
 import { routes } from '@/config/routes'
 import { COPY } from '@/config/copy'
-import { useAuthStore } from '@/features/auth'
 import { LogoLockup } from '@/components/brand/Logo'
 
 const userNav: { to: string; label: string; icon: React.ReactNode }[] = [
@@ -85,10 +85,11 @@ function NavItem({
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
-  const session = useAuthStore((s) => s.session)
-  const isAdmin = useAuthStore((s) => s.isAdmin)
-  const signOut = useAuthStore((s) => s.signOut)
-  const email = session?.user?.email ?? ''
+  const { user } = useUser()
+  const { isSignedIn } = useAuth()
+  const { signOut } = useClerk()
+  const isAdmin = user?.publicMetadata?.role === 'admin'
+  const email = isSignedIn ? (user?.primaryEmailAddress?.emailAddress ?? '') : ''
   const initials = email ? email[0]?.toUpperCase() : '?'
 
   return (
@@ -190,7 +191,7 @@ export function Sidebar() {
               <span className="text-xs truncate">{email}</span>
             </NavLink>
             <button
-              onClick={signOut}
+              onClick={() => void signOut()}
               title="Sign out"
               className="p-1 text-muted hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)] rounded-md transition-colors shrink-0"
             >

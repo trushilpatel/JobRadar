@@ -5,26 +5,26 @@ import (
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/platform/cache"
-	"github.com/trushilpatel/jobradar/platform/supabaseadmin"
+	"github.com/trushilpatel/jobradar/platform/clerkadmin"
 )
 
 // adminImplService is the business-logic layer of the admin user chain.
-// It owns the Supabase → DB delete ordering for AdminDelete and cache
+// It owns the Clerk → DB delete ordering for AdminDelete and cache
 // invalidation for SetRoles / SetStatus / AdminDelete so that revoked or
 // suspended users lose access on their very next request.
 type adminImplService struct {
 	BaseAdminService
-	supabase supabaseadmin.Client
-	cache    cache.Cache
+	clerk clerkadmin.Client
+	cache cache.Cache
 }
 
 // NewAdminImplService constructs the admin orchestration layer. Both
-// supabase and c may be nil (dev / test environments); production callers
+// clerk and c may be nil (dev / test environments); production callers
 // always pass real instances.
-func NewAdminImplService(next AdminService, supabase supabaseadmin.Client, c cache.Cache) AdminService {
+func NewAdminImplService(next AdminService, clerk clerkadmin.Client, c cache.Cache) AdminService {
 	return &adminImplService{
 		BaseAdminService: NewBaseAdminService(next),
-		supabase:         supabase,
+		clerk:            clerk,
 		cache:            c,
 	}
 }
@@ -53,16 +53,16 @@ func (s *adminImplService) SetStatus(ctx context.Context, id string, status stri
 	return nil
 }
 
-// AdminDelete removes the Supabase auth identity first, then the DB row,
-// then evicts any cached identity bundle so in-flight sessions see the
-// deletion on their next request.
+// AdminDelete removes the Clerk auth user first, then the DB row, then evicts
+// any cached identity bundle so in-flight sessions see the deletion on their
+// next request.
 func (s *adminImplService) AdminDelete(ctx context.Context, id string) error {
 	if id == "" {
 		return domainerrs.ErrBadRequest.WithMessage("user id required")
 	}
-	if s.supabase != nil {
-		if err := s.supabase.DeleteUser(ctx, id); err != nil {
-			return domainerrs.ErrInternal.WithMessage("user admin delete: supabase: " + err.Error())
+	if s.clerk != nil {
+		if err := s.clerk.DeleteUser(ctx, id); err != nil {
+			return domainerrs.ErrInternal.WithMessage("user admin delete: clerk: " + err.Error())
 		}
 	}
 	if err := s.next.AdminDelete(ctx, id); err != nil {

@@ -17,6 +17,10 @@ spec:
         component: migrate
     spec:
       restartPolicy: Never
+      {{- if .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecret }}
+      {{- end }}
       containers:
         - name: migrate
           image: {{ .Values.images.backend.repository }}:{{ .Values.images.backend.tag }}
@@ -26,10 +30,6 @@ spec:
             - secretRef:
                 name: jobradar-migrate-secret
           env:
-            - name: DB_SSLMODE
-              value: "require"
-            - name: DB_PORT
-              value: "6543"
             - name: LOG_FORMAT
               value: "json"
           resources:

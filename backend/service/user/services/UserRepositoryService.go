@@ -9,7 +9,6 @@ import (
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
-	rolemodel "github.com/trushilpatel/jobradar/service/role/models"
 	userdto "github.com/trushilpatel/jobradar/service/user/dto"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	"gorm.io/gorm"
@@ -84,12 +83,7 @@ func (r *repositoryService) Provision(ctx context.Context, id, email string) (_ 
 		return nil, domainerrs.ErrInternal.WithMessage("user repo: provision: " + err.Error())
 	}
 
-	// Grant the baseline `user` role idempotently — first-login users always
-	// carry the `user` role even if no admin promotion fires.
-	roleRow := rolemodel.UserRole{UserID: id, RoleID: rolemodel.RoleUser, GrantedAt: now}
-	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&roleRow).Error; err != nil {
-		return nil, domainerrs.ErrInternal.WithMessage("user repo: provision role: " + err.Error())
-	}
+	// Roles are now sourced from Clerk JWT claims — no user_roles DB table write needed.
 
 	var fresh usermodel.User
 	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&fresh).Error; err != nil {

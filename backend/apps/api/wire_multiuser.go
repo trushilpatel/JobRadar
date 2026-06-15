@@ -10,28 +10,27 @@ import (
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/platform/cache"
+	clerkadmin "github.com/trushilpatel/jobradar/platform/clerkadmin"
 	"github.com/trushilpatel/jobradar/platform/ratelimit"
-	"github.com/trushilpatel/jobradar/platform/supabaseadmin"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	auditsvc "github.com/trushilpatel/jobradar/service/audit/services"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
-	rolesvc "github.com/trushilpatel/jobradar/service/role/services"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
 	"gorm.io/gorm"
 )
 
-// buildMultiUser composes the user / role / audit decorator chains, wraps
-// them in a /api/me RestRouter, and builds the /admin/* subtree with all
-// admin handlers behind RequireIdentity + RequireRole("admin") + RateLimit
-// + AuditAdminMutation middleware. Pure wiring; equivalent to wire_gen.go.
+// buildMultiUser composes the user / audit decorator chains, wraps them in a
+// /api/me RestRouter, and builds the /admin/* subtree with all admin handlers
+// behind RequireIdentity + RequireRole("admin") + RateLimit +
+// AuditAdminMutation middleware. Pure wiring; equivalent to wire_gen.go.
 func buildMultiUser(
 	db *gorm.DB,
 	cfg *config.Config,
 	c cache.Cache,
 	limiter ratelimit.Limiter,
-	supabase supabaseadmin.Client,
+	clerkClient clerkadmin.Client,
 	log logger.Logger,
 	pipelineSvc dashboardsvc.PipelineService,
 	insightsRouter *insightssvc.RestRouter,
@@ -39,20 +38,16 @@ func buildMultiUser(
 	atsRouter *atssvc.AtsRestRouter,
 ) *multiUser {
 	userRepo := usersvc.NewRepositoryService(db)
-	userImpl := usersvc.NewImplService(userRepo, supabase)
+	userImpl := usersvc.NewImplService(userRepo, clerkClient)
 	userCache := usersvc.NewCacheService(userImpl, c, time.Duration(cfg.MultiUser.CacheTTLUserSeconds)*time.Second)
 	userValid := usersvc.NewValidationService(userCache)
 	userRest := usersvc.NewRestService(userValid)
-
-	roleRepo := rolesvc.NewRepositoryService(db)
-	roleImpl := rolesvc.NewImplService(roleRepo)
-	roleValid := rolesvc.NewValidationService(roleImpl)
 
 	auditRepo := auditsvc.NewRepositoryService(db)
 	auditImpl := auditsvc.NewImplService(auditRepo)
 
 	userAdminRepo := usersvc.NewAdminRepositoryService(db)
-	userAdminImpl := usersvc.NewAdminImplService(userAdminRepo, supabase, c)
+	userAdminImpl := usersvc.NewAdminImplService(userAdminRepo, clerkClient, c)
 	userAdminValid := usersvc.NewAdminValidationService(userAdminImpl)
 	userAdminRest := usersvc.NewAdminRestService(userAdminValid)
 	userAdminRouter := usersvc.NewAdminRestRouter(userAdminRest)
@@ -65,7 +60,6 @@ func buildMultiUser(
 
 	identityMW := middleware.RequireIdentity(
 		userValid,
-		roleValid,
 		c,
 		time.Duration(cfg.MultiUser.CacheTTLUserSeconds)*time.Second,
 		log,
@@ -94,7 +88,6 @@ func buildMultiUser(
 
 	return &multiUser{
 		userSvc:     userValid,
-		roleSvc:     roleValid,
 		auditSvc:    auditImpl,
 		identityMW:  identityMW,
 		rateLimitMW: rateLimitMW,

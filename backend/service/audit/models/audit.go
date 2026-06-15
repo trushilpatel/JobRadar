@@ -11,7 +11,7 @@ import (
 // in AuditRepositoryService.List — it is never written to the DB.
 type Entry struct {
 	ID          string         `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
-	ActorUserID *string        `gorm:"type:uuid"                                      json:"actor_user_id"`
+	ActorUserID *string        `gorm:"type:text"                                      json:"actor_user_id"`
 	ActorEmail  *string        `gorm:"column:actor_email;<-:false"                    json:"actor_email,omitempty"`
 	Action      string         `gorm:"not null"                                       json:"action"`
 	TargetType  *string        `json:"target_type"`

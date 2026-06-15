@@ -7,10 +7,8 @@ import (
 	"time"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
-	rolemodel "github.com/trushilpatel/jobradar/service/role/models"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // adminRepositoryService is the terminal layer for the admin user chain.
@@ -68,29 +66,17 @@ func (r *adminRepositoryService) List(ctx context.Context, filter AdminUserFilte
 		userIDs[i] = u.ID
 	}
 
-	var userRoles []rolemodel.UserRole
-	if err := r.db.WithContext(ctx).Where("user_id IN ?", userIDs).Find(&userRoles).Error; err != nil {
-		return AdminListResult{}, domainerrs.ErrInternal.WithMessage("user admin repo: list roles: " + err.Error())
-	}
-
-	rolesByUser := make(map[string][]string, len(rows))
-	for _, ur := range userRoles {
-		rolesByUser[ur.UserID] = append(rolesByUser[ur.UserID], ur.RoleID)
-	}
-
+	// Roles are now carried in Clerk JWT claims — no user_roles DB table.
 	items := make([]UserWithRoles, len(rows))
 	for i, u := range rows {
-		roles := rolesByUser[u.ID]
-		if roles == nil {
-			roles = []string{}
-		}
-		items[i] = UserWithRoles{User: u, Roles: roles}
+		items[i] = UserWithRoles{User: u, Roles: []string{}}
 	}
 
 	return AdminListResult{Items: items, Total: total}, nil
 }
 
-// GetWithRoles returns a single user with their role IDs.
+// GetWithRoles returns a single user. Roles are now carried in Clerk JWT claims,
+// so the Roles field of the returned UserWithRoles is always an empty slice.
 func (r *adminRepositoryService) GetWithRoles(ctx context.Context, id string) (*UserWithRoles, error) {
 	var u usermodel.User
 	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&u).Error; err != nil {
@@ -99,49 +85,13 @@ func (r *adminRepositoryService) GetWithRoles(ctx context.Context, id string) (*
 		}
 		return nil, domainerrs.ErrInternal.WithMessage("user admin repo: get: " + err.Error())
 	}
-
-	var userRoles []rolemodel.UserRole
-	if err := r.db.WithContext(ctx).Where("user_id = ?", id).Find(&userRoles).Error; err != nil {
-		return nil, domainerrs.ErrInternal.WithMessage("user admin repo: get roles: " + err.Error())
-	}
-
-	roles := make([]string, len(userRoles))
-	for i, ur := range userRoles {
-		roles[i] = ur.RoleID
-	}
-
-	return &UserWithRoles{User: u, Roles: roles}, nil
+	return &UserWithRoles{User: u, Roles: []string{}}, nil
 }
 
-// SetRoles replaces the full set of roles for a user atomically: all
-// existing rows are deleted then the new set is inserted. The grantedBy
-// ID is stored on each new row for the audit trail.
-func (r *adminRepositoryService) SetRoles(ctx context.Context, id string, roleIDs []string, grantedBy string) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("user_id = ?", id).Delete(&rolemodel.UserRole{}).Error; err != nil {
-			return domainerrs.ErrInternal.WithMessage("user admin repo: set roles delete: " + err.Error())
-		}
-
-		if len(roleIDs) == 0 {
-			return nil
-		}
-
-		now := time.Now().UTC()
-		rows := make([]rolemodel.UserRole, len(roleIDs))
-		for i, rid := range roleIDs {
-			rows[i] = rolemodel.UserRole{
-				UserID:    id,
-				RoleID:    rid,
-				GrantedAt: now,
-				GrantedBy: &grantedBy,
-			}
-		}
-
-		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows).Error; err != nil {
-			return domainerrs.ErrInternal.WithMessage("user admin repo: set roles insert: " + err.Error())
-		}
-		return nil
-	})
+// SetRoles is a no-op in the Clerk auth model — roles are managed via
+// Clerk publicMetadata, not via the DB user_roles table (dropped in migration 081).
+func (r *adminRepositoryService) SetRoles(_ context.Context, _ string, _ []string, _ string) error {
+	return nil
 }
 
 // SetStatus updates the user's status column.
