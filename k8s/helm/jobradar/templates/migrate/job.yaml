@@ -32,6 +32,8 @@ spec:
           env:
             - name: LOG_FORMAT
               value: "json"
+            - name: DB_PORT
+              value: "6543"
           resources:
             requests:
               memory: "32Mi"

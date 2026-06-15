@@ -10,7 +10,7 @@ const BASE = '/api'
 // which avoids a React hook call outside a component.
 interface ClerkWindow {
   Clerk?: {
-    session?: { getToken: () => Promise<string | null> }
+    session?: { getToken: (opts?: { template?: string }) => Promise<string | null> }
     signOut: () => Promise<void>
   }
 }

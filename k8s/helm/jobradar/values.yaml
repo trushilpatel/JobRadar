@@ -45,7 +45,8 @@ api:
   rateLimitWriteRpm: "60"
   rateLimitAdminRpm: "300"
   # Set in values.local.yaml — do not commit real values here
-  supabaseProjectUrl: ""
+  clerkJwksUrl: ""
+  clerkIssuerUrl: ""
   jwtClockSkewSeconds: "60"
   jwksCacheTtlSeconds: "600"
   apiMaxBodyBytes: "1048576"
