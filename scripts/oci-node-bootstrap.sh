@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # oci-node-bootstrap.sh — one-time setup for a fresh OCI ARM A1 instance.
 # Identical software stack on every node; which services run is controlled by
-# the Helm values files (values.prod-node1.yaml / values.prod-node2.yaml).
+# the Helm values files (values.prod-infra.yaml / values.prod-app.yaml).
 #
 # Usage:
 #   bash oci-node-bootstrap.sh
@@ -50,10 +50,37 @@ disable:
   - traefik
   - servicelb
   - metrics-server
+disable-network-policy: true
+# OCI /etc/resolv.conf points to systemd-resolved stub (127.0.0.53) which is
+# unreachable from inside pods. Override here with real OCI DNS IPs so CoreDNS
+# can forward external queries correctly.
+resolv-conf: /etc/rancher/k3s/resolv.conf
+# k3s regenerates k3s.yaml with 0600 (root-only) on every restart by default.
+# 0644 lets the ubuntu deploy user and CI read the kubeconfig without sudo.
+write-kubeconfig-mode: "0644"
 EOF
-  ok "k3s config written (traefik/servicelb/metrics-server disabled)"
+  ok "k3s config written"
 else
-  ok "k3s config already exists"
+  # Ensure write-kubeconfig-mode is set even if config already exists
+  if ! grep -q "write-kubeconfig-mode" /etc/rancher/k3s/config.yaml; then
+    echo 'write-kubeconfig-mode: "0644"' | sudo tee -a /etc/rancher/k3s/config.yaml >/dev/null
+    ok "added write-kubeconfig-mode to existing k3s config"
+  else
+    ok "k3s config already exists"
+  fi
+fi
+
+# OCI-specific resolv.conf for k3s/CoreDNS (must exist before k3s starts if
+# config.yaml references it; idempotent if already written by oci-k3s-netfix.sh)
+if [[ ! -f /etc/rancher/k3s/resolv.conf ]]; then
+  sudo tee /etc/rancher/k3s/resolv.conf >/dev/null <<'EOF'
+nameserver 169.254.169.254
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+EOF
+  ok "k3s resolv.conf written (OCI DNS)"
+else
+  ok "k3s resolv.conf already exists"
 fi
 
 if command -v k3s >/dev/null 2>&1; then
@@ -68,7 +95,8 @@ echo "  Waiting for node to become Ready..."
 until sudo KUBECONFIG="$KUBECONFIG_PATH" kubectl get nodes 2>/dev/null | grep -q " Ready"; do sleep 2; done
 ok "Node is Ready"
 
-# Allow the current user to read the kubeconfig without sudo
+# write-kubeconfig-mode in config.yaml means k3s already set 644; chmod 644
+# here is belt-and-suspenders for the initial install before config was present.
 sudo chmod 644 "$KUBECONFIG_PATH"
 ok "kubeconfig permissions set (644)"
 export KUBECONFIG="$KUBECONFIG_PATH"
@@ -80,6 +108,35 @@ if ! grep -q "KUBECONFIG=$KUBECONFIG_PATH" ~/.bashrc 2>/dev/null; then
 else
   ok "KUBECONFIG already in ~/.bashrc"
 fi
+
+# Install the iptables cleanup service so stale KUBE-ROUTER-* chains (restored by
+# netfilter-persistent after OCI reboots) don't block pod→API connections.
+sudo tee /usr/local/bin/jobradar-iptables-fix.sh >/dev/null <<'SCRIPT'
+#!/usr/bin/env bash
+for chain in KUBE-ROUTER-FORWARD KUBE-ROUTER-INPUT KUBE-ROUTER-OUTPUT KUBE-ROUTER-FILTER; do
+    if iptables -F "$chain" 2>/dev/null; then iptables -X "$chain" 2>/dev/null || true; fi
+done
+iptables -C INPUT -s 10.42.0.0/16 -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 1 -s 10.42.0.0/16 -j ACCEPT
+SCRIPT
+sudo chmod +x /usr/local/bin/jobradar-iptables-fix.sh
+
+sudo tee /etc/systemd/system/jobradar-iptables.service >/dev/null <<'SVC'
+[Unit]
+Description=Clear stale KUBE-ROUTER iptables chains before k3s starts
+DefaultDependencies=no
+Before=k3s.service
+After=network-pre.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/jobradar-iptables-fix.sh
+[Install]
+WantedBy=multi-user.target
+SVC
+sudo systemctl daemon-reload
+sudo systemctl enable --now jobradar-iptables.service
+ok "jobradar-iptables.service installed and enabled"
 
 # ── 2. Helm ───────────────────────────────────────────────────────────────────
 step "[2/6] Helm"
@@ -174,5 +231,6 @@ echo "       INFRA node: TCP 22, 30080, 30300"
 echo "       APP node:   TCP 22 only"
 echo "  3. Add GitHub repo secrets (Settings → Secrets → Actions):"
 echo "       OCI_INFRA_HOST, OCI_APP_HOST, OCI_SSH_USER, OCI_SSH_KEY"
-echo "       VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY"
+echo "       VITE_CLERK_PUBLISHABLE_KEY, CLERK_JWKS_URL, CLERK_ISSUER_URL"
+echo "       CODECOV_TOKEN"
 echo ""

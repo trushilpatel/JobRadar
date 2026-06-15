@@ -26,7 +26,7 @@ orchestrator:
   natsCredsFile: "/etc/nats/jobradar.creds"
 
 crawlerNode:
-  replicas: 3
+  replicas: 2
 
 imagePullSecret: ghcr-pull-secret
 
