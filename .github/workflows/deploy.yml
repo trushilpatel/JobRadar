@@ -1,6 +1,7 @@
 name: Deploy
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -88,7 +89,9 @@ jobs:
       - name: Derive node-level flags
         id: flags
         run: |
-          if [[ "${{ steps.filter.outputs.backend }}" == "true" || \
+          # workflow_dispatch has no changed files — always deploy both nodes
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || \
+                "${{ steps.filter.outputs.backend }}" == "true" || \
                 "${{ steps.filter.outputs.console }}"  == "true" || \
                 "${{ steps.filter.outputs.helm }}"     == "true" ]]; then
             echo "infra=true" >> $GITHUB_OUTPUT
@@ -96,7 +99,8 @@ jobs:
             echo "infra=false" >> $GITHUB_OUTPUT
           fi
 
-          if [[ "${{ steps.filter.outputs.backend }}"      == "true" || \
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || \
+                "${{ steps.filter.outputs.backend }}"      == "true" || \
                 "${{ steps.filter.outputs.orchestrator }}" == "true" || \
                 "${{ steps.filter.outputs.crawler_node }}" == "true" || \
                 "${{ steps.filter.outputs.helm }}"         == "true" ]]; then
