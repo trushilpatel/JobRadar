@@ -88,11 +88,15 @@ echo "=== [4/4] Restarting k3s ==="
 # Stop first so the unit is in a clean state before starting.
 systemctl stop k3s 2>/dev/null || true
 sleep 3
-systemctl start k3s || true
+# Use --no-block so we don't wait for sd_notify: k3s sends READY after full
+# API-server init which can exceed systemd's TimeoutStartSec on cold storage.
+systemctl start --no-block k3s || true
 
-echo -n "  waiting for k3s API (up to 120s)..."
-deadline=$((SECONDS + 120))
+echo -n "  waiting for k3s API (up to 300s)..."
+deadline=$((SECONDS + 300))
 while [ $SECONDS -lt $deadline ]; do
+    # Ensure ubuntu user can read the kubeconfig once k3s regenerates it.
+    chmod 644 /etc/rancher/k3s/k3s.yaml 2>/dev/null || true
     if KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get nodes 2>/dev/null | grep -q Ready; then
         break
     fi
@@ -102,9 +106,9 @@ done
 echo ""
 
 if ! KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get nodes 2>/dev/null | grep -q Ready; then
-    echo "  ERROR: k3s not ready after 120s — dumping diagnostics:"
+    echo "  ERROR: k3s not ready after 300s — dumping diagnostics:"
     systemctl status k3s.service --no-pager -l || true
-    journalctl -xeu k3s.service --no-pager -n 80 || true
+    journalctl -xeu k3s.service --no-pager -n 120 || true
     exit 1
 fi
 
