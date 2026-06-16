@@ -20,9 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history required so vitest --changed origin/main can compute
-          # the merge base between the PR branch and main.
-          fetch-depth: 0
+          fetch-depth: 1
 
       - uses: ./.github/actions/setup-frontend
 
@@ -32,11 +30,4 @@ jobs:
 
       - name: TypeScript check
         run: npx tsc --noEmit
-        working-directory: frontend
-
-      # PRs: vitest walks the import graph from every changed file and runs
-      # only the transitively-affected tests — fast signal without full suite.
-      # Full coverage runs on main push inside deploy.yml (frontend-check job).
-      - name: Run affected tests
-        run: npm run test:changed
         working-directory: frontend

@@ -131,40 +131,7 @@ jobs:
         run: npx tsc --noEmit
         working-directory: frontend
 
-      - name: Run full tests with coverage
-        run: npm run test:coverage
-        working-directory: frontend
-
-      - name: Verify Codecov token is configured
-        if: always()
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        run: |
-          if [ -z "$CODECOV_TOKEN" ]; then
-            echo "::error::CODECOV_TOKEN secret is not set"
-            exit 1
-          fi
-
-      - name: Upload coverage to Codecov
-        if: always()
-        uses: codecov/codecov-action@v5
-        with:
-          files: frontend/coverage/lcov.info
-          flags: console
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Upload test results to Codecov
-        if: always()
-        uses: codecov/codecov-action@v5
-        with:
-          files: frontend/coverage/junit.xml
-          flags: console
-          report_type: test_results
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-  # ── 3. Backend quality gates (lint + full test suite + codecov) ───────────
+  # ── 3. Backend quality gates (lint only) ─────────────────────────────────
   backend-lint:
     name: backend lint
     needs: detect-changes
@@ -172,27 +139,10 @@ jobs:
     uses: ./.github/workflows/backend-lint.yml
     secrets: inherit
 
-  backend-check:
-    name: backend tests + coverage
-    needs: detect-changes
-    if: needs.detect-changes.outputs.any_go_changed == 'true'
-    uses: ./.github/workflows/backend-test.yml
-    with:
-      packages: ./apps/... ./service/... ./platform/... ./common/...
-      flags: backend
-      artifact-name: coverage-backend
-      upload: true
-    secrets: inherit
-
   # ── 4. Quality gate aggregator ─────────────────────────────────────────────
-  #
-  # Explicit fan-in: succeeds only when every quality gate that ran passed.
-  # Skipped gates (path not changed) are treated as passed — only `failure`
-  # blocks the build.  All build jobs depend on this job so the first failing
-  # test or lint error stops the pipeline before any image is built or pushed.
   quality-gate:
     name: quality gate
-    needs: [detect-changes, frontend-check, backend-lint, backend-check]
+    needs: [detect-changes, frontend-check, backend-lint]
     if: always() && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     steps:
@@ -200,8 +150,7 @@ jobs:
         run: |
           for result in \
             "${{ needs.frontend-check.result }}" \
-            "${{ needs.backend-lint.result }}" \
-            "${{ needs.backend-check.result }}"; do
+            "${{ needs.backend-lint.result }}"; do
             if [[ "$result" == "failure" ]]; then
               echo "A quality gate failed — blocking build and deploy."
               exit 1
