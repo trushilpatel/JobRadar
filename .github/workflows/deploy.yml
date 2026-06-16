@@ -71,6 +71,8 @@ jobs:
             console:
               - 'frontend/**'
               - 'infra/Dockerfile.console.ci'
+            helm:
+              - 'k8s/**'
 
       - name: Derive compile-go flag
         id: goflags
@@ -87,7 +89,8 @@ jobs:
         id: flags
         run: |
           if [[ "${{ steps.filter.outputs.backend }}" == "true" || \
-                "${{ steps.filter.outputs.console }}"  == "true" ]]; then
+                "${{ steps.filter.outputs.console }}"  == "true" || \
+                "${{ steps.filter.outputs.helm }}"     == "true" ]]; then
             echo "infra=true" >> $GITHUB_OUTPUT
           else
             echo "infra=false" >> $GITHUB_OUTPUT
@@ -95,7 +98,8 @@ jobs:
 
           if [[ "${{ steps.filter.outputs.backend }}"      == "true" || \
                 "${{ steps.filter.outputs.orchestrator }}" == "true" || \
-                "${{ steps.filter.outputs.crawler_node }}" == "true" ]]; then
+                "${{ steps.filter.outputs.crawler_node }}" == "true" || \
+                "${{ steps.filter.outputs.helm }}"         == "true" ]]; then
             echo "app=true" >> $GITHUB_OUTPUT
           else
             echo "app=false" >> $GITHUB_OUTPUT
