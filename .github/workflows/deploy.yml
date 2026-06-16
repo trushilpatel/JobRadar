@@ -495,6 +495,20 @@ jobs:
             "KUBECONFIG=/etc/rancher/k3s/k3s.yaml timeout 300 bash -c \
               'until kubectl get nodes 2>/dev/null | grep -q Ready; do sleep 5; done'"
 
+      - name: Refresh GHCR pull secret (INFRA)
+        env:
+          HOST: ${{ secrets.OCI_INFRA_HOST }}
+          USER: ${{ secrets.OCI_SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
+            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl create namespace jobradar-local 2>/dev/null || true && \
+             KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl create secret docker-registry ghcr-pull-secret \
+               --docker-server=ghcr.io \
+               --docker-username=${{ github.actor }} \
+               --docker-password=${{ secrets.GITHUB_TOKEN }} \
+               --namespace jobradar-local \
+               --dry-run=client -o yaml | kubectl apply -f -"
+
       - name: Helm upgrade INFRA
         env:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
@@ -580,6 +594,20 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
             "KUBECONFIG=/etc/rancher/k3s/k3s.yaml timeout 300 bash -c \
               'until kubectl get nodes 2>/dev/null | grep -q Ready; do sleep 5; done'"
+
+      - name: Refresh GHCR pull secret (APP)
+        env:
+          HOST: ${{ secrets.OCI_APP_HOST }}
+          USER: ${{ secrets.OCI_SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
+            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl create namespace jobradar-local 2>/dev/null || true && \
+             KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl create secret docker-registry ghcr-pull-secret \
+               --docker-server=ghcr.io \
+               --docker-username=${{ github.actor }} \
+               --docker-password=${{ secrets.GITHUB_TOKEN }} \
+               --namespace jobradar-local \
+               --dry-run=client -o yaml | kubectl apply -f -"
 
       - name: Helm upgrade APP
         env:
