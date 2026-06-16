@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fix two recurring OCI-reboot failure modes that break k3s:
+# Fix recurring OCI-reboot failure modes that break k3s:
 #
 #  1. Stale KUBE-ROUTER-* iptables chains restored by netfilter-persistent
 #     block pod→API connections (INPUT chain REJECT drops NEW packets from
@@ -10,10 +10,14 @@
 #     k3s reads /etc/rancher/k3s/resolv.conf to build the CoreDNS forward
 #     directive; this file must list the real OCI DNS IPs.
 #
+#  3. Deprecated kube-apiserver flag --max-mutating-requests-in-flight was
+#     removed in Kubernetes 1.30. k3s v1.30+ rejects it on startup, causing
+#     k3s to exit immediately with "unknown flag". Removed before each start.
+#
 # Safe to re-run on any node at any time.
 set -euo pipefail
 
-echo "=== [1/3] Writing OCI-specific resolv.conf for k3s/CoreDNS ==="
+echo "=== [1/5] Writing OCI-specific resolv.conf for k3s/CoreDNS ==="
 mkdir -p /etc/rancher/k3s
 cat > /etc/rancher/k3s/resolv.conf <<'EOF'
 # OCI-specific upstream DNS for CoreDNS.
@@ -26,7 +30,7 @@ nameserver 8.8.4.4
 EOF
 echo "  wrote /etc/rancher/k3s/resolv.conf"
 
-echo "=== [2/3] Installing jobradar-iptables service ==="
+echo "=== [2/5] Installing jobradar-iptables service ==="
 
 cat > /usr/local/bin/jobradar-iptables-fix.sh <<'EOF'
 #!/usr/bin/env bash
@@ -73,7 +77,7 @@ systemctl enable jobradar-iptables.service
 systemctl start  jobradar-iptables.service
 echo "  jobradar-iptables.service enabled and started"
 
-echo "=== [3/3] Persisting kubeconfig mode in k3s config ==="
+echo "=== [3/5] Persisting kubeconfig mode in k3s config ==="
 # k3s regenerates k3s.yaml with 0600 (root-only) on every restart by default.
 # write-kubeconfig-mode: "0644" makes k3s set 644 after every start so the
 # ubuntu deploy user (and CI via SSH) can read it without sudo.
@@ -84,7 +88,23 @@ else
     echo "  write-kubeconfig-mode already set"
 fi
 
-echo "=== [4/4] Restarting k3s ==="
+echo "=== [4/5] Removing deprecated kube-apiserver flags from k3s config ==="
+# --max-mutating-requests-in-flight was removed in Kubernetes 1.30.
+# k3s v1.30+ bundles a kube-apiserver that rejects this flag on startup,
+# causing k3s to exit immediately with "unknown flag". Remove it from any
+# existing config.yaml before restarting.
+if [ -f /etc/rancher/k3s/config.yaml ]; then
+    if grep -q "max-mutating-requests-in-flight" /etc/rancher/k3s/config.yaml; then
+        sed -i '/max-mutating-requests-in-flight/d' /etc/rancher/k3s/config.yaml
+        echo "  removed deprecated max-mutating-requests-in-flight from k3s config"
+    else
+        echo "  no deprecated flags found"
+    fi
+else
+    echo "  no k3s config.yaml found, skipping"
+fi
+
+echo "=== [5/5] Restarting k3s ==="
 # Stop first so the unit is in a clean state before starting.
 systemctl stop k3s 2>/dev/null || true
 sleep 3
