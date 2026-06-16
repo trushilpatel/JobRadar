@@ -26,9 +26,15 @@ function FilterPill({
       onClick={onClick}
       className={cn(
         'px-2.5 py-1.5 text-xs rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500',
-        active && color === 'violet' && 'bg-violet-500/15 border-violet-500/30 text-violet-300',
-        active && color === 'emerald' && 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
-        active && color === 'amber' && 'bg-amber-500/15 border-amber-500/30 text-amber-400',
+        active &&
+          color === 'violet' &&
+          'bg-violet-100 dark:bg-violet-500/15 border-violet-400/50 dark:border-violet-500/30 text-violet-700 dark:text-violet-300',
+        active &&
+          color === 'emerald' &&
+          'bg-emerald-100 dark:bg-emerald-500/15 border-emerald-400/50 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300',
+        active &&
+          color === 'amber' &&
+          'bg-amber-100 dark:bg-amber-500/15 border-amber-400/50 dark:border-amber-500/30 text-amber-700 dark:text-amber-400',
         !active && 'bg-subtle border-[var(--border)] text-muted hover:text-primary hover:bg-hover'
       )}
     >
@@ -120,7 +126,7 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
             className={cn(
               'flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-lg border px-3 transition-colors',
               hasActiveFilters
-                ? 'border-violet-500/30 bg-violet-500/15 text-violet-300'
+                ? 'border-violet-400/50 dark:border-violet-500/30 bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300'
                 : 'border-[var(--border-strong)] bg-subtle text-secondary hover:bg-hover'
             )}
           >
