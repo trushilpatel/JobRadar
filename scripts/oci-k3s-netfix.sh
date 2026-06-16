@@ -14,6 +14,9 @@
 #     removed in Kubernetes 1.30. k3s v1.30+ rejects it on startup, causing
 #     k3s to exit immediately with "unknown flag". Removed before each start.
 #
+#  4. OCI A1 ARM nodes have slow cold-start I/O. k3s needs up to 10 minutes
+#     to reach API-server Ready after a fresh start — poll for 600 s.
+#
 # Safe to re-run on any node at any time.
 set -euo pipefail
 
@@ -112,8 +115,8 @@ sleep 3
 # API-server init which can exceed systemd's TimeoutStartSec on cold storage.
 systemctl start --no-block k3s || true
 
-echo -n "  waiting for k3s API (up to 300s)..."
-deadline=$((SECONDS + 300))
+echo -n "  waiting for k3s API (up to 600s)..."
+deadline=$((SECONDS + 600))
 while [ $SECONDS -lt $deadline ]; do
     # Ensure ubuntu user can read the kubeconfig once k3s regenerates it.
     chmod 644 /etc/rancher/k3s/k3s.yaml 2>/dev/null || true
@@ -126,7 +129,7 @@ done
 echo ""
 
 if ! KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get nodes 2>/dev/null | grep -q Ready; then
-    echo "  ERROR: k3s not ready after 300s — dumping diagnostics:"
+    echo "  ERROR: k3s not ready after 600s — dumping diagnostics:"
     systemctl status k3s.service --no-pager -l || true
     journalctl -xeu k3s.service --no-pager -n 120 || true
     exit 1
