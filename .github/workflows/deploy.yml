@@ -447,6 +447,8 @@ jobs:
           echo "${{ secrets.OCI_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "${{ secrets.OCI_INFRA_HOST }}" >> ~/.ssh/known_hosts
+          printf 'Host *\n  ServerAliveInterval 30\n  ServerAliveCountMax 20\n' >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
 
       - name: Resolve image tags for INFRA
         id: tags
@@ -507,7 +509,7 @@ jobs:
               --set images.console.tag=${{ steps.tags.outputs.console }} \
               --set api.clerkJwksUrl=${{ secrets.CLERK_JWKS_URL }} \
               --set api.clerkIssuerUrl=${{ secrets.CLERK_ISSUER_URL }} \
-              --wait --timeout 5m"
+              --wait --timeout 10m"
 
   # ── 13. Deploy APP node (Pipeline) ────────────────────────────────────────
   deploy-app:
@@ -534,6 +536,8 @@ jobs:
           echo "${{ secrets.OCI_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "${{ secrets.OCI_APP_HOST }}" >> ~/.ssh/known_hosts
+          printf 'Host *\n  ServerAliveInterval 30\n  ServerAliveCountMax 20\n' >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
 
       - name: Resolve image tags for APP
         id: tags
@@ -590,4 +594,4 @@ jobs:
               --set images.backend.tag=${{ steps.tags.outputs.backend }} \
               --set images.orchestrator.tag=${{ steps.tags.outputs.orchestrator }} \
               --set images.crawlerNode.tag=${{ steps.tags.outputs.crawler_node }} \
-              --wait --timeout 5m"
+              --wait --timeout 10m"
