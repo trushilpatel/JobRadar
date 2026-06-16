@@ -85,13 +85,29 @@ else
 fi
 
 echo "=== [4/4] Restarting k3s ==="
-systemctl restart k3s
-echo -n "  waiting for k3s API..."
-until KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get nodes 2>/dev/null | grep -q Ready; do
+# Stop first so the unit is in a clean state before starting.
+systemctl stop k3s 2>/dev/null || true
+sleep 3
+systemctl start k3s || true
+
+echo -n "  waiting for k3s API (up to 120s)..."
+deadline=$((SECONDS + 120))
+while [ $SECONDS -lt $deadline ]; do
+    if KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get nodes 2>/dev/null | grep -q Ready; then
+        break
+    fi
     sleep 5
     echo -n "."
 done
 echo ""
+
+if ! KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get nodes 2>/dev/null | grep -q Ready; then
+    echo "  ERROR: k3s not ready after 120s — dumping diagnostics:"
+    systemctl status k3s.service --no-pager -l || true
+    journalctl -xeu k3s.service --no-pager -n 80 || true
+    exit 1
+fi
+
 echo "  k3s is ready"
 KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get nodes
 
