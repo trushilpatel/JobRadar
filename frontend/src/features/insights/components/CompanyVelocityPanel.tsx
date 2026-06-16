@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import type { CompanyVelocityInsight } from '@/types'
 import { cn } from '@/lib/utils/utils'
-import { InsightCard, InsightEmpty, InsightError, InsightSkeleton } from './InsightCard'
+import { InsightCard, InsightError, InsightSkeleton } from './InsightCard'
 import { useVelocity } from '../hooks/useInsights'
 
 const BADGE: Record<string, string> = {
@@ -37,7 +37,11 @@ function Sparkline({ row }: { row: CompanyVelocityInsight }) {
 
 function VelocityContent({ data }: { data: CompanyVelocityInsight[] }) {
   if (data.length === 0)
-    return <InsightEmpty reason="Requires 2+ weeks of scan history to compute velocity" />
+    return (
+      <div className="flex items-center justify-center h-14 text-placeholder text-sm">
+        Requires 2+ weeks of scan history to compute velocity
+      </div>
+    )
   return (
     <div className="overflow-x-auto">
       <table className="w-full">

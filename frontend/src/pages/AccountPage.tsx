@@ -238,7 +238,11 @@ export function AccountPage() {
                 disabled={patchConfig.isPending || configLoading}
               />
             </div>
-            <ShortcutReference />
+            {userConfig?.show_keyboard_shortcuts && (
+              <div className="mt-4 border-t border-[var(--border)] pt-4">
+                <ShortcutReference />
+              </div>
+            )}
           </section>
         </ErrorBoundary>
 

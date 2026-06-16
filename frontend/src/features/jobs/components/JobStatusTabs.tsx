@@ -35,7 +35,9 @@ function CountPill({ count, active }: { count: number; active: boolean }) {
       data-testid="job-tab-count"
       className={cn(
         'ml-1.5 text-xs px-1.5 py-0.5 rounded-full',
-        active ? 'bg-violet-500/20 text-violet-300' : 'bg-subtle text-muted'
+        active
+          ? 'bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300'
+          : 'bg-subtle text-muted'
       )}
     >
       {count > 999 ? '999+' : count}
@@ -67,7 +69,7 @@ function DesktopTabs({
                 'rounded-none rounded-t-lg border-b-2 -mb-px px-4 py-2 text-sm font-medium transition-colors',
                 'shadow-none ring-offset-transparent focus-visible:ring-violet-500',
                 'data-[state=inactive]:border-transparent data-[state=inactive]:text-muted data-[state=inactive]:hover:text-primary data-[state=inactive]:hover:bg-hover',
-                'data-[state=active]:text-violet-300 data-[state=active]:border-violet-500 data-[state=active]:bg-violet-500/5 data-[state=active]:shadow-none'
+                'data-[state=active]:text-violet-700 dark:data-[state=active]:text-violet-300 data-[state=active]:border-violet-600 dark:data-[state=active]:border-violet-500 data-[state=active]:bg-violet-500/8 data-[state=active]:shadow-none'
               )}
             >
               {t.label}
@@ -95,7 +97,7 @@ function MobileTabSelect({
         aria-label="Select tab"
         className={cn(
           'flex items-center gap-2 px-3 py-1.5 rounded-lg border outline-none cursor-pointer transition-colors',
-          'text-sm font-medium text-violet-300 bg-violet-500/10 border-violet-500/20',
+          'text-sm font-medium text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-500/10 border-violet-400/40 dark:border-violet-500/20',
           'hover:brightness-110 focus-visible:ring-2 focus-visible:ring-violet-500'
         )}
       >
