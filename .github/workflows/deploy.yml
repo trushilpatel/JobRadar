@@ -9,6 +9,7 @@ on:
       - 'frontend/**'
       - 'infra/**'
       - 'k8s/**'
+      - '.github/workflows/deploy.yml'
 
 concurrency:
   group: deploy-${{ github.ref }}
