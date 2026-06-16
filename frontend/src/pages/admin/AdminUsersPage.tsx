@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Shield, ShieldOff, Trash2 } from 'lucide-react'
+import * as Tooltip from '@radix-ui/react-tooltip'
+import { Shield, ShieldOff, Trash2, ExternalLink } from 'lucide-react'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { cn } from '@/lib/utils/utils'
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
@@ -10,7 +11,6 @@ import { Pagination } from '@/components/ui/pagination'
 import { useIdentity } from '@/features/auth'
 import {
   fetchAdminUsers,
-  setUserRoles,
   setUserStatus,
   deleteAdminUser,
   authQueryKeys,
@@ -31,16 +31,34 @@ function StatusBadge({ status }: { status: 'active' | 'suspended' }) {
   )
 }
 
-function RoleBadge({ role }: { role: string }) {
+function ClerkRoleNote() {
   return (
-    <span
-      className={cn(
-        'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium',
-        role === 'admin' ? 'bg-violet-900/30 text-violet-300' : 'bg-subtle text-muted'
-      )}
-    >
-      {role}
-    </span>
+    <Tooltip.Provider delayDuration={200}>
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>
+          <a
+            href="https://dashboard.clerk.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-muted hover:text-primary transition-colors"
+          >
+            via Clerk
+            <ExternalLink size={10} />
+          </a>
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content
+            className="z-50 max-w-xs rounded-md bg-panel border border-[var(--border)] px-3 py-2 text-xs text-secondary shadow-lg"
+            sideOffset={4}
+          >
+            Admin roles are managed in Clerk Dashboard → Users → publicMetadata{' '}
+            <code className="text-violet-400">{'{"role":"admin"}'}</code>. Changes take effect on
+            the user&apos;s next sign-in.
+            <Tooltip.Arrow className="fill-[var(--border)]" />
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </Tooltip.Provider>
   )
 }
 
@@ -105,24 +123,6 @@ function UserRow({
   const qc = useQueryClient()
   const isSelf = selfId !== undefined && user.id === selfId
 
-  const { mutate: toggleAdmin, isPending: togglingAdmin } = useMutation({
-    mutationFn: () => {
-      const newRoles = user.roles.includes('admin')
-        ? user.roles.filter((r) => r !== 'admin')
-        : [...user.roles, 'admin']
-      return setUserRoles(user.id, newRoles)
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: authQueryKeys.adminUsersBase() })
-      toast.success(
-        user.roles.includes('admin')
-          ? `Admin revoked for ${user.email}`
-          : `Admin granted to ${user.email}`
-      )
-    },
-    onError: () => toast.error('Failed to update roles'),
-  })
-
   const { mutate: toggleStatus, isPending: togglingStatus } = useMutation({
     mutationFn: () => setUserStatus(user.id, user.status === 'active' ? 'suspended' : 'active'),
     onSuccess: () => {
@@ -134,7 +134,6 @@ function UserRow({
     onError: () => toast.error('Failed to update status'),
   })
 
-  const isAdmin = user.roles.includes('admin')
   const selfTitle = 'Cannot modify your own account'
 
   return (
@@ -155,32 +154,37 @@ function UserRow({
           <StatusBadge status={user.status} />
         </td>
         <td className="px-4 py-3">
-          <div className="flex flex-wrap gap-1">
-            {user.roles.map((r) => (
-              <RoleBadge key={r} role={r} />
-            ))}
-          </div>
+          <ClerkRoleNote />
         </td>
         <td className="px-4 py-3 text-xs text-muted">
           {new Date(user.created_at).toLocaleDateString()}
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => toggleAdmin()}
-              disabled={togglingAdmin || isSelf}
-              title={isSelf ? selfTitle : isAdmin ? 'Revoke admin' : 'Grant admin'}
-              className={cn(
-                'p-1.5 rounded-md transition-colors',
-                isSelf
-                  ? 'text-slate-700 cursor-not-allowed'
-                  : isAdmin
-                    ? 'text-violet-400 hover:bg-violet-900/30'
-                    : 'text-muted hover:text-violet-400 hover:bg-hover'
-              )}
-            >
-              <Shield size={14} />
-            </button>
+            <Tooltip.Provider delayDuration={200}>
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <a
+                    href="https://dashboard.clerk.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 rounded-md transition-colors text-muted hover:text-violet-600 dark:hover:text-violet-400 hover:bg-hover inline-flex"
+                    aria-label="Manage admin role in Clerk"
+                  >
+                    <Shield size={14} />
+                  </a>
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Content
+                    className="z-50 rounded-md bg-panel border border-[var(--border)] px-3 py-2 text-xs text-secondary shadow-lg"
+                    sideOffset={4}
+                  >
+                    Admin roles are managed in Clerk Dashboard
+                    <Tooltip.Arrow className="fill-[var(--border)]" />
+                  </Tooltip.Content>
+                </Tooltip.Portal>
+              </Tooltip.Root>
+            </Tooltip.Provider>
             <button
               onClick={() => toggleStatus()}
               disabled={togglingStatus || isSelf}
@@ -188,10 +192,10 @@ function UserRow({
               className={cn(
                 'p-1.5 rounded-md transition-colors',
                 isSelf
-                  ? 'text-slate-700 cursor-not-allowed'
+                  ? 'text-placeholder cursor-not-allowed'
                   : user.status === 'suspended'
-                    ? 'text-amber-400 hover:bg-amber-900/30'
-                    : 'text-muted hover:text-amber-400 hover:bg-hover'
+                    ? 'text-amber-500 dark:text-amber-400 hover:bg-amber-500/10'
+                    : 'text-muted hover:text-amber-600 dark:hover:text-amber-400 hover:bg-hover'
               )}
             >
               <ShieldOff size={14} />
@@ -203,8 +207,8 @@ function UserRow({
               className={cn(
                 'p-1.5 rounded-md transition-colors',
                 isSelf
-                  ? 'text-slate-700 cursor-not-allowed'
-                  : 'text-muted hover:text-red-400 hover:bg-red-900/20'
+                  ? 'text-placeholder cursor-not-allowed'
+                  : 'text-muted hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10'
               )}
             >
               <Trash2 size={14} />
@@ -309,7 +313,7 @@ export function AdminUsersPage() {
                 <tr className="border-b border-[var(--border)] text-xs text-muted text-left">
                   <th className="px-4 py-2 font-medium">Email</th>
                   <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium">Roles</th>
+                  <th className="px-4 py-2 font-medium">Admin</th>
                   <th className="px-4 py-2 font-medium">Joined</th>
                   <th className="px-4 py-2 font-medium">Actions</th>
                 </tr>

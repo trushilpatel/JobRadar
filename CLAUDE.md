@@ -84,6 +84,19 @@ All secrets and config values are managed in **Doppler** (project `job-radar`, c
 - **Frontend proxy target:** `API_PROXY_TARGET` in Doppler controls where the Vite dev server forwards `/api` calls. Dev default: `http://localhost:8080` (local Go API via air). Set to `http://localhost:30080` to target k3d instead.
 - **Vite proxy routing rule:** user API routes (`/api/*`) are forwarded **with** the `/api` prefix intact (Go chi router mounts at `/api/`). Admin routes (`/api/admin/*`) have the prefix stripped (Go registers admin groups at root `/admin/*`). Never add a blanket rewrite that strips `/api` from all paths — it breaks every user-facing endpoint.
 - **Local dev stack:** `make dev` is the single entry point — kills stale port processes, migrates, starts API (air hot-reload on :8080) and Vite HMR (:5173) in parallel. No Docker or k3d needed for UI+API work. See `.claude/skills/run/SKILL.md` for the full runbook.
+- **Frontend-only dev (no local API):** `cd frontend && API_PROXY_TARGET=http://localhost:30080 npx vite --port 5173` — starts Vite HMR proxying to the k3d API at `:30080`. Use this when only editing UI files and the local Go API isn't running. Clerk auth is port-scoped: sign in once at http://localhost:5173 and the session persists for that port.
+
+## Dev iteration rule — Vite first, k3d only for final verification
+
+**Never use k3d/Docker builds during UI development.** The inner loop for frontend changes is:
+
+1. Edit source files in `frontend/src/`
+2. Vite HMR reflects changes instantly at http://localhost:5173 — no build step, no restart
+3. Verify visually in the browser at http://localhost:5173
+
+**k3d is for final deployment verification only** — rebuild the console image (`make k8s-build-console`) only once, after all UI changes are complete and lint/tests pass, to confirm the production build works. Never rebuild k3d mid-iteration to check a CSS or component change.
+
+A worktree Vite server (`.worktrees/*/frontend/`) runs on `:5173` and serves a different branch — **do not edit main-repo files and check them against a worktree Vite server**. If `:5173` is serving a worktree, kill it (`lsof -ti:5173 | xargs kill`) and start the main-repo server.
 
 ## Key rules
 
