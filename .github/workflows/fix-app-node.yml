@@ -1,0 +1,39 @@
+name: Fix APP Node k3s
+
+# One-shot remediation: runs oci-k3s-netfix.sh on the APP node to clear
+# stale iptables chains and restart k3s when the node is not Ready.
+# Safe to re-run — the script is idempotent.
+on:
+  workflow_dispatch:
+
+jobs:
+  fix-app-k3s:
+    name: Fix k3s on APP node
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.OCI_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.OCI_APP_HOST }}" >> ~/.ssh/known_hosts
+          printf 'Host *\n  ServerAliveInterval 30\n  ServerAliveCountMax 20\n' >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      - name: Copy and run k3s netfix on APP node
+        env:
+          HOST: ${{ secrets.OCI_APP_HOST }}
+          USER: ${{ secrets.OCI_SSH_USER }}
+        run: |
+          scp -i ~/.ssh/id_ed25519 scripts/oci-k3s-netfix.sh "$USER@$HOST:/tmp/oci-k3s-netfix.sh"
+          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" "sudo bash /tmp/oci-k3s-netfix.sh"
+
+      - name: Verify APP node is Ready
+        env:
+          HOST: ${{ secrets.OCI_APP_HOST }}
+          USER: ${{ secrets.OCI_SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
+            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get nodes"
