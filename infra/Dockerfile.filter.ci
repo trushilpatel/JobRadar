@@ -3,10 +3,11 @@ RUN apk --no-cache add ca-certificates tzdata && \
     addgroup -S -g 65532 jobradar && \
     adduser  -S -D -H -u 65532 -G jobradar jobradar
 WORKDIR /app
-COPY api migrate scheduler filter enricher ./
-COPY migrations/ /app/migrations/
-RUN chown -R 65532:65532 /app
+COPY filter /app/filter
+RUN chown 65532:65532 /app/filter
 USER 65532:65532
 
 ARG GIT_SHA=dev
 LABEL org.opencontainers.image.revision="${GIT_SHA}"
+
+CMD ["/app/filter"]

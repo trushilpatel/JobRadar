@@ -143,32 +143,48 @@ Node IPs and usernames are stored in Doppler prod as `OCI_INFRA_IP`, `OCI_INFRA_
 
 ### CI/CD cycle — how every push to `main` deploys
 
+Two separate workflows run on push to `main`:
+
+**`ci.yml`** (also runs on PRs): lint + unit tests + Codecov upload.
+
+**`release.yml`**: detect which services changed → compile changed Go binaries → build per-service images → deploy to OCI nodes.
+
 ```
 push to main
      │
-     ▼
-[detect-changes]  ← dorny/paths-filter checks which files changed
+     ├─► [ci.yml]  lint + tests (parallel with release.yml)
      │
-     ├─ backend/ changed?      → [build-backend]      → ghcr.io/trushilpatel/jobradar-backend:<sha>
-     ├─ orchestrator/ changed? → [build-orchestrator] → ghcr.io/trushilpatel/jobradar-orchestrator:<sha>
-     ├─ crawler-node/ changed? → [build-crawler-node] → ghcr.io/trushilpatel/jobradar-crawler-node:<sha>
-     └─ frontend/ changed?     → [build-console]      → ghcr.io/trushilpatel/jobradar-console:<sha>
-                                          │
-                   ┌──────────────────────┤
-                   ▼                      ▼
-          [deploy-infra]          [deploy-app]
-          (if backend or          (if backend, orch,
-           console changed)        or crawler-node changed)
-          SSH → helm upgrade      SSH → helm upgrade
-          INFRA node only         APP node only
+     └─► [release.yml]
+              │
+              ▼
+         [detect-changes]  ← dorny/paths-filter per service
+              │
+              ├─ api/ changed?          → [build-api]          → ghcr.io/trushilpatel/jobradar-api:<sha>
+              ├─ scheduler/ changed?    → [build-scheduler]    → ghcr.io/trushilpatel/jobradar-scheduler:<sha>
+              ├─ filter/ changed?       → [build-filter]       → ghcr.io/trushilpatel/jobradar-filter:<sha>
+              ├─ enricher/ changed?     → [build-enricher]     → ghcr.io/trushilpatel/jobradar-enricher:<sha>
+              ├─ orchestrator/ changed? → [build-orchestrator] → ghcr.io/trushilpatel/jobradar-orchestrator:<sha>
+              ├─ crawler-node/ changed? → [build-crawler-node] → ghcr.io/trushilpatel/jobradar-crawler-node:<sha>
+              └─ frontend/ changed?     → [build-console]      → ghcr.io/trushilpatel/jobradar-console:<sha>
+                                                  │
+                             ┌────────────────────┤
+                             ▼                    ▼
+                    [deploy-infra]         [deploy-app]
+                    (if api or             (if scheduler, filter,
+                     console changed)       enricher, orch, or
+                    SSH → helm upgrade      crawler-node changed)
+                    INFRA node only        SSH → helm upgrade
+                                           APP node only
 ```
 
 Key properties:
 
+- Each service has its own image — deploying a filter fix never restarts the API or scheduler
 - A frontend-only push rebuilds only `jobradar-console` and deploys only to INFRA — APP node is never touched
-- For images not rebuilt, the deploy job reads the currently running tag from `helm get values` on the live release so no pods restart unnecessarily
-- Each Deployment has a `deploy/<image>-sha` annotation baked into its pod spec — Kubernetes only rolls pods whose annotation changed
-- All five images are ARM64 (`linux/arm64`) built via buildx + QEMU on GitHub-hosted x86 runners
+- For images not rebuilt, the deploy step reads the currently running tag from `helm get values` so unchanged pods are never restarted
+- Each Deployment has a `deploy/<service>-sha` annotation — Kubernetes only rolls pods whose annotation changed
+- All images are `linux/amd64` built on GitHub-hosted x86 runners (no QEMU needed)
+- Rollback: trigger `deploy.yml` (manual dispatch) — select node + Helm revision; or SSH and run `helm rollback jobradar <revision>` directly
 
 ### One-time bootstrap per node
 

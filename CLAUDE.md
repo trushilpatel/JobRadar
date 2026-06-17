@@ -153,7 +153,7 @@ Every feature must ship with:
 
 **Per-service test workflow.** Follow the 3-phase per-package flow in `.claude/agents/service-test-lead.md`: edge-case discovery (read-only) → numbered test plan (read-only) → implementation + QA. For multi-package backfill, dispatch one general-purpose agent per package in parallel.
 
-**Coverage gate details.** Statement-weighted: `covered_statements / total_statements` per package. Excluded from the unit tier: `main.go`, `wire.go`, `wire_*.go`, `wire_gen.go`, `/compat/`, `/dto/`, `/models/`, `/testutil/`, plus broker/Postgres infrastructure (`common/db`, `common/jetstream`). The integration tier (`.github/workflows/integration.yml`) runs nightly + on infra-touching PRs against real Postgres/NATS/Redis via testcontainers; gate with `//go:build integration`.
+**Coverage gate details.** Statement-weighted: `covered_statements / total_statements` per package. Excluded from the unit tier: `main.go`, `wire.go`, `wire_*.go`, `wire_gen.go`, `/compat/`, `/dto/`, `/models/`, `/testutil/`, plus broker/Postgres infrastructure (`common/db`, `common/jetstream`). The integration tier exists in code with `//go:build integration` but has no active CI workflow — run locally via `go test -tags=integration -race ./...` against real Postgres/NATS/Redis.
 
 After implementation: write a brief spec doc to `docs/superpowers/specs/` with date prefix — file-level references only, no code snippets, no filler.
 
