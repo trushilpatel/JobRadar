@@ -447,6 +447,7 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-console:${{ env.SHORT_SHA }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-console:latest
+          build-args: GIT_SHA=${{ env.SHORT_SHA }}
           cache-from: type=gha,scope=console-ci
           cache-to: type=gha,scope=console-ci,mode=max
 
@@ -527,7 +528,7 @@ jobs:
                --docker-username=${{ github.actor }} \
                --docker-password=${{ secrets.GITHUB_TOKEN }} \
                --namespace jobradar-local \
-               --dry-run=client -o yaml | kubectl apply -f -"
+               --dry-run=client -o yaml | KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply --validate=false -f -"
 
       - name: Helm upgrade INFRA
         env:
@@ -628,7 +629,7 @@ jobs:
                --docker-username=${{ github.actor }} \
                --docker-password=${{ secrets.GITHUB_TOKEN }} \
                --namespace jobradar-local \
-               --dry-run=client -o yaml | kubectl apply -f -"
+               --dry-run=client -o yaml | KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply --validate=false -f -"
 
       - name: Helm upgrade APP
         env:
