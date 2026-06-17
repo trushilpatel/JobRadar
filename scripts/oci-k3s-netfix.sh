@@ -10,9 +10,12 @@
 #     k3s reads /etc/rancher/k3s/resolv.conf to build the CoreDNS forward
 #     directive; this file must list the real OCI DNS IPs.
 #
-#  3. Deprecated kube-apiserver flag --max-mutating-requests-in-flight was
-#     removed in Kubernetes 1.30. k3s v1.30+ rejects it on startup, causing
-#     k3s to exit immediately with "unknown flag". Removed before each start.
+#  3. Deprecated kube-apiserver flags --max-mutating-requests-in-flight and
+#     --max-requests-in-flight were removed in Kubernetes 1.30. k3s v1.30+
+#     rejects them on startup, causing k3s to exit immediately with "unknown
+#     flag". Both are removed from config.yaml before each start.
+#     A bare 'kube-apiserver-arg:' key with no items is also removed — k3s
+#     translates a null list to '--=true' causing immediate startup failure.
 #
 #  4. OCI A1 ARM nodes have slow cold-start I/O. k3s needs up to 10 minutes
 #     to reach API-server Ready after a fresh start — poll for 600 s.
@@ -92,17 +95,27 @@ else
 fi
 
 echo "=== [4/5] Removing deprecated kube-apiserver flags from k3s config ==="
-# --max-mutating-requests-in-flight was removed in Kubernetes 1.30.
-# k3s v1.30+ bundles a kube-apiserver that rejects this flag on startup,
-# causing k3s to exit immediately with "unknown flag". Remove it from any
-# existing config.yaml before restarting.
+# Both --max-mutating-requests-in-flight and --max-requests-in-flight were
+# removed in Kubernetes 1.30. k3s v1.30+ rejects them on kube-apiserver
+# startup, causing an immediate crash loop. Remove both from config.yaml.
+# Also remove bare 'kube-apiserver-arg:' null keys — k3s translates a null
+# value to '--=true' which is an immediate kube-apiserver fatal error.
 if [ -f /etc/rancher/k3s/config.yaml ]; then
-    if grep -q "max-mutating-requests-in-flight" /etc/rancher/k3s/config.yaml; then
-        sed -i '/max-mutating-requests-in-flight/d' /etc/rancher/k3s/config.yaml
-        echo "  removed deprecated max-mutating-requests-in-flight from k3s config"
-    else
-        echo "  no deprecated flags found"
+    removed=0
+    for flag in max-mutating-requests-in-flight max-requests-in-flight; do
+        if grep -q "$flag" /etc/rancher/k3s/config.yaml; then
+            sed -i "/$flag/d" /etc/rancher/k3s/config.yaml
+            echo "  removed deprecated $flag from k3s config"
+            removed=1
+        fi
+    done
+    # Remove bare 'kube-apiserver-arg:' key with no list items (null value)
+    if grep -qP '^kube-apiserver-arg:\s*$' /etc/rancher/k3s/config.yaml; then
+        sed -i '/^kube-apiserver-arg:[[:space:]]*$/d' /etc/rancher/k3s/config.yaml
+        echo "  removed empty kube-apiserver-arg key from k3s config"
+        removed=1
     fi
+    [ "$removed" -eq 0 ] && echo "  no deprecated flags found"
 else
     echo "  no k3s config.yaml found, skipping"
 fi

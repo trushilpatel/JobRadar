@@ -4,7 +4,7 @@ RUN apk --no-cache add ca-certificates tzdata && \
     adduser  -S -D -H -u 65532 -G jobradar jobradar
 WORKDIR /app
 COPY scheduler /app/scheduler
-RUN chown 65532:65532 /app/scheduler
+RUN chown 65532:65532 /app/scheduler && chmod +x /app/scheduler
 USER 65532:65532
 
 ARG GIT_SHA=dev

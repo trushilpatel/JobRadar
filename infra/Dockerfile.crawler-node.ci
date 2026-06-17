@@ -4,7 +4,7 @@ RUN apk --no-cache add ca-certificates tzdata && \
     adduser  -S -D -H -u 65532 -G jobradar jobradar
 WORKDIR /app
 COPY crawler-node /app/crawler-node
-RUN chown 65532:65532 /app/crawler-node
+RUN chown 65532:65532 /app/crawler-node && chmod +x /app/crawler-node
 USER 65532:65532
 
 ARG GIT_SHA=dev

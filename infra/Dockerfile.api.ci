@@ -5,7 +5,7 @@ RUN apk --no-cache add ca-certificates tzdata && \
 WORKDIR /app
 COPY api migrate ./
 COPY migrations/ /app/migrations/
-RUN chown -R 65532:65532 /app
+RUN chown -R 65532:65532 /app && chmod +x /app/api /app/migrate
 USER 65532:65532
 
 ARG GIT_SHA=dev
