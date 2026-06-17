@@ -89,12 +89,14 @@ flowchart LR
 
 ## CI
 
-GitHub Actions enforces lint, type-check, unit tests, and (nightly + on infra PRs) integration tests against the branch. Image builds and deploys are run manually from the developer machine via `make k8s-build` / `make k8s-up`.
+GitHub Actions enforces lint, type-check, and unit tests on PRs and push to `main`. On push to `main`, changed service images are built and deployed automatically to OCI nodes.
 
-| Workflow                            | Trigger                      | Purpose                                                             |
-| ----------------------------------- | ---------------------------- | ------------------------------------------------------------------- |
-| `.github/workflows/lint.yml`        | PR to `main`                 | golangci-lint (diff against `main`), ESLint, TypeScript check       |
-| `.github/workflows/integration.yml` | Nightly + PRs touching infra | `//go:build integration` tier — Postgres/Kafka/Redis testcontainers |
+| Workflow                             | Trigger             | Purpose                                                                  |
+| ------------------------------------ | ------------------- | ------------------------------------------------------------------------ |
+| `.github/workflows/ci.yml`           | PR + push to `main` | golangci-lint, ESLint, TypeScript check, Go unit tests, Codecov on push  |
+| `.github/workflows/release.yml`      | push to `main`      | Detect changes → build per-service images → deploy INFRA + APP OCI nodes |
+| `.github/workflows/deploy.yml`       | Manual dispatch     | Rollback: pick node (infra/app/both) + Helm revision                     |
+| `.github/workflows/fix-app-node.yml` | Manual dispatch     | Run `oci-k3s-netfix.sh` on the APP node when k3s is not Ready            |
 
 ---
 

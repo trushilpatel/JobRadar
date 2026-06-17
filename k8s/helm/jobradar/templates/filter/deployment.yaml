@@ -20,7 +20,7 @@ spec:
         {{- include "jobradar.labels" . | nindent 8 }}
         component: filter
       annotations:
-        deploy/backend-sha: {{ .Values.images.backend.tag | quote }}
+        deploy/filter-sha: {{ .Values.images.filter.tag | quote }}
     spec:
       {{- with .Values.imagePullSecret }}
       imagePullSecrets:
@@ -37,8 +37,8 @@ spec:
         {{- end }}
       containers:
         - name: filter
-          image: {{ .Values.images.backend.repository }}:{{ .Values.images.backend.tag }}
-          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          image: {{ .Values.images.filter.repository }}:{{ .Values.images.filter.tag }}
+          imagePullPolicy: {{ .Values.images.filter.pullPolicy }}
           command: ["/app/filter"]
           envFrom:
             - configMapRef:

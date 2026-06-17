@@ -23,8 +23,8 @@ spec:
       {{- end }}
       containers:
         - name: migrate
-          image: {{ .Values.images.backend.repository }}:{{ .Values.images.backend.tag }}
-          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          image: {{ .Values.images.api.repository }}:{{ .Values.images.api.tag }}
+          imagePullPolicy: {{ .Values.images.api.pullPolicy }}
           command: ["/app/migrate", "/app/migrations"]
           envFrom:
             - secretRef:

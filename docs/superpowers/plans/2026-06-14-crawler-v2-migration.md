@@ -389,7 +389,9 @@ Expected: PASS.
 
 ### Task D2: Remove Dockerfiles, Helm, CI, Makefile crawler refs
 
-**Files:** `infra/Dockerfile.crawler`, `infra/Dockerfile.crawler.ci`, `k8s/helm/jobradar/templates/crawler/`, `crawler:`/`images.crawler` blocks in all `values*.yaml`, `.github/workflows/deploy.yml` (crawler job/filter/tag-set/needs), `.github/workflows/backend.yml` (`test-crawler` job), `Makefile`.
+**Files:** `infra/Dockerfile.crawler`, `infra/Dockerfile.crawler.ci`, `k8s/helm/jobradar/templates/crawler/`, `crawler:`/`images.crawler` blocks in all `values*.yaml`, `.github/workflows/release.yml` (crawler job/filter/tag-set/needs), `Makefile`.
+
+Note: `.github/workflows/backend.yml` no longer exists (replaced by `ci.yml` + `release.yml`). The `test-crawler` job referenced in the original plan was removed when `backend.yml` was deleted.
 
 - [ ] **Step 1: Remove Dockerfiles + Helm**
 
@@ -400,7 +402,7 @@ git rm -r k8s/helm/jobradar/templates/crawler
 
 Edit all `values*.yaml` to delete `crawler:` and `images.crawler` blocks.
 
-- [ ] **Step 2: Edit CI** — in `deploy.yml` remove `crawler_changed`, the `crawler:`/`Dockerfile.crawler.ci` paths-filter entries, the `steps.filter.outputs.crawler` ifs, `go build ./apps/crawler`, the `build-crawler` job + its `needs` entry, the `crawler=$(get_tag…)` line, `--set images.crawler.tag=…`. In `backend.yml` delete the `test-crawler` job.
+- [ ] **Step 2: Edit CI** — in `release.yml` remove `crawler_changed` from `detect-changes`, the `crawler:`/`Dockerfile.crawler.ci` paths-filter entries, `go build ./apps/crawler` from the compile job, and the `build-crawler` job + its `needs` entries.
 
 - [ ] **Step 3: Edit Makefile (must-not-miss)** — repoint `Makefile:111` integration path and `Makefile:188`/`:134`/`:146` digest paths to `apps/crawler-v2/adapters/ats/...`; remove `run-crawler`, `k8s-build-crawler`, `k8s-logs-crawler` + `.PHONY` entries.
 

@@ -31,8 +31,16 @@ crawlerNode:
 imagePullSecret: ghcr-pull-secret
 
 images:
-  backend:
-    repository: ghcr.io/trushilpatel/jobradar-backend
+  scheduler:
+    repository: ghcr.io/trushilpatel/jobradar-scheduler
+    tag: latest # overridden at deploy time via --set
+    pullPolicy: IfNotPresent
+  filter:
+    repository: ghcr.io/trushilpatel/jobradar-filter
+    tag: latest # overridden at deploy time via --set
+    pullPolicy: IfNotPresent
+  enricher:
+    repository: ghcr.io/trushilpatel/jobradar-enricher
     tag: latest # overridden at deploy time via --set
     pullPolicy: IfNotPresent
   orchestrator:

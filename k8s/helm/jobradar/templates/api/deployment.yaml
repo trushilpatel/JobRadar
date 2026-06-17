@@ -23,7 +23,7 @@ spec:
         {{- include "jobradar.labels" . | nindent 8 }}
         component: api
       annotations:
-        deploy/backend-sha: {{ .Values.images.backend.tag | quote }}
+        deploy/api-sha: {{ .Values.images.api.tag | quote }}
     spec:
       {{- with .Values.imagePullSecret }}
       imagePullSecrets:
@@ -31,8 +31,8 @@ spec:
       {{- end }}
       containers:
         - name: api
-          image: {{ .Values.images.backend.repository }}:{{ .Values.images.backend.tag }}
-          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          image: {{ .Values.images.api.repository }}:{{ .Values.images.api.tag }}
+          imagePullPolicy: {{ .Values.images.api.pullPolicy }}
           command: ["/app/api"]
           envFrom:
             - configMapRef:
