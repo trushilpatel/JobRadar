@@ -28,10 +28,10 @@ const userNav: { to: string; label: string; icon: React.ReactNode }[] = [
     icon: <LayoutDashboard size={16} />,
   },
   { to: routes.jobs(), label: COPY['nav.jobs'], icon: <Briefcase size={16} /> },
-  { to: routes.insights(), label: COPY['nav.insights'], icon: <BarChart2 size={16} /> },
 ]
 
 const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [
+  { to: routes.insights(), label: COPY['nav.insights'], icon: <BarChart2 size={16} /> },
   {
     to: routes.adminCompanies(),
     label: COPY['nav.companies'],

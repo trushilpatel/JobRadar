@@ -27,9 +27,9 @@ function ProtectedLayout() {
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:id" element={<MobileJobDetailRoute />} />
           <Route path="/account" element={<AccountPage />} />
-          <Route path="/insights" element={<InsightsPage />} />
           {/* Admin routes — server also enforces 403 for non-admins */}
           <Route element={<RequireAdmin />}>
+            <Route path="/insights" element={<InsightsPage />} />
             <Route path="/admin/companies" element={<CompaniesPage />} />
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/audit" element={<AdminAuditPage />} />
