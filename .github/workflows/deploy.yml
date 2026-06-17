@@ -1,446 +1,26 @@
-name: Deploy
+name: Deploy (rollback)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'infra/**'
-      - 'k8s/**'
-      - '.github/workflows/deploy.yml'
-
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  REGISTRY: ghcr.io
-  OWNER: trushilpatel
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    inputs:
+      node:
+        description: 'Node to roll back'
+        required: true
+        default: both
+        type: choice
+        options: [infra, app, both]
+      revision:
+        description: 'Helm revision number (empty = roll back to previous revision)'
+        required: false
+        default: ''
+        type: string
 
 jobs:
-  # ── 1. Detect which source paths changed ──────────────────────────────────
-  detect-changes:
-    name: detect changes
-    runs-on: ubuntu-latest
-    outputs:
-      backend_changed: ${{ steps.filter.outputs.backend }}
-      orch_changed: ${{ steps.filter.outputs.orchestrator }}
-      node_changed: ${{ steps.filter.outputs.crawler_node }}
-      console_changed: ${{ steps.filter.outputs.console }}
-      any_go_changed: ${{ steps.goflags.outputs.any_go }}
-      infra_changed: ${{ steps.flags.outputs.infra }}
-      app_changed: ${{ steps.flags.outputs.app }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            backend:
-              - 'backend/apps/api/**'
-              - 'backend/apps/filter/**'
-              - 'backend/apps/enricher/**'
-              - 'backend/apps/scheduler/**'
-              - 'backend/apps/migrate/**'
-              - 'backend/service/**'
-              - 'backend/platform/**'
-              - 'backend/common/**'
-              - 'backend/go.mod'
-              - 'backend/go.sum'
-              - 'infra/Dockerfile.backend.ci'
-            orchestrator:
-              - 'backend/apps/orchestrator/**'
-              - 'backend/service/**'
-              - 'backend/platform/**'
-              - 'backend/common/**'
-              - 'backend/go.mod'
-              - 'backend/go.sum'
-              - 'infra/Dockerfile.orchestrator.ci'
-            crawler_node:
-              - 'backend/apps/crawler-node/**'
-              - 'backend/service/**'
-              - 'backend/platform/**'
-              - 'backend/common/**'
-              - 'backend/go.mod'
-              - 'backend/go.sum'
-              - 'infra/Dockerfile.crawler-node.ci'
-            console:
-              - 'frontend/**'
-              - 'infra/Dockerfile.console.ci'
-            helm:
-              - 'k8s/**'
-
-      - name: Derive compile-go flag
-        id: goflags
-        run: |
-          if [[ "${{ steps.filter.outputs.backend }}"      == "true" || \
-                "${{ steps.filter.outputs.orchestrator }}" == "true" || \
-                "${{ steps.filter.outputs.crawler_node }}" == "true" ]]; then
-            echo "any_go=true" >> $GITHUB_OUTPUT
-          else
-            echo "any_go=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Derive node-level flags
-        id: flags
-        run: |
-          # workflow_dispatch has no changed files — always deploy both nodes
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" || \
-                "${{ steps.filter.outputs.backend }}" == "true" || \
-                "${{ steps.filter.outputs.console }}"  == "true" || \
-                "${{ steps.filter.outputs.helm }}"     == "true" ]]; then
-            echo "infra=true" >> $GITHUB_OUTPUT
-          else
-            echo "infra=false" >> $GITHUB_OUTPUT
-          fi
-
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" || \
-                "${{ steps.filter.outputs.backend }}"      == "true" || \
-                "${{ steps.filter.outputs.orchestrator }}" == "true" || \
-                "${{ steps.filter.outputs.crawler_node }}" == "true" || \
-                "${{ steps.filter.outputs.helm }}"         == "true" ]]; then
-            echo "app=true" >> $GITHUB_OUTPUT
-          else
-            echo "app=false" >> $GITHUB_OUTPUT
-          fi
-
-  # ── 2-4. Quality gates (run before any build) ─────────────────────────────
-  frontend-check:
-    name: frontend check (lint + types + tests)
-    needs: detect-changes
-    if: needs.detect-changes.outputs.console_changed == 'true'
+  rollback-infra:
+    name: Rollback INFRA node
+    if: inputs.node == 'infra' || inputs.node == 'both'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: ./.github/actions/setup-frontend
-
-      - name: Lint
-        run: npm run lint
-        working-directory: frontend
-
-      - name: TypeScript check
-        run: npx tsc --noEmit
-        working-directory: frontend
-
-  # ── 3. Backend quality gates (lint only) ─────────────────────────────────
-  backend-lint:
-    name: backend lint
-    needs: detect-changes
-    if: needs.detect-changes.outputs.any_go_changed == 'true'
-    uses: ./.github/workflows/backend-lint.yml
-    secrets: inherit
-
-  # ── 4. Quality gate aggregator ─────────────────────────────────────────────
-  quality-gate:
-    name: quality gate
-    needs: [detect-changes, frontend-check, backend-lint]
-    if: always() && !contains(needs.*.result, 'cancelled')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check all quality gates passed
-        run: |
-          for result in \
-            "${{ needs.frontend-check.result }}" \
-            "${{ needs.backend-lint.result }}"; do
-            if [[ "$result" == "failure" ]]; then
-              echo "A quality gate failed — blocking build and deploy."
-              exit 1
-            fi
-          done
-          echo "All quality gates passed (or were not triggered by this change)."
-
-  # ── 5-6. Build assets (run after quality gate passes) ─────────────────────
-  #
-  # Runs on an x86 runner at full native CPU speed — no QEMU involved.
-  # All 8 binaries are compiled in one job so the module + build caches are
-  # shared, eliminating redundant dependency downloads and recompilation of
-  # unchanged shared packages across the four image build jobs.
-  compile-go:
-    name: compile go binaries (amd64)
-    needs: [detect-changes, quality-gate]
-    if: needs.detect-changes.outputs.any_go_changed == 'true' && needs.quality-gate.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      # cache: true persists both ~/go/pkg/mod (module downloads) and
-      # ~/.cache/go-build (compiled package cache) keyed on go.sum.
-      # Module downloads vanish on warm runs; only changed packages recompile.
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: backend/go.mod
-          cache: true
-          cache-dependency-path: backend/go.sum
-
-      - name: Compile all binaries (GOARCH=amd64)
-        working-directory: backend
-        env:
-          GOOS: linux
-          GOARCH: amd64
-          CGO_ENABLED: "0"
-        run: |
-          mkdir -p /tmp/go-binaries
-          go build -o /tmp/go-binaries/api          ./apps/api
-          go build -o /tmp/go-binaries/migrate      ./apps/migrate
-          go build -o /tmp/go-binaries/scheduler    ./apps/scheduler
-          go build -o /tmp/go-binaries/filter       ./apps/filter
-          go build -o /tmp/go-binaries/enricher     ./apps/analyzer
-          go build -o /tmp/go-binaries/orchestrator ./apps/orchestrator
-          go build -o /tmp/go-binaries/crawler-node ./apps/crawler-node
-
-      - name: Upload binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: go-binaries-amd64
-          path: /tmp/go-binaries/
-          retention-days: 1
-
-  # ── 6. Build frontend assets ───────────────────────────────────────────────
-  #
-  # Vite bundle built natively on x86 — no QEMU, no secrets baked into layers.
-  # Uses setup-frontend action for the node_modules direct cache (same key as
-  # frontend-check, so the cache is always warm when both run in parallel).
-  build-frontend-assets:
-    name: build frontend assets
-    needs: [detect-changes, quality-gate]
-    if: needs.detect-changes.outputs.console_changed == 'true' && needs.quality-gate.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - uses: ./.github/actions/setup-frontend
-
-      - name: Build Vite bundle
-        working-directory: frontend
-        env:
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-        run: npm run build
-
-      - name: Upload dist
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist/
-          retention-days: 1
-
-  # ── 7-11. Build images (parallel, after quality gate + asset build) ────────
-  build-backend:
-    name: build backend image
-    needs: [detect-changes, compile-go]
-    if: needs.detect-changes.outputs.backend_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: go-binaries-amd64
-          path: /tmp/go-binaries
-
-      - name: Stage build context
-        run: |
-          mkdir -p /tmp/backend-ctx
-          cp /tmp/go-binaries/api /tmp/go-binaries/migrate /tmp/go-binaries/scheduler \
-             /tmp/go-binaries/filter /tmp/go-binaries/enricher /tmp/backend-ctx/
-          cp -r backend/migrations /tmp/backend-ctx/migrations
-
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set short SHA
-        run: echo "SHORT_SHA=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: /tmp/backend-ctx
-          file: infra/Dockerfile.backend.ci
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-backend:${{ env.SHORT_SHA }}
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-backend:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-backend:latest
-          cache-from: type=gha,scope=backend-ci
-          cache-to: type=gha,scope=backend-ci,mode=max
-
-  # ──────────────────────────────────────────────────────────────────────────
-  build-orchestrator:
-    name: build orchestrator image
-    needs: [detect-changes, compile-go]
-    if: needs.detect-changes.outputs.orch_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: go-binaries-amd64
-          path: /tmp/go-binaries
-
-      - name: Stage build context
-        run: |
-          mkdir -p /tmp/orchestrator-ctx
-          cp /tmp/go-binaries/orchestrator /tmp/orchestrator-ctx/
-
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set short SHA
-        run: echo "SHORT_SHA=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: /tmp/orchestrator-ctx
-          file: infra/Dockerfile.orchestrator.ci
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-orchestrator:${{ env.SHORT_SHA }}
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-orchestrator:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-orchestrator:latest
-          cache-from: type=gha,scope=orchestrator-ci
-          cache-to: type=gha,scope=orchestrator-ci,mode=max
-
-  # ──────────────────────────────────────────────────────────────────────────
-  build-crawler-node:
-    name: build crawler-node image
-    needs: [detect-changes, compile-go]
-    if: needs.detect-changes.outputs.node_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: go-binaries-amd64
-          path: /tmp/go-binaries
-
-      - name: Stage build context
-        run: |
-          mkdir -p /tmp/crawler-node-ctx
-          cp /tmp/go-binaries/crawler-node /tmp/crawler-node-ctx/
-
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set short SHA
-        run: echo "SHORT_SHA=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: /tmp/crawler-node-ctx
-          file: infra/Dockerfile.crawler-node.ci
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-crawler-node:${{ env.SHORT_SHA }}
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-crawler-node:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-crawler-node:latest
-          cache-from: type=gha,scope=crawler-node-ci
-          cache-to: type=gha,scope=crawler-node-ci,mode=max
-
-  # ──────────────────────────────────────────────────────────────────────────
-  build-console:
-    name: build console image
-    needs: [detect-changes, build-frontend-assets]
-    if: needs.detect-changes.outputs.console_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: /tmp/frontend-dist
-
-      - name: Stage build context
-        run: |
-          mkdir -p /tmp/console-ctx
-          cp -r /tmp/frontend-dist /tmp/console-ctx/dist
-          cp frontend/nginx.conf /tmp/console-ctx/
-
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set short SHA
-        run: echo "SHORT_SHA=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: /tmp/console-ctx
-          file: infra/Dockerfile.console.ci
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-console:${{ env.SHORT_SHA }}
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-console:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/jobradar-console:latest
-          cache-from: type=gha,scope=console-ci
-          cache-to: type=gha,scope=console-ci,mode=max
-
-  # ── 12. Deploy INFRA node (API + Console) ─────────────────────────────────
-  deploy-infra:
-    name: deploy infra (serving)
-    needs:
-      - detect-changes
-      - quality-gate
-      - build-backend
-      - build-console
-    if: |
-      always() &&
-      needs.detect-changes.outputs.infra_changed == 'true' &&
-      needs.quality-gate.result == 'success' &&
-      !contains(needs.*.result, 'failure') &&
-      !contains(needs.*.result, 'cancelled')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -450,100 +30,35 @@ jobs:
           printf 'Host *\n  ServerAliveInterval 30\n  ServerAliveCountMax 20\n' >> ~/.ssh/config
           chmod 600 ~/.ssh/config
 
-      - name: Resolve image tags for INFRA
-        id: tags
+      - name: Show current Helm history (INFRA)
         env:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
         run: |
-          SHORT_SHA="${GITHUB_SHA:0:7}"
+          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
+            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm history jobradar --namespace jobradar-local"
 
-          if [ "${{ needs.build-backend.result }}" == "success" ]; then
-            BACKEND_TAG="$SHORT_SHA"
+      - name: Rollback INFRA
+        env:
+          HOST: ${{ secrets.OCI_INFRA_HOST }}
+          USER: ${{ secrets.OCI_SSH_USER }}
+          REVISION: ${{ inputs.revision }}
+        run: |
+          if [[ -n "$REVISION" ]]; then
+            ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
+              "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm rollback jobradar $REVISION \
+                --namespace jobradar-local --wait --timeout 5m"
           else
-            BACKEND_TAG=$(ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
-              "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm get values jobradar --all -o json 2>/dev/null \
-              | jq -r '.images.backend.tag // \"latest\"'")
+            ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
+              "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm rollback jobradar \
+                --namespace jobradar-local --wait --timeout 5m"
           fi
 
-          if [ "${{ needs.build-console.result }}" == "success" ]; then
-            CONSOLE_TAG="$SHORT_SHA"
-          else
-            CONSOLE_TAG=$(ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
-              "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm get values jobradar --all -o json 2>/dev/null \
-              | jq -r '.images.console.tag // \"latest\"'")
-          fi
-
-          echo "backend=$BACKEND_TAG" >> $GITHUB_OUTPUT
-          echo "console=$CONSOLE_TAG" >> $GITHUB_OUTPUT
-
-      - name: Copy chart and values to INFRA
-        env:
-          HOST: ${{ secrets.OCI_INFRA_HOST }}
-          USER: ${{ secrets.OCI_SSH_USER }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" "rm -rf /tmp/jobradar-chart /tmp/values.prod-infra.yaml"
-          scp -i ~/.ssh/id_ed25519 -r k8s/helm/jobradar "$USER@$HOST:/tmp/jobradar-chart"
-          scp -i ~/.ssh/id_ed25519 k8s/helm/jobradar/values.prod-infra.yaml "$USER@$HOST:/tmp/"
-
-      - name: Wait for k3s API (INFRA)
-        env:
-          HOST: ${{ secrets.OCI_INFRA_HOST }}
-          USER: ${{ secrets.OCI_SSH_USER }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
-            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml timeout 300 bash -c \
-              'until kubectl get nodes 2>/dev/null | grep -q Ready; do sleep 5; done'"
-
-      - name: Refresh GHCR pull secret (INFRA)
-        env:
-          HOST: ${{ secrets.OCI_INFRA_HOST }}
-          USER: ${{ secrets.OCI_SSH_USER }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
-            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl create namespace jobradar-local 2>/dev/null || true && \
-             KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl create secret docker-registry ghcr-pull-secret \
-               --docker-server=ghcr.io \
-               --docker-username=${{ github.actor }} \
-               --docker-password=${{ secrets.GITHUB_TOKEN }} \
-               --namespace jobradar-local \
-               --dry-run=client -o yaml | kubectl apply -f -"
-
-      - name: Helm upgrade INFRA
-        env:
-          HOST: ${{ secrets.OCI_INFRA_HOST }}
-          USER: ${{ secrets.OCI_SSH_USER }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
-            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install jobradar /tmp/jobradar-chart \
-              --namespace jobradar-local \
-              --create-namespace \
-              -f /tmp/values.prod-infra.yaml \
-              --set images.backend.tag=${{ steps.tags.outputs.backend }} \
-              --set images.console.tag=${{ steps.tags.outputs.console }} \
-              --set api.clerkJwksUrl=${{ secrets.CLERK_JWKS_URL }} \
-              --set api.clerkIssuerUrl=${{ secrets.CLERK_ISSUER_URL }} \
-              --wait --timeout 10m"
-
-  # ── 13. Deploy APP node (Pipeline) ────────────────────────────────────────
-  deploy-app:
-    name: deploy app (pipeline)
-    needs:
-      - detect-changes
-      - quality-gate
-      - build-backend
-      - build-orchestrator
-      - build-crawler-node
-    if: |
-      always() &&
-      needs.detect-changes.outputs.app_changed == 'true' &&
-      needs.quality-gate.result == 'success' &&
-      !contains(needs.*.result, 'failure') &&
-      !contains(needs.*.result, 'cancelled')
+  rollback-app:
+    name: Rollback APP node
+    if: inputs.node == 'app' || inputs.node == 'both'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -553,73 +68,26 @@ jobs:
           printf 'Host *\n  ServerAliveInterval 30\n  ServerAliveCountMax 20\n' >> ~/.ssh/config
           chmod 600 ~/.ssh/config
 
-      - name: Resolve image tags for APP
-        id: tags
-        env:
-          HOST: ${{ secrets.OCI_APP_HOST }}
-          USER: ${{ secrets.OCI_SSH_USER }}
-        run: |
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-
-          get_tag() {
-            local result="$1"
-            local key="$2"
-            if [ "$result" == "success" ]; then
-              echo "$SHORT_SHA"
-            else
-              ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
-                "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm get values jobradar --all -o json 2>/dev/null \
-                | jq -r \".images.${key}.tag // \\\"latest\\\"\""
-            fi
-          }
-
-          echo "backend=$(get_tag '${{ needs.build-backend.result }}' backend)" >> $GITHUB_OUTPUT
-          echo "orchestrator=$(get_tag '${{ needs.build-orchestrator.result }}' orchestrator)" >> $GITHUB_OUTPUT
-          echo "crawler_node=$(get_tag '${{ needs.build-crawler-node.result }}' crawlerNode)" >> $GITHUB_OUTPUT
-
-      - name: Copy chart and values to APP
-        env:
-          HOST: ${{ secrets.OCI_APP_HOST }}
-          USER: ${{ secrets.OCI_SSH_USER }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" "rm -rf /tmp/jobradar-chart /tmp/values.prod-app.yaml"
-          scp -i ~/.ssh/id_ed25519 -r k8s/helm/jobradar "$USER@$HOST:/tmp/jobradar-chart"
-          scp -i ~/.ssh/id_ed25519 k8s/helm/jobradar/values.prod-app.yaml "$USER@$HOST:/tmp/"
-
-      - name: Wait for k3s API (APP)
+      - name: Show current Helm history (APP)
         env:
           HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
         run: |
           ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
-            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml timeout 300 bash -c \
-              'until kubectl get nodes 2>/dev/null | grep -q Ready; do sleep 5; done'"
+            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm history jobradar --namespace jobradar-local"
 
-      - name: Refresh GHCR pull secret (APP)
+      - name: Rollback APP
         env:
           HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
+          REVISION: ${{ inputs.revision }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
-            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl create namespace jobradar-local 2>/dev/null || true && \
-             KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl create secret docker-registry ghcr-pull-secret \
-               --docker-server=ghcr.io \
-               --docker-username=${{ github.actor }} \
-               --docker-password=${{ secrets.GITHUB_TOKEN }} \
-               --namespace jobradar-local \
-               --dry-run=client -o yaml | kubectl apply -f -"
-
-      - name: Helm upgrade APP
-        env:
-          HOST: ${{ secrets.OCI_APP_HOST }}
-          USER: ${{ secrets.OCI_SSH_USER }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
-            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install jobradar /tmp/jobradar-chart \
-              --namespace jobradar-local \
-              --create-namespace \
-              -f /tmp/values.prod-app.yaml \
-              --set images.backend.tag=${{ steps.tags.outputs.backend }} \
-              --set images.orchestrator.tag=${{ steps.tags.outputs.orchestrator }} \
-              --set images.crawlerNode.tag=${{ steps.tags.outputs.crawler_node }} \
-              --wait --timeout 10m"
+          if [[ -n "$REVISION" ]]; then
+            ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
+              "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm rollback jobradar $REVISION \
+                --namespace jobradar-local --wait --timeout 5m"
+          else
+            ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
+              "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm rollback jobradar \
+                --namespace jobradar-local --wait --timeout 5m"
+          fi

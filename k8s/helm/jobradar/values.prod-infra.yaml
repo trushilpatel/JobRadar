@@ -20,8 +20,8 @@ enricher:
 imagePullSecret: ghcr-pull-secret
 
 images:
-  backend:
-    repository: ghcr.io/trushilpatel/jobradar-backend
+  api:
+    repository: ghcr.io/trushilpatel/jobradar-api
     tag: latest # overridden at deploy time via --set
     pullPolicy: IfNotPresent
   console:

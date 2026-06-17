@@ -20,7 +20,7 @@ spec:
         {{- include "jobradar.labels" . | nindent 8 }}
         component: scheduler
       annotations:
-        deploy/backend-sha: {{ .Values.images.backend.tag | quote }}
+        deploy/scheduler-sha: {{ .Values.images.scheduler.tag | quote }}
     spec:
       {{- with .Values.imagePullSecret }}
       imagePullSecrets:
@@ -28,8 +28,8 @@ spec:
       {{- end }}
       containers:
         - name: scheduler
-          image: {{ .Values.images.backend.repository }}:{{ .Values.images.backend.tag }}
-          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          image: {{ .Values.images.scheduler.repository }}:{{ .Values.images.scheduler.tag }}
+          imagePullPolicy: {{ .Values.images.scheduler.pullPolicy }}
           command: ["/app/scheduler"]
           envFrom:
             - configMapRef:

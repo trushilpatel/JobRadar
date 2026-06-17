@@ -4,7 +4,21 @@ namespace: jobradar-local
 environment: local
 
 images:
-  backend:
+  # Local dev: all backend services share the bundled jobradar-backend:local image.
+  # Prod: each service has its own image (overridden in values.prod-*.yaml).
+  api:
+    repository: jobradar-backend
+    tag: local
+    pullPolicy: IfNotPresent
+  scheduler:
+    repository: jobradar-backend
+    tag: local
+    pullPolicy: IfNotPresent
+  filter:
+    repository: jobradar-backend
+    tag: local
+    pullPolicy: IfNotPresent
+  enricher:
     repository: jobradar-backend
     tag: local
     pullPolicy: IfNotPresent

@@ -20,7 +20,7 @@ spec:
         {{- include "jobradar.labels" . | nindent 8 }}
         component: enricher
       annotations:
-        deploy/backend-sha: {{ .Values.images.backend.tag | quote }}
+        deploy/enricher-sha: {{ .Values.images.enricher.tag | quote }}
     spec:
       {{- with .Values.imagePullSecret }}
       imagePullSecrets:
@@ -37,8 +37,8 @@ spec:
         {{- end }}
       containers:
         - name: enricher
-          image: {{ .Values.images.backend.repository }}:{{ .Values.images.backend.tag }}
-          imagePullPolicy: {{ .Values.images.backend.pullPolicy }}
+          image: {{ .Values.images.enricher.repository }}:{{ .Values.images.enricher.tag }}
+          imagePullPolicy: {{ .Values.images.enricher.pullPolicy }}
           command: ["/app/enricher"]
           envFrom:
             - configMapRef:
