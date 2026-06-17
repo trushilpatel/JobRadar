@@ -59,6 +59,7 @@ describe('Sidebar', () => {
     renderSidebar()
     expect(screen.getByRole('link', { name: /Dashboard/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Jobs/i })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Insights/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Companies/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Users/i })).not.toBeInTheDocument()
   })
