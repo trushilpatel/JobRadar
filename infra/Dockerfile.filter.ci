@@ -4,7 +4,7 @@ RUN apk --no-cache add ca-certificates tzdata && \
     adduser  -S -D -H -u 65532 -G jobradar jobradar
 WORKDIR /app
 COPY filter /app/filter
-RUN chown 65532:65532 /app/filter
+RUN chown 65532:65532 /app/filter && chmod +x /app/filter
 USER 65532:65532
 
 ARG GIT_SHA=dev
