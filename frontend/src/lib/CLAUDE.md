@@ -2,7 +2,7 @@
 
 ## What belongs here
 
-- `core/` — HTTP client, Supabase client, QueryClient, session ref, API error class
+- `core/` — HTTP client, QueryClient, API error class, resilient response parser (Clerk auth is wired via `ClerkProvider` in `main.tsx`, not a client here)
 - `hooks/` — shared hooks used by 2+ features (debounce, media query, undo, hidden-items)
 - `utils/` — pure utility functions (cn, formatters, etc.)
 - `api/` — shared API helpers used by 2+ features (e.g. pipeline.ts)

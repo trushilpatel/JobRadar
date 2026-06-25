@@ -23,7 +23,7 @@ The UI is always in a defined, usable state — never blank or broken during loa
 
 - TanStack Query `staleTime: 30s` + `gcTime: 5m` — cached data keeps the UI functional during network hiccups
 - Show loading skeletons while queries are pending — never blank content where data should appear
-- Auth token is auto-refreshed on 401 with deduplication — concurrent requests don't spawn multiple refresh calls; users never see an unexpected logout
+- Clerk manages the session token and refreshes it transparently; `api-client` attaches a fresh token per request, so users never see an unexpected logout
 - `refetchInterval` on live data panels — data self-heals without user action
 
 ## Fault Tolerance
@@ -40,9 +40,9 @@ The UI degrades gracefully when APIs fail; one failure never breaks unrelated fe
 The UI returns to correct state automatically after failures or user re-engagement.
 
 - Call `queryClient.invalidateQueries()` after every mutation — stale data is refetched immediately, no manual refresh needed
-- Auth `onAuthStateChange` listener in `features/auth/store.ts` restores session after page refresh or tab focus — no re-login required
+- Clerk's `ClerkProvider` restores the session from its own storage on page refresh or tab focus — no Zustand auth store, no re-login required
 - `refetchInterval` on dashboard panels provides automatic recovery from transient API outages
-- On 401 after token refresh, sign out and redirect to `/login` cleanly — no stuck state
+- On a 401, `api-client` signs out via Clerk and redirects to `/login` cleanly (skipped if Clerk hasn't initialized yet) — no stuck state
 
 ## Faultlessness
 
@@ -85,7 +85,7 @@ Shared code is written once and used everywhere; no copy-paste of logic or UI pa
 The UI exposes enough structure to reason about state, diagnose bugs, and trace data flow.
 
 - Query keys are structured string arrays (`['company', id]`, `['dashboard-market']`) — predictable, greppable, and easy to invalidate precisely
-- Zustand store for auth is the single source of truth for session state — one place to inspect
+- Clerk (`useAuth`/`useUser`, wrapped by the `useIdentity()` hook) is the single source of truth for session state — one place to inspect
 - TypeScript strict mode catches type mismatches at compile time before they reach the browser
 - TanStack Query DevTools in development — inspect cache, staleness, and query status without console logging
 

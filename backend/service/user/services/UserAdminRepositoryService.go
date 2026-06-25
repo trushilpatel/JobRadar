@@ -114,7 +114,7 @@ func (r *adminRepositoryService) SetStatus(ctx context.Context, id string, statu
 }
 
 // AdminDelete removes the user row. The impl layer is responsible for
-// calling the Supabase admin API before this method — the repository only
+// calling the Clerk admin API before this method — the repository only
 // owns the DB delete.
 func (r *adminRepositoryService) AdminDelete(ctx context.Context, id string) error {
 	res := r.db.WithContext(ctx).Where("id = ?", id).Delete(&usermodel.User{})

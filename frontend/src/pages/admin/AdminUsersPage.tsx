@@ -88,7 +88,7 @@ function DeleteDialog({ user, onClose }: { user: AdminUser | null; onClose: () =
             Delete {user?.email}?
           </Dialog.Title>
           <Dialog.Description className="text-sm text-muted mb-6">
-            Permanently deletes the Supabase auth record and all DB data for this user. Cannot be
+            Permanently deletes the Clerk auth record and all DB data for this user. Cannot be
             undone.
           </Dialog.Description>
           <div className="flex justify-end gap-3">
