@@ -145,7 +145,11 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 	fetchLog := w.log.With(logger.Str(logger.FieldFetchID, fetchID))
 
 	items := make([]chunkItem, 0, len(msgs))
-	// TODO: extract W3C trace context from msg headers via tracing.ExtractNATS once available
+	// Link this span to the upstream publisher's span by extracting the W3C
+	// traceparent injected into the first message's headers.
+	if len(msgs) > 0 {
+		ctx = tracing.ExtractNATS(ctx, msgs[0].Headers())
+	}
 	for _, msg := range msgs {
 		var job core.JobSummary
 		if jerr := json.Unmarshal(msg.Data(), &job); jerr != nil {

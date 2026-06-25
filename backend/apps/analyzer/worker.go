@@ -187,7 +187,9 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 		return nil
 	}
 
-	// TODO: extract W3C trace context from msg headers via tracing.ExtractNATS once available
+	// Link this span to the upstream publisher's span by extracting the W3C
+	// traceparent injected into the first message's headers.
+	ctx = tracing.ExtractNATS(ctx, msgs[0].Headers())
 
 	fetchID := uuid.NewString()
 	fetchLog := w.log.With(logger.Str(logger.FieldFetchID, fetchID))
