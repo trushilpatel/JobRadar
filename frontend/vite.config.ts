@@ -55,7 +55,7 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       // Dummy values so `config/env.ts`'s eager validation passes at import time.
       // CI has no repo-root `.env` (gitignored), and every test mocks the API /
-      // auth layer, so the Supabase client built from these is never called.
+      // auth layer, so Clerk is never actually initialised from these.
       env: {
         VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_fake_key_for_testing',
       },

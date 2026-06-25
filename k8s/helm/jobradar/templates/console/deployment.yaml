@@ -24,6 +24,10 @@ spec:
         component: console
       annotations:
         deploy/console-sha: {{ .Values.images.console.tag | quote }}
+        # Roll the pods whenever the nginx ConfigMap changes, even if the image
+        # tag is unchanged — otherwise a config-only edit (cache headers, routes)
+        # never reaches running pods.
+        checksum/nginx-config: {{ include (print $.Template.BasePath "/console/configmap.yaml") . | sha256sum }}
     spec:
       {{- with .Values.imagePullSecret }}
       imagePullSecrets:

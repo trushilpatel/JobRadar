@@ -11,7 +11,7 @@ import (
 )
 
 // fakeAdminRepo is a hand-rolled AdminService implementation. The admin impl
-// layer only orchestrates calls to next + the supabase client + cache, so a
+// layer only orchestrates calls to next + the clerk client + cache, so a
 // recording fake here is sufficient to assert the orchestration order and
 // error propagation rules.
 type fakeAdminRepo struct {
@@ -182,25 +182,25 @@ func TestAdminImpl_SetStatus_DoesNotEvictOnError(t *testing.T) {
 
 // ---------- AdminDelete ----------
 
-// fakeAdminSupabase is reused from UserImplService tests where fakeSupabase
+// fakeAdminClerk is reused from UserImplService tests where fakeClerk
 // exists, but the AdminImpl chain expects the same Client interface so
 // declaring a tiny dedicated fake keeps blast radius low.
-type fakeAdminSupabase struct {
+type fakeAdminClerk struct {
 	called bool
 	id     string
 	err    error
 }
 
-func (f *fakeAdminSupabase) DeleteUser(_ context.Context, id string) error {
+func (f *fakeAdminClerk) DeleteUser(_ context.Context, id string) error {
 	f.called = true
 	f.id = id
 	return f.err
 }
 
-func TestAdminImpl_AdminDelete_OrderingSupabaseThenDBThenCache(t *testing.T) {
+func TestAdminImpl_AdminDelete_OrderingClerkThenDBThenCache(t *testing.T) {
 	t.Parallel()
 	repo := &fakeAdminRepo{}
-	sb := &fakeAdminSupabase{}
+	sb := &fakeAdminClerk{}
 	c := cache.NewMemoryCache()
 	ctx := context.Background()
 	if err := c.Set(ctx, "user:u1", "anything", 0); err != nil {
@@ -212,13 +212,13 @@ func TestAdminImpl_AdminDelete_OrderingSupabaseThenDBThenCache(t *testing.T) {
 		t.Fatalf("AdminDelete: %v", err)
 	}
 	if !sb.called {
-		t.Error("supabase DeleteUser not invoked")
+		t.Error("clerk DeleteUser not invoked")
 	}
 	if !repo.deleteCalled {
 		t.Error("repo.AdminDelete not invoked")
 	}
 	if sb.id != "u1" || repo.deleteID != "u1" {
-		t.Errorf("user ids = supabase %q, repo %q; want u1", sb.id, repo.deleteID)
+		t.Errorf("user ids = clerk %q, repo %q; want u1", sb.id, repo.deleteID)
 	}
 	var dest string
 	hit, _ := c.Get(ctx, "user:u1", &dest)
@@ -230,7 +230,7 @@ func TestAdminImpl_AdminDelete_OrderingSupabaseThenDBThenCache(t *testing.T) {
 func TestAdminImpl_AdminDelete_EmptyID(t *testing.T) {
 	t.Parallel()
 	repo := &fakeAdminRepo{}
-	svc := usersvc.NewAdminImplService(repo, &fakeAdminSupabase{}, nil)
+	svc := usersvc.NewAdminImplService(repo, &fakeAdminClerk{}, nil)
 	err := svc.AdminDelete(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected error for empty id")
@@ -243,26 +243,26 @@ func TestAdminImpl_AdminDelete_EmptyID(t *testing.T) {
 	}
 }
 
-func TestAdminImpl_AdminDelete_AbortsOnSupabaseFailure(t *testing.T) {
+func TestAdminImpl_AdminDelete_AbortsOnClerkFailure(t *testing.T) {
 	t.Parallel()
 	repo := &fakeAdminRepo{}
-	sb := &fakeAdminSupabase{err: errors.New("supabase 500")}
+	sb := &fakeAdminClerk{err: errors.New("clerk 500")}
 	svc := usersvc.NewAdminImplService(repo, sb, nil)
 	err := svc.AdminDelete(context.Background(), "u1")
 	if err == nil {
-		t.Fatal("expected supabase failure to propagate")
+		t.Fatal("expected clerk failure to propagate")
 	}
 	if repo.deleteCalled {
-		t.Error("repo.AdminDelete must not run after supabase failure")
+		t.Error("repo.AdminDelete must not run after clerk failure")
 	}
 	if se := asUserSvcErr(t, err); se.Code != domainerrs.ErrInternal.Code {
 		t.Errorf("code = %q, want INTERNAL", se.Code)
 	}
 }
 
-// When the supabase client is nil (test/dev), the impl layer must still
+// When the clerk client is nil (test/dev), the impl layer must still
 // invoke the repo. Otherwise admin deletes would silently no-op in tests.
-func TestAdminImpl_AdminDelete_NilSupabaseDelegatesToRepo(t *testing.T) {
+func TestAdminImpl_AdminDelete_NilClerkDelegatesToRepo(t *testing.T) {
 	t.Parallel()
 	repo := &fakeAdminRepo{}
 	svc := usersvc.NewAdminImplService(repo, nil, nil)
@@ -270,18 +270,18 @@ func TestAdminImpl_AdminDelete_NilSupabaseDelegatesToRepo(t *testing.T) {
 		t.Fatalf("AdminDelete: %v", err)
 	}
 	if !repo.deleteCalled {
-		t.Error("repo.AdminDelete not invoked when supabase is nil")
+		t.Error("repo.AdminDelete not invoked when clerk is nil")
 	}
 }
 
-// When the repo delete fails after supabase succeeds, the cache must NOT be
+// When the repo delete fails after clerk succeeds, the cache must NOT be
 // evicted — we leave the stale identity bundle alone so the caller has the
 // option to retry without invalidating active sessions on a half-failed
 // delete.
 func TestAdminImpl_AdminDelete_RepoFailureSkipsCacheEvict(t *testing.T) {
 	t.Parallel()
 	repo := &fakeAdminRepo{deleteErr: errors.New("db down")}
-	sb := &fakeAdminSupabase{}
+	sb := &fakeAdminClerk{}
 	c := cache.NewMemoryCache()
 	ctx := context.Background()
 	if err := c.Set(ctx, "user:u1", "anything", 0); err != nil {
