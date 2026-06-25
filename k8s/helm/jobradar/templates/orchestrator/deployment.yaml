@@ -12,11 +12,12 @@ spec:
   selector:
     matchLabels:
       {{- include "jobradar.selectorLabels" (dict "component" "orchestrator") | nindent 6 }}
+  # Recreate (not RollingUpdate): the orchestrator holds a single external NATS
+  # (NGS) connection from a connection-capped account. A rolling update would
+  # briefly run two pods → two connections → "maximum account active connections
+  # exceeded", deadlocking the rollout. Recreate tears the old pod down first.
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   template:
     metadata:
       labels:
@@ -56,27 +57,38 @@ spec:
               name: http
             - containerPort: 9104
               name: metrics
+          # Liveness targets the cheap, dependency-free /healthz (see health.go).
+          # timeoutSeconds is generous because the production node is a throttled
+          # single-OCPU instance (high CPU steal / iowait); a 1s default would
+          # let transient scheduling latency kill a healthy process.
           livenessProbe:
             httpGet:
-              path: /admin/crawler-nodes
+              path: /healthz
               port: 8082
-            initialDelaySeconds: 10
+            initialDelaySeconds: 15
             periodSeconds: 30
-            failureThreshold: 3
+            timeoutSeconds: 5
+            failureThreshold: 6
+          # Readiness may gate on dependencies, so it keeps the DB-backed route,
+          # but with tolerant timeout/threshold for the same slow-node reason.
           readinessProbe:
             httpGet:
               path: /admin/crawler-nodes
               port: 8082
             initialDelaySeconds: 5
             periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 5
+            timeoutSeconds: 8
+            failureThreshold: 6
           resources:
             requests:
               memory: "32Mi"
               cpu: "50m"
             limits:
-              memory: "32Mi"
+              # Burst headroom above the 32Mi request: the Go runtime under GC
+              # pressure on a swap-thrashing node needs slack to avoid stalls
+              # that would otherwise trip the probes. Request stays at 32Mi so
+              # scheduling is unchanged.
+              memory: "96Mi"
               cpu: "300m"
           securityContext:
             {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
