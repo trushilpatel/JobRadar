@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -9,33 +8,15 @@ import (
 	"github.com/trushilpatel/jobradar/common/ats/core"
 	domainerr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/worker"
 )
 
-// clock abstracts wall-clock reads and ctx-aware sleeps so tests can control
-// both the inter-chunk pacing and the NextAttemptAt value stamped into the
-// retry ledger row.
-type clock interface {
-	Now() time.Time
-	Sleep(ctx context.Context, d time.Duration) error
-}
+// clock is a package-level alias for the shared worker.Clock interface so
+// existing field declarations and test doubles need no changes.
+type clock = worker.Clock
 
-type realClock struct{}
-
-func (realClock) Now() time.Time { return time.Now() }
-
-func (realClock) Sleep(ctx context.Context, d time.Duration) error {
-	if d <= 0 {
-		return nil
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-t.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
+// realClock is the production implementation from the shared worker package.
+type realClock = worker.RealClock
 
 // splitBySize divides s into chunks of at most size elements each.
 func splitBySize(s []chunkItem, size int) [][]chunkItem {

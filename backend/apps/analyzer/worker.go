@@ -19,47 +19,22 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	"github.com/trushilpatel/jobradar/common/worker"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 )
 
-// analyzerMaxRetries is the max NATS delivery count before a job goes to DLQ
-// on the infra-error path. Must equal len(analyzerBackOff). Must stay in sync
-// with MaxDeliver on the JOBS_FILTERED consumer in common/jetstream/streams.go
-// (MaxDeliver:3 → 2 Nak tiers before Term).
-const analyzerMaxRetries = 2
+// analyzerMaxRetries and analyzerBackOff are sourced from common/worker to stay
+// in sync with the NATS consumer configuration without manual duplication.
+const analyzerMaxRetries = worker.NATSWorkerMaxRetries
 
-// analyzerBackOff mirrors the JOBS_FILTERED consumer BackOff config so the
-// ledger's next_attempt_at field stays meaningful for dashboards on the
-// infra-error path. Must match BackOff in ConsumerAnalyzerWorkers.
-var analyzerBackOff = []time.Duration{30 * time.Second, 2 * time.Minute}
+var analyzerBackOff = worker.NATSWorkerBackOff
 
-// clock abstracts wall-clock reads and ctx-aware sleeps so tests can control
-// both the inter-group pacing and the NextAttemptAt value stamped into the
-// retry ledger row.
-type clock interface {
-	Now() time.Time
-	Sleep(ctx context.Context, d time.Duration) error
-}
-
-type realClock struct{}
-
-func (realClock) Now() time.Time { return time.Now() }
-
-func (realClock) Sleep(ctx context.Context, d time.Duration) error {
-	if d <= 0 {
-		return nil
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-t.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
+// clock and realClock are package-level aliases for the shared worker types so
+// existing field declarations and test doubles need no changes.
+type clock = worker.Clock
+type realClock = worker.RealClock
 
 // pipelineStage identifies which processing stage failed, used by handleFailure
 // to route retries correctly. Typed to prevent typos at callsites.
