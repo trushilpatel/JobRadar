@@ -11,6 +11,11 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	defaultUserAdminPageLimit = 20
+	maxUserAdminPageLimit     = 100
+)
+
 // adminRepositoryService is the terminal layer for the admin user chain.
 // It owns all SQL that the admin decorator chain is allowed to issue against
 // the users and user_roles tables.
@@ -42,10 +47,10 @@ func (r *adminRepositoryService) List(ctx context.Context, filter AdminUserFilte
 	}
 
 	if limit <= 0 {
-		limit = 20
+		limit = defaultUserAdminPageLimit
 	}
-	if limit > 100 {
-		limit = 100
+	if limit > maxUserAdminPageLimit {
+		limit = maxUserAdminPageLimit
 	}
 	if page < 1 {
 		page = 1

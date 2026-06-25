@@ -93,7 +93,7 @@ func (h *RestService) deleteMe(w http.ResponseWriter, r *http.Request) {
 		handler.HandleError(w, err)
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	handler.RespondNoContent(w)
 }
 
 // getMyConfig returns the caller's UserConfig. New users without a
