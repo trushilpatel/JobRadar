@@ -18,7 +18,7 @@ import (
 // Provision is idempotent: callers (the auth middleware on first login) hand
 // it the JWT subject + email and receive a row whether or not one already
 // exists. Delete is hard delete — the impl layer is responsible for calling
-// the Supabase admin API before the DB delete so the two stay in sync.
+// the Clerk admin API before the DB delete so the two stay in sync.
 type Service interface {
 	Get(ctx context.Context, id string) (*usermodel.User, error)
 	GetByEmail(ctx context.Context, email string) (*usermodel.User, error)

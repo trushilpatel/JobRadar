@@ -86,7 +86,7 @@ func (h *RestService) updateMe(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteMe hard-deletes the caller's account. The impl service handles the
-// Supabase admin call before the DB delete; we never invoke either directly.
+// Clerk admin call before the DB delete; we never invoke either directly.
 func (h *RestService) deleteMe(w http.ResponseWriter, r *http.Request) {
 	id := identity.MustFromContext(r.Context())
 	if err := h.next.Delete(r.Context(), id.UserID); err != nil {

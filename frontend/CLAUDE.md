@@ -2,11 +2,11 @@
 
 ## Stack
 
-React 19 · TypeScript (strict) · Vite · TanStack Query v5 · TanStack Table v8 · Zustand · Tailwind · Radix UI · Recharts · Supabase Auth · Vitest + Testing Library.
+React 19 · TypeScript (strict) · Vite · TanStack Query v5 · TanStack Table v8 · Zustand · Tailwind · Radix UI · Recharts · Clerk Auth · Vitest + Testing Library.
 
 ## Project layout
 
-`src/config/` (env, routes, constants) · `src/lib/` (api-client, queryClient, supabase, utils, commands) · `src/types/` (all shared types in `index.ts`) · `src/features/<domain>/` (api + components + hooks + `queryKeys.ts` + `__tests__/` + barrel `index.ts`) · `src/components/ui/` (generic, zero domain knowledge) · `src/components/shared/` (lightly domain-aware) · `src/pages/` (route-level, compose features only).
+`src/config/` (env, routes, constants) · `src/lib/` (api-client, queryClient, resilient-parse, utils, commands) · `src/types/` (all shared types in `index.ts`) · `src/features/<domain>/` (api + components + hooks + `queryKeys.ts` + `__tests__/` + barrel `index.ts`) · `src/components/ui/` (generic, zero domain knowledge) · `src/components/shared/` (lightly domain-aware) · `src/pages/` (route-level, compose features only).
 
 ---
 

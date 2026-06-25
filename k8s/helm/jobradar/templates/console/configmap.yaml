@@ -1,3 +1,7 @@
+# Single source of truth for the console nginx config. The console image ships
+# no app nginx config; this ConfigMap is mounted over /etc/nginx/conf.d/default.conf
+# at runtime. The deployment's checksum/nginx-config annotation rolls the pods
+# whenever this file changes, so edits here take effect on the next `helm upgrade`.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -22,6 +26,14 @@ data:
             try_files $uri =404;
         }
 
+        # Build SHA baked into the image at /version.json. Explicit `=404` (not the
+        # SPA fallback) so a missing file is detectable by the deploy verifier
+        # instead of being masked by index.html. Never cached.
+        location = /version.json {
+            add_header Cache-Control "no-cache";
+            try_files $uri =404;
+        }
+
         location /api/admin/ {
             rewrite ^/api(/admin/.*)$ $1 break;
             proxy_pass         http://jobradar-api:8080;
@@ -41,7 +53,13 @@ data:
             proxy_set_header   X-Forwarded-Proto $scheme;
         }
 
+        # SPA fallback. index.html must NEVER be cached: assets above are
+        # content-hashed and served immutable, so if the browser also caches this
+        # entry document it keeps referencing the previous build's hashed JS/CSS
+        # after a redeploy and silently runs old code. `no-cache` forces
+        # revalidation so a redeploy is picked up on the next load.
         location / {
+            add_header Cache-Control "no-cache";
             try_files $uri $uri/ /index.html;
         }
     }

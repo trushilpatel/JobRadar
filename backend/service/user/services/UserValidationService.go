@@ -90,7 +90,7 @@ func (v *validationService) Provision(ctx context.Context, id, email string) (*u
 
 // looksLikeEmail enforces the cheapest reasonable shape: exactly one '@',
 // a non-empty local part, and a non-empty domain with at least one dot.
-// Anything stricter belongs to Supabase's own validator — duplicating it
+// Anything stricter belongs to Clerk's own validator — duplicating it
 // here would only drift over time.
 func looksLikeEmail(s string) bool {
 	s = strings.TrimSpace(s)

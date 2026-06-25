@@ -81,26 +81,9 @@ describe('AdminUsersPage cache seam — invalidation contracts', () => {
     vi.clearAllMocks()
   })
 
-  it('toggleAdmin invalidates authQueryKeys.adminUsersBase() on success', async () => {
-    vi.mocked(adminAuth.fetchAdminUsers).mockResolvedValue(makeUserListResult())
-    vi.mocked(adminAuth.setUserRoles).mockResolvedValue(undefined)
-
-    render(<AdminUsersPage />, { wrapper: makeWrapper() })
-    const invalidateSpy = vi.spyOn(lastQc, 'invalidateQueries')
-
-    // Wait for the user row to appear
-    await screen.findByText('alice@example.com')
-
-    const grantBtn = screen.getByTitle('Grant admin')
-    fireEvent.click(grantBtn)
-
-    await waitFor(() => {
-      expect(adminAuth.setUserRoles).toHaveBeenCalled()
-    })
-
-    const calledKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey)
-    expect(calledKeys).toContainEqual(authQueryKeys.adminUsersBase())
-  })
+  // NOTE: in-app admin granting was removed in the Clerk migration — roles are
+  // managed in the Clerk dashboard (the page now shows a "Manage admin role in
+  // Clerk" link, no Grant/Revoke button), so there is no toggleAdmin seam to test.
 
   it('toggleStatus invalidates authQueryKeys.adminUsersBase() on success', async () => {
     vi.mocked(adminAuth.fetchAdminUsers).mockResolvedValue(makeUserListResult())

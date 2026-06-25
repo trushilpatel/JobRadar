@@ -54,58 +54,58 @@ func (f *fakeUserRepo) PatchConfig(_ context.Context, _ string, partial userdto.
 	return &partial, nil
 }
 
-// fakeSupabase records DeleteUser calls and can be primed to return an error.
-type fakeSupabase struct {
+// fakeClerk records DeleteUser calls and can be primed to return an error.
+type fakeClerk struct {
 	called bool
 	userID string
 	err    error
 }
 
-func (f *fakeSupabase) DeleteUser(_ context.Context, id string) error {
+func (f *fakeClerk) DeleteUser(_ context.Context, id string) error {
 	f.called = true
 	f.userID = id
 	return f.err
 }
 
-func TestImplService_DeleteCallsSupabaseFirst(t *testing.T) {
+func TestImplService_DeleteCallsClerkFirst(t *testing.T) {
 	t.Parallel()
 	repo := &fakeUserRepo{}
-	sb := &fakeSupabase{}
+	sb := &fakeClerk{}
 	s := usersvc.NewImplService(repo, sb)
 
 	if err := s.Delete(context.Background(), "user-1"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	if !sb.called {
-		t.Fatal("expected supabase DeleteUser to be called")
+		t.Fatal("expected clerk DeleteUser to be called")
 	}
 	if !repo.deleteCalled {
 		t.Fatal("expected repo Delete to be called")
 	}
 	if sb.userID != "user-1" {
-		t.Errorf("supabase userID = %q, want %q", sb.userID, "user-1")
+		t.Errorf("clerk userID = %q, want %q", sb.userID, "user-1")
 	}
 }
 
-func TestImplService_DeleteAbortsOnSupabaseFailure(t *testing.T) {
+func TestImplService_DeleteAbortsOnClerkFailure(t *testing.T) {
 	t.Parallel()
 	repo := &fakeUserRepo{}
-	sb := &fakeSupabase{err: errors.New("supabase down")}
+	sb := &fakeClerk{err: errors.New("clerk down")}
 	s := usersvc.NewImplService(repo, sb)
 
 	err := s.Delete(context.Background(), "user-1")
 	if err == nil {
-		t.Fatal("expected error when supabase fails")
+		t.Fatal("expected error when clerk fails")
 	}
 	if repo.deleteCalled {
-		t.Fatal("repo Delete must not run when supabase delete fails")
+		t.Fatal("repo Delete must not run when clerk delete fails")
 	}
 }
 
 func TestImplService_DeleteRejectsEmptyID(t *testing.T) {
 	t.Parallel()
 	repo := &fakeUserRepo{}
-	s := usersvc.NewImplService(repo, &fakeSupabase{})
+	s := usersvc.NewImplService(repo, &fakeClerk{})
 	err := s.Delete(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected error for empty id")
