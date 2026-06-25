@@ -10,6 +10,8 @@ import (
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 )
 
+var _ ApplicationService = (*validationService)(nil)
+
 // maxNoteLength caps the persisted application note. Larger values are
 // rejected up front rather than relying on DB-level truncation.
 const maxNoteLength = 4000

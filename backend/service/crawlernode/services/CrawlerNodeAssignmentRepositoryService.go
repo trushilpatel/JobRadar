@@ -10,6 +10,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var _ AssignmentStore = (*assignmentRepositoryService)(nil)
+
 // assignmentRepositoryService implements AssignmentStore against company_scan_queue
 // using the locked_by column (migration 079) for node-specific ownership.
 // Terminal — no next, no BaseNodeService.

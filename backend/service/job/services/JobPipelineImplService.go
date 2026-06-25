@@ -20,6 +20,8 @@ import (
 	"gorm.io/datatypes"
 )
 
+var _ PipelineService = (*pipelineService)(nil)
+
 // pipelineLedgerSink is the narrow subset of SeenLedgerStore the pipeline
 // service needs — keeping it small lets the analyzer mock a 2-method
 // double instead of the full ledger surface.

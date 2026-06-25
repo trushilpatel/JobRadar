@@ -14,6 +14,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var _ ApplicationRepository = (*applicationRepository)(nil)
+
 // applicationRepository is the GORM-backed terminal ApplicationRepository
 // implementation. Every method takes userID explicitly; an empty userID is
 // rejected with ErrInternal.WithMessage("user id required") before the DB
@@ -136,6 +138,7 @@ func (s *applicationRepository) Create(ctx context.Context, userID, jobResultID 
 }
 
 // UpdateStage updates the stage of an application owned by userID.
+// Returns ErrNotFound when no row matches (wrong ID or cross-user attempt).
 func (s *applicationRepository) UpdateStage(ctx context.Context, userID, appID string, input dto.UpdateStageInput) (err error) {
 	if userID == "" {
 		return errNoUser()
@@ -147,13 +150,21 @@ func (s *applicationRepository) UpdateStage(ctx context.Context, userID, appID s
 	ctx, span := tracing.Start(ctx, "application.repo.UpdateStage")
 	defer tracing.End(span, &err)
 
-	return s.db.WithContext(ctx).Exec(
-		`UPDATE job_application_tracker SET stage = ?, stage_at = NOW() WHERE id = ? AND user_id = ?`,
+	res := s.db.WithContext(ctx).Exec(
+		`UPDATE job_application_tracker SET stage = ?, stage_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`,
 		input.Stage, id, userID,
-	).Error
+	)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return apperr.ErrNotFound.WithMessage("application not found")
+	}
+	return nil
 }
 
 // UpdateNote updates the note of an application owned by userID.
+// Returns ErrNotFound when no row matches (wrong ID or cross-user attempt).
 func (s *applicationRepository) UpdateNote(ctx context.Context, userID, appID string, input dto.UpdateNoteInput) (err error) {
 	if userID == "" {
 		return errNoUser()
@@ -165,10 +176,17 @@ func (s *applicationRepository) UpdateNote(ctx context.Context, userID, appID st
 	ctx, span := tracing.Start(ctx, "application.repo.UpdateNote")
 	defer tracing.End(span, &err)
 
-	return s.db.WithContext(ctx).Exec(
+	res := s.db.WithContext(ctx).Exec(
 		`UPDATE job_application_tracker SET note = ? WHERE id = ? AND user_id = ?`,
 		input.Note, id, userID,
-	).Error
+	)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return apperr.ErrNotFound.WithMessage("application not found")
+	}
+	return nil
 }
 
 // --- jobsvc.ApplicationWriter interface ---

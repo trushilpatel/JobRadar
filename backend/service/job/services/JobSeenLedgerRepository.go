@@ -15,6 +15,8 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+var _ SeenLedgerStore = (*seenLedgerStore)(nil)
+
 // RetryLedgerEntry describes a per-job retry state update destined for
 // job_pipeline_ledger. Used by UpdateRetryBatch to write distinct
 // retry_count and next_attempt_at values for many rows in a single call.
@@ -345,6 +347,8 @@ func (s *seenLedgerStore) GetActiveJobIDsByCompany(ctx context.Context, companyI
 // LedgerService — narrow façade for crawler workers (HasSeenBatch /
 // MarkSeenBatch / GetActiveJobIDsByCompany / MarkRemovedBatch).
 // -----------------------------------------------------------------------------
+
+var _ LedgerService = (*ledgerService)(nil)
 
 type ledgerService struct {
 	store SeenLedgerStore

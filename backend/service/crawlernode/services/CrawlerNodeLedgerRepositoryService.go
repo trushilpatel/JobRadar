@@ -8,6 +8,8 @@ import (
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
 
+var _ LedgerStore = (*ledgerRepositoryService)(nil)
+
 // ledgerRepositoryService implements LedgerStore as a thin façade over the
 // existing job.LedgerService (JobSeenLedgerRepository).
 // Terminal — no next, no BaseNodeService.

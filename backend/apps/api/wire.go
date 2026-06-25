@@ -14,7 +14,7 @@ import (
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	"github.com/trushilpatel/jobradar/service/dashboard"
 	dashsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
-	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
+	"github.com/trushilpatel/jobradar/service/insights"
 	"github.com/trushilpatel/jobradar/service/job"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	"github.com/trushilpatel/jobradar/service/scan"
@@ -91,7 +91,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 		job.ProviderSet,
 		application.ProviderSet,
 		dashboard.ProviderSet,
-		insightssvc.ProviderSet,
+		insights.ProviderSet,
 		NewApp,
 	)
 	return nil, nil

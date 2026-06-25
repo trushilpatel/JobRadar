@@ -14,6 +14,15 @@ import (
 	"github.com/trushilpatel/jobradar/service/llm/store"
 )
 
+// Token estimation constants for LLM quota reservation.
+const (
+	scoreBatchBaseTokens     = 150
+	scoreTokensPerJob        = 20
+	enrichBatchBaseTokens    = 500
+	enrichBaseTokens         = 50
+	enrichTokensPerCharRatio = 4
+)
+
 // RateLimitSlot describes a single provider/key/model slot's local quota limits.
 type RateLimitSlot struct {
 	SlotID   string
@@ -143,7 +152,7 @@ func (s *rateLimitService) aftercall(ctx context.Context, reqID string, innerErr
 // batch. It intentionally over-counts slightly so the TPM limiter trends
 // toward conservative behaviour under load.
 func estimateScoreBatchTokens(jobs []dto.JobsRelevanceFilterInput) int {
-	return 150 + len(jobs)*20
+	return scoreBatchBaseTokens + len(jobs)*scoreTokensPerJob
 }
 
 // estimateEnrichBatchTokens returns a coarse input-token estimate for an enrich
@@ -151,9 +160,9 @@ func estimateScoreBatchTokens(jobs []dto.JobsRelevanceFilterInput) int {
 // input contributes its raw text length divided by ~4 (rough chars-per-token).
 // We intentionally over-count slightly so the TPM limiter trends conservative.
 func estimateEnrichBatchTokens(inputs []dto.JobPostEnrichInput) int {
-	total := 500
+	total := enrichBatchBaseTokens
 	for _, in := range inputs {
-		total += 50 + len(in.RawText)/4 // 50 = per-job framing overhead
+		total += enrichBaseTokens + len(in.RawText)/enrichTokensPerCharRatio
 	}
 	return total
 }

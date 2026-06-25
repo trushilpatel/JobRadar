@@ -16,6 +16,8 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+var _ JobStore = (*jobStore)(nil)
+
 // jobStore is the GORM-backed implementation of JobReader + JobWriter.
 // It holds NO per-user state — joins to user_job_state happen one level
 // up in the impl service via the UserJobStateRepository.

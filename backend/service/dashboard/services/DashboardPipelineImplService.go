@@ -8,6 +8,8 @@ import (
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 )
 
+var _ PipelineService = (*PipelineImplService)(nil)
+
 // validRetryTargets maps worker → tier for input validation.
 // NATS BackOff/MaxDeliver handles redelivery automatically — no manual drain.
 var validRetryTargets = map[string]map[string]struct{}{
