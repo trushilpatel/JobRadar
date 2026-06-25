@@ -50,3 +50,11 @@ The crawler writes the `reason='fetch'` ledger row **before** publishing to NATS
 ## LLM dependency
 
 Depends on `service/llm/services.JobsRelevanceFilter` — never on `*geminiScorer` directly. Worker-level sleep is independent of the LLM layer's slot/cooldown pacing.
+
+## Adding a new LLM outcome
+
+1. Add a new `routeOutcome` constant in `worker.go`
+2. Handle it in the `processChunk` switch statement
+3. Write the corresponding ledger update via `FilterLedger`
+4. Add a Prometheus metric in `common/metrics/` if it's a new event type
+5. Add a test case in `worker_test.go` covering the new branch

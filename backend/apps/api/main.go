@@ -13,11 +13,8 @@ import (
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/db"
 	"github.com/trushilpatel/jobradar/common/logger"
-	commonredis "github.com/trushilpatel/jobradar/common/redis"
 	"github.com/trushilpatel/jobradar/common/tracing"
-	"github.com/trushilpatel/jobradar/platform/cache"
 	clerkadmin "github.com/trushilpatel/jobradar/platform/clerkadmin"
-	"github.com/trushilpatel/jobradar/platform/ratelimit"
 	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 )
 
@@ -134,76 +131,4 @@ func main() {
 	defer cancel()
 	apiSrv.Shutdown(shutdownCtx) //nolint:errcheck
 	opsSrv.Shutdown(shutdownCtx) //nolint:errcheck
-}
-
-// buildMultiUserPlatform constructs the cache + rate-limiter pair used by
-// the Phase 1 multi-user middleware. Falls back to in-memory implementations
-// when Redis is unreachable — the goal is that a developer can boot the API
-// without standing up Redis first.
-//
-// Rate-limit refill rate is read RPM ÷ 60. Burst equals refill * 2 so a quiet
-// caller has a one-minute headroom to absorb a small spike before getting
-// throttled.
-func buildMultiUserPlatform(cfg *config.Config, log logger.Logger) (cache.Cache, ratelimit.Limiter) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	rdb, err := commonredis.New(ctx, cfg.Redis.URL)
-	if err != nil {
-		log.Warn("redis unavailable; using in-memory cache + limiter", logger.Err(err))
-		return cache.NewMemoryCache(), ratelimit.NewMemoryLimiter(20, 0.5)
-	}
-
-	// Wrap Redis in a bounded in-process LRU. The same instance is fanned
-	// out to the identity middleware and every service-layer cache decorator,
-	// so any Set/Delete performed on this Cache clears the local layer as a
-	// side effect — the user service does not need to know it exists.
-	c := cache.NewLocalCache(
-		cache.NewRedisCache(rdb),
-		time.Duration(cfg.MultiUser.IdentityCacheLocalTTLSeconds)*time.Second,
-		cfg.MultiUser.IdentityCacheLocalMaxEntries,
-	)
-	// Use the write RPM as the conservative budget — read RPM is a higher
-	// limit but the limiter middleware picks the scope by HTTP method so
-	// either RPM is honoured for its scope.
-	burst := float64(cfg.MultiUser.RateLimitWriteRPM)
-	if burst <= 0 {
-		burst = 20
-	}
-	refill := burst / 60.0
-	limiter := ratelimit.NewRedisLimiter(rdb, burst, refill, "ratelimit")
-	return c, limiter
-}
-
-// runRefresher keeps dashboard materialized views up to date.
-// Pipeline stats refresh every 3 minutes; the heatmap every 5 minutes.
-// Both views are also refreshed once immediately on startup so the first
-// API response reflects the current DB state rather than stale MV data.
-func runRefresher(ctx context.Context, log logger.Logger, r dashboardsvc.StatsRefresher) {
-	if err := r.RefreshPipelineStats(ctx); err != nil {
-		log.Error("refresh pipeline stats failed", err)
-	}
-	if err := r.RefreshHeatmap(ctx); err != nil {
-		log.Error("refresh heatmap failed", err)
-	}
-
-	pipelineTicker := time.NewTicker(3 * time.Minute)
-	heatmapTicker := time.NewTicker(5 * time.Minute)
-	defer pipelineTicker.Stop()
-	defer heatmapTicker.Stop()
-
-	for {
-		select {
-		case <-pipelineTicker.C:
-			if err := r.RefreshPipelineStats(ctx); err != nil {
-				log.Error("refresh pipeline stats failed", err)
-			}
-		case <-heatmapTicker.C:
-			if err := r.RefreshHeatmap(ctx); err != nil {
-				log.Error("refresh heatmap failed", err)
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
 }

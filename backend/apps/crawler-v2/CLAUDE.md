@@ -62,3 +62,14 @@ Per-package coverage ≥95% (same as backend gate). Run:
 go test -short -coverprofile=/tmp/cov.out ./...
 go tool cover -func=/tmp/cov.out
 ```
+
+## Adding a new ATS adapter
+
+Touch these files in order:
+
+1. `adapters/ats/{name}/` — new directory with `{name}.go`, `mapper.go`, `{name}_test.go`, `mapper_test.go`, `testdata/`, `{name}.md`
+2. `adapters/ats/{name}/{name}.go` — struct + HTTP methods + compile-time interface check (e.g. `var _ core.ListingFetcher = (*Name)(nil)`)
+3. `adapters/registry.go` — add `"{name}": func(l logger.Logger, c *http.Client) AdapterBundle { return AdapterBundle{Listing: ats{name}.New(l, c)} }` (or ConfigListing for configurable adapters)
+4. `service/company/common/CompanyServiceConstants.go` — add the name to `AdapterTypes` slice
+5. `adapters/registry_test.go` — the test already imports AdapterTypes from CompanyServiceConstants, so no manual list change needed after P2-07 fix
+6. DB migration — add a row in `ats` table for the new adapter name
