@@ -61,6 +61,15 @@ func (realClock) Sleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
+// pipelineStage identifies which processing stage failed, used by handleFailure
+// to route retries correctly. Typed to prevent typos at callsites.
+type pipelineStage string
+
+const (
+	stageFetch  pipelineStage = "fetch"
+	stageEnrich pipelineStage = "enrich"
+)
+
 // adapterBundleFn resolves a crawler-v2 adapter bundle by type name. Injectable
 // for tests; the default is adapters.New, which consults the crawler-v2 registry.
 // Mirrors the seam used by apps/crawler-node/executor.go.
@@ -314,7 +323,7 @@ func chunkFetched(s []fetchedJob, size int) [][]fetchedJob {
 // Only stage="enrich" failures write retry state to job_pipeline_ledger.
 // Returns true when the job reached a terminal routing state; false on ctx
 // cancel, Nak failure, or DLQ publish failure.
-func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj fetchedJob, stage string, err error) bool {
+func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj fetchedJob, stage pipelineStage, err error) bool {
 	if stderrors.Is(err, context.Canceled) || ctx.Err() != nil {
 		return false
 	}
@@ -333,7 +342,7 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 	// ledger write fails, Nak (NATS redelivers) so the job is not lost.
 	// Do NOT Nak on success — NATS BackOff redelivery would just burn quota.
 	var exhausted *domainerr.LLMAllExhaustedError
-	if stderrors.As(err, &exhausted) && stage == "enrich" {
+	if stderrors.As(err, &exhausted) && stage == stageEnrich {
 		retryAfter := exhausted.RetryAfter
 		if retryAfter.IsZero() {
 			retryAfter = w.clock.Now().Add(analyzerBackOff[0])
@@ -376,7 +385,7 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 
 	if fj.retryCount >= analyzerMaxRetries {
 		cause := "exhausted"
-		if stage == "fetch" {
+		if stage == stageFetch {
 			cause = "fetch_failed"
 		}
 		return w.sendToDLQ(ctx, jobLog, fj, cause, err)
@@ -384,15 +393,15 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 
 	// Within retry budget — Nak so NATS redelivers with consumer BackOff.
 	if nerr := fj.msg.Nak(); nerr != nil {
-		metrics.EnricherRetryPublishFailures.WithLabelValues("nats", stage).Inc()
-		jobLog.Error("nak failed", nerr, logger.Str(logger.FieldStage, stage))
+		metrics.EnricherRetryPublishFailures.WithLabelValues("nats", string(stage)).Inc()
+		jobLog.Error("nak failed", nerr, logger.Str(logger.FieldStage, string(stage)))
 		return false
 	}
-	metrics.EnricherRetryPublishesTotal.WithLabelValues("nats", stage).Inc()
+	metrics.EnricherRetryPublishesTotal.WithLabelValues("nats", string(stage)).Inc()
 
 	nextAttemptAt := w.clock.Now().Add(analyzerBackOff[fj.retryCount])
 
-	if stage == "enrich" {
+	if stage == stageEnrich {
 		entry := jobsvc.RetryLedgerEntry{
 			JobID:         fj.summary.ID,
 			RetryCount:    fj.retryCount + 1,
@@ -408,7 +417,7 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 
 	jobLog.Info("scheduled retry via NATS BackOff",
 		logger.Str(logger.FieldNextAttemptAt, nextAttemptAt.UTC().Format(time.RFC3339)),
-		logger.Str(logger.FieldStage, stage),
+		logger.Str(logger.FieldStage, string(stage)),
 	)
 	return true
 }
