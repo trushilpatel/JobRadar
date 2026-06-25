@@ -17,6 +17,8 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+var _ UserJobStateRepository = (*userJobStateRepository)(nil)
+
 // userJobStateRepository is the GORM-backed terminal repo for the
 // user_job_state table. Every method takes userID explicitly; an empty
 // userID is rejected with ErrInternal.WithMessage("user id required") so

@@ -11,6 +11,8 @@ import (
 	"github.com/trushilpatel/jobradar/service/crawlernode/dto"
 )
 
+var _ ScanLogStore = (*scanLogRepositoryService)(nil)
+
 // scanLogRepositoryService implements ScanLogStore by delegating to the
 // existing scan.ScanLogWriter interface.
 // Terminal — no next, no BaseNodeService.

@@ -221,15 +221,3 @@ type TechTagWriter interface {
 type ApplicationWriter interface {
 	InsertAppliedApplication(ctx context.Context, jobResultID string) error
 }
-
-// implLogger is the minimal logging surface implService needs. Tests pass a
-// noop; production wires the platform logger.
-type implLogger interface {
-	Warn(msg string, kv ...any)
-}
-
-// noopLogger swallows every log call. Used as a default so wire setup
-// doesn't have to thread a logger through every test seam.
-type noopLogger struct{}
-
-func (noopLogger) Warn(string, ...any) {}

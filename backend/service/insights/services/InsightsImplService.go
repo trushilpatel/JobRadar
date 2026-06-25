@@ -9,6 +9,8 @@ import (
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 )
 
+var _ InsightsService = (*implService)(nil)
+
 type implService struct {
 	BaseService
 }

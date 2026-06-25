@@ -21,6 +21,8 @@ import (
 	crawlernodemodel "github.com/trushilpatel/jobradar/service/crawlernode/models"
 )
 
+var _ NodeService = (*implService)(nil)
+
 type implService struct {
 	BaseNodeService
 	nodeStore    NodeStore

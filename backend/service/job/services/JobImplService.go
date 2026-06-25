@@ -11,12 +11,15 @@ import (
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/identity"
+	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/platform/cache"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 )
+
+var _ JobService = (*implService)(nil)
 
 // Cache TTLs and key prefixes for the job feed. Page entries hold the raw
 // list of jobs (no per-user state); the per-user overlay is merged AFTER
@@ -41,11 +44,12 @@ type implService struct {
 	appWriter ApplicationWriter
 	ledger    SeenLedgerWriter
 	cache     cache.Cache
-	logger    implLogger
+	logger    logger.Logger
 }
 
-// NewImplService constructs the terminal JobService. cache and logger may
-// be nil — nil cache disables caching entirely, nil logger no-ops.
+// NewImplService constructs the terminal JobService. cache may be nil —
+// nil cache disables caching entirely. log must not be nil; pass
+// logger.NewNoop() in tests that do not inspect log output.
 func NewImplService(
 	jobs JobReader,
 	userState UserJobStateRepository,
@@ -53,10 +57,10 @@ func NewImplService(
 	appWriter ApplicationWriter,
 	ledger SeenLedgerWriter,
 	c cache.Cache,
-	log implLogger,
+	log logger.Logger,
 ) JobService {
 	if log == nil {
-		log = noopLogger{}
+		log = logger.NewNoop()
 	}
 	return &implService{
 		jobs:      jobs,
@@ -143,7 +147,7 @@ func (s *implService) List(ctx context.Context, filter dto.JobFilter, cursor str
 		}
 		overlay, err = s.userState.GetMany(ctx, userID, ids)
 		if err != nil {
-			s.logger.Warn("user_state overlay fetch failed", "err", err.Error())
+			s.logger.Warn("user_state overlay fetch failed", logger.Err(err))
 			overlay = map[string]*jobmodel.UserJobState{}
 		}
 	}
@@ -195,7 +199,7 @@ func (s *implService) listByUserStatus(ctx context.Context, filter dto.JobFilter
 		}
 		overlay, err = s.userState.GetMany(ctx, userID, ids)
 		if err != nil {
-			s.logger.Warn("user_state overlay fetch failed for status tab", "err", err.Error())
+			s.logger.Warn("user_state overlay fetch failed for status tab", logger.Err(err))
 			overlay = map[string]*jobmodel.UserJobState{}
 		}
 	}
@@ -234,7 +238,7 @@ func (s *implService) Get(ctx context.Context, id string) (_ *dto.JobView, err e
 		} else {
 			var serr *apperr.ServiceError
 			if !stderrors.As(err, &serr) || serr.Code != apperr.ErrNotFound.Code {
-				s.logger.Warn("user_state get failed", "err", err.Error())
+				s.logger.Warn("user_state get failed", logger.Err(err))
 			}
 		}
 	}
@@ -260,7 +264,7 @@ func (s *implService) SetSaved(ctx context.Context, id string, saved bool) (err 
 		// Best-effort snapshot action update — analytics history is
 		// orthogonal to per-user state. Failures here never block the save.
 		if err = s.snapshot.UpdateSnapshotAction(ctx, id, jobmodel.StatusSaved); err != nil {
-			s.logger.Warn("snapshot action update failed", "err", err.Error())
+			s.logger.Warn("snapshot action update failed", logger.Err(err))
 		}
 	}
 	s.invalidateUserCounts(ctx, userID)
@@ -292,14 +296,14 @@ func (s *implService) SetStatus(ctx context.Context, id, status string) (err err
 	switch status {
 	case jobmodel.StatusApplied:
 		if err = s.snapshot.UpdateSnapshotAction(ctx, id, jobmodel.StatusApplied); err != nil {
-			s.logger.Warn("snapshot action update failed", "err", err.Error())
+			s.logger.Warn("snapshot action update failed", logger.Err(err))
 		}
 		if err = s.appWriter.InsertAppliedApplication(ctx, id); err != nil {
-			s.logger.Warn("applied application insert failed", "err", err.Error())
+			s.logger.Warn("applied application insert failed", logger.Err(err))
 		}
 	case jobmodel.StatusDismissed:
 		if err = s.snapshot.UpdateSnapshotAction(ctx, id, jobmodel.StatusDismissed); err != nil {
-			s.logger.Warn("snapshot action update failed", "err", err.Error())
+			s.logger.Warn("snapshot action update failed", logger.Err(err))
 		}
 	}
 	return nil
@@ -386,10 +390,10 @@ func (s *implService) Dismiss(ctx context.Context, id string, reason, note strin
 
 	// Best-effort side effects.
 	if err = s.ledger.UpdateSeenReason(ctx, job.JobPostID, jobcommon.SeenReasonUserDismissed); err != nil {
-		s.logger.Warn("ledger seen reason update failed", "err", err.Error())
+		s.logger.Warn("ledger seen reason update failed", logger.Err(err))
 	}
 	if err = s.snapshot.UpdateSnapshotAction(ctx, id, jobmodel.StatusDismissed); err != nil {
-		s.logger.Warn("snapshot action update failed", "err", err.Error())
+		s.logger.Warn("snapshot action update failed", logger.Err(err))
 	}
 	return nil
 }
@@ -416,11 +420,11 @@ func (s *implService) BulkDismiss(ctx context.Context, ids []string, reason, not
 	jobPostIDs, perr := s.jobs.GetJobPostIDs(ctx, ids)
 	if perr == nil && len(jobPostIDs) > 0 {
 		if err = s.ledger.UpdateSeenReasonBatch(ctx, jobPostIDs, jobcommon.SeenReasonUserDismissed); err != nil {
-			s.logger.Warn("ledger seen reason batch update failed", "err", err.Error())
+			s.logger.Warn("ledger seen reason batch update failed", logger.Err(err))
 		}
 	}
 	if err = s.snapshot.UpdateSnapshotActionBatch(ctx, ids, jobmodel.StatusDismissed); err != nil {
-		s.logger.Warn("snapshot action batch update failed", "err", err.Error())
+		s.logger.Warn("snapshot action batch update failed", logger.Err(err))
 	}
 	return nil
 }
@@ -473,7 +477,7 @@ func (s *implService) invalidateUserCounts(ctx context.Context, userID string) {
 		return
 	}
 	if err := s.cache.Delete(ctx, userCountsKey(userID)); err != nil {
-		s.logger.Warn("user counts cache invalidation failed", "user_id", userID, "err", err.Error())
+		s.logger.Warn("user counts cache invalidation failed", logger.Str(logger.FieldUserID, userID), logger.Err(err))
 	}
 }
 

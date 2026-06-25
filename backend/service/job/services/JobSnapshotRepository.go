@@ -10,6 +10,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var _ SnapshotWriter = (*snapshotStore)(nil)
+
 // snapshotStore is the GORM-backed implementation of SnapshotWriter
 // (interface declared in JobService.go).
 type snapshotStore struct {

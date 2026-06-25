@@ -139,7 +139,7 @@ func TestRepo_UpdateStage_HappyAndBadID(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	_ = created // happy-path UpdateStage uses Postgres NOW(); covered by error branch + integration tier.
+	_ = created // happy-path covered by not-found and cross-user sub-tests below.
 
 	t.Run("invalid app_id", func(t *testing.T) {
 		err := repo.UpdateStage(context.Background(), "u1", "not-a-number", dto.UpdateStageInput{Stage: "applied"})
@@ -149,6 +149,33 @@ func TestRepo_UpdateStage_HappyAndBadID(t *testing.T) {
 		var se *domainerrs.ServiceError
 		if !stderrors.As(err, &se) || se.Code != "BAD_REQUEST" {
 			t.Fatalf("expected BAD_REQUEST ServiceError, got %#v", err)
+		}
+	})
+
+	t.Run("not found — non-existent id", func(t *testing.T) {
+		err := repo.UpdateStage(context.Background(), "u1", "99999", dto.UpdateStageInput{Stage: "applied"})
+		if err == nil {
+			t.Fatal("expected ErrNotFound for non-existent app id, got nil")
+		}
+		var se *domainerrs.ServiceError
+		if !stderrors.As(err, &se) || se.Code != "NOT_FOUND" {
+			t.Fatalf("expected NOT_FOUND ServiceError, got %#v", err)
+		}
+	})
+
+	t.Run("not found — cross-user attempt", func(t *testing.T) {
+		created2, err := repo.Create(context.Background(), "u2", "j1", dto.CreateApplicationInput{Stage: "applied"})
+		if err != nil {
+			t.Fatalf("Create u2 row: %v", err)
+		}
+		// u1 tries to update a row owned by u2.
+		err = repo.UpdateStage(context.Background(), "u1", itoa(created2.ID), dto.UpdateStageInput{Stage: "phone_screen"})
+		if err == nil {
+			t.Fatal("expected ErrNotFound for cross-user update, got nil")
+		}
+		var se *domainerrs.ServiceError
+		if !stderrors.As(err, &se) || se.Code != "NOT_FOUND" {
+			t.Fatalf("expected NOT_FOUND ServiceError, got %#v", err)
 		}
 	})
 
@@ -184,6 +211,33 @@ func TestRepo_UpdateNote_HappyAndBadID(t *testing.T) {
 		var se *domainerrs.ServiceError
 		if !stderrors.As(err, &se) || se.Code != "BAD_REQUEST" {
 			t.Fatalf("expected BAD_REQUEST ServiceError, got %#v", err)
+		}
+	})
+
+	t.Run("not found — non-existent id", func(t *testing.T) {
+		err := repo.UpdateNote(context.Background(), "u1", "99999", dto.UpdateNoteInput{Note: "x"})
+		if err == nil {
+			t.Fatal("expected ErrNotFound for non-existent app id, got nil")
+		}
+		var se *domainerrs.ServiceError
+		if !stderrors.As(err, &se) || se.Code != "NOT_FOUND" {
+			t.Fatalf("expected NOT_FOUND ServiceError, got %#v", err)
+		}
+	})
+
+	t.Run("not found — cross-user attempt", func(t *testing.T) {
+		created2, err := repo.Create(context.Background(), "u2", "j1", dto.CreateApplicationInput{Stage: "applied"})
+		if err != nil {
+			t.Fatalf("Create u2 row: %v", err)
+		}
+		// u1 tries to update a note on a row owned by u2.
+		err = repo.UpdateNote(context.Background(), "u1", itoa(created2.ID), dto.UpdateNoteInput{Note: "hijack"})
+		if err == nil {
+			t.Fatal("expected ErrNotFound for cross-user note update, got nil")
+		}
+		var se *domainerrs.ServiceError
+		if !stderrors.As(err, &se) || se.Code != "NOT_FOUND" {
+			t.Fatalf("expected NOT_FOUND ServiceError, got %#v", err)
 		}
 	})
 

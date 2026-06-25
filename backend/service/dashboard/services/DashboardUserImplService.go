@@ -12,6 +12,8 @@ import (
 	insightscommon "github.com/trushilpatel/jobradar/service/insights/common"
 )
 
+var _ UserDashboardService = (*userDashboardImplService)(nil)
+
 // userDashboardImplService is the terminal implementation of UserDashboardService.
 // It aggregates DB data from UserDashboardStore and cross-service data from ApplicationListReader.
 type userDashboardImplService struct {

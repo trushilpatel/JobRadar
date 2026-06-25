@@ -12,6 +12,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var _ InsightsService = (*repositoryService)(nil)
+
 type repositoryService struct {
 	db  *gorm.DB
 	log logger.Logger

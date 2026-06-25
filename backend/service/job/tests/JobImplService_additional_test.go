@@ -7,6 +7,7 @@ import (
 	"time"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/common/logger"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
@@ -358,10 +359,12 @@ type recordingLogger struct {
 	lastMsg   string
 }
 
-func (r *recordingLogger) Warn(msg string, _ ...any) {
-	r.warnCount++
-	r.lastMsg = msg
-}
+func (r *recordingLogger) Debug(_ string, _ ...logger.Field)           {}
+func (r *recordingLogger) Info(_ string, _ ...logger.Field)            {}
+func (r *recordingLogger) Warn(msg string, _ ...logger.Field)          { r.warnCount++; r.lastMsg = msg }
+func (r *recordingLogger) Error(_ string, _ error, _ ...logger.Field)  {}
+func (r *recordingLogger) With(_ ...logger.Field) logger.Logger        { return r }
+func (r *recordingLogger) WithContext(_ context.Context) logger.Logger { return r }
 
 // bulkFailUserState wraps fakeUserState with an UpsertBulkDismiss override
 // that returns a configured error. Used to test the BulkDismiss store-error

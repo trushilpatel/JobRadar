@@ -10,6 +10,8 @@ import (
 	"github.com/trushilpatel/jobradar/service/crawlernode/dto"
 )
 
+var _ NodeService = (*validationService)(nil)
+
 type validationService struct {
 	BaseNodeService
 }
