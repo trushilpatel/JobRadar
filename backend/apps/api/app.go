@@ -74,17 +74,26 @@ func (a *App) Handlers() []handler.RouteGroup {
 }
 
 // AtsHandler returns the ATS router for admin mounting.
-func (a *App) AtsHandler() *atssvc.AtsRestRouter {
+func (a *App) AtsHandler() handler.RouteGroup {
+	if a.atsHandler == nil {
+		return nil
+	}
 	return a.atsHandler
 }
 
 // InsightsHandler returns the insights router for admin mounting.
-func (a *App) InsightsHandler() *insightssvc.RestRouter {
+func (a *App) InsightsHandler() handler.RouteGroup {
+	if a.insightsHandler == nil {
+		return nil
+	}
 	return a.insightsHandler
 }
 
 // CompanyAdminHandler returns the company admin router for admin mounting.
-func (a *App) CompanyAdminHandler() *companysvc.AdminRestRouter {
+func (a *App) CompanyAdminHandler() handler.RouteGroup {
+	if a.companyAdminHandler == nil {
+		return nil
+	}
 	return a.companyAdminHandler
 }
 

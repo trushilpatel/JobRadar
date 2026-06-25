@@ -118,7 +118,7 @@ func (w *Worker) fetchOne(ctx context.Context, fetchLog logger.Logger, msg *js.M
 		jobLog.Error("fetch job post failed", err)
 		metrics.EnricherJobsTotal.WithLabelValues("error").Inc()
 		fj := fetchedJob{summary: summary, msg: msg, retryCount: retryCount, ctx: msgCtx}
-		w.handleFailure(msgCtx, fetchLog, fj, "fetch", fmt.Errorf("fetch job post: %w", err))
+		w.handleFailure(msgCtx, fetchLog, fj, stageFetch, fmt.Errorf("fetch job post: %w", err))
 		return fetchedJob{}, false
 	}
 

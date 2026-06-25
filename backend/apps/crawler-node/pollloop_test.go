@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/trushilpatel/jobradar/common/logger"
 )
 
 // --- Mock OrchestratorClient for PollLoop tests ---
@@ -46,7 +48,7 @@ func (m *mockExecutor) Execute(ctx context.Context, unit WorkUnit) error {
 // --- Helpers ---
 
 func newTestPollLoop(cfg *Config, client OrchestratorClient, exec AdapterExecutor) *PollLoop {
-	return NewPollLoop(cfg, client, exec)
+	return NewPollLoop(cfg, client, exec, logger.NewNoop())
 }
 
 func testConfig(pollInterval, maxConcurrent int) *Config {

@@ -7,22 +7,17 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters"
 	"github.com/trushilpatel/jobradar/common/logger"
+	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 )
 
-var allAdapterTypes = []string{
-	"apple", "ashby", "deel", "eightfold", "gem",
-	"google", "greenhouse", "lever", "meta", "microsoft",
-	"netflix", "rippling", "uber", "workday",
-}
-
-func TestRegistry_ContainsAll14Adapters(t *testing.T) {
+func TestRegistry_ContainsAllAdapters(t *testing.T) {
 	reg := adapters.Registry()
-	for _, typ := range allAdapterTypes {
+	for _, typ := range companycommon.AdapterTypes {
 		if _, ok := reg[typ]; !ok {
 			t.Errorf("Registry() missing adapter type %q", typ)
 		}
 	}
-	if got, want := len(reg), len(allAdapterTypes); got != want {
+	if got, want := len(reg), len(companycommon.AdapterTypes); got != want {
 		t.Errorf("Registry() len = %d, want %d", got, want)
 	}
 }
@@ -32,7 +27,7 @@ func TestRegistry_EachConstructorReturnsValidBundle(t *testing.T) {
 	client := &http.Client{}
 	reg := adapters.Registry()
 
-	for _, typ := range allAdapterTypes {
+	for _, typ := range companycommon.AdapterTypes {
 		ctor := reg[typ]
 		bundle := ctor(log, client)
 		// Every adapter must expose at least a ListingFetcher or ConfigurableListingFetcher.

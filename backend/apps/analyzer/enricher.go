@@ -190,7 +190,7 @@ func (w *Worker) routeMissingResult(ctx context.Context, fetchLog logger.Logger,
 		)
 		return w.sendToDLQ(ctx, jobLog, fj, "llm_result_missing", err)
 	}
-	return w.handleFailure(ctx, fetchLog, fj, "enrich", err)
+	return w.handleFailure(ctx, fetchLog, fj, stageEnrich, err)
 }
 
 // processResult applies the drop rules and either saves the job or marks the
@@ -257,7 +257,7 @@ func (w *Worker) routeBatchFailure(ctx context.Context, fetchLog logger.Logger, 
 
 	var retried, dlqed, publishFailed int
 	for _, fj := range group {
-		ok := w.handleFailure(routeCtx, fetchLog, fj, "enrich", err)
+		ok := w.handleFailure(routeCtx, fetchLog, fj, stageEnrich, err)
 		if !ok {
 			publishFailed++
 			continue

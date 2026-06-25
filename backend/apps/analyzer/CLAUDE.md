@@ -64,3 +64,9 @@ Duplicate inserts: `SaveEnrichedJob` tolerates `ErrJobAlreadyExists` from `Inser
 - Snapshot write (`job_analytics`) is non-fatal — the job row is already saved if it fails
 - Depends on `service/llm/services.JobPostEnricher` — never on `*geminiScorer` directly
 - Rate limiter is per-adapter — Greenhouse, Lever, Ashby each get their own bucket
+
+## Adding a new drop condition
+
+1. Add the check in `dropJob()` in `worker.go`
+2. Add a metric increment in `common/metrics/` for the new drop reason
+3. Add a test case in `worker_test.go` verifying the condition drops the job
