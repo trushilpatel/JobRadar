@@ -548,6 +548,15 @@ jobs:
               --set api.clerkIssuerUrl=${{ secrets.CLERK_ISSUER_URL }} \
               --wait --timeout 10m
           }
+          # Dump why the rollout is unhappy — distinguishes a transient apiserver
+          # hiccup from a pod that genuinely can't become Ready on the starved node.
+          dump_diag() {
+            echo "--- pods ---"
+            kubectl get pods -n jobradar-local -o wide 2>/dev/null || true
+            echo "--- recent warnings ---"
+            kubectl get events -n jobradar-local --field-selector type=Warning \
+              --sort-by=.lastTimestamp 2>/dev/null | tail -20 || true
+          }
           # The 1-OCPU INFRA node's k3s apiserver can time out a single create
           # request under rollout load ("context deadline exceeded"). Retry — a
           # failed upgrade can leave the release in pending-*, which blocks the
@@ -560,12 +569,13 @@ jobs:
             fi
             status=$(helm status jobradar -n jobradar-local -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo unknown)
             echo "Attempt ${attempt} failed; release status=${status}"
+            dump_diag
             case "$status" in
               pending-*) echo "Clearing stuck release before retry"; helm rollback jobradar -n jobradar-local 2>/dev/null || true ;;
             esac
             [ "$attempt" -lt 3 ] && sleep 30
           done
-          echo "::error::Helm upgrade INFRA failed after 3 attempts"
+          echo "::error::Helm upgrade INFRA failed after 3 attempts — see pod/event diagnostics above"
           exit 1
           REMOTE
 
@@ -703,6 +713,15 @@ jobs:
               --set images.crawlerNode.tag=${{ steps.tags.outputs.crawler_node }} \
               --wait --timeout 10m
           }
+          # Dump why the rollout is unhappy — distinguishes a transient apiserver
+          # hiccup from a pod that genuinely can't become Ready on the starved node.
+          dump_diag() {
+            echo "--- pods ---"
+            kubectl get pods -n jobradar-local -o wide 2>/dev/null || true
+            echo "--- recent warnings ---"
+            kubectl get events -n jobradar-local --field-selector type=Warning \
+              --sort-by=.lastTimestamp 2>/dev/null | tail -20 || true
+          }
           # The 1-OCPU APP node's k3s apiserver can time out a single create
           # request under rollout load ("context deadline exceeded"). Retry — a
           # failed upgrade can leave the release in pending-*, which blocks the
@@ -715,11 +734,12 @@ jobs:
             fi
             status=$(helm status jobradar -n jobradar-local -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo unknown)
             echo "Attempt ${attempt} failed; release status=${status}"
+            dump_diag
             case "$status" in
               pending-*) echo "Clearing stuck release before retry"; helm rollback jobradar -n jobradar-local 2>/dev/null || true ;;
             esac
             [ "$attempt" -lt 3 ] && sleep 30
           done
-          echo "::error::Helm upgrade APP failed after 3 attempts"
+          echo "::error::Helm upgrade APP failed after 3 attempts — see pod/event diagnostics above"
           exit 1
           REMOTE
