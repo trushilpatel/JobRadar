@@ -12,11 +12,8 @@ import (
 	"github.com/trushilpatel/jobradar/platform/cache"
 	clerkadmin "github.com/trushilpatel/jobradar/platform/clerkadmin"
 	"github.com/trushilpatel/jobradar/platform/ratelimit"
-	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	auditsvc "github.com/trushilpatel/jobradar/service/audit/services"
-	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
-	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
 	"gorm.io/gorm"
 )
@@ -33,9 +30,9 @@ func buildMultiUser(
 	clerkClient clerkadmin.Client,
 	log logger.Logger,
 	pipelineSvc dashboardsvc.PipelineService,
-	insightsRouter *insightssvc.RestRouter,
-	companyAdminRouter *companysvc.AdminRestRouter,
-	atsRouter *atssvc.AtsRestRouter,
+	insightsRouter handler.RouteGroup,
+	companyAdminRouter handler.RouteGroup,
+	atsRouter handler.RouteGroup,
 ) *multiUser {
 	userRepo := usersvc.NewRepositoryService(db)
 	userImpl := usersvc.NewImplService(userRepo, clerkClient)
