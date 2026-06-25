@@ -66,21 +66,26 @@ spec:
             limits:
               memory: "64Mi"
               cpu: "500m"
+          # timeoutSeconds is explicit (not the 1s default) and failureThreshold
+          # is generous: the production node is a throttled single-OCPU instance
+          # (high CPU steal / iowait), so a healthy worker can take >1s to answer
+          # under load. A tight probe would kill it and churn restarts.
           livenessProbe:
             httpGet:
               path: /health
               port: 9101
-            initialDelaySeconds: 10
+            initialDelaySeconds: 15
             periodSeconds: 30
-            failureThreshold: 3
+            timeoutSeconds: 5
+            failureThreshold: 6
           readinessProbe:
             httpGet:
               path: /ready
               port: 9101
             initialDelaySeconds: 5
             periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 5
+            timeoutSeconds: 5
+            failureThreshold: 6
           securityContext:
             {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
       securityContext:
