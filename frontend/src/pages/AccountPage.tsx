@@ -238,11 +238,11 @@ export function AccountPage() {
                 disabled={patchConfig.isPending || configLoading}
               />
             </div>
-            {userConfig?.show_keyboard_shortcuts && (
-              <div className="mt-4 border-t border-[var(--border)] pt-4">
-                <ShortcutReference />
-              </div>
-            )}
+            {/* Static registry-derived reference — always visible. The toggle
+                above only controls in-button hint glyphs, not this table. */}
+            <div className="mt-4 border-t border-[var(--border)] pt-4">
+              <ShortcutReference />
+            </div>
           </section>
         </ErrorBoundary>
 
