@@ -2,7 +2,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { MapPin, Wifi, Bookmark, X, Paperclip } from 'lucide-react'
 import type { Job } from '@/types'
 import { DataTableColumnHeader } from '@/components/ui/data-table'
-import { formatRelativeTime, cn, formatSalary } from '@/lib/utils/utils'
+import { formatRelativeTime, formatExactDateTime, cn, formatSalary } from '@/lib/utils/utils'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 
 export interface JobTableActions {
@@ -146,9 +146,14 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       accessorKey: 'added_at',
       size: 100,
       header: ({ column }) => <DataTableColumnHeader column={column} title="Added" />,
-      cell: ({ getValue }) => (
-        <span className="text-xs text-muted">{formatRelativeTime(getValue() as string)}</span>
-      ),
+      cell: ({ getValue }) => {
+        const addedAt = getValue() as string
+        return (
+          <span className="text-xs text-muted" title={`Added ${formatExactDateTime(addedAt)}`}>
+            {formatRelativeTime(addedAt)}
+          </span>
+        )
+      },
     },
 
     // ── 7. Dismiss (hover-revealed) ────────────────────────────────────────

@@ -16,7 +16,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { Job, JobStatus } from '@/types'
 import { JOB_STATUS } from '@/config/constants/jobStatus'
-import { formatRelativeTime, cn, formatSalary } from '@/lib/utils/utils'
+import { formatRelativeTime, formatExactDateTime, cn, formatSalary } from '@/lib/utils/utils'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { StatusSelect } from './StatusSelect'
 import { setJobNotes } from '../api/jobs.api'
@@ -169,7 +169,13 @@ export function JobDetailPanel({
             <p className="text-base font-semibold text-primary leading-tight">{job.title}</p>
             <p className="text-sm text-muted mt-0.5">
               {companyName}
-              <span className="text-placeholder"> · added {formatRelativeTime(job.added_at)}</span>
+              <span
+                className="text-placeholder"
+                title={`Added ${formatExactDateTime(job.added_at)}`}
+              >
+                {' '}
+                · added {formatRelativeTime(job.added_at)}
+              </span>
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
