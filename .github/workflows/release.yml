@@ -534,8 +534,11 @@ jobs:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
-            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install jobradar /tmp/jobradar-chart \
+          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" bash -s <<'REMOTE'
+          set -uo pipefail
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+          run_upgrade() {
+            helm upgrade --install jobradar /tmp/jobradar-chart \
               --namespace jobradar-local \
               --create-namespace \
               -f /tmp/values.prod-infra.yaml \
@@ -543,7 +546,28 @@ jobs:
               --set images.console.tag=${{ steps.tags.outputs.console }} \
               --set api.clerkJwksUrl=${{ secrets.CLERK_JWKS_URL }} \
               --set api.clerkIssuerUrl=${{ secrets.CLERK_ISSUER_URL }} \
-              --wait --timeout 10m"
+              --wait --timeout 10m
+          }
+          # The 1-OCPU INFRA node's k3s apiserver can time out a single create
+          # request under rollout load ("context deadline exceeded"). Retry — a
+          # failed upgrade can leave the release in pending-*, which blocks the
+          # next attempt, so clear that with a rollback before retrying.
+          for attempt in 1 2 3; do
+            echo "Helm upgrade INFRA — attempt ${attempt}/3"
+            if run_upgrade; then
+              echo "Helm upgrade INFRA succeeded on attempt ${attempt}"
+              exit 0
+            fi
+            status=$(helm status jobradar -n jobradar-local -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo unknown)
+            echo "Attempt ${attempt} failed; release status=${status}"
+            case "$status" in
+              pending-*) echo "Clearing stuck release before retry"; helm rollback jobradar -n jobradar-local 2>/dev/null || true ;;
+            esac
+            [ "$attempt" -lt 3 ] && sleep 30
+          done
+          echo "::error::Helm upgrade INFRA failed after 3 attempts"
+          exit 1
+          REMOTE
 
       # Fail loudly if the live console is still serving a stale bundle. Compares
       # the SHA baked into the running image's /version.json against the tag we
@@ -664,8 +688,11 @@ jobs:
           HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
-            "KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install jobradar /tmp/jobradar-chart \
+          ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" bash -s <<'REMOTE'
+          set -uo pipefail
+          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+          run_upgrade() {
+            helm upgrade --install jobradar /tmp/jobradar-chart \
               --namespace jobradar-local \
               --create-namespace \
               -f /tmp/values.prod-app.yaml \
@@ -674,4 +701,25 @@ jobs:
               --set images.enricher.tag=${{ steps.tags.outputs.enricher }} \
               --set images.orchestrator.tag=${{ steps.tags.outputs.orchestrator }} \
               --set images.crawlerNode.tag=${{ steps.tags.outputs.crawler_node }} \
-              --wait --timeout 10m"
+              --wait --timeout 10m
+          }
+          # The 1-OCPU APP node's k3s apiserver can time out a single create
+          # request under rollout load ("context deadline exceeded"). Retry — a
+          # failed upgrade can leave the release in pending-*, which blocks the
+          # next attempt, so clear that with a rollback before retrying.
+          for attempt in 1 2 3; do
+            echo "Helm upgrade APP — attempt ${attempt}/3"
+            if run_upgrade; then
+              echo "Helm upgrade APP succeeded on attempt ${attempt}"
+              exit 0
+            fi
+            status=$(helm status jobradar -n jobradar-local -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo unknown)
+            echo "Attempt ${attempt} failed; release status=${status}"
+            case "$status" in
+              pending-*) echo "Clearing stuck release before retry"; helm rollback jobradar -n jobradar-local 2>/dev/null || true ;;
+            esac
+            [ "$attempt" -lt 3 ] && sleep 30
+          done
+          echo "::error::Helm upgrade APP failed after 3 attempts"
+          exit 1
+          REMOTE
