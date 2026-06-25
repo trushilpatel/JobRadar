@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,12 +15,11 @@ import (
 
 func main() {
 	cfg := Load()
+	log := logger.Init("crawler-node")
 	if err := cfg.Validate(); err != nil {
-		fmt.Fprintf(os.Stderr, "crawler-node: %v\n", err)
+		log.Error("crawler-node: invalid config", err)
 		os.Exit(1)
 	}
-
-	log := logger.Init("crawler-node")
 
 	shutdown := tracing.Init("jobradar-crawler-node", "", log)
 	defer shutdown()
@@ -37,8 +35,7 @@ func main() {
 
 	client := newHTTPClient(cfg)
 	exec := newAdapterExecutor(client, adapters.New, adapterHTTPClient, log)
-	loop := NewPollLoop(cfg, client, exec)
-	loop.log = log
+	loop := NewPollLoop(cfg, client, exec, log)
 
 	log.Info("crawler-node starting",
 		logger.Str("orchestrator_url", cfg.OrchestratorURL),

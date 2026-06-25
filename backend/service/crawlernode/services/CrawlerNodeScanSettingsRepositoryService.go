@@ -8,6 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var _ ScanSettingsReader = (*scanSettingsRepositoryService)(nil)
+
 // scanSettingsRow is the minimal DB projection of company_scan_settings.
 type scanSettingsRow struct {
 	AdapterConfig *string `gorm:"column:adapter_config"`

@@ -38,20 +38,10 @@ type SchedulerService interface {
 }
 
 // Service defines all business operations for the scan domain.
+// It embeds SchedulerService so the scheduler worker can depend on the
+// narrower interface while the REST decorator chain uses the full Service.
 type Service interface {
-	// EnqueueDue mirrors SchedulerService.EnqueueDue but is exposed on the
-	// REST decorator chain too — the API binary uses the same Service
-	// interface for its scheduler-style endpoints.
-	EnqueueDue(ctx context.Context, intervalMinutes int) (SchedulerCycleResult, error)
-	// ResetStuck resets queue rows stuck in 'running' state whose heartbeat has
-	// expired. Returns the count of rows recovered — zero is not an error.
-	ResetStuck(ctx context.Context, staleDur time.Duration) (int, error)
-	PurgeInactive(ctx context.Context) (int, error)
-	// RetryDueJobs re-publishes due retry-ledger jobs or escalates them.
-	RetryDueJobs(ctx context.Context) error
-	// EscalateStuckRetryJobs promotes reason='retry' rows that are stuck past
-	// the 4-hour threshold to reason='error'.
-	EscalateStuckRetryJobs(ctx context.Context) (int64, error)
+	SchedulerService
 	TriggerScan(ctx context.Context, companyID string) error
 	TriggerScanAll(ctx context.Context) (int, error)
 	GetStats(ctx context.Context, companyID string) (*dto.ScanStatsView, error)

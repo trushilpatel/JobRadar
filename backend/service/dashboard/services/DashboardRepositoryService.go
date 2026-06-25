@@ -9,6 +9,8 @@ import (
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 )
 
+var _ UserDashboardStore = (*userDashboardRepository)(nil)
+
 // UserDashboardStore provides all DB queries for the user dashboard panels.
 type UserDashboardStore interface {
 	GetProgressStats(ctx context.Context, userID string) (dto.ProgressStats, error)
@@ -184,6 +186,8 @@ type PipelineStore interface {
 	GetPipelineDBStats(ctx context.Context) (dto.PipelineDBStats, error)
 }
 
+var _ PipelineStore = (*pipelineRepository)(nil)
+
 type pipelineRepository struct {
 	db *gorm.DB
 }
@@ -231,6 +235,8 @@ type StatsRefresher interface {
 	RefreshPipelineStats(ctx context.Context) error
 	RefreshHeatmap(ctx context.Context) error
 }
+
+var _ StatsRefresher = (*dashboardRefresher)(nil)
 
 type dashboardRefresher struct{ db *gorm.DB }
 

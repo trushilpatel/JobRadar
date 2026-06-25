@@ -18,6 +18,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	"github.com/trushilpatel/jobradar/common/worker"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/location"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -25,17 +26,11 @@ import (
 	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 )
 
-// filterMaxRetries is the max NATS delivery count before a job goes to DLQ
-// on the infra-error path. Must equal len(filterBackOff) so that every Nak'd
-// delivery has a BackOff entry and the (filterMaxRetries+1)-th delivery is DLQ'd.
-// Must stay in sync with MaxDeliver on the JOBS_RAW consumer in
-// common/jetstream/streams.go (MaxDeliver:3 → 2 Nak tiers before Term).
-const filterMaxRetries = 2
+// filterMaxRetries and filterBackOff are sourced from common/worker to stay
+// in sync with the NATS consumer configuration without manual duplication.
+const filterMaxRetries = worker.NATSWorkerMaxRetries
 
-// filterBackOff mirrors the JOBS_RAW consumer BackOff config so the ledger's
-// next_attempt_at field stays meaningful for dashboards on the infra-error path.
-// Must match the BackOff slice in ConsumerFilterWorkers (common/jetstream/streams.go).
-var filterBackOff = []time.Duration{30 * time.Second, 2 * time.Minute}
+var filterBackOff = worker.NATSWorkerBackOff
 
 // filterRPDExhaustionRetryAfter is the minimum next_attempt_at applied when
 // the LLM router reports zero RetryAfter on an LLMAllExhaustedError (RPD cap
@@ -150,7 +145,11 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 	fetchLog := w.log.With(logger.Str(logger.FieldFetchID, fetchID))
 
 	items := make([]chunkItem, 0, len(msgs))
-	// TODO: extract W3C trace context from msg headers via tracing.ExtractNATS once available
+	// Link this span to the upstream publisher's span by extracting the W3C
+	// traceparent injected into the first message's headers.
+	if len(msgs) > 0 {
+		ctx = tracing.ExtractNATS(ctx, msgs[0].Headers())
+	}
 	for _, msg := range msgs {
 		var job core.JobSummary
 		if jerr := json.Unmarshal(msg.Data(), &job); jerr != nil {

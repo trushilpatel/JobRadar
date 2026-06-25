@@ -8,9 +8,12 @@ import (
 	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/identity"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/dashboard/dto"
 	insightscommon "github.com/trushilpatel/jobradar/service/insights/common"
 )
+
+var _ UserDashboardService = (*userDashboardImplService)(nil)
 
 // userDashboardImplService is the terminal implementation of UserDashboardService.
 // It aggregates DB data from UserDashboardStore and cross-service data from ApplicationListReader.
@@ -80,13 +83,12 @@ func (s *userDashboardImplService) GetInterviews(ctx context.Context) (_ []dto.I
 }
 
 // displayStageMap maps DB stage keys to their UI display labels.
-// Defined locally to avoid coupling to the application domain's constants package.
 var displayStageMap = map[string]string{
-	"applied":      "Waiting",
-	"phone_screen": "Interviewing",
-	"technical":    "Interviewing",
-	"final_round":  "Interviewing",
-	"offer":        "Offer received",
+	appcommon.StageApplied:     appcommon.DisplayStageWaiting,
+	appcommon.StagePhoneScreen: appcommon.DisplayStageInterviewing,
+	appcommon.StageTechnical:   appcommon.DisplayStageInterviewing,
+	appcommon.StageFinalRound:  appcommon.DisplayStageInterviewing,
+	appcommon.StageOffer:       appcommon.DisplayStageOffer,
 }
 
 // toDisplayStage maps a raw DB application stage to its UI display label.

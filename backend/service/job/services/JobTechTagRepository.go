@@ -10,6 +10,8 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+var _ TechTagWriter = (*techTagStore)(nil)
+
 // techTagStore is the GORM-backed implementation of TechTagWriter
 // (interface declared in JobService.go).
 type techTagStore struct {

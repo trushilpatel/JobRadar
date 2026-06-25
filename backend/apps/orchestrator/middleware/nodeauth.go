@@ -49,7 +49,7 @@ func RequireNodeToken(store NodeAuthStore, tokenSecret string) func(http.Handler
 				return
 			}
 
-			if node.Status != "active" {
+			if node.Status != crawlernodecommon.NodeStatusActive {
 				handler.HandleError(w, domainerrs.ErrNodeDisabled)
 				return
 			}

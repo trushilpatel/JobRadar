@@ -11,6 +11,8 @@ import (
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
 
+var _ ApplicationService = (*implService)(nil)
+
 // implService is the terminal ApplicationService implementation. It pulls
 // the caller's userID from ctx, passes it explicitly to the repository,
 // and orchestrates the cross-domain "verify the job exists" check via the

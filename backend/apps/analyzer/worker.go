@@ -19,47 +19,31 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	"github.com/trushilpatel/jobradar/common/worker"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
 )
 
-// analyzerMaxRetries is the max NATS delivery count before a job goes to DLQ
-// on the infra-error path. Must equal len(analyzerBackOff). Must stay in sync
-// with MaxDeliver on the JOBS_FILTERED consumer in common/jetstream/streams.go
-// (MaxDeliver:3 → 2 Nak tiers before Term).
-const analyzerMaxRetries = 2
+// analyzerMaxRetries and analyzerBackOff are sourced from common/worker to stay
+// in sync with the NATS consumer configuration without manual duplication.
+const analyzerMaxRetries = worker.NATSWorkerMaxRetries
 
-// analyzerBackOff mirrors the JOBS_FILTERED consumer BackOff config so the
-// ledger's next_attempt_at field stays meaningful for dashboards on the
-// infra-error path. Must match BackOff in ConsumerAnalyzerWorkers.
-var analyzerBackOff = []time.Duration{30 * time.Second, 2 * time.Minute}
+var analyzerBackOff = worker.NATSWorkerBackOff
 
-// clock abstracts wall-clock reads and ctx-aware sleeps so tests can control
-// both the inter-group pacing and the NextAttemptAt value stamped into the
-// retry ledger row.
-type clock interface {
-	Now() time.Time
-	Sleep(ctx context.Context, d time.Duration) error
-}
+// clock and realClock are package-level aliases for the shared worker types so
+// existing field declarations and test doubles need no changes.
+type clock = worker.Clock
+type realClock = worker.RealClock
 
-type realClock struct{}
+// pipelineStage identifies which processing stage failed, used by handleFailure
+// to route retries correctly. Typed to prevent typos at callsites.
+type pipelineStage string
 
-func (realClock) Now() time.Time { return time.Now() }
-
-func (realClock) Sleep(ctx context.Context, d time.Duration) error {
-	if d <= 0 {
-		return nil
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-t.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
+const (
+	stageFetch  pipelineStage = "fetch"
+	stageEnrich pipelineStage = "enrich"
+)
 
 // adapterBundleFn resolves a crawler-v2 adapter bundle by type name. Injectable
 // for tests; the default is adapters.New, which consults the crawler-v2 registry.
@@ -203,7 +187,9 @@ func (w *Worker) processFetch(ctx context.Context, msgs []*js.Msg) (err error) {
 		return nil
 	}
 
-	// TODO: extract W3C trace context from msg headers via tracing.ExtractNATS once available
+	// Link this span to the upstream publisher's span by extracting the W3C
+	// traceparent injected into the first message's headers.
+	ctx = tracing.ExtractNATS(ctx, msgs[0].Headers())
 
 	fetchID := uuid.NewString()
 	fetchLog := w.log.With(logger.Str(logger.FieldFetchID, fetchID))
@@ -314,7 +300,7 @@ func chunkFetched(s []fetchedJob, size int) [][]fetchedJob {
 // Only stage="enrich" failures write retry state to job_pipeline_ledger.
 // Returns true when the job reached a terminal routing state; false on ctx
 // cancel, Nak failure, or DLQ publish failure.
-func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj fetchedJob, stage string, err error) bool {
+func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj fetchedJob, stage pipelineStage, err error) bool {
 	if stderrors.Is(err, context.Canceled) || ctx.Err() != nil {
 		return false
 	}
@@ -333,7 +319,7 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 	// ledger write fails, Nak (NATS redelivers) so the job is not lost.
 	// Do NOT Nak on success — NATS BackOff redelivery would just burn quota.
 	var exhausted *domainerr.LLMAllExhaustedError
-	if stderrors.As(err, &exhausted) && stage == "enrich" {
+	if stderrors.As(err, &exhausted) && stage == stageEnrich {
 		retryAfter := exhausted.RetryAfter
 		if retryAfter.IsZero() {
 			retryAfter = w.clock.Now().Add(analyzerBackOff[0])
@@ -376,7 +362,7 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 
 	if fj.retryCount >= analyzerMaxRetries {
 		cause := "exhausted"
-		if stage == "fetch" {
+		if stage == stageFetch {
 			cause = "fetch_failed"
 		}
 		return w.sendToDLQ(ctx, jobLog, fj, cause, err)
@@ -384,15 +370,15 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 
 	// Within retry budget — Nak so NATS redelivers with consumer BackOff.
 	if nerr := fj.msg.Nak(); nerr != nil {
-		metrics.EnricherRetryPublishFailures.WithLabelValues("nats", stage).Inc()
-		jobLog.Error("nak failed", nerr, logger.Str(logger.FieldStage, stage))
+		metrics.EnricherRetryPublishFailures.WithLabelValues("nats", string(stage)).Inc()
+		jobLog.Error("nak failed", nerr, logger.Str(logger.FieldStage, string(stage)))
 		return false
 	}
-	metrics.EnricherRetryPublishesTotal.WithLabelValues("nats", stage).Inc()
+	metrics.EnricherRetryPublishesTotal.WithLabelValues("nats", string(stage)).Inc()
 
 	nextAttemptAt := w.clock.Now().Add(analyzerBackOff[fj.retryCount])
 
-	if stage == "enrich" {
+	if stage == stageEnrich {
 		entry := jobsvc.RetryLedgerEntry{
 			JobID:         fj.summary.ID,
 			RetryCount:    fj.retryCount + 1,
@@ -408,7 +394,7 @@ func (w *Worker) handleFailure(ctx context.Context, fetchLog logger.Logger, fj f
 
 	jobLog.Info("scheduled retry via NATS BackOff",
 		logger.Str(logger.FieldNextAttemptAt, nextAttemptAt.UTC().Format(time.RFC3339)),
-		logger.Str(logger.FieldStage, stage),
+		logger.Str(logger.FieldStage, string(stage)),
 	)
 	return true
 }

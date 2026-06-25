@@ -72,5 +72,5 @@ func (h *NodeRestService) ReportError(w http.ResponseWriter, r *http.Request) {
 		handler.HandleError(w, err)
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	handler.RespondNoContent(w)
 }

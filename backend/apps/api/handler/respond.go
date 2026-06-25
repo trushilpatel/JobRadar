@@ -66,6 +66,11 @@ func RespondValidationErrors(w http.ResponseWriter, errs apperr.ValidationErrors
 	json.NewEncoder(w).Encode(response.ValidationErrorResponse{Errors: fields}) //nolint:errcheck
 }
 
+// RespondNoContent writes a 204 No Content response with no body.
+func RespondNoContent(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // HandleError inspects err and writes the appropriate error response.
 // ValidationErrors → 400 with field list, *ValidationError → 400 (single field),
 // ServiceError → its Status, anything else → 500.

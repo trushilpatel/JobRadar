@@ -56,8 +56,7 @@ type jwtPipeline struct {
 	jwks     keyfunc.Keyfunc
 	devToken string
 	issuer   string
-	// clockSkew is hard-coded at 60s — Clerk's recommended tolerance.
-	// TODO: make configurable in AuthConfig if a non-standard environment requires it.
+	// clockSkew is the JWT exp tolerance; set to jwtClockSkew at construction.
 	clockSkew time.Duration
 }
 
@@ -81,6 +80,10 @@ func loadPipeline() *jwtPipeline {
 	return pipelineSlot
 }
 
+// jwtClockSkew is the tolerance applied to JWT exp validation.
+// Configure in Clerk JWT template if a different value is needed.
+const jwtClockSkew = 60 * time.Second
+
 // Auth builds the authentication middleware. Fetches Clerk JWKS once at
 // startup and refreshes automatically via MicahParks/keyfunc. Validates
 // RS256 (or ES256) signature, iss, and exp with 60s clock skew.
@@ -93,7 +96,7 @@ func Auth(cfg config.AuthConfig, devToken string, log logger.Logger) (func(http.
 		jwks:      jwks,
 		devToken:  devToken,
 		issuer:    cfg.ClerkIssuerURL,
-		clockSkew: 60 * time.Second,
+		clockSkew: jwtClockSkew,
 	}
 	storePipeline(p)
 	return authHandler(p, log), nil

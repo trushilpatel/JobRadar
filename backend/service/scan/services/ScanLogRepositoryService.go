@@ -12,6 +12,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// recentRunsLimit is the maximum number of recent scan runs returned per company.
+const recentRunsLimit = 10
+
 // ScanLogWriter records scan summaries.
 //
 // Phase 2: per-company operational state lives on `company_scan_settings`,
@@ -113,7 +116,7 @@ func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ dt
 	if err := s.db.WithContext(ctx).Model(&scanmodel.CompanyScanLog{}).
 		Where("company_id = ?", companyID).
 		Order("scanned_at DESC").
-		Limit(10).
+		Limit(recentRunsLimit).
 		Select("company_id, scanned_at, jobs_fetched, jobs_new, error, duration_ms").
 		Scan(&recent).Error; err != nil {
 		return stats, err

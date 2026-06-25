@@ -22,12 +22,12 @@ type PollLoop struct {
 }
 
 // NewPollLoop constructs a PollLoop with the given dependencies.
-func NewPollLoop(cfg *Config, client OrchestratorClient, exec AdapterExecutor) *PollLoop {
+func NewPollLoop(cfg *Config, client OrchestratorClient, exec AdapterExecutor, log logger.Logger) *PollLoop {
 	return &PollLoop{
 		cfg:    cfg,
 		client: client,
 		exec:   exec,
-		log:    logger.NewNoop(),
+		log:    log,
 	}
 }
 

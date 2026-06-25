@@ -8,6 +8,8 @@ import (
 	"github.com/trushilpatel/jobradar/service/insights/dto"
 )
 
+var _ InsightsService = (*validationService)(nil)
+
 type validationService struct {
 	BaseService
 }

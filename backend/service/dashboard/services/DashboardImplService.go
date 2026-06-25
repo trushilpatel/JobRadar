@@ -11,6 +11,8 @@ import (
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
+var _ DashboardService = (*DashboardImplService)(nil)
+
 // pipelineCountReader is the narrow interface this service needs from insights.
 type pipelineCountReader interface {
 	GetPipelineCounts(ctx context.Context) (insightsdto.PipelineCounts, error)

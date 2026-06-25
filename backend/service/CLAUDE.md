@@ -133,7 +133,6 @@ router  := NewRestRouter(handler)
 | `insights/`    | Analytics queries: tech stack, funnel, location, sponsorship, velocity, role categories |
 | `scan/`        | Scan result recording — used by the crawler worker, not the API                         |
 | `user/`        | User profile (Get / Provision / UpdateProfile / Delete), cache decorator, `/api/me`     |
-| `role/`        | RBAC0 (Grant / Revoke / ListForUser / ListAll); no REST surface yet                     |
 | `audit/`       | Admin audit log (Append / List); consumed by `AuditAdminMutation` middleware            |
 | `llm/`         | LLM business logic — `JobsRelevanceFilter` + `JobPostEnricher`, Gemini impl, prompts    |
 
@@ -141,7 +140,7 @@ router  := NewRestRouter(handler)
 
 ## General rules
 
-- All list endpoints use **keyset cursor pagination** — `filter.Cursor string` in the DTO, `next_cursor *string` in the result, tuple comparison in SQL (e.g. `(sort_col, id) > (?, ?)`). Never use `OFFSET`-based pagination.
+- All list endpoints use **keyset cursor pagination** — `filter.Cursor string` in the DTO, `next_cursor *string` in the result, tuple comparison in SQL (e.g. `(sort_col, id) > (?, ?)`). Never use `OFFSET`-based pagination. **Exception:** `audit/` and `user/admin` use page+offset because they are admin-only, operate on small result sets, and support page-jump UX in the admin console. Do not extend this exception to any new slice.
 - All service methods take `context.Context` as the first argument and use `tracing.Start` / `tracing.End` for OTel spans
 - Services return `domain.ServiceError` via sentinel `.WithMessage()` — never `fmt.Errorf` for errors handlers inspect
 - All responses use `handler.Respond`, `handler.RespondPaged`, or `handler.HandleError` — never raw `json.NewEncoder`

@@ -18,7 +18,6 @@ import (
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/tracing"
-	crawlernodecommon "github.com/trushilpatel/jobradar/service/crawlernode/common"
 	crawlernodesvc "github.com/trushilpatel/jobradar/service/crawlernode/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
@@ -99,6 +98,11 @@ func main() {
 	r.Use(chimiddleware.RequestID)
 	r.Use(apimiddleware.Logger(log))
 
+	// Liveness endpoint — cheap, dependency-free (see health.go). The kubelet
+	// liveness probe targets this so a transient DB/NATS slowdown never kills a
+	// healthy orchestrator.
+	r.Get("/healthz", healthzHandler)
+
 	r.Route("/node", nodeRouter.Register)
 	r.Route("/admin/crawler-nodes", adminRouter.Register)
 
@@ -112,23 +116,7 @@ func main() {
 	}
 
 	// Background: reset stuck assignments every 5 minutes.
-	go func() {
-		ticker := time.NewTicker(resetStuckInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				n, err := assignStore.ResetStuckForNodes(ctx, crawlernodecommon.HeartbeatStaleDuration)
-				if err != nil {
-					log.Error("ResetStuckForNodes failed", err)
-				} else if n > 0 {
-					log.Info("reset stuck assignments", logger.Int("count", n))
-				}
-			}
-		}
-	}()
+	go runResetStuck(ctx, assignStore, resetStuckInterval, log)
 
 	log.Info("orchestrator listening", logger.Str("addr", listenAddr))
 

@@ -12,6 +12,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var _ NodeStore = (*nodeRepositoryService)(nil)
+
 // nodeRepositoryService implements NodeStore against the crawler_nodes table.
 // Terminal — no next, no BaseNodeService.
 type nodeRepositoryService struct {
