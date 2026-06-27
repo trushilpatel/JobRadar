@@ -183,7 +183,7 @@ else
 fi
 
 # ── 5. Kubernetes namespace ───────────────────────────────────────────────────
-step "[5/6] Kubernetes namespace"
+step "[5/7] Kubernetes namespace"
 # k3s API server may still be starting after a reboot — wait until it accepts connections
 echo "  Waiting for k3s API server..."
 until kubectl get nodes >/dev/null 2>&1; do sleep 3; done
@@ -195,8 +195,30 @@ else
   ok "Namespace '$NS' created"
 fi
 
-# ── 6. GHCR imagePullSecret ───────────────────────────────────────────────────
-step "[6/6] GHCR imagePullSecret"
+# ── 6. Harden CoreDNS against CPU-steal spikes ───────────────────────────────
+# The 1-OCPU OCI free-tier nodes run at high CPU steal + swap pressure. With the
+# stock liveness probe (failureThreshold 5 / period 15s ≈ 75s) CoreDNS misses
+# probes during a starvation spike and the kubelet restarts it — dropping cluster
+# DNS so workers can't resolve external endpoints (the Gemini API), which breaks
+# the filter/enricher. Widen the probe to ~200s so a transient spike no longer
+# kills DNS. Idempotent: re-applying the same values is a no-op (no rollout).
+step "[6/7] Harden CoreDNS liveness probe"
+if kubectl -n kube-system get deploy coredns >/dev/null 2>&1; then
+  kubectl -n kube-system patch deploy coredns --type=json -p '[
+    {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/failureThreshold","value":10},
+    {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/periodSeconds","value":20},
+    {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/timeoutSeconds","value":10}
+  ]' >/dev/null 2>&1 && ok "CoreDNS liveness probe widened (failureThreshold=10, period=20s, timeout=10s)" \
+    || ok "CoreDNS already hardened (no change)"
+else
+  ok "CoreDNS not present yet — skipping (re-run bootstrap after k3s settles)"
+fi
+# NOTE: k3s re-applies its bundled CoreDNS addon on k3s restart/upgrade, which
+# reverts this patch. Re-run this script (idempotent) after any k3s restart, or
+# promote this to a systemd oneshot if restarts become frequent.
+
+# ── 7. GHCR imagePullSecret ───────────────────────────────────────────────────
+step "[7/7] GHCR imagePullSecret"
 if kubectl get secret ghcr-pull-secret -n "$NS" >/dev/null 2>&1; then
   ok "ghcr-pull-secret already exists in $NS"
 else
