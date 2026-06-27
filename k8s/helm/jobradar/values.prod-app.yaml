@@ -28,6 +28,11 @@ filter:
 enricher:
   natsUrl: "tls://connect.ngs.global"
   natsCredsFile: "/etc/nats/jobradar.creds"
+  # The 1-OCPU OCI free-tier node runs at ~52% CPU steal + heavy swap. High fetch
+  # concurrency spikes CPU/memory and starves CoreDNS (it misses its liveness
+  # probe and restarts, dropping cluster DNS → LLM lookups fail). Keep this low on
+  # this node; the base default (15) is tuned for a non-starved host.
+  fetchConcurrency: "4"
 
 orchestrator:
   natsUrl: "tls://connect.ngs.global"
@@ -41,6 +46,9 @@ orchestrator:
 # NATS is self-hosted in-cluster (which removes the cap).
 crawlerNode:
   replicas: 1
+  # Lowered from the base default (3) to reduce concurrent crawl CPU/memory load
+  # on the starved 1-OCPU node — see the enricher.fetchConcurrency note above.
+  maxConcurrent: "2"
 
 imagePullSecret: ghcr-pull-secret
 
