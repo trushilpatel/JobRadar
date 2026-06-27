@@ -41,6 +41,13 @@ images:
     pullPolicy: IfNotPresent
   # Redis is external (Upstash) — no in-cluster deployment
 
+# Schema migration Job. Runs the migrate binary bundled in the api image, so it
+# can only run where that image is deployed. Disable it on nodes that don't
+# carry the api image (e.g. the prod APP/pipeline node) — otherwise the Job
+# renders with an unpullable api tag, never completes, and blocks `helm --wait`.
+migrate:
+  enabled: true
+
 api:
   enabled: true
   nodePort: 30080

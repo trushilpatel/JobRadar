@@ -1,3 +1,4 @@
+{{- if .Values.migrate.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -44,3 +45,4 @@ spec:
             {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
       securityContext:
         runAsNonRoot: true
+{{- end }}
