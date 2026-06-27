@@ -49,13 +49,15 @@ func (f *pipelineLedgerStore) UpdateSeenReason(_ context.Context, jobID string, 
 
 type pipelineSnapshotWriter struct {
 	insertCalled bool
+	insertInput  jobdto.SnapshotInput
 	insertErr    error
 	updateCalled bool
 	updateErr    error
 }
 
-func (f *pipelineSnapshotWriter) InsertSnapshot(_ context.Context, _ jobdto.SnapshotInput) error {
+func (f *pipelineSnapshotWriter) InsertSnapshot(_ context.Context, in jobdto.SnapshotInput) error {
 	f.insertCalled = true
+	f.insertInput = in
 	return f.insertErr
 }
 func (f *pipelineSnapshotWriter) UpdateSnapshotAction(_ context.Context, _, _ string) error {
