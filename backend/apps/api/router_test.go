@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
@@ -282,4 +283,41 @@ func TestNewOpsRouter_ReadyReturns503WhenSqlDBClosed(t *testing.T) {
 	}
 	// silence sql import unused (kept for symmetry with future expansions)
 	var _ = sql.ErrConnDone
+}
+
+// stubConnPool is a gorm.ConnPool whose concrete type is NOT *sql.DB, so
+// (*gorm.DB).DB() returns gorm.ErrInvalidDB — deterministically driving the
+// PoolReady failure path in /ready.
+type stubConnPool struct{}
+
+func (stubConnPool) PrepareContext(_ context.Context, _ string) (*sql.Stmt, error) {
+	return nil, sql.ErrConnDone
+}
+func (stubConnPool) ExecContext(_ context.Context, _ string, _ ...any) (sql.Result, error) {
+	return nil, sql.ErrConnDone
+}
+func (stubConnPool) QueryContext(_ context.Context, _ string, _ ...any) (*sql.Rows, error) {
+	return nil, sql.ErrConnDone
+}
+func (stubConnPool) QueryRowContext(_ context.Context, _ string, _ ...any) *sql.Row {
+	return nil
+}
+
+// TestNewOpsRouter_Ready503WhenPoolNotReady deterministically exercises the
+// 503 branch: PoolReady returns gorm.ErrInvalidDB because the ConnPool is not
+// a *sql.DB, so /ready must respond 503 with the error text in the body.
+func TestNewOpsRouter_Ready503WhenPoolNotReady(t *testing.T) {
+	badDB := &gorm.DB{Config: &gorm.Config{ConnPool: stubConnPool{}}}
+
+	r := NewOpsRouter(badDB)
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("/ready got %d want 503 when pool not ready", rr.Code)
+	}
+	if rr.Body.Len() == 0 {
+		t.Fatal("/ready 503 must include the error text in the body")
+	}
 }
