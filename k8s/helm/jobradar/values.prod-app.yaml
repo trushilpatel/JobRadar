@@ -11,6 +11,14 @@ api:
 console:
   enabled: false
 
+# No api image is deployed on this node, so the migrate Job (which runs the
+# migrate binary from the api image) cannot run here. Schema migrations run from
+# the INFRA node, which carries the api image. Leaving this enabled renders a
+# Job with an unpullable api tag that never completes and blocks
+# `helm upgrade --wait` until it times out (the prod APP deploy failure mode).
+migrate:
+  enabled: false
+
 # NATS credentials file path — mounted from the nats-creds secret (key: jobradar.creds)
 # via the deployment template volume at /etc/nats when natsCredsFile is non-empty.
 filter:
@@ -20,6 +28,11 @@ filter:
 enricher:
   natsUrl: "tls://connect.ngs.global"
   natsCredsFile: "/etc/nats/jobradar.creds"
+  # The 1-OCPU OCI free-tier node runs at ~52% CPU steal + heavy swap. High fetch
+  # concurrency spikes CPU/memory and starves CoreDNS (it misses its liveness
+  # probe and restarts, dropping cluster DNS → LLM lookups fail). Keep this low on
+  # this node; the base default (15) is tuned for a non-starved host.
+  fetchConcurrency: "4"
 
 orchestrator:
   natsUrl: "tls://connect.ngs.global"
@@ -33,6 +46,9 @@ orchestrator:
 # NATS is self-hosted in-cluster (which removes the cap).
 crawlerNode:
   replicas: 1
+  # Lowered from the base default (3) to reduce concurrent crawl CPU/memory load
+  # on the starved 1-OCPU node — see the enricher.fetchConcurrency note above.
+  maxConcurrent: "2"
 
 imagePullSecret: ghcr-pull-secret
 

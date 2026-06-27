@@ -157,12 +157,12 @@ func (p *pipelineService) HasSeenJob(ctx context.Context, jobID string) (_ bool,
 func buildJobRow(input dto.EnrichedJobInput) (*jobmodel.Job, error) {
 	enriched := input.Enriched
 
-	techStack, err := json.Marshal(enriched.TechStack)
+	techStack, err := marshalJSONArray(enriched.TechStack)
 	if err != nil {
 		return nil, fmt.Errorf("marshal tech_stack: %w", err)
 	}
 
-	responsibilities, err := json.Marshal(enriched.Responsibilities)
+	responsibilities, err := marshalJSONArray(enriched.Responsibilities)
 	if err != nil {
 		return nil, fmt.Errorf("marshal responsibilities: %w", err)
 	}
@@ -197,6 +197,25 @@ func buildJobRow(input dto.EnrichedJobInput) (*jobmodel.Job, error) {
 		RoleBrief:         nullableStr(enriched.RoleBrief),
 		Responsibilities:  datatypes.JSON(responsibilities),
 	}, nil
+}
+
+// marshalJSONArray marshals a string slice into JSON bytes that are always a
+// valid, non-empty JSON array — `[]` for a nil or empty slice rather than the
+// `null` that encoding/json emits for a nil slice. This is the single
+// normalization point for every json/jsonb column fed from buildJobRow: the
+// `jobs` row (datatypes.JSON) and, via `[]byte(row.TechStack)`, the
+// `job_analytics` snapshot.
+//
+// The snapshot's `tech_stack` column binds a plain []byte (no
+// datatypes.JSON.Value() empty→NULL coercion), so empty bytes reach Postgres
+// verbatim and are rejected with `invalid input syntax for type json`
+// (SQLSTATE 22P02). Guaranteeing `[]` here keeps every downstream jsonb write
+// valid without each call site re-checking for emptiness.
+func marshalJSONArray(items []string) ([]byte, error) {
+	if len(items) == 0 {
+		return []byte("[]"), nil
+	}
+	return json.Marshal(items)
 }
 
 // title returns the authoritative job title: the fetched Post.Title when
