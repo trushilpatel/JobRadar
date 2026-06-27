@@ -12,6 +12,10 @@ env:
   REGISTRY: ghcr.io
   OWNER: trushilpatel
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Disable docker/build-push-action's build-record artifact upload — it consumes
+  # the (small) Actions artifact-storage quota and, when that quota is exhausted,
+  # fails the build. The build records are only diagnostic summaries.
+  DOCKER_BUILD_RECORD_UPLOAD: "false"
 
 jobs:
   # ── 1. Detect which source paths changed ──────────────────────────────────
@@ -157,11 +161,13 @@ jobs:
           go build -o /tmp/go-binaries/orchestrator ./apps/orchestrator
           go build -o /tmp/go-binaries/crawler-node ./apps/crawler-node
 
-      - uses: actions/upload-artifact@v4
+      # Pass binaries to the build jobs via the Actions CACHE (separate, larger
+      # quota) instead of upload-artifact, which shares the small artifact-storage
+      # quota that intermittently fills and blocks the whole pipeline.
+      - uses: actions/cache/save@v4
         with:
-          name: go-binaries-amd64
-          path: /tmp/go-binaries/
-          retention-days: 1
+          path: /tmp/go-binaries
+          key: go-binaries-${{ github.sha }}
 
   # ── 3. Build frontend assets ───────────────────────────────────────────────
   build-frontend-assets:
@@ -182,11 +188,10 @@ jobs:
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
         run: npm run build
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/cache/save@v4
         with:
-          name: frontend-dist
-          path: frontend/dist/
-          retention-days: 1
+          path: frontend/dist
+          key: frontend-dist-${{ github.sha }}
 
   # ── 4. Build images (parallel, only for changed services) ─────────────────
   build-api:
@@ -198,10 +203,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - uses: actions/download-artifact@v4
+      - uses: actions/cache/restore@v4
         with:
-          name: go-binaries-amd64
           path: /tmp/go-binaries
+          key: go-binaries-${{ github.sha }}
+          fail-on-cache-miss: true
       - name: Stage build context
         run: |
           mkdir -p /tmp/api-ctx
@@ -236,10 +242,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - uses: actions/download-artifact@v4
+      - uses: actions/cache/restore@v4
         with:
-          name: go-binaries-amd64
           path: /tmp/go-binaries
+          key: go-binaries-${{ github.sha }}
+          fail-on-cache-miss: true
       - name: Stage build context
         run: |
           mkdir -p /tmp/scheduler-ctx
@@ -273,10 +280,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - uses: actions/download-artifact@v4
+      - uses: actions/cache/restore@v4
         with:
-          name: go-binaries-amd64
           path: /tmp/go-binaries
+          key: go-binaries-${{ github.sha }}
+          fail-on-cache-miss: true
       - name: Stage build context
         run: |
           mkdir -p /tmp/filter-ctx
@@ -310,10 +318,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - uses: actions/download-artifact@v4
+      - uses: actions/cache/restore@v4
         with:
-          name: go-binaries-amd64
           path: /tmp/go-binaries
+          key: go-binaries-${{ github.sha }}
+          fail-on-cache-miss: true
       - name: Stage build context
         run: |
           mkdir -p /tmp/enricher-ctx
@@ -347,10 +356,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - uses: actions/download-artifact@v4
+      - uses: actions/cache/restore@v4
         with:
-          name: go-binaries-amd64
           path: /tmp/go-binaries
+          key: go-binaries-${{ github.sha }}
+          fail-on-cache-miss: true
       - name: Stage build context
         run: |
           mkdir -p /tmp/orchestrator-ctx
@@ -384,10 +394,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - uses: actions/download-artifact@v4
+      - uses: actions/cache/restore@v4
         with:
-          name: go-binaries-amd64
           path: /tmp/go-binaries
+          key: go-binaries-${{ github.sha }}
+          fail-on-cache-miss: true
       - name: Stage build context
         run: |
           mkdir -p /tmp/crawler-node-ctx
@@ -421,14 +432,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - uses: actions/download-artifact@v4
+      - uses: actions/cache/restore@v4
         with:
-          name: frontend-dist
-          path: /tmp/frontend-dist
+          path: frontend/dist
+          key: frontend-dist-${{ github.sha }}
+          fail-on-cache-miss: true
       - name: Stage build context
         run: |
           mkdir -p /tmp/console-ctx
-          cp -r /tmp/frontend-dist /tmp/console-ctx/dist
+          cp -r frontend/dist /tmp/console-ctx/dist
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
