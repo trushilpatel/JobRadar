@@ -4,10 +4,13 @@ import (
 	"context"
 	stderrors "errors"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters"
 	"github.com/trushilpatel/jobradar/common/ats/core"
@@ -574,5 +577,172 @@ func TestSendToDLQ_SuccessPath_JobTermedAndLogged(t *testing.T) {
 	}
 	if !log.hasWarn("moved to DLQ") {
 		t.Errorf("expected 'moved to DLQ' logged at WARN level; got warns=%v", log.warns)
+	}
+}
+
+// ── fetchOne: Ack-failure paths on the non-USA reject gates ───────────────────
+
+// TestFetchOne_EarlyNonUSA_AckFails_NoPanic exercises the Path A early reject
+// gate (LocationKnown=true, non-USA) when the subsequent msg.Ack() returns an
+// error: the worker must log a warning and return ok=false without panicking.
+// Covers the Ack-error branch in fetchOne's early non-USA path.
+func TestFetchOne_EarlyNonUSA_AckFails_NoPanic(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+
+	// LocationKnown=true with a foreign location → early reject before any fetch.
+	summary := core.JobSummary{
+		ID:            "wd-london",
+		Adapter:       "workday",
+		URL:           "https://wd/london",
+		LocationKnown: true,
+		Location:      "London, United Kingdom",
+	}
+	msg, state := makeTestMsg(t, summary, 1)
+	state.AckErr = stderrors.New("nats ack error") // force the Ack-failure branch
+
+	_, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+	if ok {
+		t.Fatalf("fetchOne should reject non-USA job early (ok=false)")
+	}
+	if !state.Acked {
+		t.Errorf("Ack must still be attempted on early non-USA reject; got %+v", state)
+	}
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != summary.ID {
+		t.Errorf("expected MarkLedgerNonUSA(%q); got %v", summary.ID, pipeline.markCalls)
+	}
+}
+
+// TestFetchOne_PostFetchNonUSA_AckFails_NoPanic exercises the Path B post-fetch
+// reject gate (CountryCode non-US) when msg.Ack() returns an error: the worker
+// logs a warning and returns ok=false without panicking. Covers the Ack-error
+// branch in fetchOne's post-fetch non-USA path.
+func TestFetchOne_PostFetchNonUSA_AckFails_NoPanic(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	pf := &fakePostFetcher{post: core.JobPost{Title: "Eng", Location: "Bengaluru", CountryCode: "IN"}}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+	w.bundleFn = bundleFnReturning(pf, nil)
+
+	summary := core.JobSummary{ID: "wd-in-ackfail", Adapter: "workday", URL: "https://wd/2"}
+	msg, state := makeTestMsg(t, summary, 1)
+	state.AckErr = stderrors.New("nats ack error") // force the Ack-failure branch
+
+	_, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+	if ok {
+		t.Fatalf("fetchOne should reject CountryCode=IN job (ok=false)")
+	}
+	if !state.Acked {
+		t.Errorf("Ack must still be attempted on post-fetch non-USA reject; got %+v", state)
+	}
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != summary.ID {
+		t.Errorf("expected MarkLedgerNonUSA(%q); got %v", summary.ID, pipeline.markCalls)
+	}
+}
+
+// ── analyzerMergedLocations: single-Location fallback branch ──────────────────
+
+// TestAnalyzerMergedLocations_LocationOnlyFallback verifies that when
+// AllLocations is empty but the single Location string is set, the helper wraps
+// it in a one-element slice. Covers the Location-only fallback branch.
+func TestAnalyzerMergedLocations_LocationOnlyFallback(t *testing.T) {
+	got := analyzerMergedLocations(core.JobSummary{Location: "Austin, TX"})
+	if len(got) != 1 || got[0] != "Austin, TX" {
+		t.Errorf("expected [Austin, TX]; got %v", got)
+	}
+}
+
+// TestAnalyzerMergedLocations_AllLocationsPreferred verifies AllLocations wins
+// over the single Location when both are present.
+func TestAnalyzerMergedLocations_AllLocationsPreferred(t *testing.T) {
+	got := analyzerMergedLocations(core.JobSummary{
+		Location:     "Austin, TX",
+		AllLocations: []string{"NYC", "SF"},
+	})
+	if len(got) != 2 || got[0] != "NYC" || got[1] != "SF" {
+		t.Errorf("expected [NYC SF]; got %v", got)
+	}
+}
+
+// TestAnalyzerMergedLocations_BothEmptyReturnsNil verifies a summary with no
+// location signal at all yields nil.
+func TestAnalyzerMergedLocations_BothEmptyReturnsNil(t *testing.T) {
+	if got := analyzerMergedLocations(core.JobSummary{}); got != nil {
+		t.Errorf("expected nil when no location set; got %v", got)
+	}
+}
+
+// ── AdapterRateLimiter.getOrCreate: double-check-under-write-lock branch ──────
+
+// TestAdapterRateLimiter_GetOrCreate_DoubleCheckRace forces the double-check
+// branch inside getOrCreate, where a goroutine acquires the write lock only to
+// find another goroutine already created the limiter. A tight loop of fresh
+// limiters with many concurrent racers reliably exercises the second-check
+// early return: every racer must observe the identical limiter instance for a
+// given adapter, proving no duplicate was created. Runs clean under -race.
+func TestAdapterRateLimiter_GetOrCreate_DoubleCheckRace(t *testing.T) {
+	const adapter = "greenhouse"
+	const racers = 64
+
+	for attempt := 0; attempt < 200; attempt++ {
+		rl := NewAdapterRateLimiter(1000.0, 1000, 0, logger.NewNoop())
+
+		var wg sync.WaitGroup
+		results := make([]*rate.Limiter, racers)
+		start := make(chan struct{})
+		wg.Add(racers)
+		for i := 0; i < racers; i++ {
+			go func(idx int) {
+				defer wg.Done()
+				<-start // release all goroutines simultaneously
+				results[idx] = rl.getOrCreate(adapter)
+			}(i)
+		}
+		// Give the scheduler a chance to park every goroutine on the barrier so
+		// they contend for the write lock at the same instant.
+		runtime.Gosched()
+		close(start)
+		wg.Wait()
+
+		// Every racer must observe the exact same limiter instance — the
+		// double-check guarantees only one is ever created.
+		first := results[0]
+		if first == nil {
+			t.Fatalf("attempt %d: getOrCreate returned nil", attempt)
+		}
+		for i, l := range results {
+			if l != first {
+				t.Fatalf("attempt %d racer %d: got a different limiter instance; double-check failed", attempt, i)
+			}
+		}
+	}
+}
+
+// ── Run: fetchSize-below-one guard ───────────────────────────────────────────
+
+// TestRun_FetchSizeBelowOne_ClampedToOne exercises the `fetchSize < 1` guard at
+// the top of Run. NewWorker clamps fetchConc/llmBatchSize to >= 1, so we poke
+// fetchConc to 0 directly to drive the product below one. The injected consumer
+// asserts the clamped fetch size (1) is requested and then cancels the context
+// so Run exits cleanly.
+func TestRun_FetchSizeBelowOne_ClampedToOne(t *testing.T) {
+	opts := makeBaseOptions(&fakeScorer{}, &fakePipelineService{}, &fakePublisher{}, &fakeLedger{})
+	w := NewWorker(opts)
+	w.fetchConc = 0 // forces fetchSize = 0 * llmBatchSize = 0 → guard clamps to 1
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var gotSize int
+	var once sync.Once
+	fc := &funcMessageFetcher{fn: func(n int, _ time.Duration) ([]*js.Msg, error) {
+		once.Do(func() { gotSize = n })
+		cancel()
+		return nil, context.Canceled
+	}}
+	w.consumer = fc
+
+	if err := w.Run(ctx); err != nil {
+		t.Errorf("Run: want nil after ctx cancel, got %v", err)
+	}
+	if gotSize != 1 {
+		t.Errorf("fetchSize guard should clamp to 1; Fetch requested %d", gotSize)
 	}
 }

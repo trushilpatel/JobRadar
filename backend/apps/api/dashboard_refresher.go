@@ -8,7 +8,10 @@ import (
 	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 )
 
-const (
+// Refresh cadences are package-level vars (not consts) so tests can shrink
+// them to exercise the ticker branches deterministically without waiting
+// minutes. Production never mutates these.
+var (
 	dashboardPipelineRefreshInterval = 3 * time.Minute
 	dashboardHeatmapRefreshInterval  = 5 * time.Minute
 )
