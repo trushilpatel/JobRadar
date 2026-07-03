@@ -94,6 +94,11 @@ enricher:
   enabled: true
   natsUrl: "tls://connect.ngs.global"
   natsCredsFile: ""   # set in values.local.yaml: path to mounted .creds file
+  # fetchConcurrency controls Stage 1 parallel HTTP fetches in the enricher.
+  # Default (15) is for local benchmarking. Prod APP node overrides to 4 via
+  # values.prod-app.yaml — the 1-OCPU OCI node can't sustain 15 concurrent
+  # goroutines without starving CoreDNS. Developers should set 4 in
+  # values.local.yaml to surface concurrency bugs that only appear at prod load.
   fetchConcurrency: "15"
   llmBatchSize: "5"
   flushTimeoutSeconds: "120"

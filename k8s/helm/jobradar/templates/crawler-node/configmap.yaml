@@ -15,3 +15,4 @@ data:
   RETRY_MAX_ATTEMPTS: {{ .Values.crawlerNode.retryMaxAttempts | quote }}
   LOG_LEVEL: {{ .Values.crawlerNode.logLevel | quote }}
   OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.crawlerNode.otelEndpoint | quote }}
+  METRICS_ADDR: ":9102"
