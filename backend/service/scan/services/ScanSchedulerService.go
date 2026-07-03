@@ -37,9 +37,11 @@ const stuckRetryLimit = 100
 const stuckFetchThreshold = 1 * time.Hour
 
 // stuckFetchLimit caps the number of stranded fetch rows deleted per scheduler
-// tick to bound DB work; a backlog drains across successive ticks. Matches
-// stuckRetryLimit.
-const stuckFetchLimit = 100
+// tick to bound DB work; a backlog drains across successive ticks. Set higher
+// than stuckRetryLimit because fetch-row flow (~160/min observed) exceeds the
+// retry-escalation rate, so a lower cap cannot drain a backlog faster than it
+// accumulates.
+const stuckFetchLimit = 500
 
 // SweeperPublisher is the narrow NATS publishing contract the sweeper needs.
 // Allows the scheduler service to publish without importing the full jetstream

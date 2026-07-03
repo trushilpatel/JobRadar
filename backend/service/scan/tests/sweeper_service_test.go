@@ -835,7 +835,7 @@ func (l *trackingSweeperLedger) ReclaimStuckFetchRows(_ context.Context, thresho
 // ── ReclaimStuckFetchRows service tests ──────────────────────────────────────
 
 // TestReclaimStuckFetchRows_CallsLedger asserts the scheduler service delegates
-// to the ledger store with the module-const threshold (1h) and limit (100), and
+// to the ledger store with the module-const threshold (1h) and limit (500), and
 // returns the count.
 func TestReclaimStuckFetchRows_CallsLedger(t *testing.T) {
 	ledger := &trackingSweeperLedger{}
@@ -855,8 +855,8 @@ func TestReclaimStuckFetchRows_CallsLedger(t *testing.T) {
 	if ledger.reclaimFetchThreshold != time.Hour {
 		t.Errorf("threshold = %v, want 1h", ledger.reclaimFetchThreshold)
 	}
-	if ledger.reclaimFetchLimit != 100 {
-		t.Errorf("limit = %d, want 100", ledger.reclaimFetchLimit)
+	if ledger.reclaimFetchLimit != 500 {
+		t.Errorf("limit = %d, want 500", ledger.reclaimFetchLimit)
 	}
 }
 

@@ -100,6 +100,37 @@ func TestAdapterConfig_Tenant(t *testing.T) {
 	}
 }
 
+func TestAdapterConfig_Locale(t *testing.T) {
+	tests := []struct {
+		name       string
+		cfg        adapterConfig
+		wantLocale string
+	}{
+		{
+			name:       "default locale when empty",
+			cfg:        adapterConfig{Host: "nvidia.wd5.myworkdayjobs.com", Site: "NVIDIAExternalCareerSite"},
+			wantLocale: "en-US",
+		},
+		{
+			name:       "configured locale is used",
+			cfg:        adapterConfig{Host: "nvidia.wd5.myworkdayjobs.com", Site: "NVIDIAExternalCareerSite", Locale: "fr-FR"},
+			wantLocale: "fr-FR",
+		},
+		{
+			name:       "en-US explicit",
+			cfg:        adapterConfig{Host: "nvidia.wd5.myworkdayjobs.com", Site: "NVIDIAExternalCareerSite", Locale: "en-US"},
+			wantLocale: "en-US",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cfg.locale(); got != tt.wantLocale {
+				t.Errorf("locale() = %q, want %q", got, tt.wantLocale)
+			}
+		})
+	}
+}
+
 // ── mapJobSummary ─────────────────────────────────────────────────────────────
 
 func TestMapJobSummary_AllFields(t *testing.T) {
@@ -364,16 +395,27 @@ func TestExtractCountryCode(t *testing.T) {
 			want: "US",
 		},
 		{
-			// AC2.3: a non-US descriptor returns "" so the analyzer's string
-			// classifier decides via post.Location — never guess a foreign ISO code.
-			name: "Japan descriptor → empty",
+			// AC2.3: a non-empty non-US descriptor returns the normalized descriptor
+			// name so the analyzer's country-code gate fires immediately, rather than
+			// falling through to string matching which misses lesser-known cities.
+			name: "Japan descriptor → normalized name",
 			raw:  json.RawMessage(`{"descriptor":"Japan","id":"fff"}`),
-			want: "",
+			want: "japan",
 		},
 		{
-			name: "United Kingdom descriptor → empty",
+			name: "United Kingdom descriptor → normalized name",
 			raw:  json.RawMessage(`{"descriptor":"United Kingdom","id":"ggg"}`),
-			want: "",
+			want: "united kingdom",
+		},
+		{
+			name: "India descriptor → normalized name",
+			raw:  json.RawMessage(`{"descriptor":"India","id":"hhh"}`),
+			want: "india",
+		},
+		{
+			name: "Spain descriptor → normalized name",
+			raw:  json.RawMessage(`{"descriptor":"Spain","id":"iii"}`),
+			want: "spain",
 		},
 		{
 			// AC2.4: missing / null / malformed / empty-object all return "".
@@ -398,7 +440,7 @@ func TestExtractCountryCode(t *testing.T) {
 		},
 		{
 			name: "object with empty descriptor",
-			raw:  json.RawMessage(`{"descriptor":"","id":"hhh"}`),
+			raw:  json.RawMessage(`{"descriptor":"","id":"zzz"}`),
 			want: "",
 		},
 	}
