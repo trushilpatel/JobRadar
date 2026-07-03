@@ -41,9 +41,11 @@ type ScanHistoryReader interface {
 //     adapter_config / scan_interval_override / active, and to write
 //     scan-state outcomes (UpdateScanState).
 //
-// Every method rejects an empty companyID with ErrInternal.WithMessage(
-// "company id required") before touching the DB so a forgotten ctx scoping
-// can never silently broaden a query to the entire table.
+// Every method that takes a companyID rejects an empty one with
+// ErrInternal.WithMessage("company id required") before touching the DB so
+// a forgotten ctx scoping can never silently broaden a query to the entire
+// table. CountAutoPaused takes no companyID and is exempt — it aggregates
+// across all rows by design.
 type ScanSettingsRepository interface {
 	Get(ctx context.Context, companyID string) (*companymodel.CompanyScanSettings, error)
 	GetMissing(ctx context.Context) ([]string, error)

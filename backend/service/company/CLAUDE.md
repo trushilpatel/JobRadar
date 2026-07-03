@@ -30,7 +30,7 @@ Both chains share the same `*cache.Cache` instance. The admin `ImplService` inva
 
 - `ListPublic` / `GetPublic` return `CompanyPublicView` — no `adapter_type`, no `adapter_config`, no scan timestamps. **Never** add operational fields to the public view.
 - `CompanyAdminService.List` returns `CompanyAdminListResult` (containing `CompanyAdminListView`) — adapter credentials are **still omitted** from list responses. Only `CompanyAdminService.Get` returns the full `CompanyAdminView` with `adapter_config`.
-- `ScanSettingsRepository` rejects an empty `companyID` with `ErrInternal.WithMessage("company id required")` on every method — a forgotten ctx scoping must never silently match all rows.
+- `ScanSettingsRepository` rejects an empty `companyID` with `ErrInternal.WithMessage("company id required")` on every method that takes a `companyID` — a forgotten ctx scoping must never silently match all rows. `CountAutoPaused` takes no `companyID` and is exempt by design (it aggregates across all rows).
 - `Create` inserts a `companies` row plus an optional `company_scan_settings` row in a single transaction. When `CompanyScanSettingsInput.IsEmpty()`, no settings row is written and the company starts un-onboarded for scanning.
 - `DELETE` on `companies` cascades to `company_scan_settings` via the DB `ON DELETE CASCADE` constraint — no explicit settings delete in application code.
 
