@@ -1,4 +1,4 @@
-name: Fix Pipeline Node k3s
+name: Fix Pipeline Node
 
 # One-shot remediation: runs oci-k3s-netfix.sh on the Pipeline node to clear
 # stale iptables chains and restart k3s when the node is not Ready.
@@ -8,7 +8,7 @@ on:
 
 jobs:
   fix-pipeline-k3s:
-    name: Fix k3s on Pipeline node
+    name: Fix / Pipeline node
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

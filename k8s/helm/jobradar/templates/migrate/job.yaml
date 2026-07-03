@@ -4,6 +4,10 @@ kind: Job
 metadata:
   name: jobradar-migrate
   namespace: {{ .Values.namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade,pre-rollback
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "-5"
   labels:
     {{- include "jobradar.labels" . | nindent 4 }}
     component: migrate
