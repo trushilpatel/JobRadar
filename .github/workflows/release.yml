@@ -3,6 +3,13 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for full rebuild (optional)'
+        required: false
+        default: ''
+        type: string
 
 concurrency:
   group: release-${{ github.ref }}
@@ -23,16 +30,16 @@ jobs:
     name: Detect changes
     runs-on: ubuntu-latest
     outputs:
-      api:          ${{ steps.filter.outputs.api }}
-      scheduler:    ${{ steps.filter.outputs.scheduler }}
-      filter:       ${{ steps.filter.outputs.filter }}
-      enricher:     ${{ steps.filter.outputs.enricher }}
-      orchestrator: ${{ steps.filter.outputs.orchestrator }}
-      crawler_node: ${{ steps.filter.outputs.crawler_node }}
-      console:      ${{ steps.filter.outputs.console }}
-      any_go:       ${{ steps.flags.outputs.any_go }}
-      app:          ${{ steps.flags.outputs.app }}
-      pipeline:     ${{ steps.flags.outputs.pipeline }}
+      api:          ${{ steps.force.outputs.api          || steps.filter.outputs.api }}
+      scheduler:    ${{ steps.force.outputs.scheduler    || steps.filter.outputs.scheduler }}
+      filter:       ${{ steps.force.outputs.filter       || steps.filter.outputs.filter }}
+      enricher:     ${{ steps.force.outputs.enricher     || steps.filter.outputs.enricher }}
+      orchestrator: ${{ steps.force.outputs.orchestrator || steps.filter.outputs.orchestrator }}
+      crawler_node: ${{ steps.force.outputs.crawler_node || steps.filter.outputs.crawler_node }}
+      console:      ${{ steps.force.outputs.console      || steps.filter.outputs.console }}
+      any_go:       ${{ steps.force.outputs.any_go       || steps.flags.outputs.any_go }}
+      app:          ${{ steps.force.outputs.app          || steps.flags.outputs.app }}
+      pipeline:     ${{ steps.force.outputs.pipeline     || steps.flags.outputs.pipeline }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -125,6 +132,21 @@ jobs:
           else
             echo "pipeline=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Force all services on manual dispatch
+        id: force
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "api=true"          >> $GITHUB_OUTPUT
+          echo "scheduler=true"    >> $GITHUB_OUTPUT
+          echo "filter=true"       >> $GITHUB_OUTPUT
+          echo "enricher=true"     >> $GITHUB_OUTPUT
+          echo "orchestrator=true" >> $GITHUB_OUTPUT
+          echo "crawler_node=true" >> $GITHUB_OUTPUT
+          echo "console=true"      >> $GITHUB_OUTPUT
+          echo "any_go=true"       >> $GITHUB_OUTPUT
+          echo "app=true"          >> $GITHUB_OUTPUT
+          echo "pipeline=true"     >> $GITHUB_OUTPUT
 
   # ── 2. Compile all changed Go binaries in one job (shared module cache) ───
   compile-go:
