@@ -43,6 +43,27 @@ interface JobDetailPanelProps {
 const NOTES_MAX = 5000
 const NOTES_DEBOUNCE_MS = 800
 
+// Meta-pill variants (mirror the mockup's PILL_BG map) expressed via brand
+// tokens. `color-mix` arbitrary values keep the tint derived from the token so
+// light/dark themes stay in sync without raw palette colors.
+const META_PILL_BASE = 'text-xs px-2.5 py-1 rounded-lg whitespace-nowrap'
+const META_PILL_NEUTRAL = cn(
+  META_PILL_BASE,
+  'text-secondary bg-subtle border border-[var(--border)]'
+)
+const META_PILL_SALARY = cn(
+  META_PILL_BASE,
+  'text-salary bg-[color-mix(in_srgb,var(--salary)_14%,transparent)] border border-[var(--border)]'
+)
+const META_PILL_OK = cn(
+  META_PILL_BASE,
+  'text-ok bg-[color-mix(in_srgb,var(--ok)_14%,transparent)] border border-[var(--border)]'
+)
+const META_PILL_WARN = cn(
+  META_PILL_BASE,
+  'text-warn bg-[color-mix(in_srgb,var(--warn)_14%,transparent)] border border-[var(--border)]'
+)
+
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 export function JobDetailPanel({
@@ -162,21 +183,11 @@ export function JobDetailPanel({
           </button>
         )}
 
-        {/* Header band: avatar + title (wrappable) on the left, actions anchored top-right. */}
-        <div className="flex items-start gap-3 mb-3">
-          <CompanyAvatar name={companyName} size="md" />
-          <div className="min-w-0 flex-1">
-            <p className="text-base font-semibold text-primary leading-tight">{job.title}</p>
-            <p className="text-sm text-muted mt-0.5">
-              {companyName}
-              <span
-                className="text-placeholder"
-                title={`Added ${formatExactDateTime(job.added_at)}`}
-              >
-                {' '}
-                · added {formatRelativeTime(job.added_at)}
-              </span>
-            </p>
+        {/* Header band: avatar + company on the left, actions anchored top-right. */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <CompanyAvatar name={companyName} size="md" />
+            <span className="text-sm text-secondary font-medium truncate">{companyName}</span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
@@ -185,8 +196,8 @@ export function JobDetailPanel({
               className={cn(
                 'p-1.5 rounded-lg transition-colors',
                 isSaved
-                  ? 'text-amber-400 hover:bg-amber-500/10'
-                  : 'text-muted hover:text-amber-300 hover:bg-hover'
+                  ? 'text-salary hover:bg-hover'
+                  : 'text-muted hover:text-salary hover:bg-hover'
               )}
               title={isSaved ? 'Remove from saved' : 'Save'}
               aria-label={isSaved ? 'Remove from saved' : 'Save job'}
@@ -196,7 +207,7 @@ export function JobDetailPanel({
             </button>
             <button
               onClick={() => onDismiss(job)}
-              className="p-1.5 text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+              className="p-1.5 text-muted hover:text-danger hover:bg-hover rounded-lg transition-colors"
               title="Dismiss"
               aria-label="Dismiss job"
             >
@@ -214,45 +225,67 @@ export function JobDetailPanel({
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-3">
-          {job.experience_years != null && (
-            <span className="text-xs text-muted bg-subtle border border-[var(--border)] px-2.5 py-1 rounded-lg">
-              {job.experience_years}+ yrs exp
-            </span>
-          )}
-          {job.remote ? (
-            <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
-              <Wifi size={11} /> Remote
-            </span>
-          ) : job.location ? (
-            <span className="flex items-center gap-1 text-xs text-muted bg-subtle border border-[var(--border)] px-2.5 py-1 rounded-lg">
-              <MapPin size={11} /> {job.location}
-            </span>
-          ) : null}
-          {salary && (
-            <span className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">
-              {salary}
-            </span>
-          )}
-          {job.employ_type && (
-            <span className="flex items-center gap-1 text-xs text-muted bg-subtle border border-[var(--border)] px-2.5 py-1 rounded-lg">
-              <Briefcase size={11} /> {job.employ_type.replaceAll('_', ' ')}
-            </span>
-          )}
-          {job.sponsorship && (
-            <span className="flex items-center gap-1 text-xs text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1 rounded-lg">
-              <Globe size={11} /> Sponsors visa
-            </span>
-          )}
-          {job.requires_citizen && (
-            <span className="flex items-center gap-1 text-xs text-orange-300 bg-orange-500/10 border border-orange-500/20 px-2.5 py-1 rounded-lg">
-              <BadgeCheck size={11} /> Citizen required
-            </span>
-          )}
-          {job.security_clearance && (
-            <span className="flex items-center gap-1 text-xs text-red-300 bg-red-500/10 border border-red-500/20 px-2.5 py-1 rounded-lg">
-              <ShieldAlert size={11} /> Clearance required
-            </span>
+        {/* Display-font role title (mockup `.drawer h2`). */}
+        <h2 className="font-display text-xl font-semibold text-primary leading-tight tracking-tight mb-3">
+          {job.title}
+        </h2>
+
+        {/* Meta pills in two rows.
+            Row 1: experience · salary · location.
+            Row 2: posted · type · visa · citizenship/clearance. */}
+        <div className="flex flex-col gap-2 mb-3">
+          <div className="flex flex-wrap gap-2">
+            {job.experience_years != null && (
+              <span className={META_PILL_NEUTRAL}>
+                {job.experience_years === 0 ? 'New grad' : `${job.experience_years}+ yrs`}
+              </span>
+            )}
+            {salary && <span className={cn(META_PILL_SALARY, 'font-mono')}>{salary}</span>}
+            {job.remote ? (
+              <span className={cn(META_PILL_NEUTRAL, 'inline-flex items-center gap-1')}>
+                <Wifi size={11} /> {job.location || 'Remote'}
+              </span>
+            ) : job.location ? (
+              <span className={cn(META_PILL_NEUTRAL, 'inline-flex items-center gap-1')}>
+                <MapPin size={11} /> {job.location}
+              </span>
+            ) : null}
+          </div>
+          {(job.added_at ||
+            job.employ_type ||
+            job.sponsorship ||
+            job.requires_citizen ||
+            job.security_clearance) && (
+            <div className="flex flex-wrap gap-2">
+              {job.added_at && (
+                <span
+                  className={META_PILL_NEUTRAL}
+                  title={`Added ${formatExactDateTime(job.added_at)}`}
+                >
+                  Posted {formatRelativeTime(job.added_at)}
+                </span>
+              )}
+              {job.employ_type && (
+                <span className={cn(META_PILL_NEUTRAL, 'inline-flex items-center gap-1')}>
+                  <Briefcase size={11} /> {job.employ_type.replaceAll('_', ' ')}
+                </span>
+              )}
+              {job.sponsorship && (
+                <span className={cn(META_PILL_OK, 'inline-flex items-center gap-1')}>
+                  <Globe size={11} /> Visa sponsored
+                </span>
+              )}
+              {job.requires_citizen && (
+                <span className={cn(META_PILL_WARN, 'inline-flex items-center gap-1')}>
+                  <BadgeCheck size={11} /> Citizenship required
+                </span>
+              )}
+              {job.security_clearance && (
+                <span className={cn(META_PILL_WARN, 'inline-flex items-center gap-1')}>
+                  <ShieldAlert size={11} /> Clearance required
+                </span>
+              )}
+            </div>
           )}
         </div>
 
@@ -261,7 +294,7 @@ export function JobDetailPanel({
             href={job.url}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1.5 text-xs text-secondary hover:text-violet-300 bg-subtle border border-[var(--border-strong)] px-2.5 py-1.5 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 text-xs text-secondary hover:text-violet-bright bg-subtle border border-[var(--border-strong)] px-2.5 py-1.5 rounded-lg transition-colors"
           >
             <ExternalLink size={12} /> Open posting
           </a>
@@ -275,7 +308,7 @@ export function JobDetailPanel({
         {(job.role_brief || job.llm_summary) && (
           <div>
             <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-2">
-              Summary
+              The role
             </h3>
             <p className="text-sm text-secondary leading-relaxed">
               {job.role_brief ?? job.llm_summary}
@@ -286,7 +319,7 @@ export function JobDetailPanel({
         {job.responsibilities && job.responsibilities.length > 0 && (
           <div>
             <h3 className="text-xs font-medium text-muted uppercase tracking-wider mb-2">
-              Responsibilities
+              What you'll do
             </h3>
             <ul className="list-disc list-inside space-y-1">
               {job.responsibilities.map((r, i) => (
@@ -336,14 +369,14 @@ export function JobDetailPanel({
             placeholder="Private notes about this job (only you can see these)…"
             aria-labelledby={notesLabelId}
             aria-describedby={notesStatusId}
-            className="w-full resize-y rounded-lg border border-[var(--border)] bg-subtle px-3 py-2 text-sm text-primary placeholder:text-placeholder focus-visible:border-violet-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+            className="w-full resize-y rounded-lg border border-[var(--border)] bg-subtle px-3 py-2 text-sm text-primary placeholder:text-placeholder focus-visible:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet"
           />
           <p
             id={notesStatusId}
             aria-live="polite"
             className={cn(
               'mt-1 text-[10px] transition-opacity',
-              saveState === 'error' ? 'text-red-400' : 'text-muted',
+              saveState === 'error' ? 'text-danger' : 'text-muted',
               saveState === 'idle' ? 'opacity-0' : 'opacity-100'
             )}
           >
@@ -359,10 +392,10 @@ export function JobDetailPanel({
             onClick={() => onToggleSave(job)}
             aria-pressed={isSaved}
             className={cn(
-              'flex-1 min-h-[44px] rounded-lg px-4 py-2 text-sm font-medium transition-colors flex items-center justify-center gap-1.5',
+              'flex-1 min-h-[44px] rounded-lg px-4 py-2 text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 border',
               isSaved
-                ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
-                : 'bg-violet-600 text-white hover:bg-violet-500'
+                ? 'text-salary bg-[color-mix(in_srgb,var(--salary)_16%,transparent)] border-[var(--border-strong)] hover:brightness-110'
+                : 'text-primary bg-subtle border-[var(--border-strong)] hover:bg-hover'
             )}
           >
             <Bookmark size={14} fill={isSaved ? 'currentColor' : 'none'} />
@@ -371,14 +404,14 @@ export function JobDetailPanel({
           <button
             type="button"
             onClick={() => onStatusChange(job, JOB_STATUS.APPLIED)}
-            className="flex-1 min-h-[44px] rounded-lg bg-subtle px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-hover"
+            className="flex-1 min-h-[44px] rounded-lg bg-subtle px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-hover border border-[var(--border-strong)]"
           >
             Applied
           </button>
           <button
             type="button"
             onClick={() => onDismiss(job)}
-            className="flex-1 min-h-[44px] rounded-lg bg-red-600/80 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600"
+            className="flex-1 min-h-[44px] rounded-lg px-4 py-2 text-sm font-semibold text-danger bg-[color-mix(in_srgb,var(--danger)_14%,transparent)] border border-[var(--border-strong)] transition-colors hover:brightness-110"
           >
             Dismiss
           </button>

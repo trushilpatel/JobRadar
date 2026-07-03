@@ -4,6 +4,7 @@ import type { Job } from '@/types'
 import { DataTableColumnHeader } from '@/components/ui/data-table'
 import { formatRelativeTime, formatExactDateTime, cn, formatSalary } from '@/lib/utils/utils'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
+import { JobStatusPill } from './JobStatusPill'
 
 export interface JobTableActions {
   onToggleSave: (job: Job) => void
@@ -45,10 +46,8 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
             title={saved ? 'Remove from saved' : 'Save'}
             className={cn(
               'p-1.5 rounded-md transition-colors',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400',
-              saved
-                ? 'text-amber-400 hover:bg-amber-500/10'
-                : 'text-muted hover:text-amber-300 hover:bg-hover'
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet',
+              saved ? 'text-salary hover:bg-hover' : 'text-muted hover:text-salary hover:bg-hover'
             )}
           >
             <Bookmark size={15} fill={saved ? 'currentColor' : 'none'} />
@@ -58,27 +57,10 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       },
     },
 
-    // ── 2. Company ─────────────────────────────────────────────────────────
-    {
-      id: 'company',
-      size: 180,
-      accessorFn: (row) => row.company?.name ?? row.company_id ?? '',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Company" />,
-      cell: ({ row }) => {
-        const name = row.original.company?.name ?? row.original.company_id ?? ''
-        return (
-          <div className="flex items-center gap-2.5">
-            <CompanyAvatar name={name} size="sm" />
-            <span className="text-xs text-secondary truncate max-w-[120px]">{name}</span>
-          </div>
-        )
-      },
-    },
-
-    // ── 3. Title ───────────────────────────────────────────────────────────
+    // ── 2. Title (role) ────────────────────────────────────────────────────
     {
       accessorKey: 'title',
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Title" />,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Role" />,
       cell: ({ row, getValue }) => {
         // Mockup paperclip indicator — shown when a resume is attached to
         // this job (any state). Real impl will read from user_job_state /
@@ -91,11 +73,11 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
             {attachmentState && (
               <Paperclip
                 size={11}
-                className="text-violet-400 shrink-0"
+                className="text-violet shrink-0"
                 aria-label={`Resume attached (${attachmentState})`}
               />
             )}
-            <span className="font-medium text-primary text-sm truncate">
+            <span className="font-semibold text-primary text-sm truncate leading-tight">
               {getValue() as string}
             </span>
           </div>
@@ -103,7 +85,37 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       },
     },
 
-    // ── 4. Location ────────────────────────────────────────────────────────
+    // ── 3. Company ─────────────────────────────────────────────────────────
+    {
+      id: 'company',
+      size: 180,
+      accessorFn: (row) => row.company?.name ?? row.company_id ?? '',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Company" />,
+      cell: ({ row }) => {
+        const name = row.original.company?.name ?? row.original.company_id ?? ''
+        return (
+          <div className="flex items-center gap-2.5 min-w-0">
+            <CompanyAvatar name={name} size="sm" />
+            <span className="text-[13px] text-secondary font-medium truncate max-w-[120px]">
+              {name}
+            </span>
+          </div>
+        )
+      },
+    },
+
+    // ── 4. Status ──────────────────────────────────────────────────────────
+    {
+      id: 'status',
+      size: 120,
+      enableSorting: false,
+      header: () => <span className="text-muted">Status</span>,
+      cell: ({ row }) => <JobStatusPill status={row.original.status} />,
+    },
+
+    // ── 5. Location ────────────────────────────────────────────────────────
+    // Mockup direction: location cell shows ONLY the location text (or a
+    // Remote indicator). Visa/sponsorship lives in the drawer meta, never here.
     {
       id: 'location',
       size: 180,
@@ -113,14 +125,14 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
         const j = row.original
         if (j.remote)
           return (
-            <span className="inline-flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
-              <Wifi size={10} /> Remote
+            <span className="inline-flex items-center gap-1.5 text-[13px] text-remote">
+              <Wifi size={11} /> {j.location || 'Remote'}
             </span>
           )
         if (j.location)
           return (
-            <span className="inline-flex items-center gap-1 text-xs text-muted">
-              <MapPin size={10} /> {j.location}
+            <span className="inline-flex items-center gap-1.5 text-[13px] text-secondary">
+              <MapPin size={11} className="text-muted" /> {j.location}
             </span>
           )
         // Empty cells render blank rather than an em-dash — per UX direction:
@@ -129,7 +141,7 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       },
     },
 
-    // ── 5. Salary ──────────────────────────────────────────────────────────
+    // ── 6. Salary ──────────────────────────────────────────────────────────
     {
       id: 'salary',
       size: 140,
@@ -137,26 +149,33 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       header: () => <span className="text-muted">Salary</span>,
       cell: ({ row }) => {
         const salary = formatSalary(row.original.salary_range)
-        return salary ? <span className="text-xs text-amber-300">{salary}</span> : null
+        return salary ? (
+          <span className="font-mono text-[13px] font-semibold text-salary">{salary}</span>
+        ) : (
+          <span className="text-[13px] text-placeholder">Not listed</span>
+        )
       },
     },
 
-    // ── 6. Added ───────────────────────────────────────────────────────────
+    // ── 7. Posted (added) ──────────────────────────────────────────────────
     {
       accessorKey: 'added_at',
       size: 100,
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Added" />,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Posted" />,
       cell: ({ getValue }) => {
         const addedAt = getValue() as string
         return (
-          <span className="text-xs text-muted" title={`Added ${formatExactDateTime(addedAt)}`}>
+          <span
+            className="text-[12.5px] text-muted"
+            title={`Added ${formatExactDateTime(addedAt)}`}
+          >
             {formatRelativeTime(addedAt)}
           </span>
         )
       },
     },
 
-    // ── 7. Dismiss (hover-revealed) ────────────────────────────────────────
+    // ── 8. Dismiss (hover-revealed) ────────────────────────────────────────
     // Anchored to the row's right edge. Hidden by default, shown on row hover
     // or when the row is focused via keyboard. Keyboard users hit `D` on the
     // focused row instead.
@@ -175,9 +194,9 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
           aria-label={`Dismiss ${row.original.title}`}
           title="Dismiss"
           className={cn(
-            'p-1.5 rounded-md transition-all text-muted hover:text-red-400 hover:bg-red-500/10',
+            'p-1.5 rounded-md transition-all text-muted hover:text-danger hover:bg-hover',
             'opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100',
-            'focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400'
+            'focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet'
           )}
         >
           <X size={14} />

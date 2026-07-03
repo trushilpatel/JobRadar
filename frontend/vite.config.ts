@@ -39,6 +39,11 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: true,
+      // Vite's watcher only ignores node_modules/.git by default — explicitly
+      // ignore generated dirs so a coverage run doesn't trigger a reload storm.
+      watch: {
+        ignored: ['**/coverage/**', '**/dist/**', '**/.git/**'],
+      },
       proxy: {
         // Admin routes: strip /api prefix — Go router registers /admin/* at root
         '/api/admin': {

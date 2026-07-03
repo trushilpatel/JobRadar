@@ -4,13 +4,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   Building2,
   Briefcase,
-  LayoutDashboard,
-  BarChart2,
   ChevronsLeft,
   ChevronsRight,
   LogOut,
   Users,
-  ClipboardList,
   Settings,
   FileText,
   Send,
@@ -21,30 +18,29 @@ import { routes } from '@/config/routes'
 import { COPY } from '@/config/copy'
 import { LogoLockup } from '@/components/brand/Logo'
 
-const userNav: { to: string; label: string; icon: React.ReactNode }[] = [
-  {
-    to: routes.dashboard(),
-    label: COPY['nav.dashboard'],
-    icon: <LayoutDashboard size={16} />,
-  },
+const APP_VERSION = 'v1.0.0'
+
+interface NavLinkSpec {
+  to: string
+  label: string
+  icon: React.ReactNode
+}
+
+// Résumés + Apply queue are frontend-only pages (no backend endpoints), so
+// they are user-facing for every authenticated user — not admin-gated.
+const userNav: NavLinkSpec[] = [
   { to: routes.jobs(), label: COPY['nav.jobs'], icon: <Briefcase size={16} /> },
+  { to: routes.applyQueue(), label: COPY['nav.apply-queue'], icon: <Send size={16} /> },
+  { to: routes.resumeLibrary(), label: COPY['nav.resumes'], icon: <FileText size={16} /> },
 ]
 
-const adminNav: { to: string; label: string; icon: React.ReactNode }[] = [
-  { to: routes.insights(), label: COPY['nav.insights'], icon: <BarChart2 size={16} /> },
+const adminNav: NavLinkSpec[] = [
   {
     to: routes.adminCompanies(),
     label: COPY['nav.companies'],
     icon: <Building2 size={16} />,
   },
   { to: routes.adminUsers(), label: COPY['nav.users'], icon: <Users size={16} /> },
-  { to: routes.resumeLibrary(), label: COPY['nav.resumes'], icon: <FileText size={16} /> },
-  { to: routes.applyQueue(), label: COPY['nav.apply-queue'], icon: <Send size={16} /> },
-  {
-    to: routes.adminAudit(),
-    label: COPY['nav.audit-log'],
-    icon: <ClipboardList size={16} />,
-  },
   { to: routes.adminPipeline(), label: COPY['nav.pipeline'], icon: <Settings size={16} /> },
 ]
 
@@ -53,16 +49,19 @@ function NavItem({
   label,
   icon,
   collapsed,
+  onNavigate,
 }: {
   to: string
   label: string
   icon: React.ReactNode
   collapsed: boolean
+  onNavigate?: () => void
 }) {
   return (
     <NavLink
       to={to}
       title={collapsed ? label : undefined}
+      onClick={onNavigate}
       className={({ isActive }) =>
         cn(
           'w-full flex items-center rounded-lg text-sm transition-colors',
@@ -83,8 +82,15 @@ function NavItem({
   )
 }
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false)
+/**
+ * SidebarNav — the single source of truth for the navigation list, account
+ * footer, and version line. Rendered identically by the desktop rail and the
+ * mobile drawer (Sheet) so the two surfaces never drift.
+ *
+ * `collapsed` only ever true on the desktop rail; the mobile drawer always
+ * renders expanded. `onNavigate` lets the drawer close itself on link click.
+ */
+function SidebarNav({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const { user } = useUser()
   const { isSignedIn } = useAuth()
   const { signOut } = useClerk()
@@ -93,9 +99,127 @@ export function Sidebar() {
   const initials = email ? email[0]?.toUpperCase() : '?'
 
   return (
+    <>
+      {/* Nav links */}
+      <nav className="flex-1 px-1.5 py-4 space-y-0.5 overflow-y-auto">
+        {userNav.map(({ to, label, icon }) => (
+          <NavItem
+            key={to}
+            to={to}
+            label={label}
+            icon={icon}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+          />
+        ))}
+
+        {isAdmin && (
+          <>
+            {!collapsed && (
+              <p className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-600 select-none">
+                Admin
+              </p>
+            )}
+            {collapsed && (
+              <div role="separator" className="my-2 border-t border-[var(--sidebar-border)]" />
+            )}
+            {adminNav.map(({ to, label, icon }) => (
+              <NavItem
+                key={to}
+                to={to}
+                label={label}
+                icon={icon}
+                collapsed={collapsed}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </>
+        )}
+      </nav>
+
+      {/* Account footer */}
+      <div
+        className={cn(
+          'border-t border-[var(--sidebar-border)]',
+          collapsed ? 'px-1.5 py-3' : 'px-3 py-3'
+        )}
+      >
+        {collapsed ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <NavLink
+                to="/account"
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  cn(
+                    'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
+                    isActive ? 'bg-[var(--sidebar-active)]' : 'hover:bg-[var(--sidebar-hover)]'
+                  )
+                }
+              >
+                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
+                  {initials}
+                </span>
+              </NavLink>
+            </TooltipTrigger>
+            <TooltipContent side="right">{email}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <div className="flex items-center gap-2.5">
+            <NavLink
+              to="/account"
+              title="Account"
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                cn(
+                  'flex-1 flex items-center gap-2 rounded-lg px-1 py-1 -mx-1 transition-colors min-w-0',
+                  isActive
+                    ? 'text-[var(--accent-text)]'
+                    : 'text-muted hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)]'
+                )
+              }
+            >
+              <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
+                {initials}
+              </span>
+              <span className="text-xs truncate">{email}</span>
+            </NavLink>
+            <button
+              onClick={() => void signOut()}
+              title="Sign out"
+              className="p-1 text-muted hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)] rounded-md transition-colors shrink-0"
+            >
+              <LogOut size={13} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Version line */}
+      <div
+        className={cn(
+          'border-t border-[var(--sidebar-border)] px-3 py-2 text-[10px] text-muted select-none',
+          collapsed ? 'text-center' : ''
+        )}
+      >
+        {collapsed ? APP_VERSION : `JobRadar · ${APP_VERSION}`}
+      </div>
+    </>
+  )
+}
+
+/**
+ * Sidebar — the desktop collapsible rail. Hidden on small screens; the mobile
+ * drawer in ProtectedLayout renders the same SidebarNav via a Sheet.
+ */
+export function Sidebar() {
+  const [collapsed, setCollapsed] = useState(false)
+
+  return (
     <div
       className={cn(
-        'shrink-0 bg-sidebar border-r border-[var(--sidebar-border)] flex flex-col transition-[width] duration-200 overflow-hidden',
+        'hidden md:flex shrink-0 flex-col overflow-hidden transition-[width] duration-200',
+        'bg-sidebar backdrop-blur-xl border-r border-[var(--sidebar-border)]',
         collapsed ? 'w-[52px]' : 'w-56'
       )}
     >
@@ -122,84 +246,18 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* Nav links */}
-      <nav className="flex-1 px-1.5 py-4 space-y-0.5 overflow-y-auto">
-        {userNav.map(({ to, label, icon }) => (
-          <NavItem key={to} to={to} label={label} icon={icon} collapsed={collapsed} />
-        ))}
+      <SidebarNav collapsed={collapsed} />
+    </div>
+  )
+}
 
-        {isAdmin && (
-          <>
-            {!collapsed && (
-              <p className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-600 select-none">
-                Admin
-              </p>
-            )}
-            {collapsed && (
-              <div role="separator" className="my-2 border-t border-[var(--sidebar-border)]" />
-            )}
-            {adminNav.map(({ to, label, icon }) => (
-              <NavItem key={to} to={to} label={label} icon={icon} collapsed={collapsed} />
-            ))}
-          </>
-        )}
-      </nav>
-
-      {/* Footer */}
-      <div
-        className={cn(
-          'border-t border-[var(--sidebar-border)]',
-          collapsed ? 'px-1.5 py-3' : 'px-3 py-3'
-        )}
-      >
-        {collapsed ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <NavLink
-                to="/account"
-                className={({ isActive }) =>
-                  cn(
-                    'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
-                    isActive ? 'bg-[var(--sidebar-active)]' : 'hover:bg-[var(--sidebar-hover)]'
-                  )
-                }
-              >
-                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
-                  {initials}
-                </span>
-              </NavLink>
-            </TooltipTrigger>
-            <TooltipContent side="right">{email}</TooltipContent>
-          </Tooltip>
-        ) : (
-          <div className="flex items-center gap-2.5">
-            <NavLink
-              to="/account"
-              title="Account"
-              className={({ isActive }) =>
-                cn(
-                  'flex-1 flex items-center gap-2 rounded-lg px-1 py-1 -mx-1 transition-colors min-w-0',
-                  isActive
-                    ? 'text-[var(--accent-text)]'
-                    : 'text-muted hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)]'
-                )
-              }
-            >
-              <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
-                {initials}
-              </span>
-              <span className="text-xs truncate">{email}</span>
-            </NavLink>
-            <button
-              onClick={() => void signOut()}
-              title="Sign out"
-              className="p-1 text-muted hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)] rounded-md transition-colors shrink-0"
-            >
-              <LogOut size={13} />
-            </button>
-          </div>
-        )}
-      </div>
+/**
+ * MobileSidebarNav — the drawer body. Always expanded; closes on navigation.
+ */
+export function MobileSidebarNav({ onNavigate }: { onNavigate: () => void }) {
+  return (
+    <div className="flex h-full flex-col">
+      <SidebarNav collapsed={false} onNavigate={onNavigate} />
     </div>
   )
 }

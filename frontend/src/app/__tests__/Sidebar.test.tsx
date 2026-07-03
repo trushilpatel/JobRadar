@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { Sidebar } from '@/app/Sidebar'
+import { Sidebar, MobileSidebarNav } from '@/app/Sidebar'
 
 // ── Configurable Clerk mock ───────────────────────────────────────────────────
 const signOut = vi.fn().mockResolvedValue(undefined)
@@ -32,7 +32,7 @@ vi.mock('@clerk/react', () => ({
   useClerk: () => ({ signOut }),
 }))
 
-function renderSidebar(initialEntries = ['/dashboard']) {
+function renderSidebar(initialEntries = ['/jobs']) {
   return render(
     <TooltipProvider>
       <MemoryRouter initialEntries={initialEntries}>
@@ -40,6 +40,16 @@ function renderSidebar(initialEntries = ['/dashboard']) {
       </MemoryRouter>
     </TooltipProvider>
   )
+}
+
+function asAdmin() {
+  userState = {
+    ...userState,
+    user: {
+      primaryEmailAddress: { emailAddress: 'jane@example.com' },
+      publicMetadata: { role: 'admin' },
+    },
+  }
 }
 
 beforeEach(() => {
@@ -55,32 +65,36 @@ beforeEach(() => {
 })
 
 describe('Sidebar', () => {
-  it('renders user nav links but not admin links for a non-admin', () => {
+  it('renders the user nav (Jobs, Apply queue, Résumés) but no admin links for a non-admin', () => {
     renderSidebar()
-    expect(screen.getByRole('link', { name: /Dashboard/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Jobs/i })).toBeInTheDocument()
+    // Résumés + Apply queue are user-facing — visible to every authenticated user.
+    expect(screen.getByRole('link', { name: /Apply Queue/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Resumes/i })).toBeInTheDocument()
+    // Dashboard/Insights/Audit are removed from the nav entirely.
+    expect(screen.queryByRole('link', { name: /Dashboard/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Insights/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Audit/i })).not.toBeInTheDocument()
+    // Admin-only links are hidden for non-admins.
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Companies/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Users/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Pipeline/i })).not.toBeInTheDocument()
   })
 
-  it('renders the Admin section and admin links for an admin', () => {
-    userState = {
-      ...userState,
-      user: {
-        primaryEmailAddress: { emailAddress: 'jane@example.com' },
-        publicMetadata: { role: 'admin' },
-      },
-    }
+  it('renders the Admin section (Companies, Users, Pipeline) for an admin', () => {
+    asAdmin()
     renderSidebar()
     expect(screen.getByText('Admin')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Companies/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Users/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Pipeline/i })).toBeInTheDocument()
+    // User-facing links remain visible for admins too.
     expect(screen.getByRole('link', { name: /Resumes/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Apply Queue/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Audit Log/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Insights/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Pipeline/i })).toBeInTheDocument()
+    // Removed-from-nav routes stay out even for admins.
+    expect(screen.queryByRole('link', { name: /Insights/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Audit/i })).not.toBeInTheDocument()
   })
 
   it('highlights the active route', () => {
@@ -96,6 +110,11 @@ describe('Sidebar', () => {
     expect(signOut).toHaveBeenCalledOnce()
   })
 
+  it('renders the version line', () => {
+    renderSidebar()
+    expect(screen.getByText('JobRadar · v1.0.0')).toBeInTheDocument()
+  })
+
   it('collapses and expands via the toggle button', async () => {
     renderSidebar()
     // Expanded: email is visible
@@ -103,19 +122,15 @@ describe('Sidebar', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
     // Collapsed: email label is hidden, only the initials avatar link remains
     expect(screen.queryByText('jane@example.com')).not.toBeInTheDocument()
+    // Version line collapses to just the version
+    expect(screen.getByText('v1.0.0')).toBeInTheDocument()
     // Toggle is now the expand control
     await userEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }))
     expect(screen.getByText('jane@example.com')).toBeInTheDocument()
   })
 
   it('renders the avatar initial from the email and an account link when collapsed', async () => {
-    userState = {
-      ...userState,
-      user: {
-        primaryEmailAddress: { emailAddress: 'jane@example.com' },
-        publicMetadata: { role: 'admin' },
-      },
-    }
+    asAdmin()
     renderSidebar()
     await userEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
     // Initial of "jane@example.com" → "J"
@@ -133,5 +148,41 @@ describe('Sidebar', () => {
     }
     renderSidebar()
     expect(screen.getByText('?')).toBeInTheDocument()
+  })
+})
+
+describe('MobileSidebarNav', () => {
+  function renderMobile(onNavigate = vi.fn(), initialEntries = ['/jobs']) {
+    render(
+      <TooltipProvider>
+        <MemoryRouter initialEntries={initialEntries}>
+          <MobileSidebarNav onNavigate={onNavigate} />
+        </MemoryRouter>
+      </TooltipProvider>
+    )
+    return onNavigate
+  }
+
+  it('renders the same nav links as the desktop rail', () => {
+    asAdmin()
+    renderMobile()
+    expect(screen.getByRole('link', { name: /Jobs/i })).toBeInTheDocument()
+    expect(screen.getByText('Admin')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Companies/i })).toBeInTheDocument()
+    expect(screen.getByText('JobRadar · v1.0.0')).toBeInTheDocument()
+  })
+
+  it('shows the user-facing links for a non-admin (no admin group)', () => {
+    renderMobile()
+    expect(screen.getByRole('link', { name: /Jobs/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Apply Queue/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Resumes/i })).toBeInTheDocument()
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument()
+  })
+
+  it('calls onNavigate when a link is clicked (closes the drawer)', async () => {
+    const onNavigate = renderMobile()
+    await userEvent.click(screen.getByRole('link', { name: /Jobs/i }))
+    expect(onNavigate).toHaveBeenCalledOnce()
   })
 })

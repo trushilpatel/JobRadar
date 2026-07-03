@@ -9,70 +9,120 @@
     padding: 0;
   }
 
+  /* ── Shared design tokens (theme-independent) ───────── */
+  :root {
+    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-display: 'Space Grotesk', 'Inter', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --glass-blur: 22px;
+  }
+
   /* ── Light theme ─────────────────────────────────── */
   :root {
-    --bg-page: #f5f6f8;
+    --bg-page: #f6f7fb;
     --bg-panel: #ffffff;
     --bg-subtle: #f0f1f5;
     --bg-input: #ffffff;
-    --bg-hover: #e8eaf0;
-    --border: rgba(0, 0, 0, 0.08);
-    --border-strong: rgba(0, 0, 0, 0.15);
-    --text-primary: #0f1117;
-    --text-secondary: #374151;
-    --text-muted: #6b7280;
-    --text-placeholder: #9ca3af;
+    --bg-hover: #f1f2f8;
+    --border: rgba(10, 12, 30, 0.09);
+    --border-strong: rgba(10, 12, 30, 0.16);
+    --text-primary: #0d0f1a;
+    --text-secondary: #41455c;
+    --text-muted: #6b6f86;
+    --text-placeholder: #9aa0b4;
     --sidebar-bg: #f0f1f5;
-    --sidebar-border: rgba(0, 0, 0, 0.07);
-    --sidebar-hover: rgba(0, 0, 0, 0.06);
-    --sidebar-active: rgba(109, 40, 217, 0.12);
-    --sidebar-fg: #0f1117;
-    --accent: #7c3aed;
-    --accent-dim: rgba(109, 40, 217, 0.15);
-    --accent-text: #7c3aed;
-    --destructive: #dc2626;
-    --scrollbar-thumb: rgba(0, 0, 0, 0.18);
-    --heat-zero: #e8eaf0;
-    --heat-1: #6ee7b7;
-    --heat-2: #34d399;
-    --heat-3: #10b981;
-    --heat-4: #059669;
-    --sparkline-dim-purple: rgba(109, 40, 217, 0.2);
+    --sidebar-border: rgba(10, 12, 30, 0.08);
+    --sidebar-hover: rgba(10, 12, 30, 0.05);
+    --sidebar-active: rgba(109, 68, 255, 0.12);
+    --sidebar-fg: #0d0f1a;
+    --accent: #6d44ff;
+    --accent-dim: rgba(109, 68, 255, 0.15);
+    --accent-text: #6d44ff;
+    --destructive: #e11d48;
+    --scrollbar-thumb: rgba(10, 12, 30, 0.2);
+    /* application-activity heat ramp — violet */
+    --heat-zero: #eceef5;
+    --heat-1: #d8d2fb;
+    --heat-2: #b3a3f5;
+    --heat-3: #8a6dff;
+    --heat-4: #6d44ff;
+    --sparkline-dim-purple: rgba(109, 68, 255, 0.2);
     --sparkline-dim-green: rgba(16, 185, 129, 0.2);
-    --sparkline-bar-prev: #d1fae5;
+    --sparkline-bar-prev: #e6defb;
+    /* brand + semantic palette (mockup tokens) */
+    --violet: #6d44ff;
+    --violet-bright: #6d44ff;
+    --cyan: #11b3ad;
+    --cyan-bright: #11b3ad;
+    --magenta: #d6249f;
+    --lime: #5fa800;
+    --ok: #0e8a6c;
+    --warn: #b45309;
+    --danger: #e11d48;
+    --remote: #0e8a6c;
+    --salary: #b7791f;
+    --score-low: #e11d48;
+    --score-mid: #b7791f;
+    --score-high: #11b3ad;
+    --score-top: #5fa800;
+    --glass-bg: rgba(255, 255, 255, 0.65);
+    --glass-stroke: rgba(10, 12, 30, 0.1);
+    --glow-violet: 0 0 0 1px rgba(124, 92, 255, 0.25), 0 10px 36px -10px rgba(124, 92, 255, 0.35);
+    --glow-cyan: 0 0 0 1px rgba(20, 160, 156, 0.25), 0 10px 36px -10px rgba(20, 160, 156, 0.3);
   }
 
-  /* ── Dark theme ──────────────────────────────────── */
+  /* ── Dark theme (default) ────────────────────────── */
   .dark {
-    --bg-page: #0a0a0f;
-    --bg-panel: #0d0d14;
-    --bg-subtle: rgba(30, 30, 45, 0.5);
-    --bg-input: #13131e;
-    --bg-hover: rgba(255, 255, 255, 0.04);
-    --border: rgba(255, 255, 255, 0.07);
-    --border-strong: rgba(255, 255, 255, 0.12);
-    --text-primary: #e2e8f0;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
-    --text-placeholder: #475569;
-    --sidebar-bg: #0d0d14;
-    --sidebar-border: rgba(255, 255, 255, 0.06);
-    --sidebar-hover: rgba(255, 255, 255, 0.04);
-    --sidebar-active: rgba(109, 40, 217, 0.2);
-    --sidebar-fg: #e2e8f0;
-    --accent: #7c3aed;
-    --accent-dim: rgba(109, 40, 217, 0.25);
-    --accent-text: #a78bfa;
-    --destructive: #ef4444;
-    --scrollbar-thumb: rgba(255, 255, 255, 0.12);
-    --heat-zero: #1c1c1e;
-    --heat-1: #085041;
-    --heat-2: #0f6e56;
-    --heat-3: #1d9e75;
-    --heat-4: #5dcaa5;
-    --sparkline-dim-purple: #221f4a;
+    --bg-page: #0b0b14;
+    --bg-panel: #12121d;
+    --bg-subtle: #181826;
+    --bg-input: #161622;
+    --bg-hover: #1f1f30;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --text-primary: #f4f4fb;
+    --text-secondary: #b6b8c9;
+    --text-muted: #7c7f95;
+    --text-placeholder: #565b6e;
+    --sidebar-bg: #0d0d16;
+    --sidebar-border: rgba(255, 255, 255, 0.08);
+    --sidebar-hover: rgba(255, 255, 255, 0.05);
+    --sidebar-active: rgba(124, 92, 255, 0.18);
+    --sidebar-fg: #f4f4fb;
+    --accent: #7c5cff;
+    --accent-dim: rgba(124, 92, 255, 0.22);
+    --accent-text: #9d86ff;
+    --destructive: #fb7185;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.16);
+    /* application-activity heat ramp — violet */
+    --heat-zero: #1f1f30;
+    --heat-1: #39306a;
+    --heat-2: #4f3f9c;
+    --heat-3: #664dcd;
+    --heat-4: #7c5cff;
+    --sparkline-dim-purple: rgba(124, 92, 255, 0.22);
     --sparkline-dim-green: #083426;
-    --sparkline-bar-prev: #1c3c34;
+    --sparkline-bar-prev: #2a2545;
+    /* brand + semantic palette (mockup tokens) */
+    --violet: #7c5cff;
+    --violet-bright: #9d86ff;
+    --cyan: #2fe6e0;
+    --cyan-bright: #5ffff9;
+    --magenta: #ff5cc8;
+    --lime: #9bff5c;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --danger: #fb7185;
+    --remote: #34d399;
+    --salary: #ffd166;
+    --score-low: #ff6b6b;
+    --score-mid: #ffd166;
+    --score-high: #2fe6e0;
+    --score-top: #9bff5c;
+    --glass-bg: rgba(20, 20, 34, 0.55);
+    --glass-stroke: rgba(255, 255, 255, 0.12);
+    --glow-violet: 0 0 0 1px rgba(124, 92, 255, 0.3), 0 8px 40px -8px rgba(124, 92, 255, 0.45);
+    --glow-cyan: 0 0 0 1px rgba(47, 230, 224, 0.3), 0 8px 40px -8px rgba(47, 230, 224, 0.4);
   }
 
   html {
@@ -80,13 +130,11 @@
   }
 
   body {
-    font-family:
-      system-ui,
-      -apple-system,
-      sans-serif;
+    font-family: var(--font-sans);
     background: var(--bg-page);
     color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   #root {
