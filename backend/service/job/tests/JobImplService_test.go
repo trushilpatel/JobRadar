@@ -92,6 +92,7 @@ type fakeUserState struct {
 	statusErr        error
 	statusCalls      int
 	lastStatusStatus string
+	lastStatusFilter jobdto.JobFilter
 }
 
 // strPtr returns a pointer to s. Helper for *string status fixtures.
@@ -164,6 +165,7 @@ func (f *fakeUserState) GetJobsByStatus(_ context.Context, userID string, filter
 	}
 	f.statusCalls++
 	f.lastStatusStatus = filter.Status
+	f.lastStatusFilter = filter
 	return f.statusJobs, f.statusNext, f.statusErr
 }
 
@@ -529,6 +531,41 @@ func TestList_AppliedTab_SetsStatusOnAllViews(t *testing.T) {
 		if item.UserState.Status != "applied" {
 			t.Errorf("expected status=applied on all views, got %q on item %s", item.UserState.Status, item.ID)
 		}
+	}
+}
+
+// TestImpl_List_StatusesFilter_RoutesToUserStateAndForwardsFilter proves the
+// dispatch-routing fix: a request with only filter.Statuses set (and
+// filter.Status empty) must route to listByUserStatus/GetJobsByStatus, not
+// the global "new"-feed cache path. This is the single most important test
+// in the combined-status ("Tracking" tab) feature — without the dispatch
+// fix, a request with only ?statuses= silently falls through to the global
+// feed and GetJobsByStatus is never called, defeating the feature entirely.
+func TestImpl_List_StatusesFilter_RoutesToUserStateAndForwardsFilter(t *testing.T) {
+	reader := &fakeJobReader{jobs: []jobmodel.Job{{ID: "j1"}}}
+	state := &fakeUserState{
+		statusJobs: []jobmodel.Job{{ID: "j-applied"}, {ID: "j-interviewing"}},
+	}
+	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, nil)
+
+	statuses := []string{jobcommon.JobStatusApplied, jobcommon.JobStatusInterviewing}
+	res, err := svc.List(ctxAs("u1"), jobdto.JobFilter{Statuses: statuses}, "", 10)
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	if reader.calls != 0 {
+		t.Errorf("GetJobs calls = %d, want 0 (must not hit the global feed)", reader.calls)
+	}
+	if state.statusCalls != 1 {
+		t.Fatalf("GetJobsByStatus calls = %d, want 1", state.statusCalls)
+	}
+	if len(state.lastStatusFilter.Statuses) != 2 ||
+		state.lastStatusFilter.Statuses[0] != jobcommon.JobStatusApplied ||
+		state.lastStatusFilter.Statuses[1] != jobcommon.JobStatusInterviewing {
+		t.Errorf("forwarded Statuses = %v, want %v", state.lastStatusFilter.Statuses, statuses)
+	}
+	if len(res.Items) != 2 {
+		t.Errorf("items = %d, want 2 (from statusJobs)", len(res.Items))
 	}
 }
 

@@ -176,6 +176,11 @@ describe('useJobs', () => {
     expect(result.current.dateFilter).toBe('all')
   })
 
+  it('initial visaFilter is "any"', () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    expect(result.current.visaFilter).toBe('any')
+  })
+
   it('setSelectedCompanies updates selectedCompanies', () => {
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
     act(() => result.current.setSelectedCompanies(['Acme', 'Stripe']))
@@ -200,6 +205,33 @@ describe('useJobs', () => {
     expect(result.current.dateFilter).toBe('7d')
   })
 
+  it('setVisaFilter updates visaFilter', () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    act(() => result.current.setVisaFilter('true'))
+    expect(result.current.visaFilter).toBe('true')
+  })
+
+  it('passes sponsorship=undefined to fetchJobs when visaFilter is "any"', async () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    const [filters] = vi.mocked(jobsApi.fetchJobs).mock.calls[0]!
+    expect(filters.sponsorship).toBeUndefined()
+  })
+
+  it('passes sponsorship=true to fetchJobs when visaFilter is "true"', async () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper('?visa=true') })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].sponsorship).toBe(true)
+  })
+
+  it('passes sponsorship=false to fetchJobs when visaFilter is "false"', async () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper('?visa=false') })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].sponsorship).toBe(false)
+  })
+
   // ── Reset filters ──────────────────────────────────────────────────────────
 
   it('resetFilters clears all filter state', () => {
@@ -210,6 +242,7 @@ describe('useJobs', () => {
       result.current.setLocationFilter('remote')
       result.current.setExpFilter(['0-2'])
       result.current.setDateFilter('7d')
+      result.current.setVisaFilter('true')
     })
     act(() => result.current.resetFilters())
     expect(result.current.searchQuery).toBe('')
@@ -217,6 +250,7 @@ describe('useJobs', () => {
     expect(result.current.locationFilter).toBe('any')
     expect(result.current.expFilter).toEqual([])
     expect(result.current.dateFilter).toBe('all')
+    expect(result.current.visaFilter).toBe('any')
   })
 
   it('resetFilters resets page to 1', () => {

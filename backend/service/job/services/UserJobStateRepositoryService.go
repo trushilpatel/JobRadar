@@ -441,8 +441,10 @@ func (r *userJobStateRepository) CountsByUser(ctx context.Context, userID string
 // experience range, remote/on-site). Drives from user_job_state so every page
 // is a full limit-sized result set. Cursor format matches GetJobs.
 //
-// Status "saved" joins on saved_at IS NOT NULL (orthogonal flag); other
-// workflow values join on ujs.status = ? AND ujs.status IS NOT NULL.
+// filter.Statuses (when non-empty) takes precedence and joins on
+// ujs.status IN (...) for a combined multi-stage view (e.g. the Tracking tab).
+// Otherwise: Status "saved" joins on saved_at IS NOT NULL (orthogonal flag);
+// other workflow values join on ujs.status = ? AND ujs.status IS NOT NULL.
 func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID string, filter dto.JobFilter, cursor string, limit int) (_ []jobmodel.Job, _ string, err error) {
 	ctx, span := tracing.Start(ctx, "job.userstate.GetJobsByStatus")
 	defer tracing.End(span, &err)
@@ -460,8 +462,13 @@ func (r *userJobStateRepository) GetJobsByStatus(ctx context.Context, userID str
 		Model(&jobmodel.Job{}).
 		Joins("Company")
 
-	switch filter.Status {
-	case jobcommon.JobStatusSaved:
+	switch {
+	case len(filter.Statuses) > 0:
+		query = query.Joins(
+			"INNER JOIN user_job_state ujs ON ujs.job_id = jobs.id AND ujs.user_id = ? AND ujs.status IN ? AND ujs.status IS NOT NULL",
+			userID, filter.Statuses,
+		)
+	case filter.Status == jobcommon.JobStatusSaved:
 		query = query.Joins(
 			"INNER JOIN user_job_state ujs ON ujs.job_id = jobs.id AND ujs.user_id = ? AND ujs.saved_at IS NOT NULL",
 			userID,

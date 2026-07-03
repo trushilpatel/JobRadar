@@ -18,6 +18,8 @@ export type SortDir = 'asc' | 'desc'
 const LOCATION_VALUES = ['any', 'remote', 'onsite', 'hybrid'] as const
 const DATE_VALUES = ['all', '24h', '7d', '30d'] as const
 const DIR_VALUES = ['asc', 'desc'] as const
+const VISA_VALUES = ['any', 'true', 'false'] as const
+export type VisaFilter = (typeof VISA_VALUES)[number]
 
 const DEFAULT_TAB: TabKey = JOB_STATUS.NEW
 const DEFAULT_LIMIT = 20
@@ -35,6 +37,7 @@ const PARSERS = {
   since: parseAsStringLiteral(DATE_VALUES).withDefault('all'),
   sort: parseAsString.withDefault(''),
   dir: parseAsStringLiteral(DIR_VALUES).withDefault('asc'),
+  visa: parseAsStringLiteral(VISA_VALUES).withDefault('any'),
   /**
    * Zero-based page index. Lives in the URL so refresh and share-links land
    * on the same page within the result set. Replaces the prior local
@@ -116,6 +119,8 @@ export function useJobUrlState() {
     [setState]
   )
 
+  const setVisa = useCallback((visa: VisaFilter) => setState({ visa, page: 0 }, PUSH), [setState])
+
   const setSort = useCallback((sort: string) => setState({ sort, page: 0 }, PUSH), [setState])
 
   const setDir = useCallback((dir: SortDir) => setState({ dir, page: 0 }, PUSH), [setState])
@@ -141,6 +146,7 @@ export function useJobUrlState() {
         sort: '',
         dir: 'asc',
         page: 0,
+        visa: 'any',
       },
       PUSH
     )
@@ -170,6 +176,8 @@ export function useJobUrlState() {
       setPage,
       limit: state.limit,
       setLimit,
+      visa: state.visa,
+      setVisa,
       resetFilters,
     }),
     [
@@ -184,6 +192,7 @@ export function useJobUrlState() {
       state.dir,
       state.page,
       state.limit,
+      state.visa,
       setTab,
       setOpenJobId,
       setQ,
@@ -195,6 +204,7 @@ export function useJobUrlState() {
       setDir,
       setPage,
       setLimit,
+      setVisa,
       resetFilters,
     ]
   )

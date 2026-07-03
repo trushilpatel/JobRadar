@@ -188,6 +188,27 @@ describe('useJobs — cursor history pagination', () => {
     await waitFor(() => expect(result.current.page).toBe(1))
   })
 
+  // ── 6b. Visa filter change resets cursorHistory and page ────────────────────
+
+  it('visa filter change resets cursorHistory to [empty-string] and page to 1', async () => {
+    vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
+      if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
+      return { items: [makeJob('b')], next_cursor: '' }
+    })
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    await act(async () => {
+      result.current.goToNextPage()
+    })
+    await waitFor(() => expect(result.current.page).toBe(2))
+
+    // Change the visa filter — should reset back to page 1 (fingerprint change).
+    act(() => result.current.setVisaFilter('true'))
+
+    await waitFor(() => expect(result.current.page).toBe(1))
+  })
+
   // ── 7. Tab change resets cursorHistory and page ─────────────────────────────
 
   it('tab change resets cursorHistory and returns to page 1', async () => {

@@ -25,6 +25,7 @@ describe('useJobUrlState', () => {
     expect(result.current.dir).toBe('asc')
     expect(result.current.page).toBe(0)
     expect(result.current.limit).toBe(20)
+    expect(result.current.visa).toBe('any')
   })
 
   it('hydrates state from a populated query string', () => {
@@ -74,6 +75,17 @@ describe('useJobUrlState', () => {
     expect(result.current.openJobId).toBeNull()
   })
 
+  it('setVisa updates the URL and resets page', async () => {
+    const { result } = renderHook(() => useJobUrlState(), {
+      wrapper: makeWrapper('?page=2'),
+    })
+    act(() => {
+      result.current.setVisa('true')
+    })
+    await waitFor(() => expect(result.current.visa).toBe('true'))
+    expect(result.current.page).toBe(0)
+  })
+
   it('array filters (companies, exp) round-trip values', async () => {
     const { result } = renderHook(() => useJobUrlState(), { wrapper: makeWrapper() })
     act(() => {
@@ -87,7 +99,7 @@ describe('useJobUrlState', () => {
   it('resetFilters clears every filter but preserves tab and openJobId', async () => {
     const { result } = renderHook(() => useJobUrlState(), {
       wrapper: makeWrapper(
-        '?tab=applied&job=keep-me&q=hello&companies=x,y&loc=remote&exp=5%2B&since=24h&sort=title&dir=desc&cursor=cur1'
+        '?tab=applied&job=keep-me&q=hello&companies=x,y&loc=remote&exp=5%2B&since=24h&sort=title&dir=desc&cursor=cur1&visa=true'
       ),
     })
     expect(result.current.tab).toBe('applied')
@@ -105,6 +117,7 @@ describe('useJobUrlState', () => {
     expect(result.current.sort).toBe('')
     expect(result.current.dir).toBe('asc')
     expect(result.current.page).toBe(0)
+    expect(result.current.visa).toBe('any')
     // Preserved:
     expect(result.current.tab).toBe('applied')
     expect(result.current.openJobId).toBe('keep-me')
@@ -154,5 +167,11 @@ describe('jobsUrl', () => {
 
   it('omits default values so an unfiltered link stays clean', () => {
     expect(jobsUrl({})).toBe('/jobs')
+  })
+
+  it('carries the visa filter in the query string', () => {
+    const url = jobsUrl({ visa: 'true' })
+    const params = new URL(`http://x${url}`).searchParams
+    expect(params.get('visa')).toBe('true')
   })
 })

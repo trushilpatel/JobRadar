@@ -757,6 +757,35 @@ func TestRest_Dismiss_ServiceErrorMapsToStatus(t *testing.T) {
 	}
 }
 
+// TestRest_List_ParsesStatusesParam verifies repeated ?statuses= query params
+// are collected into filter.Statuses — the combined multi-status view (e.g.
+// the Tracking tab). A plain ?status= request must leave Statuses empty.
+func TestRest_List_ParsesStatusesParam(t *testing.T) {
+	fake := &fakeRestSvc{}
+	r := newRouter(fake)
+	req := httptest.NewRequest(http.MethodGet, "/jobs?statuses=applied&statuses=interviewing", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
+	}
+	if len(fake.lastFilter.Statuses) != 2 || fake.lastFilter.Statuses[0] != "applied" || fake.lastFilter.Statuses[1] != "interviewing" {
+		t.Errorf("statuses = %v, want [applied interviewing]", fake.lastFilter.Statuses)
+	}
+
+	fake2 := &fakeRestSvc{}
+	r2 := newRouter(fake2)
+	req2 := httptest.NewRequest(http.MethodGet, "/jobs?status=applied", nil)
+	w2 := httptest.NewRecorder()
+	r2.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", w2.Code, w2.Body.String())
+	}
+	if len(fake2.lastFilter.Statuses) != 0 {
+		t.Errorf("statuses = %v, want empty for plain ?status= request", fake2.lastFilter.Statuses)
+	}
+}
+
 // TestRest_List_HybridParam_True verifies ?hybrid=true sets filter.Hybrid=true.
 func TestRest_List_HybridParam_True(t *testing.T) {
 	fake := &fakeRestSvc{}

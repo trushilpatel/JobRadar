@@ -246,6 +246,30 @@ describe('jobs API', () => {
       expect(url).toContain('sort_dir=desc')
     })
 
+    it('includes sponsorship=true param when sponsorship filter is true', async () => {
+      const page: JobsPage = { items: [], next_cursor: '' }
+      vi.mocked(apiClient.get).mockResolvedValue(page)
+      await fetchJobs({ ...baseFilters, sponsorship: true }, '', 20)
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
+      expect(url).toContain('sponsorship=true')
+    })
+
+    it('includes sponsorship=false param when sponsorship filter is false', async () => {
+      const page: JobsPage = { items: [], next_cursor: '' }
+      vi.mocked(apiClient.get).mockResolvedValue(page)
+      await fetchJobs({ ...baseFilters, sponsorship: false }, '', 20)
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
+      expect(url).toContain('sponsorship=false')
+    })
+
+    it('omits sponsorship param when undefined', async () => {
+      const page: JobsPage = { items: [], next_cursor: '' }
+      vi.mocked(apiClient.get).mockResolvedValue(page)
+      await fetchJobs(baseFilters, '', 20)
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
+      expect(url).not.toContain('sponsorship=')
+    })
+
     it('appends multiple companies params', async () => {
       const page: JobsPage = { items: [], next_cursor: '' }
       vi.mocked(apiClient.get).mockResolvedValue(page)

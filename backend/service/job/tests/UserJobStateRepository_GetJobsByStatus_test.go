@@ -318,6 +318,79 @@ func TestUserJobStateRepo_GetJobsByStatus_ExperienceRange_OpenAndMin0(t *testing
 	}
 }
 
+// TestUserJobStateRepo_GetJobsByStatus_CombinedStatuses — filter.Statuses
+// (the combined multi-status view used by e.g. the Tracking tab) returns the
+// union of jobs across every listed status, scoped to the current user, and
+// excludes statuses not in the list.
+func TestUserJobStateRepo_GetJobsByStatus_CombinedStatuses(t *testing.T) {
+	t.Parallel()
+	db := newJobTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	t0 := time.Now()
+	seedJob(t, db, "j-applied", "c1", "T1", "p1", t0.Add(3*time.Minute))
+	seedJob(t, db, "j-interviewing", "c1", "T2", "p2", t0.Add(2*time.Minute))
+	seedJob(t, db, "j-offer", "c1", "T3", "p3", t0.Add(time.Minute))
+	seedJob(t, db, "j-rejected", "c1", "T4", "p4", t0)
+	repo := jobsvc.NewUserJobStateRepository(db)
+	ctx := context.Background()
+	if err := repo.Upsert(ctx, "u1", "j-applied", jobdto.UpsertState{Status: jobmodel.StatusApplied}); err != nil {
+		t.Fatalf("seed applied: %v", err)
+	}
+	if err := repo.Upsert(ctx, "u1", "j-interviewing", jobdto.UpsertState{Status: jobmodel.StatusInterviewing}); err != nil {
+		t.Fatalf("seed interviewing: %v", err)
+	}
+	if err := repo.Upsert(ctx, "u1", "j-offer", jobdto.UpsertState{Status: jobmodel.StatusOffer}); err != nil {
+		t.Fatalf("seed offer: %v", err)
+	}
+	if err := repo.Upsert(ctx, "u1", "j-rejected", jobdto.UpsertState{Status: jobmodel.StatusRejected}); err != nil {
+		t.Fatalf("seed rejected: %v", err)
+	}
+
+	jobs, _, err := repo.GetJobsByStatus(ctx, "u1",
+		jobdto.JobFilter{Statuses: []string{jobmodel.StatusApplied, jobmodel.StatusInterviewing}}, "", 10)
+	if err != nil {
+		t.Fatalf("GetJobsByStatus err = %v", err)
+	}
+	got := idSlice(jobs)
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2: %v", len(got), got)
+	}
+	want := map[string]bool{"j-applied": true, "j-interviewing": true}
+	for _, id := range got {
+		if !want[id] {
+			t.Errorf("unexpected job %s in combined-status result", id)
+		}
+	}
+}
+
+// TestUserJobStateRepo_GetJobsByStatus_StatusesTakesPrecedenceOverStatus —
+// when both Status and Statuses are set, Statuses wins.
+func TestUserJobStateRepo_GetJobsByStatus_StatusesTakesPrecedenceOverStatus(t *testing.T) {
+	t.Parallel()
+	db := newJobTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	t0 := time.Now()
+	seedJob(t, db, "j-applied", "c1", "T1", "p1", t0.Add(time.Minute))
+	seedJob(t, db, "j-offer", "c1", "T2", "p2", t0)
+	repo := jobsvc.NewUserJobStateRepository(db)
+	ctx := context.Background()
+	if err := repo.Upsert(ctx, "u1", "j-applied", jobdto.UpsertState{Status: jobmodel.StatusApplied}); err != nil {
+		t.Fatalf("seed applied: %v", err)
+	}
+	if err := repo.Upsert(ctx, "u1", "j-offer", jobdto.UpsertState{Status: jobmodel.StatusOffer}); err != nil {
+		t.Fatalf("seed offer: %v", err)
+	}
+
+	jobs, _, err := repo.GetJobsByStatus(ctx, "u1",
+		jobdto.JobFilter{Status: jobmodel.StatusOffer, Statuses: []string{jobmodel.StatusApplied}}, "", 10)
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if len(jobs) != 1 || jobs[0].ID != "j-applied" {
+		t.Errorf("got %v, want only j-applied (Statuses must take precedence over Status)", idSlice(jobs))
+	}
+}
+
 // TestUserJobStateRepo_GetJobsByStatus_PaginatesWithSortByCompany exercises
 // the company-sort branch through the per-user repo.
 func TestUserJobStateRepo_GetJobsByStatus_PaginatesWithSortByCompany(t *testing.T) {
