@@ -126,8 +126,8 @@ export function JobsTable({
               // `group/row` enables Tailwind named-group hover for child cells
               // (the hover-revealed Dismiss button in jobs-columns.tsx).
               'group/row',
-              isFocused && 'ring-2 ring-violet-400 ring-inset',
-              isActive ? 'bg-violet-500/[0.08]' : 'hover:bg-hover'
+              isFocused && 'ring-2 ring-violet ring-inset',
+              isActive ? 'bg-[var(--accent-dim)]' : 'hover:bg-hover'
             )
           }}
           getRowProps={(job) => ({
@@ -142,7 +142,7 @@ export function JobsTable({
               }
             },
             className:
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-inset',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet focus-visible:ring-inset',
           })}
           sorting={sorting}
           onSortingChange={onSortingChange}

@@ -83,11 +83,25 @@ func runCycle(ctx context.Context, log logger.Logger, svc SchedulerService, inte
 		}
 	}
 
+	if reclaimed, err := svc.ReclaimStuckFetchRows(ctx); err != nil {
+		metrics.SchedulerErrorsTotal.WithLabelValues("reclaim_stuck_fetch").Inc()
+		log.Error("reclaim stuck fetch failed", err)
+	} else if reclaimed > 0 {
+		log.Info("reclaimed stuck fetch ledger rows", logger.Int(logger.FieldCount, int(reclaimed)))
+	}
+
 	if purged, err := svc.PurgeInactive(ctx); err != nil {
 		metrics.SchedulerErrorsTotal.WithLabelValues("purge_inactive").Inc()
 		log.Error("purge inactive failed", err)
 	} else if purged > 0 {
 		log.Info("purged inactive company queue entries", logger.Int(logger.FieldPurged, purged))
+	}
+
+	if n, err := svc.AutoPauseChronicFailures(ctx); err != nil {
+		metrics.SchedulerErrorsTotal.WithLabelValues("auto_pause").Inc()
+		log.Error("auto-pause chronic failures failed", err)
+	} else if n > 0 {
+		log.Info("auto-paused chronic-failing companies", logger.Int(logger.FieldCount, n))
 	}
 
 	if rerr := svc.RetryDueJobs(ctx); rerr != nil {

@@ -82,6 +82,8 @@ const (
 	FieldStuckTimeout        = "stuck_timeout"
 	FieldJitter              = "jitter"
 	FieldReason              = "reason"
+	FieldAttempt             = "attempt"
+	FieldMaxAttempts         = "max_attempts"
 	FieldPurged              = "purged"
 	FieldSkippedNoSettings   = "skipped_no_settings"
 	FieldStillActive         = "still_active"

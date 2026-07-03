@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -326,6 +327,68 @@ func TestWorkday_FetchJobListingWithConfig_MaxJobsCap(t *testing.T) {
 	}
 	if len(result.Jobs) != 1 {
 		t.Errorf("expected 1 job (capped), got %d", len(result.Jobs))
+	}
+}
+
+func TestWorkday_FetchJobListingWithConfig_LocaleDefault(t *testing.T) {
+	var capturedBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"total":0,"jobPostings":[]}`))
+	}))
+	defer srv.Close()
+
+	adapter := &Workday{
+		httpClient:     testHTTPClientRedirectingTo(srv.URL),
+		interPageDelay: 0,
+		log:            logger.NewNoop(),
+	}
+
+	cfg := validConfig("nvidia.wd5.myworkdayjobs.com", "NVIDIAExternalCareerSite")
+	_, err := adapter.FetchJobListingWithConfig(context.Background(), "nvidia", cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var body map[string]interface{}
+	if err := json.Unmarshal(capturedBody, &body); err != nil {
+		t.Fatalf("could not decode request body: %v", err)
+	}
+	if got, _ := body["locale"].(string); got != "en-US" {
+		t.Errorf("request locale = %q, want en-US (default)", got)
+	}
+}
+
+func TestWorkday_FetchJobListingWithConfig_LocaleFromConfig(t *testing.T) {
+	var capturedBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"total":0,"jobPostings":[]}`))
+	}))
+	defer srv.Close()
+
+	adapter := &Workday{
+		httpClient:     testHTTPClientRedirectingTo(srv.URL),
+		interPageDelay: 0,
+		log:            logger.NewNoop(),
+	}
+
+	cfg := json.RawMessage(`{"host":"nvidia.wd5.myworkdayjobs.com","site":"NVIDIAExternalCareerSite","locale":"fr-FR"}`)
+	_, err := adapter.FetchJobListingWithConfig(context.Background(), "nvidia", cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var body map[string]interface{}
+	if err := json.Unmarshal(capturedBody, &body); err != nil {
+		t.Fatalf("could not decode request body: %v", err)
+	}
+	if got, _ := body["locale"].(string); got != "fr-FR" {
+		t.Errorf("request locale = %q, want fr-FR (from config)", got)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters"
 	"github.com/trushilpatel/jobradar/common/ats/core"
 	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
 )
 
 // adapterLookupFn resolves an adapter bundle by type name. Injectable for tests.
@@ -49,6 +50,7 @@ func newAdapterExecutor(
 func (e *adapterExecutor) Execute(ctx context.Context, unit WorkUnit) error {
 	bundle, err := e.lookupFn(unit.AdapterType, e.log, e.httpClient)
 	if err != nil {
+		metrics.CrawlerScansTotal.WithLabelValues("error").Inc()
 		return fmt.Errorf("executor: lookup adapter %q: %w", unit.AdapterType, err)
 	}
 
@@ -63,10 +65,14 @@ func (e *adapterExecutor) Execute(ctx context.Context, unit WorkUnit) error {
 		listing, err = bundle.Listing.FetchJobListing(ctx, unit.CompanyID)
 	}
 	if err != nil {
+		metrics.CrawlerScansTotal.WithLabelValues("error").Inc()
 		return fmt.Errorf("executor: fetch %q: %w", unit.AdapterType, err)
 	}
 
-	return e.client.SubmitBatch(ctx, PageBatch{
+	metrics.CrawlerScanDuration.Observe(time.Since(start).Seconds())
+	metrics.CrawlerJobsFetchedTotal.Add(float64(len(listing.Jobs)))
+
+	if err := e.client.SubmitBatch(ctx, PageBatch{
 		AssignmentID: unit.AssignmentID,
 		CompanyID:    unit.CompanyID,
 		AdapterType:  unit.AdapterType,
@@ -74,5 +80,11 @@ func (e *adapterExecutor) Execute(ctx context.Context, unit WorkUnit) error {
 		FetchedCount: len(listing.Jobs),
 		DurationMs:   time.Since(start).Milliseconds(),
 		Final:        true,
-	})
+	}); err != nil {
+		metrics.CrawlerScansTotal.WithLabelValues("error").Inc()
+		return err
+	}
+
+	metrics.CrawlerScansTotal.WithLabelValues("success").Inc()
+	return nil
 }

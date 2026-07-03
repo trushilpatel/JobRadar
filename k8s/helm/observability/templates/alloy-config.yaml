@@ -26,6 +26,30 @@ data:
       forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
     }
 
+    discovery.kubernetes "crawler_node_pods" {
+      role = "pod"
+      namespaces {
+        names = ["{{ .Values.namespace }}"]
+      }
+      selectors {
+        role  = "pod"
+        label = "component=crawler-node"
+      }
+    }
+
+    prometheus.scrape "crawler_node" {
+      targets    = discovery.kubernetes.crawler_node_pods.targets
+      forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+      job_name   = "jobradar_crawler_node"
+
+      relabeling_rules {
+        replacement   = "${1}:9102"
+        source_labels = ["__meta_kubernetes_pod_ip"]
+        target_label  = "__address__"
+        regex         = "(.+)"
+      }
+    }
+
     prometheus.remote_write "grafana_cloud" {
       endpoint {
         url = sys.env("GRAFANA_CLOUD_PROM_URL")

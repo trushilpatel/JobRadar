@@ -301,6 +301,35 @@ func TestFetchOne_ThinAdapter_CountryCodeUS_PassesThrough(t *testing.T) {
 	}
 }
 
+// TestFetchOne_Workday_EmptyCountryCode_NonUSLocation_StringFallbackRejected
+// verifies AC2.7: a Workday post whose CountryCode is empty (the correct
+// behavior when the descriptor is non-US) but whose Location string is foreign
+// is rejected by the string-based fallback classifier — not silently kept.
+func TestFetchOne_Workday_EmptyCountryCode_NonUSLocation_StringFallbackRejected(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	pf := &fakePostFetcher{post: core.JobPost{Title: "Eng", Location: "Tokyo, JP", CountryCode: ""}}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+	w.bundleFn = bundleFnReturning(pf, nil)
+
+	summary := core.JobSummary{ID: "wd-jp", Adapter: "workday", URL: "https://wd/3"}
+	before := nonUSACount()
+	msg, state := makeTestMsg(t, summary, 1)
+	_, ok := w.fetchOne(context.Background(), logger.NewNoop(), msg)
+
+	if ok {
+		t.Fatalf("fetchOne should reject empty-code non-US Workday job via string fallback")
+	}
+	if !state.Acked {
+		t.Errorf("expected msg Acked on string_match rejection, got %+v", state)
+	}
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != summary.ID {
+		t.Errorf("expected MarkLedgerNonUSA(%q), got %v", summary.ID, pipeline.markCalls)
+	}
+	if got := nonUSACount() - before; got != 1 {
+		t.Errorf("expected non_usa metric +1, got %v", got)
+	}
+}
+
 // TestFetchOne_LocationKnownTrue_NonUSA_EarlyGateNoFetch verifies the early gate:
 // LocationKnown=true non-USA jobs are rejected before any bundle resolution.
 func TestFetchOne_LocationKnownTrue_NonUSA_EarlyGateNoFetch(t *testing.T) {

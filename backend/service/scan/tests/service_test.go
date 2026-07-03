@@ -53,7 +53,10 @@ func (f *fakeQueueStore) ResetStuck(_ context.Context, _ time.Duration) (int, er
 	f.resetStuckCalled = true
 	return 0, f.err
 }
-func (f *fakeQueueStore) PurgeInactive(_ context.Context) (int, error)      { return 0, f.err }
+func (f *fakeQueueStore) PurgeInactive(_ context.Context) (int, error) { return 0, f.err }
+func (f *fakeQueueStore) AutoPauseChronicFailures(_ context.Context, _ int) ([]string, error) {
+	return nil, f.err
+}
 func (f *fakeQueueStore) UpdateHeartbeat(_ context.Context, _ string) error { return f.err }
 func (f *fakeQueueStore) ListQueue(_ context.Context, filter dto.QueueFilter) ([]dto.ScanQueueItem, error) {
 	if f.err != nil {

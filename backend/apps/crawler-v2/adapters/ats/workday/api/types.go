@@ -11,6 +11,7 @@ type ListJobsRequest struct {
 	Limit         int                 `json:"limit"`
 	Offset        int                 `json:"offset"`
 	SearchText    string              `json:"searchText"`
+	Locale        string              `json:"locale"`
 }
 
 // ListJobsResponse is the JSON response from POST .../jobs.

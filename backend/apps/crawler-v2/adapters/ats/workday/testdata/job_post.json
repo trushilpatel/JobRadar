@@ -10,7 +10,10 @@
     "jobReqId": "R-12345",
     "jobPostingId": "posting-001",
     "jobPostingSiteId": "site-001",
-    "country": { "descriptor": "United States of America", "id": "US" },
+    "country": {
+      "descriptor": "United States of America",
+      "id": "bc33aa3152ec42d4995f4791a106ed09"
+    },
     "canApply": true,
     "posted": true,
     "includeResumeParsing": false,

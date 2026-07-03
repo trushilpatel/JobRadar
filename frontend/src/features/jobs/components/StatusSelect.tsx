@@ -3,40 +3,7 @@ import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
 import { SELECT_STATUSES, type SelectStatus } from '@/config/constants/jobStatus'
 import type { JobStatus } from '@/types'
-
-const STATUS_CONFIG: Record<JobStatus, { label: string; classes: string }> = {
-  new: {
-    label: 'New',
-    classes: 'text-secondary bg-subtle border-[var(--border-strong)]',
-  },
-  // 'saved' kept in the config only to satisfy the JobStatus Record<>.
-  // It's never offered in the dropdown — SELECT_STATUSES excludes it.
-  // The bookmark icon next to the dropdown handles save/unsave instead.
-  saved: {
-    label: 'Saved',
-    classes: 'text-amber-300 bg-amber-500/10 border-amber-500/20',
-  },
-  applied: {
-    label: 'Applied',
-    classes: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20',
-  },
-  interviewing: {
-    label: 'Interviewing',
-    classes: 'text-blue-300 bg-blue-500/10 border-blue-500/20',
-  },
-  offer: {
-    label: 'Offer',
-    classes: 'text-amber-300 bg-amber-500/10 border-amber-500/20',
-  },
-  dismissed: {
-    label: 'Dismissed',
-    classes: 'text-muted bg-subtle border-[var(--border)]',
-  },
-  rejected: {
-    label: 'Rejected',
-    classes: 'text-red-300 bg-red-500/10 border-red-500/20',
-  },
-}
+import { STATUS_CONFIG } from './jobStatusConfig'
 
 type SettableStatus = SelectStatus
 

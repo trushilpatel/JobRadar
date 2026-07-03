@@ -122,6 +122,7 @@ func newFKDB(t *testing.T) *gorm.DB {
 			adapter_type TEXT NOT NULL REFERENCES ats(name),
 			adapter_config TEXT, scan_interval_override INTEGER,
 			active INTEGER NOT NULL DEFAULT 1,
+			auto_paused INTEGER NOT NULL DEFAULT 0,
 			last_scan_at DATETIME, last_success_at DATETIME, last_error_at DATETIME,
 			last_error_message TEXT, consecutive_errors INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME, updated_at DATETIME,

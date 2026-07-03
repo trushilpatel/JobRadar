@@ -14,6 +14,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	auditsvc "github.com/trushilpatel/jobradar/service/audit/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
@@ -63,9 +64,15 @@ func main() {
 		return js.NewPublisher(njs), nil
 	}, log)
 
+	// Audit writer for the auto-pause sweep: one admin_audit_log row per company
+	// auto-paused after crossing the consecutive-error threshold. Audit writes
+	// are non-fatal — a failure never blocks the pause.
+	auditWriter := auditsvc.NewImplService(auditsvc.NewRepositoryService(database))
+
 	sweeperOpts := scansvc.SchedulerServiceOptions{
 		Ledger:     jobsvc.NewSeenLedgerStore(database),
 		Publisher:  lazyPub,
+		Auditor:    auditWriter,
 		MaxRetries: cfg.Scheduler.SweeperMaxRetries,
 		Log:        log,
 	}

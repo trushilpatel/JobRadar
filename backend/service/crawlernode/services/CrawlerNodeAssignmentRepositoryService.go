@@ -7,6 +7,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/service/crawlernode/dto"
+	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"gorm.io/gorm"
 )
 
@@ -44,6 +45,7 @@ func (s *assignmentRepositoryService) ClaimNextForNode(ctx context.Context, node
 			    SELECT id FROM company_scan_queue
 			    WHERE status = 'queued'
 			      AND adapter_type = ?
+			      AND COALESCE(next_attempt_at, '-infinity'::timestamptz) <= NOW()
 			    ORDER BY priority DESC, queued_at ASC
 			    LIMIT 1
 			    FOR UPDATE SKIP LOCKED
@@ -60,6 +62,7 @@ func (s *assignmentRepositoryService) ClaimNextForNode(ctx context.Context, node
 			WHERE id = (
 			    SELECT id FROM company_scan_queue
 			    WHERE status = 'queued'
+			      AND COALESCE(next_attempt_at, '-infinity'::timestamptz) <= NOW()
 			    ORDER BY priority DESC, queued_at ASC
 			    LIMIT 1
 			    FOR UPDATE SKIP LOCKED
@@ -137,21 +140,37 @@ func (s *assignmentRepositoryService) CompleteForNode(ctx context.Context, queue
 	return nil
 }
 
-// FailForNode resets the queue row to status='queued' and clears locked_by.
-// Returns ErrQueueRowMissing when locked_by != nodeID.
+// FailForNode resets the queue row to status='queued', clears locked_by, and
+// stamps next_attempt_at = NOW() + Backoff(consecutive_errors) so the row is
+// NOT re-served instantly (the crawler retry hot-loop fix). The back-off is
+// computed in SQL from company_scan_settings.consecutive_errors (already
+// incremented on this same failure path by RecordScanResult), using the
+// scancommon back-off constants bound as parameters so Go remains the single
+// source of truth for base/cap/factor/max-shift. Returns ErrQueueRowMissing
+// when locked_by != nodeID (ownership mismatch — never a silent no-op).
 func (s *assignmentRepositoryService) FailForNode(ctx context.Context, queueID, nodeID string) (err error) {
 	ctx, span := tracing.Start(ctx, "crawlernode.store.FailForNode")
 	defer tracing.End(span, &err)
 
+	capSeconds := scancommon.BackoffCap.Seconds()
+	baseSeconds := scancommon.BackoffBase.Seconds()
+
 	result := s.db.WithContext(ctx).Exec(`
-		UPDATE company_scan_queue
+		UPDATE company_scan_queue q
 		SET status = 'queued',
 		    locked_by = NULL,
 		    started_at = NULL,
-		    heartbeat_at = NULL
-		WHERE id = ?
-		  AND locked_by = ?
-	`, queueID, nodeID)
+		    heartbeat_at = NULL,
+		    next_attempt_at = NOW() + LEAST(
+		        ? * INTERVAL '1 second',
+		        (? * INTERVAL '1 second')
+		            * POWER(?, LEAST(?, COALESCE(s.consecutive_errors, 0)))
+		    )
+		FROM company_scan_settings s
+		WHERE q.id = ?
+		  AND q.locked_by = ?
+		  AND s.company_id = q.company_id
+	`, capSeconds, baseSeconds, scancommon.BackoffFactor, scancommon.BackoffMaxShift, queueID, nodeID)
 	if result.Error != nil {
 		return errors.ErrInternal.WithMessage("fail for node: " + result.Error.Error())
 	}

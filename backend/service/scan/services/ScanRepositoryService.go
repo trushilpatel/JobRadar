@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	commondb "github.com/trushilpatel/jobradar/common/db"
 	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
@@ -71,6 +72,13 @@ type ScanQueueStore interface {
 	// is inactive. Returns the number of rows removed.
 	PurgeInactive(ctx context.Context) (int, error)
 
+	// AutoPauseChronicFailures sets company_scan_settings.auto_paused=true for
+	// every company whose consecutive_errors >= threshold and is not already
+	// paused, returning the IDs newly paused (RETURNING company_id). Returning 0
+	// rows is NOT an error — the sweep is idempotent and no-ops when nothing
+	// crosses the threshold (mirrors the ReclaimStuckFetchRows convention).
+	AutoPauseChronicFailures(ctx context.Context, threshold int) ([]string, error)
+
 	// UpdateHeartbeat refreshes the heartbeat timestamp for an in-progress row.
 	// Returns ErrQueueRowMissing when no row matched — signals the row was
 	// reassigned by ResetStuck and the crawler must abort the scan.
@@ -112,41 +120,53 @@ func (s *scanQueueStore) EnqueueDue(ctx context.Context, intervalMinutes int, so
 	// Phase 2 enqueue source is `company_scan_settings`, not `companies`.
 	// Companies without a scan_settings row are silently skipped here; the
 	// scheduler logs the count via the SkippedNoSettings field on the result.
+	// Fix 1 (AC1.5): auto_paused companies are never enqueued (in addition to
+	// the existing active=true filter). Fix 3 (AC3.7): the INSERT ... SELECT is
+	// idempotent (ON CONFLICT DO NOTHING) so it is safe to retry on a transient
+	// connection-drop; wrap only the Raw exec in WithRetry and evaluate the
+	// result (ids) after the retried closure succeeds.
 	var ids []string
-	if err = s.db.WithContext(ctx).Raw(`
-		INSERT INTO company_scan_queue (company_id, source, adapter_type)
-		SELECT s.company_id, ?, s.adapter_type
-		FROM company_scan_settings s
-		LEFT JOIN ats a ON a.name = s.adapter_type
-		WHERE s.active = true
-		  AND NOT EXISTS (
-		    SELECT 1 FROM company_scan_queue q
-		    WHERE q.company_id = s.company_id AND q.status IN ('queued','running')
-		  )
-		  AND (
-		    s.last_scan_at IS NULL
-		    OR s.last_scan_at + COALESCE(
-		        s.scan_interval_override,
-		        a.scan_interval_min,
-		        ?
-		    ) * INTERVAL '1 minute' <= NOW()
-		  )
-		ORDER BY s.last_scan_at ASC NULLS FIRST
-		ON CONFLICT DO NOTHING
-		RETURNING company_id
-	`, source, intervalMinutes).Scan(&ids).Error; err != nil {
+	if err = commondb.WithRetry(ctx, func() error {
+		ids = nil
+		return s.db.WithContext(ctx).Raw(`
+			INSERT INTO company_scan_queue (company_id, source, adapter_type)
+			SELECT s.company_id, ?, s.adapter_type
+			FROM company_scan_settings s
+			LEFT JOIN ats a ON a.name = s.adapter_type
+			WHERE s.active = true
+			  AND s.auto_paused = false
+			  AND NOT EXISTS (
+			    SELECT 1 FROM company_scan_queue q
+			    WHERE q.company_id = s.company_id AND q.status IN ('queued','running')
+			  )
+			  AND (
+			    s.last_scan_at IS NULL
+			    OR s.last_scan_at + COALESCE(
+			        s.scan_interval_override,
+			        a.scan_interval_min,
+			        ?
+			    ) * INTERVAL '1 minute' <= NOW()
+			  )
+			ORDER BY s.last_scan_at ASC NULLS FIRST
+			ON CONFLICT DO NOTHING
+			RETURNING company_id
+		`, source, intervalMinutes).Scan(&ids).Error
+	}); err != nil {
 		return EnqueueDueResult{}, err
 	}
 
 	// Count companies that exist but have no scan_settings row — surfaced
 	// once per scheduler tick so admins know they still need to onboard them.
+	// Read-only COUNT is idempotent; retry on transient connection drops.
 	var skipped int64
-	if err = s.db.WithContext(ctx).Raw(`
-		SELECT COUNT(*)
-		FROM companies c
-		LEFT JOIN company_scan_settings s ON s.company_id = c.id
-		WHERE s.company_id IS NULL
-	`).Scan(&skipped).Error; err != nil {
+	if err = commondb.WithRetry(ctx, func() error {
+		return s.db.WithContext(ctx).Raw(`
+			SELECT COUNT(*)
+			FROM companies c
+			LEFT JOIN company_scan_settings s ON s.company_id = c.id
+			WHERE s.company_id IS NULL
+		`).Scan(&skipped).Error
+	}); err != nil {
 		return EnqueueDueResult{}, err
 	}
 
@@ -162,6 +182,7 @@ func (s *scanQueueStore) EnqueueAll(ctx context.Context, source string) (_ int, 
 		SELECT s.company_id, ?, s.adapter_type
 		FROM company_scan_settings s
 		WHERE s.active = true
+		  AND s.auto_paused = false
 		  AND NOT EXISTS (
 		    SELECT 1 FROM company_scan_queue q
 		    WHERE q.company_id = s.company_id AND q.status IN ('queued','running')
@@ -208,6 +229,7 @@ func (s *scanQueueStore) ClaimNext(ctx context.Context, adapterType string) (_ *
 			WHERE id = (
 			    SELECT id FROM company_scan_queue
 			    WHERE status = 'queued' AND adapter_type = ?
+			      AND COALESCE(next_attempt_at, '-infinity'::timestamptz) <= NOW()
 			    ORDER BY priority DESC, queued_at ASC
 			    LIMIT 1
 			    FOR UPDATE SKIP LOCKED
@@ -244,7 +266,8 @@ func (s *scanQueueStore) PurgeInactive(ctx context.Context) (_ int, err error) {
 	defer tracing.End(span, &err)
 	// Phase 2: `active` lives on company_scan_settings. A company is
 	// considered inactive (queue-purgable) when its scan_settings row is
-	// active=false OR the scan_settings row is absent entirely.
+	// active=false, auto_paused=true (system decision — Fix 1, AC1.11), OR the
+	// scan_settings row is absent entirely.
 	result := s.db.WithContext(ctx).Exec(`
 		DELETE FROM company_scan_queue
 		WHERE status = 'queued'
@@ -252,10 +275,36 @@ func (s *scanQueueStore) PurgeInactive(ctx context.Context) (_ int, err error) {
 		    SELECT c.id
 		    FROM companies c
 		    LEFT JOIN company_scan_settings s ON s.company_id = c.id
-		    WHERE s.company_id IS NULL OR s.active = false
+		    WHERE s.company_id IS NULL OR s.active = false OR s.auto_paused = true
 		  )
 	`)
 	return int(result.RowsAffected), result.Error
+}
+
+// AutoPauseChronicFailures flips company_scan_settings.auto_paused=true for
+// every company whose consecutive_errors has crossed threshold and is not yet
+// paused, returning the IDs newly paused. The WHERE auto_paused=false guard
+// makes the sweep idempotent — an already-paused company is never re-selected,
+// so it produces no duplicate audit rows. Returning 0 rows is NOT an error
+// (mirrors the ReclaimStuckFetchRows no-sentinel convention). The UPDATE ...
+// RETURNING is idempotent for the same threshold, so it is wrapped in WithRetry
+// for transient-connection-drop resilience (Fix 3 parity).
+func (s *scanQueueStore) AutoPauseChronicFailures(ctx context.Context, threshold int) (_ []string, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.AutoPauseChronicFailures")
+	defer tracing.End(span, &err)
+	var ids []string
+	if err = commondb.WithRetry(ctx, func() error {
+		ids = nil
+		return s.db.WithContext(ctx).Raw(`
+			UPDATE company_scan_settings
+			SET auto_paused = true, updated_at = NOW()
+			WHERE auto_paused = false AND consecutive_errors >= ?
+			RETURNING company_id
+		`, threshold).Scan(&ids).Error
+	}); err != nil {
+		return nil, err
+	}
+	return ids, nil
 }
 
 func (s *scanQueueStore) Complete(ctx context.Context, id string) (err error) {
@@ -287,16 +336,27 @@ func (s *scanQueueStore) Remove(ctx context.Context, id string) (err error) {
 func (s *scanQueueStore) ResetStuck(ctx context.Context, staleDur time.Duration) (rowsReset int, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.ResetStuck")
 	defer tracing.End(span, &err)
-	res := s.db.WithContext(ctx).Exec(`
-		UPDATE company_scan_queue
-		SET status = 'queued', started_at = NULL, heartbeat_at = NULL
-		WHERE status = 'running'
-		  AND COALESCE(heartbeat_at, started_at) < NOW() - INTERVAL '1 second' * ?
-	`, int(staleDur.Seconds()))
-	if res.Error != nil {
-		return 0, res.Error
+	// Fix 3 (AC3.7): the reset is idempotent (re-running the same UPDATE on
+	// already-queued rows is a no-op), so retry the raw Exec on a transient
+	// connection-drop. RowsAffected is captured inside the closure and read only
+	// after WithRetry succeeds.
+	var rowsAffected int64
+	if err = commondb.WithRetry(ctx, func() error {
+		res := s.db.WithContext(ctx).Exec(`
+			UPDATE company_scan_queue
+			SET status = 'queued', started_at = NULL, heartbeat_at = NULL
+			WHERE status = 'running'
+			  AND COALESCE(heartbeat_at, started_at) < NOW() - INTERVAL '1 second' * ?
+		`, int(staleDur.Seconds()))
+		if res.Error != nil {
+			return res.Error
+		}
+		rowsAffected = res.RowsAffected
+		return nil
+	}); err != nil {
+		return 0, err
 	}
-	return int(res.RowsAffected), nil
+	return int(rowsAffected), nil
 }
 
 func (s *scanQueueStore) UpdateHeartbeat(ctx context.Context, id string) (err error) {
@@ -498,6 +558,20 @@ func (s *repositoryService) RetryDueJobs(_ context.Context) error {
 // reason as RetryDueJobs — the scheduler-only sweeper path is never wired
 // through the REST decorator chain.
 func (s *repositoryService) EscalateStuckRetryJobs(_ context.Context) (int64, error) {
+	return 0, nil
+}
+
+// ReclaimStuckFetchRows is a no-op on the repository service for the same
+// reason as RetryDueJobs/EscalateStuckRetryJobs — the scheduler-only reclaimer
+// path is never wired through the REST decorator chain.
+func (s *repositoryService) ReclaimStuckFetchRows(_ context.Context) (int64, error) {
+	return 0, nil
+}
+
+// AutoPauseChronicFailures is a no-op on the repository service for the same
+// reason as the other scheduler-only sweeps — the auto-pause path is never
+// wired through the REST decorator chain.
+func (s *repositoryService) AutoPauseChronicFailures(_ context.Context) (int, error) {
 	return 0, nil
 }
 

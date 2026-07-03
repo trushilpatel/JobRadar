@@ -34,6 +34,10 @@ type fakeSchedulerService struct {
 	retryDueJobsErr  error
 	escalateStuckErr error
 	escalateStuckN   int64
+	reclaimStuckErr  error
+	reclaimStuckN    int64
+	autoPauseErr     error
+	autoPauseN       int
 	resetStuckArg    time.Duration
 
 	// Channel synchronisation — avoids time.Sleep in tests.
@@ -45,6 +49,8 @@ type fakeSchedulerService struct {
 	enqueueCalls       atomic.Int64
 	retryDueJobsCalls  atomic.Int64
 	escalateStuckCalls atomic.Int64
+	reclaimStuckCalls  atomic.Int64
+	autoPauseCalls     atomic.Int64
 
 	enqueueDueArgs int
 }
@@ -103,6 +109,24 @@ func (f *fakeSchedulerService) EscalateStuckRetryJobs(_ context.Context) (int64,
 	err := f.escalateStuckErr
 	f.mu.Unlock()
 	f.escalateStuckCalls.Add(1)
+	return n, err
+}
+
+func (f *fakeSchedulerService) ReclaimStuckFetchRows(_ context.Context) (int64, error) {
+	f.mu.Lock()
+	n := f.reclaimStuckN
+	err := f.reclaimStuckErr
+	f.mu.Unlock()
+	f.reclaimStuckCalls.Add(1)
+	return n, err
+}
+
+func (f *fakeSchedulerService) AutoPauseChronicFailures(_ context.Context) (int, error) {
+	f.mu.Lock()
+	n := f.autoPauseN
+	err := f.autoPauseErr
+	f.mu.Unlock()
+	f.autoPauseCalls.Add(1)
 	return n, err
 }
 

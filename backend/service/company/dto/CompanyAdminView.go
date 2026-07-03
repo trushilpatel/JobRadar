@@ -39,6 +39,7 @@ type CompanyScanSettingsListView struct {
 	AdapterType          string     `json:"adapter_type"`
 	ScanIntervalOverride *int       `json:"scan_interval_override,omitempty"`
 	Active               bool       `json:"active"`
+	AutoPaused           bool       `json:"auto_paused"`
 	LastScanAt           *time.Time `json:"last_scan_at,omitempty"`
 	LastSuccessAt        *time.Time `json:"last_success_at,omitempty"`
 	LastErrorAt          *time.Time `json:"last_error_at,omitempty"`
@@ -69,6 +70,7 @@ func ScanSettingsListViewFromModel(m *companymodel.CompanyScanSettings) *Company
 		AdapterType:          m.AdapterType,
 		ScanIntervalOverride: m.ScanIntervalOverride,
 		Active:               m.Active,
+		AutoPaused:           m.AutoPaused,
 		LastScanAt:           m.LastScanAt,
 		LastSuccessAt:        m.LastSuccessAt,
 		LastErrorAt:          m.LastErrorAt,

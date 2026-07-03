@@ -187,6 +187,15 @@ type SeenLedgerWriter interface {
 	// Used by the scheduler to recover jobs whose sweeper publish never happened
 	// (e.g. persistent NATS outage). Returns (0, nil) when no rows are stuck.
 	EscalateStuckRetryJobs(ctx context.Context, stuckThreshold time.Duration, limit int) (int64, error)
+	// ReclaimStuckFetchRows DELETEs rows stranded at reason='fetch' with
+	// removed_at IS NULL and first_seen_at < NOW() - threshold, bounded by limit.
+	// These are jobs the crawler marked seen before publishing but the filter
+	// never transitioned to a terminal verdict. Because HasSeenBatch ignores
+	// reason and removed_at, deleting the row is the only way to clear the dedup
+	// block — escalating to reason='error' would keep the job deduped forever.
+	// Returns the number of rows deleted; 0 is a valid steady-state outcome (no
+	// ErrLedgerRowMissing — this is a count-based sweep, not a targeted write).
+	ReclaimStuckFetchRows(ctx context.Context, threshold time.Duration, limit int) (int64, error)
 	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
 }
 

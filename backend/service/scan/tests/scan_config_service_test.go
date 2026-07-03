@@ -440,6 +440,14 @@ func (m *mockScanService) EscalateStuckRetryJobs(_ context.Context) (int64, erro
 	return 0, m.err
 }
 
+func (m *mockScanService) ReclaimStuckFetchRows(_ context.Context) (int64, error) {
+	return 0, m.err
+}
+
+func (m *mockScanService) AutoPauseChronicFailures(_ context.Context) (int, error) {
+	return 0, m.err
+}
+
 var _ svc.Service = (*mockScanService)(nil)
 
 func TestScanHandler_GetEffectiveScanConfig_OK(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 
 	llmerr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
 	llmcommon "github.com/trushilpatel/jobradar/service/llm/common"
 	"github.com/trushilpatel/jobradar/service/llm/dto"
 	"github.com/trushilpatel/jobradar/service/llm/store"
@@ -50,6 +51,7 @@ func (r *routerService) ScoreBatch(ctx context.Context, jobs []dto.JobsRelevance
 		ok, cdErr := r.cooldown.IsAvailable(ctx, s.SlotID)
 		if cdErr != nil {
 			r.warnCooldown("cooldown availability check failed", s.SlotID, cdErr)
+			metrics.LLMCooldownMissTotal.Inc()
 		}
 		if !ok {
 			statuses = append(statuses, r.statusOf(ctx, s, llmcommon.OutcomeCooldownSkipped))
@@ -86,6 +88,7 @@ func (r *routerService) EnrichBatch(ctx context.Context, inputs []dto.JobPostEnr
 		ok, cdErr := r.cooldown.IsAvailable(ctx, s.SlotID)
 		if cdErr != nil {
 			r.warnCooldown("cooldown availability check failed", s.SlotID, cdErr)
+			metrics.LLMCooldownMissTotal.Inc()
 		}
 		if !ok {
 			statuses = append(statuses, r.statusOf(ctx, s, llmcommon.OutcomeCooldownSkipped))

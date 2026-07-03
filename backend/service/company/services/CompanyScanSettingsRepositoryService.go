@@ -215,6 +215,16 @@ func scanSettingsInputToFields(p companydto.CompanyScanSettingsInput) map[string
 	if p.Active != nil {
 		fields["active"] = *p.Active
 	}
+	if p.AutoPaused != nil {
+		fields["auto_paused"] = *p.AutoPaused
+		// AC1.9: clearing auto_paused (admin unpause) also resets
+		// consecutive_errors so the next scheduler sweep does not immediately
+		// re-pause the company on its historical error count. Re-pausing is only
+		// deliberate, never intended.
+		if !*p.AutoPaused {
+			fields["consecutive_errors"] = 0
+		}
+	}
 	return fields
 }
 

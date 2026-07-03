@@ -116,6 +116,7 @@ func (w *Workday) FetchJobListingWithConfig(ctx context.Context, companyID strin
 			Limit:         defaultPageSize,
 			Offset:        offset,
 			SearchText:    "",
+			Locale:        cfg.locale(),
 		}
 		body, status, err := w.postJSON(ctx, listURL, reqBody)
 		if err != nil {

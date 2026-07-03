@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters"
 	"github.com/trushilpatel/jobradar/common/ats/core"
 	logger "github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
 )
 
 // --- Fake core fetchers ---
@@ -291,5 +293,46 @@ func TestAdapterExecutor_DefaultLookup_UnknownAdapter(t *testing.T) {
 	}
 	if !errors.Is(err, adapters.ErrInvalidAdapter) {
 		t.Errorf("error %v does not wrap ErrInvalidAdapter", err)
+	}
+}
+
+// Successful Execute increments the success scan counter and the jobs-fetched counter.
+func TestExecute_IncrementsSuccessMetrics(t *testing.T) {
+	beforeScans := testutil.ToFloat64(metrics.CrawlerScansTotal.WithLabelValues("success"))
+	beforeFetched := testutil.ToFloat64(metrics.CrawlerJobsFetchedTotal)
+
+	bundle := adapters.AdapterBundle{
+		Listing: &fakeListingFetcher{fn: func(_ context.Context, _ string) (core.JobListing, error) {
+			return core.JobListing{Jobs: []core.JobSummary{{ID: "j1"}, {ID: "j2"}}}, nil
+		}},
+	}
+	client := &mockBatchClient{}
+	exec := makeExecutor(t, bundle, client)
+
+	if err := exec.Execute(context.Background(), workUnit("lever")); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if got := testutil.ToFloat64(metrics.CrawlerScansTotal.WithLabelValues("success")) - beforeScans; got != 1 {
+		t.Errorf("CrawlerScansTotal{success}: want +1, got +%g", got)
+	}
+	if got := testutil.ToFloat64(metrics.CrawlerJobsFetchedTotal) - beforeFetched; got != 2 {
+		t.Errorf("CrawlerJobsFetchedTotal: want +2, got +%g", got)
+	}
+}
+
+// A lookup error increments the error scan counter.
+func TestExecute_IncrementsErrorMetric(t *testing.T) {
+	beforeErrors := testutil.ToFloat64(metrics.CrawlerScansTotal.WithLabelValues("error"))
+
+	lookupFn := func(_ string, _ logger.Logger, _ *http.Client) (adapters.AdapterBundle, error) {
+		return adapters.AdapterBundle{}, errors.New("adapter not found")
+	}
+	client := &mockBatchClient{}
+	exec := newAdapterExecutor(client, lookupFn, &http.Client{}, logger.NewNoop())
+	_ = exec.Execute(context.Background(), workUnit("unknown"))
+
+	if got := testutil.ToFloat64(metrics.CrawlerScansTotal.WithLabelValues("error")) - beforeErrors; got != 1 {
+		t.Errorf("CrawlerScansTotal{error}: want +1, got +%g", got)
 	}
 }
