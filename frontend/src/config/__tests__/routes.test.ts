@@ -3,8 +3,6 @@ import { routes } from '@/config/routes'
 
 describe('routes — static top-level', () => {
   it.each([
-    [routes.dashboard(), '/dashboard'],
-    [routes.insights(), '/insights'],
     [routes.account(), '/account'],
     [routes.login(), '/login'],
     [routes.resumeLibrary(), '/admin/resumes'],

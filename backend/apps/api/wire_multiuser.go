@@ -13,7 +13,6 @@ import (
 	clerkadmin "github.com/trushilpatel/jobradar/platform/clerkadmin"
 	"github.com/trushilpatel/jobradar/platform/ratelimit"
 	auditsvc "github.com/trushilpatel/jobradar/service/audit/services"
-	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
 	"gorm.io/gorm"
 )
@@ -29,8 +28,6 @@ func buildMultiUser(
 	limiter ratelimit.Limiter,
 	clerkClient clerkadmin.Client,
 	log logger.Logger,
-	pipelineSvc dashboardsvc.PipelineService,
-	insightsRouter handler.RouteGroup,
 	companyAdminRouter handler.RouteGroup,
 	atsRouter handler.RouteGroup,
 ) *multiUser {
@@ -51,9 +48,6 @@ func buildMultiUser(
 
 	auditAdminRest := auditsvc.NewAdminRestService(auditImpl)
 	auditAdminRouter := auditsvc.NewAdminRestRouter(auditAdminRest)
-
-	pipelineRest := dashboardsvc.NewPipelineRestService(pipelineSvc)
-	pipelineRouter := dashboardsvc.NewPipelineRestRouter(pipelineRest)
 
 	identityMW := middleware.RequireIdentity(
 		userValid,
@@ -76,8 +70,6 @@ func buildMultiUser(
 		handlers: []handler.RouteGroup{
 			userAdminRouter,
 			auditAdminRouter,
-			pipelineRouter,
-			insightsRouter,
 			companyAdminRouter,
 			atsRouter,
 		},

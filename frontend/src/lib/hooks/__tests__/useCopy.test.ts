@@ -4,8 +4,8 @@ import { useCopy } from '@/lib/hooks/useCopy'
 
 describe('useCopy', () => {
   it('returns copy for a nav key', () => {
-    const { result } = renderHook(() => useCopy('nav.dashboard'))
-    expect(result.current).toBe('Dashboard')
+    const { result } = renderHook(() => useCopy('nav.jobs'))
+    expect(result.current).toBe('Jobs')
   })
 
   it('returns copy for a job tab key', () => {
