@@ -11,17 +11,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend-checks:
-    name: Backend / checks
+  backend-lint:
+    name: Backend / lint
     runs-on: ubuntu-latest
     env:
       GOTOOLCHAIN: local
-      GOLANGCI_LINT_VERSION: v2.12.2
-      GOTESTSUM_VERSION: v1.13.0
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # required by lint's --new-from-rev=origin/main
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: false
+
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.12.2
+          working-directory: backend
+          args: --config ../.github/.golangci.yml --new-from-rev=origin/main --timeout 5m --path-mode=abs
+
+  backend-test:
+    name: Backend / test
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - uses: actions/setup-go@v5
         with:
@@ -29,91 +48,25 @@ jobs:
           cache: true
           cache-dependency-path: backend/go.sum
 
-      - name: Cache lint tool + analysis cache
-        id: golangci-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/bin/golangci-lint
-            ~/.cache/golangci-lint
-          key: golangci-lint-${{ env.GOLANGCI_LINT_VERSION }}-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}
-          restore-keys: |
-            golangci-lint-${{ env.GOLANGCI_LINT_VERSION }}-${{ runner.os }}-
-
-      - name: Install golangci-lint
-        if: steps.golangci-cache.outputs.cache-hit != 'true'
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | \
-            sh -s -- -b "$(go env GOPATH)/bin" "$GOLANGCI_LINT_VERSION"
-
       - name: Cache gotestsum
         id: gotestsum-cache
         uses: actions/cache@v4
         with:
           path: ~/go/bin/gotestsum
-          key: gotestsum-${{ env.GOTESTSUM_VERSION }}-${{ runner.os }}
+          key: gotestsum-v1.13.0-${{ runner.os }}
 
       - name: Install gotestsum
         if: steps.gotestsum-cache.outputs.cache-hit != 'true'
-        run: go install gotest.tools/gotestsum@${{ env.GOTESTSUM_VERSION }}
+        run: go install gotest.tools/gotestsum@v1.13.0
 
-      # Lint and test run as concurrent background processes in one job so we pay for
-      # one runner's wall-clock instead of two separate jobs' rounded-up durations.
-      # Each process's output is captured to a file and only echoed (inside a foldable
-      # ::group::) after it finishes, so interleaved concurrent output never garbles the log.
-      - name: Run lint and tests in parallel
-        id: checks
-        working-directory: backend
+      - name: Run unit tests
         run: |
-          set +e
-
-          (
-            "$(go env GOPATH)/bin/golangci-lint" run \
-              --config ../.github/.golangci.yml \
-              --new-from-rev=origin/main \
-              --timeout 5m \
-              --path-mode=abs \
-              > /tmp/lint.log 2>&1
-            echo $? > /tmp/lint.exit
-          ) &
-          lint_pid=$!
-
-          (
-            "$(go env GOPATH)/bin/gotestsum" --junitfile /tmp/junit.xml --format pkgname -- \
-              -race -count=1 -short \
-              -coverpkg=./... \
-              -coverprofile=/tmp/coverage.out \
-              ./... \
-              > /tmp/test.log 2>&1
-            echo $? > /tmp/test.exit
-          ) &
-          test_pid=$!
-
-          wait "$lint_pid"
-          wait "$test_pid"
-
-          echo "::group::Lint output"
-          cat /tmp/lint.log
-          echo "::endgroup::"
-
-          echo "::group::Test output"
-          cat /tmp/test.log
-          echo "::endgroup::"
-
-          lint_exit=$(cat /tmp/lint.exit)
-          test_exit=$(cat /tmp/test.exit)
-
-          {
-            echo "| Check | Result |"
-            echo "|---|---|"
-            echo "| Lint | $([ "$lint_exit" -eq 0 ] && echo ':white_check_mark:' || echo ':x:') |"
-            echo "| Test | $([ "$test_exit" -eq 0 ] && echo ':white_check_mark:' || echo ':x:') |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "$lint_exit" -ne 0 ] || [ "$test_exit" -ne 0 ]; then
-            echo "::error::lint_exit=$lint_exit test_exit=$test_exit"
-            exit 1
-          fi
+          gotestsum --junitfile /tmp/junit.xml --format pkgname -- \
+            -race -count=1 -short \
+            -coverpkg=./... \
+            -coverprofile=/tmp/coverage.out \
+            ./...
+        working-directory: backend
 
       - name: Enforce coverage threshold
         run: ../scripts/check-coverage.sh /tmp/coverage.out 95
