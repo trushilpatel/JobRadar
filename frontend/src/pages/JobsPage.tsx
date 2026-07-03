@@ -241,6 +241,7 @@ export function JobsPage() {
     jobs.locationFilter !== 'any',
     jobs.expFilter.length > 0,
     jobs.dateFilter !== 'all',
+    jobs.visaFilter !== 'any',
   ].filter(Boolean).length
 
   return (
@@ -302,6 +303,8 @@ export function JobsPage() {
         onExpChange={jobs.setExpFilter}
         dateFilter={jobs.dateFilter}
         onDateChange={jobs.setDateFilter}
+        visaFilter={jobs.visaFilter}
+        onVisaChange={jobs.setVisaFilter}
         onReset={jobs.resetFilters}
         hasActiveFilters={activeFilterCount > 0}
         mobileOpen={mobileFilterOpen}

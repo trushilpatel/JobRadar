@@ -205,6 +205,38 @@ describe('useJobs', () => {
     expect(result.current.dateFilter).toBe('7d')
   })
 
+  it('setDateFilter("24h") maps to daysAdded=1 on the resulting fetchJobs call', async () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    act(() => result.current.setDateFilter('24h'))
+    await waitFor(() => expect(result.current.dateFilter).toBe('24h'))
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].daysAdded).toBe(1)
+  })
+
+  it('setDateFilter("30d") maps to daysAdded=30 on the resulting fetchJobs call', async () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    act(() => result.current.setDateFilter('30d'))
+    await waitFor(() => expect(result.current.dateFilter).toBe('30d'))
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].daysAdded).toBe(30)
+  })
+
+  it('setLocationFilter("onsite") maps to onSite=true on the resulting fetchJobs call', async () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    act(() => result.current.setLocationFilter('onsite'))
+    await waitFor(() => expect(result.current.locationFilter).toBe('onsite'))
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].onSite).toBe(true)
+  })
+
+  it('setLocationFilter("hybrid") maps to hybrid=true on the resulting fetchJobs call', async () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    act(() => result.current.setLocationFilter('hybrid'))
+    await waitFor(() => expect(result.current.locationFilter).toBe('hybrid'))
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].hybrid).toBe(true)
+  })
+
   it('setVisaFilter updates visaFilter', () => {
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
     act(() => result.current.setVisaFilter('true'))
