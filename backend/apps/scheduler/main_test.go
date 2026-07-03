@@ -39,6 +39,7 @@ type fakeSchedulerService struct {
 	autoPauseErr     error
 	autoPauseN       int
 	resetStuckArg    time.Duration
+	refreshGaugeErr  error
 
 	// Channel synchronisation — avoids time.Sleep in tests.
 	readyAt int64         // close readyCh when enqueueCalls reaches this value
@@ -51,6 +52,7 @@ type fakeSchedulerService struct {
 	escalateStuckCalls atomic.Int64
 	reclaimStuckCalls  atomic.Int64
 	autoPauseCalls     atomic.Int64
+	refreshGaugeCalls  atomic.Int64
 
 	enqueueDueArgs int
 }
@@ -128,6 +130,14 @@ func (f *fakeSchedulerService) AutoPauseChronicFailures(_ context.Context) (int,
 	f.mu.Unlock()
 	f.autoPauseCalls.Add(1)
 	return n, err
+}
+
+func (f *fakeSchedulerService) RefreshGaugeMetrics(_ context.Context) error {
+	f.mu.Lock()
+	err := f.refreshGaugeErr
+	f.mu.Unlock()
+	f.refreshGaugeCalls.Add(1)
+	return err
 }
 
 // resetCalled reports whether ResetStuck has been invoked at least once.

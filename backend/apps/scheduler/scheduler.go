@@ -104,6 +104,11 @@ func runCycle(ctx context.Context, log logger.Logger, svc SchedulerService, inte
 		log.Info("auto-paused chronic-failing companies", logger.Int(logger.FieldCount, n))
 	}
 
+	if err := svc.RefreshGaugeMetrics(ctx); err != nil {
+		metrics.SchedulerErrorsTotal.WithLabelValues("refresh_gauge_metrics").Inc()
+		log.Error("refresh gauge metrics failed", err)
+	}
+
 	if rerr := svc.RetryDueJobs(ctx); rerr != nil {
 		metrics.SchedulerErrorsTotal.WithLabelValues("retry_due_jobs").Inc()
 		log.Error("retry due jobs failed", rerr)

@@ -37,6 +37,11 @@ type SchedulerService interface {
 	// company. Idempotent. Returns the number of companies newly paused — zero
 	// is not an error.
 	AutoPauseChronicFailures(ctx context.Context) (int, error)
+	// RefreshGaugeMetrics recomputes the current-state gauge metrics for the
+	// Overview dashboard stat strip. Always returns a non-nil error only when
+	// at least one of the 5 underlying reads failed — partial failure never
+	// blocks the others.
+	RefreshGaugeMetrics(ctx context.Context) error
 }
 
 // RetryPublisher is the narrow NATS publishing contract the sweeper needs.
