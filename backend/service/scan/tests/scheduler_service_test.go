@@ -446,7 +446,10 @@ func (f *fakeSeenLedgerStore) GetActiveJobIDsByCompany(_ context.Context, _ stri
 func (f *fakeSeenLedgerStore) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
 	return 0, nil
 }
-func (f *fakeSeenLedgerStore) ReclaimStuckFetchRows(_ context.Context, _ time.Duration, _ int) (int64, error) {
+func (f *fakeSeenLedgerStore) ReclaimStuckFetchRows(_ context.Context, _ time.Time, _ int) (int64, error) {
+	return 0, nil
+}
+func (f *fakeSeenLedgerStore) ReclaimStuckFilteredRows(_ context.Context, _ time.Time, _ int) (int64, error) {
 	return 0, nil
 }
 func (f *fakeSeenLedgerStore) CountByReason(_ context.Context, _ jobcommon.SeenReason) (int, error) {

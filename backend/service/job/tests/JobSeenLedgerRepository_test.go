@@ -5,7 +5,6 @@ import (
 	stderrors "errors"
 	"io"
 	"testing"
-	"time"
 
 	commondb "github.com/trushilpatel/jobradar/common/db"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
@@ -24,17 +23,7 @@ func seedLedger(t *testing.T, db *gorm.DB, jobID, companyID, reason string) {
 	}
 }
 
-// seedLedgerRemoved inserts a single ledger row already marked removed
-// (removed_at set) — used to assert removed rows are excluded from reads
-// like CountByReason.
-func seedLedgerRemoved(t *testing.T, db *gorm.DB, jobID, companyID, reason string) {
-	t.Helper()
-	removedAt := time.Now()
-	row := jobmodel.JobSeenLedger{JobID: jobID, CompanyID: companyID, Reason: reason, RemovedAt: &removedAt}
-	if err := db.Create(&row).Error; err != nil {
-		t.Fatalf("seed removed ledger %s: %v", jobID, err)
-	}
-}
+// seedLedgerRemoved is declared in JobSeenLedgerReclaim_test.go (testing.TB signature).
 
 // TestSeenLedger_HasSeen_True asserts a present row returns true.
 func TestSeenLedger_HasSeen_True(t *testing.T) {
