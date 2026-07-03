@@ -22,6 +22,15 @@ Stage 2 — serial: group successful (job, content) into chunks of ENRICHER_LLM_
    - processGroup returns routed=false (ctx cancelled mid-batch) → skip commit, return
 ```
 
+## processResult gate order
+
+`processResult` applies gates in this order before calling `SaveEnrichedJob`:
+
+1. **Role mismatch** (`result.RoleMatch == false`) → `markIrrelevant`
+2. **Eligibility drops** (`dropJob`) → `markIrrelevant`
+3. **Post-enrichment country gate** (`result.Country != "" && result.Country != "USA"`) → `markNonUSA` — catches thin-adapter jobs (Workday, Meta) that slipped past the fetcher-stage gates when the detail fetch returned no `CountryCode` and no recognizable location string
+4. **Save** → `SaveEnrichedJob`
+
 ## dropJob — eligibility rules (Go, not LLM)
 
 | Condition             | Drop if                                                    |

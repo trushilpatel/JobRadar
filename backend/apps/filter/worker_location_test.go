@@ -248,36 +248,75 @@ func TestProcessChunk_NoTitleUnknownLocation_PassesThrough(t *testing.T) {
 	}
 }
 
-// ── AC-5: LocationKnown gate ─────────────────────────────────────────────────
+// ── AC-5: LocationKnown-agnostic non-USA gate ────────────────────────────────
 
-// Jobs with LocationKnown=false bypass the non-USA gate entirely and reach
-// the scorer even when Location contains a clearly non-USA string. This is the
-// Workday/Meta thin-listing path where location is resolved at analyzer time.
-func TestProcessChunk_LocationKnownFalse_BypassesNonUSAGate(t *testing.T) {
-	scorer := &fakeScorer{relevantIDs: []string{"wd-1"}}
+// The non-USA gate applies regardless of LocationKnown. AnyNonUSA is safe for
+// thin-listing adapters (Workday/Meta) because it returns false for
+// nil/empty/Unknown-classified locations — only unambiguous non-USA strings
+// (e.g. "Jaipur", "London, UK") are rejected. This saves LLM spend on clear
+// India/international postings that carry a recognizable location string in
+// the listing even without a structured CountryCode.
+
+// LocationKnown=false + unambiguous non-USA city → rejected before LLM.
+func TestProcessChunk_LocationKnownFalse_UnambiguousNonUSA_Rejected(t *testing.T) {
+	scorer := &fakeScorer{}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 
 	w := makeWorker(scorer, ledger, pub)
-	// LocationKnown=false (zero value via makeJobAt) + an explicitly non-USA string.
+	// makeJobAt → LocationKnown=false, but Location is a known non-USA city.
 	_ = w.processChunk(context.Background(), chunkOf(
-		makeJobAt("wd-1", "Software Engineer", "London, United Kingdom"),
+		makeJobAt("atci-1", "Custom Software Engineer", "Jaipur"),
+		makeJobAt("atci-2", "Data Engineer", "Bangalore, India"),
 	), "fetch-1", 0, 1)
 
-	// Must NOT be rejected as non-USA.
+	// Must be rejected — no LLM call, no filtered publish.
+	if scorer.calls != 0 {
+		t.Errorf("expected scorer NOT called for unambiguous non-USA jobs, got %d", scorer.calls)
+	}
+	if len(pub.recordsOnSubject("jobs.filtered.")) != 0 {
+		t.Errorf("expected no filtered publishes, got %d", len(pub.recordsOnSubject("jobs.filtered.")))
+	}
+	var sawNonUSA bool
 	for _, c := range ledger.calls {
 		if c.reason == jobcommon.SeenReasonNonUSA {
-			t.Errorf("LocationKnown=false job must not be rejected as non-USA; ledger=%+v", ledger.calls)
+			sawNonUSA = true
+			if len(c.ids) != 2 {
+				t.Errorf("expected 2 non-USA IDs, got %d (%v)", len(c.ids), c.ids)
+			}
 		}
 	}
-	// Must reach the scorer.
-	if scorer.calls != 1 {
-		t.Errorf("expected scorer called once for LocationKnown=false job, got %d", scorer.calls)
+	if !sawNonUSA {
+		t.Errorf("expected ledger marked non_usa_location; calls=%+v", ledger.calls)
 	}
-	// Must be published to filtered subject.
-	if len(pub.recordsOnSubject("jobs.filtered.")) != 1 {
-		t.Errorf("expected 1 filtered publish for LocationKnown=false job, got %d",
-			len(pub.recordsOnSubject("jobs.filtered.")))
+}
+
+// LocationKnown=false + ambiguous/empty location → passes through to LLM.
+// AnyNonUSA returns false for unknown signals, so thin-listing adapters with
+// "Remote", "Multiple Locations", or empty LocationsText still reach the scorer.
+func TestProcessChunk_LocationKnownFalse_AmbiguousLocation_PassesThrough(t *testing.T) {
+	scorer := &fakeScorer{relevantIDs: []string{"wd-1", "wd-2", "wd-3"}}
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{}
+
+	w := makeWorker(scorer, ledger, pub)
+	_ = w.processChunk(context.Background(), chunkOf(
+		makeJobAt("wd-1", "Software Engineer", ""),
+		makeJobAt("wd-2", "Software Engineer", "Remote"),
+		makeJobAt("wd-3", "Software Engineer", "Multiple Locations"),
+	), "fetch-1", 0, 1)
+
+	// Must NOT be rejected as non-USA — unknown location passes through.
+	for _, c := range ledger.calls {
+		if c.reason == jobcommon.SeenReasonNonUSA {
+			t.Errorf("ambiguous/empty location must not trigger non-USA gate; ledger=%+v", ledger.calls)
+		}
+	}
+	if scorer.calls != 1 {
+		t.Errorf("expected scorer called for ambiguous-location jobs, got %d", scorer.calls)
+	}
+	if len(pub.recordsOnSubject("jobs.filtered.")) != 3 {
+		t.Errorf("expected 3 filtered publishes; got %d", len(pub.recordsOnSubject("jobs.filtered.")))
 	}
 }
 

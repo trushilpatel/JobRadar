@@ -46,6 +46,7 @@ const (
 	FieldSource              = "source"
 	FieldLocation            = "location"
 	FieldLocationKnown       = "location_known"
+	FieldCountry             = "country"
 	FieldCountryCode         = "country_code"
 	FieldScanID              = "scan_id"
 	FieldStage               = "stage"
