@@ -115,7 +115,8 @@ func (f *fakeScanSettingsRepo) Update(_ context.Context, _ string, _ companydto.
 func (f *fakeScanSettingsRepo) UpdateScanState(_ context.Context, _ string, _ companydto.CompanyScanStateUpdate) error {
 	return nil
 }
-func (f *fakeScanSettingsRepo) Delete(_ context.Context, _ string) error { return nil }
+func (f *fakeScanSettingsRepo) Delete(_ context.Context, _ string) error       { return nil }
+func (f *fakeScanSettingsRepo) CountAutoPaused(_ context.Context) (int, error) { return 0, nil }
 
 // fakeCompanyAdminService is a test double for companysvc.CompanyAdminService.
 // Only GetByIDs is exercised by the impl service today; other methods are stubs.

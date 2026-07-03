@@ -51,6 +51,10 @@ type ScanSettingsRepository interface {
 	Update(ctx context.Context, companyID string, p companydto.CompanyScanSettingsInput) error
 	UpdateScanState(ctx context.Context, companyID string, st companydto.CompanyScanStateUpdate) error
 	Delete(ctx context.Context, companyID string) error
+	// CountAutoPaused returns the current number of company_scan_settings
+	// rows with auto_paused=true — a point-in-time snapshot, distinct from
+	// the scheduler's pause-event counter.
+	CountAutoPaused(ctx context.Context) (int, error)
 }
 
 // CompanyService is the public read-only contract for the company domain.
