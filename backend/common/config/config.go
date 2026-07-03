@@ -77,6 +77,15 @@ type DatabaseConfig struct {
 	Password string
 	Name     string
 	SSLMode  string
+	// ConnMaxIdleSeconds bounds how long an idle pooled connection is kept
+	// before being closed. It must stay below the upstream pooler's own idle
+	// timeout (Supabase Supavisor) so the client never hands out a connection
+	// the pooler has already dropped — the root cause of mid-flight
+	// "unexpected EOF" errors. Sourced from DB_CONN_MAX_IDLE_SECONDS.
+	ConnMaxIdleSeconds int
+	// ConnMaxLifetimeMinutes bounds the total lifetime of a pooled connection.
+	// Sourced from DB_CONN_MAX_LIFETIME_MINUTES.
+	ConnMaxLifetimeMinutes int
 }
 
 func (c DatabaseConfig) DSN() string {
@@ -84,6 +93,26 @@ func (c DatabaseConfig) DSN() string {
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s statement_cache_capacity=0 default_query_exec_mode=simple_protocol",
 		c.Host, c.Port, c.User, c.Password, c.Name, c.SSLMode,
 	)
+}
+
+// Validate enforces boot-time database pool invariants. Both timeouts must be
+// positive and the idle timeout must not exceed the connection lifetime (an
+// idle window longer than the lifetime is meaningless — the connection is
+// recycled first). Kept as a method so worker main() functions that already
+// validate config can call it before Open.
+func (c DatabaseConfig) Validate() error {
+	if c.ConnMaxIdleSeconds <= 0 {
+		return fmt.Errorf("config: DB_CONN_MAX_IDLE_SECONDS must be > 0, got %d", c.ConnMaxIdleSeconds)
+	}
+	if c.ConnMaxLifetimeMinutes <= 0 {
+		return fmt.Errorf("config: DB_CONN_MAX_LIFETIME_MINUTES must be > 0, got %d", c.ConnMaxLifetimeMinutes)
+	}
+	if c.ConnMaxIdleSeconds > c.ConnMaxLifetimeMinutes*60 {
+		return fmt.Errorf(
+			"config: DB_CONN_MAX_IDLE_SECONDS (%d) must be <= DB_CONN_MAX_LIFETIME_MINUTES*60 (%d)",
+			c.ConnMaxIdleSeconds, c.ConnMaxLifetimeMinutes*60)
+	}
+	return nil
 }
 
 type NATSConfig struct {
@@ -239,6 +268,10 @@ func Load() *Config {
 			Password: getEnv("DB_PASSWORD", "postgres"),
 			Name:     getEnv("DB_NAME", "jobradar"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
+			// Defaults tuned below Supabase Supavisor's idle timeout so the
+			// client never reuses a connection the pooler already closed.
+			ConnMaxIdleSeconds:     getEnvInt("DB_CONN_MAX_IDLE_SECONDS", 30),
+			ConnMaxLifetimeMinutes: getEnvInt("DB_CONN_MAX_LIFETIME_MINUTES", 15),
 		},
 		NATS: NATSConfig{
 			URL:       getEnv("NATS_URL", "nats://localhost:4222"),
