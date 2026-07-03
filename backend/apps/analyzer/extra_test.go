@@ -717,6 +717,130 @@ func TestAdapterRateLimiter_GetOrCreate_DoubleCheckRace(t *testing.T) {
 	}
 }
 
+// ── processResult: post-enrichment country gate ───────────────────────────────
+
+// A non-remote job enriched with a non-USA country must be marked
+// non_usa_location and must NOT be saved to the DB, even when it is otherwise
+// eligible (role match, sponsorship, etc.). This is the final gate that catches
+// thin-adapter jobs (e.g. Workday ATCI India) that slipped through the
+// fetcher-stage gates.
+func TestProcessResult_NonUSACountry_MarksNonUSAAndSkipsSave(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+
+	result := baseEnrichResult()
+	result.RoleMatch = true
+	result.Country = "India" // unambiguously non-USA
+	result.Remote = false    // on-site: gate must fire
+
+	fj, state := makeTestFetchedJob(t, baseSummary(), 0)
+	stats := &groupOutcomeStats{}
+	w.processResult(context.Background(), fj, result, stats)
+
+	if len(pipeline.savedInputs) != 0 {
+		t.Errorf("SaveEnrichedJob must NOT be called for a non-USA job, got %d calls", len(pipeline.savedInputs))
+	}
+	if len(pipeline.markCalls) != 1 || pipeline.markCalls[0] != baseSummary().ID {
+		t.Errorf("expected markNonUSA for job ID %q; markCalls=%v", baseSummary().ID, pipeline.markCalls)
+	}
+	if !state.Acked {
+		t.Errorf("msg must be Acked after non-USA rejection")
+	}
+	if stats.dropped != 1 {
+		t.Errorf("stats.dropped should be 1 for non-USA rejection, got %d", stats.dropped)
+	}
+}
+
+// Remote non-USA jobs must pass through regardless of country — they may be
+// US-eligible even when posted from a non-US company or listed location.
+func TestProcessResult_NonUSACountry_RemoteJob_Passes(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+
+	result := baseEnrichResult()
+	result.RoleMatch = true
+	result.Country = "Canada"
+	result.Remote = true
+
+	fj, _ := makeTestFetchedJob(t, baseSummary(), 0)
+	stats := &groupOutcomeStats{}
+	w.processResult(context.Background(), fj, result, stats)
+
+	if len(pipeline.savedInputs) != 1 {
+		t.Errorf("remote non-USA job must pass through; expected 1 save, got %d", len(pipeline.savedInputs))
+	}
+	if len(pipeline.markCalls) != 0 {
+		t.Errorf("expected no markNonUSA for remote non-USA job; markCalls=%v", pipeline.markCalls)
+	}
+}
+
+// When the LLM could not determine country (returns ""), the job must pass
+// through — never reject on missing signal.
+func TestProcessResult_EmptyCountry_DoesNotReject(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+
+	result := baseEnrichResult()
+	result.RoleMatch = true
+	result.Country = ""
+
+	fj, _ := makeTestFetchedJob(t, baseSummary(), 0)
+	stats := &groupOutcomeStats{}
+	w.processResult(context.Background(), fj, result, stats)
+
+	if len(pipeline.savedInputs) != 1 {
+		t.Errorf("empty country should not trigger non-USA gate; expected 1 save, got %d", len(pipeline.savedInputs))
+	}
+	if len(pipeline.markCalls) != 0 {
+		t.Errorf("expected no markNonUSA for empty country; markCalls=%v", pipeline.markCalls)
+	}
+}
+
+// USA country must not trigger the non-USA gate.
+func TestProcessResult_USACountry_Passes(t *testing.T) {
+	pipeline := &fakePipelineService{}
+	w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+
+	result := baseEnrichResult()
+	result.RoleMatch = true
+	result.Country = "USA"
+
+	fj, _ := makeTestFetchedJob(t, baseSummary(), 0)
+	stats := &groupOutcomeStats{}
+	w.processResult(context.Background(), fj, result, stats)
+
+	if len(pipeline.savedInputs) != 1 {
+		t.Errorf("USA country must pass through; expected 1 save, got %d", len(pipeline.savedInputs))
+	}
+}
+
+// Non-USA gate fires for every distinct non-USA country string the LLM returns
+// when the job is not remote.
+func TestProcessResult_NonUSACountry_VariousCountries(t *testing.T) {
+	countries := []string{"Canada", "UK", "Israel", "Romania", "China", "Philippines"}
+	for _, country := range countries {
+		t.Run(country, func(t *testing.T) {
+			pipeline := &fakePipelineService{}
+			w := makeWorker(&fakeScorer{}, pipeline, &fakePublisher{}, &fakeLedger{})
+
+			result := baseEnrichResult()
+			result.RoleMatch = true
+			result.Country = country
+			result.Remote = false // on-site: gate must fire
+
+			fj, _ := makeTestFetchedJob(t, baseSummary(), 0)
+			w.processResult(context.Background(), fj, result, &groupOutcomeStats{})
+
+			if len(pipeline.savedInputs) != 0 {
+				t.Errorf("country %q must trigger non-USA gate; expected 0 saves, got %d", country, len(pipeline.savedInputs))
+			}
+			if len(pipeline.markCalls) != 1 {
+				t.Errorf("country %q must trigger markNonUSA; markCalls=%v", country, pipeline.markCalls)
+			}
+		})
+	}
+}
+
 // ── Run: fetchSize-below-one guard ───────────────────────────────────────────
 
 // TestRun_FetchSizeBelowOne_ClampedToOne exercises the `fetchSize < 1` guard at

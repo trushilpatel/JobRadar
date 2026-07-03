@@ -35,11 +35,15 @@ type SchedulerService interface {
 	// re-published within 4 hours of their next_attempt_at and sets them to
 	// reason='error'. Returns the number of rows escalated.
 	EscalateStuckRetryJobs(ctx context.Context) (int64, error)
-	// ReclaimStuckFetchRows DELETEs reason='fetch' ledger rows (removed_at IS
-	// NULL) older than 1 hour to clear the dedup block for jobs the crawler
-	// marked seen but the filter never transitioned. Returns the number of rows
-	// reclaimed.
+	// ReclaimStuckFetchRows DELETEs reason='fetch' ledger rows older than 1 hour
+	// to clear the dedup block for jobs the crawler marked seen but the filter
+	// never transitioned. Returns the number of rows reclaimed.
 	ReclaimStuckFetchRows(ctx context.Context) (int64, error)
+	// ReclaimStuckFilteredRows DELETEs reason='filtered' ledger rows older than
+	// 1 hour to clear the dedup block for jobs the filter published but the
+	// analyzer never transitioned to a terminal verdict. Returns the number of
+	// rows reclaimed — zero is not an error.
+	ReclaimStuckFilteredRows(ctx context.Context) (int64, error)
 	// AutoPauseChronicFailures sets company_scan_settings.auto_paused=true for
 	// every company whose consecutive_errors has crossed AutoPauseThreshold and
 	// is not already paused, writing one admin_audit_log row per newly paused
@@ -47,6 +51,12 @@ type SchedulerService interface {
 	// re-audited. Returns the number of companies newly paused — zero is not an
 	// error. Audit writes are non-fatal (a failed audit never blocks the pause).
 	AutoPauseChronicFailures(ctx context.Context) (int, error)
+	// RefreshGaugeMetrics recomputes the current-state gauge metrics (queue
+	// depth, oldest-pending age, online node count, auto-paused company
+	// count, retry-ladder backlog). Each of the 5 reads is independent —
+	// a failure on one is joined into the returned error but never blocks
+	// the others.
+	RefreshGaugeMetrics(ctx context.Context) error
 }
 
 // Service defines all business operations for the scan domain.
@@ -107,8 +117,16 @@ func (b *BaseService) ReclaimStuckFetchRows(ctx context.Context) (int64, error) 
 	return b.next.ReclaimStuckFetchRows(ctx)
 }
 
+func (b *BaseService) ReclaimStuckFilteredRows(ctx context.Context) (int64, error) {
+	return b.next.ReclaimStuckFilteredRows(ctx)
+}
+
 func (b *BaseService) AutoPauseChronicFailures(ctx context.Context) (int, error) {
 	return b.next.AutoPauseChronicFailures(ctx)
+}
+
+func (b *BaseService) RefreshGaugeMetrics(ctx context.Context) error {
+	return b.next.RefreshGaugeMetrics(ctx)
 }
 
 func (b *BaseService) TriggerScan(ctx context.Context, companyID string) error {

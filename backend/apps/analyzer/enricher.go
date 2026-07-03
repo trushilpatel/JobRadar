@@ -224,6 +224,28 @@ func (w *Worker) processResult(ctx context.Context, fj fetchedJob, result *llmdt
 		return
 	}
 
+	// Post-enrichment country gate: the LLM-enriched Country is the most
+	// reliable non-USA signal available. Thin adapters (e.g. Workday) that
+	// omit a structured CountryCode from the detail fetch slip past the earlier
+	// fetcher-stage gates; the enriched Country catches them here. An empty
+	// Country means the LLM could not determine the location — pass through so
+	// we never reject on missing signal. Remote jobs are kept regardless of
+	// country because they may be US-eligible even when posted from a non-US
+	// company or location.
+	if result.Country != "" && result.Country != "USA" && !result.Remote {
+		jobLog.Info("job rejected: non-USA country (post-enrichment)",
+			logger.Str(logger.FieldCountry, result.Country),
+			logger.Str(logger.FieldLocation, fj.post.Location),
+		)
+		w.markNonUSA(ctx, fj.summary.ID)
+		if aerr := fj.msg.Ack(); aerr != nil {
+			jobLog.Warn("msg ack failed", logger.Err(aerr))
+		}
+		metrics.EnricherJobsTotal.WithLabelValues("non_usa").Inc()
+		stats.markDropped()
+		return
+	}
+
 	input := toEnrichedInput(fj.summary, fj.post, result)
 	if err := w.pipeline.SaveEnrichedJob(ctx, input); err != nil {
 		jobLog.Error("save enriched job failed", err)

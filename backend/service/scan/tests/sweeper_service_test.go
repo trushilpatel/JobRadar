@@ -78,7 +78,13 @@ func (f *fakeSweeperLedger) GetActiveJobIDsByCompany(_ context.Context, _ string
 func (f *fakeSweeperLedger) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
 	return 0, nil
 }
-func (f *fakeSweeperLedger) ReclaimStuckFetchRows(_ context.Context, _ time.Duration, _ int) (int64, error) {
+func (f *fakeSweeperLedger) ReclaimStuckFetchRows(_ context.Context, _ time.Time, _ int) (int64, error) {
+	return 0, nil
+}
+func (f *fakeSweeperLedger) ReclaimStuckFilteredRows(_ context.Context, _ time.Time, _ int) (int64, error) {
+	return 0, nil
+}
+func (f *fakeSweeperLedger) CountByReason(_ context.Context, _ jobcommon.SeenReason) (int, error) {
 	return 0, nil
 }
 
@@ -161,6 +167,8 @@ func (q *sweeperFakeQueue) UpdateHeartbeat(_ context.Context, _ string) error { 
 func (q *sweeperFakeQueue) ListQueue(_ context.Context, _ scandto.QueueFilter) ([]scandto.ScanQueueItem, error) {
 	return nil, nil
 }
+func (q *sweeperFakeQueue) CountQueued(context.Context) (int, error)                { return 0, nil }
+func (q *sweeperFakeQueue) OldestQueuedAgeSeconds(context.Context) (float64, error) { return 0, nil }
 
 var _ svc.ScanQueueStore = (*sweeperFakeQueue)(nil)
 
@@ -707,7 +715,13 @@ func (l *conditionalSweeperLedger) GetActiveJobIDsByCompany(_ context.Context, _
 func (l *conditionalSweeperLedger) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
 	return 0, nil
 }
-func (l *conditionalSweeperLedger) ReclaimStuckFetchRows(_ context.Context, _ time.Duration, _ int) (int64, error) {
+func (l *conditionalSweeperLedger) ReclaimStuckFetchRows(_ context.Context, _ time.Time, _ int) (int64, error) {
+	return 0, nil
+}
+func (l *conditionalSweeperLedger) ReclaimStuckFilteredRows(_ context.Context, _ time.Time, _ int) (int64, error) {
+	return 0, nil
+}
+func (l *conditionalSweeperLedger) CountByReason(_ context.Context, _ jobcommon.SeenReason) (int, error) {
 	return 0, nil
 }
 
@@ -805,8 +819,8 @@ func TestEscalateStuckRetryJobs_NoOp_WhenLedgerNil(t *testing.T) {
 	}
 }
 
-// trackingSweeperLedger extends fakeSweeperLedger with EscalateStuckRetryJobs
-// and ReclaimStuckFetchRows tracking.
+// trackingSweeperLedger extends fakeSweeperLedger with EscalateStuckRetryJobs,
+// ReclaimStuckFetchRows, and ReclaimStuckFilteredRows tracking.
 type trackingSweeperLedger struct {
 	fakeSweeperLedger
 	escalateStuckCalled bool
@@ -814,10 +828,16 @@ type trackingSweeperLedger struct {
 	escalateStuckErr    error
 
 	reclaimFetchCalled    bool
-	reclaimFetchThreshold time.Duration
+	reclaimFetchOlderThan time.Time
 	reclaimFetchLimit     int
 	reclaimFetchCount     int64
 	reclaimFetchErr       error
+
+	reclaimFilteredCalled    bool
+	reclaimFilteredOlderThan time.Time
+	reclaimFilteredLimit     int
+	reclaimFilteredCount     int64
+	reclaimFilteredErr       error
 }
 
 func (l *trackingSweeperLedger) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
@@ -825,11 +845,18 @@ func (l *trackingSweeperLedger) EscalateStuckRetryJobs(_ context.Context, _ time
 	return l.escalateStuckCount, l.escalateStuckErr
 }
 
-func (l *trackingSweeperLedger) ReclaimStuckFetchRows(_ context.Context, threshold time.Duration, limit int) (int64, error) {
+func (l *trackingSweeperLedger) ReclaimStuckFetchRows(_ context.Context, olderThan time.Time, limit int) (int64, error) {
 	l.reclaimFetchCalled = true
-	l.reclaimFetchThreshold = threshold
+	l.reclaimFetchOlderThan = olderThan
 	l.reclaimFetchLimit = limit
 	return l.reclaimFetchCount, l.reclaimFetchErr
+}
+
+func (l *trackingSweeperLedger) ReclaimStuckFilteredRows(_ context.Context, olderThan time.Time, limit int) (int64, error) {
+	l.reclaimFilteredCalled = true
+	l.reclaimFilteredOlderThan = olderThan
+	l.reclaimFilteredLimit = limit
+	return l.reclaimFilteredCount, l.reclaimFilteredErr
 }
 
 // ── ReclaimStuckFetchRows service tests ──────────────────────────────────────
@@ -852,8 +879,11 @@ func TestReclaimStuckFetchRows_CallsLedger(t *testing.T) {
 	if !ledger.reclaimFetchCalled {
 		t.Error("expected ReclaimStuckFetchRows to be called on ledger")
 	}
-	if ledger.reclaimFetchThreshold != time.Hour {
-		t.Errorf("threshold = %v, want 1h", ledger.reclaimFetchThreshold)
+	// The service computes time.Now().Add(-1h) before calling the store; assert
+	// olderThan is within 2 seconds of the expected cutoff.
+	wantFetchCutoff := time.Now().Add(-time.Hour)
+	if diff := wantFetchCutoff.Sub(ledger.reclaimFetchOlderThan); diff < -2*time.Second || diff > 2*time.Second {
+		t.Errorf("olderThan = %v, want ~%v (±2s)", ledger.reclaimFetchOlderThan, wantFetchCutoff)
 	}
 	if ledger.reclaimFetchLimit != 500 {
 		t.Errorf("limit = %d, want 500", ledger.reclaimFetchLimit)
@@ -1036,4 +1066,107 @@ func (p *headerCapturingPublisher) Publish(_ context.Context, _ string, _ []byte
 func (p *headerCapturingPublisher) PublishWithHeaders(_ context.Context, subject string, payload []byte, headers map[string]string) error {
 	p.calls = append(p.calls, headerPublishCall{subject: subject, payload: payload, headers: headers})
 	return p.publishErr
+}
+
+// ── AC-5: ReclaimStuckFilteredRows service-layer tests ───────────────────────
+
+// TestReclaimStuckFilteredRows_CallsLedger asserts the scheduler service
+// delegates to the ledger with threshold=1h and limit=500, and returns the count.
+func TestReclaimStuckFilteredRows_CallsLedger(t *testing.T) {
+	ledger := &trackingSweeperLedger{}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	n, err := s.ReclaimStuckFilteredRows(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 reclaimed, got %d", n)
+	}
+	if !ledger.reclaimFilteredCalled {
+		t.Error("expected ReclaimStuckFilteredRows to be called on ledger")
+	}
+	// The service computes time.Now().Add(-1h) before calling the store; assert
+	// olderThan is within 2 seconds of the expected cutoff.
+	wantFilteredCutoff := time.Now().Add(-time.Hour)
+	if diff := wantFilteredCutoff.Sub(ledger.reclaimFilteredOlderThan); diff < -2*time.Second || diff > 2*time.Second {
+		t.Errorf("olderThan = %v, want ~%v (±2s)", ledger.reclaimFilteredOlderThan, wantFilteredCutoff)
+	}
+	if ledger.reclaimFilteredLimit != 500 {
+		t.Errorf("limit = %d, want 500", ledger.reclaimFilteredLimit)
+	}
+}
+
+// TestReclaimStuckFilteredRows_ReturnsCount asserts the count from the ledger
+// is propagated to the caller so scheduler.go can log and metric it.
+func TestReclaimStuckFilteredRows_ReturnsCount(t *testing.T) {
+	ledger := &trackingSweeperLedger{reclaimFilteredCount: 7}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	n, err := s.ReclaimStuckFilteredRows(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 7 {
+		t.Errorf("expected 7 reclaimed, got %d", n)
+	}
+}
+
+// TestReclaimStuckFilteredRows_LedgerError_Propagates asserts a ledger error
+// is returned with a 0 count.
+func TestReclaimStuckFilteredRows_LedgerError_Propagates(t *testing.T) {
+	ledger := &trackingSweeperLedger{reclaimFilteredErr: errors.New("db down")}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	n, err := s.ReclaimStuckFilteredRows(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if n != 0 {
+		t.Errorf("expected 0 on error, got %d", n)
+	}
+}
+
+// TestReclaimStuckFilteredRows_MetricIncremented asserts
+// SchedulerStuckFilteredReclaimedTotal is incremented by n when rows are reclaimed.
+func TestReclaimStuckFilteredRows_MetricIncremented(t *testing.T) {
+	before := testutil.ToFloat64(metrics.SchedulerStuckFilteredReclaimedTotal)
+
+	ledger := &trackingSweeperLedger{reclaimFilteredCount: 3}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	n, err := s.ReclaimStuckFilteredRows(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 3 {
+		t.Errorf("expected 3, got %d", n)
+	}
+
+	after := testutil.ToFloat64(metrics.SchedulerStuckFilteredReclaimedTotal)
+	if after-before < 3 {
+		t.Errorf("SchedulerStuckFilteredReclaimedTotal delta = %.0f, want ≥3", after-before)
+	}
+}
+
+// TestReclaimStuckFilteredRows_NoOp_WhenLedgerNil asserts that with no ledger
+// configured, ReclaimStuckFilteredRows is a no-op returning 0, nil.
+func TestReclaimStuckFilteredRows_NoOp_WhenLedgerNil(t *testing.T) {
+	s := svc.NewSchedulerServiceWithSweeper(&sweeperFakeQueue{}, svc.SchedulerServiceOptions{
+		Ledger:    nil,
+		Publisher: &fakeSweeperPublisher{},
+		Log:       logger.NewNoop(),
+	})
+
+	n, err := s.ReclaimStuckFilteredRows(context.Background())
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0, got %d", n)
+	}
 }

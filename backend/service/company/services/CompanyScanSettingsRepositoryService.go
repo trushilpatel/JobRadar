@@ -198,6 +198,25 @@ func (r *scanSettingsRepository) Delete(ctx context.Context, companyID string) (
 	return nil
 }
 
+// CountAutoPaused returns the current number of company_scan_settings rows
+// with auto_paused=true. Read-only snapshot for the scheduler's gauge
+// refresh — distinct from AutoPauseChronicFailures, which is the write path
+// that sets auto_paused=true.
+func (r *scanSettingsRepository) CountAutoPaused(ctx context.Context) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "company.scan_settings.repo.CountAutoPaused")
+	defer tracing.End(span, &err)
+
+	var count int64
+	result := r.db.WithContext(ctx).
+		Model(&companymodel.CompanyScanSettings{}).
+		Where("auto_paused = ?", true).
+		Count(&count)
+	if result.Error != nil {
+		return 0, apperr.ErrInternal.WithMessage("count auto-paused companies: " + result.Error.Error())
+	}
+	return int(count), nil
+}
+
 // scanSettingsInputToFields converts a partial-patch input into the GORM
 // field map used by Update. Shared by the admin chain and the repo so the
 // column projection lives in one place.

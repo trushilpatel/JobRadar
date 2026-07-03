@@ -77,12 +77,13 @@ func TestProcessFetch_CoreJobSummary_DeserializeAndRepublish(t *testing.T) {
 }
 
 // TestProcessChunk_WorkdayLocationKnownFalse_NotRejected is the crawler-v2 parity
-// guard: a Workday job with LocationKnown=false and a clearly non-USA Location
-// (Bengaluru, India) must NOT be routed to the non-USA reject path at the filter
-// stage — the gate short-circuits on LocationKnown==false, so the job flows
-// through to jobs.filtered.* and the analyzer decides later via country code.
-func TestProcessChunk_WorkdayLocationKnownFalse_NotRejected(t *testing.T) {
-	scorer := &fakeScorer{relevantIDs: []string{"workday-1"}}
+// The non-USA gate applies regardless of LocationKnown. A Workday job with
+// LocationKnown=false and a clearly non-USA Location string (Bengaluru, India)
+// IS rejected at the filter stage, saving LLM spend. Workday jobs with
+// ambiguous location strings (e.g. "Remote", "") still pass through because
+// AnyNonUSA returns false for Unknown-classified locations.
+func TestProcessChunk_WorkdayLocationKnownFalse_UnambiguousNonUSA_Rejected(t *testing.T) {
+	scorer := &fakeScorer{}
 	ledger := &fakeLedger{}
 	pub := &fakePublisher{}
 	w := makeWorker(scorer, ledger, pub)
@@ -96,14 +97,49 @@ func TestProcessChunk_WorkdayLocationKnownFalse_NotRejected(t *testing.T) {
 	}
 	_ = w.processChunk(context.Background(), chunkOf(job), "fetch-1", 0, 1)
 
+	if scorer.calls != 0 {
+		t.Errorf("expected scorer NOT called for unambiguous non-USA Workday job, got %d", scorer.calls)
+	}
+	if len(pub.recordsOnSubject("jobs.filtered.")) != 0 {
+		t.Errorf("expected no filtered publishes for non-USA Workday job")
+	}
+	var sawNonUSA bool
 	for _, c := range ledger.calls {
 		if c.reason == jobcommon.SeenReasonNonUSA {
-			t.Fatalf("LocationKnown=false Workday job must not be rejected as non-USA; ledger=%+v", ledger.calls)
+			sawNonUSA = true
+		}
+	}
+	if !sawNonUSA {
+		t.Errorf("expected non_usa_location ledger entry for Bengaluru India job; calls=%+v", ledger.calls)
+	}
+}
+
+// A Workday job with LocationKnown=false and an ambiguous Location (no clear
+// non-USA signal) still reaches the scorer — AnyNonUSA returns false for
+// empty/Unknown-classified strings.
+func TestProcessChunk_WorkdayLocationKnownFalse_AmbiguousLocation_PassesThrough(t *testing.T) {
+	scorer := &fakeScorer{relevantIDs: []string{"workday-2"}}
+	ledger := &fakeLedger{}
+	pub := &fakePublisher{}
+	w := makeWorker(scorer, ledger, pub)
+
+	job := core.JobSummary{
+		ID:            "workday-2",
+		Adapter:       "workday",
+		Title:         "Software Engineer",
+		Location:      "Multiple Locations",
+		LocationKnown: false,
+	}
+	_ = w.processChunk(context.Background(), chunkOf(job), "fetch-1", 0, 1)
+
+	for _, c := range ledger.calls {
+		if c.reason == jobcommon.SeenReasonNonUSA {
+			t.Fatalf("ambiguous Workday location must not be rejected as non-USA; ledger=%+v", ledger.calls)
 		}
 	}
 	filtered := pub.recordsOnSubject("jobs.filtered.")
 	if len(filtered) != 1 {
-		t.Fatalf("expected Workday job to pass through to jobs.filtered.*, got %d publishes", len(filtered))
+		t.Fatalf("expected Workday job with ambiguous location to pass through; got %d publishes", len(filtered))
 	}
 	if filtered[0].subject != "jobs.filtered.workday" {
 		t.Errorf("expected subject jobs.filtered.workday, got %q", filtered[0].subject)

@@ -23,6 +23,8 @@ func seedLedger(t *testing.T, db *gorm.DB, jobID, companyID, reason string) {
 	}
 }
 
+// seedLedgerRemoved is declared in JobSeenLedgerReclaim_test.go (testing.TB signature).
+
 // TestSeenLedger_HasSeen_True asserts a present row returns true.
 func TestSeenLedger_HasSeen_True(t *testing.T) {
 	t.Parallel()
@@ -86,6 +88,28 @@ func TestSeenLedger_HasSeenBatch(t *testing.T) {
 	}
 	if out["p3"] {
 		t.Errorf("p3 present in map; want absent (missing row)")
+	}
+}
+
+// TestSeenLedger_CountByReason_CountsMatchingNonRemovedRows asserts
+// CountByReason counts only non-removed rows at the given reason, excluding
+// removed rows and rows with a different reason.
+func TestSeenLedger_CountByReason_CountsMatchingNonRemovedRows(t *testing.T) {
+	t.Parallel()
+	db := newJobTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedLedger(t, db, "job-1", "c1", string(jobcommon.SeenReasonRetry))
+	seedLedger(t, db, "job-2", "c1", string(jobcommon.SeenReasonRetry))
+	seedLedgerRemoved(t, db, "job-3", "c1", string(jobcommon.SeenReasonRetry)) // removed — excluded
+	seedLedger(t, db, "job-4", "c1", string(jobcommon.SeenReasonFetch))        // wrong reason — excluded
+	store := jobsvc.NewSeenLedgerStore(db)
+
+	count, err := store.CountByReason(context.Background(), jobcommon.SeenReasonRetry)
+	if err != nil {
+		t.Fatalf("CountByReason() error = %v", err)
+	}
+	if count != 2 {
+		t.Errorf("CountByReason() = %d, want 2", count)
 	}
 }
 

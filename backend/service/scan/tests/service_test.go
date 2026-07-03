@@ -115,7 +115,8 @@ func (f *fakeScanSettingsRepo) Update(_ context.Context, _ string, _ companydto.
 func (f *fakeScanSettingsRepo) UpdateScanState(_ context.Context, _ string, _ companydto.CompanyScanStateUpdate) error {
 	return nil
 }
-func (f *fakeScanSettingsRepo) Delete(_ context.Context, _ string) error { return nil }
+func (f *fakeScanSettingsRepo) Delete(_ context.Context, _ string) error       { return nil }
+func (f *fakeScanSettingsRepo) CountAutoPaused(_ context.Context) (int, error) { return 0, nil }
 
 // fakeCompanyAdminService is a test double for companysvc.CompanyAdminService.
 // Only GetByIDs is exercised by the impl service today; other methods are stubs.
@@ -413,6 +414,9 @@ func TestResetStuck_StoreError(t *testing.T) {
 		t.Errorf("expected INTERNAL error, got %v", err)
 	}
 }
+
+func (f *fakeQueueStore) CountQueued(context.Context) (int, error)                { return 0, nil }
+func (f *fakeQueueStore) OldestQueuedAgeSeconds(context.Context) (float64, error) { return 0, nil }
 
 // Ensure test doubles implement their interfaces.
 var _ svc.ScanQueueStore = (*fakeQueueStore)(nil)

@@ -278,10 +278,13 @@ func (w *Worker) processChunk(ctx context.Context, chunk []chunkItem, fetchID st
 	var scorable, passThrough []chunkItem
 	var nonUSAItems []chunkItem
 	for _, item := range chunk {
-		// Non-USA gate: only applied when LocationKnown=true (adapter-supplied
-		// structured location). When LocationKnown=false (Workday/Meta thin listing),
-		// location is unknown at this stage and must not be rejected here.
-		if item.job.job.LocationKnown && location.AnyNonUSA(mergedLocations(item.job.job)) {
+		// Non-USA gate: AnyNonUSA returns false for nil/empty/Unknown-classified
+		// locations, so this is safe for all adapters — thin-listing adapters
+		// (Workday, Meta) with ambiguous strings like "Remote" or "Multiple
+		// Locations" still pass through to the LLM. Unambiguous non-USA city
+		// names present in the listing (e.g. "Jaipur", "London, UK") are caught
+		// here, saving LLM spend before the analyzer's post-fetch country gate.
+		if location.AnyNonUSA(mergedLocations(item.job.job)) {
 			nonUSAItems = append(nonUSAItems, item)
 			continue
 		}

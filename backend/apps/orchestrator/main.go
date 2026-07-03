@@ -17,6 +17,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/db"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	crawlernodesvc "github.com/trushilpatel/jobradar/service/crawlernode/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -52,6 +53,8 @@ func main() {
 		log.Error("db open failed", err)
 		os.Exit(1)
 	}
+
+	go metrics.Serve(cfg.Observability.MetricsAddr, func() error { return db.PoolReady(database) })
 
 	nc, njs, err := js.Connect(js.Config{URL: cfg.NATS.URL, CredsFile: cfg.NATS.CredsFile})
 	if err != nil {
@@ -97,6 +100,7 @@ func main() {
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.RequestID)
 	r.Use(apimiddleware.Logger(log))
+	r.Use(apimiddleware.Metrics())
 
 	// Health endpoints — liveness (/healthz, cheap) and readiness (/readyz,
 	// NATS-gated). Extracted into registerHealthRoutes so route registration

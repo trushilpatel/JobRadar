@@ -86,6 +86,15 @@ type ScanQueueStore interface {
 
 	// ListQueue returns queue entries matching filter, ordered by priority DESC, queued_at ASC.
 	ListQueue(ctx context.Context, filter dto.QueueFilter) ([]dto.ScanQueueItem, error)
+
+	// CountQueued returns the current number of company_scan_queue rows in
+	// status='queued'. Read-only snapshot — used by the scheduler's gauge
+	// refresh, not the enqueue/claim path.
+	CountQueued(ctx context.Context) (int, error)
+
+	// OldestQueuedAgeSeconds returns the age in seconds of the oldest
+	// status='queued' row, or 0 when the queue is empty.
+	OldestQueuedAgeSeconds(ctx context.Context) (float64, error)
 }
 
 // --- GORM implementations ---
@@ -391,6 +400,25 @@ func (s *scanQueueStore) ListQueue(ctx context.Context, filter dto.QueueFilter) 
 	return items, err
 }
 
+func (s *scanQueueStore) CountQueued(ctx context.Context) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.CountQueued")
+	defer tracing.End(span, &err)
+	var count int64
+	err = s.db.WithContext(ctx).Raw(`SELECT COUNT(*) FROM company_scan_queue WHERE status = 'queued'`).Scan(&count).Error
+	return int(count), err
+}
+
+func (s *scanQueueStore) OldestQueuedAgeSeconds(ctx context.Context) (_ float64, err error) {
+	ctx, span := tracing.Start(ctx, "scan.store.OldestQueuedAgeSeconds")
+	defer tracing.End(span, &err)
+	var seconds float64
+	err = s.db.WithContext(ctx).Raw(`
+		SELECT COALESCE(EXTRACT(EPOCH FROM (NOW() - MIN(queued_at))), 0)
+		FROM company_scan_queue WHERE status = 'queued'
+	`).Scan(&seconds).Error
+	return seconds, err
+}
+
 // --- repositoryService: terminal Service implementation ---
 
 type repositoryService struct {
@@ -568,11 +596,25 @@ func (s *repositoryService) ReclaimStuckFetchRows(_ context.Context) (int64, err
 	return 0, nil
 }
 
+// ReclaimStuckFilteredRows is a no-op on the repository service for the same
+// reason as ReclaimStuckFetchRows — the scheduler-only reclaimer path is never
+// wired through the REST decorator chain.
+func (s *repositoryService) ReclaimStuckFilteredRows(_ context.Context) (int64, error) {
+	return 0, nil
+}
+
 // AutoPauseChronicFailures is a no-op on the repository service for the same
 // reason as the other scheduler-only sweeps — the auto-pause path is never
 // wired through the REST decorator chain.
 func (s *repositoryService) AutoPauseChronicFailures(_ context.Context) (int, error) {
 	return 0, nil
+}
+
+// RefreshGaugeMetrics is a no-op on the repository service for the same
+// reason as the other scheduler-only sweeps — the gauge-refresh path is
+// never wired through the REST decorator chain.
+func (s *repositoryService) RefreshGaugeMetrics(_ context.Context) error {
+	return nil
 }
 
 func (s *repositoryService) UpdateScanIntervalOverride(ctx context.Context, companyID string, override *int) (err error) {
