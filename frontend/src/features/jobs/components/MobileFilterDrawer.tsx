@@ -9,7 +9,14 @@ import {
 import { MultiSelect } from '@/components/ui/multi-select'
 import { cn } from '@/lib/utils/utils'
 import type { DateFilter, LocationFilter } from '../hooks/useJobs'
-import { EXP_OPTIONS, DATE_OPTIONS, LOCATION_OPTIONS } from '../constants/filterOptions'
+import type { VisaFilter } from '../hooks/useJobUrlState'
+import {
+  EXP_OPTIONS,
+  DATE_OPTIONS,
+  LOCATION_OPTIONS,
+  VISA_OPTIONS,
+  pickSingleSelectValue,
+} from '../constants/filterOptions'
 
 export interface MobileFilterDrawerProps {
   open: boolean
@@ -23,6 +30,8 @@ export interface MobileFilterDrawerProps {
   onExpChange?: (v: string[]) => void
   dateFilter?: DateFilter
   onDateChange?: (v: DateFilter) => void
+  visaFilter?: VisaFilter
+  onVisaChange?: (v: VisaFilter) => void
   onReset?: () => void
 }
 
@@ -63,6 +72,8 @@ export function MobileFilterDrawer({
   onExpChange,
   dateFilter = 'all',
   onDateChange,
+  visaFilter = 'any',
+  onVisaChange,
   onReset,
 }: MobileFilterDrawerProps) {
   function toggleExp(opt: string) {
@@ -78,6 +89,11 @@ export function MobileFilterDrawer({
   function toggleLocation(value: LocationFilter) {
     if (!onLocationChange) return
     onLocationChange(locationFilter === value ? 'any' : value)
+  }
+
+  function toggleVisa(value: Exclude<VisaFilter, 'any'>) {
+    if (!onVisaChange) return
+    onVisaChange(pickSingleSelectValue([value], visaFilter, 'any'))
   }
 
   return (
@@ -107,13 +123,13 @@ export function MobileFilterDrawer({
               Experience
             </h4>
             <div className="flex flex-wrap gap-2">
-              {EXP_OPTIONS.map((opt) => (
+              {EXP_OPTIONS.map(({ value, label }) => (
                 <PillButton
-                  key={opt}
-                  active={expFilter.includes(opt)}
-                  onClick={() => toggleExp(opt)}
+                  key={value}
+                  active={expFilter.includes(value)}
+                  onClick={() => toggleExp(value)}
                 >
-                  {opt === '5+' ? '5+ yrs' : `${opt} yrs`}
+                  {label}
                 </PillButton>
               ))}
             </div>
@@ -148,6 +164,23 @@ export function MobileFilterDrawer({
                   onClick={() => toggleLocation(loc.value)}
                 >
                   {loc.label}
+                </PillButton>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-secondary">
+              Visa
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {VISA_OPTIONS.map((opt) => (
+                <PillButton
+                  key={opt.value}
+                  active={visaFilter === opt.value}
+                  onClick={() => toggleVisa(opt.value)}
+                >
+                  {opt.label}
                 </PillButton>
               ))}
             </div>

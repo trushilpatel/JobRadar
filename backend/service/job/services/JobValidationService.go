@@ -49,6 +49,16 @@ func (v *validationService) List(ctx context.Context, filter dto.JobFilter, curs
 			Message: "status must be one of: new, saved, applied, interviewing, offer, dismissed, rejected",
 		})
 	}
+	for _, st := range filter.Statuses {
+		if !validJobStatuses[st] {
+			errs = append(errs, errors.ValidationError{
+				Field:   "statuses",
+				Code:    "INVALID_VALUE",
+				Message: "each status must be one of: new, saved, applied, interviewing, offer, dismissed, rejected",
+			})
+			break
+		}
+	}
 	for _, r := range filter.ExperienceRanges {
 		if r.Min < 0 {
 			errs = append(errs, errors.ValidationError{

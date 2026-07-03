@@ -139,6 +139,7 @@ export interface JobFilters {
   daysAdded?: number
   sortBy?: string
   sortDir?: 'asc' | 'desc'
+  sponsorship?: boolean
 }
 
 // ── Normalization ────────────────────────────────────────────────────────────
@@ -185,6 +186,7 @@ export async function fetchJobs(
   if (filters.remote) p.set('remote', 'true')
   if (filters.onSite) p.set('on_site', 'true')
   if (filters.hybrid) p.set('hybrid', 'true')
+  if (filters.sponsorship !== undefined) p.set('sponsorship', String(filters.sponsorship))
   filters.experienceRanges?.forEach((r) => p.append('experience_ranges', r))
   if (filters.daysAdded) p.set('days_added', String(filters.daysAdded))
   if (filters.sortBy) p.set('sort_by', filters.sortBy)

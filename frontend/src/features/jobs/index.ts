@@ -13,7 +13,7 @@ export { JOB_COMMANDS } from './commands/jobCommands'
 export type { JobCommandId } from './commands/jobCommands'
 export { MobileFilterDrawer } from './components/MobileFilterDrawer'
 export { MobileJobDetailRoute } from './components/MobileJobDetailRoute'
-export type { TabKey, DateFilter, LocationFilter } from './hooks/useJobs'
+export type { TabKey, DateFilter, LocationFilter, VisaFilter } from './hooks/useJobs'
 export {
   fetchJobs,
   fetchJob,

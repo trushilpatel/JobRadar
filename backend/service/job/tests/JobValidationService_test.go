@@ -68,6 +68,38 @@ func TestValidate_List(t *testing.T) {
 	}
 }
 
+// TestValidate_List_StatusesFilter covers validation of the combined
+// multi-status filter (filter.Statuses) — used by tabs that show multiple
+// workflow states at once (e.g. Tracking). Invalid entries fail validation;
+// a valid or empty/nil slice passes without affecting the existing
+// filter.Status validation.
+func TestValidate_List_StatusesFilter(t *testing.T) {
+	v := newValidator()
+	tests := []struct {
+		name    string
+		filter  jobdto.JobFilter
+		wantErr bool
+	}{
+		{name: "nil statuses allowed", filter: jobdto.JobFilter{}},
+		{name: "empty statuses allowed", filter: jobdto.JobFilter{Statuses: []string{}}},
+		{name: "all valid statuses", filter: jobdto.JobFilter{Statuses: []string{
+			jobcommon.JobStatusApplied, jobcommon.JobStatusInterviewing, jobcommon.JobStatusOffer,
+		}}},
+		{name: "one invalid entry rejected", filter: jobdto.JobFilter{Statuses: []string{
+			jobcommon.JobStatusApplied, "bogus",
+		}}, wantErr: true},
+		{name: "all invalid rejected", filter: jobdto.JobFilter{Statuses: []string{"bogus1", "bogus2"}}, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := v.List(context.Background(), tc.filter, "", 20)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("err = %v, wantErr = %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestValidate_SetStatus_RejectsNew(t *testing.T) {
 	v := newValidator()
 	if err := v.SetStatus(context.Background(), "j1", jobcommon.JobStatusNew); err == nil {
