@@ -45,6 +45,10 @@ func (n *noopService) ReclaimStuckFetchRows(_ context.Context) (int64, error) {
 	return 0, nil
 }
 
+func (n *noopService) ReclaimStuckFilteredRows(_ context.Context) (int64, error) {
+	return 0, nil
+}
+
 func (n *noopService) AutoPauseChronicFailures(_ context.Context) (int, error) {
 	return 0, nil
 }

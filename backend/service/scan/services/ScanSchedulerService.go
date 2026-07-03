@@ -292,12 +292,12 @@ func (s *schedulerService) EscalateStuckRetryJobs(ctx context.Context) (_ int64,
 }
 
 // ReclaimStuckFetchRows DELETEs job_pipeline_ledger rows stranded at
-// reason='fetch' (removed_at IS NULL, first_seen_at older than
-// stuckFetchThreshold), bounded by stuckFetchLimit per call. These are jobs the
-// crawler marked seen before publishing but the filter never transitioned to a
-// terminal verdict. Because HasSeenBatch ignores reason and removed_at, deleting
-// the row is the only way to clear the dedup block so the next crawl can
-// re-drive the job — escalating to reason='error' would keep it deduped forever.
+// reason='fetch' (first_seen_at older than stuckFetchThreshold, regardless of
+// removed_at), bounded by stuckFetchLimit per call. These are jobs the crawler
+// marked seen before publishing but the filter never transitioned to a terminal
+// verdict. Because HasSeenBatch ignores reason and removed_at, deleting the row
+// is the only way to clear the dedup block so the next crawl can re-drive the
+// job — escalating to reason='error' would keep it deduped forever.
 //
 // Returns (0, nil) when no ledger was configured (no-op) or no stuck rows exist.
 func (s *schedulerService) ReclaimStuckFetchRows(ctx context.Context) (_ int64, err error) {
@@ -308,13 +308,52 @@ func (s *schedulerService) ReclaimStuckFetchRows(ctx context.Context) (_ int64, 
 	ctx, span := tracing.Start(ctx, "scan.service.ReclaimStuckFetchRows")
 	defer tracing.End(span, &err)
 
-	n, serr := s.ledger.ReclaimStuckFetchRows(ctx, stuckFetchThreshold, stuckFetchLimit)
+	n, serr := s.ledger.ReclaimStuckFetchRows(ctx, time.Now().Add(-stuckFetchThreshold), stuckFetchLimit)
 	if serr != nil {
 		return 0, fmt.Errorf("ReclaimStuckFetchRows: %w", serr)
 	}
 	if n > 0 {
 		metrics.SchedulerStuckFetchReclaimedTotal.Add(float64(n))
 		s.log.Info("reclaimed stuck fetch ledger rows",
+			logger.Int(logger.FieldCount, int(n)),
+		)
+	}
+	return n, nil
+}
+
+// stuckFilteredThreshold is how old a reason='filtered' ledger row must be
+// before the reclaimer deletes it. Normal filter→analyzer latency is seconds-to-
+// minutes; the worst-case legitimate in-flight window is well under an hour.
+// 1h is a conservative safety floor that still recovers within the same incident.
+const stuckFilteredThreshold = 1 * time.Hour
+
+// stuckFilteredLimit caps the number of stranded filtered rows deleted per
+// scheduler tick to bound DB work; a backlog drains across successive ticks.
+const stuckFilteredLimit = 500
+
+// ReclaimStuckFilteredRows DELETEs job_pipeline_ledger rows stranded at
+// reason='filtered' older than stuckFilteredThreshold, bounded by
+// stuckFilteredLimit per call. These are jobs the filter published to
+// jobs.filtered.* but the analyzer never transitioned to a terminal verdict.
+// Because HasSeenBatch ignores reason and removed_at, deleting the row is the
+// only way to clear the dedup block so the next crawl can re-drive the job.
+//
+// Returns (0, nil) when no ledger was configured (no-op) or no stuck rows exist.
+func (s *schedulerService) ReclaimStuckFilteredRows(ctx context.Context) (_ int64, err error) {
+	if s.ledger == nil {
+		return 0, nil
+	}
+
+	ctx, span := tracing.Start(ctx, "scan.service.ReclaimStuckFilteredRows")
+	defer tracing.End(span, &err)
+
+	n, serr := s.ledger.ReclaimStuckFilteredRows(ctx, time.Now().Add(-stuckFilteredThreshold), stuckFilteredLimit)
+	if serr != nil {
+		return 0, fmt.Errorf("ReclaimStuckFilteredRows: %w", serr)
+	}
+	if n > 0 {
+		metrics.SchedulerStuckFilteredReclaimedTotal.Add(float64(n))
+		s.log.Info("reclaimed stuck filtered ledger rows",
 			logger.Int(logger.FieldCount, int(n)),
 		)
 	}

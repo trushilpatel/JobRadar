@@ -24,35 +24,38 @@ import (
 type fakeSchedulerService struct {
 	mu sync.Mutex
 
-	enqueueCount     int
-	skippedCount     int
-	purgeCount       int
-	resetCount       int
-	enqueueErr       error
-	resetErr         error
-	purgeErr         error
-	retryDueJobsErr  error
-	escalateStuckErr error
-	escalateStuckN   int64
-	reclaimStuckErr  error
-	reclaimStuckN    int64
-	autoPauseErr     error
-	autoPauseN       int
-	resetStuckArg    time.Duration
-	refreshGaugeErr  error
+	enqueueCount       int
+	skippedCount       int
+	purgeCount         int
+	resetCount         int
+	enqueueErr         error
+	resetErr           error
+	purgeErr           error
+	retryDueJobsErr    error
+	escalateStuckErr   error
+	escalateStuckN     int64
+	reclaimStuckErr    error
+	reclaimStuckN      int64
+	reclaimFilteredErr error
+	reclaimFilteredN   int64
+	autoPauseErr       error
+	autoPauseN         int
+	resetStuckArg      time.Duration
+	refreshGaugeErr    error
 
 	// Channel synchronisation — avoids time.Sleep in tests.
 	readyAt int64         // close readyCh when enqueueCalls reaches this value
 	readyCh chan struct{} // closed once; nil means no synchronisation needed
 
-	resetCalls         atomic.Int64
-	purgeCalls         atomic.Int64
-	enqueueCalls       atomic.Int64
-	retryDueJobsCalls  atomic.Int64
-	escalateStuckCalls atomic.Int64
-	reclaimStuckCalls  atomic.Int64
-	autoPauseCalls     atomic.Int64
-	refreshGaugeCalls  atomic.Int64
+	resetCalls           atomic.Int64
+	purgeCalls           atomic.Int64
+	enqueueCalls         atomic.Int64
+	retryDueJobsCalls    atomic.Int64
+	escalateStuckCalls   atomic.Int64
+	reclaimStuckCalls    atomic.Int64
+	reclaimFilteredCalls atomic.Int64
+	autoPauseCalls       atomic.Int64
+	refreshGaugeCalls    atomic.Int64
 
 	enqueueDueArgs int
 }
@@ -120,6 +123,15 @@ func (f *fakeSchedulerService) ReclaimStuckFetchRows(_ context.Context) (int64, 
 	err := f.reclaimStuckErr
 	f.mu.Unlock()
 	f.reclaimStuckCalls.Add(1)
+	return n, err
+}
+
+func (f *fakeSchedulerService) ReclaimStuckFilteredRows(_ context.Context) (int64, error) {
+	f.mu.Lock()
+	n := f.reclaimFilteredN
+	err := f.reclaimFilteredErr
+	f.mu.Unlock()
+	f.reclaimFilteredCalls.Add(1)
 	return n, err
 }
 

@@ -1,6 +1,9 @@
 # apps/scheduler/ — Scan scheduler
 
-Checks every 1 minute for companies whose `last_scan_at` is NULL or due for a scan. Inserts due companies into `company_scan_queue`. Also resets queue rows stuck in `running` state (crawler crash recovery) and reclaims stranded `reason='fetch'` ledger rows (`ReclaimStuckFetchRows` — DELETEs `fetch` rows older than 1h so a job that never reached a terminal filter verdict is re-driven on the next crawl instead of being silently deduped out).
+Checks every 1 minute for companies whose `last_scan_at` is NULL or due for a scan. Inserts due companies into `company_scan_queue`. Also resets queue rows stuck in `running` state (crawler crash recovery) and reclaims two classes of stranded ledger rows each cycle:
+
+- `ReclaimStuckFetchRows` — DELETEs `reason='fetch'` rows older than 1h (regardless of `removed_at`) so a job that never reached a terminal filter verdict is re-driven on the next crawl instead of being silently deduped out.
+- `ReclaimStuckFilteredRows` — DELETEs `reason='filtered'` rows older than 1h (regardless of `removed_at`) so a job that passed the filter but whose enricher NATS message expired is re-driven rather than permanently blocked.
 
 The effective scan interval per company is resolved from a 3-level cascade inside `EnqueueDue`:
 `company_scan_settings.scan_interval_override → adapter_configs.scan_interval_minutes → SCAN_INTERVAL_MINUTES env var`

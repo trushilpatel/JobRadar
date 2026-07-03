@@ -392,3 +392,42 @@ func TestRunCycle_RefreshGaugeMetricsError_ContinuesToEnqueue(t *testing.T) {
 		t.Errorf("EnqueueDue calls = %d, want 1 (gauge-refresh failure must not block enqueue)", svc.enqueueCalls.Load())
 	}
 }
+
+// ── AC-6: ReclaimStuckFilteredRows in runCycle ────────────────────────────────
+
+// TestRunCycle_ReclaimStuckFilteredRows_CalledEachCycle asserts that
+// ReclaimStuckFilteredRows is invoked in every runCycle pass.
+func TestRunCycle_ReclaimStuckFilteredRows_CalledEachCycle(t *testing.T) {
+	svc := &fakeSchedulerService{}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+	if svc.reclaimFilteredCalls.Load() != 1 {
+		t.Errorf("ReclaimStuckFilteredRows calls = %d, want 1", svc.reclaimFilteredCalls.Load())
+	}
+}
+
+// TestRunCycle_ReclaimStuckFilteredRows_ErrorContinues asserts that an error
+// from ReclaimStuckFilteredRows does not abort subsequent steps in runCycle.
+func TestRunCycle_ReclaimStuckFilteredRows_ErrorContinues(t *testing.T) {
+	svc := &fakeSchedulerService{
+		reclaimFilteredErr: errors.New("db down"),
+		enqueueCount:       1,
+	}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+
+	if svc.reclaimFilteredCalls.Load() != 1 {
+		t.Errorf("ReclaimStuckFilteredRows calls = %d, want 1", svc.reclaimFilteredCalls.Load())
+	}
+	if svc.enqueueCalls.Load() != 1 {
+		t.Errorf("EnqueueDue calls = %d, want 1 (must run even after reclaimFiltered error)", svc.enqueueCalls.Load())
+	}
+}
+
+// TestRunCycle_ReclaimStuckFilteredRows_LogsOnReclaim exercises the n>0
+// INFO-log branch of the reclaim-filtered step.
+func TestRunCycle_ReclaimStuckFilteredRows_LogsOnReclaim(t *testing.T) {
+	svc := &fakeSchedulerService{reclaimFilteredN: 5}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+	if svc.reclaimFilteredCalls.Load() != 1 {
+		t.Errorf("ReclaimStuckFilteredRows calls = %d, want 1", svc.reclaimFilteredCalls.Load())
+	}
+}

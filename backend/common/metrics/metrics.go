@@ -246,6 +246,18 @@ var SchedulerCompaniesAutoPausedTotal = prometheus.NewCounter(prometheus.Counter
 	Help: "Total companies auto-paused by the scheduler after crossing the consecutive-error threshold.",
 })
 
+// SchedulerStuckFilteredReclaimedTotal counts job_pipeline_ledger rows deleted
+// by the scheduler's stranded-filtered reclaimer: rows stuck at reason='filtered'
+// older than the 1h threshold. These are jobs the filter marked as filtered but
+// the analyzer never transitioned to a terminal verdict. Deleting them clears
+// the dedup block so the next crawl can re-drive the job. Only incremented when
+// at least one row was reclaimed. Alert on a sustained non-zero rate — it
+// indicates jobs are being stranded before the analyzer.
+var SchedulerStuckFilteredReclaimedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "jobradar_scheduler_stuck_filtered_reclaimed_total",
+	Help: "Total stranded reason='filtered' ledger rows deleted by the scheduler reclaimer (dedup-block recovery).",
+})
+
 // DBTransientRetriesTotal counts database operations retried by db.WithRetry
 // after a transient connection-drop error (e.g. Supabase pooler closing an idle
 // connection → unexpected EOF). A sustained rate indicates pool-timeout vs pooler
@@ -407,6 +419,7 @@ func init() {
 		SchedulerStuckRowsResetTotal,
 		SchedulerStuckFetchReclaimedTotal,
 		SchedulerCompaniesAutoPausedTotal,
+		SchedulerStuckFilteredReclaimedTotal,
 		DBTransientRetriesTotal,
 		FilterLLMExhaustionTotal,
 		EnricherLLMExhaustionTotal,

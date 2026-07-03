@@ -444,6 +444,10 @@ func (m *mockScanService) ReclaimStuckFetchRows(_ context.Context) (int64, error
 	return 0, m.err
 }
 
+func (m *mockScanService) ReclaimStuckFilteredRows(_ context.Context) (int64, error) {
+	return 0, m.err
+}
+
 func (m *mockScanService) AutoPauseChronicFailures(_ context.Context) (int, error) {
 	return 0, m.err
 }
@@ -547,5 +551,56 @@ func TestScanHandler_UpdateScanIntervalOverride_NotFound(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// ── BaseService + repositoryService no-op coverage ────────────────────────────
+// The scheduler-only methods (EscalateStuckRetryJobs, ReclaimStuckFetchRows,
+// ReclaimStuckFilteredRows, AutoPauseChronicFailures) are no-ops on the
+// repositoryService because they are never wired through the REST decorator
+// chain. These tests call them via the BaseService pass-through to satisfy the
+// ≥95% per-package coverage gate.
+
+// TestRepositoryService_SchedulerNoOps_ReturnZeroNil verifies that the
+// scheduler-only methods on the repository service are benign no-ops.
+func TestRepositoryService_SchedulerNoOps_ReturnZeroNil(t *testing.T) {
+	db := newScanConfigTestDB(t)
+	repo := newRepoWithDB(db, newFakeAts())
+	ctx := context.Background()
+
+	if n, err := repo.EscalateStuckRetryJobs(ctx); err != nil || n != 0 {
+		t.Errorf("EscalateStuckRetryJobs() = %d, %v; want 0, nil", n, err)
+	}
+	if n, err := repo.ReclaimStuckFetchRows(ctx); err != nil || n != 0 {
+		t.Errorf("ReclaimStuckFetchRows() = %d, %v; want 0, nil", n, err)
+	}
+	if n, err := repo.ReclaimStuckFilteredRows(ctx); err != nil || n != 0 {
+		t.Errorf("ReclaimStuckFilteredRows() = %d, %v; want 0, nil", n, err)
+	}
+	if n, err := repo.AutoPauseChronicFailures(ctx); err != nil || n != 0 {
+		t.Errorf("AutoPauseChronicFailures() = %d, %v; want 0, nil", n, err)
+	}
+}
+
+// TestBaseService_SchedulerPassThroughs_ReturnZeroNil verifies that the
+// BaseService pass-through methods delegate to the repository no-ops
+// transparently. NewValidator wraps repo with BaseService, so every call
+// traverses BaseService.ReclaimStuckFilteredRows → repo.ReclaimStuckFilteredRows.
+func TestBaseService_SchedulerPassThroughs_ReturnZeroNil(t *testing.T) {
+	db := newScanConfigTestDB(t)
+	chain := svc.NewValidator(newRepoWithDB(db, newFakeAts()))
+	ctx := context.Background()
+
+	if n, err := chain.EscalateStuckRetryJobs(ctx); err != nil || n != 0 {
+		t.Errorf("EscalateStuckRetryJobs via BaseService = %d, %v; want 0, nil", n, err)
+	}
+	if n, err := chain.ReclaimStuckFetchRows(ctx); err != nil || n != 0 {
+		t.Errorf("ReclaimStuckFetchRows via BaseService = %d, %v; want 0, nil", n, err)
+	}
+	if n, err := chain.ReclaimStuckFilteredRows(ctx); err != nil || n != 0 {
+		t.Errorf("ReclaimStuckFilteredRows via BaseService = %d, %v; want 0, nil", n, err)
+	}
+	if n, err := chain.AutoPauseChronicFailures(ctx); err != nil || n != 0 {
+		t.Errorf("AutoPauseChronicFailures via BaseService = %d, %v; want 0, nil", n, err)
 	}
 }

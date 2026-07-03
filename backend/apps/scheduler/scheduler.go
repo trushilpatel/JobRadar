@@ -90,6 +90,13 @@ func runCycle(ctx context.Context, log logger.Logger, svc SchedulerService, inte
 		log.Info("reclaimed stuck fetch ledger rows", logger.Int(logger.FieldCount, int(reclaimed)))
 	}
 
+	if reclaimed, err := svc.ReclaimStuckFilteredRows(ctx); err != nil {
+		metrics.SchedulerErrorsTotal.WithLabelValues("reclaim_stuck_filtered").Inc()
+		log.Error("reclaim stuck filtered failed", err)
+	} else if reclaimed > 0 {
+		log.Info("reclaimed stuck filtered ledger rows", logger.Int(logger.FieldCount, int(reclaimed)))
+	}
+
 	if purged, err := svc.PurgeInactive(ctx); err != nil {
 		metrics.SchedulerErrorsTotal.WithLabelValues("purge_inactive").Inc()
 		log.Error("purge inactive failed", err)

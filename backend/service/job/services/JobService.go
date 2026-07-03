@@ -191,15 +191,28 @@ type SeenLedgerWriter interface {
 	// Used by the scheduler to recover jobs whose sweeper publish never happened
 	// (e.g. persistent NATS outage). Returns (0, nil) when no rows are stuck.
 	EscalateStuckRetryJobs(ctx context.Context, stuckThreshold time.Duration, limit int) (int64, error)
-	// ReclaimStuckFetchRows DELETEs rows stranded at reason='fetch' with
-	// removed_at IS NULL and first_seen_at < NOW() - threshold, bounded by limit.
+	// ReclaimStuckFetchRows DELETEs rows stranded at reason='fetch' and
+	// first_seen_at < olderThan, bounded by limit, regardless of removed_at.
 	// These are jobs the crawler marked seen before publishing but the filter
 	// never transitioned to a terminal verdict. Because HasSeenBatch ignores
 	// reason and removed_at, deleting the row is the only way to clear the dedup
 	// block — escalating to reason='error' would keep the job deduped forever.
+	// The caller computes olderThan (e.g. time.Now().Add(-threshold)) so the SQL
+	// uses a plain timestamp comparison, which is both dialect-agnostic and
+	// testable with SQLite.
 	// Returns the number of rows deleted; 0 is a valid steady-state outcome (no
 	// ErrLedgerRowMissing — this is a count-based sweep, not a targeted write).
-	ReclaimStuckFetchRows(ctx context.Context, threshold time.Duration, limit int) (int64, error)
+	ReclaimStuckFetchRows(ctx context.Context, olderThan time.Time, limit int) (int64, error)
+	// ReclaimStuckFilteredRows DELETEs rows stranded at reason='filtered' and
+	// first_seen_at < olderThan, bounded by limit, regardless of removed_at.
+	// These are jobs the filter published to jobs.filtered.* but the analyzer never
+	// transitioned to a terminal verdict. Deleting the row clears the dedup block
+	// so the next crawl can re-drive the job.
+	// The caller computes olderThan (e.g. time.Now().Add(-threshold)) — plain
+	// timestamp comparison, dialect-agnostic and SQLite-testable.
+	// Returns the number of rows deleted; 0 is a valid steady-state outcome
+	// (count-based sweep, no ErrLedgerRowMissing).
+	ReclaimStuckFilteredRows(ctx context.Context, olderThan time.Time, limit int) (int64, error)
 	MarkRemovedBatch(ctx context.Context, jobIDs []string) error
 }
 
