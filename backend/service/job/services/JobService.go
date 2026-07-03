@@ -154,6 +154,10 @@ type UserJobStateRepository interface {
 type SeenLedgerReader interface {
 	HasSeen(ctx context.Context, jobID string) (bool, error)
 	HasSeenBatch(ctx context.Context, jobIDs []string) (map[string]bool, error)
+	// CountByReason returns the current number of non-removed
+	// job_pipeline_ledger rows at the given reason. Read-only snapshot used
+	// by the scheduler's gauge refresh.
+	CountByReason(ctx context.Context, reason jobcommon.SeenReason) (int, error)
 }
 
 // SeenLedgerWriter marks jobs as seen / removed / retried.

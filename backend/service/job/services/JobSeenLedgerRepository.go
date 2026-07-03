@@ -91,6 +91,19 @@ func (s *seenLedgerStore) HasSeenBatch(ctx context.Context, jobIDs []string) (_ 
 	return result, nil
 }
 
+// CountByReason returns the current number of job_pipeline_ledger rows at
+// the given reason with removed_at IS NULL — e.g. the sweeper's
+// reason='retry' backlog size.
+func (s *seenLedgerStore) CountByReason(ctx context.Context, reason jobcommon.SeenReason) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "job.ledger.store.CountByReason")
+	defer tracing.End(span, &err)
+	var count int64
+	err = s.db.WithContext(ctx).Raw(`
+		SELECT COUNT(*) FROM job_pipeline_ledger WHERE reason = ? AND removed_at IS NULL
+	`, string(reason)).Scan(&count).Error
+	return int(count), err
+}
+
 func (s *seenLedgerStore) MarkSeen(ctx context.Context, jobID, companyID, reason string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.MarkSeen")
 	defer tracing.End(span, &err)

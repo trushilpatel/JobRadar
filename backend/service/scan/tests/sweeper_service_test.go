@@ -81,6 +81,9 @@ func (f *fakeSweeperLedger) EscalateStuckRetryJobs(_ context.Context, _ time.Dur
 func (f *fakeSweeperLedger) ReclaimStuckFetchRows(_ context.Context, _ time.Duration, _ int) (int64, error) {
 	return 0, nil
 }
+func (f *fakeSweeperLedger) CountByReason(_ context.Context, _ jobcommon.SeenReason) (int, error) {
+	return 0, nil
+}
 
 var _ jobsvc.SeenLedgerStore = (*fakeSweeperLedger)(nil)
 
@@ -710,6 +713,9 @@ func (l *conditionalSweeperLedger) EscalateStuckRetryJobs(_ context.Context, _ t
 	return 0, nil
 }
 func (l *conditionalSweeperLedger) ReclaimStuckFetchRows(_ context.Context, _ time.Duration, _ int) (int64, error) {
+	return 0, nil
+}
+func (l *conditionalSweeperLedger) CountByReason(_ context.Context, _ jobcommon.SeenReason) (int, error) {
 	return 0, nil
 }
 
