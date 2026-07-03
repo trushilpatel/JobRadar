@@ -161,6 +161,8 @@ func (q *sweeperFakeQueue) UpdateHeartbeat(_ context.Context, _ string) error { 
 func (q *sweeperFakeQueue) ListQueue(_ context.Context, _ scandto.QueueFilter) ([]scandto.ScanQueueItem, error) {
 	return nil, nil
 }
+func (q *sweeperFakeQueue) CountQueued(context.Context) (int, error)                { return 0, nil }
+func (q *sweeperFakeQueue) OldestQueuedAgeSeconds(context.Context) (float64, error) { return 0, nil }
 
 var _ svc.ScanQueueStore = (*sweeperFakeQueue)(nil)
 

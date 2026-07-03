@@ -414,6 +414,9 @@ func TestResetStuck_StoreError(t *testing.T) {
 	}
 }
 
+func (f *fakeQueueStore) CountQueued(context.Context) (int, error)                { return 0, nil }
+func (f *fakeQueueStore) OldestQueuedAgeSeconds(context.Context) (float64, error) { return 0, nil }
+
 // Ensure test doubles implement their interfaces.
 var _ svc.ScanQueueStore = (*fakeQueueStore)(nil)
 var _ svc.ScanLogReader = (*fakeScanLogReader)(nil)

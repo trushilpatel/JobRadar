@@ -67,6 +67,8 @@ func (f *schedulerFakeQueue) UpdateHeartbeat(context.Context, string) error { re
 func (f *schedulerFakeQueue) ListQueue(context.Context, dto.QueueFilter) ([]dto.ScanQueueItem, error) {
 	return nil, nil
 }
+func (f *schedulerFakeQueue) CountQueued(context.Context) (int, error)                { return 0, nil }
+func (f *schedulerFakeQueue) OldestQueuedAgeSeconds(context.Context) (float64, error) { return 0, nil }
 
 var _ svc.ScanQueueStore = (*schedulerFakeQueue)(nil)
 

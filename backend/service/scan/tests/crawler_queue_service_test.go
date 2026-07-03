@@ -55,6 +55,10 @@ func (f *crawlerQueueFakeStore) UpdateHeartbeat(_ context.Context, id string) er
 func (f *crawlerQueueFakeStore) ListQueue(context.Context, dto.QueueFilter) ([]dto.ScanQueueItem, error) {
 	return nil, nil
 }
+func (f *crawlerQueueFakeStore) CountQueued(context.Context) (int, error) { return 0, nil }
+func (f *crawlerQueueFakeStore) OldestQueuedAgeSeconds(context.Context) (float64, error) {
+	return 0, nil
+}
 
 var _ svc.ScanQueueStore = (*crawlerQueueFakeStore)(nil)
 
