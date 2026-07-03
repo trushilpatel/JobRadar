@@ -6,7 +6,6 @@
 package main
 
 import (
-	"context"
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/config"
@@ -16,8 +15,6 @@ import (
 	services3 "github.com/trushilpatel/jobradar/service/application/services"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	services "github.com/trushilpatel/jobradar/service/company/services"
-	services4 "github.com/trushilpatel/jobradar/service/dashboard/services"
-	services5 "github.com/trushilpatel/jobradar/service/insights/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	services2 "github.com/trushilpatel/jobradar/service/scan/services"
 	"gorm.io/gorm"
@@ -87,24 +84,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	applicationRestService := services3.NewApplicationRestService(applicationValidationService)
 	applicationRestRouter := services3.NewApplicationRestRouter(applicationRestService)
 
-	// ── Insights ──────────────────────────────────────────────────────────────
-	insightsRepositoryService := services5.NewRepositoryService(db)
-	insightsImplService := services5.NewImplService(insightsRepositoryService)
-	insightsValidationService := services5.NewValidationService(insightsImplService)
-	insightsRestService := services5.NewRestService(insightsValidationService)
-	insightsRestRouter := services5.NewRestRouter(insightsRestService)
-
-	// ── Dashboard ─────────────────────────────────────────────────────────────
-	dashboardService := services4.NewDashboardImplService(scanLogReader, insightsImplService)
-	userDashboardStore := services4.NewUserDashboardStore(db)
-	appListReader := provideApplicationListReader(applicationImplService)
-	userDashboardService := services4.NewUserDashboardService(userDashboardStore, appListReader)
-	pipelineStore := services4.NewPipelineStore(db)
-	pipelineService := services4.NewPipelineService(pipelineStore)
-	dashboardRestService := services4.NewDashboardRestService(dashboardService, userDashboardService)
-	dashboardRestRouter := services4.NewRestRouter(dashboardRestService)
-
-	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, dashboardRestRouter, insightsRestRouter, pipelineService, companyAdminRouter)
+	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter)
 	return app, nil
 }
 
@@ -121,7 +101,7 @@ func provideScanConfig(cfg *config.Config) services2.Config {
 }
 
 // provideScanLogReader binds ScanLogStore (returned by NewLogStore) to the ScanLogReader interface
-// needed by dashboard.Service.
+// needed by scan.Service.
 func provideScanLogReader(s services2.ScanLogStore) services2.ScanLogReader {
 	return s
 }
@@ -135,17 +115,4 @@ func provideSeenLedgerWriter(s jobsvc.SeenLedgerStore) jobsvc.SeenLedgerWriter {
 // provideJobApplicationWriter constructs a dedicated ApplicationWriter for job.Service.
 func provideJobApplicationWriter(db *gorm.DB) jobsvc.ApplicationWriter {
 	return application.NewApplicationWriter(db)
-}
-
-// applicationListReaderAdapter adapts ApplicationService to ApplicationListReader.
-type applicationListReaderAdapter struct{ svc services3.ApplicationService }
-
-func (a *applicationListReaderAdapter) ListActive(ctx context.Context) ([]services3.ApplicationWithJob, error) {
-	return a.svc.ListActive(ctx)
-}
-
-// provideApplicationListReader wraps ApplicationService in an adapter that
-// satisfies the ApplicationListReader interface used by UserDashboardService.
-func provideApplicationListReader(s services3.ApplicationService) services4.ApplicationListReader {
-	return &applicationListReaderAdapter{svc: s}
 }

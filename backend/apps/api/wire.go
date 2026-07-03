@@ -3,18 +3,12 @@
 package main
 
 import (
-	"context"
-
 	"github.com/google/wire"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/service/application"
-	appsvc "github.com/trushilpatel/jobradar/service/application/services"
 	"github.com/trushilpatel/jobradar/service/company"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
-	"github.com/trushilpatel/jobradar/service/dashboard"
-	dashsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
-	"github.com/trushilpatel/jobradar/service/insights"
 	"github.com/trushilpatel/jobradar/service/job"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	"github.com/trushilpatel/jobradar/service/scan"
@@ -22,16 +16,12 @@ import (
 	"gorm.io/gorm"
 )
 
-func provideCompanyConfig(cfg *config.Config) company.Config {
-	return company.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
-}
-
 func provideScanConfig(cfg *config.Config) scansvc.Config {
 	return scansvc.Config{ScanIntervalMinutes: cfg.Scheduler.ScanIntervalMinutes}
 }
 
-// provideScanLogReader binds ScanLogStore (returned by NewLogStore) to the ScanLogReader interface
-// needed by dashboard.Service.
+// provideScanLogReader binds ScanLogStore to the ScanLogReader interface
+// needed by scan.Service.
 func provideScanLogReader(s scansvc.ScanLogStore) scansvc.ScanLogReader {
 	return s
 }
@@ -42,27 +32,10 @@ func provideScanHistoryReader(s scansvc.ScanLogStore) companysvc.ScanHistoryRead
 	return s
 }
 
-// provideSeenLedgerWriter binds SeenLedgerStore (returned by NewSeenLedgerStore) to the
-// SeenLedgerWriter interface needed by job.Service.
+// provideSeenLedgerWriter binds SeenLedgerStore to the SeenLedgerWriter interface
+// needed by job.Service.
 func provideSeenLedgerWriter(s jobsvc.SeenLedgerStore) jobsvc.SeenLedgerWriter {
 	return s
-}
-
-// jobCountReaderAdapter wraps jobsvc.JobStore to satisfy the dashboard.JobCountReader interface.
-type jobCountReaderAdapter struct{ store jobsvc.JobStore }
-
-func (a *jobCountReaderAdapter) GetJobCounts() (int64, int64, int64, error) {
-	counts, err := a.store.GetJobCounts(context.Background())
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	return counts.New, counts.Saved, counts.Applied, nil
-}
-
-// provideJobCountReader binds JobStore (returned by NewJobStore) to the JobCountReader
-// interface needed by dashboard.Service.
-func provideJobCountReader(s jobsvc.JobStore) dashboard.JobCountReader {
-	return &jobCountReaderAdapter{store: s}
 }
 
 // provideJobApplicationWriter constructs a dedicated ApplicationWriter for job.Service.
@@ -70,28 +43,17 @@ func provideJobApplicationWriter(db *gorm.DB) jobsvc.ApplicationWriter {
 	return application.NewApplicationWriter(db)
 }
 
-// provideApplicationListReader binds ApplicationService to the ApplicationListReader interface
-// needed by dashboard.UserDashboardService.
-func provideApplicationListReader(s appsvc.ApplicationService) dashsvc.ApplicationListReader {
-	return s
-}
-
 func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, error) {
 	wire.Build(
-		provideCompanyConfig,
 		provideScanConfig,
 		provideScanLogReader,
 		provideScanHistoryReader,
 		provideSeenLedgerWriter,
-		provideJobCountReader,
 		provideJobApplicationWriter,
-		provideApplicationListReader,
 		company.ProviderSet,
 		scan.ProviderSet,
 		job.ProviderSet,
 		application.ProviderSet,
-		dashboard.ProviderSet,
-		insights.ProviderSet,
 		NewApp,
 	)
 	return nil, nil

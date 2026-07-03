@@ -15,7 +15,6 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	clerkadmin "github.com/trushilpatel/jobradar/platform/clerkadmin"
-	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
 )
 
 // Strict server timeouts applied to both the public API listener and the
@@ -80,7 +79,7 @@ func main() {
 		log.Warn("clerk admin client unavailable — account deletion degraded", logger.Err(clerkErr))
 	}
 
-	mu := buildMultiUser(database, cfg, muCache, muLimiter, clerkClient, log, app.PipelineSvc(), app.InsightsHandler(), app.CompanyAdminHandler(), app.AtsHandler())
+	mu := buildMultiUser(database, cfg, muCache, muLimiter, clerkClient, log, app.CompanyAdminHandler(), app.AtsHandler())
 
 	apiGroups := append(app.Handlers(), mu.APIHandlers()...)
 	apiRouter := NewRouter(log, cfg, authMW, mu.IdentityMW(), mu.RateLimitMW(), apiGroups, mu.AdminHandlers())
@@ -121,8 +120,6 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-
-	go runRefresher(ctx, log, dashboardsvc.NewDashboardRefresher(database))
 
 	<-ctx.Done()
 	log.Info("shutting down")

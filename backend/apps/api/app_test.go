@@ -15,11 +15,6 @@ import (
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
-	"github.com/trushilpatel/jobradar/service/dashboard"
-	dashboarddto "github.com/trushilpatel/jobradar/service/dashboard/dto"
-	dashboardsvc "github.com/trushilpatel/jobradar/service/dashboard/services"
-	insightsdto "github.com/trushilpatel/jobradar/service/insights/dto"
-	insightssvc "github.com/trushilpatel/jobradar/service/insights/services"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	scandto "github.com/trushilpatel/jobradar/service/scan/dto"
@@ -50,21 +45,13 @@ func buildTestApp() *App {
 	appRest := appsvc.NewApplicationRestService(appValidation)
 	appH := appsvc.NewApplicationRestRouter(appRest)
 
-	dashRest := dashboardsvc.NewDashboardRestService(&fakeDashboardService{}, &fakeUserDashboardService{})
-	dashH := dashboardsvc.NewRestRouter(dashRest)
-
-	fakeInsights := &fakeInsightsService{}
-	insightsValidation := insightssvc.NewValidationService(fakeInsights)
-	insightsRest := insightssvc.NewRestService(insightsValidation)
-	insightsH := insightssvc.NewRestRouter(insightsRest)
-
-	return NewApp(companyH, scanH, atsH, jobH, appH, dashH, insightsH, &fakePipelineService{}, nil)
+	return NewApp(companyH, scanH, atsH, jobH, appH, nil)
 }
 
 func TestApp_Handlers_ReturnsExpectedCount(t *testing.T) {
 	app := buildTestApp()
-	if got := len(app.Handlers()); got != 5 {
-		t.Fatalf("expected 5 route groups, got %d", got)
+	if got := len(app.Handlers()); got != 4 {
+		t.Fatalf("expected 4 route groups, got %d", got)
 	}
 }
 
@@ -124,13 +111,6 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 		{http.MethodDelete, "/api/companies/queue/{entry_id}"},
 		{http.MethodGet, "/api/companies/{id}/scan-stats"},
 		{http.MethodPost, "/api/companies/{id}/scan"},
-		// Dashboard (user-facing panels; pipeline stats live under /admin)
-		{http.MethodGet, "/api/dashboard/stats"},
-		{http.MethodGet, "/api/dashboard/activity"},
-		{http.MethodGet, "/api/dashboard/progress"},
-		{http.MethodGet, "/api/dashboard/market"},
-		{http.MethodGet, "/api/dashboard/heatmap"},
-		{http.MethodGet, "/api/dashboard/velocity"},
 	}
 
 	for _, tc := range expected {
@@ -253,73 +233,6 @@ func (f *fakeAppService) UpdateNote(_ context.Context, _, _ string, _ appdto.Upd
 	return nil
 }
 
-type fakeDashboardService struct{}
-
-func (f *fakeDashboardService) GetStats(_ context.Context) (*dashboard.StatsView, error) {
-	return nil, nil
-}
-func (f *fakeDashboardService) GetActivity(_ context.Context, _ int) ([]dashboard.ActivityView, error) {
-	return nil, nil
-}
-
-type fakeUserDashboardService struct{}
-
-func (f *fakeUserDashboardService) GetProgressStats(_ context.Context) (*dashboarddto.ProgressStats, error) {
-	return nil, nil
-}
-func (f *fakeUserDashboardService) GetMarketStats(_ context.Context) (*dashboarddto.MarketStats, error) {
-	return nil, nil
-}
-func (f *fakeUserDashboardService) GetHeatmap(_ context.Context) ([]dashboarddto.WeeklyCount, error) {
-	return nil, nil
-}
-func (f *fakeUserDashboardService) GetInterviews(_ context.Context) ([]dashboarddto.InterviewRow, error) {
-	return nil, nil
-}
-func (f *fakeUserDashboardService) GetVelocity(_ context.Context, _ int) ([]dashboarddto.CompanyVelocityRow, error) {
-	return nil, nil
-}
-func (f *fakeUserDashboardService) GetTechTrends(_ context.Context) (*dashboarddto.TechTrends, error) {
-	return nil, nil
-}
-
-type fakePipelineService struct{}
-
-func (f *fakePipelineService) GetPipelineStats(_ context.Context) (*dashboarddto.PipelineStats, error) {
-	return nil, nil
-}
-
-func (f *fakePipelineService) TriggerRetry(_ context.Context, _, _ string) (int64, error) {
-	return 0, nil
-}
-
-type fakeInsightsService struct{}
-
-func (f *fakeInsightsService) TechStack(_ context.Context) ([]insightsdto.TechCount, error) {
-	return nil, nil
-}
-func (f *fakeInsightsService) CompanyActivity(_ context.Context) ([]insightsdto.CompanyActivityItem, error) {
-	return nil, nil
-}
-func (f *fakeInsightsService) Funnel(_ context.Context) ([]insightsdto.FunnelStep, error) {
-	return nil, nil
-}
-func (f *fakeInsightsService) Location(_ context.Context) (insightsdto.LocationBreakdown, error) {
-	return insightsdto.LocationBreakdown{}, nil
-}
-func (f *fakeInsightsService) Sponsorship(_ context.Context, _ insightsdto.InsightsFilter) ([]insightsdto.SponsorshipDay, error) {
-	return nil, nil
-}
-func (f *fakeInsightsService) Velocity(_ context.Context) ([]insightsdto.CompanyVelocity, error) {
-	return nil, nil
-}
-func (f *fakeInsightsService) RoleCategories(_ context.Context) ([]insightsdto.RoleCategoryCount, error) {
-	return nil, nil
-}
-func (f *fakeInsightsService) GetPipelineCounts(_ context.Context) (insightsdto.PipelineCounts, error) {
-	return insightsdto.PipelineCounts{}, nil
-}
-
 type fakeAtsService struct{}
 
 func (f *fakeAtsService) ListATS(_ context.Context) ([]atsdto.ATSDTO, error) {
@@ -338,7 +251,3 @@ var _ scansvc.Service = (*fakeScanService)(nil)
 var _ atssvc.AtsService = (*fakeAtsService)(nil)
 var _ jobsvc.JobService = (*fakeJobService)(nil)
 var _ appsvc.ApplicationRepository = (*fakeAppService)(nil)
-var _ dashboard.Service = (*fakeDashboardService)(nil)
-var _ dashboardsvc.UserDashboardService = (*fakeUserDashboardService)(nil)
-var _ dashboardsvc.PipelineService = (*fakePipelineService)(nil)
-var _ insightssvc.InsightsService = (*fakeInsightsService)(nil)
