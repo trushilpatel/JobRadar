@@ -353,29 +353,63 @@ func (s *seenLedgerStore) EscalateStuckRetryJobs(ctx context.Context, stuckThres
 }
 
 // ReclaimStuckFetchRows DELETEs up to limit ledger rows that are stranded at
-// reason='fetch' with removed_at IS NULL and first_seen_at older than now() -
-// threshold. These are jobs the crawler marked seen before publishing but the
+// reason='fetch' and first_seen_at older than now() - threshold, regardless of
+// removed_at. These are jobs the crawler marked seen before publishing but the
 // filter never transitioned to a terminal verdict (e.g. a NATS message lost
 // before consumption). Because HasSeenBatch ignores reason and removed_at, the
 // only way to clear the dedup block is to remove the row — escalating to
 // reason='error' would keep the job deduped forever. Once deleted, the next
 // scheduled crawl re-discovers the still-live job and re-drives it.
 //
+// removed_at is intentionally NOT filtered: a removed job whose fetch row was
+// never transitioned also blocks re-processing and must be reclaimed.
+//
 // This is a count-based sweep, not a targeted write: 0 deleted rows is a valid
 // steady-state outcome, so it returns RowsAffected and does NOT return
 // ErrLedgerRowMissing (unlike the targeted UPDATE methods above).
-func (s *seenLedgerStore) ReclaimStuckFetchRows(ctx context.Context, threshold time.Duration, limit int) (_ int64, err error) {
+func (s *seenLedgerStore) ReclaimStuckFetchRows(ctx context.Context, olderThan time.Time, limit int) (_ int64, err error) {
 	ctx, span := tracing.Start(ctx, "job.store.ReclaimStuckFetchRows")
 	defer tracing.End(span, &err)
 	res := s.db.WithContext(ctx).Exec(`
 		DELETE FROM job_pipeline_ledger
 		WHERE job_id IN (
 			SELECT job_id FROM job_pipeline_ledger
-			WHERE reason = ? AND removed_at IS NULL
-			  AND first_seen_at < NOW() - (? * INTERVAL '1 second')
+			WHERE reason = ?
+			  AND first_seen_at < ?
 			LIMIT ?
 		)
-	`, string(jobcommon.SeenReasonFetch), int64(threshold.Seconds()), limit)
+	`, string(jobcommon.SeenReasonFetch), olderThan, limit)
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
+}
+
+// ReclaimStuckFilteredRows DELETEs up to limit ledger rows that are stranded at
+// reason='filtered' and first_seen_at older than now() - threshold, regardless
+// of removed_at. These are jobs the filter published to jobs.filtered.* but the
+// analyzer never transitioned to a terminal verdict. Because HasSeenBatch ignores
+// reason and removed_at, deleting the row is the only way to clear the dedup
+// block — the next crawl re-discovers and re-drives the job.
+//
+// removed_at is intentionally NOT filtered: a removed job whose filtered row
+// was never transitioned also blocks re-processing and must be reclaimed.
+//
+// This is a count-based sweep, not a targeted write: 0 deleted rows is a valid
+// steady-state outcome, so it returns RowsAffected and does NOT return
+// ErrLedgerRowMissing (unlike the targeted UPDATE methods above).
+func (s *seenLedgerStore) ReclaimStuckFilteredRows(ctx context.Context, olderThan time.Time, limit int) (_ int64, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.ReclaimStuckFilteredRows")
+	defer tracing.End(span, &err)
+	res := s.db.WithContext(ctx).Exec(`
+		DELETE FROM job_pipeline_ledger
+		WHERE job_id IN (
+			SELECT job_id FROM job_pipeline_ledger
+			WHERE reason = ?
+			  AND first_seen_at < ?
+			LIMIT ?
+		)
+	`, string(jobcommon.SeenReasonFiltered), olderThan, limit)
 	if res.Error != nil {
 		return 0, res.Error
 	}

@@ -596,6 +596,13 @@ func (s *repositoryService) ReclaimStuckFetchRows(_ context.Context) (int64, err
 	return 0, nil
 }
 
+// ReclaimStuckFilteredRows is a no-op on the repository service for the same
+// reason as ReclaimStuckFetchRows — the scheduler-only reclaimer path is never
+// wired through the REST decorator chain.
+func (s *repositoryService) ReclaimStuckFilteredRows(_ context.Context) (int64, error) {
+	return 0, nil
+}
+
 // AutoPauseChronicFailures is a no-op on the repository service for the same
 // reason as the other scheduler-only sweeps — the auto-pause path is never
 // wired through the REST decorator chain.

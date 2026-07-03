@@ -55,6 +55,10 @@ func (f *fakeScanService) ReclaimStuckFetchRows(_ context.Context) (int64, error
 	return 0, f.err
 }
 
+func (f *fakeScanService) ReclaimStuckFilteredRows(_ context.Context) (int64, error) {
+	return 0, f.err
+}
+
 func (f *fakeScanService) AutoPauseChronicFailures(_ context.Context) (int, error) {
 	return 0, f.err
 }

@@ -35,11 +35,15 @@ type SchedulerService interface {
 	// re-published within 4 hours of their next_attempt_at and sets them to
 	// reason='error'. Returns the number of rows escalated.
 	EscalateStuckRetryJobs(ctx context.Context) (int64, error)
-	// ReclaimStuckFetchRows DELETEs reason='fetch' ledger rows (removed_at IS
-	// NULL) older than 1 hour to clear the dedup block for jobs the crawler
-	// marked seen but the filter never transitioned. Returns the number of rows
-	// reclaimed.
+	// ReclaimStuckFetchRows DELETEs reason='fetch' ledger rows older than 1 hour
+	// to clear the dedup block for jobs the crawler marked seen but the filter
+	// never transitioned. Returns the number of rows reclaimed.
 	ReclaimStuckFetchRows(ctx context.Context) (int64, error)
+	// ReclaimStuckFilteredRows DELETEs reason='filtered' ledger rows older than
+	// 1 hour to clear the dedup block for jobs the filter published but the
+	// analyzer never transitioned to a terminal verdict. Returns the number of
+	// rows reclaimed — zero is not an error.
+	ReclaimStuckFilteredRows(ctx context.Context) (int64, error)
 	// AutoPauseChronicFailures sets company_scan_settings.auto_paused=true for
 	// every company whose consecutive_errors has crossed AutoPauseThreshold and
 	// is not already paused, writing one admin_audit_log row per newly paused
@@ -111,6 +115,10 @@ func (b *BaseService) EscalateStuckRetryJobs(ctx context.Context) (int64, error)
 
 func (b *BaseService) ReclaimStuckFetchRows(ctx context.Context) (int64, error) {
 	return b.next.ReclaimStuckFetchRows(ctx)
+}
+
+func (b *BaseService) ReclaimStuckFilteredRows(ctx context.Context) (int64, error) {
+	return b.next.ReclaimStuckFilteredRows(ctx)
 }
 
 func (b *BaseService) AutoPauseChronicFailures(ctx context.Context) (int, error) {
