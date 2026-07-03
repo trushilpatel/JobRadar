@@ -10,10 +10,11 @@ import {
   type DateFilter,
   type LocationFilter,
   type SortDir,
+  type VisaFilter,
 } from './useJobUrlState'
 
 export type { TabKey } from '@/config/constants/jobStatus'
-export type { DateFilter, LocationFilter } from './useJobUrlState'
+export type { DateFilter, LocationFilter, VisaFilter } from './useJobUrlState'
 
 // ── Cursor history helpers ────────────────────────────────────────────────────
 //
@@ -115,6 +116,7 @@ export function useJobs() {
             : urlState.since === '30d'
               ? 30
               : undefined,
+      sponsorship: urlState.visa === 'any' ? undefined : urlState.visa === 'true',
       sortBy,
       sortDir,
     }),
@@ -125,6 +127,7 @@ export function useJobs() {
       urlState.loc,
       urlState.exp,
       urlState.since,
+      urlState.visa,
       sortBy,
       sortDir,
     ]
@@ -148,6 +151,7 @@ export function useJobs() {
               : 'any',
         exp: (filters.experienceRanges ?? []).slice().sort(),
         since: filters.daysAdded ?? 0,
+        visa: filters.sponsorship === undefined ? 'any' : String(filters.sponsorship),
         sort: filters.sortBy ?? '',
         dir: filters.sortDir ?? 'asc',
         limit: urlState.limit,
@@ -274,6 +278,9 @@ export function useJobs() {
   function setDateFilter(since: DateFilter) {
     void urlState.setSince(since)
   }
+  function setVisaFilter(visa: VisaFilter) {
+    void urlState.setVisa(visa)
+  }
   function setLimit(limit: number) {
     void urlState.setLimit(limit)
   }
@@ -314,6 +321,8 @@ export function useJobs() {
     setExpFilter,
     dateFilter: urlState.since,
     setDateFilter,
+    visaFilter: urlState.visa,
+    setVisaFilter,
     resetFilters,
 
     // Sorting

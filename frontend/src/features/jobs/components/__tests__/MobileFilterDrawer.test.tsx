@@ -59,12 +59,28 @@ describe('MobileFilterDrawer', () => {
         onExpChange={() => {}}
         onDateChange={() => {}}
         onLocationChange={() => {}}
+        onVisaChange={() => {}}
       />
     )
     expect(screen.getByText('Companies')).toBeInTheDocument()
     expect(screen.getByText('Experience')).toBeInTheDocument()
     expect(screen.getByText('Posted')).toBeInTheDocument()
     expect(screen.getByText('Location')).toBeInTheDocument()
+    expect(screen.getByText('Visa')).toBeInTheDocument()
+  })
+
+  it('renders EXP_OPTIONS labels directly from the constant', () => {
+    render(
+      <MobileFilterDrawer
+        open={true}
+        onOpenChange={() => {}}
+        expFilter={[]}
+        onExpChange={() => {}}
+      />
+    )
+    expect(screen.getByText('0-2 yrs')).toBeInTheDocument()
+    expect(screen.getByText('2-5 yrs')).toBeInTheDocument()
+    expect(screen.getByText('5+ yrs')).toBeInTheDocument()
   })
 
   it('toggles an exp pill on click', async () => {
@@ -81,6 +97,34 @@ describe('MobileFilterDrawer', () => {
     expect(onExpChange).toHaveBeenCalledWith(['2-5'])
   })
 
+  it('toggles a location pill on click', async () => {
+    const onLocationChange = vi.fn()
+    render(
+      <MobileFilterDrawer
+        open={true}
+        onOpenChange={() => {}}
+        locationFilter="any"
+        onLocationChange={onLocationChange}
+      />
+    )
+    await userEvent.click(screen.getByText('Remote'))
+    expect(onLocationChange).toHaveBeenCalledWith('remote')
+  })
+
+  it('toggles an active location pill back to "any"', async () => {
+    const onLocationChange = vi.fn()
+    render(
+      <MobileFilterDrawer
+        open={true}
+        onOpenChange={() => {}}
+        locationFilter="remote"
+        onLocationChange={onLocationChange}
+      />
+    )
+    await userEvent.click(screen.getByText('Remote'))
+    expect(onLocationChange).toHaveBeenCalledWith('any')
+  })
+
   it('toggles a date pill on click', async () => {
     const onDateChange = vi.fn()
     render(
@@ -93,6 +137,40 @@ describe('MobileFilterDrawer', () => {
     )
     await userEvent.click(screen.getByText('7d'))
     expect(onDateChange).toHaveBeenCalledWith('7d')
+  })
+
+  it('toggles a visa pill ON when inactive', async () => {
+    const onVisaChange = vi.fn()
+    render(
+      <MobileFilterDrawer
+        open={true}
+        onOpenChange={() => {}}
+        visaFilter="any"
+        onVisaChange={onVisaChange}
+      />
+    )
+    await userEvent.click(screen.getByText('Sponsorship offered'))
+    expect(onVisaChange).toHaveBeenCalledWith('true')
+  })
+
+  it('toggles a visa pill OFF (back to "any") when already active', async () => {
+    const onVisaChange = vi.fn()
+    render(
+      <MobileFilterDrawer
+        open={true}
+        onOpenChange={() => {}}
+        visaFilter="true"
+        onVisaChange={onVisaChange}
+      />
+    )
+    await userEvent.click(screen.getByText('Sponsorship offered'))
+    expect(onVisaChange).toHaveBeenCalledWith('any')
+  })
+
+  it('defaults visaFilter to "any" when not provided', () => {
+    render(<MobileFilterDrawer open={true} onOpenChange={() => {}} onVisaChange={() => {}} />)
+    const pill = screen.getByText('Sponsorship offered').closest('button')
+    expect(pill).not.toHaveClass('bg-violet-500/15')
   })
 
   it('Reset button calls onReset', async () => {

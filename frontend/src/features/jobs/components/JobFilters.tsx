@@ -2,49 +2,28 @@ import { forwardRef } from 'react'
 import { Search, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
 import { useIsMobile } from '@/lib/hooks/use-media-query'
-import { MultiSelect } from '@/components/ui/multi-select'
 import { MobileFilterDrawer } from './MobileFilterDrawer'
+import { FilterPopover } from './FilterPopover'
+import { FilterChip } from './FilterChip'
 import type { DateFilter, LocationFilter } from '../hooks/useJobs'
+import type { VisaFilter } from '../hooks/useJobUrlState'
 import { COPY } from '@/config/copy'
-import { EXP_OPTIONS, DATE_OPTIONS, LOCATION_OPTIONS } from '../constants/filterOptions'
-
-function FilterPill({
-  active,
-  color = 'violet',
-  onClick,
-  children,
-}: {
-  active: boolean
-  color?: 'violet' | 'emerald' | 'amber'
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        'px-2.5 py-1.5 text-xs rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500',
-        active &&
-          color === 'violet' &&
-          'bg-violet-100 dark:bg-violet-500/15 border-violet-400/50 dark:border-violet-500/30 text-violet-700 dark:text-violet-300',
-        active &&
-          color === 'emerald' &&
-          'bg-emerald-100 dark:bg-emerald-500/15 border-emerald-400/50 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300',
-        active &&
-          color === 'amber' &&
-          'bg-amber-100 dark:bg-amber-500/15 border-amber-400/50 dark:border-amber-500/30 text-amber-700 dark:text-amber-400',
-        !active && 'bg-subtle border-[var(--border)] text-muted hover:text-primary hover:bg-hover'
-      )}
-    >
-      {children}
-    </button>
-  )
-}
+import {
+  EXP_OPTIONS,
+  DATE_OPTIONS,
+  LOCATION_OPTIONS,
+  VISA_OPTIONS,
+  pickSingleSelectValue,
+} from '../constants/filterOptions'
 
 function Divider() {
   return <div className="w-px h-4 bg-[var(--border-strong)] mx-0.5" />
+}
+
+interface FilterChipDescriptor {
+  key: string
+  label: string
+  onRemove: () => void
 }
 
 interface JobFiltersProps {
@@ -59,6 +38,8 @@ interface JobFiltersProps {
   onExpChange: (v: string[]) => void
   dateFilter: DateFilter
   onDateChange: (v: DateFilter) => void
+  visaFilter: VisaFilter
+  onVisaChange: (v: VisaFilter) => void
   onReset: () => void
   hasActiveFilters: boolean
   mobileOpen?: boolean
@@ -79,6 +60,8 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
     onExpChange,
     dateFilter,
     onDateChange,
+    visaFilter,
+    onVisaChange,
     onReset,
     hasActiveFilters,
     mobileOpen = false,
@@ -88,18 +71,6 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
   searchRef
 ) {
   const isMobile = useIsMobile()
-
-  function toggleExp(opt: string) {
-    onExpChange(expFilter.includes(opt) ? expFilter.filter((v) => v !== opt) : [...expFilter, opt])
-  }
-
-  function toggleDate(value: Exclude<DateFilter, 'all'>) {
-    onDateChange(dateFilter === value ? 'all' : value)
-  }
-
-  function toggleLocation(value: LocationFilter) {
-    onLocationChange(locationFilter === value ? 'any' : value)
-  }
 
   if (isMobile) {
     return (
@@ -146,81 +117,156 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
           onExpChange={onExpChange}
           dateFilter={dateFilter}
           onDateChange={onDateChange}
+          visaFilter={visaFilter}
+          onVisaChange={onVisaChange}
           onReset={onReset}
         />
       </>
     )
   }
 
+  // ── Active-filter chips ─────────────────────────────────────────────────────
+  // One chip per active facet value (company, location, experience, date,
+  // visa — search is excluded, chips are for discrete facets only). Each
+  // chip's onRemove clears JUST that value, never the whole filter set.
+  const chips: FilterChipDescriptor[] = []
+
+  for (const company of selectedCompanies) {
+    chips.push({
+      key: `company-${company}`,
+      label: company,
+      onRemove: () => onCompaniesChange(selectedCompanies.filter((c) => c !== company)),
+    })
+  }
+
+  if (locationFilter !== 'any') {
+    const opt = LOCATION_OPTIONS.find((o) => o.value === locationFilter)
+    chips.push({
+      key: 'location',
+      label: opt?.label ?? locationFilter,
+      onRemove: () => onLocationChange('any'),
+    })
+  }
+
+  for (const exp of expFilter) {
+    const opt = EXP_OPTIONS.find((o) => o.value === exp)
+    chips.push({
+      key: `exp-${exp}`,
+      label: opt?.label ?? exp,
+      onRemove: () => onExpChange(expFilter.filter((v) => v !== exp)),
+    })
+  }
+
+  if (dateFilter !== 'all') {
+    const opt = DATE_OPTIONS.find((o) => o.value === dateFilter)
+    chips.push({
+      key: 'date',
+      label: opt?.label ?? dateFilter,
+      onRemove: () => onDateChange('all'),
+    })
+  }
+
+  if (visaFilter !== 'any') {
+    const opt = VISA_OPTIONS.find((o) => o.value === visaFilter)
+    chips.push({
+      key: 'visa',
+      label: opt?.label ?? visaFilter,
+      onRemove: () => onVisaChange('any'),
+    })
+  }
+
   return (
-    <div className="flex items-center gap-2 px-6 py-2.5 border-b border-[var(--border)] flex-wrap">
-      <div className="relative">
-        <Search
-          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
-          size={13}
+    <div className="flex flex-col border-b border-[var(--border)]">
+      <div className="flex items-center gap-2 px-6 py-2.5 flex-wrap">
+        <div className="relative">
+          <Search
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+            size={13}
+          />
+          <input
+            ref={searchRef}
+            type="search"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={COPY['jobs.search.placeholder']}
+            className="pl-7 pr-3 py-1.5 text-xs bg-subtle border border-[var(--border)] rounded-lg placeholder:text-placeholder focus:outline-none focus:border-violet-500 w-44 text-primary"
+          />
+        </div>
+
+        <FilterPopover
+          label="Company"
+          options={companies.map((c) => ({ value: c, label: c }))}
+          selected={selectedCompanies}
+          onChange={onCompaniesChange}
+          searchable
+          showCount
+          emptyLabel="No companies"
         />
-        <input
-          ref={searchRef}
-          type="search"
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder={COPY['jobs.search.placeholder']}
-          className="pl-7 pr-3 py-1.5 text-xs bg-subtle border border-[var(--border)] rounded-lg placeholder:text-placeholder focus:outline-none focus:border-violet-500 w-44 text-primary"
+
+        <Divider />
+
+        <FilterPopover
+          label="Location"
+          options={LOCATION_OPTIONS}
+          selected={locationFilter === 'any' ? [] : [locationFilter]}
+          onChange={(next) => onLocationChange(pickSingleSelectValue(next, locationFilter, 'any'))}
         />
+
+        <FilterPopover
+          label="Experience"
+          options={EXP_OPTIONS}
+          selected={expFilter}
+          onChange={onExpChange}
+        />
+
+        <FilterPopover
+          label="Posted"
+          options={DATE_OPTIONS}
+          selected={dateFilter === 'all' ? [] : [dateFilter]}
+          onChange={(next) =>
+            onDateChange(pickSingleSelectValue(next, dateFilter, 'all') as DateFilter)
+          }
+        />
+
+        <FilterPopover
+          label="Visa"
+          options={VISA_OPTIONS}
+          selected={visaFilter === 'any' ? [] : [visaFilter]}
+          onChange={(next) =>
+            onVisaChange(pickSingleSelectValue(next, visaFilter, 'any') as VisaFilter)
+          }
+        />
+
+        {hasActiveFilters && (
+          <>
+            <Divider />
+            <button
+              type="button"
+              aria-label="Reset filters"
+              onClick={onReset}
+              className="text-[11px] text-muted hover:text-primary px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
+            >
+              Reset
+            </button>
+          </>
+        )}
       </div>
 
-      <MultiSelect
-        options={companies}
-        selected={selectedCompanies}
-        onChange={onCompaniesChange}
-        placeholder="All companies"
-      />
-
-      <Divider />
-
-      {EXP_OPTIONS.map((opt) => (
-        <FilterPill key={opt} active={expFilter.includes(opt)} onClick={() => toggleExp(opt)}>
-          {opt === '5+' ? '5+ yrs' : `${opt} yrs`}
-        </FilterPill>
-      ))}
-
-      <Divider />
-
-      {DATE_OPTIONS.map((d) => (
-        <FilterPill
-          key={d.value}
-          active={dateFilter === d.value}
-          onClick={() => toggleDate(d.value)}
-        >
-          {d.label}
-        </FilterPill>
-      ))}
-
-      <Divider />
-
-      {LOCATION_OPTIONS.map((loc) => (
-        <FilterPill
-          key={loc.value}
-          color={loc.color}
-          active={locationFilter === loc.value}
-          onClick={() => toggleLocation(loc.value)}
-        >
-          {loc.label}
-        </FilterPill>
-      ))}
-
-      {hasActiveFilters && (
-        <>
-          <Divider />
-          <button
-            type="button"
-            aria-label="Reset filters"
-            onClick={onReset}
-            className="text-[11px] text-muted hover:text-primary px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
-          >
-            Reset
-          </button>
-        </>
+      {chips.length > 0 && (
+        <div className="flex items-center gap-1.5 px-6 pb-2.5 flex-wrap">
+          {chips.map((chip) => (
+            <FilterChip key={chip.key} label={chip.label} onRemove={chip.onRemove} />
+          ))}
+          {chips.length > 1 && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="text-[11px] text-muted hover:text-primary px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

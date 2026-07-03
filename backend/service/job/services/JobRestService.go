@@ -47,6 +47,7 @@ func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
 
 	filter := dto.JobFilter{
 		Status:           q.Get("status"),
+		Statuses:         q["statuses"],
 		Companies:        q["companies"],
 		EmployTypes:      q["employ_types"],
 		ExperienceRanges: expRanges,

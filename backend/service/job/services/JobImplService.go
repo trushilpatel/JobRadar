@@ -107,7 +107,7 @@ func (s *implService) List(ctx context.Context, filter dto.JobFilter, cursor str
 
 	// Non-"new" status tabs drive from user_job_state — the shared page cache
 	// is user-agnostic and in-memory status filtering produced sparse pages.
-	if filter.Status != "" && filter.Status != jobcommon.JobStatusNew {
+	if len(filter.Statuses) > 0 || (filter.Status != "" && filter.Status != jobcommon.JobStatusNew) {
 		return s.listByUserStatus(ctx, filter, cursor, limit)
 	}
 
