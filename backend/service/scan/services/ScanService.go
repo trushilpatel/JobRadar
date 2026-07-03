@@ -47,6 +47,12 @@ type SchedulerService interface {
 	// re-audited. Returns the number of companies newly paused — zero is not an
 	// error. Audit writes are non-fatal (a failed audit never blocks the pause).
 	AutoPauseChronicFailures(ctx context.Context) (int, error)
+	// RefreshGaugeMetrics recomputes the current-state gauge metrics (queue
+	// depth, oldest-pending age, online node count, auto-paused company
+	// count, retry-ladder backlog). Each of the 5 reads is independent —
+	// a failure on one is joined into the returned error but never blocks
+	// the others.
+	RefreshGaugeMetrics(ctx context.Context) error
 }
 
 // Service defines all business operations for the scan domain.
@@ -109,6 +115,10 @@ func (b *BaseService) ReclaimStuckFetchRows(ctx context.Context) (int64, error) 
 
 func (b *BaseService) AutoPauseChronicFailures(ctx context.Context) (int, error) {
 	return b.next.AutoPauseChronicFailures(ctx)
+}
+
+func (b *BaseService) RefreshGaugeMetrics(ctx context.Context) error {
+	return b.next.RefreshGaugeMetrics(ctx)
 }
 
 func (b *BaseService) TriggerScan(ctx context.Context, companyID string) error {

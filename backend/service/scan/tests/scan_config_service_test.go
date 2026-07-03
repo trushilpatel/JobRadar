@@ -448,6 +448,8 @@ func (m *mockScanService) AutoPauseChronicFailures(_ context.Context) (int, erro
 	return 0, m.err
 }
 
+func (m *mockScanService) RefreshGaugeMetrics(context.Context) error { return nil }
+
 var _ svc.Service = (*mockScanService)(nil)
 
 func TestScanHandler_GetEffectiveScanConfig_OK(t *testing.T) {

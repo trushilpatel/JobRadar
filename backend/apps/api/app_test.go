@@ -211,6 +211,7 @@ func (f *fakeScanService) RetryDueJobs(_ context.Context) error                 
 func (f *fakeScanService) EscalateStuckRetryJobs(_ context.Context) (int64, error) { return 0, nil }
 func (f *fakeScanService) ReclaimStuckFetchRows(_ context.Context) (int64, error)  { return 0, nil }
 func (f *fakeScanService) AutoPauseChronicFailures(_ context.Context) (int, error) { return 0, nil }
+func (f *fakeScanService) RefreshGaugeMetrics(_ context.Context) error             { return nil }
 
 type fakeJobService struct{}
 

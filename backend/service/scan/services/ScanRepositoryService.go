@@ -603,6 +603,13 @@ func (s *repositoryService) AutoPauseChronicFailures(_ context.Context) (int, er
 	return 0, nil
 }
 
+// RefreshGaugeMetrics is a no-op on the repository service for the same
+// reason as the other scheduler-only sweeps — the gauge-refresh path is
+// never wired through the REST decorator chain.
+func (s *repositoryService) RefreshGaugeMetrics(_ context.Context) error {
+	return nil
+}
+
 func (s *repositoryService) UpdateScanIntervalOverride(ctx context.Context, companyID string, override *int) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.repository.UpdateScanIntervalOverride")
 	defer tracing.End(span, &err)

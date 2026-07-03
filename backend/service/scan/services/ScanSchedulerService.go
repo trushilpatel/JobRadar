@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	auditmodel "github.com/trushilpatel/jobradar/service/audit/models"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 )
@@ -69,25 +71,44 @@ type AutoPauseAuditor interface {
 // vocabulary enforced by the compiler.
 const AutoPauseAction = "company.scan.auto_pause"
 
+// GaugeNodeReader is the narrow crawler_nodes read contract the gauge
+// refresher needs — declared here (not the full crawlernode NodeStore) so
+// the scheduler depends on one method, not the admin CRUD surface it never
+// calls. Satisfied structurally by crawlernodesvc.NodeStore.
+type GaugeNodeReader interface {
+	CountOnline(ctx context.Context) (int, error)
+}
+
+// GaugeSettingsReader is the narrow company_scan_settings read contract the
+// gauge refresher needs. Satisfied structurally by
+// companysvc.ScanSettingsRepository.
+type GaugeSettingsReader interface {
+	CountAutoPaused(ctx context.Context) (int, error)
+}
+
 // schedulerService implements SchedulerService for the scheduler worker.
 // It uses ScanQueueStore directly — not part of the REST decorator chain.
 type schedulerService struct {
-	queue      ScanQueueStore
-	ledger     jobsvc.SeenLedgerStore
-	publisher  SweeperPublisher
-	auditor    AutoPauseAuditor
-	maxRetries int
-	log        logger.Logger
+	queue          ScanQueueStore
+	ledger         jobsvc.SeenLedgerStore
+	publisher      SweeperPublisher
+	auditor        AutoPauseAuditor
+	nodeReader     GaugeNodeReader
+	settingsReader GaugeSettingsReader
+	maxRetries     int
+	log            logger.Logger
 }
 
 // SchedulerServiceOptions groups the optional sweeper dependencies for
 // NewSchedulerService. Zero-value means no sweeper (RetryDueJobs is a no-op).
 type SchedulerServiceOptions struct {
-	Ledger     jobsvc.SeenLedgerStore
-	Publisher  SweeperPublisher
-	Auditor    AutoPauseAuditor
-	MaxRetries int
-	Log        logger.Logger
+	Ledger         jobsvc.SeenLedgerStore
+	Publisher      SweeperPublisher
+	Auditor        AutoPauseAuditor
+	NodeReader     GaugeNodeReader
+	SettingsReader GaugeSettingsReader
+	MaxRetries     int
+	Log            logger.Logger
 }
 
 // NewSchedulerService constructs the minimal service the scheduler worker needs.
@@ -108,12 +129,14 @@ func NewSchedulerServiceWithSweeper(queue ScanQueueStore, opts SchedulerServiceO
 		log = logger.NewNoop()
 	}
 	return &schedulerService{
-		queue:      queue,
-		ledger:     opts.Ledger,
-		publisher:  opts.Publisher,
-		auditor:    opts.Auditor,
-		maxRetries: maxRetries,
-		log:        log,
+		queue:          queue,
+		ledger:         opts.Ledger,
+		publisher:      opts.Publisher,
+		auditor:        opts.Auditor,
+		nodeReader:     opts.NodeReader,
+		settingsReader: opts.SettingsReader,
+		maxRetries:     maxRetries,
+		log:            log,
 	}
 }
 
@@ -351,3 +374,59 @@ func (s *schedulerService) AutoPauseChronicFailures(ctx context.Context) (_ int,
 
 // logAutoPauseTargetType is the audit target_type recorded for auto-pause rows.
 const logAutoPauseTargetType = "company"
+
+// RefreshGaugeMetrics recomputes the 5 current-state gauge metrics (queue
+// depth, oldest-pending age, online node count, currently-paused company
+// count, retry-ladder backlog) from their source-of-truth tables and sets
+// them on the package-level Prometheus gauges. Called once per scheduler
+// tick (runCycle).
+//
+// Each of the 5 reads is independent — a failure on one is joined into the
+// returned error but never prevents the others from running or setting
+// their gauge. NodeReader and SettingsReader are optional (nil-safe,
+// mirroring the Ledger/Publisher optional-deps pattern); when nil, that
+// gauge is simply not refreshed this tick rather than treated as an error.
+func (s *schedulerService) RefreshGaugeMetrics(ctx context.Context) (err error) {
+	ctx, span := tracing.Start(ctx, "scan.service.RefreshGaugeMetrics")
+	defer tracing.End(span, &err)
+
+	var errs []error
+
+	if n, qerr := s.queue.CountQueued(ctx); qerr != nil {
+		errs = append(errs, fmt.Errorf("count queued: %w", qerr))
+	} else {
+		metrics.SchedulerQueuePending.Set(float64(n))
+	}
+
+	if age, aerr := s.queue.OldestQueuedAgeSeconds(ctx); aerr != nil {
+		errs = append(errs, fmt.Errorf("oldest queued age: %w", aerr))
+	} else {
+		metrics.SchedulerQueueOldestPendingAgeSeconds.Set(age)
+	}
+
+	if s.nodeReader != nil {
+		if n, nerr := s.nodeReader.CountOnline(ctx); nerr != nil {
+			errs = append(errs, fmt.Errorf("count online nodes: %w", nerr))
+		} else {
+			metrics.CrawlerNodesOnline.Set(float64(n))
+		}
+	}
+
+	if s.settingsReader != nil {
+		if n, serr := s.settingsReader.CountAutoPaused(ctx); serr != nil {
+			errs = append(errs, fmt.Errorf("count auto-paused: %w", serr))
+		} else {
+			metrics.SchedulerCompaniesAutoPausedCurrent.Set(float64(n))
+		}
+	}
+
+	if s.ledger != nil {
+		if n, lerr := s.ledger.CountByReason(ctx, jobcommon.SeenReasonRetry); lerr != nil {
+			errs = append(errs, fmt.Errorf("count retry ledger: %w", lerr))
+		} else {
+			metrics.JobPipelineLedgerRetryCount.Set(float64(n))
+		}
+	}
+
+	return stderrors.Join(errs...)
+}
