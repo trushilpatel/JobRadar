@@ -31,7 +31,7 @@ The crawler writes the `reason='fetch'` ledger row **before** publishing to NATS
 - `ScoreBatch` failures → `routeFailedChunk` issues `msg.Nak()` so NATS BackOff handles redelivery on the configured back-off schedule. No publish to a retry topic — NATS manages redelivery timing.
 - `UpdateRetryBatch` records `next_attempt_at` in the ledger for dashboard visibility only; its failure is non-fatal to message disposition.
 - Exhausted jobs (retry count >= max) → `msg.Term()` + publish to `jobs.dlq` via `publishToDLQ`. If the DLQ publish itself fails, the message is still Term'd (prevents endless redelivery of an exhausted job).
-- Reprocess stuck `error` rows by deleting the ledger rows manually.
+- Reprocess stuck `error` rows by deleting the ledger rows manually. Stranded `reason='fetch'` rows (job entered the filter but never reached a terminal verdict — e.g. a NATS restart mid-flight) are now reclaimed automatically: the scheduler's `ReclaimStuckFetchRows` sweep DELETEs `fetch` rows older than 1h each cycle so the next crawl re-drives them. No manual cleanup needed for `fetch`.
 
 ## Ledger retry state
 

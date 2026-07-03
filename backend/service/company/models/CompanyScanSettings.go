@@ -19,13 +19,19 @@ type CompanyScanSettings struct {
 	AdapterConfig        datatypes.JSON `gorm:"column:adapter_config"        json:"adapter_config,omitempty"`
 	ScanIntervalOverride *int           `gorm:"column:scan_interval_override" json:"scan_interval_override,omitempty"`
 	Active               bool           `gorm:"not null;default:true"        json:"active"`
-	LastScanAt           *time.Time     `gorm:"column:last_scan_at"          json:"last_scan_at,omitempty"`
-	LastSuccessAt        *time.Time     `gorm:"column:last_success_at"       json:"last_success_at,omitempty"`
-	LastErrorAt          *time.Time     `gorm:"column:last_error_at"         json:"last_error_at,omitempty"`
-	LastErrorMessage     *string        `gorm:"column:last_error_message"    json:"last_error_message,omitempty"`
-	ConsecutiveErrors    int            `gorm:"not null;default:0"           json:"consecutive_errors"`
-	CreatedAt            time.Time      `gorm:"not null;autoCreateTime"      json:"created_at"`
-	UpdatedAt            time.Time      `gorm:"not null;autoUpdateTime"      json:"updated_at"`
+	// AutoPaused is a SYSTEM decision (distinct from admin-managed Active): the
+	// scheduler's AutoPauseChronicFailures sweep sets it true once a company
+	// reaches AutoPauseThreshold consecutive errors, so a chronically-failing
+	// company stops consuming queue slots. Admins clear it (which also resets
+	// ConsecutiveErrors) to re-enable scanning.
+	AutoPaused        bool       `gorm:"not null;default:false"       json:"auto_paused"`
+	LastScanAt        *time.Time `gorm:"column:last_scan_at"          json:"last_scan_at,omitempty"`
+	LastSuccessAt     *time.Time `gorm:"column:last_success_at"       json:"last_success_at,omitempty"`
+	LastErrorAt       *time.Time `gorm:"column:last_error_at"         json:"last_error_at,omitempty"`
+	LastErrorMessage  *string    `gorm:"column:last_error_message"    json:"last_error_message,omitempty"`
+	ConsecutiveErrors int        `gorm:"not null;default:0"           json:"consecutive_errors"`
+	CreatedAt         time.Time  `gorm:"not null;autoCreateTime"      json:"created_at"`
+	UpdatedAt         time.Time  `gorm:"not null;autoUpdateTime"      json:"updated_at"`
 }
 
 // TableName pins the GORM table name.

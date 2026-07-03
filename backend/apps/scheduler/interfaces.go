@@ -25,6 +25,18 @@ type SchedulerService interface {
 	// re-published within 4 hours of their next_attempt_at to reason='error'.
 	// Returns the number of rows escalated — zero is not an error.
 	EscalateStuckRetryJobs(ctx context.Context) (int64, error)
+	// ReclaimStuckFetchRows DELETEs reason='fetch' ledger rows older than a
+	// safety threshold, clearing the dedup block left when a job entered the
+	// filter but never reached a terminal verdict (e.g. NATS restart mid-flight).
+	// The next crawl re-discovers and re-drives the job. Returns the number of
+	// rows reclaimed — zero is not an error.
+	ReclaimStuckFetchRows(ctx context.Context) (int64, error)
+	// AutoPauseChronicFailures sets company_scan_settings.auto_paused=true for
+	// every company whose consecutive scan errors crossed the threshold and is
+	// not already paused, writing one admin_audit_log row per newly paused
+	// company. Idempotent. Returns the number of companies newly paused — zero
+	// is not an error.
+	AutoPauseChronicFailures(ctx context.Context) (int, error)
 }
 
 // RetryPublisher is the narrow NATS publishing contract the sweeper needs.
