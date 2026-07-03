@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"testing"
+	"time"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	crawlernodemodel "github.com/trushilpatel/jobradar/service/crawlernode/models"
@@ -308,6 +309,66 @@ func TestNodeRepositoryService_Retire_ErrInternalOnDBError(t *testing.T) {
 	err := store.Retire(context.Background(), "uuid-001")
 	if err == nil {
 		t.Fatal("Retire() on closed DB expected error, got nil")
+	}
+}
+
+// --- CountOnline ---
+
+func TestNodeRepositoryService_CountOnline_CountsActiveWithRecentHeartbeat(t *testing.T) {
+	db := newNodeTestDB(t)
+	store := services.NewNodeRepositoryService(db)
+	now := time.Now().UTC()
+
+	seedNodeWithHeartbeat(t, db, "n1", "node-1", "active", now)                      // online
+	seedNodeWithHeartbeat(t, db, "n2", "node-2", "active", now.Add(-30*time.Second)) // online (within 90s)
+	seedNodeWithHeartbeat(t, db, "n3", "node-3", "active", now.Add(-5*time.Minute))  // offline (stale heartbeat)
+	seedNodeWithHeartbeat(t, db, "n4", "node-4", "disabled", now)                    // offline (not active status)
+	seedNodeWithHeartbeat(t, db, "n5", "node-5", "active", now.Add(120*time.Second)) // online (future heartbeat, still >= cutoff)
+
+	count, err := store.CountOnline(context.Background())
+	if err != nil {
+		t.Fatalf("CountOnline() error = %v", err)
+	}
+	if count != 3 {
+		t.Errorf("CountOnline() = %d, want 3", count)
+	}
+}
+
+func TestNodeRepositoryService_CountOnline_NilLastSeenExcluded(t *testing.T) {
+	db := newNodeTestDB(t)
+	store := services.NewNodeRepositoryService(db)
+	hash := "hash-never-seen"
+	if err := db.Create(&crawlernodemodel.CrawlerNode{
+		ID: "n-never", Name: "node-never", TokenPrefix: "n-never0", TokenHash: &hash, Status: "active",
+	}).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	count, err := store.CountOnline(context.Background())
+	if err != nil {
+		t.Fatalf("CountOnline() error = %v", err)
+	}
+	if count != 0 {
+		t.Errorf("CountOnline() = %d, want 0 (nil last_seen_at never counts as online)", count)
+	}
+}
+
+// seedNodeWithHeartbeat extends seedNode with an explicit last_seen_at.
+// TokenPrefix is derived as "prefix-"+id rather than id[:8] (unlike seedNode)
+// because CountOnline test IDs (e.g. "n1") are shorter than 8 runes and
+// would panic on a raw slice.
+func seedNodeWithHeartbeat(t *testing.T, db *gorm.DB, id, name, status string, lastSeen time.Time) {
+	t.Helper()
+	hash := "hash-" + id
+	if err := db.Create(&crawlernodemodel.CrawlerNode{
+		ID:          id,
+		Name:        name,
+		TokenPrefix: "prefix-" + id,
+		TokenHash:   &hash,
+		Status:      status,
+		LastSeenAt:  &lastSeen,
+	}).Error; err != nil {
+		t.Fatalf("seed node %s: %v", id, err)
 	}
 }
 

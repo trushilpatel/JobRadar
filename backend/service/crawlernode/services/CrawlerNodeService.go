@@ -18,6 +18,13 @@ type NodeStore interface {
 	List(ctx context.Context, status string) ([]crawlernodemodel.CrawlerNode, error)
 	// Retire sets status='retired' and clears token_hash atomically.
 	Retire(ctx context.Context, nodeID string) error
+
+	// CountOnline returns the number of nodes with status=active whose
+	// last_seen_at is within crawlernodecommon.OnlineThreshold of now. The
+	// cutoff is computed inside the store (not passed by the caller) so the
+	// "what counts as online" threshold stays encapsulated where
+	// OnlineThreshold is already defined and used by ListNodes.
+	CountOnline(ctx context.Context) (int, error)
 }
 
 // AssignmentStore manages the company_scan_queue in node-claiming mode.

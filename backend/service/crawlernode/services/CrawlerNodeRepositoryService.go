@@ -8,6 +8,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	crawlernodecommon "github.com/trushilpatel/jobradar/service/crawlernode/common"
 	crawlernodemodel "github.com/trushilpatel/jobradar/service/crawlernode/models"
 	"gorm.io/gorm"
 )
@@ -97,6 +98,26 @@ func (s *nodeRepositoryService) List(ctx context.Context, status string) (_ []cr
 		return nil, errors.ErrInternal.WithMessage("list crawler nodes: " + result.Error.Error())
 	}
 	return nodes, nil
+}
+
+// CountOnline returns the number of status=active nodes whose last_seen_at
+// is at or after (now - OnlineThreshold). Mirrors the online/offline
+// computation ListNodes already does in Go for the admin UI, pushed down to
+// SQL here since only a count is needed.
+func (s *nodeRepositoryService) CountOnline(ctx context.Context) (_ int, err error) {
+	ctx, span := tracing.Start(ctx, "crawlernode.store.CountOnline")
+	defer tracing.End(span, &err)
+
+	cutoff := time.Now().UTC().Add(-crawlernodecommon.OnlineThreshold)
+	var count int64
+	result := s.db.WithContext(ctx).
+		Model(&crawlernodemodel.CrawlerNode{}).
+		Where("status = ? AND last_seen_at >= ?", crawlernodecommon.NodeStatusActive, cutoff).
+		Count(&count)
+	if result.Error != nil {
+		return 0, errors.ErrInternal.WithMessage("count online nodes: " + result.Error.Error())
+	}
+	return int(count), nil
 }
 
 // Retire sets status='retired' and clears token_hash atomically in one UPDATE.
