@@ -50,8 +50,6 @@ function withQuery(path: string, params?: object): string {
 
 export const routes = {
   // ─── Top-level user routes ────────────────────────────────────────────────
-  dashboard: () => '/dashboard',
-  insights: () => '/insights',
   account: () => '/account',
   login: () => '/login',
 

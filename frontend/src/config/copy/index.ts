@@ -5,7 +5,6 @@
  */
 export const COPY = {
   // Navigation (sidebar)
-  'nav.dashboard': 'Dashboard',
   'nav.jobs': 'Jobs',
   'nav.companies': 'Companies',
   'nav.users': 'Users',

@@ -5,9 +5,7 @@ import { Sidebar, MobileSidebarNav } from './Sidebar'
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { LogoLockup } from '@/components/brand/Logo'
 import { CompaniesPage } from '@/pages/CompaniesPage'
-import { DashboardPage } from '@/pages/DashboardPage'
 import { JobsPage } from '@/pages/JobsPage'
-import { InsightsPage } from '@/pages/InsightsPage'
 import { AccountPage } from '@/pages/AccountPage'
 import { AdminUsersPage } from '@/pages/admin/AdminUsersPage'
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage'
@@ -55,7 +53,6 @@ function ProtectedLayout() {
 
         <Routes>
           <Route path="/" element={<Navigate to={routes.jobs()} replace />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:id" element={<MobileJobDetailRoute />} />
           <Route path="/account" element={<AccountPage />} />
@@ -68,7 +65,6 @@ function ProtectedLayout() {
           <Route path="/admin/apply-queue" element={<ApplyQueuePage />} />
           {/* Admin routes — server also enforces 403 for non-admins */}
           <Route element={<RequireAdmin />}>
-            <Route path="/insights" element={<InsightsPage />} />
             <Route path="/admin/companies" element={<CompaniesPage />} />
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/audit" element={<AdminAuditPage />} />

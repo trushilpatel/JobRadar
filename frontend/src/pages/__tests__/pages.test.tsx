@@ -6,8 +6,6 @@ import { MemoryRouter } from 'react-router-dom'
 import { NuqsTestingAdapter } from 'nuqs/adapters/testing'
 
 // ── Mock all API modules so no real fetch calls are made ─────────────────────
-vi.mock('@/features/dashboard/api/dashboard.api')
-vi.mock('@/features/insights/api/insights.api')
 vi.mock('@/features/jobs/api/jobs.api')
 vi.mock('@/features/companies/api/companies.api')
 vi.mock('@/features/companies/api/adminCompanies.api')
@@ -69,10 +67,6 @@ function makeWrapper(initialEntries = ['/']) {
 }
 
 // ── Lazy imports (after mocks are registered) ─────────────────────────────────
-// Import from feature barrels — the barrel re-exports from the mocked sub-modules
-// so vi.mocked() references resolve to the same mocked functions.
-import * as dashboardApi from '@/features/dashboard'
-import * as insightsApi from '@/features/insights'
 import * as jobsApi from '@/features/jobs'
 import * as adapterConfigsApi from '@/features/settings'
 import * as atsFeature from '@/features/ats'
@@ -80,9 +74,7 @@ import * as adminCompaniesApi from '@/features/companies'
 import * as adminUsersApi from '@/features/auth'
 import * as adminAuditApi from '@/features/auth'
 
-import { DashboardPage } from '@/pages/DashboardPage'
 import { JobsPage } from '@/pages/JobsPage'
-import { InsightsPage } from '@/pages/InsightsPage'
 import { AdminPipelinePage } from '@/pages/admin/AdminPipelinePage'
 import { AccountPage } from '@/pages/AccountPage'
 import { CompaniesPage } from '@/pages/CompaniesPage'
@@ -93,25 +85,6 @@ import { AdminAuditPage } from '@/pages/admin/AdminAuditPage'
 function pending(): Promise<never> {
   return new Promise(() => {})
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DashboardPage
-// ─────────────────────────────────────────────────────────────────────────────
-describe('DashboardPage', () => {
-  beforeEach(() => {
-    vi.mocked(dashboardApi.fetchProgress).mockReturnValue(pending())
-    vi.mocked(dashboardApi.fetchMarket).mockReturnValue(pending())
-    vi.mocked(dashboardApi.fetchHeatmap).mockReturnValue(pending())
-    vi.mocked(dashboardApi.fetchInterviews).mockReturnValue(pending())
-    vi.mocked(dashboardApi.fetchVelocity).mockReturnValue(pending())
-    vi.mocked(dashboardApi.fetchTechTrends).mockReturnValue(pending())
-    vi.mocked(dashboardApi.fetchPipelineStats).mockReturnValue(pending())
-  })
-
-  it('renders without crashing', () => {
-    expect(() => render(<DashboardPage />, { wrapper: makeWrapper() })).not.toThrow()
-  })
-})
 
 // ─────────────────────────────────────────────────────────────────────────────
 // JobsPage
@@ -126,25 +99,6 @@ describe('JobsPage', () => {
 
   it('renders without crashing', () => {
     expect(() => render(<JobsPage />, { wrapper: makeWrapper() })).not.toThrow()
-  })
-})
-
-// ─────────────────────────────────────────────────────────────────────────────
-// InsightsPage
-// ─────────────────────────────────────────────────────────────────────────────
-describe('InsightsPage', () => {
-  beforeEach(() => {
-    vi.mocked(insightsApi.fetchFunnel).mockReturnValue(pending())
-    vi.mocked(insightsApi.fetchRoleCategories).mockReturnValue(pending())
-    vi.mocked(insightsApi.fetchVelocity).mockReturnValue(pending())
-    vi.mocked(insightsApi.fetchLocation).mockReturnValue(pending())
-    vi.mocked(insightsApi.fetchSponsorshipTrend).mockReturnValue(pending())
-    vi.mocked(insightsApi.fetchTechStack).mockReturnValue(pending())
-    vi.mocked(insightsApi.fetchCompanyActivity).mockReturnValue(pending())
-  })
-
-  it('renders without crashing', () => {
-    expect(() => render(<InsightsPage />, { wrapper: makeWrapper() })).not.toThrow()
   })
 })
 
