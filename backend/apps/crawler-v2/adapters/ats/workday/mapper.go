@@ -48,6 +48,16 @@ func (c adapterConfig) validate() error {
 	return nil
 }
 
+// locale returns the configured locale or "en-US" as the default. Workday's
+// CXS endpoint schema-validates the locale field and returns HTTP 422 when it
+// is absent or empty, so a safe fallback is required.
+func (c adapterConfig) locale() string {
+	if c.Locale != "" {
+		return c.Locale
+	}
+	return "en-US"
+}
+
 // tenant extracts the leftmost subdomain of host — e.g.
 // "nvidia.wd5.myworkdayjobs.com" → "nvidia".
 func (c adapterConfig) tenant() string {
@@ -192,8 +202,8 @@ var usDescriptors = map[string]struct{}{
 	"us":                       {},
 }
 
-// extractCountryCode derives the ISO alpha-2 country code from Workday's
-// `country` detail field. The field is a JSON object shaped like:
+// extractCountryCode derives a country identifier from Workday's `country`
+// detail field. The field is a JSON object shaped like:
 //
 //	{"descriptor": "United States of America", "id": "bc33aa3152ec42d4995f4791a106ed09"}
 //
@@ -202,10 +212,12 @@ var usDescriptors = map[string]struct{}{
 // used as a country code. Only `descriptor` carries the human-readable country
 // name, which we normalize and match against the US descriptor set.
 //
-// A US descriptor returns "US". Any non-US descriptor returns "" (empty) rather
-// than guessing a foreign ISO code — the analyzer's string-based location
-// classifier owns the non-US decision via post.Location. An unset, null,
-// malformed, or empty-object field also returns "".
+// A US descriptor returns "US". A non-empty non-US descriptor returns the
+// normalized descriptor name (e.g. "india", "united kingdom") so the analyzer's
+// country-code gate (post.CountryCode != "" && !isUSCode) fires immediately —
+// this is more reliable than string-based location matching, which misses cities
+// not in the classifier token list (e.g. "Indore", "Coimbatore", "Milano").
+// An unset, null, malformed, or empty-object field returns "" (unknown).
 func extractCountryCode(raw json.RawMessage) string {
 	if len(raw) == 0 || string(raw) == "null" {
 		return ""
@@ -217,10 +229,16 @@ func extractCountryCode(raw json.RawMessage) string {
 		return ""
 	}
 	normalized := strings.ToLower(strings.TrimSpace(obj.Descriptor))
+	if normalized == "" {
+		return ""
+	}
 	if _, ok := usDescriptors[normalized]; ok {
 		return "US"
 	}
-	return ""
+	// Non-empty, non-US descriptor: definite non-USA. Return the normalized
+	// name so the analyzer's country-code gate fires rather than falling
+	// through to string matching, which misses lesser-known cities.
+	return normalized
 }
 
 // mapEmploymentType normalises Workday's `timeType` strings ("Full time",
