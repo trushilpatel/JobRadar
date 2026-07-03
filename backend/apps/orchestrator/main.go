@@ -98,10 +98,10 @@ func main() {
 	r.Use(chimiddleware.RequestID)
 	r.Use(apimiddleware.Logger(log))
 
-	// Liveness endpoint — cheap, dependency-free (see health.go). The kubelet
-	// liveness probe targets this so a transient DB/NATS slowdown never kills a
-	// healthy orchestrator.
-	r.Get("/healthz", healthzHandler)
+	// Health endpoints — liveness (/healthz, cheap) and readiness (/readyz,
+	// NATS-gated). Extracted into registerHealthRoutes so route registration
+	// is always co-located with the handler definitions (see health.go).
+	registerHealthRoutes(r, nc)
 
 	r.Route("/node", nodeRouter.Register)
 	r.Route("/admin/crawler-nodes", adminRouter.Register)

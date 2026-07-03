@@ -195,6 +195,22 @@ func TestValidate_BoundaryValues(t *testing.T) {
 	}
 }
 
+func TestLoad_MetricsAddrDefault(t *testing.T) {
+	t.Setenv("METRICS_ADDR", "")
+	cfg := Load()
+	if cfg.MetricsAddr != ":9102" {
+		t.Fatalf("want :9102, got %q", cfg.MetricsAddr)
+	}
+}
+
+func TestLoad_MetricsAddrFromEnv(t *testing.T) {
+	t.Setenv("METRICS_ADDR", ":9199")
+	cfg := Load()
+	if cfg.MetricsAddr != ":9199" {
+		t.Fatalf("want :9199, got %q", cfg.MetricsAddr)
+	}
+}
+
 func validConfig() *Config {
 	return &Config{
 		OrchestratorURL:       "https://orch.example.com",
