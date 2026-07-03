@@ -370,3 +370,25 @@ func TestRunCycle_AutoPause_LogsOnPause(t *testing.T) {
 		t.Errorf("AutoPauseChronicFailures calls = %d, want 1", svc.autoPauseCalls.Load())
 	}
 }
+
+// TestRunCycle_RefreshesGaugeMetrics asserts RefreshGaugeMetrics is invoked
+// in every runCycle pass.
+func TestRunCycle_RefreshesGaugeMetrics(t *testing.T) {
+	svc := &fakeSchedulerService{}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+
+	if svc.refreshGaugeCalls.Load() != 1 {
+		t.Errorf("RefreshGaugeMetrics calls = %d, want 1", svc.refreshGaugeCalls.Load())
+	}
+}
+
+// TestRunCycle_RefreshGaugeMetricsError_ContinuesToEnqueue asserts a
+// gauge-refresh failure does not abort the cycle — enqueue still runs after.
+func TestRunCycle_RefreshGaugeMetricsError_ContinuesToEnqueue(t *testing.T) {
+	svc := &fakeSchedulerService{refreshGaugeErr: errors.New("db down"), enqueueCount: 2}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+
+	if svc.enqueueCalls.Load() != 1 {
+		t.Errorf("EnqueueDue calls = %d, want 1 (gauge-refresh failure must not block enqueue)", svc.enqueueCalls.Load())
+	}
+}

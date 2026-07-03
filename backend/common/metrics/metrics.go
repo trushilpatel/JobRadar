@@ -318,6 +318,55 @@ var LLMCooldownMissTotal = prometheus.NewCounter(prometheus.CounterOpts{
 	Help: "IsAvailable errors from the LLM cooldown store (slot skipped, fail-closed).",
 })
 
+// ── Current-state gauges (refreshed once per scheduler tick) ─────────────────
+//
+// Every metric above this section is a Counter or Histogram — cumulative
+// totals, not current state. These 5 gauges are the exception: they answer
+// "how many right now", refreshed by schedulerService.RefreshGaugeMetrics on
+// every scheduler tick (default every 60s, see CheckIntervalSeconds). They
+// lag real-time by at most one tick interval — acceptable for an Overview
+// dashboard stat strip, not for anything requiring sub-minute freshness.
+
+// SchedulerQueuePending is the current number of company_scan_queue rows in
+// status='queued'. Refreshed by schedulerService.RefreshGaugeMetrics.
+var SchedulerQueuePending = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "jobradar_scheduler_queue_pending",
+	Help: "Current number of company_scan_queue rows in status='queued'.",
+})
+
+// SchedulerQueueOldestPendingAgeSeconds is the age in seconds of the oldest
+// status='queued' row, or 0 when the queue is empty. Refreshed by
+// schedulerService.RefreshGaugeMetrics.
+var SchedulerQueueOldestPendingAgeSeconds = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "jobradar_scheduler_queue_oldest_pending_age_seconds",
+	Help: "Age in seconds of the oldest status='queued' company_scan_queue row, 0 when empty.",
+})
+
+// CrawlerNodesOnline is the current number of crawler nodes with
+// status='active' and a heartbeat within crawlernodecommon.OnlineThreshold.
+// Refreshed by schedulerService.RefreshGaugeMetrics.
+var CrawlerNodesOnline = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "jobradar_crawler_nodes_online",
+	Help: "Current number of crawler nodes with status=active and a recent heartbeat.",
+})
+
+// SchedulerCompaniesAutoPausedCurrent is the current number of companies with
+// company_scan_settings.auto_paused=true. Distinct from
+// SchedulerCompaniesAutoPausedTotal, which counts pause *events* — this is a
+// point-in-time snapshot. Refreshed by schedulerService.RefreshGaugeMetrics.
+var SchedulerCompaniesAutoPausedCurrent = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "jobradar_scheduler_companies_auto_paused_current",
+	Help: "Current number of companies with company_scan_settings.auto_paused=true.",
+})
+
+// JobPipelineLedgerRetryCount is the current number of job_pipeline_ledger
+// rows at reason='retry' (removed_at IS NULL) — the sweeper's backlog size.
+// Refreshed by schedulerService.RefreshGaugeMetrics.
+var JobPipelineLedgerRetryCount = prometheus.NewGauge(prometheus.GaugeOpts{
+	Name: "jobradar_job_pipeline_ledger_retry_count",
+	Help: "Current number of job_pipeline_ledger rows at reason='retry' (removed_at IS NULL).",
+})
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 func init() {
@@ -367,6 +416,11 @@ func init() {
 		SweeperStuckEscalatedTotal,
 		SweeperNATSUnavailableTotal,
 		LLMCooldownMissTotal,
+		SchedulerQueuePending,
+		SchedulerQueueOldestPendingAgeSeconds,
+		CrawlerNodesOnline,
+		SchedulerCompaniesAutoPausedCurrent,
+		JobPipelineLedgerRetryCount,
 	)
 }
 

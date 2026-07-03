@@ -15,6 +15,8 @@ import (
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	auditsvc "github.com/trushilpatel/jobradar/service/audit/services"
+	companysvc "github.com/trushilpatel/jobradar/service/company/services"
+	crawlernodesvc "github.com/trushilpatel/jobradar/service/crawlernode/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
@@ -70,11 +72,13 @@ func main() {
 	auditWriter := auditsvc.NewImplService(auditsvc.NewRepositoryService(database))
 
 	sweeperOpts := scansvc.SchedulerServiceOptions{
-		Ledger:     jobsvc.NewSeenLedgerStore(database),
-		Publisher:  lazyPub,
-		Auditor:    auditWriter,
-		MaxRetries: cfg.Scheduler.SweeperMaxRetries,
-		Log:        log,
+		Ledger:         jobsvc.NewSeenLedgerStore(database),
+		Publisher:      lazyPub,
+		Auditor:        auditWriter,
+		NodeReader:     crawlernodesvc.NewNodeRepositoryService(database),
+		SettingsReader: companysvc.NewScanSettingsRepositoryService(database),
+		MaxRetries:     cfg.Scheduler.SweeperMaxRetries,
+		Log:            log,
 	}
 
 	svc := scansvc.NewSchedulerServiceWithSweeper(scansvc.NewQueueStore(database), sweeperOpts)

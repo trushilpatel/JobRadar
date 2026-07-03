@@ -64,3 +64,12 @@ func TestBaseService_DelegatesUpdateScanIntervalOverride(t *testing.T) {
 		t.Errorf("UpdateScanIntervalOverride delegate error = %v", err)
 	}
 }
+
+func TestBaseService_DelegatesRefreshGaugeMetrics(t *testing.T) {
+	noop := &noopService{}
+	base := newBasePassthroughService(noop)
+
+	if err := base.RefreshGaugeMetrics(context.Background()); err != nil {
+		t.Errorf("RefreshGaugeMetrics delegate error = %v", err)
+	}
+}

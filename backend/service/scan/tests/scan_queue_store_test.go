@@ -531,3 +531,52 @@ func TestScanQueueStore_EnqueueDue_DBError(t *testing.T) {
 		t.Fatal("expected error on closed DB")
 	}
 }
+
+func TestScanQueueStore_CountQueued_EmitsStatusFilter(t *testing.T) {
+	db, cap := newScanDryRunDB(t)
+	store := svc.NewQueueStore(db)
+
+	// DryRun mode never executes the query, so Raw(...).Scan(...) always
+	// returns gorm.ErrDryRunModeUnsupported (same limitation documented on
+	// AutoPauseChronicFailures/EnqueueDue/EnqueueAll/ClaimNext/ListQueue
+	// above) — the return value is ignored here; only the emitted SQL shape
+	// is asserted.
+	_, _ = store.CountQueued(context.Background())
+
+	joined := strings.Join(cap.statements(), "\n")
+	for _, want := range []string{"SELECT COUNT(*)", "FROM company_scan_queue", "status = 'queued'"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected SQL to contain %q; got:\n%s", want, joined)
+		}
+	}
+}
+
+func TestScanQueueStore_CountQueued_DBError(t *testing.T) {
+	store := svc.NewQueueStore(newClosedScanQueueDB(t))
+	if _, err := store.CountQueued(context.Background()); err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+}
+
+func TestScanQueueStore_OldestQueuedAgeSeconds_EmitsAgeQuery(t *testing.T) {
+	db, cap := newScanDryRunDB(t)
+	store := svc.NewQueueStore(db)
+
+	// Same DryRun Scan() limitation as CountQueued above — return value
+	// ignored, only the emitted SQL shape is asserted.
+	_, _ = store.OldestQueuedAgeSeconds(context.Background())
+
+	joined := strings.Join(cap.statements(), "\n")
+	for _, want := range []string{"EXTRACT(EPOCH", "MIN(queued_at)", "status = 'queued'"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected SQL to contain %q; got:\n%s", want, joined)
+		}
+	}
+}
+
+func TestScanQueueStore_OldestQueuedAgeSeconds_DBError(t *testing.T) {
+	store := svc.NewQueueStore(newClosedScanQueueDB(t))
+	if _, err := store.OldestQueuedAgeSeconds(context.Background()); err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+}

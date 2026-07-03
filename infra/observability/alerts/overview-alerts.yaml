@@ -1,0 +1,143 @@
+# JobRadar Overview dashboard alert rules — Grafana Cloud unified alerting
+# provisioning format. Notification routing is intentionally unconfigured:
+# these rules evaluate and enter "Alerting" state but produce no
+# notification until a contact point is wired in a follow-up pass (see
+# docs/superpowers/specs/2026-07-02-grafana-observability-dashboards-design.md).
+#
+# datasourceUid below is a placeholder — resolve it via the Grafana MCP
+# tools (list datasources, find the Prometheus/Mimir one) before pushing.
+# Unlike dashboard JSON, alert rule queries cannot use a templated
+# "${datasource}" variable — they evaluate independently of any dashboard.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: jobradar-overview-alerts
+    folder: JobRadar
+    interval: 1m
+    rules:
+      - uid: jobradar-queue-backlog
+        title: QueueBacklog
+        condition: C
+        for: 10m
+        noDataState: NoData
+        execErrState: Error
+        annotations:
+          summary: "company_scan_queue oldest-pending row has been waiting longer than 2x the default scan interval"
+        data:
+          - refId: A
+            datasourceUid: REPLACE_WITH_PROMETHEUS_DATASOURCE_UID
+            model:
+              expr: jobradar_scheduler_queue_oldest_pending_age_seconds{job="jobradar_scheduler"}
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              # 172800s = 2 x SCAN_INTERVAL_MINUTES default (1440min = 24h).
+              # Update this if SCAN_INTERVAL_MINUTES changes from its default.
+              conditions:
+                - evaluator: { type: gt, params: [172800] }
+              refId: C
+
+      - uid: jobradar-dlq-publish-rate
+        title: DLQPublishRateNonZero
+        condition: C
+        for: 5m
+        noDataState: NoData
+        execErrState: Error
+        annotations:
+          summary: "Filter or analyzer is publishing to the DLQ — jobs are failing terminally"
+        data:
+          - refId: A
+            datasourceUid: REPLACE_WITH_PROMETHEUS_DATASOURCE_UID
+            model:
+              expr: sum(rate(filter_dlq_publishes_total{job="jobradar_filter"}[5m])) + sum(rate(enricher_dlq_publishes_total{job="jobradar_enricher"}[5m]))
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+              refId: C
+
+      - uid: jobradar-retry-ladder-backlog
+        title: RetryLadderBacklog
+        condition: C
+        for: 30m
+        noDataState: NoData
+        execErrState: Error
+        annotations:
+          summary: "job_pipeline_ledger retry-ladder backlog has stayed above 50 for 30 minutes — sweeper may not be draining it. Initial conservative threshold; tune once real traffic baselines are observed."
+        data:
+          - refId: A
+            datasourceUid: REPLACE_WITH_PROMETHEUS_DATASOURCE_UID
+            model:
+              expr: jobradar_job_pipeline_ledger_retry_count{job="jobradar_scheduler"}
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [50] }
+              refId: C
+
+      - uid: jobradar-db-transient-retry-spike
+        title: DBTransientRetrySpike
+        condition: C
+        for: 10m
+        noDataState: NoData
+        execErrState: Error
+        annotations:
+          summary: "DB transient connection-drop retries have been continuously non-zero for 10 minutes — possible pooler or network instability"
+        data:
+          - refId: A
+            datasourceUid: REPLACE_WITH_PROMETHEUS_DATASOURCE_UID
+            model:
+              expr: sum(rate(jobradar_db_transient_retries_total[5m]))
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+              refId: C

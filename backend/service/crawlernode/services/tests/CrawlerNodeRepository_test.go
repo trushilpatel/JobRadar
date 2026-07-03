@@ -39,6 +39,7 @@ func (m *mockNodeStore) List(ctx context.Context, status string) ([]crawlernodem
 func (m *mockNodeStore) Retire(ctx context.Context, nodeID string) error {
 	return m.retireFn(ctx, nodeID)
 }
+func (m *mockNodeStore) CountOnline(context.Context) (int, error) { return 0, nil }
 
 // Compile-time interface check.
 var _ services.NodeStore = (*mockNodeStore)(nil)

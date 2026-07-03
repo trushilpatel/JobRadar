@@ -5,6 +5,7 @@ import (
 	stderrors "errors"
 	"io"
 	"testing"
+	"time"
 
 	commondb "github.com/trushilpatel/jobradar/common/db"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
@@ -20,6 +21,18 @@ func seedLedger(t *testing.T, db *gorm.DB, jobID, companyID, reason string) {
 	row := jobmodel.JobSeenLedger{JobID: jobID, CompanyID: companyID, Reason: reason}
 	if err := db.Create(&row).Error; err != nil {
 		t.Fatalf("seed ledger %s: %v", jobID, err)
+	}
+}
+
+// seedLedgerRemoved inserts a single ledger row already marked removed
+// (removed_at set) — used to assert removed rows are excluded from reads
+// like CountByReason.
+func seedLedgerRemoved(t *testing.T, db *gorm.DB, jobID, companyID, reason string) {
+	t.Helper()
+	removedAt := time.Now()
+	row := jobmodel.JobSeenLedger{JobID: jobID, CompanyID: companyID, Reason: reason, RemovedAt: &removedAt}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatalf("seed removed ledger %s: %v", jobID, err)
 	}
 }
 
@@ -86,6 +99,28 @@ func TestSeenLedger_HasSeenBatch(t *testing.T) {
 	}
 	if out["p3"] {
 		t.Errorf("p3 present in map; want absent (missing row)")
+	}
+}
+
+// TestSeenLedger_CountByReason_CountsMatchingNonRemovedRows asserts
+// CountByReason counts only non-removed rows at the given reason, excluding
+// removed rows and rows with a different reason.
+func TestSeenLedger_CountByReason_CountsMatchingNonRemovedRows(t *testing.T) {
+	t.Parallel()
+	db := newJobTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedLedger(t, db, "job-1", "c1", string(jobcommon.SeenReasonRetry))
+	seedLedger(t, db, "job-2", "c1", string(jobcommon.SeenReasonRetry))
+	seedLedgerRemoved(t, db, "job-3", "c1", string(jobcommon.SeenReasonRetry)) // removed — excluded
+	seedLedger(t, db, "job-4", "c1", string(jobcommon.SeenReasonFetch))        // wrong reason — excluded
+	store := jobsvc.NewSeenLedgerStore(db)
+
+	count, err := store.CountByReason(context.Background(), jobcommon.SeenReasonRetry)
+	if err != nil {
+		t.Fatalf("CountByReason() error = %v", err)
+	}
+	if count != 2 {
+		t.Errorf("CountByReason() = %d, want 2", count)
 	}
 }
 

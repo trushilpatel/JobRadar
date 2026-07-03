@@ -290,3 +290,38 @@ func TestScanSettingsRepo_Delete_DBError(t *testing.T) {
 		t.Errorf("expected INTERNAL, got %T %v", err, err)
 	}
 }
+
+func TestScanSettingsRepo_CountAutoPaused_CountsOnlyPausedRows(t *testing.T) {
+	db := newScanSettingsDB(t)
+	now := time.Now()
+	seed := func(id string, paused bool) {
+		if err := db.Exec(`INSERT INTO company_scan_settings (company_id, adapter_type, active, auto_paused, consecutive_errors, created_at, updated_at) VALUES (?, ?, true, ?, 0, ?, ?)`,
+			id, companycommon.AdapterGreenhouse, paused, now, now).Error; err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+	seed("a", true)
+	seed("b", false)
+	seed("c", true)
+
+	repo := companysvc.NewScanSettingsRepositoryService(db)
+	count, err := repo.CountAutoPaused(context.Background())
+	if err != nil {
+		t.Fatalf("CountAutoPaused() error = %v", err)
+	}
+	if count != 2 {
+		t.Errorf("CountAutoPaused() = %d, want 2", count)
+	}
+}
+
+func TestScanSettingsRepo_CountAutoPaused_EmptyTable(t *testing.T) {
+	db := newScanSettingsDB(t)
+	repo := companysvc.NewScanSettingsRepositoryService(db)
+	count, err := repo.CountAutoPaused(context.Background())
+	if err != nil {
+		t.Fatalf("CountAutoPaused() error = %v", err)
+	}
+	if count != 0 {
+		t.Errorf("CountAutoPaused() = %d, want 0", count)
+	}
+}

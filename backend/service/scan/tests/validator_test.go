@@ -49,6 +49,8 @@ func (n *noopService) AutoPauseChronicFailures(_ context.Context) (int, error) {
 	return 0, nil
 }
 
+func (n *noopService) RefreshGaugeMetrics(context.Context) error { return nil }
+
 var _ svc.Service = (*noopService)(nil)
 
 func TestValidateTriggerScan(t *testing.T) {

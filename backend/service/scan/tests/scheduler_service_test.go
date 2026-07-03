@@ -12,6 +12,8 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	auditmodel "github.com/trushilpatel/jobradar/service/audit/models"
+	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
+	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 	svc "github.com/trushilpatel/jobradar/service/scan/services"
@@ -37,6 +39,12 @@ type schedulerFakeQueue struct {
 	autoPauseErr       error
 	autoPauseThreshold int
 	autoPauseCalls     int
+
+	// Gauge-refresh test hooks.
+	countQueuedRes int
+	countQueuedErr error
+	oldestAgeRes   float64
+	oldestAgeErr   error
 }
 
 func (f *schedulerFakeQueue) Enqueue(context.Context, string, string) error { return nil }
@@ -66,6 +74,12 @@ func (f *schedulerFakeQueue) AutoPauseChronicFailures(_ context.Context, thresho
 func (f *schedulerFakeQueue) UpdateHeartbeat(context.Context, string) error { return nil }
 func (f *schedulerFakeQueue) ListQueue(context.Context, dto.QueueFilter) ([]dto.ScanQueueItem, error) {
 	return nil, nil
+}
+func (f *schedulerFakeQueue) CountQueued(context.Context) (int, error) {
+	return f.countQueuedRes, f.countQueuedErr
+}
+func (f *schedulerFakeQueue) OldestQueuedAgeSeconds(context.Context) (float64, error) {
+	return f.oldestAgeRes, f.oldestAgeErr
 }
 
 var _ svc.ScanQueueStore = (*schedulerFakeQueue)(nil)
@@ -179,6 +193,17 @@ func TestRepositoryService_RetryDueJobs_NoOp(t *testing.T) {
 	s := newImplService(&fakeQueueStore{}, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
 	if err := s.RetryDueJobs(context.Background()); err != nil {
 		t.Fatalf("RetryDueJobs() through decorator chain error = %v, want nil", err)
+	}
+}
+
+// TestRepositoryService_RefreshGaugeMetrics_NoOp asserts that the
+// repository-layer RefreshGaugeMetrics is always a no-op — it satisfies the
+// Service interface but the gauge-refresh path is implemented on
+// schedulerService, not the decorator chain.
+func TestRepositoryService_RefreshGaugeMetrics_NoOp(t *testing.T) {
+	s := newImplService(&fakeQueueStore{}, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
+	if err := s.RefreshGaugeMetrics(context.Background()); err != nil {
+		t.Fatalf("RefreshGaugeMetrics() through decorator chain error = %v, want nil", err)
 	}
 }
 
@@ -369,5 +394,199 @@ func TestAutoPause_MetricIncremented(t *testing.T) {
 	after := testutil.ToFloat64(metrics.SchedulerCompaniesAutoPausedTotal)
 	if after-before != 3 {
 		t.Errorf("metric delta = %v, want 3", after-before)
+	}
+}
+
+// ── RefreshGaugeMetrics tests ────────────────────────────────────────────────
+
+// fakeSeenLedgerStore is a test double for jobsvc.SeenLedgerStore, scoped to
+// RefreshGaugeMetrics tests. Mirrors fakeSweeperLedger's "meaningful methods
+// for what this test needs, no-op stubs for everything else" pattern, but
+// exposes CountByReason as a configurable field since these tests need to
+// control its return value.
+type fakeSeenLedgerStore struct {
+	countByReasonRes int
+	countByReasonErr error
+}
+
+func (f *fakeSeenLedgerStore) HasSeen(_ context.Context, _ string) (bool, error) { return false, nil }
+func (f *fakeSeenLedgerStore) HasSeenBatch(_ context.Context, _ []string) (map[string]bool, error) {
+	return nil, nil
+}
+func (f *fakeSeenLedgerStore) MarkSeen(_ context.Context, _, _, _ string) error { return nil }
+func (f *fakeSeenLedgerStore) MarkSeenBatch(_ context.Context, _ []string, _, _ string) error {
+	return nil
+}
+func (f *fakeSeenLedgerStore) UpdateSeenReason(_ context.Context, _ string, _ jobcommon.SeenReason) error {
+	return nil
+}
+func (f *fakeSeenLedgerStore) UpdateSeenReasonBatch(_ context.Context, _ []string, _ jobcommon.SeenReason) error {
+	return nil
+}
+func (f *fakeSeenLedgerStore) UpdateRetryBatch(_ context.Context, _ []jobsvc.RetryLedgerEntry) error {
+	return nil
+}
+func (f *fakeSeenLedgerStore) UpdateRetryBatchWithPayload(_ context.Context, _ []jobsvc.RetryLedgerEntryWithPayload) error {
+	return nil
+}
+func (f *fakeSeenLedgerStore) FetchDueRetryJobs(_ context.Context, _ int) ([]jobsvc.RetryJobRecord, error) {
+	return nil, nil
+}
+func (f *fakeSeenLedgerStore) FetchDueRetryJobsWithPayload(_ context.Context, _ int) ([]jobsvc.RetryJobRecord, error) {
+	return nil, nil
+}
+func (f *fakeSeenLedgerStore) ResetRetryToFetch(_ context.Context, _ string) error { return nil }
+func (f *fakeSeenLedgerStore) EscalateRetryToError(_ context.Context, _ string) error {
+	return nil
+}
+func (f *fakeSeenLedgerStore) MarkRemovedBatch(_ context.Context, _ []string) error { return nil }
+func (f *fakeSeenLedgerStore) GetActiveJobIDsByCompany(_ context.Context, _ string) ([]string, error) {
+	return nil, nil
+}
+func (f *fakeSeenLedgerStore) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
+	return 0, nil
+}
+func (f *fakeSeenLedgerStore) ReclaimStuckFetchRows(_ context.Context, _ time.Duration, _ int) (int64, error) {
+	return 0, nil
+}
+func (f *fakeSeenLedgerStore) CountByReason(_ context.Context, _ jobcommon.SeenReason) (int, error) {
+	return f.countByReasonRes, f.countByReasonErr
+}
+
+var _ jobsvc.SeenLedgerStore = (*fakeSeenLedgerStore)(nil)
+
+// fakeGaugeNodeReader is a test double for svc.GaugeNodeReader.
+type fakeGaugeNodeReader struct {
+	count int
+	err   error
+	calls int
+}
+
+func (f *fakeGaugeNodeReader) CountOnline(context.Context) (int, error) {
+	f.calls++
+	return f.count, f.err
+}
+
+// fakeGaugeSettingsReader is a test double for svc.GaugeSettingsReader.
+type fakeGaugeSettingsReader struct {
+	count int
+	err   error
+	calls int
+}
+
+func (f *fakeGaugeSettingsReader) CountAutoPaused(context.Context) (int, error) {
+	f.calls++
+	return f.count, f.err
+}
+
+func TestSchedulerService_RefreshGaugeMetrics_SetsAllFiveGauges(t *testing.T) {
+	q := &schedulerFakeQueue{countQueuedRes: 7, oldestAgeRes: 42.5}
+	nodeReader := &fakeGaugeNodeReader{count: 3}
+	settingsReader := &fakeGaugeSettingsReader{count: 2}
+	ledger := &fakeSeenLedgerStore{countByReasonRes: 5}
+
+	s := svc.NewSchedulerServiceWithSweeper(q, svc.SchedulerServiceOptions{
+		Ledger:         ledger,
+		NodeReader:     nodeReader,
+		SettingsReader: settingsReader,
+		Log:            logger.NewNoop(),
+	})
+
+	if err := s.RefreshGaugeMetrics(context.Background()); err != nil {
+		t.Fatalf("RefreshGaugeMetrics() error = %v", err)
+	}
+
+	if got := testutil.ToFloat64(metrics.SchedulerQueuePending); got != 7 {
+		t.Errorf("SchedulerQueuePending = %v, want 7", got)
+	}
+	if got := testutil.ToFloat64(metrics.SchedulerQueueOldestPendingAgeSeconds); got != 42.5 {
+		t.Errorf("SchedulerQueueOldestPendingAgeSeconds = %v, want 42.5", got)
+	}
+	if got := testutil.ToFloat64(metrics.CrawlerNodesOnline); got != 3 {
+		t.Errorf("CrawlerNodesOnline = %v, want 3", got)
+	}
+	if got := testutil.ToFloat64(metrics.SchedulerCompaniesAutoPausedCurrent); got != 2 {
+		t.Errorf("SchedulerCompaniesAutoPausedCurrent = %v, want 2", got)
+	}
+	if got := testutil.ToFloat64(metrics.JobPipelineLedgerRetryCount); got != 5 {
+		t.Errorf("JobPipelineLedgerRetryCount = %v, want 5", got)
+	}
+	if nodeReader.calls != 1 || settingsReader.calls != 1 {
+		t.Errorf("expected exactly 1 call each; nodeReader=%d settingsReader=%d", nodeReader.calls, settingsReader.calls)
+	}
+}
+
+func TestSchedulerService_RefreshGaugeMetrics_NilOptionalReaders_NoPanic(t *testing.T) {
+	q := &schedulerFakeQueue{countQueuedRes: 1}
+	s := svc.NewSchedulerServiceWithSweeper(q, svc.SchedulerServiceOptions{Log: logger.NewNoop()})
+
+	// nodeReader/settingsReader/ledger all nil — must not panic, must not error
+	// (their gauges are simply not refreshed this tick).
+	if err := s.RefreshGaugeMetrics(context.Background()); err != nil {
+		t.Fatalf("RefreshGaugeMetrics() error = %v, want nil (nil readers are skipped, not errors)", err)
+	}
+}
+
+func TestSchedulerService_RefreshGaugeMetrics_PartialFailure_JoinsErrorsAndSetsSucceeded(t *testing.T) {
+	q := &schedulerFakeQueue{countQueuedErr: errors.New("db down"), oldestAgeRes: 10}
+	nodeReader := &fakeGaugeNodeReader{err: errors.New("node store down")}
+	settingsReader := &fakeGaugeSettingsReader{count: 4}
+
+	s := svc.NewSchedulerServiceWithSweeper(q, svc.SchedulerServiceOptions{
+		NodeReader:     nodeReader,
+		SettingsReader: settingsReader,
+		Log:            logger.NewNoop(),
+	})
+
+	err := s.RefreshGaugeMetrics(context.Background())
+	if err == nil {
+		t.Fatal("expected a joined error from the 2 failing reads")
+	}
+	if !strings.Contains(err.Error(), "count queued") || !strings.Contains(err.Error(), "count online nodes") {
+		t.Errorf("expected joined error to mention both failures, got: %v", err)
+	}
+	// The 2 succeeding reads (oldest age, auto-paused) must still have set
+	// their gauges — a partial failure never blocks the other gauges.
+	if got := testutil.ToFloat64(metrics.SchedulerQueueOldestPendingAgeSeconds); got != 10 {
+		t.Errorf("SchedulerQueueOldestPendingAgeSeconds = %v, want 10 (should still be set despite the other failure)", got)
+	}
+	if got := testutil.ToFloat64(metrics.SchedulerCompaniesAutoPausedCurrent); got != 4 {
+		t.Errorf("SchedulerCompaniesAutoPausedCurrent = %v, want 4", got)
+	}
+}
+
+// TestSchedulerService_RefreshGaugeMetrics_RemainingFailurePaths exercises
+// the 3 error branches not covered by the partial-failure test above
+// (OldestQueuedAgeSeconds, SettingsReader.CountAutoPaused, and
+// Ledger.CountByReason), confirming each is joined into the returned error
+// and the 2 succeeding reads (queue depth, online nodes) still set their
+// gauges.
+func TestSchedulerService_RefreshGaugeMetrics_RemainingFailurePaths(t *testing.T) {
+	q := &schedulerFakeQueue{countQueuedRes: 9, oldestAgeErr: errors.New("age query failed")}
+	nodeReader := &fakeGaugeNodeReader{count: 6}
+	settingsReader := &fakeGaugeSettingsReader{err: errors.New("settings store down")}
+	ledger := &fakeSeenLedgerStore{countByReasonErr: errors.New("ledger down")}
+
+	s := svc.NewSchedulerServiceWithSweeper(q, svc.SchedulerServiceOptions{
+		Ledger:         ledger,
+		NodeReader:     nodeReader,
+		SettingsReader: settingsReader,
+		Log:            logger.NewNoop(),
+	})
+
+	err := s.RefreshGaugeMetrics(context.Background())
+	if err == nil {
+		t.Fatal("expected a joined error from the 3 failing reads")
+	}
+	for _, want := range []string{"oldest queued age", "count auto-paused", "count retry ledger"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("expected joined error to mention %q, got: %v", want, err)
+		}
+	}
+	if got := testutil.ToFloat64(metrics.SchedulerQueuePending); got != 9 {
+		t.Errorf("SchedulerQueuePending = %v, want 9 (should still be set despite the other failures)", got)
+	}
+	if got := testutil.ToFloat64(metrics.CrawlerNodesOnline); got != 6 {
+		t.Errorf("CrawlerNodesOnline = %v, want 6 (should still be set despite the other failures)", got)
 	}
 }

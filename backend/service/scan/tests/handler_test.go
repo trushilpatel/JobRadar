@@ -59,6 +59,8 @@ func (f *fakeScanService) AutoPauseChronicFailures(_ context.Context) (int, erro
 	return 0, f.err
 }
 
+func (f *fakeScanService) RefreshGaugeMetrics(context.Context) error { return nil }
+
 // newScanTestRouter wires the full decorator chain under test using the given
 // service as the terminal, then mounts all routes onto a chi router.
 func newScanTestRouter(next svc.Service) *chi.Mux {
