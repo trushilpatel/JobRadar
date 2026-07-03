@@ -28,6 +28,64 @@ func TestDatabaseConfig_DSN(t *testing.T) {
 	}
 }
 
+// ---------- DatabaseConfig.Validate (pool timeouts) ----------
+
+func TestDatabaseConfig_Validate(t *testing.T) {
+	base := func() config.DatabaseConfig {
+		return config.DatabaseConfig{ConnMaxIdleSeconds: 30, ConnMaxLifetimeMinutes: 15}
+	}
+
+	t.Run("valid defaults", func(t *testing.T) {
+		if err := base().Validate(); err != nil {
+			t.Fatalf("valid config returned error: %v", err)
+		}
+	})
+	t.Run("idle equal to lifetime boundary", func(t *testing.T) {
+		// idle == lifetime*60 is the accepted upper boundary.
+		cfg := config.DatabaseConfig{ConnMaxIdleSeconds: 900, ConnMaxLifetimeMinutes: 15}
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("idle==lifetime*60 boundary should pass: %v", err)
+		}
+	})
+	t.Run("idle one over lifetime boundary", func(t *testing.T) {
+		cfg := config.DatabaseConfig{ConnMaxIdleSeconds: 901, ConnMaxLifetimeMinutes: 15}
+		err := cfg.Validate()
+		if err == nil || !strings.Contains(err.Error(), "DB_CONN_MAX_IDLE_SECONDS") {
+			t.Fatalf("want idle>lifetime error, got %v", err)
+		}
+	})
+	t.Run("zero idle", func(t *testing.T) {
+		cfg := base()
+		cfg.ConnMaxIdleSeconds = 0
+		err := cfg.Validate()
+		if err == nil || !strings.Contains(err.Error(), "DB_CONN_MAX_IDLE_SECONDS") {
+			t.Fatalf("want idle>0 error, got %v", err)
+		}
+	})
+	t.Run("negative idle", func(t *testing.T) {
+		cfg := base()
+		cfg.ConnMaxIdleSeconds = -1
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("expected error for negative idle")
+		}
+	})
+	t.Run("zero lifetime", func(t *testing.T) {
+		cfg := base()
+		cfg.ConnMaxLifetimeMinutes = 0
+		err := cfg.Validate()
+		if err == nil || !strings.Contains(err.Error(), "DB_CONN_MAX_LIFETIME_MINUTES") {
+			t.Fatalf("want lifetime>0 error, got %v", err)
+		}
+	})
+	t.Run("negative lifetime", func(t *testing.T) {
+		cfg := base()
+		cfg.ConnMaxLifetimeMinutes = -5
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("expected error for negative lifetime")
+		}
+	})
+}
+
 // ---------- AuthConfig.Validate (Clerk) ----------
 
 func TestAuthConfig_ClerkValidate(t *testing.T) {
@@ -217,6 +275,7 @@ func clearConfigEnv(t *testing.T) {
 	keys := []string{
 		"LLM_SLOTS_CONFIG", "FILTER_LLM_SLOTS", "ENRICHER_LLM_SLOTS",
 		"DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_SSLMODE",
+		"DB_CONN_MAX_IDLE_SECONDS", "DB_CONN_MAX_LIFETIME_MINUTES",
 		"KAFKA_BROKERS", "KAFKA_USER", "KAFKA_PASSWORD",
 		"REDIS_URL",
 		"LLM_COOLDOWN_BASE_SECONDS", "LLM_COOLDOWN_MAX_SECONDS", "LLM_COOLDOWN_JITTER",
@@ -256,6 +315,10 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 
 	if cfg.DB.Host != "localhost" || cfg.DB.Port != "5432" || cfg.DB.User != "postgres" || cfg.DB.Password != "postgres" || cfg.DB.Name != "jobradar" || cfg.DB.SSLMode != "disable" {
 		t.Errorf("DB defaults wrong: %+v", cfg.DB)
+	}
+	if cfg.DB.ConnMaxIdleSeconds != 30 || cfg.DB.ConnMaxLifetimeMinutes != 15 {
+		t.Errorf("DB pool-timeout defaults wrong: idle=%d lifetime=%d (want 30/15)",
+			cfg.DB.ConnMaxIdleSeconds, cfg.DB.ConnMaxLifetimeMinutes)
 	}
 	if cfg.Redis.URL != "redis://localhost:6379/0" {
 		t.Errorf("Redis defaults wrong: %+v", cfg.Redis)
@@ -314,6 +377,8 @@ func TestLoad_OverridesApplied(t *testing.T) {
 	t.Setenv("DB_PASSWORD", "p")
 	t.Setenv("DB_NAME", "d")
 	t.Setenv("DB_SSLMODE", "require")
+	t.Setenv("DB_CONN_MAX_IDLE_SECONDS", "45")
+	t.Setenv("DB_CONN_MAX_LIFETIME_MINUTES", "20")
 	t.Setenv("REDIS_URL", "rediss://default:secret@redis.example:6380/5")
 	t.Setenv("LLM_COOLDOWN_BASE_SECONDS", "10")
 	t.Setenv("LLM_COOLDOWN_MAX_SECONDS", "100")
@@ -362,6 +427,10 @@ func TestLoad_OverridesApplied(t *testing.T) {
 
 	if cfg.DB.Host != "db.example" || cfg.DB.Port != "6543" || cfg.DB.SSLMode != "require" {
 		t.Errorf("DB overrides wrong: %+v", cfg.DB)
+	}
+	if cfg.DB.ConnMaxIdleSeconds != 45 || cfg.DB.ConnMaxLifetimeMinutes != 20 {
+		t.Errorf("DB pool-timeout overrides wrong: idle=%d lifetime=%d (want 45/20)",
+			cfg.DB.ConnMaxIdleSeconds, cfg.DB.ConnMaxLifetimeMinutes)
 	}
 	if cfg.Redis.URL != "rediss://default:secret@redis.example:6380/5" {
 		t.Errorf("REDIS_URL override wrong: %q", cfg.Redis.URL)

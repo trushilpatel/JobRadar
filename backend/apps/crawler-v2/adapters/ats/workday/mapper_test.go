@@ -205,7 +205,7 @@ func TestMapJobSummary_FallbackIDUnknown(t *testing.T) {
 // ── mapJobPost ────────────────────────────────────────────────────────────────
 
 func TestMapJobPost_AllFields(t *testing.T) {
-	countryJSON := json.RawMessage(`{"descriptor":"United States of America","id":"US"}`)
+	countryJSON := json.RawMessage(`{"descriptor":"United States of America","id":"bc33aa3152ec42d4995f4791a106ed09"}`)
 	info := wdapi.JobPostingInfo{
 		Title:          "Senior Software Engineer",
 		JobDescription: "<p>Join our team.</p>",
@@ -331,16 +331,52 @@ func TestExtractCountryCode(t *testing.T) {
 		want string
 	}{
 		{
-			name: "US",
-			raw:  json.RawMessage(`{"descriptor":"United States of America","id":"US"}`),
+			// AC2.1: a real tenant-internal WID in `id` must NOT be used; the US
+			// descriptor is the signal that yields "US".
+			name: "US via descriptor with real WID id",
+			raw:  json.RawMessage(`{"descriptor":"United States of America","id":"bc33aa3152ec42d4995f4791a106ed09"}`),
 			want: "US",
 		},
 		{
-			name: "GB",
-			raw:  json.RawMessage(`{"descriptor":"United Kingdom","id":"GB"}`),
-			want: "GB",
+			// AC2.6: descriptor variants are matched case-insensitively and trimmed.
+			name: "US variant United States",
+			raw:  json.RawMessage(`{"descriptor":"United States","id":"aaa"}`),
+			want: "US",
 		},
 		{
+			name: "US variant USA",
+			raw:  json.RawMessage(`{"descriptor":"USA","id":"bbb"}`),
+			want: "US",
+		},
+		{
+			name: "US variant U.S.",
+			raw:  json.RawMessage(`{"descriptor":"U.S.","id":"ccc"}`),
+			want: "US",
+		},
+		{
+			name: "US variant US",
+			raw:  json.RawMessage(`{"descriptor":"US","id":"ddd"}`),
+			want: "US",
+		},
+		{
+			name: "US descriptor case-insensitive with surrounding whitespace",
+			raw:  json.RawMessage(`{"descriptor":"  united states of AMERICA  ","id":"eee"}`),
+			want: "US",
+		},
+		{
+			// AC2.3: a non-US descriptor returns "" so the analyzer's string
+			// classifier decides via post.Location — never guess a foreign ISO code.
+			name: "Japan descriptor → empty",
+			raw:  json.RawMessage(`{"descriptor":"Japan","id":"fff"}`),
+			want: "",
+		},
+		{
+			name: "United Kingdom descriptor → empty",
+			raw:  json.RawMessage(`{"descriptor":"United Kingdom","id":"ggg"}`),
+			want: "",
+		},
+		{
+			// AC2.4: missing / null / malformed / empty-object all return "".
 			name: "null",
 			raw:  json.RawMessage("null"),
 			want: "",
@@ -353,6 +389,16 @@ func TestExtractCountryCode(t *testing.T) {
 		{
 			name: "malformed",
 			raw:  json.RawMessage("not-json"),
+			want: "",
+		},
+		{
+			name: "empty object",
+			raw:  json.RawMessage("{}"),
+			want: "",
+		},
+		{
+			name: "object with empty descriptor",
+			raw:  json.RawMessage(`{"descriptor":"","id":"hhh"}`),
 			want: "",
 		},
 	}

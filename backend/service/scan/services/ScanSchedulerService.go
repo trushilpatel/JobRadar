@@ -11,6 +11,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	auditmodel "github.com/trushilpatel/jobradar/service/audit/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 )
@@ -26,6 +27,20 @@ const stuckRetryThreshold = 4 * time.Hour
 // a prolonged outage.
 const stuckRetryLimit = 100
 
+// stuckFetchThreshold is how old a reason='fetch' ledger row must be before the
+// reclaimer deletes it. Normal fetch→verdict latency is seconds-to-minutes; the
+// worst-case legitimate in-flight window (NATS redelivery + filter retry
+// backoff) is well under an hour. 1h is a conservative safety floor (~60-600x
+// normal) that still recovers within the same incident. It is a module const,
+// not a config var, to mirror the sibling retry sweep and keep the operator
+// surface minimal.
+const stuckFetchThreshold = 1 * time.Hour
+
+// stuckFetchLimit caps the number of stranded fetch rows deleted per scheduler
+// tick to bound DB work; a backlog drains across successive ticks. Matches
+// stuckRetryLimit.
+const stuckFetchLimit = 100
+
 // SweeperPublisher is the narrow NATS publishing contract the sweeper needs.
 // Allows the scheduler service to publish without importing the full jetstream
 // package at the call site.
@@ -38,12 +53,29 @@ type SweeperPublisher interface {
 	PublishWithHeaders(ctx context.Context, subject string, payload []byte, headers map[string]string) error
 }
 
+// AutoPauseAuditor is the narrow audit-writing contract the auto-pause sweep
+// needs. It is satisfied by audit/services.Service.Append. Declared here (where
+// the consuming struct lives) so the scheduler service depends on a single
+// method, not the full audit Service — and so the dependency is optional
+// (mirroring the Ledger/Publisher optional-deps pattern). When nil, the sweep
+// still pauses companies but logs a WARN that audit is unconfigured; a failed
+// Append is likewise non-fatal (audit must never block runaway-company pausing).
+type AutoPauseAuditor interface {
+	Append(ctx context.Context, entry auditmodel.Entry) error
+}
+
+// AutoPauseAction is the admin_audit_log action recorded for each company the
+// scheduler auto-pauses. A dedicated const (not a raw string) keeps the audit
+// vocabulary enforced by the compiler.
+const AutoPauseAction = "company.scan.auto_pause"
+
 // schedulerService implements SchedulerService for the scheduler worker.
 // It uses ScanQueueStore directly — not part of the REST decorator chain.
 type schedulerService struct {
 	queue      ScanQueueStore
 	ledger     jobsvc.SeenLedgerStore
 	publisher  SweeperPublisher
+	auditor    AutoPauseAuditor
 	maxRetries int
 	log        logger.Logger
 }
@@ -53,6 +85,7 @@ type schedulerService struct {
 type SchedulerServiceOptions struct {
 	Ledger     jobsvc.SeenLedgerStore
 	Publisher  SweeperPublisher
+	Auditor    AutoPauseAuditor
 	MaxRetries int
 	Log        logger.Logger
 }
@@ -78,6 +111,7 @@ func NewSchedulerServiceWithSweeper(queue ScanQueueStore, opts SchedulerServiceO
 		queue:      queue,
 		ledger:     opts.Ledger,
 		publisher:  opts.Publisher,
+		auditor:    opts.Auditor,
 		maxRetries: maxRetries,
 		log:        log,
 	}
@@ -231,3 +265,89 @@ func (s *schedulerService) EscalateStuckRetryJobs(ctx context.Context) (_ int64,
 	}
 	return n, nil
 }
+
+// ReclaimStuckFetchRows DELETEs job_pipeline_ledger rows stranded at
+// reason='fetch' (removed_at IS NULL, first_seen_at older than
+// stuckFetchThreshold), bounded by stuckFetchLimit per call. These are jobs the
+// crawler marked seen before publishing but the filter never transitioned to a
+// terminal verdict. Because HasSeenBatch ignores reason and removed_at, deleting
+// the row is the only way to clear the dedup block so the next crawl can
+// re-drive the job — escalating to reason='error' would keep it deduped forever.
+//
+// Returns (0, nil) when no ledger was configured (no-op) or no stuck rows exist.
+func (s *schedulerService) ReclaimStuckFetchRows(ctx context.Context) (_ int64, err error) {
+	if s.ledger == nil {
+		return 0, nil
+	}
+
+	ctx, span := tracing.Start(ctx, "scan.service.ReclaimStuckFetchRows")
+	defer tracing.End(span, &err)
+
+	n, serr := s.ledger.ReclaimStuckFetchRows(ctx, stuckFetchThreshold, stuckFetchLimit)
+	if serr != nil {
+		return 0, fmt.Errorf("ReclaimStuckFetchRows: %w", serr)
+	}
+	if n > 0 {
+		metrics.SchedulerStuckFetchReclaimedTotal.Add(float64(n))
+		s.log.Info("reclaimed stuck fetch ledger rows",
+			logger.Int(logger.FieldCount, int(n)),
+		)
+	}
+	return n, nil
+}
+
+// AutoPauseChronicFailures sets auto_paused=true for every company whose
+// consecutive_errors has crossed AutoPauseThreshold and is not yet paused,
+// writing one admin_audit_log row per newly paused company. It is idempotent —
+// the store's WHERE auto_paused=false guard means an already-paused company is
+// neither re-paused nor re-audited. Audit is NON-FATAL: a nil auditor or a
+// failed Append is logged at WARN and never blocks or fails the pause (pausing a
+// runaway company matters more than the audit row; the metric + log still record
+// it). Returns the number of companies newly paused — zero is not an error.
+func (s *schedulerService) AutoPauseChronicFailures(ctx context.Context) (_ int, err error) {
+	if s.queue == nil {
+		return 0, nil
+	}
+
+	ctx, span := tracing.Start(ctx, "scan.service.AutoPauseChronicFailures")
+	defer tracing.End(span, &err)
+
+	ids, serr := s.queue.AutoPauseChronicFailures(ctx, scancommon.AutoPauseThreshold)
+	if serr != nil {
+		return 0, fmt.Errorf("AutoPauseChronicFailures: %w", serr)
+	}
+
+	for _, id := range ids {
+		companyID := id
+		if s.auditor == nil {
+			s.log.Warn("auto-pause: audit unconfigured, skipping audit row",
+				logger.Str(logger.FieldCompany, companyID),
+			)
+			continue
+		}
+		targetType := logAutoPauseTargetType
+		entry := auditmodel.Entry{
+			Action:     AutoPauseAction,
+			TargetType: &targetType,
+			TargetID:   &companyID,
+		}
+		if aerr := s.auditor.Append(ctx, entry); aerr != nil {
+			s.log.Warn("auto-pause: audit append failed (non-fatal)",
+				logger.Str(logger.FieldCompany, companyID),
+				logger.Err(aerr),
+			)
+		}
+	}
+
+	n := len(ids)
+	if n > 0 {
+		metrics.SchedulerCompaniesAutoPausedTotal.Add(float64(n))
+		s.log.Info("auto-paused chronic-failing companies",
+			logger.Int(logger.FieldCount, n),
+		)
+	}
+	return n, nil
+}
+
+// logAutoPauseTargetType is the audit target_type recorded for auto-pause rows.
+const logAutoPauseTargetType = "company"

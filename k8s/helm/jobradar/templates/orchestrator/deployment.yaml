@@ -69,11 +69,14 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 6
-          # Readiness may gate on dependencies, so it keeps the DB-backed route,
-          # but with tolerant timeout/threshold for the same slow-node reason.
+          # Readiness gates on NATS connectivity (/readyz) — not on Supabase.
+          # Supabase slowdowns cause 500s on /node/work which crawler-nodes
+          # handle via retry; an unreachable NATS stalls all crawl results.
+          # Switching from /admin/crawler-nodes eliminates the 130-min NotReady
+          # windows caused by Supabase probe timeouts (seen 3× in 3 days).
           readinessProbe:
             httpGet:
-              path: /admin/crawler-nodes
+              path: /readyz
               port: 8082
             initialDelaySeconds: 5
             periodSeconds: 10

@@ -216,6 +216,9 @@ func (f *fakeLedgerWriter) EscalateRetryToError(_ context.Context, _ string) err
 func (f *fakeLedgerWriter) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
 	return 0, nil
 }
+func (f *fakeLedgerWriter) ReclaimStuckFetchRows(_ context.Context, _ time.Duration, _ int) (int64, error) {
+	return 0, nil
+}
 func (f *fakeLedgerWriter) MarkRemovedBatch(_ context.Context, _ []string) error { return nil }
 
 // helper — wires the impl service for tests with a memory cache.

@@ -438,3 +438,96 @@ func TestScanQueueStore_ListQueue_DBError(t *testing.T) {
 		t.Fatal("expected error on closed DB")
 	}
 }
+
+// --- Fix 1: back-off due-gate + auto-pause eligibility SQL ---
+
+// TestScanQueueStore_EnqueueDue_ExcludesAutoPaused asserts auto_paused companies
+// are never enqueued by the scheduler due-sweep (AC1.5).
+func TestScanQueueStore_EnqueueDue_ExcludesAutoPaused(t *testing.T) {
+	db, cap := newScanDryRunDB(t)
+	store := svc.NewQueueStore(db)
+
+	_, _ = store.EnqueueDue(context.Background(), 1440, "scheduler")
+
+	joined := strings.Join(cap.statements(), "\n")
+	for _, want := range []string{
+		"s.active = true",
+		"s.auto_paused = false",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected EnqueueDue to contain %q; got:\n%s", want, joined)
+		}
+	}
+}
+
+// TestScanQueueStore_EnqueueAll_ExcludesAutoPaused asserts the manual "scan all"
+// path also excludes auto_paused companies (AC1.5).
+func TestScanQueueStore_EnqueueAll_ExcludesAutoPaused(t *testing.T) {
+	db, cap := newScanDryRunDB(t)
+	store := svc.NewQueueStore(db)
+
+	_, _ = store.EnqueueAll(context.Background(), "manual")
+
+	joined := strings.Join(cap.statements(), "\n")
+	if !strings.Contains(joined, "s.auto_paused = false") {
+		t.Errorf("expected EnqueueAll to exclude auto_paused; got:\n%s", joined)
+	}
+}
+
+// TestScanQueueStore_PurgeInactive_TreatsAutoPausedAsInactive asserts a paused
+// company's queued rows are purged so it stops holding queue slots (AC1.11).
+func TestScanQueueStore_PurgeInactive_TreatsAutoPausedAsInactive(t *testing.T) {
+	db, cap := newScanDryRunDB(t)
+	store := svc.NewQueueStore(db)
+
+	_, _ = store.PurgeInactive(context.Background())
+
+	joined := strings.Join(cap.statements(), "\n")
+	if !strings.Contains(joined, "s.company_id IS NULL OR s.active = false OR s.auto_paused = true") {
+		t.Errorf("expected PurgeInactive to treat auto_paused as inactive; got:\n%s", joined)
+	}
+}
+
+// TestScanQueueStore_AutoPauseChronicFailures_EmitsThresholdUpdate asserts the
+// sweep flips auto_paused for companies over the threshold, guards on
+// auto_paused=false for idempotency, and returns the paused company IDs (AC1.6).
+func TestScanQueueStore_AutoPauseChronicFailures_EmitsThresholdUpdate(t *testing.T) {
+	db, cap := newScanDryRunDB(t)
+	store := svc.NewQueueStore(db)
+
+	// DryRun captures the emitted SQL but cannot Scan a RETURNING result, so the
+	// returned error/ids are ignored here (same pattern as EnqueueDue/EnqueueAll
+	// DryRun tests); the SQL shape is what this asserts.
+	_, _ = store.AutoPauseChronicFailures(context.Background(), 50)
+
+	joined := strings.Join(cap.statements(), "\n")
+	for _, want := range []string{
+		"UPDATE company_scan_settings",
+		"auto_paused = true",
+		"WHERE auto_paused = false AND consecutive_errors >=",
+		"RETURNING company_id",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected AutoPauseChronicFailures to contain %q; got:\n%s", want, joined)
+		}
+	}
+}
+
+// TestScanQueueStore_AutoPauseChronicFailures_DBError asserts a DB failure is
+// surfaced (not swallowed) — the sweep is not silently no-opped on error.
+func TestScanQueueStore_AutoPauseChronicFailures_DBError(t *testing.T) {
+	store := svc.NewQueueStore(newClosedScanQueueDB(t))
+	if _, err := store.AutoPauseChronicFailures(context.Background(), 50); err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+}
+
+// TestScanQueueStore_EnqueueDue_DBError asserts EnqueueDue surfaces a DB error
+// through the WithRetry wrapper (transient-retry wrapping never swallows a
+// non-transient closed-DB error).
+func TestScanQueueStore_EnqueueDue_DBError(t *testing.T) {
+	store := svc.NewQueueStore(newClosedScanQueueDB(t))
+	if _, err := store.EnqueueDue(context.Background(), 1440, "scheduler"); err == nil {
+		t.Fatal("expected error on closed DB")
+	}
+}

@@ -225,6 +225,36 @@ var SchedulerStuckRowsResetTotal = prometheus.NewCounter(prometheus.CounterOpts{
 	Help: "Total number of stuck queue rows recovered by the scheduler.",
 })
 
+// SchedulerStuckFetchReclaimedTotal counts job_pipeline_ledger rows deleted by
+// the scheduler's stranded-fetch reclaimer: rows stuck at reason='fetch' with
+// removed_at IS NULL older than the 1h threshold, which the crawler marked seen
+// but the filter never transitioned. Deleting them clears the dedup block so the
+// next crawl can re-drive the job. Only incremented when at least one row was
+// reclaimed. Alert on a sustained non-zero rate — it indicates jobs are being
+// stranded before the filter.
+var SchedulerStuckFetchReclaimedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "jobradar_scheduler_stuck_fetch_reclaimed_total",
+	Help: "Total stranded reason='fetch' ledger rows deleted by the scheduler reclaimer (dedup-block recovery).",
+})
+
+// SchedulerCompaniesAutoPausedTotal counts companies the scheduler auto-paused
+// (auto_paused=true) after their consecutive scan errors crossed the threshold.
+// Auto-pause removes chronically-dead boards from crawl rotation so they stop
+// monopolizing the crawler tier. Alert on a sustained non-zero rate.
+var SchedulerCompaniesAutoPausedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "jobradar_scheduler_companies_auto_paused_total",
+	Help: "Total companies auto-paused by the scheduler after crossing the consecutive-error threshold.",
+})
+
+// DBTransientRetriesTotal counts database operations retried by db.WithRetry
+// after a transient connection-drop error (e.g. Supabase pooler closing an idle
+// connection → unexpected EOF). A sustained rate indicates pool-timeout vs pooler
+// mismatch or network instability.
+var DBTransientRetriesTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "jobradar_db_transient_retries_total",
+	Help: "Total DB operations retried after a transient connection-drop error.",
+})
+
 // ── LLM Exhaustion + Sweeper ──────────────────────────────────────────────────
 
 // FilterLLMExhaustionTotal counts chunks routed via the LLM exhaustion path
@@ -279,6 +309,15 @@ var SweeperNATSUnavailableTotal = prometheus.NewCounter(prometheus.CounterOpts{
 	Help: "Total scheduler cycles where the sweeper publisher was unavailable (NATS down).",
 })
 
+// LLMCooldownMissTotal counts IsAvailable errors from the LLM cooldown store
+// (Redis unreachable). On each miss the slot is skipped (fail-closed), so LLM
+// throughput drops to zero during Redis outages. A sustained rate of this
+// counter signals a silent pipeline stall.
+var LLMCooldownMissTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "llm_cooldown_miss_total",
+	Help: "IsAvailable errors from the LLM cooldown store (slot skipped, fail-closed).",
+})
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 func init() {
@@ -317,6 +356,9 @@ func init() {
 		SchedulerErrorsTotal,
 		SchedulerStuckChecksTotal,
 		SchedulerStuckRowsResetTotal,
+		SchedulerStuckFetchReclaimedTotal,
+		SchedulerCompaniesAutoPausedTotal,
+		DBTransientRetriesTotal,
 		FilterLLMExhaustionTotal,
 		EnricherLLMExhaustionTotal,
 		SweeperRetriesPublishedTotal,
@@ -324,6 +366,7 @@ func init() {
 		SweeperRetriesFailedTotal,
 		SweeperStuckEscalatedTotal,
 		SweeperNATSUnavailableTotal,
+		LLMCooldownMissTotal,
 	)
 }
 
@@ -343,9 +386,11 @@ func Serve(addr string, readyFn func() error) {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, _ *http.Request) {
-		if err := readyFn(); err != nil {
-			http.Error(w, err.Error(), http.StatusServiceUnavailable)
-			return
+		if readyFn != nil {
+			if err := readyFn(); err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return
+			}
 		}
 		w.WriteHeader(http.StatusOK)
 	})

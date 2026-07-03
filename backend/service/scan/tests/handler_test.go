@@ -51,6 +51,14 @@ func (f *fakeScanService) EscalateStuckRetryJobs(_ context.Context) (int64, erro
 	return 0, f.err
 }
 
+func (f *fakeScanService) ReclaimStuckFetchRows(_ context.Context) (int64, error) {
+	return 0, f.err
+}
+
+func (f *fakeScanService) AutoPauseChronicFailures(_ context.Context) (int, error) {
+	return 0, f.err
+}
+
 // newScanTestRouter wires the full decorator chain under test using the given
 // service as the terminal, then mounts all routes onto a chi router.
 func newScanTestRouter(next svc.Service) *chi.Mux {

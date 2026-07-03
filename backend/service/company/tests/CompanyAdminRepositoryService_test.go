@@ -263,6 +263,7 @@ func TestAdminRepo_Create_FKViolationIsBadRequest(t *testing.T) {
 			adapter_type TEXT NOT NULL REFERENCES ats(name),
 			adapter_config TEXT, scan_interval_override INTEGER,
 			active INTEGER NOT NULL DEFAULT 1,
+			auto_paused INTEGER NOT NULL DEFAULT 0,
 			last_scan_at DATETIME, last_success_at DATETIME, last_error_at DATETIME,
 			last_error_message TEXT, consecutive_errors INTEGER NOT NULL DEFAULT 0,
 			created_at DATETIME, updated_at DATETIME,
@@ -431,6 +432,73 @@ func TestAdminRepo_UpdateScanSettings_Empty(t *testing.T) {
 	var se *apperr.ServiceError
 	if !errors.As(err, &se) || se.Code != "BAD_REQUEST" {
 		t.Errorf("expected BAD_REQUEST, got %T %v", err, err)
+	}
+}
+
+// TestAdminRepo_UpdateScanSettings_UnpauseResetsConsecutiveErrors asserts that
+// clearing auto_paused (admin unpause) also resets consecutive_errors to 0 so
+// the next scheduler sweep does not immediately re-pause the company (AC1.9).
+func TestAdminRepo_UpdateScanSettings_UnpauseResetsConsecutiveErrors(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	seedAdminCompany(t, db, "stripe", "Stripe")
+	// Seed a paused company with a high historical error count.
+	now := time.Now()
+	if err := db.Exec(`INSERT INTO company_scan_settings
+        (company_id, adapter_type, active, auto_paused, consecutive_errors, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"stripe", companycommon.AdapterGreenhouse, true, true, 137, now, now).Error; err != nil {
+		t.Fatalf("seed paused scan_settings: %v", err)
+	}
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	unpause := false
+	if err := repo.UpdateScanSettings(context.Background(), "stripe",
+		companydto.CompanyScanSettingsInput{AutoPaused: &unpause}); err != nil {
+		t.Fatalf("UpdateScanSettings: %v", err)
+	}
+
+	var got companymodel.CompanyScanSettings
+	if err := db.First(&got, "company_id = ?", "stripe").Error; err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if got.AutoPaused {
+		t.Error("auto_paused should be cleared")
+	}
+	if got.ConsecutiveErrors != 0 {
+		t.Errorf("consecutive_errors = %d, want 0 (must reset on unpause)", got.ConsecutiveErrors)
+	}
+}
+
+// TestAdminRepo_UpdateScanSettings_PauseKeepsConsecutiveErrors asserts that
+// setting auto_paused=true does NOT touch consecutive_errors — only clearing it
+// resets the counter.
+func TestAdminRepo_UpdateScanSettings_PauseKeepsConsecutiveErrors(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	seedAdminCompany(t, db, "stripe", "Stripe")
+	now := time.Now()
+	if err := db.Exec(`INSERT INTO company_scan_settings
+        (company_id, adapter_type, active, auto_paused, consecutive_errors, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"stripe", companycommon.AdapterGreenhouse, true, false, 5, now, now).Error; err != nil {
+		t.Fatalf("seed scan_settings: %v", err)
+	}
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	pause := true
+	if err := repo.UpdateScanSettings(context.Background(), "stripe",
+		companydto.CompanyScanSettingsInput{AutoPaused: &pause}); err != nil {
+		t.Fatalf("UpdateScanSettings: %v", err)
+	}
+
+	var got companymodel.CompanyScanSettings
+	if err := db.First(&got, "company_id = ?", "stripe").Error; err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if !got.AutoPaused {
+		t.Error("auto_paused should be set")
+	}
+	if got.ConsecutiveErrors != 5 {
+		t.Errorf("consecutive_errors = %d, want 5 (pause must not reset counter)", got.ConsecutiveErrors)
 	}
 }
 

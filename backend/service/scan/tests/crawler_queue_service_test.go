@@ -44,6 +44,9 @@ func (f *crawlerQueueFakeStore) ResetStuck(_ context.Context, d time.Duration) (
 	return f.resetStuckCount, f.err
 }
 func (f *crawlerQueueFakeStore) PurgeInactive(context.Context) (int, error) { return 0, nil }
+func (f *crawlerQueueFakeStore) AutoPauseChronicFailures(context.Context, int) ([]string, error) {
+	return nil, nil
+}
 func (f *crawlerQueueFakeStore) UpdateHeartbeat(_ context.Context, id string) error {
 	f.heartbeatIDArg = id
 	f.heartbeatCallCnt++

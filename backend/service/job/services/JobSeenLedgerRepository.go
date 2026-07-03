@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	commondb "github.com/trushilpatel/jobradar/common/db"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
@@ -132,24 +133,49 @@ func (s *seenLedgerStore) UpdateSeenReason(ctx context.Context, jobID string, re
 	return nil
 }
 
+// execBatchWithRetry runs run (an idempotent GORM UPDATE/Exec producing a
+// *gorm.DB result) inside db.WithRetry so a transient Supavisor connection drop
+// is retried, then evaluates the RowsAffected sentinel ONCE on the final
+// successful exec. run is retried only on the connection-drop class — the
+// ErrLedgerRowMissing decision is made outside the retried closure so a
+// short-count (a business outcome) is never retried. context is the message
+// prefix for the sentinel error. Returns ErrLedgerRowMissing when fewer than
+// expected rows matched, the raw error on a non-recoverable exec failure, or
+// nil on a full match.
+func execBatchWithRetry(ctx context.Context, sentinelContext string, expected int64, run func() *gorm.DB) error {
+	var rowsAffected int64
+	if err := commondb.WithRetry(ctx, func() error {
+		res := run()
+		if res.Error != nil {
+			return res.Error
+		}
+		rowsAffected = res.RowsAffected
+		return nil
+	}); err != nil {
+		return err
+	}
+	if rowsAffected < expected {
+		return domainerrs.ErrLedgerRowMissing.WithMessage(
+			fmt.Sprintf("%s: %d of %d ledger rows missing",
+				sentinelContext, expected-rowsAffected, expected))
+	}
+	return nil
+}
+
 func (s *seenLedgerStore) UpdateSeenReasonBatch(ctx context.Context, jobIDs []string, reason jobcommon.SeenReason) (err error) {
 	ctx, span := tracing.Start(ctx, "job.store.UpdateSeenReasonBatch")
 	defer tracing.End(span, &err)
 	if len(jobIDs) == 0 {
 		return nil
 	}
-	res := s.db.WithContext(ctx).Model(&jobmodel.JobSeenLedger{}).
-		Where("job_id IN ?", jobIDs).
-		Update("reason", string(reason))
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected < int64(len(jobIDs)) {
-		return domainerrs.ErrLedgerRowMissing.WithMessage(
-			fmt.Sprintf("UpdateSeenReasonBatch: %d of %d ledger rows missing (reason=%s)",
-				int64(len(jobIDs))-res.RowsAffected, len(jobIDs), reason))
-	}
-	return nil
+	// Idempotent: re-running the same reason UPDATE is a no-op after the first
+	// success (the target reason is already set). Retried only on a conn drop;
+	// the short-count sentinel is evaluated after success (never retried).
+	return execBatchWithRetry(ctx, "UpdateSeenReasonBatch", int64(len(jobIDs)), func() *gorm.DB {
+		return s.db.WithContext(ctx).Model(&jobmodel.JobSeenLedger{}).
+			Where("job_id IN ?", jobIDs).
+			Update("reason", string(reason))
+	})
 }
 
 func (s *seenLedgerStore) UpdateRetryBatch(ctx context.Context, entries []RetryLedgerEntry) (err error) {
@@ -173,16 +199,12 @@ func (s *seenLedgerStore) UpdateRetryBatch(ctx context.Context, entries []RetryL
 		"AS v(job_id, retry_count, next_attempt_at) " +
 		"WHERE l.job_id = v.job_id"
 
-	res := s.db.WithContext(ctx).Exec(query, args...)
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected < int64(len(entries)) {
-		return domainerrs.ErrLedgerRowMissing.WithMessage(
-			fmt.Sprintf("UpdateRetryBatch: %d of %d ledger rows missing",
-				int64(len(entries))-res.RowsAffected, len(entries)))
-	}
-	return nil
+	// Idempotent: the VALUES-join UPDATE writes the same retry_count /
+	// next_attempt_at each run. Retry only the raw Exec (conn-drop surface);
+	// evaluate the row-count sentinel once, after success.
+	return execBatchWithRetry(ctx, "UpdateRetryBatch", int64(len(entries)), func() *gorm.DB {
+		return s.db.WithContext(ctx).Exec(query, args...)
+	})
 }
 
 func (s *seenLedgerStore) UpdateRetryBatchWithPayload(ctx context.Context, entries []RetryLedgerEntryWithPayload) (err error) {
@@ -209,16 +231,12 @@ func (s *seenLedgerStore) UpdateRetryBatchWithPayload(ctx context.Context, entri
 		"AS v(job_id, retry_count, next_attempt_at, payload, adapter) " +
 		"WHERE l.job_id = v.job_id"
 
-	res := s.db.WithContext(ctx).Exec(query, args...)
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected < int64(len(entries)) {
-		return domainerrs.ErrLedgerRowMissing.WithMessage(
-			fmt.Sprintf("UpdateRetryBatchWithPayload: %d of %d ledger rows missing",
-				int64(len(entries))-res.RowsAffected, len(entries)))
-	}
-	return nil
+	// Idempotent: the VALUES-join UPDATE writes the same retry_count /
+	// next_attempt_at / payload / adapter each run. Retry only the raw Exec
+	// (conn-drop surface); evaluate the row-count sentinel once, after success.
+	return execBatchWithRetry(ctx, "UpdateRetryBatchWithPayload", int64(len(entries)), func() *gorm.DB {
+		return s.db.WithContext(ctx).Exec(query, args...)
+	})
 }
 
 func (s *seenLedgerStore) FetchDueRetryJobs(ctx context.Context, limit int) (_ []RetryJobRecord, err error) {
@@ -315,6 +333,36 @@ func (s *seenLedgerStore) EscalateStuckRetryJobs(ctx context.Context, stuckThres
 		)
 	`, string(jobcommon.SeenReasonError), string(jobcommon.SeenReasonRetry),
 		int64(stuckThreshold.Seconds()), limit)
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
+}
+
+// ReclaimStuckFetchRows DELETEs up to limit ledger rows that are stranded at
+// reason='fetch' with removed_at IS NULL and first_seen_at older than now() -
+// threshold. These are jobs the crawler marked seen before publishing but the
+// filter never transitioned to a terminal verdict (e.g. a NATS message lost
+// before consumption). Because HasSeenBatch ignores reason and removed_at, the
+// only way to clear the dedup block is to remove the row — escalating to
+// reason='error' would keep the job deduped forever. Once deleted, the next
+// scheduled crawl re-discovers the still-live job and re-drives it.
+//
+// This is a count-based sweep, not a targeted write: 0 deleted rows is a valid
+// steady-state outcome, so it returns RowsAffected and does NOT return
+// ErrLedgerRowMissing (unlike the targeted UPDATE methods above).
+func (s *seenLedgerStore) ReclaimStuckFetchRows(ctx context.Context, threshold time.Duration, limit int) (_ int64, err error) {
+	ctx, span := tracing.Start(ctx, "job.store.ReclaimStuckFetchRows")
+	defer tracing.End(span, &err)
+	res := s.db.WithContext(ctx).Exec(`
+		DELETE FROM job_pipeline_ledger
+		WHERE job_id IN (
+			SELECT job_id FROM job_pipeline_ledger
+			WHERE reason = ? AND removed_at IS NULL
+			  AND first_seen_at < NOW() - (? * INTERVAL '1 second')
+			LIMIT ?
+		)
+	`, string(jobcommon.SeenReasonFetch), int64(threshold.Seconds()), limit)
 	if res.Error != nil {
 		return 0, res.Error
 	}

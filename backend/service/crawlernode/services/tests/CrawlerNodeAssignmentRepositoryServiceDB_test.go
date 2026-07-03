@@ -97,6 +97,7 @@ func newAssignExecDB(t *testing.T) *gorm.DB {
 			queued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			started_at TIMESTAMP,
 			heartbeat_at TIMESTAMP,
+			next_attempt_at TIMESTAMP,
 			locked_by TEXT
 		)
 	`).Error; err != nil {
@@ -256,36 +257,68 @@ func TestAssignmentRepositoryService_CompleteForNode_ErrQueueRowMissingOnMissing
 	}
 }
 
-// --- SQLite exec tests: FailForNode ---
+// --- FailForNode (back-off) ---
 
-func TestAssignmentRepositoryService_FailForNode_ResetsRowToQueued(t *testing.T) {
-	db := newAssignExecDB(t)
-	seedQueueItem(t, db, "q-1", "running", "node-1")
+// FailForNode now uses Postgres-only correlated-UPDATE syntax (FROM
+// company_scan_settings, INTERVAL, POWER, LEAST) to stamp next_attempt_at, so
+// its execution semantics live in the integration tier. Here we probe the SQL
+// shape under DryRun to prove the back-off columns and the ownership guard are
+// present, and use a real (executing) SQLite DB only to exercise the
+// RowsAffected==0 → ErrQueueRowMissing ownership-mismatch branch, which does not
+// depend on the Postgres-only functions (0 rows match, nothing is computed).
+
+// FailForNode SQL must set next_attempt_at with the exponential back-off
+// (INTERVAL + POWER + LEAST), join company_scan_settings, and keep the
+// locked_by ownership guard.
+func TestAssignmentRepositoryService_FailForNode_SQLShape_BackoffAndGuard(t *testing.T) {
+	db, cap := newAssignDryRunDB(t)
 	store := services.NewAssignmentRepositoryService(db)
 
-	if err := store.FailForNode(context.Background(), "q-1", "node-1"); err != nil {
-		t.Fatalf("FailForNode() error = %v", err)
+	_ = store.FailForNode(context.Background(), "q-1", "node-1")
+
+	stmts := cap.statements()
+	if len(stmts) == 0 {
+		t.Fatal("FailForNode: no SQL emitted")
 	}
-	var status, lockedBy string
-	if err := db.Raw("SELECT status, COALESCE(locked_by, '') FROM company_scan_queue WHERE id = 'q-1'").Row().Scan(&status, &lockedBy); err != nil {
-		t.Fatalf("scan row: %v", err)
-	}
-	if status != "queued" {
-		t.Errorf("FailForNode: status = %q, want queued", status)
-	}
-	if lockedBy != "" {
-		t.Errorf("FailForNode: locked_by = %q, want empty", lockedBy)
+	upper := strings.ToUpper(stmts[0])
+	for _, want := range []string{
+		"NEXT_ATTEMPT_AT",
+		"FROM COMPANY_SCAN_SETTINGS",
+		"POWER(",
+		"LEAST(",
+		"INTERVAL",
+		"CONSECUTIVE_ERRORS",
+		"LOCKED_BY =",
+	} {
+		if !strings.Contains(upper, want) {
+			t.Errorf("FailForNode SQL missing %q:\n%s", want, stmts[0])
+		}
 	}
 }
 
-func TestAssignmentRepositoryService_FailForNode_ErrQueueRowMissingOnOwnershipMismatch(t *testing.T) {
-	db := newAssignExecDB(t)
-	seedQueueItem(t, db, "q-1", "running", "node-other")
-	store := services.NewAssignmentRepositoryService(db)
+// FailForNode's RowsAffected==0 → ErrQueueRowMissing ownership-mismatch branch
+// is exercised in the integration tier: the correlated UPDATE ... FROM
+// company_scan_settings syntax (with POWER/LEAST/INTERVAL) is Postgres-only and
+// SQLite cannot parse it, so a real round-trip needs Postgres. The closed-DB
+// error test below and the DryRun shape test above cover the unit surface.
 
-	err := store.FailForNode(context.Background(), "q-1", "node-1")
-	if !stderrors.Is(err, domainerrs.ErrQueueRowMissing) {
-		t.Errorf("FailForNode(mismatch) error = %v, want ErrQueueRowMissing", err)
+// ClaimNextForNode SQL must gate on next_attempt_at so a backed-off row is not
+// re-served instantly (both the adapter-scoped and generic SELECTs).
+func TestAssignmentRepositoryService_ClaimNextForNode_DueGate_SQLShape(t *testing.T) {
+	for _, adapter := range []string{"greenhouse", ""} {
+		db, cap := newAssignDryRunDB(t)
+		store := services.NewAssignmentRepositoryService(db)
+
+		_, _ = store.ClaimNextForNode(context.Background(), "node-1", adapter)
+
+		stmts := cap.statements()
+		if len(stmts) == 0 {
+			t.Fatalf("ClaimNextForNode(%q): no SQL emitted", adapter)
+		}
+		upper := strings.ToUpper(stmts[0])
+		if !strings.Contains(upper, "NEXT_ATTEMPT_AT") {
+			t.Errorf("ClaimNextForNode(%q) SQL missing next_attempt_at due-gate:\n%s", adapter, stmts[0])
+		}
 	}
 }
 

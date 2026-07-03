@@ -16,6 +16,7 @@ type Config struct {
 	HTTPTimeoutSeconds    int
 	RetryMaxAttempts      int
 	LogLevel              string
+	MetricsAddr           string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -29,6 +30,7 @@ func Load() *Config {
 		HTTPTimeoutSeconds:    envInt("HTTP_TIMEOUT_SECONDS", 15),
 		RetryMaxAttempts:      envInt("RETRY_MAX_ATTEMPTS", 3),
 		LogLevel:              envStr("LOG_LEVEL", "info"),
+		MetricsAddr:           envStr("METRICS_ADDR", ":9102"),
 	}
 }
 

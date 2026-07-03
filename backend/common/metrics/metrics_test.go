@@ -137,6 +137,7 @@ func TestCountersAndHistograms_Defined(t *testing.T) {
 		metrics.SchedulerRunDuration,
 		metrics.SchedulerErrorsTotal,
 		metrics.SchedulerStuckChecksTotal,
+		metrics.LLMCooldownMissTotal,
 	}
 	for i, c := range cases {
 		if c == nil {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/trushilpatel/jobradar/apps/crawler-v2/adapters"
 	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
 )
 
@@ -23,6 +24,8 @@ func main() {
 
 	shutdown := tracing.Init("jobradar-crawler-node", "", log)
 	defer shutdown()
+
+	go metrics.Serve(cfg.MetricsAddr, nil)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

@@ -78,6 +78,9 @@ func (f *fakeSweeperLedger) GetActiveJobIDsByCompany(_ context.Context, _ string
 func (f *fakeSweeperLedger) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
 	return 0, nil
 }
+func (f *fakeSweeperLedger) ReclaimStuckFetchRows(_ context.Context, _ time.Duration, _ int) (int64, error) {
+	return 0, nil
+}
 
 var _ jobsvc.SeenLedgerStore = (*fakeSweeperLedger)(nil)
 
@@ -150,7 +153,10 @@ func (q *sweeperFakeQueue) Remove(_ context.Context, _ string) error   { return 
 func (q *sweeperFakeQueue) ResetStuck(_ context.Context, _ time.Duration) (int, error) {
 	return 0, nil
 }
-func (q *sweeperFakeQueue) PurgeInactive(_ context.Context) (int, error)      { return 0, nil }
+func (q *sweeperFakeQueue) PurgeInactive(_ context.Context) (int, error) { return 0, nil }
+func (q *sweeperFakeQueue) AutoPauseChronicFailures(_ context.Context, _ int) ([]string, error) {
+	return nil, nil
+}
 func (q *sweeperFakeQueue) UpdateHeartbeat(_ context.Context, _ string) error { return nil }
 func (q *sweeperFakeQueue) ListQueue(_ context.Context, _ scandto.QueueFilter) ([]scandto.ScanQueueItem, error) {
 	return nil, nil
@@ -701,6 +707,9 @@ func (l *conditionalSweeperLedger) GetActiveJobIDsByCompany(_ context.Context, _
 func (l *conditionalSweeperLedger) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
 	return 0, nil
 }
+func (l *conditionalSweeperLedger) ReclaimStuckFetchRows(_ context.Context, _ time.Duration, _ int) (int64, error) {
+	return 0, nil
+}
 
 var _ jobsvc.SeenLedgerStore = (*conditionalSweeperLedger)(nil)
 
@@ -796,17 +805,132 @@ func TestEscalateStuckRetryJobs_NoOp_WhenLedgerNil(t *testing.T) {
 	}
 }
 
-// trackingSweeperLedger extends fakeSweeperLedger with EscalateStuckRetryJobs tracking.
+// trackingSweeperLedger extends fakeSweeperLedger with EscalateStuckRetryJobs
+// and ReclaimStuckFetchRows tracking.
 type trackingSweeperLedger struct {
 	fakeSweeperLedger
 	escalateStuckCalled bool
 	escalateStuckCount  int64
 	escalateStuckErr    error
+
+	reclaimFetchCalled    bool
+	reclaimFetchThreshold time.Duration
+	reclaimFetchLimit     int
+	reclaimFetchCount     int64
+	reclaimFetchErr       error
 }
 
 func (l *trackingSweeperLedger) EscalateStuckRetryJobs(_ context.Context, _ time.Duration, _ int) (int64, error) {
 	l.escalateStuckCalled = true
 	return l.escalateStuckCount, l.escalateStuckErr
+}
+
+func (l *trackingSweeperLedger) ReclaimStuckFetchRows(_ context.Context, threshold time.Duration, limit int) (int64, error) {
+	l.reclaimFetchCalled = true
+	l.reclaimFetchThreshold = threshold
+	l.reclaimFetchLimit = limit
+	return l.reclaimFetchCount, l.reclaimFetchErr
+}
+
+// ── ReclaimStuckFetchRows service tests ──────────────────────────────────────
+
+// TestReclaimStuckFetchRows_CallsLedger asserts the scheduler service delegates
+// to the ledger store with the module-const threshold (1h) and limit (100), and
+// returns the count.
+func TestReclaimStuckFetchRows_CallsLedger(t *testing.T) {
+	ledger := &trackingSweeperLedger{}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	n, err := s.ReclaimStuckFetchRows(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 reclaimed, got %d", n)
+	}
+	if !ledger.reclaimFetchCalled {
+		t.Error("expected ReclaimStuckFetchRows to be called on ledger")
+	}
+	if ledger.reclaimFetchThreshold != time.Hour {
+		t.Errorf("threshold = %v, want 1h", ledger.reclaimFetchThreshold)
+	}
+	if ledger.reclaimFetchLimit != 100 {
+		t.Errorf("limit = %d, want 100", ledger.reclaimFetchLimit)
+	}
+}
+
+// TestReclaimStuckFetchRows_ReturnsCount asserts the count from the ledger is
+// propagated so scheduler.go can log and metric it.
+func TestReclaimStuckFetchRows_ReturnsCount(t *testing.T) {
+	ledger := &trackingSweeperLedger{reclaimFetchCount: 5}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	n, err := s.ReclaimStuckFetchRows(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 5 {
+		t.Errorf("expected 5 reclaimed, got %d", n)
+	}
+}
+
+// TestReclaimStuckFetchRows_LedgerError_Propagates asserts a ledger error is
+// wrapped and returned with a 0 count.
+func TestReclaimStuckFetchRows_LedgerError_Propagates(t *testing.T) {
+	ledger := &trackingSweeperLedger{reclaimFetchErr: errors.New("db down")}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	n, err := s.ReclaimStuckFetchRows(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if n != 0 {
+		t.Errorf("expected 0 on error, got %d", n)
+	}
+}
+
+// TestReclaimStuckFetchRows_MetricIncremented asserts
+// SchedulerStuckFetchReclaimedTotal is incremented by n when rows are reclaimed.
+func TestReclaimStuckFetchRows_MetricIncremented(t *testing.T) {
+	before := testutil.ToFloat64(metrics.SchedulerStuckFetchReclaimedTotal)
+
+	ledger := &trackingSweeperLedger{reclaimFetchCount: 4}
+	pub := &fakeSweeperPublisher{}
+	s := makeSweeperService(&sweeperFakeQueue{}, ledger, pub, 10)
+
+	n, err := s.ReclaimStuckFetchRows(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 4 {
+		t.Errorf("expected 4, got %d", n)
+	}
+
+	after := testutil.ToFloat64(metrics.SchedulerStuckFetchReclaimedTotal)
+	if after-before < 4 {
+		t.Errorf("SchedulerStuckFetchReclaimedTotal delta = %.0f, want ≥4", after-before)
+	}
+}
+
+// TestReclaimStuckFetchRows_NoOp_WhenLedgerNil asserts that with no ledger
+// configured, ReclaimStuckFetchRows is a no-op returning 0, nil.
+func TestReclaimStuckFetchRows_NoOp_WhenLedgerNil(t *testing.T) {
+	s := svc.NewSchedulerServiceWithSweeper(&sweeperFakeQueue{}, svc.SchedulerServiceOptions{
+		Ledger:    nil,
+		Publisher: &fakeSweeperPublisher{},
+		Log:       logger.NewNoop(),
+	})
+
+	n, err := s.ReclaimStuckFetchRows(context.Background())
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0, got %d", n)
+	}
 }
 
 // ── RC-3: FetchDueRetryJobsWithPayload ────────────────────────────────────────

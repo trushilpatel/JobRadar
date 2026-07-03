@@ -6,8 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	llmerr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/logger"
+	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/service/llm/dto"
 	"github.com/trushilpatel/jobradar/service/llm/services"
 	"github.com/trushilpatel/jobradar/service/llm/store"
@@ -393,5 +395,44 @@ func TestRouter_NoLoggerDoesNotPanicOnCooldownErrors(t *testing.T) {
 	r := services.NewLLMRouterService([]services.RouterSlot{{SlotID: "s1", Model: "m1", Scorer: ok}}, cd)
 	if _, err := r.ScoreBatch(context.Background(), nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestScoreBatch_CooldownMissIncrementsCounter verifies that a cooldown-store
+// IsAvailable error increments LLMCooldownMissTotal by exactly 1. The slot is
+// skipped (fail-closed, available=false) so the overall call returns
+// LLMAllExhaustedError — the error return is intentionally ignored here because
+// the assertion under test is the counter.
+func TestScoreBatch_CooldownMissIncrementsCounter(t *testing.T) {
+	before := testutil.ToFloat64(metrics.LLMCooldownMissTotal)
+
+	cd := errCooldown{available: false, availableErr: errors.New("redis: i/o timeout")}
+	r := services.NewLLMRouterService([]services.RouterSlot{
+		{SlotID: "slot1", Model: "gemini", Scorer: &fakeScorer{}},
+	}, cd)
+
+	_, _ = r.ScoreBatch(context.Background(), nil)
+
+	after := testutil.ToFloat64(metrics.LLMCooldownMissTotal)
+	if after-before != 1 {
+		t.Errorf("LLMCooldownMissTotal: want +1, got +%g", after-before)
+	}
+}
+
+// TestEnrichBatch_CooldownMissIncrementsCounter verifies the same counter
+// increments on the EnrichBatch code path when IsAvailable returns an error.
+func TestEnrichBatch_CooldownMissIncrementsCounter(t *testing.T) {
+	before := testutil.ToFloat64(metrics.LLMCooldownMissTotal)
+
+	cd := errCooldown{available: false, availableErr: errors.New("redis: connection refused")}
+	r := services.NewLLMRouterService([]services.RouterSlot{
+		{SlotID: "slot1", Model: "gemini", Scorer: &fakeScorer{}},
+	}, cd)
+
+	_, _ = r.EnrichBatch(context.Background(), []dto.JobPostEnrichInput{{ID: "j1", RawText: "x"}})
+
+	after := testutil.ToFloat64(metrics.LLMCooldownMissTotal)
+	if after-before != 1 {
+		t.Errorf("LLMCooldownMissTotal: want +1, got +%g", after-before)
 	}
 }

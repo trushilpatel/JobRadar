@@ -296,3 +296,77 @@ func TestRunCycle_EscalateStuckRetryJobs_ErrorContinues(t *testing.T) {
 		t.Errorf("EnqueueDue calls = %d, want 1 (must run even after escalateStuck error)", svc.enqueueCalls.Load())
 	}
 }
+
+// TestRunCycle_ReclaimStuckFetchRows_CalledEachCycle asserts that
+// ReclaimStuckFetchRows is invoked in every runCycle pass.
+func TestRunCycle_ReclaimStuckFetchRows_CalledEachCycle(t *testing.T) {
+	svc := &fakeSchedulerService{}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+	if svc.reclaimStuckCalls.Load() != 1 {
+		t.Errorf("ReclaimStuckFetchRows calls = %d, want 1", svc.reclaimStuckCalls.Load())
+	}
+}
+
+// TestRunCycle_ReclaimStuckFetchRows_ErrorContinues asserts that an error from
+// ReclaimStuckFetchRows does not abort subsequent steps in runCycle.
+func TestRunCycle_ReclaimStuckFetchRows_ErrorContinues(t *testing.T) {
+	svc := &fakeSchedulerService{
+		reclaimStuckErr: errors.New("db down"),
+		enqueueCount:    1,
+	}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+
+	if svc.reclaimStuckCalls.Load() != 1 {
+		t.Errorf("ReclaimStuckFetchRows calls = %d, want 1", svc.reclaimStuckCalls.Load())
+	}
+	if svc.enqueueCalls.Load() != 1 {
+		t.Errorf("EnqueueDue calls = %d, want 1 (must run even after reclaimStuck error)", svc.enqueueCalls.Load())
+	}
+}
+
+// TestRunCycle_ReclaimStuckFetchRows_LogsOnReclaim exercises the n>0 INFO-log
+// branch of the reclaim step.
+func TestRunCycle_ReclaimStuckFetchRows_LogsOnReclaim(t *testing.T) {
+	svc := &fakeSchedulerService{reclaimStuckN: 7}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+	if svc.reclaimStuckCalls.Load() != 1 {
+		t.Errorf("ReclaimStuckFetchRows calls = %d, want 1", svc.reclaimStuckCalls.Load())
+	}
+}
+
+// TestRunCycle_AutoPause_CalledEachCycle asserts the auto-pause sweep runs in
+// every runCycle pass.
+func TestRunCycle_AutoPause_CalledEachCycle(t *testing.T) {
+	svc := &fakeSchedulerService{}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+	if svc.autoPauseCalls.Load() != 1 {
+		t.Errorf("AutoPauseChronicFailures calls = %d, want 1", svc.autoPauseCalls.Load())
+	}
+}
+
+// TestRunCycle_AutoPause_ErrorContinues asserts an auto-pause error does not
+// abort subsequent steps (EnqueueDue still runs).
+func TestRunCycle_AutoPause_ErrorContinues(t *testing.T) {
+	svc := &fakeSchedulerService{
+		autoPauseErr: errors.New("db down"),
+		enqueueCount: 1,
+	}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+
+	if svc.autoPauseCalls.Load() != 1 {
+		t.Errorf("AutoPauseChronicFailures calls = %d, want 1", svc.autoPauseCalls.Load())
+	}
+	if svc.enqueueCalls.Load() != 1 {
+		t.Errorf("EnqueueDue calls = %d, want 1 (must run even after auto-pause error)", svc.enqueueCalls.Load())
+	}
+}
+
+// TestRunCycle_AutoPause_LogsOnPause exercises the n>0 INFO-log branch of the
+// auto-pause step.
+func TestRunCycle_AutoPause_LogsOnPause(t *testing.T) {
+	svc := &fakeSchedulerService{autoPauseN: 4}
+	runCycle(context.Background(), logger.NewNoop(), svc, 1440, 30*time.Minute)
+	if svc.autoPauseCalls.Load() != 1 {
+		t.Errorf("AutoPauseChronicFailures calls = %d, want 1", svc.autoPauseCalls.Load())
+	}
+}
