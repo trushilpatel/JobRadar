@@ -1,4 +1,4 @@
-name: Deploy (rollback)
+name: Rollback
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ on:
 
 jobs:
   rollback-infra:
-    name: Rollback INFRA node
+    name: Rollback / INFRA node
     if: inputs.node == 'infra' || inputs.node == 'both'
     runs-on: ubuntu-latest
     steps:
@@ -55,7 +55,7 @@ jobs:
           fi
 
   rollback-app:
-    name: Rollback APP node
+    name: Rollback / APP node
     if: inputs.node == 'app' || inputs.node == 'both'
     runs-on: ubuntu-latest
     steps:

@@ -195,7 +195,7 @@ jobs:
 
   # ── 4. Build images (parallel, only for changed services) ─────────────────
   build-api:
-    name: Build api image
+    name: Build / api
     needs: [detect-changes, compile-go]
     if: needs.detect-changes.outputs.api == 'true'
     runs-on: ubuntu-latest
@@ -234,7 +234,7 @@ jobs:
           cache-to: type=gha,scope=api-ci,mode=max
 
   build-scheduler:
-    name: Build scheduler image
+    name: Build / scheduler
     needs: [detect-changes, compile-go]
     if: needs.detect-changes.outputs.scheduler == 'true'
     runs-on: ubuntu-latest
@@ -272,7 +272,7 @@ jobs:
           cache-to: type=gha,scope=scheduler-ci,mode=max
 
   build-filter:
-    name: Build filter image
+    name: Build / filter
     needs: [detect-changes, compile-go]
     if: needs.detect-changes.outputs.filter == 'true'
     runs-on: ubuntu-latest
@@ -310,7 +310,7 @@ jobs:
           cache-to: type=gha,scope=filter-ci,mode=max
 
   build-enricher:
-    name: Build enricher image
+    name: Build / enricher
     needs: [detect-changes, compile-go]
     if: needs.detect-changes.outputs.enricher == 'true'
     runs-on: ubuntu-latest
@@ -348,7 +348,7 @@ jobs:
           cache-to: type=gha,scope=enricher-ci,mode=max
 
   build-orchestrator:
-    name: Build orchestrator image
+    name: Build / orchestrator
     needs: [detect-changes, compile-go]
     if: needs.detect-changes.outputs.orchestrator == 'true'
     runs-on: ubuntu-latest
@@ -386,7 +386,7 @@ jobs:
           cache-to: type=gha,scope=orchestrator-ci,mode=max
 
   build-crawler-node:
-    name: Build crawler-node image
+    name: Build / crawler-node
     needs: [detect-changes, compile-go]
     if: needs.detect-changes.outputs.crawler_node == 'true'
     runs-on: ubuntu-latest
@@ -424,7 +424,7 @@ jobs:
           cache-to: type=gha,scope=crawler-node-ci,mode=max
 
   build-console:
-    name: Build console image
+    name: Build / console
     needs: [detect-changes, build-frontend-assets]
     if: needs.detect-changes.outputs.console == 'true'
     runs-on: ubuntu-latest
@@ -464,7 +464,7 @@ jobs:
 
   # ── 5. Deploy App node (Console + API) ───────────────────────────────────
   deploy-app:
-    name: Deploy App (Console + API)
+    name: Deploy / App node
     needs:
       - detect-changes
       - build-api
@@ -638,7 +638,7 @@ jobs:
 
   # ── 6. Deploy Pipeline node (Job Data Pipeline) ───────────────────────────
   deploy-pipeline:
-    name: Deploy Pipeline (Job Data Pipeline)
+    name: Deploy / Pipeline node
     needs:
       - detect-changes
       - build-scheduler
