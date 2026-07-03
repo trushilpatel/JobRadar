@@ -41,6 +41,10 @@ spec:
                 name: jobradar-crawler-node-config
             - secretRef:
                 name: jobradar-crawler-node-secret
+          ports:
+            - name: metrics
+              containerPort: 9102
+              protocol: TCP
           resources:
             requests:
               memory: "64Mi"
@@ -48,6 +52,22 @@ spec:
             limits:
               memory: "96Mi"
               cpu: "300m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9102
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9102
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           securityContext:
             {{- include "jobradar.workerSecurityContext" . | nindent 12 }}
       securityContext:

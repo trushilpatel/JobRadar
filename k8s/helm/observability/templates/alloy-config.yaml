@@ -17,13 +17,37 @@ data:
     prometheus.scrape "jobradar" {
       targets = [
         { __address__ = "jobradar-api.{{ .Values.namespace }}.svc.cluster.local:9100",       job = "jobradar_api" },
-        { __address__ = "jobradar-scheduler.{{ .Values.namespace }}.svc.cluster.local:9103", job = "jobradar_scheduler" },
+        { __address__ = "jobradar-scheduler.{{ .Values.namespace }}.svc.cluster.local:9101", job = "jobradar_scheduler" },
         { __address__ = "jobradar-orchestrator.{{ .Values.namespace }}.svc.cluster.local:9104", job = "jobradar_orchestrator" },
         { __address__ = "jobradar-filter.{{ .Values.namespace }}.svc.cluster.local:9101",    job = "jobradar_filter" },
         { __address__ = "jobradar-enricher.{{ .Values.namespace }}.svc.cluster.local:9101",  job = "jobradar_enricher" },
       ]
       scrape_interval = "60s"
       forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+    }
+
+    discovery.kubernetes "crawler_node_pods" {
+      role = "pod"
+      namespaces {
+        names = ["{{ .Values.namespace }}"]
+      }
+      selectors {
+        role  = "pod"
+        label = "component=crawler-node"
+      }
+    }
+
+    prometheus.scrape "crawler_node" {
+      targets    = discovery.kubernetes.crawler_node_pods.targets
+      forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+      job_name   = "jobradar_crawler_node"
+
+      relabeling_rules {
+        replacement   = "${1}:9102"
+        source_labels = ["__meta_kubernetes_pod_ip"]
+        target_label  = "__address__"
+        regex         = "(.+)"
+      }
     }
 
     prometheus.remote_write "grafana_cloud" {
