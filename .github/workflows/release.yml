@@ -31,8 +31,8 @@ jobs:
       crawler_node: ${{ steps.filter.outputs.crawler_node }}
       console:      ${{ steps.filter.outputs.console }}
       any_go:       ${{ steps.flags.outputs.any_go }}
-      infra:        ${{ steps.flags.outputs.infra }}
       app:          ${{ steps.flags.outputs.app }}
+      pipeline:     ${{ steps.flags.outputs.pipeline }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -111,9 +111,9 @@ jobs:
 
           if [[ "${{ steps.filter.outputs.api }}"    == "true" || \
                 "${{ steps.filter.outputs.console }}" == "true" ]]; then
-            echo "infra=true" >> $GITHUB_OUTPUT
+            echo "app=true" >> $GITHUB_OUTPUT
           else
-            echo "infra=false" >> $GITHUB_OUTPUT
+            echo "app=false" >> $GITHUB_OUTPUT
           fi
 
           if [[ "${{ steps.filter.outputs.scheduler }}"    == "true" || \
@@ -121,9 +121,9 @@ jobs:
                 "${{ steps.filter.outputs.enricher }}"     == "true" || \
                 "${{ steps.filter.outputs.orchestrator }}" == "true" || \
                 "${{ steps.filter.outputs.crawler_node }}" == "true" ]]; then
-            echo "app=true" >> $GITHUB_OUTPUT
+            echo "pipeline=true" >> $GITHUB_OUTPUT
           else
-            echo "app=false" >> $GITHUB_OUTPUT
+            echo "pipeline=false" >> $GITHUB_OUTPUT
           fi
 
   # ── 2. Compile all changed Go binaries in one job (shared module cache) ───
@@ -462,16 +462,16 @@ jobs:
           cache-from: type=gha,scope=console-ci
           cache-to: type=gha,scope=console-ci,mode=max
 
-  # ── 5. Deploy INFRA node (API + Console) ─────────────────────────────────
-  deploy-infra:
-    name: Deploy INFRA node
+  # ── 5. Deploy App node (Console + API) ───────────────────────────────────
+  deploy-app:
+    name: Deploy App (Console + API)
     needs:
       - detect-changes
       - build-api
       - build-console
     if: |
       always() &&
-      needs.detect-changes.outputs.infra == 'true' &&
+      needs.detect-changes.outputs.app == 'true' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
@@ -487,7 +487,7 @@ jobs:
           printf 'Host *\n  ServerAliveInterval 30\n  ServerAliveCountMax 20\n' >> ~/.ssh/config
           chmod 600 ~/.ssh/config
 
-      - name: Resolve image tags for INFRA
+      - name: Resolve image tags for App node
         id: tags
         env:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
@@ -506,10 +506,25 @@ jobs:
           if [[ "${{ needs.build-console.result }}" == "success" ]]; then
             echo "console=$SHORT_SHA" >> $GITHUB_OUTPUT
           else
-            echo "console=$(echo "$CURRENT" | jq -r '.images.console.tag // "latest"')" >> $GITHUB_OUTPUT
+            # Console not rebuilt this run — read the tag currently pinned in helm
+            # values so Helm writes the same SHA again (idempotent) and rollback
+            # always steps to a pinned SHA, never to the floating "latest" tag.
+            CONSOLE_TAG=$(echo "$CURRENT" | jq -r '.images.console.tag // empty')
+            if [[ -z "$CONSOLE_TAG" ]]; then
+              # First ever deploy: read the tag directly from the running deployment.
+              CONSOLE_TAG=$(ssh -i ~/.ssh/id_ed25519 "$USER@$HOST" \
+                "KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get deployment jobradar-console \
+                  -n jobradar-local -o jsonpath='{.spec.template.spec.containers[0].image}' \
+                  2>/dev/null | sed 's/.*://'" || echo "")
+            fi
+            if [[ -z "$CONSOLE_TAG" ]]; then
+              echo "::error::Cannot resolve console image tag — no helm value and no running deployment. Deploy the console at least once first."
+              exit 1
+            fi
+            echo "console=$CONSOLE_TAG" >> $GITHUB_OUTPUT
           fi
 
-      - name: Copy chart to INFRA
+      - name: Copy chart to App node
         env:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
@@ -518,7 +533,7 @@ jobs:
           scp -i ~/.ssh/id_ed25519 -r k8s/helm/jobradar "$USER@$HOST:/tmp/jobradar-chart"
           scp -i ~/.ssh/id_ed25519 k8s/helm/jobradar/values.prod-infra.yaml "$USER@$HOST:/tmp/"
 
-      - name: Wait for k3s API (INFRA)
+      - name: Wait for k3s API (App node)
         env:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
@@ -527,7 +542,7 @@ jobs:
             "KUBECONFIG=/etc/rancher/k3s/k3s.yaml timeout 300 bash -c \
               'until kubectl get nodes 2>/dev/null | grep -q Ready; do sleep 5; done'"
 
-      - name: Refresh GHCR pull secret (INFRA)
+      - name: Refresh GHCR pull secret (App node)
         env:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
@@ -541,7 +556,7 @@ jobs:
                --namespace jobradar-local \
                --dry-run=client -o yaml | KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply --validate=false -f -"
 
-      - name: Helm upgrade INFRA
+      - name: Helm upgrade App node
         env:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
@@ -569,14 +584,14 @@ jobs:
             kubectl get events -n jobradar-local --field-selector type=Warning \
               --sort-by=.lastTimestamp 2>/dev/null | tail -20 || true
           }
-          # The 1-OCPU INFRA node's k3s apiserver can time out a single create
+          # The 1-OCPU App node's k3s apiserver can time out a single create
           # request under rollout load ("context deadline exceeded"). Retry — a
           # failed upgrade can leave the release in pending-*, which blocks the
           # next attempt, so clear that with a rollback before retrying.
           for attempt in 1 2 3; do
-            echo "Helm upgrade INFRA — attempt ${attempt}/3"
+            echo "Helm upgrade App node — attempt ${attempt}/3"
             if run_upgrade; then
-              echo "Helm upgrade INFRA succeeded on attempt ${attempt}"
+              echo "Helm upgrade App node succeeded on attempt ${attempt}"
               exit 0
             fi
             status=$(helm status jobradar -n jobradar-local -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo unknown)
@@ -587,7 +602,7 @@ jobs:
             esac
             [ "$attempt" -lt 3 ] && sleep 30
           done
-          echo "::error::Helm upgrade INFRA failed after 3 attempts — see pod/event diagnostics above"
+          echo "::error::Helm upgrade App node failed after 3 attempts — see pod/event diagnostics above"
           exit 1
           REMOTE
 
@@ -595,7 +610,8 @@ jobs:
       # the SHA baked into the running image's /version.json against the tag we
       # just deployed. This is the guard that was missing when prod silently ran
       # a months-old pre-Clerk console.
-      - name: Verify console rollout (INFRA)
+      - name: Verify console rollout
+        if: needs.build-console.result == 'success'
         env:
           HOST: ${{ secrets.OCI_INFRA_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
@@ -620,9 +636,9 @@ jobs:
           echo "Console verified: serving ${EXPECTED}"
           REMOTE
 
-  # ── 6. Deploy APP node (Pipeline) ─────────────────────────────────────────
-  deploy-app:
-    name: Deploy APP node
+  # ── 6. Deploy Pipeline node (Job Data Pipeline) ───────────────────────────
+  deploy-pipeline:
+    name: Deploy Pipeline (Job Data Pipeline)
     needs:
       - detect-changes
       - build-scheduler
@@ -632,7 +648,7 @@ jobs:
       - build-crawler-node
     if: |
       always() &&
-      needs.detect-changes.outputs.app == 'true' &&
+      needs.detect-changes.outputs.pipeline == 'true' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
@@ -648,7 +664,7 @@ jobs:
           printf 'Host *\n  ServerAliveInterval 30\n  ServerAliveCountMax 20\n' >> ~/.ssh/config
           chmod 600 ~/.ssh/config
 
-      - name: Resolve image tags for APP
+      - name: Resolve image tags for Pipeline node
         id: tags
         env:
           HOST: ${{ secrets.OCI_APP_HOST }}
@@ -663,7 +679,13 @@ jobs:
             if [[ "$result" == "success" ]]; then
               echo "$SHORT_SHA"
             else
-              echo "$CURRENT" | jq -r ".images.${key}.tag // \"latest\""
+              local tag
+              tag=$(echo "$CURRENT" | jq -r ".images.${key}.tag // empty")
+              if [[ -z "$tag" ]]; then
+                echo "::error::Cannot resolve image tag for ${key} — no helm value found. Deploy this service at least once first." >&2
+                exit 1
+              fi
+              echo "$tag"
             fi
           }
 
@@ -673,7 +695,7 @@ jobs:
           echo "orchestrator=$(resolve '${{ needs.build-orchestrator.result }}' orchestrator)" >> $GITHUB_OUTPUT
           echo "crawler_node=$(resolve '${{ needs.build-crawler-node.result }}' crawlerNode)"  >> $GITHUB_OUTPUT
 
-      - name: Copy chart to APP
+      - name: Copy chart to Pipeline node
         env:
           HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
@@ -682,7 +704,7 @@ jobs:
           scp -i ~/.ssh/id_ed25519 -r k8s/helm/jobradar "$USER@$HOST:/tmp/jobradar-chart"
           scp -i ~/.ssh/id_ed25519 k8s/helm/jobradar/values.prod-app.yaml "$USER@$HOST:/tmp/"
 
-      - name: Wait for k3s API (APP)
+      - name: Wait for k3s API (Pipeline node)
         env:
           HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
@@ -691,7 +713,7 @@ jobs:
             "KUBECONFIG=/etc/rancher/k3s/k3s.yaml timeout 600 bash -c \
               'until kubectl get nodes 2>/dev/null | grep -q Ready; do sleep 5; done'"
 
-      - name: Refresh GHCR pull secret (APP)
+      - name: Refresh GHCR pull secret (Pipeline node)
         env:
           HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
@@ -705,7 +727,7 @@ jobs:
                --namespace jobradar-local \
                --dry-run=client -o yaml | KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply --validate=false -f -"
 
-      - name: Helm upgrade APP
+      - name: Helm upgrade Pipeline node
         env:
           HOST: ${{ secrets.OCI_APP_HOST }}
           USER: ${{ secrets.OCI_SSH_USER }}
@@ -734,14 +756,14 @@ jobs:
             kubectl get events -n jobradar-local --field-selector type=Warning \
               --sort-by=.lastTimestamp 2>/dev/null | tail -20 || true
           }
-          # The 1-OCPU APP node's k3s apiserver can time out a single create
+          # The 1-OCPU Pipeline node's k3s apiserver can time out a single create
           # request under rollout load ("context deadline exceeded"). Retry — a
           # failed upgrade can leave the release in pending-*, which blocks the
           # next attempt, so clear that with a rollback before retrying.
           for attempt in 1 2 3; do
-            echo "Helm upgrade APP — attempt ${attempt}/3"
+            echo "Helm upgrade Pipeline node — attempt ${attempt}/3"
             if run_upgrade; then
-              echo "Helm upgrade APP succeeded on attempt ${attempt}"
+              echo "Helm upgrade Pipeline node succeeded on attempt ${attempt}"
               exit 0
             fi
             status=$(helm status jobradar -n jobradar-local -o json 2>/dev/null | jq -r '.info.status' 2>/dev/null || echo unknown)
@@ -752,6 +774,6 @@ jobs:
             esac
             [ "$attempt" -lt 3 ] && sleep 30
           done
-          echo "::error::Helm upgrade APP failed after 3 attempts — see pod/event diagnostics above"
+          echo "::error::Helm upgrade Pipeline node failed after 3 attempts — see pod/event diagnostics above"
           exit 1
           REMOTE
