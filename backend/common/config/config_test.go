@@ -354,7 +354,7 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 	if cfg.Auth.ClerkJWKSURL != "" || cfg.Auth.ClerkIssuerURL != "" {
 		t.Errorf("Auth defaults should be empty strings: %+v", cfg.Auth)
 	}
-	if cfg.API.MaxBodyBytes != 1048576 || cfg.API.DevToken != "" {
+	if cfg.API.MaxBodyBytes != 3145728 || cfg.API.DevToken != "" {
 		t.Errorf("API defaults wrong: %+v", cfg.API)
 	}
 	if cfg.MultiUser.RateLimitReadRPM != 30 || cfg.MultiUser.RateLimitWriteRPM != 20 ||

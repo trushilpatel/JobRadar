@@ -66,7 +66,7 @@ api:
   clerkIssuerUrl: ""
   jwtClockSkewSeconds: "60"
   jwksCacheTtlSeconds: "600"
-  apiMaxBodyBytes: "1048576"
+  apiMaxBodyBytes: "3145728"
 
 console:
   enabled: true
