@@ -67,14 +67,23 @@ function NavItem({
           'w-full flex items-center rounded-lg text-sm transition-colors',
           collapsed ? 'justify-center p-2.5' : 'gap-2.5 px-3 py-2.5',
           isActive
-            ? 'bg-[var(--sidebar-active)] text-[var(--accent-text)] font-medium'
+            ? 'bg-[var(--sidebar-active)] text-[var(--accent-text)] font-semibold'
             : 'text-muted hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)]'
         )
+      }
+      style={({ isActive }) =>
+        isActive
+          ? { boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--violet) 28%, transparent)' }
+          : undefined
       }
     >
       {({ isActive }) => (
         <>
-          <span className={cn('shrink-0', isActive ? 'text-[var(--accent)]' : '')}>{icon}</span>
+          <span
+            className={cn('shrink-0 transition-colors', isActive ? 'text-[var(--accent)]' : '')}
+          >
+            {icon}
+          </span>
           {!collapsed && <span>{label}</span>}
         </>
       )}
@@ -116,7 +125,7 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?
         {isAdmin && (
           <>
             {!collapsed && (
-              <p className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-600 select-none">
+              <p className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-placeholder select-none">
                 Admin
               </p>
             )}
@@ -157,7 +166,13 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?
                   )
                 }
               >
-                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
+                <span
+                  className="flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold shrink-0"
+                  style={{
+                    background: 'color-mix(in srgb, var(--violet) 18%, transparent)',
+                    color: 'var(--violet-bright)',
+                  }}
+                >
                   {initials}
                 </span>
               </NavLink>
@@ -179,7 +194,13 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?
                 )
               }
             >
-              <span className="flex items-center justify-center w-7 h-7 rounded-full bg-violet-600/30 text-violet-300 text-xs font-semibold shrink-0">
+              <span
+                className="flex items-center justify-center w-7 h-7 rounded-full text-xs font-semibold shrink-0"
+                style={{
+                  background: 'color-mix(in srgb, var(--violet) 18%, transparent)',
+                  color: 'var(--violet-bright)',
+                }}
+              >
                 {initials}
               </span>
               <span className="text-xs truncate">{email}</span>
@@ -233,7 +254,9 @@ export function Sidebar() {
         {!collapsed && (
           <div className="flex items-center gap-2">
             <LogoLockup className="text-sidebar-fg" />
-            <span className="text-xs text-violet-400 font-medium">beta</span>
+            <span className="text-xs font-medium" style={{ color: 'var(--violet-bright)' }}>
+              beta
+            </span>
           </div>
         )}
         <button
