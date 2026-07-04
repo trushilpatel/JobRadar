@@ -19,7 +19,6 @@ import {
   JobCommandPalette,
   JobShortcutSheet,
 } from '@/features/jobs'
-import { JobResumeSection } from '@/pages/jobs/JobResumeSection'
 import { useIsMobile } from '@/lib/hooks/use-media-query'
 import { useHiddenItems } from '@/lib/hooks/hidden-items'
 import { showDismissStripe } from '@/components/ui/dismiss-stripe'
@@ -370,7 +369,6 @@ export function JobsPage() {
                   onStatusChange={handleStatusChange}
                   onToggleSave={handleToggleSave}
                   onDismiss={handleDismiss}
-                  resumeSection={<JobResumeSection jobId={openJob.id} />}
                 />
               </div>
             </>

@@ -10,7 +10,6 @@ import {
   Users,
   Settings,
   FileText,
-  Send,
 } from 'lucide-react'
 import { useAuth, useUser, useClerk } from '@clerk/react'
 import { cn } from '@/lib/utils/utils'
@@ -26,11 +25,9 @@ interface NavLinkSpec {
   icon: React.ReactNode
 }
 
-// Résumés + Apply queue are frontend-only pages (no backend endpoints), so
-// they are user-facing for every authenticated user — not admin-gated.
+// Resumes is user-facing for every authenticated user — not admin-gated.
 const userNav: NavLinkSpec[] = [
   { to: routes.jobs(), label: COPY['nav.jobs'], icon: <Briefcase size={16} /> },
-  { to: routes.applyQueue(), label: COPY['nav.apply-queue'], icon: <Send size={16} /> },
   { to: routes.resumeLibrary(), label: COPY['nav.resumes'], icon: <FileText size={16} /> },
 ]
 
