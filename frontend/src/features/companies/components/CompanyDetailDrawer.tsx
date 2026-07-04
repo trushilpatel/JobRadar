@@ -13,6 +13,7 @@ import type { Company, ATS } from '@/types'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
 import { cn, formatRelativeTime } from '@/lib/utils/utils'
+import { adapterEdge } from '@/lib/utils/adapterTokens'
 import { useCompanyScanStats } from '../hooks/useCompanyScanStats'
 import { useCompanyAnalytics } from '../hooks/useCompanyAnalytics'
 
@@ -80,59 +81,81 @@ export function CompanyDetailDrawer({
 
   return (
     <div className="flex flex-col h-full bg-panel">
-      {/* Header */}
-      <div className="relative px-5 pt-4 pb-3 border-b border-[var(--border)]">
-        <div className="absolute top-3 right-3 flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onScan(company)}
-            title="Scan now"
-            className="flex items-center gap-1.5 text-xs text-white bg-violet-600 hover:bg-violet-500 px-2.5 py-1.5 rounded-lg transition-colors"
-          >
-            <RefreshCw size={12} /> Scan now
-          </button>
-          <button
-            type="button"
-            onClick={() => onEdit(company)}
-            title="Edit"
-            className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-hover transition-colors"
-          >
-            <Pencil size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleteConfirmOpen(true)}
-            title="Delete"
-            className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-hover transition-colors"
-          >
-            <Trash2 size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            title="Close"
-            aria-label="Close drawer"
-            className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-hover transition-colors"
-          >
-            <X size={14} />
-          </button>
-        </div>
-        <div className="flex items-start gap-3 pr-36">
-          <CompanyAvatar name={company.name} size="md" />
-          <div className="min-w-0 flex-1">
-            <p className="text-base font-semibold text-primary leading-tight">{company.name}</p>
-            <p className="text-sm text-muted mt-0.5 truncate">
-              <a
-                href={company.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-primary transition-colors"
-              >
-                {safeHost(company.url)}
-              </a>
-              {' · '}
-              {atsEntry?.display_name ?? company.adapter_type}
-            </p>
+      {/* Header — LENS C: violet→cyan left edge + adapter-tinted aurora */}
+      <div className="relative overflow-hidden shrink-0">
+        {/* Violet → cyan left edge glow */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-[2px] pointer-events-none z-10"
+          style={{
+            background: 'linear-gradient(180deg, var(--violet), var(--cyan))',
+            opacity: 0.7,
+          }}
+        />
+        {/* Adapter-tinted aurora radial */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: `radial-gradient(360px 120px at 0% 0%, color-mix(in srgb, ${adapterEdge(company.adapter_type)} 14%, transparent), transparent 70%)`,
+          }}
+        />
+        <div className="relative px-5 pt-4 pb-3 border-b border-[var(--border)]">
+          <div className="absolute top-3 right-3 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => onScan(company)}
+              title="Scan now"
+              className="flex items-center gap-1.5 text-xs text-white px-2.5 py-1.5 rounded-lg transition-colors"
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--violet), color-mix(in srgb, var(--violet) 60%, var(--cyan)))',
+                boxShadow: 'var(--glow-violet)',
+              }}
+            >
+              <RefreshCw size={12} /> Scan now
+            </button>
+            <button
+              type="button"
+              onClick={() => onEdit(company)}
+              title="Edit"
+              className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-hover transition-colors"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              title="Delete"
+              className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-hover transition-colors"
+            >
+              <Trash2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              title="Close"
+              aria-label="Close drawer"
+              className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-hover transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="flex items-start gap-3 pr-36">
+            <CompanyAvatar name={company.name} adapterType={company.adapter_type} size="md" />
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-semibold text-primary leading-tight">{company.name}</p>
+              <p className="text-sm text-muted mt-0.5 truncate">
+                <a
+                  href={company.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-primary transition-colors"
+                >
+                  {safeHost(company.url)}
+                </a>
+                {' · '}
+                {atsEntry?.display_name ?? company.adapter_type}
+              </p>
+            </div>
           </div>
         </div>
       </div>
