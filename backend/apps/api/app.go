@@ -6,6 +6,7 @@ import (
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
+	resumesvc "github.com/trushilpatel/jobradar/service/resume/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
@@ -18,6 +19,7 @@ type App struct {
 	jobHandler          *jobsvc.RestRouter
 	applicationHandler  *application.Handler
 	companyAdminHandler *companysvc.AdminRestRouter
+	resumeHandler       *resumesvc.RestRouter
 }
 
 // NewApp constructs the App from fully-wired domain handlers.
@@ -29,6 +31,7 @@ func NewApp(
 	jobHandler *jobsvc.RestRouter,
 	applicationHandler *application.Handler,
 	companyAdminHandler *companysvc.AdminRestRouter,
+	resumeHandler *resumesvc.RestRouter,
 ) *App {
 	return &App{
 		companyHandler:      companyHandler,
@@ -37,6 +40,7 @@ func NewApp(
 		jobHandler:          jobHandler,
 		applicationHandler:  applicationHandler,
 		companyAdminHandler: companyAdminHandler,
+		resumeHandler:       resumeHandler,
 	}
 }
 
@@ -48,6 +52,7 @@ func (a *App) Handlers() []handler.RouteGroup {
 		a.scanHandler,
 		a.jobHandler,
 		a.applicationHandler,
+		a.resumeHandler,
 	}
 }
 
