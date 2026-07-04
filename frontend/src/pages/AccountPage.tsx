@@ -103,7 +103,7 @@ function ThemeToggle() {
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
               theme === value
-                ? 'bg-violet-600 text-white'
+                ? 'bg-[var(--violet)] text-white'
                 : 'text-muted hover:text-primary hover:bg-hover'
             )}
           >
@@ -162,17 +162,57 @@ export function AccountPage() {
     }
   }
 
+  const heroInitials = (() => {
+    const src = identity?.display_name ?? identity?.email ?? ''
+    if (!src) return '?'
+    const words = src.trim().split(/\s+/).filter(Boolean)
+    if (words.length >= 2) {
+      return words
+        .slice(0, 2)
+        .map((w) => w[0]?.toUpperCase() ?? '')
+        .join('')
+    }
+    return (words[0] ?? '').slice(0, 2).toUpperCase()
+  })()
+
   return (
     <div className="flex flex-col h-full bg-panel overflow-y-auto">
-      <div className="border-b border-[var(--border)] px-6 py-4 shrink-0">
-        <h1 className="text-lg font-semibold text-primary">Account</h1>
-      </div>
+      {/* Identity hero */}
+      <section
+        className="shrink-0 px-8 py-8 border-b border-[var(--border)] relative overflow-hidden"
+        aria-label="Your identity"
+      >
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              'radial-gradient(800px 300px at 0% 0%, color-mix(in srgb, var(--violet) 8%, transparent), transparent 60%)',
+          }}
+        />
+        <div className="relative flex items-center gap-5">
+          <div
+            className="w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-bold text-white shrink-0"
+            style={{ background: 'linear-gradient(135deg, var(--violet), var(--cyan))' }}
+            aria-hidden="true"
+          >
+            {heroInitials}
+          </div>
+          <div>
+            <p className="text-xl font-semibold text-primary">{identity?.display_name ?? '—'}</p>
+            <p className="text-sm text-muted mt-0.5">
+              {identity?.email ?? '—'}
+              <span className="mx-2 text-placeholder">·</span>
+              <span className="text-placeholder">Managed by your login provider</span>
+            </p>
+          </div>
+        </div>
+      </section>
 
-      <div className="flex-1 px-6 py-6 max-w-2xl space-y-8">
+      <div className="flex-1 px-6 py-6 max-w-2xl space-y-5">
         {/* Profile */}
         <ErrorBoundary>
-          <section>
-            <h2 className="text-sm font-semibold text-primary mb-4">Profile</h2>
+          <section className="rounded-xl border border-[var(--border)] bg-[var(--bg-panel)] p-6">
+            <h2 className="text-sm font-semibold text-primary mb-5">Profile</h2>
             <div className="mb-3">
               <p className="text-xs text-muted mb-1">Email</p>
               <p className="text-sm text-secondary">{identity?.email ?? '—'}</p>
@@ -191,14 +231,20 @@ export function AccountPage() {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   maxLength={80}
-                  className="w-full rounded-md bg-subtle border border-[var(--border-strong)] px-3 py-2 text-sm text-primary placeholder:text-placeholder focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  className="w-full rounded-lg bg-[var(--bg-panel)] border border-[var(--border-strong)] px-3 py-2 text-sm text-primary placeholder:text-placeholder focus:outline-none focus:border-[var(--violet)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--violet)_14%,transparent)]"
                   placeholder="Your name"
                 />
               </div>
               <button
                 type="submit"
                 disabled={saving}
-                className="px-4 py-2 rounded-md text-sm font-medium bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white transition-colors"
+                className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-all"
+                style={{
+                  background:
+                    'linear-gradient(135deg, var(--violet), color-mix(in srgb, var(--violet) 60%, var(--cyan)))',
+                  color: '#0b0b14',
+                  boxShadow: 'var(--glow-violet)',
+                }}
               >
                 {saving ? 'Saving…' : 'Save'}
               </button>
@@ -208,8 +254,8 @@ export function AccountPage() {
 
         {/* Appearance */}
         <ErrorBoundary>
-          <section className="space-y-4">
-            <h2 className="text-sm font-semibold text-primary mb-4">Appearance</h2>
+          <section className="rounded-xl border border-[var(--border)] bg-[var(--bg-panel)] p-6">
+            <h2 className="text-sm font-semibold text-primary mb-5">Appearance</h2>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-primary">Theme</p>
@@ -222,8 +268,8 @@ export function AccountPage() {
 
         {/* Keyboard shortcuts */}
         <ErrorBoundary>
-          <section>
-            <h2 className="text-sm font-semibold text-primary mb-4">Keyboard shortcuts</h2>
+          <section className="rounded-xl border border-[var(--border)] bg-[var(--bg-panel)] p-6">
+            <h2 className="text-sm font-semibold text-primary mb-5">Keyboard shortcuts</h2>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-secondary">Show keyboard shortcut hints</p>
@@ -238,8 +284,6 @@ export function AccountPage() {
                 disabled={patchConfig.isPending || configLoading}
               />
             </div>
-            {/* Static registry-derived reference — always visible. The toggle
-                above only controls in-button hint glyphs, not this table. */}
             <div className="mt-4 border-t border-[var(--border)] pt-4">
               <ShortcutReference />
             </div>
@@ -248,7 +292,7 @@ export function AccountPage() {
 
         {/* Danger zone */}
         <ErrorBoundary>
-          <section className="border border-red-400/30 rounded-lg p-4">
+          <section className="rounded-xl border border-red-400/30 bg-[var(--bg-panel)] p-6">
             <h2 className="text-sm font-semibold text-red-400 mb-2">Danger zone</h2>
             <p className="text-xs text-muted mb-4">
               Permanently delete your account and all associated data. This cannot be undone.
