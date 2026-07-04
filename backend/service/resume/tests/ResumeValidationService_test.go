@@ -19,15 +19,22 @@ type fakeService struct {
 	lastRenameLabel string
 	uploadResult    *resumemodel.Resume
 	uploadErr       error
+	renameResult    *resumemodel.Resume
 	renameErr       error
 	deleteErr       error
 	presignResult   string
 	presignErr      error
+	listResult      []resumemodel.Resume
+	listErr         error
+	getResult       *resumemodel.Resume
+	getErr          error
 }
 
-func (f *fakeService) List(context.Context, string) ([]resumemodel.Resume, error) { return nil, nil }
+func (f *fakeService) List(context.Context, string) ([]resumemodel.Resume, error) {
+	return f.listResult, f.listErr
+}
 func (f *fakeService) Get(context.Context, string, string) (*resumemodel.Resume, error) {
-	return nil, nil
+	return f.getResult, f.getErr
 }
 func (f *fakeService) Upload(_ context.Context, _ string, input dto.UploadInput) (*resumemodel.Resume, error) {
 	f.lastUploadInput = input
@@ -35,7 +42,7 @@ func (f *fakeService) Upload(_ context.Context, _ string, input dto.UploadInput)
 }
 func (f *fakeService) Rename(_ context.Context, _ string, _ string, label string) (*resumemodel.Resume, error) {
 	f.lastRenameLabel = label
-	return nil, f.renameErr
+	return f.renameResult, f.renameErr
 }
 func (f *fakeService) Delete(context.Context, string, string) error { return f.deleteErr }
 func (f *fakeService) PresignDownload(context.Context, string, string) (string, error) {
@@ -153,4 +160,61 @@ func TestResumeValidation_RenameTrimsWhitespace(t *testing.T) {
 	if fake.lastRenameLabel != "Trimmed" {
 		t.Fatalf("expected trimmed label 'Trimmed', got %q", fake.lastRenameLabel)
 	}
+}
+
+// The following pass-through tests exercise BaseService — ValidationService
+// doesn't override List/Get/Delete/PresignDownload, so calling them here
+// must delegate straight through to the fake without any validation logic.
+
+func TestResumeValidation_ListPassesThroughToNext(t *testing.T) {
+	fake := &fakeService{listResult: []resumemodel.Resume{{ID: "r1"}}}
+	v := resumesvc.NewValidationService(fake)
+	rows, err := v.List(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ID != "r1" {
+		t.Fatalf("expected pass-through result, got %+v", rows)
+	}
+}
+
+func TestResumeValidation_GetPassesThroughToNext(t *testing.T) {
+	fake := &fakeService{getResult: &resumemodel.Resume{ID: "r1"}}
+	v := resumesvc.NewValidationService(fake)
+	row, err := v.Get(context.Background(), "u1", "r1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if row.ID != "r1" {
+		t.Fatalf("expected pass-through result, got %+v", row)
+	}
+}
+
+func TestResumeValidation_DeletePassesThroughToNext(t *testing.T) {
+	fake := &fakeService{deleteErr: domainerrs.ErrNotFound.WithMessage("resume not found")}
+	v := resumesvc.NewValidationService(fake)
+	if err := v.Delete(context.Background(), "u1", "r1"); err == nil {
+		t.Fatal("expected the pass-through error to propagate")
+	}
+}
+
+func TestResumeValidation_PresignDownloadPassesThroughToNext(t *testing.T) {
+	fake := &fakeService{presignResult: "https://example.test/signed"}
+	v := resumesvc.NewValidationService(fake)
+	url, err := v.PresignDownload(context.Background(), "u1", "r1")
+	if err != nil {
+		t.Fatalf("PresignDownload: %v", err)
+	}
+	if url != "https://example.test/signed" {
+		t.Fatalf("expected pass-through URL, got %s", url)
+	}
+}
+
+func TestNewValidationService_PanicsOnNilNext(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected NewValidationService(nil) to panic")
+		}
+	}()
+	resumesvc.NewValidationService(nil)
 }

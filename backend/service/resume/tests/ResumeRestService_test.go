@@ -200,3 +200,82 @@ func TestResumeRest_ListReturns200(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 }
+
+func TestResumeRest_ListReturns500OnServiceError(t *testing.T) {
+	fake := &fakeService{listErr: domainerrs.ErrInternal.WithMessage("db down")}
+	h := resumesvc.NewRestService(fake)
+	router := resumesvc.NewRestRouter(h)
+	mux := chi.NewRouter()
+	router.Register(mux)
+
+	req := withUser(httptest.NewRequest(http.MethodGet, "/resumes", nil), "u1")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rec.Code)
+	}
+}
+
+func TestResumeRest_RenameReturns404ForMissingResume(t *testing.T) {
+	fake := &fakeService{renameErr: domainerrs.ErrNotFound.WithMessage("resume not found")}
+	h := resumesvc.NewRestService(fake)
+	router := resumesvc.NewRestRouter(h)
+	mux := chi.NewRouter()
+	router.Register(mux)
+
+	body, _ := json.Marshal(map[string]string{"label": "New label"})
+	req := withUser(httptest.NewRequest(http.MethodPatch, "/resumes/missing", bytes.NewReader(body)), "u1")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestResumeRest_UploadReturns400OnMalformedMultipartBody(t *testing.T) {
+	fake := &fakeService{}
+	h := resumesvc.NewRestService(fake)
+	router := resumesvc.NewRestRouter(h)
+	mux := chi.NewRouter()
+	router.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/resumes", bytes.NewReader([]byte("not multipart")))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=x")
+	req = withUser(req, "u1")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestResumeRest_UploadReturns400WhenFileFieldMissing(t *testing.T) {
+	fake := &fakeService{}
+	h := resumesvc.NewRestService(fake)
+	router := resumesvc.NewRestRouter(h)
+	mux := chi.NewRouter()
+	router.Register(mux)
+
+	buf := &bytes.Buffer{}
+	w := multipart.NewWriter(buf)
+	_ = w.WriteField("label", "no file here")
+	_ = w.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/resumes", buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req = withUser(req, "u1")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestNewRestService_PanicsOnNilNext(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected NewRestService(nil) to panic")
+		}
+	}()
+	resumesvc.NewRestService(nil)
+}

@@ -224,6 +224,84 @@ func TestResumeRepository_ListOrdersByCreatedAtDesc(t *testing.T) {
 	}
 }
 
+// closedResumeTestDB returns a DB whose underlying connection is already
+// closed, so any subsequent query fails with a generic (non-NotFound) DB
+// error — used to exercise the repository's ErrInternal-wrapping branches
+// that a normal query never reaches.
+func closedResumeTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db := newResumeTestDB(t)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get underlying sql.DB: %v", err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatalf("close sql.DB: %v", err)
+	}
+	return db
+}
+
+func TestResumeRepository_ListReturnsInternalErrorOnDBFailure(t *testing.T) {
+	repo := resumesvc.NewRepositoryService(closedResumeTestDB(t))
+	if _, err := repo.List(context.Background(), "user-1"); err == nil {
+		t.Fatal("expected an error when the underlying connection is closed")
+	}
+}
+
+func TestResumeRepository_GetReturnsInternalErrorOnDBFailure(t *testing.T) {
+	repo := resumesvc.NewRepositoryService(closedResumeTestDB(t))
+	if _, err := repo.Get(context.Background(), "user-1", "r1"); err == nil {
+		t.Fatal("expected an error when the underlying connection is closed")
+	}
+}
+
+func TestResumeRepository_RenameReturnsInternalErrorOnDBFailure(t *testing.T) {
+	repo := resumesvc.NewRepositoryService(closedResumeTestDB(t))
+	if _, err := repo.Rename(context.Background(), "user-1", "r1", "New"); err == nil {
+		t.Fatal("expected an error when the underlying connection is closed")
+	}
+}
+
+func TestResumeRepository_DeleteReturnsInternalErrorOnDBFailure(t *testing.T) {
+	repo := resumesvc.NewRepositoryService(closedResumeTestDB(t))
+	if err := repo.Delete(context.Background(), "user-1", "r1"); err == nil {
+		t.Fatal("expected an error when the underlying connection is closed")
+	}
+}
+
+func TestResumeRepository_UploadReturnsInternalErrorOnDBFailure(t *testing.T) {
+	repo := resumesvc.NewRepositoryService(closedResumeTestDB(t))
+	_, err := repo.Upload(context.Background(), "user-1", dto.UploadInput{
+		ID: "r1", Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k1", DeclaredSize: 10,
+	})
+	if err == nil {
+		t.Fatal("expected an error when the underlying connection is closed")
+	}
+}
+
+func TestResumeRepository_UploadRejectsDuplicateStorageKey(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	_, err := repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "shared-key", DeclaredSize: 10,
+	})
+	if err != nil {
+		t.Fatalf("first upload: %v", err)
+	}
+
+	_, err = repo.Upload(ctx, "user-2", dto.UploadInput{
+		ID: "r2", Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "shared-key", DeclaredSize: 10,
+	})
+	if err == nil {
+		t.Fatal("expected the duplicate storage_key insert to fail")
+	}
+}
+
 func TestResumeRepository_PresignDownloadIsUnreachableStub(t *testing.T) {
 	db := newResumeTestDB(t)
 	repo := resumesvc.NewRepositoryService(db)
