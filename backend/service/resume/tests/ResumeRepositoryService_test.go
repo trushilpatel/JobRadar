@@ -1,0 +1,233 @@
+package tests
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	resumecommon "github.com/trushilpatel/jobradar/service/resume/common"
+	"github.com/trushilpatel/jobradar/service/resume/dto"
+	resumesvc "github.com/trushilpatel/jobradar/service/resume/services"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
+)
+
+// newResumeTestDB returns an in-memory sqlite DB with a hand-written `resumes`
+// table (and a minimal `users` table for the FK) — same convention as
+// service/user/tests/UserRepositoryService_test.go. Advisory locking is
+// Postgres-only and is skipped by the repo when db.Name() != "postgres".
+func newResumeTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	stmts := []string{
+		`CREATE TABLE users (id TEXT PRIMARY KEY)`,
+		`CREATE TABLE resumes (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			label TEXT NOT NULL,
+			original_filename TEXT NOT NULL,
+			storage_key TEXT NOT NULL UNIQUE,
+			content_type TEXT NOT NULL,
+			size_bytes INTEGER NOT NULL,
+			created_at DATETIME NOT NULL
+		)`,
+	}
+	for _, s := range stmts {
+		if err := db.Exec(s).Error; err != nil {
+			t.Fatalf("schema setup: %v", err)
+		}
+	}
+	return db
+}
+
+func TestResumeRepository_UploadThenGetRoundTrips(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	created, err := repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "Backend resume", OriginalFilename: "resume.pdf",
+		ContentType: "application/pdf", Extension: "pdf",
+		StorageKey: "resumes/user-1/r1.pdf", DeclaredSize: 1024,
+	})
+	if err != nil {
+		t.Fatalf("Upload: %v", err)
+	}
+	if created.ID != "r1" || created.Label != "Backend resume" {
+		t.Fatalf("unexpected created row: %+v", created)
+	}
+
+	fetched, err := repo.Get(ctx, "user-1", "r1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if fetched.StorageKey != "resumes/user-1/r1.pdf" {
+		t.Fatalf("unexpected storage key: %s", fetched.StorageKey)
+	}
+}
+
+func TestResumeRepository_GetForWrongUserReturnsNotFound(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	_, _ = repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k1", DeclaredSize: 10,
+	})
+
+	_, err := repo.Get(ctx, "user-2", "r1")
+	if !errors.Is(err, domainerrs.ErrNotFound) {
+		t.Fatalf("expected NotFound for cross-user access, got %v", err)
+	}
+}
+
+func TestResumeRepository_UploadAtCapIsRejected(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	for i := range resumecommon.ResumeLimitPerUser {
+		id := "r" + string(rune('a'+i%26)) + string(rune('0'+i/26))
+		_, err := repo.Upload(ctx, "user-1", dto.UploadInput{
+			ID: id, Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+			Extension: "pdf", StorageKey: "key-" + id, DeclaredSize: 10,
+		})
+		if err != nil {
+			t.Fatalf("upload %d/%d: %v", i+1, resumecommon.ResumeLimitPerUser, err)
+		}
+	}
+
+	_, err := repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "over-cap", Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "key-over-cap", DeclaredSize: 10,
+	})
+	if err == nil {
+		t.Fatal("expected the 51st upload to be rejected")
+	}
+}
+
+func TestResumeRepository_UploadAtExactly50thSucceeds(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	for i := range resumecommon.ResumeLimitPerUser - 1 {
+		id := "r" + string(rune('a'+i%26)) + string(rune('0'+i/26))
+		if _, err := repo.Upload(ctx, "user-1", dto.UploadInput{
+			ID: id, Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+			Extension: "pdf", StorageKey: "key-" + id, DeclaredSize: 10,
+		}); err != nil {
+			t.Fatalf("upload %d: %v", i+1, err)
+		}
+	}
+	// This is the 50th — must succeed (cap is inclusive of 50).
+	if _, err := repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "last", Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "key-last", DeclaredSize: 10,
+	}); err != nil {
+		t.Fatalf("expected the 50th upload to succeed, got %v", err)
+	}
+}
+
+func TestResumeRepository_RenameUpdatesLabel(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	_, _ = repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "Old", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k1", DeclaredSize: 10,
+	})
+	renamed, err := repo.Rename(ctx, "user-1", "r1", "New label")
+	if err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if renamed.Label != "New label" {
+		t.Fatalf("expected label 'New label', got %s", renamed.Label)
+	}
+}
+
+func TestResumeRepository_RenameMissingReturnsNotFound(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	if _, err := repo.Rename(context.Background(), "user-1", "does-not-exist", "New"); !errors.Is(err, domainerrs.ErrNotFound) {
+		t.Fatalf("expected NotFound, got %v", err)
+	}
+}
+
+func TestResumeRepository_DeleteRemovesRow(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	_, _ = repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k1", DeclaredSize: 10,
+	})
+	if err := repo.Delete(ctx, "user-1", "r1"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := repo.Get(ctx, "user-1", "r1"); !errors.Is(err, domainerrs.ErrNotFound) {
+		t.Fatalf("expected NotFound after delete, got %v", err)
+	}
+}
+
+func TestResumeRepository_DoubleDeleteSecondCallIsNotFound(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	_, _ = repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k1", DeclaredSize: 10,
+	})
+	_ = repo.Delete(ctx, "user-1", "r1")
+	if err := repo.Delete(ctx, "user-1", "r1"); !errors.Is(err, domainerrs.ErrNotFound) {
+		t.Fatalf("expected NotFound on second delete, got %v", err)
+	}
+}
+
+func TestResumeRepository_DeleteForWrongUserReturnsNotFound(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	_, _ = repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k1", DeclaredSize: 10,
+	})
+	if err := repo.Delete(ctx, "user-2", "r1"); !errors.Is(err, domainerrs.ErrNotFound) {
+		t.Fatalf("expected NotFound deleting another user's resume, got %v", err)
+	}
+}
+
+func TestResumeRepository_ListOrdersByCreatedAtDesc(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	_, _ = repo.Upload(ctx, "user-1", dto.UploadInput{ID: "r1", Label: "First", OriginalFilename: "f.pdf", ContentType: "application/pdf", Extension: "pdf", StorageKey: "k1", DeclaredSize: 10})
+	_, _ = repo.Upload(ctx, "user-1", dto.UploadInput{ID: "r2", Label: "Second", OriginalFilename: "f.pdf", ContentType: "application/pdf", Extension: "pdf", StorageKey: "k2", DeclaredSize: 10})
+
+	rows, err := repo.List(ctx, "user-1")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+}
+
+func TestResumeRepository_PresignDownloadIsUnreachableStub(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	if _, err := repo.PresignDownload(context.Background(), "user-1", "r1"); err == nil {
+		t.Fatal("expected the repository-layer stub to always return an error")
+	}
+}
