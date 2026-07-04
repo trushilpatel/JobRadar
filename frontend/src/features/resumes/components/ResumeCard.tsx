@@ -1,59 +1,84 @@
-import { Link } from 'react-router-dom'
-import { FileText, Paperclip, CheckCircle2 } from 'lucide-react'
+import { useState } from 'react'
+import { FileText, Download, Trash2, Pencil } from 'lucide-react'
 import { cn, formatRelativeTime } from '@/lib/utils/utils'
-import { routes } from '@/config/routes'
+import { Input } from '@/components/ui/input'
+import { useResumeActions } from '../hooks/useResumeActions'
 import type { Resume } from '../types'
-import { AXIS_TONE } from '../constants'
 
 export function ResumeCard({ resume }: { resume: Resume }) {
+  const { download, rename, remove } = useResumeActions()
+  const [editing, setEditing] = useState(false)
+  const [label, setLabel] = useState(resume.label)
+
+  async function handleDownload() {
+    const url = await download.mutateAsync(resume.id)
+    window.location.assign(url)
+  }
+
+  async function handleRenameSubmit() {
+    if (label.trim() && label !== resume.label) {
+      await rename.mutateAsync({ id: resume.id, label: label.trim() })
+    }
+    setEditing(false)
+  }
+
   return (
-    <Link
-      to={routes.resumeDetail(resume.id)}
-      className={cn(
-        'group block rounded-xl border border-[var(--border)] bg-panel p-4',
-        'hover:border-violet-500/40 hover:bg-subtle transition-colors'
-      )}
-    >
+    <div className={cn('rounded-xl border border-[var(--border)] bg-panel p-4')}>
       <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-primary font-medium truncate">
             <FileText size={14} className="text-muted shrink-0" />
-            <span className="truncate">{resume.name}</span>
-          </div>
-          <div className="text-[11px] text-muted mt-0.5 font-mono">{resume.label}</div>
-        </div>
-        <div className="text-[10px] text-muted shrink-0 whitespace-nowrap">
-          v{resume.version_count}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-1 mb-4">
-        {resume.tags.map((t, i) => (
-          <span
-            key={i}
-            className={cn(
-              'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium',
-              AXIS_TONE[t.axis] ?? 'bg-subtle text-muted'
+            {editing ? (
+              <Input
+                autoFocus
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                onBlur={handleRenameSubmit}
+                onKeyDown={(e) => e.key === 'Enter' && handleRenameSubmit()}
+                className="h-6 text-sm"
+              />
+            ) : (
+              <span className="truncate">{resume.label}</span>
             )}
-          >
-            {t.value}
-          </span>
-        ))}
+          </div>
+          <div className="text-[11px] text-muted mt-0.5 font-mono truncate">
+            {resume.original_filename}
+          </div>
+        </div>
       </div>
 
       <div className="flex items-center justify-between text-xs text-muted">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-1">
-            <Paperclip size={11} />
-            {resume.attached_job_count}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <CheckCircle2 size={11} />
-            {resume.submitted_count}
-          </span>
+        <span>
+          {(resume.size_bytes / 1024).toFixed(0)} KB · Uploaded{' '}
+          {formatRelativeTime(resume.created_at)}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            aria-label="Rename"
+            className="hover:text-primary"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            type="button"
+            onClick={handleDownload}
+            aria-label="Download"
+            className="hover:text-primary"
+          >
+            <Download size={13} />
+          </button>
+          <button
+            type="button"
+            onClick={() => remove.mutate(resume.id)}
+            aria-label="Delete"
+            className="hover:text-red-400"
+          >
+            <Trash2 size={13} />
+          </button>
         </div>
-        <span className="text-muted">Updated {formatRelativeTime(resume.updated_at)}</span>
       </div>
-    </Link>
+    </div>
   )
 }
