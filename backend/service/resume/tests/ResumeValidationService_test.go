@@ -30,8 +30,6 @@ type fakeService struct {
 	listErr         error
 	getResult       *resumemodel.Resume
 	getErr          error
-	extractResult   *resumemodel.Resume
-	extractErr      error
 }
 
 func (f *fakeService) List(context.Context, string) ([]resumemodel.Resume, error) {
@@ -51,9 +49,6 @@ func (f *fakeService) Rename(_ context.Context, _ string, _ string, label string
 func (f *fakeService) Delete(context.Context, string, string) error { return f.deleteErr }
 func (f *fakeService) Download(context.Context, string, string) (io.ReadCloser, *resumemodel.Resume, error) {
 	return f.downloadReader, f.downloadResume, f.downloadErr
-}
-func (f *fakeService) ExtractKeywords(context.Context, string, string) (*resumemodel.Resume, error) {
-	return f.extractResult, f.extractErr
 }
 
 func TestResumeValidation_UploadRejectsEmptyFile(t *testing.T) {

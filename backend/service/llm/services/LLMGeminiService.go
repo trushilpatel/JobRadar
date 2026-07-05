@@ -11,7 +11,6 @@ import (
 	"google.golang.org/genai"
 
 	llmerr "github.com/trushilpatel/jobradar/common/errors"
-	llmcommon "github.com/trushilpatel/jobradar/service/llm/common"
 	"github.com/trushilpatel/jobradar/service/llm/dto"
 	"github.com/trushilpatel/jobradar/service/llm/prompts"
 )
@@ -137,37 +136,6 @@ func (s *geminiScorer) EnrichBatch(ctx context.Context, inputs []dto.JobPostEnri
 	}
 
 	return out, nil
-}
-
-// ── ExtractResumeKeywords ─────────────────────────────────────────────────────
-
-var resumeKeywordSchema = &genai.Schema{
-	Type:  genai.TypeArray,
-	Items: &genai.Schema{Type: genai.TypeString},
-}
-
-func (s *geminiScorer) ExtractResumeKeywords(ctx context.Context, input dto.ResumeKeywordInput) (*dto.ResumeKeywordResult, error) {
-	if strings.TrimSpace(input.Text) == "" {
-		return nil, fmt.Errorf("gemini extract resume keywords: %w: empty resume text", llmerr.ErrLLMValidation)
-	}
-
-	text := input.Text
-	if len(text) > llmcommon.ResumeKeywordMaxTextChars {
-		text = text[:llmcommon.ResumeKeywordMaxTextChars]
-	}
-
-	prompt := prompts.BuildResumeKeywords(text)
-
-	raw, err := s.generate(ctx, prompt, resumeKeywordSchema)
-	if err != nil {
-		return nil, fmt.Errorf("gemini extract resume keywords: %w", err)
-	}
-
-	var keywords []string
-	if err := json.Unmarshal([]byte(raw), &keywords); err != nil {
-		return nil, fmt.Errorf("gemini extract resume keywords: parse response %q: %w", raw, err)
-	}
-	return &dto.ResumeKeywordResult{Keywords: keywords}, nil
 }
 
 // ── shared generate helper ────────────────────────────────────────────────────

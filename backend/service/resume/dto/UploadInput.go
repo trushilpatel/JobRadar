@@ -3,9 +3,10 @@
 package dto
 
 // UploadInput carries an upload request through the decorator chain.
-// ContentType, Extension, ID, and StorageKey start empty and are filled in by
-// ValidationService (content-type sniffing) and ImplService (ID + storage
-// key generation) before reaching the repository.
+// ContentType, Extension, ID, StorageKey, and ExtractedText start empty and
+// are filled in by ValidationService (content-type sniffing) and ImplService
+// (ID, storage key generation, and synchronous text extraction) before
+// reaching the repository.
 type UploadInput struct {
 	ID               string
 	Label            string
@@ -15,4 +16,5 @@ type UploadInput struct {
 	RawBytes         []byte
 	DeclaredSize     int64
 	StorageKey       string
+	ExtractedText    string
 }

@@ -225,41 +225,51 @@ func (r *repositoryService) List(ctx context.Context, userID, filter, cursor str
 	}
 
 	if len(items) > 0 {
-		if recErr := r.attachResumeRecommendations(ctx, userID, items); recErr != nil {
-			return dto.QueueListResult{}, domainerrs.ErrInternal.WithMessage("applyqueue repo: resume recommendations: " + recErr.Error())
+		if kwErr := r.attachJobKeywords(ctx, items); kwErr != nil {
+			return dto.QueueListResult{}, domainerrs.ErrInternal.WithMessage("applyqueue repo: job keywords: " + kwErr.Error())
 		}
 	}
 
 	return dto.QueueListResult{Items: items, NextCursor: next}, nil
 }
 
-// attachResumeRecommendations computes recommended_resume_id/_label for
-// every item in place, per issue #264. Two queries total for the whole
-// page — job_tech_tags (IN clause over every job on the page) and the
-// caller's resumes — never one query per row, per the "join once per page"
-// requirement. Matching itself (Jaccard over the in-memory sets) is pure Go,
-// deliberately not a SQL computation or a cached table: this mirrors the
-// frozen spec's own precedent of no fit-score cache table until proven
-// necessary by p95 latency.
-func (r *repositoryService) attachResumeRecommendations(ctx context.Context, userID string, items []dto.QueueItem) error {
+// jobTechTagRow is the raw scan target for a job_tech_tags lookup — one row
+// per (job, tech) pair, matching the table's composite primary key.
+type jobTechTagRow struct {
+	JobID string `gorm:"column:job_id"`
+	Tech  string `gorm:"column:tech"`
+}
+
+// attachJobKeywords fetches the canonical (techtag.Clean-cleaned at insert
+// time — see JobPipelineImplService.go) job_tech_tags for every job on the
+// page in a single query and attaches them to each item in place — one query
+// per page, never one per row. Deliberately reads job_tech_tags rather than
+// the jobs.tech_stack JSONB column, which is uncleaned raw LLM output per
+// that table's own doc comment. Plain data, no scoring: matching against a
+// resume happens client-side.
+func (r *repositoryService) attachJobKeywords(ctx context.Context, items []dto.QueueItem) (err error) {
+	ctx, span := tracing.Start(ctx, "applyqueue.repo.attachJobKeywords")
+	defer tracing.End(span, &err)
+
 	jobIDs := make([]string, len(items))
 	for i, it := range items {
 		jobIDs[i] = it.JobID
 	}
 
-	techTagsByJob, err := r.loadJobTechTags(ctx, jobIDs)
-	if err != nil {
-		return err
+	var rows []jobTechTagRow
+	if dbErr := r.db.WithContext(ctx).Table("job_tech_tags").
+		Select("job_id, tech").
+		Where("job_id IN ?", jobIDs).
+		Find(&rows).Error; dbErr != nil {
+		return dbErr
 	}
-	resumeRows, err := r.loadUserResumeKeywords(ctx, userID)
-	if err != nil {
-		return err
-	}
-	resumes := parseResumeKeywordRows(resumeRows)
 
+	byJob := make(map[string][]string, len(jobIDs))
+	for _, row := range rows {
+		byJob[row.JobID] = append(byJob[row.JobID], row.Tech)
+	}
 	for i := range items {
-		items[i].RecommendedResumeID, items[i].RecommendedResumeLabel =
-			bestMatchingResume(techTagsByJob[items[i].JobID], resumes)
+		items[i].JobKeywords = byJob[items[i].JobID]
 	}
 	return nil
 }
