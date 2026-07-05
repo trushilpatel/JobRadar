@@ -1,5 +1,8 @@
 // Package techtag normalizes and filters raw tech_stack strings extracted by the LLM.
-// It maps variant spellings to canonical names and drops non-tech terms.
+// It maps variant spellings to canonical names and drops generic noise — see
+// `canonical` and `blocklist` for what counts as noise vs. an allowed keyword
+// (which now spans tech stack, methodologies, tools, soft skills, and
+// certifications).
 package techtag
 
 import "strings"
@@ -89,44 +92,57 @@ var canonical = map[string]string{
 	"spring":        "Spring",
 	"spring boot":   "Spring Boot",
 	"springboot":    "Spring Boot",
+	// Methodologies / practices
+	"agile":                  "Agile",
+	"scrum":                  "Scrum",
+	"kanban":                 "Kanban",
+	"waterfall":              "Waterfall",
+	"lean":                   "Lean",
+	"rest":                   "REST",
+	"restful":                "REST",
+	"soap":                   "SOAP",
+	"mvc":                    "MVC",
+	"mvvm":                   "MVVM",
+	"microservices":          "Microservices",
+	"serverless":             "Serverless",
+	"solid":                  "SOLID",
+	"oop":                    "OOP",
+	"object-oriented":        "OOP",
+	"functional programming": "Functional Programming",
+	"ci/cd":                  "CI/CD",
+	"ci cd":                  "CI/CD",
+	"devops":                 "DevOps",
+	// Non-dev tools / platforms
+	"jira":       "Jira",
+	"confluence": "Confluence",
+	"figma":      "Figma",
+	"salesforce": "Salesforce",
+	"tableau":    "Tableau",
+	// Soft skills
+	"communication":          "Communication",
+	"leadership":             "Leadership",
+	"teamwork":               "Teamwork",
+	"collaboration":          "Collaboration",
+	"stakeholder management": "Stakeholder Management",
+	"mentorship":             "Mentorship",
+	"problem solving":        "Problem Solving",
+	"problem-solving":        "Problem Solving",
+	"critical thinking":      "Critical Thinking",
+	// Certifications / domain terms
+	"aws certified": "AWS Certified",
+	"pmp":           "PMP",
+	"hipaa":         "HIPAA",
+	"fintech":       "Fintech",
+	"healthcare":    "Healthcare",
 }
 
-// blocklist contains lowercase terms that are not valid tech stack entries.
-// These are methodologies, soft skills, patterns, and generic tools.
+// blocklist contains lowercase terms that carry no matching signal at all —
+// generic office tools, generic OS names, and bare acronyms too broad to be
+// meaningful on their own (e.g. "api" alone, vs. a specific tool/platform
+// name). Methodologies, non-dev tools, soft skills, and certification/domain
+// terms are deliberately NOT blocked here — see `canonical` above — since
+// broadened job-keyword extraction now needs them for resume matching.
 var blocklist = map[string]bool{
-	// Methodologies
-	"agile":     true,
-	"scrum":     true,
-	"kanban":    true,
-	"waterfall": true,
-	"lean":      true,
-	// Architecture patterns (too generic)
-	"rest":                   true,
-	"restful":                true,
-	"rest api":               true,
-	"rest apis":              true,
-	"soap":                   true,
-	"mvc":                    true,
-	"mvvm":                   true,
-	"microservices":          true,
-	"serverless":             true,
-	"solid":                  true,
-	"oop":                    true,
-	"object-oriented":        true,
-	"functional programming": true,
-	"ci/cd":                  true,
-	"ci cd":                  true,
-	"devops":                 true,
-	// Soft skills
-	"communication":     true,
-	"leadership":        true,
-	"teamwork":          true,
-	"collaboration":     true,
-	"problem solving":   true,
-	"problem-solving":   true,
-	"critical thinking": true,
-	"verbal":            true,
-	"written":           true,
 	// Generic office tools
 	"microsoft office": true,
 	"excel":            true,

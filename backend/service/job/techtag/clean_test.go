@@ -70,22 +70,52 @@ func TestClean_CanonicalMappingNormalizesVariants(t *testing.T) {
 }
 
 // TestClean_BlocklistDropsNoise — blocklist terms are dropped entirely
-// regardless of input casing.
+// regardless of input casing. Methodologies, tools, soft skills, and domain
+// terms are no longer blocked (see TestClean_AllowsBroadenedCategories) —
+// only genuine noise remains here.
 func TestClean_BlocklistDropsNoise(t *testing.T) {
 	noise := []string{
-		"agile", "Agile", "AGILE",
-		"scrum", "Scrum",
-		"rest", "REST", "REST API", "rest apis",
-		"microservices", "ci/cd", "ci cd",
-		"devops", "communication", "leadership",
 		"microsoft office", "excel", "word", "powerpoint",
 		"windows", "macos", "unix",
 		"api", "apis", "sdk", "json", "xml", "html", "css", "sql",
-		"nosql", "version control", "problem-solving",
+		"nosql", "version control",
 	}
 	got := techtag.Clean(noise)
 	if len(got) != 0 {
 		t.Errorf("expected all noise filtered, got %v", got)
+	}
+}
+
+// TestClean_AllowsBroadenedCategories — methodologies, non-dev tools/platforms,
+// soft skills, and certifications/domain terms now survive Clean, with
+// canonical normalization applied where a mapping exists.
+func TestClean_AllowsBroadenedCategories(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want string
+	}{
+		{"agile", "Agile"},
+		{"Scrum", "Scrum"},
+		{"ci/cd", "CI/CD"},
+		{"ci cd", "CI/CD"},
+		{"microservices", "Microservices"},
+		{"devops", "DevOps"},
+		{"leadership", "Leadership"},
+		{"communication", "Communication"},
+		{"jira", "Jira"},
+		{"figma", "Figma"},
+		{"salesforce", "Salesforce"},
+		{"aws certified", "AWS Certified"},
+		{"pmp", "PMP"},
+		{"hipaa", "HIPAA"},
+	}
+	for _, c := range cases {
+		t.Run(c.raw, func(t *testing.T) {
+			got := techtag.Clean([]string{c.raw})
+			if len(got) != 1 || got[0] != c.want {
+				t.Errorf("Clean(%q) = %v, want [%q]", c.raw, got, c.want)
+			}
+		})
 	}
 }
 
@@ -135,16 +165,20 @@ func TestClean_AmbiguousCasingResolvesViaLowercaseLookup(t *testing.T) {
 	}
 }
 
-// TestClean_MixedNoiseAndValid — realistic LLM output: some valid, some noise,
-// some duplicates; output preserves only canonical valid tech in input order.
+// TestClean_MixedNoiseAndValid — realistic broadened enricher output: some
+// valid tech, some valid non-tech keywords, some duplicates, some genuine
+// noise; output preserves only allowed canonical terms in input order.
 func TestClean_MixedNoiseAndValid(t *testing.T) {
 	in := []string{
 		"Go", "agile", "REST APIs", "Kubernetes", "k8s",
 		"communication", "PostgreSQL", "postgres", "microservices",
-		"React", "reactjs", "SQL", "GraphQL",
+		"React", "reactjs", "SQL", "GraphQL", "jira",
 	}
 	got := techtag.Clean(in)
-	want := []string{"Go", "Kubernetes", "PostgreSQL", "React", "GraphQL"}
+	want := []string{
+		"Go", "Agile", "REST APIs", "Kubernetes", "Communication", "PostgreSQL",
+		"Microservices", "React", "GraphQL", "Jira",
+	}
 	if len(got) != len(want) {
 		t.Fatalf("len mismatch: got %v want %v", got, want)
 	}
