@@ -6,6 +6,7 @@ import (
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
+	pipelinesvc "github.com/trushilpatel/jobradar/service/pipeline/services"
 	resumesvc "github.com/trushilpatel/jobradar/service/resume/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
@@ -20,6 +21,7 @@ type App struct {
 	applicationHandler  *application.Handler
 	companyAdminHandler *companysvc.AdminRestRouter
 	resumeHandler       *resumesvc.RestRouter
+	pipelineHandler     *pipelinesvc.PipelineRestRouter
 }
 
 // NewApp constructs the App from fully-wired domain handlers.
@@ -32,6 +34,7 @@ func NewApp(
 	applicationHandler *application.Handler,
 	companyAdminHandler *companysvc.AdminRestRouter,
 	resumeHandler *resumesvc.RestRouter,
+	pipelineHandler *pipelinesvc.PipelineRestRouter,
 ) *App {
 	return &App{
 		companyHandler:      companyHandler,
@@ -41,6 +44,7 @@ func NewApp(
 		applicationHandler:  applicationHandler,
 		companyAdminHandler: companyAdminHandler,
 		resumeHandler:       resumeHandler,
+		pipelineHandler:     pipelineHandler,
 	}
 }
 
@@ -70,4 +74,12 @@ func (a *App) CompanyAdminHandler() handler.RouteGroup {
 		return nil
 	}
 	return a.companyAdminHandler
+}
+
+// PipelineHandler returns the pipeline router for admin mounting.
+func (a *App) PipelineHandler() handler.RouteGroup {
+	if a.pipelineHandler == nil {
+		return nil
+	}
+	return a.pipelineHandler
 }

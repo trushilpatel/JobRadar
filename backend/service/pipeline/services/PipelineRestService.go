@@ -1,0 +1,54 @@
+package services
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/trushilpatel/jobradar/apps/api/handler"
+	pipelinedto "github.com/trushilpatel/jobradar/service/pipeline/dto"
+)
+
+// PipelineRestService is the HTTP adapter for the pipeline domain. It owns
+// request decoding and response shaping for the two /pipeline endpoints;
+// routing is the responsibility of PipelineRestRouter.
+//
+// PipelineRestService does NOT implement PipelineService — it consumes one.
+// Per the slice convention, next is its only dependency.
+type PipelineRestService struct {
+	next PipelineService
+}
+
+// NewPipelineRestService constructs the HTTP adapter.
+func NewPipelineRestService(next PipelineService) *PipelineRestService {
+	if next == nil {
+		panic("pipeline.NewPipelineRestService: next must not be nil")
+	}
+	return &PipelineRestService{next: next}
+}
+
+// GetStats handles GET /pipeline/stats — returns a live pipeline health snapshot.
+func (h *PipelineRestService) GetStats(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.next.GetStats(r.Context())
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, stats)
+}
+
+// TriggerRetry handles POST /pipeline/retry — validates a (worker, tier)
+// redelivery request.
+func (h *PipelineRestService) TriggerRetry(w http.ResponseWriter, r *http.Request) {
+	var input pipelinedto.TriggerRetryInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+
+	result, err := h.next.TriggerRetry(r.Context(), input)
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, result)
+}
