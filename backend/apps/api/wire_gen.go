@@ -15,6 +15,7 @@ import (
 	"github.com/trushilpatel/jobradar/platform/objectstorage"
 	"github.com/trushilpatel/jobradar/service/application"
 	services3 "github.com/trushilpatel/jobradar/service/application/services"
+	services5 "github.com/trushilpatel/jobradar/service/applyqueue/services"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	services "github.com/trushilpatel/jobradar/service/company/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -107,7 +108,16 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	pipelineRestService := pipelinesvc.NewPipelineRestService(pipelineValidationService)
 	pipelineRestRouter := pipelinesvc.NewPipelineRestRouter(pipelineRestService)
 
-	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter, resumeHandler, pipelineRestRouter)
+	// ── Apply Queue ──────────────────────────────────────────────────────────
+	applyQueueRepositoryService := services5.NewRepositoryService(db)
+	applyQueueEngagementChecker := services5.NewEngagementChecker(db)
+	applyQueueResumeOwnershipChecker := services5.NewResumeOwnershipChecker(db)
+	applyQueueImplService := services5.NewImplService(applyQueueRepositoryService)
+	applyQueueValidationService := services5.NewValidationService(applyQueueImplService, applyQueueEngagementChecker, applyQueueResumeOwnershipChecker)
+	applyQueueRestService := services5.NewRestService(applyQueueValidationService)
+	applyQueueHandler := services5.NewRestRouter(applyQueueRestService)
+
+	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter, resumeHandler, pipelineRestRouter, applyQueueHandler)
 	return app, nil
 }
 

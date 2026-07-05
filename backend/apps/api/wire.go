@@ -10,6 +10,7 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/platform/objectstorage"
 	"github.com/trushilpatel/jobradar/service/application"
+	"github.com/trushilpatel/jobradar/service/applyqueue"
 	"github.com/trushilpatel/jobradar/service/company"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	"github.com/trushilpatel/jobradar/service/job"
@@ -74,6 +75,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 		job.ProviderSet,
 		application.ProviderSet,
 		resume.ProviderSet,
+		applyqueue.ProviderSet,
 		NewApp,
 	)
 	return nil, nil
