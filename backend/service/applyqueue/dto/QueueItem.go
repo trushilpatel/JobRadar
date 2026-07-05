@@ -17,14 +17,23 @@ package dto
 // JSON field names for Title/URL are job_title/job_url (not the bare
 // title/url used elsewhere, e.g. dto.JobView) — matches the already-shipped
 // frontend contract in frontend/src/features/apply-queue/api/apply-queue.api.ts.
+// RecommendedResumeID/RecommendedResumeLabel identify the caller's best
+// keyword-match resume for this job (issue #264), computed on-read as the
+// Jaccard similarity between the job's canonical job_tech_tags and each
+// resume's extracted keywords — the highest-scoring resume with score > 0,
+// or both fields nil when no resume scores above zero (no recommendation is
+// better than a meaningless one; a resume with empty keywords — extraction
+// never ran or failed — is simply never a candidate).
 type QueueItem struct {
-	JobID       string  `json:"job_id"`
-	Title       string  `json:"job_title"`
-	Company     string  `json:"company"`
-	URL         string  `json:"job_url"`
-	Status      string  `json:"status"`
-	ResumeID    *string `json:"resume_id"`
-	ResumeLabel *string `json:"resume_label"`
+	JobID                  string  `json:"job_id"`
+	Title                  string  `json:"job_title"`
+	Company                string  `json:"company"`
+	URL                    string  `json:"job_url"`
+	Status                 string  `json:"status"`
+	ResumeID               *string `json:"resume_id"`
+	ResumeLabel            *string `json:"resume_label"`
+	RecommendedResumeID    *string `json:"recommended_resume_id"`
+	RecommendedResumeLabel *string `json:"recommended_resume_label"`
 }
 
 // QueueListResult is the keyset-pagination response shape for

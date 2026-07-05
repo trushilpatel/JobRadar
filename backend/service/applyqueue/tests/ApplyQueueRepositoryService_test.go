@@ -474,3 +474,235 @@ func TestApplyQueueRepo_ResumeOwnedByUser(t *testing.T) {
 		t.Error("ResumeOwnedByUser = true for a nonexistent resume, want false")
 	}
 }
+
+// ─── Resume recommendation (issue #264) ──────────────────────────────────────
+
+func TestApplyQueueRepo_List_Recommendation_ExactMatchScoresOne(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJob(t, db, "j1", "c1", "Engineer")
+	seedTechTags(t, db, "j1", "c1", "Go", "PostgreSQL")
+	seedResumeWithKeywords(t, db, "r1", testUserID, "My Resume", []string{"Go", "PostgreSQL"})
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	result, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20)
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(result.Items))
+	}
+	item := result.Items[0]
+	if item.RecommendedResumeID == nil || *item.RecommendedResumeID != "r1" {
+		t.Errorf("RecommendedResumeID = %v, want r1", item.RecommendedResumeID)
+	}
+	if item.RecommendedResumeLabel == nil || *item.RecommendedResumeLabel != "My Resume" {
+		t.Errorf("RecommendedResumeLabel = %v, want %q", item.RecommendedResumeLabel, "My Resume")
+	}
+}
+
+func TestApplyQueueRepo_List_Recommendation_PicksHighestScoringResumeAmongMultiple(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJob(t, db, "j1", "c1", "Engineer")
+	seedTechTags(t, db, "j1", "c1", "Go", "PostgreSQL", "Kubernetes", "Docker")
+	// r1: 2/6 overlap (Go, PostgreSQL ∪ {Go,PostgreSQL,Kubernetes,Docker,Python,Redis} = 6, ∩=2 -> 0.333)
+	seedResumeWithKeywords(t, db, "r1", testUserID, "Weak Match", []string{"Go", "PostgreSQL", "Python", "Redis"})
+	// r2: 3/4 overlap (Go,PostgreSQL,Kubernetes ∩ job tags = 3, ∪ = 4 -> 0.75) — strictly higher.
+	seedResumeWithKeywords(t, db, "r2", testUserID, "Strong Match", []string{"Go", "PostgreSQL", "Kubernetes"})
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	result, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20)
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(result.Items))
+	}
+	if got := result.Items[0].RecommendedResumeID; got == nil || *got != "r2" {
+		t.Fatalf("RecommendedResumeID = %v, want r2 (strictly higher Jaccard score)", got)
+	}
+}
+
+func TestApplyQueueRepo_List_Recommendation_NoJobTechTagsIsNil(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJob(t, db, "j1", "c1", "Engineer") // no seedTechTags call — job has no tech tags at all
+	seedResumeWithKeywords(t, db, "r1", testUserID, "My Resume", []string{"Go", "PostgreSQL"})
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	result, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20)
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	item := result.Items[0]
+	if item.RecommendedResumeID != nil || item.RecommendedResumeLabel != nil {
+		t.Errorf("expected nil recommendation for a job with no tech tags, got id=%v label=%v",
+			item.RecommendedResumeID, item.RecommendedResumeLabel)
+	}
+}
+
+func TestApplyQueueRepo_List_Recommendation_ResumeWithEmptyKeywordsNeverRecommended(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJob(t, db, "j1", "c1", "Engineer")
+	seedTechTags(t, db, "j1", "c1", "Go", "PostgreSQL")
+	seedResume(t, db, "r1", testUserID, "Never Extracted") // keywords defaults to '[]'
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	result, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20)
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	item := result.Items[0]
+	if item.RecommendedResumeID != nil {
+		t.Errorf("expected nil recommendation when the only resume has empty keywords, got %v", *item.RecommendedResumeID)
+	}
+}
+
+func TestApplyQueueRepo_List_Recommendation_DisjointKeywordsScoreZeroIsNil(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJob(t, db, "j1", "c1", "Engineer")
+	seedTechTags(t, db, "j1", "c1", "Go", "PostgreSQL")
+	seedResumeWithKeywords(t, db, "r1", testUserID, "Unrelated", []string{"React", "TypeScript"})
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	result, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20)
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	item := result.Items[0]
+	if item.RecommendedResumeID != nil {
+		t.Errorf("expected nil recommendation for a zero-overlap resume, got %v", *item.RecommendedResumeID)
+	}
+}
+
+func TestApplyQueueRepo_List_Recommendation_TieBreaksToOldestResume(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJob(t, db, "j1", "c1", "Engineer")
+	seedTechTags(t, db, "j1", "c1", "Go", "PostgreSQL")
+	// Both resumes score identically (exact match) — loadUserResumeKeywords
+	// orders by created_at ASC, id ASC, so the lexicographically-first id
+	// wins the tie deterministically (both rows share the same
+	// CURRENT_TIMESTAMP-resolution created_at in this fast test).
+	seedResumeWithKeywords(t, db, "r1", testUserID, "First", []string{"Go", "PostgreSQL"})
+	seedResumeWithKeywords(t, db, "r2", testUserID, "Second", []string{"Go", "PostgreSQL"})
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	result, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20)
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	if got := result.Items[0].RecommendedResumeID; got == nil || *got != "r1" {
+		t.Fatalf("RecommendedResumeID = %v, want r1 (deterministic tie-break)", got)
+	}
+}
+
+func TestApplyQueueRepo_List_Recommendation_IndependentPerJobOnSamePage(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJob(t, db, "j1", "c1", "Backend Engineer")
+	seedJob(t, db, "j2", "c1", "Frontend Engineer")
+	seedTechTags(t, db, "j1", "c1", "Go", "PostgreSQL")
+	seedTechTags(t, db, "j2", "c1", "React", "TypeScript")
+	seedResumeWithKeywords(t, db, "r-backend", testUserID, "Backend Resume", []string{"Go", "PostgreSQL"})
+	seedResumeWithKeywords(t, db, "r-frontend", testUserID, "Frontend Resume", []string{"React", "TypeScript"})
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+	seedUserJobState(t, db, testUserID, "j2", nil, &savedAt, now.Add(time.Second))
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	result, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20)
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	if len(result.Items) != 2 {
+		t.Fatalf("len(items) = %d, want 2", len(result.Items))
+	}
+
+	byJobID := map[string]string{}
+	for _, item := range result.Items {
+		if item.RecommendedResumeID != nil {
+			byJobID[item.JobID] = *item.RecommendedResumeID
+		}
+	}
+	if byJobID["j1"] != "r-backend" {
+		t.Errorf("j1 recommendation = %q, want r-backend", byJobID["j1"])
+	}
+	if byJobID["j2"] != "r-frontend" {
+		t.Errorf("j2 recommendation = %q, want r-frontend", byJobID["j2"])
+	}
+}
+
+func TestApplyQueueRepo_List_Recommendation_NoResumesAtAllIsNil(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJob(t, db, "j1", "c1", "Engineer")
+	seedTechTags(t, db, "j1", "c1", "Go", "PostgreSQL")
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	result, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20)
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	item := result.Items[0]
+	if item.RecommendedResumeID != nil || item.RecommendedResumeLabel != nil {
+		t.Errorf("expected nil recommendation with no resumes at all, got id=%v label=%v",
+			item.RecommendedResumeID, item.RecommendedResumeLabel)
+	}
+}
+
+func TestApplyQueueRepo_List_Recommendation_ScopedToCallerResumesOnly(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJob(t, db, "j1", "c1", "Engineer")
+	seedTechTags(t, db, "j1", "c1", "Go", "PostgreSQL")
+	// Another user's perfectly-matching resume must never be recommended.
+	seedResumeWithKeywords(t, db, "r-other", "other-user", "Other User Resume", []string{"Go", "PostgreSQL"})
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	result, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20)
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	if result.Items[0].RecommendedResumeID != nil {
+		t.Errorf("expected nil recommendation — the only matching resume belongs to a different user, got %v",
+			*result.Items[0].RecommendedResumeID)
+	}
+}

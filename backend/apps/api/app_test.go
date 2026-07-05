@@ -274,6 +274,9 @@ func (f *fakeResumeService) Delete(_ context.Context, _, _ string) error { retur
 func (f *fakeResumeService) Download(_ context.Context, _, _ string) (io.ReadCloser, *resumemodel.Resume, error) {
 	return nil, nil, nil
 }
+func (f *fakeResumeService) ExtractKeywords(_ context.Context, _, _ string) (*resumemodel.Resume, error) {
+	return nil, nil
+}
 
 type fakeAtsService struct{}
 

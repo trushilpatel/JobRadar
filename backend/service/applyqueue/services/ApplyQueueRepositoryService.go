@@ -212,7 +212,45 @@ func (r *repositoryService) List(ctx context.Context, userID, filter, cursor str
 			ResumeLabel: row.ResumeLabel,
 		}
 	}
+
+	if len(items) > 0 {
+		if recErr := r.attachResumeRecommendations(ctx, userID, items); recErr != nil {
+			return dto.QueueListResult{}, domainerrs.ErrInternal.WithMessage("applyqueue repo: resume recommendations: " + recErr.Error())
+		}
+	}
+
 	return dto.QueueListResult{Items: items, NextCursor: next}, nil
+}
+
+// attachResumeRecommendations computes recommended_resume_id/_label for
+// every item in place, per issue #264. Two queries total for the whole
+// page — job_tech_tags (IN clause over every job on the page) and the
+// caller's resumes — never one query per row, per the "join once per page"
+// requirement. Matching itself (Jaccard over the in-memory sets) is pure Go,
+// deliberately not a SQL computation or a cached table: this mirrors the
+// frozen spec's own precedent of no fit-score cache table until proven
+// necessary by p95 latency.
+func (r *repositoryService) attachResumeRecommendations(ctx context.Context, userID string, items []dto.QueueItem) error {
+	jobIDs := make([]string, len(items))
+	for i, it := range items {
+		jobIDs[i] = it.JobID
+	}
+
+	techTagsByJob, err := r.loadJobTechTags(ctx, jobIDs)
+	if err != nil {
+		return err
+	}
+	resumeRows, err := r.loadUserResumeKeywords(ctx, userID)
+	if err != nil {
+		return err
+	}
+	resumes := parseResumeKeywordRows(resumeRows)
+
+	for i := range items {
+		items[i].RecommendedResumeID, items[i].RecommendedResumeLabel =
+			bestMatchingResume(techTagsByJob[items[i].JobID], resumes)
+	}
+	return nil
 }
 
 // SetResume attaches or clears the resume_job_attachments row for

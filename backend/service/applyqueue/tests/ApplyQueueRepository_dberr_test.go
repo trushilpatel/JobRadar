@@ -80,6 +80,51 @@ func TestApplyQueueRepo_SetResume_Attach_LabelFetchDBError(t *testing.T) {
 	}
 }
 
+// TestApplyQueueRepo_List_RecommendationTechTagsQueryDBError forces
+// attachResumeRecommendations' job_tech_tags lookup to fail (base query
+// already succeeded — there's a row to recommend against) and asserts List
+// surfaces it as an error rather than silently returning items with no
+// recommendation.
+func TestApplyQueueRepo_List_RecommendationTechTagsQueryDBError(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJob(t, db, "j1", "c1", "Engineer")
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+
+	if err := db.Exec("DROP TABLE job_tech_tags").Error; err != nil {
+		t.Fatalf("drop job_tech_tags: %v", err)
+	}
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	if _, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20); err == nil {
+		t.Fatal("expected an error when the job_tech_tags lookup fails")
+	}
+}
+
+// TestApplyQueueRepo_List_RecommendationResumesQueryDBError is the same
+// shape for the resumes-lookup half of attachResumeRecommendations.
+func TestApplyQueueRepo_List_RecommendationResumesQueryDBError(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	seedJob(t, db, "j1", "c1", "Engineer")
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+
+	if err := db.Exec("DROP TABLE resumes").Error; err != nil {
+		t.Fatalf("drop resumes: %v", err)
+	}
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	if _, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20); err == nil {
+		t.Fatal("expected an error when the resumes lookup fails")
+	}
+}
+
 func TestApplyQueueRepo_HasEngagement_DBError(t *testing.T) {
 	t.Parallel()
 	db := newApplyQueueTestDB(t)
