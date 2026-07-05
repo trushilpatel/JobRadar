@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -39,6 +40,7 @@ func newResumeTestDB(t *testing.T) *gorm.DB {
 			content_type TEXT NOT NULL,
 			size_bytes INTEGER NOT NULL,
 			created_at DATETIME NOT NULL,
+			keywords TEXT NOT NULL DEFAULT '[]',
 			UNIQUE(user_id, label)
 		)`,
 	}
@@ -395,5 +397,100 @@ func TestResumeRepository_DownloadIsUnreachableStub(t *testing.T) {
 	repo := resumesvc.NewRepositoryService(db)
 	if _, _, err := repo.Download(context.Background(), "user-1", "r1"); err == nil {
 		t.Fatal("expected the repository-layer stub to always return an error")
+	}
+}
+
+func TestResumeRepository_ExtractKeywordsIsUnreachableStub(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	if _, err := repo.ExtractKeywords(context.Background(), "user-1", "r1"); err == nil {
+		t.Fatal("expected the repository-layer stub to always return an error")
+	}
+}
+
+func TestResumeKeywordStore_UpdateKeywordsPersistsAndIsReadableViaGet(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	store := resumesvc.NewKeywordStore(db)
+	ctx := context.Background()
+
+	resume, err := repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "L", OriginalFilename: "f.pdf", StorageKey: "k1",
+		ContentType: "application/pdf", DeclaredSize: 8,
+	})
+	if err != nil {
+		t.Fatalf("Upload: %v", err)
+	}
+	// A freshly inserted row always starts with the migration 089 default.
+	if string(resume.Keywords) != "[]" {
+		t.Fatalf("expected default keywords '[]', got %s", resume.Keywords)
+	}
+
+	if err := store.UpdateKeywords(ctx, resume.ID, []string{"Go", "PostgreSQL"}); err != nil {
+		t.Fatalf("UpdateKeywords: %v", err)
+	}
+
+	updated, err := repo.Get(ctx, "user-1", resume.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	var kw []string
+	if err := json.Unmarshal(updated.Keywords, &kw); err != nil {
+		t.Fatalf("unmarshal persisted keywords: %v", err)
+	}
+	if len(kw) != 2 || kw[0] != "Go" || kw[1] != "PostgreSQL" {
+		t.Fatalf("expected [Go PostgreSQL], got %v", kw)
+	}
+}
+
+func TestResumeKeywordStore_UpdateKeywordsWithEmptySliceStoresJSONArray(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	store := resumesvc.NewKeywordStore(db)
+	ctx := context.Background()
+
+	resume, err := repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "L", OriginalFilename: "f.pdf", StorageKey: "k1",
+		ContentType: "application/pdf", DeclaredSize: 8,
+	})
+	if err != nil {
+		t.Fatalf("Upload: %v", err)
+	}
+
+	// A nil slice must still marshal to the JSON array "[]", never the JSON
+	// literal "null" — the column is NOT NULL and every reader (frontend zod
+	// schema included) expects an array.
+	if err := store.UpdateKeywords(ctx, resume.ID, nil); err != nil {
+		t.Fatalf("UpdateKeywords: %v", err)
+	}
+	updated, err := repo.Get(ctx, "user-1", resume.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if string(updated.Keywords) != "[]" {
+		t.Fatalf("expected keywords column to hold the JSON array '[]', got %s", updated.Keywords)
+	}
+}
+
+func TestResumeKeywordStore_UpdateKeywordsMissingResumeReturnsNotFound(t *testing.T) {
+	db := newResumeTestDB(t)
+	store := resumesvc.NewKeywordStore(db)
+
+	if err := store.UpdateKeywords(context.Background(), "no-such-id", []string{"Go"}); !errors.Is(err, domainerrs.ErrNotFound) {
+		t.Fatalf("expected NotFound for a missing resume, got %v", err)
+	}
+}
+
+func TestResumeKeywordStore_UpdateKeywordsReturnsInternalErrorOnDBFailure(t *testing.T) {
+	db := newResumeTestDB(t)
+	store := resumesvc.NewKeywordStore(db)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("db.DB(): %v", err)
+	}
+	_ = sqlDB.Close()
+
+	if err := store.UpdateKeywords(context.Background(), "r1", []string{"Go"}); !errors.Is(err, domainerrs.ErrInternal) {
+		t.Fatalf("expected ErrInternal on closed DB, got %v", err)
 	}
 }

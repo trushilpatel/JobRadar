@@ -279,6 +279,54 @@ func TestResumeRest_UploadReturns400WhenFileFieldMissing(t *testing.T) {
 	}
 }
 
+func TestResumeRest_ExtractKeywordsReturns200OnSuccess(t *testing.T) {
+	fake := &fakeService{extractResult: &resumemodel.Resume{ID: "r1", Label: "My resume"}}
+	h := resumesvc.NewRestService(fake)
+	router := resumesvc.NewRestRouter(h)
+	mux := chi.NewRouter()
+	router.Register(mux)
+
+	req := withUser(httptest.NewRequest(http.MethodPost, "/resumes/r1/keywords", nil), "u1")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestResumeRest_ExtractKeywordsReturns404ForMissingResume(t *testing.T) {
+	fake := &fakeService{extractErr: domainerrs.ErrNotFound.WithMessage("resume not found")}
+	h := resumesvc.NewRestService(fake)
+	router := resumesvc.NewRestRouter(h)
+	mux := chi.NewRouter()
+	router.Register(mux)
+
+	req := withUser(httptest.NewRequest(http.MethodPost, "/resumes/missing/keywords", nil), "u1")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestResumeRest_ExtractKeywordsReturns500OnExtractionFailure(t *testing.T) {
+	fake := &fakeService{extractErr: domainerrs.ErrInternal.WithMessage("llm exhausted")}
+	h := resumesvc.NewRestService(fake)
+	router := resumesvc.NewRestRouter(h)
+	mux := chi.NewRouter()
+	router.Register(mux)
+
+	req := withUser(httptest.NewRequest(http.MethodPost, "/resumes/r1/keywords", nil), "u1")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rec.Code)
+	}
+}
+
 func TestNewRestService_PanicsOnNilNext(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {

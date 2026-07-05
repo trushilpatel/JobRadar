@@ -12,4 +12,5 @@ func (rr *RestRouter) Register(r chi.Router) {
 	r.Get("/resumes/{id}/download", rr.handler.download)
 	r.Patch("/resumes/{id}", rr.handler.rename)
 	r.Delete("/resumes/{id}", rr.handler.remove)
+	r.Post("/resumes/{id}/keywords", rr.handler.extractKeywords)
 }
