@@ -3,7 +3,9 @@ package services
 import (
 	"encoding/json"
 	"io"
+	"mime"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/apps/api/handler"
@@ -72,20 +74,26 @@ func (h *RestService) upload(w http.ResponseWriter, r *http.Request) {
 	handler.Respond(w, http.StatusCreated, resume)
 }
 
-type downloadResponse struct {
-	URL string `json:"url"`
-}
-
 func (h *RestService) download(w http.ResponseWriter, r *http.Request) {
 	userID := identity.MustFromContext(r.Context()).UserID
 	id := chi.URLParam(r, "id")
 
-	url, err := h.next.PresignDownload(r.Context(), userID, id)
+	reader, resume, err := h.next.Download(r.Context(), userID, id)
 	if err != nil {
 		handler.HandleError(w, err)
 		return
 	}
-	handler.Respond(w, http.StatusOK, downloadResponse{URL: url})
+	defer reader.Close()
+
+	w.Header().Set("Content-Type", resume.ContentType)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": resume.OriginalFilename}))
+	w.Header().Set("Content-Length", strconv.FormatInt(resume.SizeBytes, 10))
+	w.WriteHeader(http.StatusOK)
+	// Headers are already committed at this point — an io.Copy failure here
+	// (client disconnect, storage read timeout) cannot change the response
+	// status, so this deliberately bypasses handler.Respond/HandleError.
+	// Nothing else to do but let the partial transfer end.
+	_, _ = io.Copy(w, reader)
 }
 
 type renameRequest struct {

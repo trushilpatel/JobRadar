@@ -3,8 +3,11 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	resumecommon "github.com/trushilpatel/jobradar/service/resume/common"
@@ -12,6 +15,26 @@ import (
 	resumemodel "github.com/trushilpatel/jobradar/service/resume/models"
 	"gorm.io/gorm"
 )
+
+// isUniqueViolation detects PostgreSQL unique-constraint failures across the
+// GORM driver landscape (SQLSTATE 23505) — same pattern as
+// service/company/services/CompanyScanSettingsRepositoryService.go. pgx wraps
+// the code on a *pgconn.PgError; GORM's generic wrapper hides it behind
+// ErrDuplicatedKey on recent versions. Checked both for portability across
+// local dev (pgx direct) and CI.
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	return false
+}
 
 type repositoryService struct {
 	db *gorm.DB
@@ -89,6 +112,11 @@ func (r *repositoryService) Upload(ctx context.Context, userID string, input dto
 			return domainerrs.ErrConflict.WithMessage("resume repo: user at resume limit")
 		}
 		if createErr := tx.Create(&row).Error; createErr != nil {
+			if isUniqueViolation(createErr) {
+				return domainerrs.ErrConflict.
+					WithMessage("resume repo: insert: " + createErr.Error()).
+					WithExternal(fmt.Sprintf("a resume named %q already exists", input.Label))
+			}
 			return domainerrs.ErrInternal.WithMessage("resume repo: insert: " + createErr.Error())
 		}
 		return nil
@@ -107,6 +135,11 @@ func (r *repositoryService) Rename(ctx context.Context, userID, id, label string
 		Where("id = ? AND user_id = ?", id, userID).
 		Update("label", label)
 	if res.Error != nil {
+		if isUniqueViolation(res.Error) {
+			return nil, domainerrs.ErrConflict.
+				WithMessage("resume repo: rename: " + res.Error.Error()).
+				WithExternal(fmt.Sprintf("a resume named %q already exists", label))
+		}
 		return nil, domainerrs.ErrInternal.WithMessage("resume repo: rename: " + res.Error.Error())
 	}
 	if res.RowsAffected == 0 {
@@ -129,12 +162,12 @@ func (r *repositoryService) Delete(ctx context.Context, userID, id string) (err 
 	return nil
 }
 
-// PresignDownload is unreachable in the real chain: ImplService overrides it
-// and never delegates further down (object storage access does not belong in
+// Download is unreachable in the real chain: ImplService overrides it and
+// never delegates further down (object storage access does not belong in
 // the GORM-only repository layer). Implemented only so repositoryService
 // satisfies Service completely.
-func (r *repositoryService) PresignDownload(_ context.Context, _, _ string) (string, error) {
-	return "", domainerrs.ErrInternal.WithMessage("resume repo: presign not supported at repository layer")
+func (r *repositoryService) Download(_ context.Context, _, _ string) (io.ReadCloser, *resumemodel.Resume, error) {
+	return nil, nil, domainerrs.ErrInternal.WithMessage("resume repo: download not supported at repository layer")
 }
 
 var _ Service = (*repositoryService)(nil)

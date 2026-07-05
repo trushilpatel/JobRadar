@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"io"
 
 	"github.com/trushilpatel/jobradar/service/resume/dto"
 	resumemodel "github.com/trushilpatel/jobradar/service/resume/models"
@@ -14,7 +15,10 @@ type Service interface {
 	Upload(ctx context.Context, userID string, input dto.UploadInput) (*resumemodel.Resume, error)
 	Rename(ctx context.Context, userID, id, label string) (*resumemodel.Resume, error)
 	Delete(ctx context.Context, userID, id string) error
-	PresignDownload(ctx context.Context, userID, id string) (string, error)
+	// Download returns a reader over the resume's object-storage bytes plus
+	// its metadata row (for content-type/filename/size) — the REST layer
+	// streams the reader directly to the client. Callers must Close() it.
+	Download(ctx context.Context, userID, id string) (io.ReadCloser, *resumemodel.Resume, error)
 }
 
 type BaseService struct {
@@ -48,6 +52,6 @@ func (b *BaseService) Delete(ctx context.Context, userID, id string) error {
 	return b.next.Delete(ctx, userID, id)
 }
 
-func (b *BaseService) PresignDownload(ctx context.Context, userID, id string) (string, error) {
-	return b.next.PresignDownload(ctx, userID, id)
+func (b *BaseService) Download(ctx context.Context, userID, id string) (io.ReadCloser, *resumemodel.Resume, error) {
+	return b.next.Download(ctx, userID, id)
 }

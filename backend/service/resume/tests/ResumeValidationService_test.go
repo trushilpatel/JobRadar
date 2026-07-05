@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"io"
 	"strings"
 	"testing"
 
@@ -22,8 +23,9 @@ type fakeService struct {
 	renameResult    *resumemodel.Resume
 	renameErr       error
 	deleteErr       error
-	presignResult   string
-	presignErr      error
+	downloadReader  io.ReadCloser
+	downloadResume  *resumemodel.Resume
+	downloadErr     error
 	listResult      []resumemodel.Resume
 	listErr         error
 	getResult       *resumemodel.Resume
@@ -45,8 +47,8 @@ func (f *fakeService) Rename(_ context.Context, _ string, _ string, label string
 	return f.renameResult, f.renameErr
 }
 func (f *fakeService) Delete(context.Context, string, string) error { return f.deleteErr }
-func (f *fakeService) PresignDownload(context.Context, string, string) (string, error) {
-	return f.presignResult, f.presignErr
+func (f *fakeService) Download(context.Context, string, string) (io.ReadCloser, *resumemodel.Resume, error) {
+	return f.downloadReader, f.downloadResume, f.downloadErr
 }
 
 func TestResumeValidation_UploadRejectsEmptyFile(t *testing.T) {
@@ -163,8 +165,8 @@ func TestResumeValidation_RenameTrimsWhitespace(t *testing.T) {
 }
 
 // The following pass-through tests exercise BaseService — ValidationService
-// doesn't override List/Get/Delete/PresignDownload, so calling them here
-// must delegate straight through to the fake without any validation logic.
+// doesn't override List/Get/Delete/Download, so calling them here must
+// delegate straight through to the fake without any validation logic.
 
 func TestResumeValidation_ListPassesThroughToNext(t *testing.T) {
 	fake := &fakeService{listResult: []resumemodel.Resume{{ID: "r1"}}}
@@ -198,15 +200,15 @@ func TestResumeValidation_DeletePassesThroughToNext(t *testing.T) {
 	}
 }
 
-func TestResumeValidation_PresignDownloadPassesThroughToNext(t *testing.T) {
-	fake := &fakeService{presignResult: "https://example.test/signed"}
+func TestResumeValidation_DownloadPassesThroughToNext(t *testing.T) {
+	fake := &fakeService{downloadResume: &resumemodel.Resume{ID: "r1"}}
 	v := resumesvc.NewValidationService(fake)
-	url, err := v.PresignDownload(context.Background(), "u1", "r1")
+	_, resume, err := v.Download(context.Background(), "u1", "r1")
 	if err != nil {
-		t.Fatalf("PresignDownload: %v", err)
+		t.Fatalf("Download: %v", err)
 	}
-	if url != "https://example.test/signed" {
-		t.Fatalf("expected pass-through URL, got %s", url)
+	if resume.ID != "r1" {
+		t.Fatalf("expected pass-through resume, got %+v", resume)
 	}
 }
 

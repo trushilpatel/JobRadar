@@ -3,19 +3,27 @@ import { apiClient } from '@/lib/core/api-client'
 import {
   fetchResumes,
   uploadResume,
-  getResumeDownloadUrl,
+  downloadResume,
   renameResume,
   deleteResume,
 } from '../resumes.api'
 
 vi.mock('@/lib/core/api-client', () => ({
-  apiClient: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), upload: vi.fn() },
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+    upload: vi.fn(),
+    getBlob: vi.fn(),
+  },
 }))
 
 const mockGet = vi.mocked(apiClient.get)
 const mockUpload = vi.mocked(apiClient.upload)
 const mockPatch = vi.mocked(apiClient.patch)
 const mockDelete = vi.mocked(apiClient.delete)
+const mockGetBlob = vi.mocked(apiClient.getBlob)
 
 const sampleResume = {
   id: 'r1',
@@ -64,12 +72,13 @@ describe('resumes.api', () => {
     })
   })
 
-  describe('getResumeDownloadUrl', () => {
-    it('url-encodes the id and returns the url', async () => {
-      mockGet.mockResolvedValue({ url: 'https://example.test/signed' })
-      const url = await getResumeDownloadUrl('r/1')
-      expect(mockGet).toHaveBeenCalledWith('/resumes/r%2F1/download')
-      expect(url).toBe('https://example.test/signed')
+  describe('downloadResume', () => {
+    it('url-encodes the id and returns the blob', async () => {
+      const blob = new Blob(['%PDF-1.4'], { type: 'application/pdf' })
+      mockGetBlob.mockResolvedValue(blob)
+      const result = await downloadResume('r/1')
+      expect(mockGetBlob).toHaveBeenCalledWith('/resumes/r%2F1/download')
+      expect(result).toBe(blob)
     })
   })
 

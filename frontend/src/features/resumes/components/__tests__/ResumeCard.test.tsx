@@ -15,13 +15,15 @@ const sampleResume = {
   created_at: '2026-07-03T00:00:00Z',
 }
 
+const sampleBlob = new Blob(['%PDF-1.4'], { type: 'application/pdf' })
+
 function mockActions(overrides: Partial<ReturnType<typeof actionsHook.useResumeActions>> = {}) {
   vi.mocked(actionsHook.useResumeActions).mockReturnValue({
     upload: { mutateAsync: vi.fn(), isPending: false } as unknown as ReturnType<
       typeof actionsHook.useResumeActions
     >['upload'],
     download: {
-      mutateAsync: vi.fn().mockResolvedValue('https://example.test/signed'),
+      mutateAsync: vi.fn().mockResolvedValue(sampleBlob),
     } as unknown as ReturnType<typeof actionsHook.useResumeActions>['download'],
     rename: { mutateAsync: vi.fn() } as unknown as ReturnType<
       typeof actionsHook.useResumeActions
@@ -36,7 +38,12 @@ function mockActions(overrides: Partial<ReturnType<typeof actionsHook.useResumeA
 describe('ResumeCard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    Object.defineProperty(window, 'location', { value: { assign: vi.fn() }, writable: true })
+    // jsdom has no createObjectURL/revokeObjectURL implementation, and
+    // clicking a real <a href="blob:..."> would log a jsdom "not implemented:
+    // navigation" error — stub all three so the save-blob flow runs cleanly.
+    URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   })
 
   it('renders label and filename', () => {
@@ -46,13 +53,12 @@ describe('ResumeCard', () => {
     expect(screen.getByText('resume.pdf')).toBeInTheDocument()
   })
 
-  it('download button fetches a URL and navigates to it', async () => {
+  it('download button fetches the file blob and triggers a save', async () => {
     mockActions()
     render(<ResumeCard resume={sampleResume} />)
     fireEvent.click(screen.getByLabelText('Download'))
-    await waitFor(() =>
-      expect(window.location.assign).toHaveBeenCalledWith('https://example.test/signed')
-    )
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledWith(sampleBlob))
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
   })
 
   it('delete button calls remove.mutate with the resume id', () => {

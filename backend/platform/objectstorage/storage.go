@@ -6,9 +6,12 @@ package objectstorage
 
 import (
 	"context"
+	"errors"
 	"io"
-	"time"
 )
+
+// ErrNotFound is returned by Get when key does not exist in the bucket.
+var ErrNotFound = errors.New("objectstorage: object not found")
 
 // Storage is the contract every implementation honours.
 type Storage interface {
@@ -16,7 +19,7 @@ type Storage interface {
 	Put(ctx context.Context, key string, r io.Reader, size int64, contentType string) error
 	// Delete removes the object at key. Deleting a missing key is not an error.
 	Delete(ctx context.Context, key string) error
-	// PresignGet returns a time-limited URL the caller can fetch key from
-	// directly, bypassing the API for the byte transfer.
-	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error)
+	// Get returns a reader over key's bytes plus its size. The caller must
+	// Close() the reader. Returns ErrNotFound if key does not exist.
+	Get(ctx context.Context, key string) (io.ReadCloser, int64, error)
 }

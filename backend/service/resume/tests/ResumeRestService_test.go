@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -77,8 +78,14 @@ func TestResumeRest_UploadReturns400OnValidationFailure(t *testing.T) {
 	}
 }
 
-func TestResumeRest_DownloadReturnsSignedURL(t *testing.T) {
-	fake := &fakeService{presignResult: "https://example.test/signed"}
+func TestResumeRest_DownloadStreamsFileWithHeaders(t *testing.T) {
+	fake := &fakeService{
+		downloadReader: io.NopCloser(bytes.NewReader([]byte("%PDF-1.4 test content"))),
+		downloadResume: &resumemodel.Resume{
+			ID: "r1", OriginalFilename: "My Resume.pdf", ContentType: "application/pdf",
+			SizeBytes: 22,
+		},
+	}
 	h := resumesvc.NewRestService(fake)
 	router := resumesvc.NewRestRouter(h)
 	mux := chi.NewRouter()
@@ -91,21 +98,22 @@ func TestResumeRest_DownloadReturnsSignedURL(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var envelope struct {
-		Data struct {
-			URL string `json:"url"`
-		} `json:"data"`
+	if ct := rec.Header().Get("Content-Type"); ct != "application/pdf" {
+		t.Fatalf("expected Content-Type application/pdf, got %s", ct)
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	if cd := rec.Header().Get("Content-Disposition"); cd != `attachment; filename="My Resume.pdf"` {
+		t.Fatalf("expected attachment Content-Disposition, got %s", cd)
 	}
-	if envelope.Data.URL != "https://example.test/signed" {
-		t.Fatalf("expected the fake's presigned URL, got %s", envelope.Data.URL)
+	if cl := rec.Header().Get("Content-Length"); cl != "22" {
+		t.Fatalf("expected Content-Length 22, got %s", cl)
+	}
+	if rec.Body.String() != "%PDF-1.4 test content" {
+		t.Fatalf("expected streamed file bytes, got %q", rec.Body.String())
 	}
 }
 
 func TestResumeRest_DownloadReturns404ForMissingResume(t *testing.T) {
-	fake := &fakeService{presignErr: domainerrs.ErrNotFound.WithMessage("resume not found")}
+	fake := &fakeService{downloadErr: domainerrs.ErrNotFound.WithMessage("resume not found")}
 	h := resumesvc.NewRestService(fake)
 	router := resumesvc.NewRestRouter(h)
 	mux := chi.NewRouter()
