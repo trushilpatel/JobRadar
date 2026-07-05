@@ -19,9 +19,15 @@ interface SegmentedSwitchProps<T extends string> {
   'aria-label'?: string
 }
 
+// `violet` is a flat design token (see tailwind.config.js), not a numbered
+// shade scale — `bg-violet-500/20`-style classes silently fail to generate.
+// `blue`/`amber`/`emerald`/`red` are untouched by the token override so their
+// numbered Tailwind scale still works normally.
 const ACCENT_ON: Record<SegmentedAccent, string> = {
-  violet: 'data-[state=on]:bg-violet-500/20 data-[state=on]:text-violet-300',
-  emerald: 'data-[state=on]:bg-emerald-500/[0.18] data-[state=on]:text-emerald-300',
+  violet:
+    'data-[state=on]:bg-[color-mix(in_srgb,var(--violet)_20%,transparent)] data-[state=on]:text-violet',
+  emerald:
+    'data-[state=on]:bg-emerald-100 data-[state=on]:text-emerald-700 dark:data-[state=on]:bg-emerald-500/20 dark:data-[state=on]:text-emerald-300',
   red: 'data-[state=on]:bg-red-500/[0.18] data-[state=on]:text-red-300',
   blue: 'data-[state=on]:bg-blue-500/20 data-[state=on]:text-blue-300',
   amber: 'data-[state=on]:bg-amber-500/20 data-[state=on]:text-amber-300',
