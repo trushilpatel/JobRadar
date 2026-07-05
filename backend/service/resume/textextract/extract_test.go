@@ -226,3 +226,19 @@ func TestExtractText_TrimsSurroundingWhitespace(t *testing.T) {
 		t.Fatalf("expected surrounding whitespace to be trimmed, got %q", text)
 	}
 }
+
+func TestExtractText_CollapsesEmbeddedNewlinesForMultiWordMatching(t *testing.T) {
+	inner := "Skilled in machine\nlearning and distributed systems with five years of experience."
+	data := buildTestDocx(t, docxParagraph(inner))
+
+	text, err := textextract.ExtractText(filetype.ContentTypeDOCX, bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("ExtractText: %v", err)
+	}
+	if strings.Contains(text, "\n") {
+		t.Fatalf("expected no embedded newlines in extracted text, got %q", text)
+	}
+	if !strings.Contains(text, "machine learning") {
+		t.Fatalf("expected the newline-broken phrase to join into one matchable string, got %q", text)
+	}
+}
