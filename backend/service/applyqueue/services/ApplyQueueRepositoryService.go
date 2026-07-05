@@ -116,7 +116,12 @@ type queueRow struct {
 
 // deriveStatus renders the client-facing status for a queue row: "saved"
 // when the workflow status column is NULL (only the orthogonal saved_at
-// flag is set), otherwise the actual status value verbatim.
+// flag is set), otherwise the actual status value verbatim. Terminal
+// statuses (dismissed/offer/rejected) never reach here — both filter
+// branches in List exclude them — so the only values this ever returns are
+// jobcommon.JobStatusSaved, JobStatusApplied, or JobStatusInterviewing,
+// matching the frontend's ApplyQueueStatusSchema three-value union
+// (frontend/src/features/apply-queue/api/apply-queue.api.ts).
 func deriveStatus(status *string) string {
 	if status == nil {
 		return jobcommon.JobStatusSaved
@@ -124,23 +129,27 @@ func deriveStatus(status *string) string {
 	return *status
 }
 
+// terminalStatusExclusion is appended to every List query regardless of
+// filter: a job the user has dismissed, or that reached a terminal
+// offer/rejected outcome, has no business in an "apply queue" even if
+// saved_at is still set (saved_at survives a dismiss — see
+// UserJobStateRepository.Upsert's StatusDismissed case, which preserves it).
+// Keeping this filter-independent also keeps deriveStatus's output
+// restricted to {saved, applied, interviewing} in every response, matching
+// the frontend contract exactly.
+const terminalStatusExclusion = "ujs.status IS NULL OR ujs.status NOT IN ?"
+
 // List returns up to limit+1 rows from user_job_state, joined to jobs +
 // companies for display fields and LEFT JOINed to resume_job_attachments +
 // resumes for any attached resume. The +1 probe row drives next-cursor
 // generation, mirroring JobRepositoryService.GetJobs.
 //
-// filter == FilterSaved: saved_at IS NOT NULL only (the orthogonal bookmark
-// flag — the literal condition the product spec gives for the "saved" tab).
+// filter == FilterSaved: saved_at IS NOT NULL (the orthogonal bookmark flag)
+// plus the terminal-status exclusion below.
 //
-// filter == FilterAll (default / anything else — ValidationService whitelists
-// before this is reached): the spec's literal WHERE is
-// "saved_at IS NOT NULL OR status IN (applied, interviewing)", but that
-// admits a row saved-then-dismissed (saved_at survives a dismiss — see
-// UserJobStateRepository.Upsert's StatusDismissed case, which preserves
-// saved_at) even though the spec explicitly says dismissed/offer/rejected
-// must be excluded from "all". The extra "AND (status IS NULL OR status NOT
-// IN (dismissed, offer, rejected))" guard resolves that contradiction in
-// favour of the explicit exclusion list.
+// filter == FilterAll (default / anything else — ValidationService
+// whitelists before this is reached): saved_at IS NOT NULL OR status IN
+// (applied, interviewing), plus the same terminal-status exclusion.
 func (r *repositoryService) List(ctx context.Context, userID, filter, cursor string, limit int) (_ dto.QueueListResult, err error) {
 	ctx, span := tracing.Start(ctx, "applyqueue.repo.List")
 	defer tracing.End(span, &err)
@@ -158,16 +167,16 @@ func (r *repositoryService) List(ctx context.Context, userID, filter, cursor str
 		Joins("INNER JOIN companies ON companies.id = jobs.company_id").
 		Joins("LEFT JOIN resume_job_attachments rja ON rja.user_id = ujs.user_id AND rja.job_id = ujs.job_id").
 		Joins("LEFT JOIN resumes ON resumes.id = rja.resume_id").
-		Where("ujs.user_id = ?", userID)
+		Where("ujs.user_id = ?", userID).
+		Where(terminalStatusExclusion, []string{jobcommon.JobStatusDismissed, jobcommon.JobStatusOffer, jobcommon.JobStatusRejected})
 
 	switch filter {
 	case applyqueuecommon.FilterSaved:
 		query = query.Where("ujs.saved_at IS NOT NULL")
 	default: // FilterAll
 		query = query.Where(
-			"(ujs.saved_at IS NOT NULL OR ujs.status IN ?) AND (ujs.status IS NULL OR ujs.status NOT IN ?)",
+			"ujs.saved_at IS NOT NULL OR ujs.status IN ?",
 			[]string{jobcommon.JobStatusApplied, jobcommon.JobStatusInterviewing},
-			[]string{jobcommon.JobStatusDismissed, jobcommon.JobStatusOffer, jobcommon.JobStatusRejected},
 		)
 	}
 

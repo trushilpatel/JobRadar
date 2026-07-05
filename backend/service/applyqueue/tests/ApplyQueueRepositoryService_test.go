@@ -129,12 +129,13 @@ func TestApplyQueueRepo_List_FilterAll_SavedThenDismissed_Excluded(t *testing.T)
 	}
 }
 
-// TestApplyQueueRepo_List_FilterSaved_DerivesActualStatus_ForDismissedButSaved
-// exercises the "saved" filter's looser condition (saved_at IS NOT NULL
-// only, no status exclusion) — a saved-then-dismissed job DOES appear here,
-// and its status renders as "dismissed", not "saved", per the spec's literal
-// derivation rule ("else the actual status value").
-func TestApplyQueueRepo_List_FilterSaved_DerivesActualStatus_ForDismissedButSaved(t *testing.T) {
+// TestApplyQueueRepo_List_FilterSaved_ExcludesDismissedEvenWhenSaved documents
+// that the terminal-status exclusion applies to both filters, not just
+// "all" — a saved-then-dismissed job never appears in the queue under any
+// filter, and consequently deriveStatus's output is always restricted to
+// {saved, applied, interviewing}, matching the frontend's
+// ApplyQueueStatusSchema three-value union.
+func TestApplyQueueRepo_List_FilterSaved_ExcludesDismissedEvenWhenSaved(t *testing.T) {
 	t.Parallel()
 	db := newApplyQueueTestDB(t)
 	seedCompany(t, db, "c1", "Acme")
@@ -148,11 +149,8 @@ func TestApplyQueueRepo_List_FilterSaved_DerivesActualStatus_ForDismissedButSave
 	if err != nil {
 		t.Fatalf("List err = %v", err)
 	}
-	if len(result.Items) != 1 {
-		t.Fatalf("len(items) = %d, want 1: %+v", len(result.Items), result.Items)
-	}
-	if result.Items[0].Status != jobcommon.JobStatusDismissed {
-		t.Errorf("status = %q, want %q", result.Items[0].Status, jobcommon.JobStatusDismissed)
+	if len(result.Items) != 0 {
+		t.Fatalf("len(items) = %d, want 0 (saved-then-dismissed excluded from saved filter too): %+v", len(result.Items), result.Items)
 	}
 }
 
