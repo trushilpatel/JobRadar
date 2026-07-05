@@ -87,6 +87,15 @@ func HandleError(w http.ResponseWriter, err error) {
 	}
 	var sErr *apperr.ServiceError
 	if errors.As(err, &sErr) {
+		// 5xx ServiceErrors carry a deliberately generic PublicMessage() — the
+		// InternalMessage set via .WithMessage() is the only record of what
+		// actually failed, so it must be logged here or it's gone forever.
+		// 4xx (NOT_FOUND, CONFLICT, BAD_REQUEST, ...) are routine and already
+		// visible in the access log; logging those at Error level would just
+		// be noise.
+		if sErr.Status >= http.StatusInternalServerError {
+			pkgLogger.Error("handler: service error returned 5xx", sErr)
+		}
 		RespondError(w, sErr.Status, sErr.Code, sErr.PublicMessage())
 		return
 	}

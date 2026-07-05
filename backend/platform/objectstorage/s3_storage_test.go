@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
@@ -121,5 +122,33 @@ func TestNewS3Storage_BuildsClientWithoutNetworkCall(t *testing.T) {
 	}
 	if s.client == nil || s.presign == nil {
 		t.Fatal("expected client and presign to be initialized")
+	}
+}
+
+// TestNewS3Storage_DisablesFlexibleChecksums guards against regressing to
+// aws-sdk-go-v2's default flexible-checksum trailer behavior, which OCI's
+// S3-compatible endpoint rejects outright (501 NotImplemented: "AWS chunked
+// encoding not supported") — confirmed against a real OCI bucket.
+func TestNewS3Storage_DisablesFlexibleChecksums(t *testing.T) {
+	s, err := NewS3Storage(context.Background(), Config{
+		Endpoint:  "https://example-namespace.compat.objectstorage.us-ashburn-1.oraclecloud.com",
+		Region:    "us-ashburn-1",
+		Bucket:    "jobradar-resumes",
+		AccessKey: "test-access-key",
+		SecretKey: "test-secret-key",
+	})
+	if err != nil {
+		t.Fatalf("NewS3Storage: %v", err)
+	}
+	client, ok := s.client.(*s3.Client)
+	if !ok {
+		t.Fatalf("expected s.client to be *s3.Client, got %T", s.client)
+	}
+	opts := client.Options()
+	if opts.RequestChecksumCalculation != aws.RequestChecksumCalculationWhenRequired {
+		t.Fatalf("RequestChecksumCalculation = %v, want WhenRequired", opts.RequestChecksumCalculation)
+	}
+	if opts.ResponseChecksumValidation != aws.ResponseChecksumValidationWhenRequired {
+		t.Fatalf("ResponseChecksumValidation = %v, want WhenRequired", opts.ResponseChecksumValidation)
 	}
 }

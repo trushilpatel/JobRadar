@@ -59,6 +59,14 @@ func NewS3Storage(ctx context.Context, cfg Config) (*S3Storage, error) {
 	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(cfg.Endpoint)
 		o.UsePathStyle = true
+		// aws-sdk-go-v2 defaults to sending a flexible-checksum trailer over
+		// aws-chunked transfer encoding on PutObject. OCI's S3-compatible
+		// endpoint rejects that encoding outright (501 NotImplemented: "AWS
+		// chunked encoding not supported"), so both must be pinned to
+		// WhenRequired — the pre-flexible-checksum behavior every
+		// S3-compatible provider actually supports.
+		o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+		o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 	})
 	return &S3Storage{
 		client:  client,
