@@ -122,7 +122,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
             value={p.search}
             onChange={(e) => p.onSearchChange(e.target.value)}
             placeholder="Search companies…"
-            className="pl-8 pr-7 py-1.5 text-xs bg-[var(--bg-panel)] border border-[var(--border-strong)] rounded-full w-56 text-primary placeholder:text-placeholder focus:outline-none focus:border-[var(--violet)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--violet)_14%,transparent)]"
+            className="pl-8 pr-7 py-1.5 text-xs bg-[var(--bg-panel)] border border-[var(--border-strong)] rounded-lg w-52 text-primary placeholder:text-placeholder focus:outline-none focus:border-[var(--violet)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--violet)_14%,transparent)]"
           />
           {p.search && (
             <button
@@ -154,17 +154,13 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleAddAdapter()
             }}
-            placeholder="Add new adapter…"
-            className="py-1.5 px-2 text-xs bg-subtle border border-[var(--border)] rounded-lg placeholder:text-placeholder focus:outline-none focus:border-violet-500 w-36 text-primary"
+            placeholder="New adapter…"
+            className="pl-2.5 pr-2 py-1.5 text-xs bg-[var(--bg-panel)] border border-[var(--border-strong)] rounded-lg placeholder:text-placeholder focus:outline-none focus:border-[var(--violet)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--violet)_14%,transparent)] w-28 text-primary"
           />
           <button
             type="button"
             onClick={handleAddAdapter}
-            className="text-[11px] px-2 py-1.5 rounded-lg text-white transition-all"
-            style={{
-              background:
-                'linear-gradient(135deg, var(--violet), color-mix(in srgb, var(--violet) 60%, var(--cyan)))',
-            }}
+            className="inline-flex items-center gap-0.5 text-[11px] px-2.5 py-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-panel)] text-muted hover:text-violet hover:border-[color-mix(in_srgb,var(--violet)_40%,transparent)] hover:bg-[color-mix(in_srgb,var(--violet)_6%,transparent)] transition-colors"
           >
             + Add
           </button>

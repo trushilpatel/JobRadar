@@ -162,8 +162,8 @@ describe('CompaniesFilterBar — add adapter', () => {
     const onAddAdapter = vi.fn()
     render(<CompaniesFilterBar {...makeProps({ onAddAdapter })} />)
 
-    // The "Add new adapter…" input is always visible (inline in the filter bar).
-    await user.type(screen.getByPlaceholderText('Add new adapter…'), 'customats')
+    // The "New adapter…" input is always visible (inline in the filter bar).
+    await user.type(screen.getByPlaceholderText('New adapter…'), 'customats')
     await user.click(screen.getByRole('button', { name: '+ Add' }))
 
     expect(onAddAdapter).toHaveBeenCalledWith('customats')
