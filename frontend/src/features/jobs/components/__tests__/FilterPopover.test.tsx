@@ -143,7 +143,7 @@ describe('FilterPopover', () => {
     render(
       <FilterPopover label="Location" options={OPTIONS} selected={['remote']} onChange={() => {}} />
     )
-    expect(screen.getByRole('button', { name: 'Location' })).toHaveClass('text-violet-300')
+    expect(screen.getByRole('button', { name: 'Location' })).toHaveClass('text-violet')
   })
 
   it('selects a focused item via keyboard (ArrowDown + Enter)', async () => {

@@ -21,6 +21,7 @@ export const COPY = {
   'jobs.tab.interviewing': 'Interviewing',
   'jobs.tab.offer': 'Offer',
   'jobs.tab.rejected': 'Rejected',
+  'jobs.tab.tracking': 'Tracking',
 
   // Search
   'jobs.search.placeholder': 'Search jobs…',

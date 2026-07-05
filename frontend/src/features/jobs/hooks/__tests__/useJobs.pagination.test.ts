@@ -68,9 +68,9 @@ function makeWrapper(qc?: QueryClient, initialSearch = '') {
     )
 }
 
-// ── useJobs — cursor history pagination ──────────────────────────────────────
+// ── useJobs — infinite scroll (cursor history + accumulation) ───────────────
 
-describe('useJobs — cursor history pagination', () => {
+describe('useJobs — infinite scroll accumulation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     sessionStorage.clear()
@@ -91,19 +91,18 @@ describe('useJobs — cursor history pagination', () => {
 
   // ── 1. Initial load ─────────────────────────────────────────────────────────
 
-  it('starts in loading state and populates jobs from first page', async () => {
+  it('starts in loading state and populates jobs from the first page', async () => {
     vi.mocked(jobsApi.fetchJobs).mockResolvedValue({ items: [makeJob('a')], next_cursor: '' })
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
     expect(result.current.isLoading).toBe(true)
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.jobs).toHaveLength(1)
     expect(result.current.jobs[0]?.id).toBe('a')
-    expect(result.current.page).toBe(1)
   })
 
-  // ── 2. goToNextPage appends cursor and advances pageIndex ───────────────────
+  // ── 2. loadMore appends the next page to the accumulated list ───────────────
 
-  it('goToNextPage appends next_cursor to history and advances to page 2', async () => {
+  it('loadMore appends the next page onto the existing jobs instead of replacing them', async () => {
     vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
       if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
       return { items: [makeJob('b')], next_cursor: '' }
@@ -111,31 +110,57 @@ describe('useJobs — cursor history pagination', () => {
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.hasNextPage).toBe(true)
+    expect(result.current.jobs.map((j) => j.id)).toEqual(['a'])
 
     await act(async () => {
-      result.current.goToNextPage()
+      result.current.loadMore()
     })
 
-    await waitFor(() => expect(result.current.jobs[0]?.id).toBe('b'))
-    expect(result.current.page).toBe(2)
+    await waitFor(() => expect(result.current.jobs.map((j) => j.id)).toEqual(['a', 'b']))
+    expect(result.current.hasNextPage).toBe(false)
   })
 
-  // ── 3. goToNextPage at last page is a no-op ─────────────────────────────────
+  // ── 3. loadMore at the last page is a no-op ─────────────────────────────────
 
-  it('goToNextPage is a no-op when next_cursor is empty', async () => {
+  it('loadMore is a no-op when there is no next_cursor', async () => {
     vi.mocked(jobsApi.fetchJobs).mockResolvedValue({ items: [makeJob('a')], next_cursor: '' })
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.hasNextPage).toBe(false)
 
-    act(() => result.current.goToNextPage())
+    act(() => result.current.loadMore())
 
-    expect(result.current.page).toBe(1)
+    expect(result.current.jobs.map((j) => j.id)).toEqual(['a'])
+    expect(jobsApi.fetchJobs).toHaveBeenCalledTimes(1)
   })
 
-  // ── 4. goToPrevPage decrements pageIndex ────────────────────────────────────
+  // ── 4. loadMore while already fetching is a no-op (no duplicate requests) ───
 
-  it('goToPrevPage returns to page 1 after advancing to page 2', async () => {
+  it('loadMore does not fire a second request while one is already in flight', async () => {
+    let resolveSecond!: (v: jobsApi.JobsPage) => void
+    vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
+      if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
+      return new Promise((resolve) => {
+        resolveSecond = resolve
+      })
+    })
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    act(() => result.current.loadMore())
+    await waitFor(() => expect(result.current.isFetchingMore).toBe(true))
+
+    // A second loadMore while the first is still pending must not re-fire.
+    act(() => result.current.loadMore())
+    expect(jobsApi.fetchJobs).toHaveBeenCalledTimes(2)
+
+    resolveSecond({ items: [makeJob('b')], next_cursor: '' })
+    await waitFor(() => expect(result.current.jobs).toHaveLength(2))
+  })
+
+  // ── 5. Filter change resets the accumulated list ────────────────────────────
+
+  it('filter change resets the accumulated jobs back to a fresh first page', async () => {
     vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
       if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
       return { items: [makeJob('b')], next_cursor: '' }
@@ -144,53 +169,19 @@ describe('useJobs — cursor history pagination', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
     await act(async () => {
-      result.current.goToNextPage()
+      result.current.loadMore()
     })
-    await waitFor(() => expect(result.current.page).toBe(2))
+    await waitFor(() => expect(result.current.jobs).toHaveLength(2))
 
-    await act(async () => {
-      result.current.goToPrevPage()
-    })
-    await waitFor(() => expect(result.current.page).toBe(1))
-    // Going back uses the cached cursor — fetchJobs is called with '' again
-    await waitFor(() => expect(result.current.jobs[0]?.id).toBe('a'))
-  })
-
-  // ── 5. goToPrevPage on page 1 is a no-op ───────────────────────────────────
-
-  it('goToPrevPage does not go below page 1', async () => {
-    vi.mocked(jobsApi.fetchJobs).mockResolvedValue({ items: [makeJob('a')], next_cursor: '' })
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-
-    act(() => result.current.goToPrevPage())
-
-    expect(result.current.page).toBe(1)
-  })
-
-  // ── 6. Filter change resets cursorHistory ───────────────────────────────────
-
-  it('filter change resets cursorHistory to [empty-string] and page to 1', async () => {
-    vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
-      if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
-      return { items: [makeJob('b')], next_cursor: '' }
-    })
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    await waitFor(() => expect(result.current.isLoading).toBe(false))
-
-    await act(async () => {
-      result.current.goToNextPage()
-    })
-    await waitFor(() => expect(result.current.page).toBe(2))
-
-    // Change a filter — should reset back to page 1
+    vi.mocked(jobsApi.fetchJobs).mockResolvedValue({ items: [makeJob('c')], next_cursor: '' })
     act(() => result.current.setLocationFilter('remote'))
 
-    await waitFor(() => expect(result.current.page).toBe(1))
+    await waitFor(() => expect(result.current.jobs.map((j) => j.id)).toEqual(['c']))
   })
 
-  // ── 6b. Visa filter change resets cursorHistory and page ────────────────────
+  // ── 5b. Visa filter change resets the accumulated list ──────────────────────
 
-  it('visa filter change resets cursorHistory to [empty-string] and page to 1', async () => {
+  it('visa filter change resets the accumulated jobs', async () => {
     vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
       if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
       return { items: [makeJob('b')], next_cursor: '' }
@@ -199,19 +190,19 @@ describe('useJobs — cursor history pagination', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
     await act(async () => {
-      result.current.goToNextPage()
+      result.current.loadMore()
     })
-    await waitFor(() => expect(result.current.page).toBe(2))
+    await waitFor(() => expect(result.current.jobs).toHaveLength(2))
 
-    // Change the visa filter — should reset back to page 1 (fingerprint change).
+    vi.mocked(jobsApi.fetchJobs).mockResolvedValue({ items: [makeJob('c')], next_cursor: '' })
     act(() => result.current.setVisaFilter('true'))
 
-    await waitFor(() => expect(result.current.page).toBe(1))
+    await waitFor(() => expect(result.current.jobs.map((j) => j.id)).toEqual(['c']))
   })
 
-  // ── 7. Tab change resets cursorHistory and page ─────────────────────────────
+  // ── 6. Tab change resets the accumulated list ───────────────────────────────
 
-  it('tab change resets cursorHistory and returns to page 1', async () => {
+  it('tab change resets the accumulated jobs', async () => {
     vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
       if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
       return { items: [makeJob('b')], next_cursor: '' }
@@ -220,113 +211,52 @@ describe('useJobs — cursor history pagination', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
     await act(async () => {
-      result.current.goToNextPage()
+      result.current.loadMore()
     })
-    await waitFor(() => expect(result.current.page).toBe(2))
+    await waitFor(() => expect(result.current.jobs).toHaveLength(2))
 
+    vi.mocked(jobsApi.fetchJobs).mockResolvedValue({ items: [makeJob('c')], next_cursor: '' })
     act(() => result.current.setTab(JOB_STATUS.SAVED))
 
-    await waitFor(() => expect(result.current.page).toBe(1))
+    await waitFor(() => expect(result.current.jobs.map((j) => j.id)).toEqual(['c']))
     expect(result.current.tab).toBe(JOB_STATUS.SAVED)
   })
 
-  // ── 8. Limit change resets cursorHistory and page ──────────────────────────
+  // ── 7. sessionStorage restore still works for the underlying cursor history ──
 
-  it('limit change resets cursorHistory and returns to page 1', async () => {
+  it('restores cursor history from sessionStorage when the fingerprint matches', async () => {
     vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
       if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
-      return { items: [makeJob('b')], next_cursor: '' }
+      if (cursor === 'cur-2') return { items: [makeJob('b')], next_cursor: '' }
+      return { items: [], next_cursor: '' }
     })
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+    // Phase 1: load more so cursorHistory gets persisted.
+    const { result: r1, unmount } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    await waitFor(() => expect(r1.current.isLoading).toBe(false))
+    await act(async () => {
+      r1.current.loadMore()
+    })
+    await waitFor(() => expect(r1.current.jobs).toHaveLength(2))
+    unmount()
+
+    // Phase 2: a fresh hook instance with the same default filters restores the
+    // persisted cursor history — loadMore uses the cached 'cur-2' cursor.
+    const qc2 = new QueryClient({
+      defaultOptions: { queries: { retry: 0, gcTime: Infinity, staleTime: Infinity } },
+    })
+    const { result: r2 } = renderHook(() => useJobs(), { wrapper: makeWrapper(qc2) })
+    await waitFor(() => expect(r2.current.isLoading).toBe(false))
 
     await act(async () => {
-      result.current.goToNextPage()
+      r2.current.loadMore()
     })
-    await waitFor(() => expect(result.current.page).toBe(2))
-
-    act(() => result.current.setLimit(50))
-
-    await waitFor(() => expect(result.current.page).toBe(1))
-    expect(result.current.limit).toBe(50)
+    await waitFor(() => expect(r2.current.jobs.map((j) => j.id)).toEqual(['a', 'b']))
   })
 
-  // ── 9. goToFirstPage resets to page 1 ──────────────────────────────────────
+  // ── 8. hasNextPage semantics ─────────────────────────────────────────────────
 
-  it('goToFirstPage returns to page 1 from any page', async () => {
-    vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
-      if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
-      return { items: [makeJob('b')], next_cursor: '' }
-    })
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    await waitFor(() => expect(result.current.isLoading).toBe(false))
-
-    await act(async () => {
-      result.current.goToNextPage()
-    })
-    await waitFor(() => expect(result.current.page).toBe(2))
-
-    act(() => result.current.goToFirstPage())
-
-    await waitFor(() => expect(result.current.page).toBe(1))
-    await waitFor(() => expect(result.current.jobs[0]?.id).toBe('a'))
-  })
-
-  // ── 10. itemsBeforePage = pageIndex * limit ─────────────────────────────────
-
-  it('itemsBeforePage returns pageIndex * limit', async () => {
-    vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
-      if (!cursor) return { items: [makeJob('a'), makeJob('a2')], next_cursor: 'cur-2' }
-      return { items: [makeJob('b')], next_cursor: '' }
-    })
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    await waitFor(() => expect(result.current.isLoading).toBe(false))
-    expect(result.current.itemsBeforePage).toBe(0) // pageIndex=0 * limit=20 = 0
-
-    await act(async () => {
-      result.current.goToNextPage()
-    })
-    await waitFor(() => expect(result.current.page).toBe(2))
-
-    // pageIndex=1 * limit=20 = 20
-    expect(result.current.itemsBeforePage).toBe(20)
-  })
-
-  // ── 11. Regression: no page-1 snap when clicking Next rapidly ───────────────
-  //
-  // With the old useInfiniteQuery approach, calling goToNextPage() could leave
-  // a render cycle where pageIndex was N+1 but isFetchingNextPage was still
-  // false, making isLoadingPage=false and jobs=[]. The Pagination H7 effect
-  // would then fire onFirst() → snap to page 1.
-  //
-  // With the new approach there is NO intermediate state: setCursorHistory +
-  // setPageIndex are both synchronous React state updates that batch in the
-  // same render. By the time the next render occurs, both are consistent.
-
-  it('no snap to page 1 — page advances synchronously to 2 on goToNextPage', async () => {
-    vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
-      if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
-      return { items: [makeJob('b')], next_cursor: '' }
-    })
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    await waitFor(() => expect(result.current.isLoading).toBe(false))
-
-    // Call goToNextPage and immediately check page without waiting for the fetch.
-    act(() => {
-      result.current.goToNextPage()
-    })
-
-    // pageIndex advances to 2 synchronously — there is no intermediate state
-    // where page=1 (the old snap-back race).
-    expect(result.current.page).toBe(2)
-
-    // The fetch eventually completes and jobs update.
-    await waitFor(() => expect(result.current.jobs[0]?.id).toBe('b'))
-  })
-
-  // ── 12. hasNextPage is true when query returns non-empty next_cursor ─────────
-
-  it('hasNextPage is true when query returns non-empty next_cursor', async () => {
+  it('hasNextPage is true when the query returns a non-empty next_cursor', async () => {
     vi.mocked(jobsApi.fetchJobs).mockResolvedValue({
       items: [makeJob('a')],
       next_cursor: 'cursor-abc',
@@ -336,68 +266,28 @@ describe('useJobs — cursor history pagination', () => {
     expect(result.current.hasNextPage).toBe(true)
   })
 
-  // ── 13. hasNextPage is false when query returns empty next_cursor ────────────
-
-  it('hasNextPage is false when query returns empty next_cursor', async () => {
+  it('hasNextPage is false when the query returns an empty next_cursor', async () => {
     vi.mocked(jobsApi.fetchJobs).mockResolvedValue({ items: [makeJob('a')], next_cursor: '' })
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.hasNextPage).toBe(false)
   })
 
-  // ── 14. hasPrevPage ─────────────────────────────────────────────────────────
+  // ── 9. isFetchingMore ────────────────────────────────────────────────────────
 
-  it('hasPrevPage is false on page 1 and true on page 2+', async () => {
+  it('isFetchingMore is false during the initial load, true only while fetching a later page', async () => {
     vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
       if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
       return { items: [makeJob('b')], next_cursor: '' }
     })
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    expect(result.current.isFetchingMore).toBe(false)
     await waitFor(() => expect(result.current.isLoading).toBe(false))
-    expect(result.current.hasPrevPage).toBe(false)
+    expect(result.current.isFetchingMore).toBe(false)
 
-    await act(async () => {
-      result.current.goToNextPage()
-    })
-    await waitFor(() => expect(result.current.page).toBe(2))
-
-    expect(result.current.hasPrevPage).toBe(true)
-  })
-
-  // ── 15. sessionStorage restore ──────────────────────────────────────────────
-
-  it('restores cursorHistory from sessionStorage when fingerprint matches', async () => {
-    vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
-      if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
-      if (cursor === 'cur-2') return { items: [makeJob('b')], next_cursor: '' }
-      return { items: [], next_cursor: '' }
-    })
-
-    // Phase 1: Navigate to page 2 so cursorHistory gets persisted.
-    const { result: r1, unmount } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    await waitFor(() => expect(r1.current.isLoading).toBe(false))
-    await act(async () => {
-      r1.current.goToNextPage()
-    })
-    await waitFor(() => expect(r1.current.page).toBe(2))
-    unmount()
-
-    // Phase 2: A new hook instance with the same default filters. The URL
-    // page param starts at 0 (page 1), but sessionStorage has ['', 'cur-2'].
-    // On page 1 we still get the '' cursor → page 1 data is shown.
-    // goToNextPage() on page 2 now uses the cached cursor without a new fetch.
-    const qc2 = new QueryClient({
-      defaultOptions: { queries: { retry: 0, gcTime: Infinity, staleTime: Infinity } },
-    })
-    const { result: r2 } = renderHook(() => useJobs(), { wrapper: makeWrapper(qc2) })
-    await waitFor(() => expect(r2.current.isLoading).toBe(false))
-
-    // goToNextPage uses the stored cursor 'cur-2' from sessionStorage
-    await act(async () => {
-      r2.current.goToNextPage()
-    })
-    await waitFor(() => expect(r2.current.page).toBe(2))
-    await waitFor(() => expect(r2.current.jobs[0]?.id).toBe('b'))
+    act(() => result.current.loadMore())
+    await waitFor(() => expect(result.current.isFetchingMore).toBe(true))
+    await waitFor(() => expect(result.current.isFetchingMore).toBe(false))
   })
 
   // ── Sorting branch ───────────────────────────────────────────────────────────
@@ -412,7 +302,7 @@ describe('useJobs — cursor history pagination', () => {
     expect(result.current.sorting).toEqual([])
   })
 
-  it('handleSortingChange resets to page 1', async () => {
+  it('handleSortingChange resets the accumulated jobs', async () => {
     vi.mocked(jobsApi.fetchJobs).mockImplementation(async (_filters, cursor) => {
       if (!cursor) return { items: [makeJob('a')], next_cursor: 'cur-2' }
       return { items: [makeJob('b')], next_cursor: '' }
@@ -421,12 +311,13 @@ describe('useJobs — cursor history pagination', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false))
 
     await act(async () => {
-      result.current.goToNextPage()
+      result.current.loadMore()
     })
-    await waitFor(() => expect(result.current.page).toBe(2))
+    await waitFor(() => expect(result.current.jobs).toHaveLength(2))
 
+    vi.mocked(jobsApi.fetchJobs).mockResolvedValue({ items: [makeJob('c')], next_cursor: '' })
     act(() => result.current.handleSortingChange([{ id: 'added_at', desc: true }]))
 
-    await waitFor(() => expect(result.current.page).toBe(1))
+    await waitFor(() => expect(result.current.jobs.map((j) => j.id)).toEqual(['c']))
   })
 })

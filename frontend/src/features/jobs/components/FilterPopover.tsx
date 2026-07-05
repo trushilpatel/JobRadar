@@ -66,9 +66,13 @@ export function FilterPopover({
           type="button"
           className={cn(
             'inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors',
+            // `violet` is a flat token (see tailwind.config.js), not a numbered
+            // shade scale — `bg-violet-100`-style classes silently fail to
+            // generate. color-mix() against the bare token is this project's
+            // established pattern for a tinted background (see jobStatusConfig.ts).
             selected.length > 0
-              ? 'bg-violet-500/15 border-violet-500/35 text-violet-300'
-              : 'bg-subtle border-[var(--border)] text-muted hover:bg-hover',
+              ? 'bg-[color-mix(in_srgb,var(--violet)_14%,transparent)] border-[color-mix(in_srgb,var(--violet)_40%,transparent)] text-violet'
+              : 'bg-[var(--bg-panel)] border-[var(--border-strong)] text-muted hover:bg-hover hover:border-[var(--border-strong)] hover:text-secondary',
             className
           )}
         >
@@ -106,17 +110,7 @@ export function FilterPopover({
                     onSelect={() => toggle(option.value)}
                     className="flex items-center gap-2 cursor-pointer"
                   >
-                    <Checkbox
-                      checked={isSelected}
-                      className={cn(
-                        'border shrink-0',
-                        isSelected
-                          ? 'bg-violet-600 border-violet-600 data-[state=checked]:bg-violet-600 data-[state=checked]:text-white'
-                          : 'border-[var(--border-strong)]'
-                      )}
-                      tabIndex={-1}
-                      aria-hidden="true"
-                    />
+                    <Checkbox checked={isSelected} tabIndex={-1} aria-hidden="true" />
                     <span className="text-xs text-secondary">{option.label}</span>
                   </CommandItem>
                 )

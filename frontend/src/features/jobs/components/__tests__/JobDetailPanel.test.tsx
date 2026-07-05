@@ -166,7 +166,7 @@ describe('JobDetailPanel', () => {
   })
 
   describe('mobile route mode reaches all statuses', () => {
-    it('renders StatusSelect in route mode (so Interviewing / Offer / Rejected are reachable)', () => {
+    it('renders the segmented status control in route mode (so Interviewing / Offer / Rejected are reachable)', () => {
       render(
         wrap(
           <JobDetailPanel
@@ -179,9 +179,43 @@ describe('JobDetailPanel', () => {
           />
         )
       )
-      // Radix Select trigger is a button labelled with the current value.
-      // StatusSelect renders a combobox — expect at least one to exist.
-      expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0)
+      expect(screen.getByRole('radiogroup', { name: 'Job status' })).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'Interviewing' })).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'Offer' })).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'Rejected' })).toBeInTheDocument()
+    })
+
+    it('clicking a status segment calls onStatusChange with that status', async () => {
+      const onStatusChange = vi.fn()
+      render(
+        wrap(
+          <JobDetailPanel
+            job={SAMPLE_JOB}
+            onClose={() => {}}
+            onStatusChange={onStatusChange}
+            onToggleSave={() => {}}
+            onDismiss={() => {}}
+          />
+        )
+      )
+      await userEvent.click(screen.getByRole('radio', { name: 'Applied' }))
+      expect(onStatusChange).toHaveBeenCalledWith(SAMPLE_JOB, 'applied')
+    })
+
+    it('marks the current status segment as checked', () => {
+      render(
+        wrap(
+          <JobDetailPanel
+            job={{ ...SAMPLE_JOB, status: JOB_STATUS.OFFER } as Job}
+            onClose={() => {}}
+            onStatusChange={() => {}}
+            onToggleSave={() => {}}
+            onDismiss={() => {}}
+          />
+        )
+      )
+      expect(screen.getByRole('radio', { name: 'Offer' })).toHaveAttribute('aria-checked', 'true')
+      expect(screen.getByRole('radio', { name: 'New' })).toHaveAttribute('aria-checked', 'false')
     })
   })
 

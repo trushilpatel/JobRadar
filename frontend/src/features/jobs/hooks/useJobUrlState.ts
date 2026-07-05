@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import {
   createSerializer,
   parseAsArrayOf,
@@ -8,8 +8,21 @@ import {
   useQueryStates,
   type inferParserType,
 } from 'nuqs'
-import { JOB_STATUS, TAB_KEYS, type TabKey } from '@/config/constants/jobStatus'
+import {
+  JOB_STATUS,
+  TAB_KEYS,
+  TRACKING_STAGES,
+  WORKFLOW_STATUSES,
+  type TabKey,
+  type TrackingStage,
+} from '@/config/constants/jobStatus'
 import { routes } from '@/config/routes'
+
+// Legacy single-stage tab values that predate the combined Tracking tab.
+// A `?tab=applied`-style deep link from before this change redirects into
+// `tracking` with that one stage pre-checked (see the effect below) rather
+// than rendering a tab the UI no longer has a segment for.
+const LEGACY_WORKFLOW_TAB_VALUES: readonly TabKey[] = WORKFLOW_STATUSES
 
 export type LocationFilter = 'any' | 'remote' | 'onsite' | 'hybrid'
 export type DateFilter = 'all' | '24h' | '7d' | '30d'
@@ -38,6 +51,13 @@ const PARSERS = {
   sort: parseAsString.withDefault(''),
   dir: parseAsStringLiteral(DIR_VALUES).withDefault('asc'),
   visa: parseAsStringLiteral(VISA_VALUES).withDefault('any'),
+  /**
+   * Checked workflow stages inside the Tracking tab's checkbox sub-menu.
+   * All 4 checked by default (combined view). Ignored when `tab !== 'tracking'`.
+   */
+  trackingStages: parseAsArrayOf(parseAsStringLiteral(TRACKING_STAGES)).withDefault([
+    ...TRACKING_STAGES,
+  ]),
   /**
    * Zero-based page index. Lives in the URL so refresh and share-links land
    * on the same page within the result set. Replaces the prior local
@@ -89,6 +109,21 @@ const REPLACE = { history: 'replace' as const }
 export function useJobUrlState() {
   const [state, setState] = useQueryStates(PARSERS, { history: 'replace' })
 
+  // Redirect a pre-existing `?tab=applied`-style deep link (from before the
+  // combined Tracking tab existed) into `tracking` with that one stage
+  // pre-checked. Runs once per genuinely-legacy hydration — the dependency
+  // is state.tab itself, so it only re-fires if the URL is externally
+  // changed back to a legacy value (e.g. browser back/forward).
+  useEffect(() => {
+    if (LEGACY_WORKFLOW_TAB_VALUES.includes(state.tab)) {
+      void setState(
+        { tab: 'tracking', trackingStages: [state.tab as TrackingStage], page: 0 },
+        REPLACE
+      )
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.tab])
+
   // Tab change is a big context shift — push to browser history.
   const setTab = useCallback(
     (tab: TabKey) => setState({ tab, job: null, page: 0 }, PUSH),
@@ -120,6 +155,11 @@ export function useJobUrlState() {
   )
 
   const setVisa = useCallback((visa: VisaFilter) => setState({ visa, page: 0 }, PUSH), [setState])
+
+  const setTrackingStages = useCallback(
+    (trackingStages: TrackingStage[]) => setState({ trackingStages, page: 0 }, PUSH),
+    [setState]
+  )
 
   const setSort = useCallback((sort: string) => setState({ sort, page: 0 }, PUSH), [setState])
 
@@ -178,6 +218,8 @@ export function useJobUrlState() {
       setLimit,
       visa: state.visa,
       setVisa,
+      trackingStages: state.trackingStages,
+      setTrackingStages,
       resetFilters,
     }),
     [
@@ -193,6 +235,7 @@ export function useJobUrlState() {
       state.page,
       state.limit,
       state.visa,
+      state.trackingStages,
       setTab,
       setOpenJobId,
       setQ,
@@ -205,6 +248,7 @@ export function useJobUrlState() {
       setPage,
       setLimit,
       setVisa,
+      setTrackingStages,
       resetFilters,
     ]
   )

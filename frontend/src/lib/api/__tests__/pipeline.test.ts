@@ -34,7 +34,7 @@ describe('fetchPipelineStats', () => {
     expect(stats.total_companies).toBe(10)
     expect(stats.filter_retries).toEqual({ '1m': 1, '10m': 2, '1h': 0, dlq: 0 })
     expect(stats.enricher_retries.dlq).toBe(2)
-    expect(getMock).toHaveBeenCalledWith('/admin/dashboard/pipeline')
+    expect(getMock).toHaveBeenCalledWith('/admin/pipeline/stats')
   })
 
   it('returns all-zero defaults when the server returns null', async () => {
@@ -78,7 +78,7 @@ describe('triggerRetry', () => {
   it('posts the worker + tier and parses the drained count', async () => {
     postMock.mockResolvedValue({ drained: 7 })
     await expect(triggerRetry('filter', '1m')).resolves.toEqual({ drained: 7 })
-    expect(postMock).toHaveBeenCalledWith('/admin/dashboard/pipeline/retry', {
+    expect(postMock).toHaveBeenCalledWith('/admin/pipeline/retry', {
       worker: 'filter',
       tier: '1m',
     })
@@ -87,7 +87,7 @@ describe('triggerRetry', () => {
   it('supports the enricher worker and dlq tier', async () => {
     postMock.mockResolvedValue({ drained: 0 })
     await triggerRetry('enricher', 'dlq')
-    expect(postMock).toHaveBeenCalledWith('/admin/dashboard/pipeline/retry', {
+    expect(postMock).toHaveBeenCalledWith('/admin/pipeline/retry', {
       worker: 'enricher',
       tier: 'dlq',
     })

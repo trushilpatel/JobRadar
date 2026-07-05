@@ -15,9 +15,7 @@ import { useAuth, useUser, useClerk } from '@clerk/react'
 import { cn } from '@/lib/utils/utils'
 import { routes } from '@/config/routes'
 import { COPY } from '@/config/copy'
-import { LogoLockup } from '@/components/brand/Logo'
-
-const APP_VERSION = 'v1.0.0'
+import { LogoMark } from '@/components/brand/Logo'
 
 interface NavLinkSpec {
   to: string
@@ -61,23 +59,28 @@ function NavItem({
       onClick={onNavigate}
       className={({ isActive }) =>
         cn(
-          'w-full flex items-center rounded-lg text-sm transition-colors',
-          collapsed ? 'justify-center p-2.5' : 'gap-2.5 px-3 py-2.5',
+          'relative w-full flex items-center rounded-lg text-[13.5px] transition-colors',
+          collapsed ? 'justify-center p-2.5' : 'gap-[10px] px-3 py-[9px]',
           isActive
-            ? 'bg-[var(--sidebar-active)] text-[var(--accent-text)] font-semibold'
+            ? 'text-[var(--sidebar-fg)] font-semibold'
             : 'text-muted hover:text-[var(--sidebar-fg)] hover:bg-[var(--sidebar-hover)]'
         )
       }
       style={({ isActive }) =>
         isActive
-          ? { boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--violet) 28%, transparent)' }
+          ? {
+              background:
+                'linear-gradient(100deg, color-mix(in srgb, var(--violet) 22%, transparent), color-mix(in srgb, var(--violet) 6%, transparent))',
+              boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--violet) 30%, transparent)',
+            }
           : undefined
       }
     >
       {({ isActive }) => (
         <>
           <span
-            className={cn('shrink-0 transition-colors', isActive ? 'text-[var(--accent)]' : '')}
+            className="shrink-0 transition-colors"
+            style={isActive ? { color: 'var(--violet-bright)' } : undefined}
           >
             {icon}
           </span>
@@ -212,16 +215,6 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?
           </div>
         )}
       </div>
-
-      {/* Version line */}
-      <div
-        className={cn(
-          'border-t border-[var(--sidebar-border)] px-3 py-2 text-[10px] text-muted select-none',
-          collapsed ? 'text-center' : ''
-        )}
-      >
-        {collapsed ? APP_VERSION : `JobRadar · ${APP_VERSION}`}
-      </div>
     </>
   )
 }
@@ -249,8 +242,19 @@ export function Sidebar() {
         )}
       >
         {!collapsed && (
-          <div className="flex items-center gap-2">
-            <LogoLockup className="text-sidebar-fg" />
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+              style={{
+                background: 'linear-gradient(135deg, var(--violet), var(--cyan))',
+                boxShadow: 'var(--glow-violet)',
+              }}
+            >
+              <LogoMark className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-sm font-bold tracking-tight text-[var(--sidebar-fg)]">
+              JobRadar
+            </span>
             <span className="text-xs font-medium" style={{ color: 'var(--violet-bright)' }}>
               beta
             </span>

@@ -15,10 +15,10 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { Job, JobStatus } from '@/types'
-import { JOB_STATUS } from '@/config/constants/jobStatus'
+import { JOB_STATUS, SELECT_STATUSES, type SelectStatus } from '@/config/constants/jobStatus'
 import { formatRelativeTime, formatExactDateTime, cn, formatSalary } from '@/lib/utils/utils'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
-import { StatusSelect } from './StatusSelect'
+import { STATUS_CONFIG } from './jobStatusConfig'
 import { setJobNotes } from '../api/jobs.api'
 
 export type JobDetailMode = 'pane' | 'route'
@@ -65,6 +65,50 @@ const META_PILL_WARN = cn(
 )
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+
+/**
+ * Inline one-line segmented status control (mirrors the approved mockup's
+ * `.statusseg` — 5 evenly-distributed segments) replacing the old dropdown
+ * `StatusSelect`. Uses `role="radiogroup"`/`role="radio"` — this is a value
+ * selector, not tab navigation, so it deliberately does NOT reuse
+ * `SegmentedTabs` (which is `role="tablist"`/`role="tab"`).
+ */
+function StatusSegmentedControl({
+  status,
+  onChange,
+}: {
+  status: JobStatus
+  onChange: (status: SelectStatus) => void
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Job status"
+      className="flex w-full gap-0.5 rounded-lg border border-[var(--border)] bg-subtle p-[3px]"
+    >
+      {SELECT_STATUSES.map((s) => {
+        const active = s === status
+        const cfg = STATUS_CONFIG[s]
+        return (
+          <button
+            key={s}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(s)}
+            className={cn(
+              'flex-1 truncate rounded-md px-1.5 py-1.5 text-center text-[11px] font-medium transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet',
+              active ? cfg.classes : 'text-muted hover:text-primary'
+            )}
+          >
+            {cfg.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 export function JobDetailPanel({
   job,
@@ -289,19 +333,22 @@ export function JobDetailPanel({
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="mb-2">
           <a
             href={job.url}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1.5 text-xs text-secondary hover:text-violet-bright bg-subtle border border-[var(--border-strong)] px-2.5 py-1.5 rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs text-secondary hover:text-violet-bright bg-subtle border border-[var(--border-strong)] px-2.5 py-1.5 rounded-lg transition-colors"
           >
             <ExternalLink size={12} /> Open posting
           </a>
-          {/* StatusSelect now shows in BOTH pane and route modes so mobile
-              users can reach Interviewing / Offer / Rejected. */}
-          <StatusSelect status={job.status} onChange={(status) => onStatusChange(job, status)} />
         </div>
+        {/* Segmented status control shows in BOTH pane and route modes so
+            mobile users can reach Interviewing / Offer / Rejected. */}
+        <StatusSegmentedControl
+          status={job.status}
+          onChange={(status) => onStatusChange(job, status)}
+        />
       </div>
 
       <div className={cn('flex-1 overflow-y-auto px-5 py-4 space-y-5', isRoute && 'pb-24')}>

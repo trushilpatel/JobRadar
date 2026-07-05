@@ -18,6 +18,7 @@ import (
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	services "github.com/trushilpatel/jobradar/service/company/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
+	pipelinesvc "github.com/trushilpatel/jobradar/service/pipeline/services"
 	services4 "github.com/trushilpatel/jobradar/service/resume/services"
 	services2 "github.com/trushilpatel/jobradar/service/scan/services"
 	"gorm.io/gorm"
@@ -98,7 +99,15 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	resumeRestService := services4.NewRestService(resumeValidationService)
 	resumeHandler := services4.NewRestRouter(resumeRestService)
 
-	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter, resumeHandler)
+	// ── Pipeline ─────────────────────────────────────────────────────────────
+	pipelineStore := pipelinesvc.NewPipelineStore(db)
+	pipelineRepositoryService := pipelinesvc.NewPipelineRepositoryService(pipelineStore)
+	pipelineImplService := pipelinesvc.NewPipelineImplService(pipelineRepositoryService)
+	pipelineValidationService := pipelinesvc.NewPipelineValidationService(pipelineImplService)
+	pipelineRestService := pipelinesvc.NewPipelineRestService(pipelineValidationService)
+	pipelineRestRouter := pipelinesvc.NewPipelineRestRouter(pipelineRestService)
+
+	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter, resumeHandler, pipelineRestRouter)
 	return app, nil
 }
 

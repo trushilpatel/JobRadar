@@ -52,7 +52,7 @@ func buildTestApp() *App {
 	resumeRest := resumesvc.NewRestService(fakeResume)
 	resumeH := resumesvc.NewRestRouter(resumeRest)
 
-	return NewApp(companyH, scanH, atsH, jobH, appH, nil, resumeH)
+	return NewApp(companyH, scanH, atsH, jobH, appH, nil, resumeH, nil)
 }
 
 func TestApp_Handlers_ReturnsExpectedCount(t *testing.T) {

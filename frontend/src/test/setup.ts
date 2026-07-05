@@ -27,6 +27,21 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
 }
 
+// jsdom has no native IntersectionObserver (used by the jobs infinite-scroll
+// sentinel). This inert default is enough for tests that don't specifically
+// exercise scroll-triggered loading — those tests (see JobsTable.test.tsx)
+// stub a callback-capturing version themselves via vi.stubGlobal.
+class MockIntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+if (typeof globalThis.IntersectionObserver === 'undefined') {
+  globalThis.IntersectionObserver =
+    MockIntersectionObserver as unknown as typeof IntersectionObserver
+}
+
 if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = function () {}
 }

@@ -87,7 +87,7 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder={COPY['jobs.search.placeholder']}
-              className="w-full min-h-[44px] pl-7 pr-3 py-1.5 text-sm bg-subtle border border-[var(--border)] rounded-lg placeholder:text-placeholder focus:outline-none focus:border-violet-500 text-primary"
+              className="w-full min-h-[44px] pl-7 pr-3 py-1.5 text-sm bg-subtle border border-[var(--border)] rounded-lg placeholder:text-placeholder focus:outline-none focus:border-violet text-primary"
             />
           </div>
           <button
@@ -97,7 +97,7 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
             className={cn(
               'flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-lg border px-3 transition-colors',
               hasActiveFilters
-                ? 'border-violet-400/50 dark:border-violet-500/30 bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300'
+                ? 'border-[color-mix(in_srgb,var(--violet)_30%,transparent)] bg-[color-mix(in_srgb,var(--violet)_14%,transparent)] text-violet'
                 : 'border-[var(--border-strong)] bg-subtle text-secondary hover:bg-hover'
             )}
           >
@@ -189,7 +189,7 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={COPY['jobs.search.placeholder']}
-            className="pl-7 pr-3 py-1.5 text-xs bg-subtle border border-[var(--border)] rounded-lg placeholder:text-placeholder focus:outline-none focus:border-violet-500 w-44 text-primary"
+            className="pl-8 pr-3 py-1.5 text-xs bg-[var(--bg-panel)] border border-[var(--border-strong)] rounded-lg placeholder:text-placeholder focus:outline-none focus:border-[var(--violet)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--violet)_14%,transparent)] w-52 text-primary"
           />
         </div>
 
@@ -244,7 +244,7 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
               type="button"
               aria-label="Reset filters"
               onClick={onReset}
-              className="text-[11px] text-muted hover:text-primary px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
+              className="text-[11px] text-muted hover:text-primary px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet rounded"
             >
               Reset
             </button>
@@ -261,7 +261,7 @@ export const JobFilters = forwardRef<HTMLInputElement, JobFiltersProps>(function
             <button
               type="button"
               onClick={onReset}
-              className="text-[11px] text-muted hover:text-primary px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
+              className="text-[11px] text-muted hover:text-primary px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet rounded"
             >
               Clear all
             </button>
