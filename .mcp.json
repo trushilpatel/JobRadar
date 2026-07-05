@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "grafana": {
+      "type": "stdio",
+      "command": "doppler",
+      "args": ["run", "--project", "job-radar", "--config", "dev", "--", "mcp-grafana"],
+      "env": {}
+    }
+  }
+}

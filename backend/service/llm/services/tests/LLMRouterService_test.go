@@ -230,6 +230,106 @@ func TestRouter_ScoreBatch_ZeroSlotsReturnsAllExhausted(t *testing.T) {
 	}
 }
 
+func TestRouter_ExtractResumeKeywords_FallsBackOnLocalQuota(t *testing.T) {
+	quota := &fakeScorer{keywordsErr: llmerr.ErrLLMLocalQuotaExceeded}
+	ok := &fakeScorer{keywordsOut: &dto.ResumeKeywordResult{Keywords: []string{"Go"}}}
+	r := services.NewLLMRouterService([]services.RouterSlot{
+		{SlotID: "s1", Model: "m1", Scorer: quota},
+		{SlotID: "s2", Model: "m2", Scorer: ok},
+	}, store.NewLLMCooldownMemoryStore(store.CooldownPolicy{Base: time.Second, Max: time.Minute}))
+
+	out, err := r.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "x"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out.Keywords) != 1 || out.Keywords[0] != "Go" {
+		t.Fatalf("unexpected output: %+v", out)
+	}
+}
+
+func TestRouter_ExtractResumeKeywords_RecordsCooldownOnProvider429(t *testing.T) {
+	limited := &fakeScorer{keywordsErr: llmerr.ErrLLMProviderRateLimited}
+	ok := &fakeScorer{keywordsOut: &dto.ResumeKeywordResult{Keywords: []string{"Go"}}}
+	cd := store.NewLLMCooldownMemoryStore(store.CooldownPolicy{Base: 10 * time.Second, Max: time.Minute})
+	r := services.NewLLMRouterService([]services.RouterSlot{
+		{SlotID: "s1", Model: "m1", Scorer: limited},
+		{SlotID: "s2", Model: "m2", Scorer: ok},
+	}, cd)
+
+	if _, err := r.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "x"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	st, _ := cd.Status(context.Background(), "s1")
+	if st.FailureCount != 1 {
+		t.Fatalf("want cooldown recorded on slot 1, got %+v", st)
+	}
+}
+
+func TestRouter_ExtractResumeKeywords_BubblesOtherErrors(t *testing.T) {
+	boom := &fakeScorer{keywordsErr: errors.New("network boom")}
+	ok := &fakeScorer{keywordsOut: &dto.ResumeKeywordResult{Keywords: []string{"Go"}}}
+	r := services.NewLLMRouterService([]services.RouterSlot{
+		{SlotID: "s1", Model: "m1", Scorer: boom},
+		{SlotID: "s2", Model: "m2", Scorer: ok},
+	}, store.NewLLMCooldownMemoryStore(store.CooldownPolicy{Base: time.Second, Max: time.Minute}))
+
+	_, err := r.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "x"})
+	if err == nil || err.Error() != "network boom" {
+		t.Fatalf("expected network boom to bubble, got %v", err)
+	}
+}
+
+// TestRouter_ExtractResumeKeywords_ValidationErrorFailsFast verifies the one
+// deliberate divergence from the ScoreBatch/EnrichBatch loop shape: a caller
+// bug (validation failure surfaced by the first slot) short-circuits instead
+// of cycling every remaining slot and burning their RPM/RPD budget on input
+// that will fail identically at every slot.
+func TestRouter_ExtractResumeKeywords_ValidationErrorFailsFast(t *testing.T) {
+	invalid := &fakeScorer{keywordsErr: llmerr.ErrLLMValidation}
+	neverCalled := &fakeScorer{keywordsErr: errors.New("must not be reached")}
+	r := services.NewLLMRouterService([]services.RouterSlot{
+		{SlotID: "s1", Model: "m1", Scorer: invalid},
+		{SlotID: "s2", Model: "m2", Scorer: neverCalled},
+	}, store.NewLLMCooldownMemoryStore(store.CooldownPolicy{Base: time.Second, Max: time.Minute}))
+
+	_, err := r.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: ""})
+	if !errors.Is(err, llmerr.ErrLLMValidation) {
+		t.Fatalf("want ErrLLMValidation to fail fast, got %v", err)
+	}
+}
+
+func TestRouter_ExtractResumeKeywords_ReturnsAllExhaustedError(t *testing.T) {
+	q1 := &fakeScorer{keywordsErr: llmerr.ErrLLMLocalQuotaExceeded}
+	q2 := &fakeScorer{keywordsErr: llmerr.ErrLLMProviderRateLimited}
+	cd := store.NewLLMCooldownMemoryStore(store.CooldownPolicy{Base: time.Second, Max: time.Minute})
+	r := services.NewLLMRouterService([]services.RouterSlot{
+		{SlotID: "s1", Model: "m1", Scorer: q1},
+		{SlotID: "s2", Model: "m2", Scorer: q2},
+	}, cd)
+
+	_, err := r.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "x"})
+	var ae *llmerr.LLMAllExhaustedError
+	if !errors.As(err, &ae) {
+		t.Fatalf("want LLMAllExhaustedError, got %v", err)
+	}
+	if len(ae.Slots) != 2 {
+		t.Fatalf("want 2 slot statuses, got %d", len(ae.Slots))
+	}
+}
+
+func TestRouter_ExtractResumeKeywords_ZeroSlotsReturnsAllExhausted(t *testing.T) {
+	r := services.NewLLMRouterService(nil,
+		store.NewLLMCooldownMemoryStore(store.CooldownPolicy{Base: time.Second, Max: time.Minute}))
+	_, err := r.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "x"})
+	var ae *llmerr.LLMAllExhaustedError
+	if !errors.As(err, &ae) {
+		t.Fatalf("want LLMAllExhaustedError for empty slot list, got %v", err)
+	}
+	if len(ae.Slots) != 0 {
+		t.Fatalf("want 0 slot statuses, got %d", len(ae.Slots))
+	}
+}
+
 // errCooldown lets tests force errors out of every cooldown-store method.
 type errCooldown struct {
 	availableErr error

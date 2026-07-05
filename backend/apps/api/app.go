@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/service/application"
+	applyqueuesvc "github.com/trushilpatel/jobradar/service/applyqueue/services"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -22,6 +23,7 @@ type App struct {
 	companyAdminHandler *companysvc.AdminRestRouter
 	resumeHandler       *resumesvc.RestRouter
 	pipelineHandler     *pipelinesvc.PipelineRestRouter
+	applyQueueHandler   *applyqueuesvc.RestRouter
 }
 
 // NewApp constructs the App from fully-wired domain handlers.
@@ -35,6 +37,7 @@ func NewApp(
 	companyAdminHandler *companysvc.AdminRestRouter,
 	resumeHandler *resumesvc.RestRouter,
 	pipelineHandler *pipelinesvc.PipelineRestRouter,
+	applyQueueHandler *applyqueuesvc.RestRouter,
 ) *App {
 	return &App{
 		companyHandler:      companyHandler,
@@ -45,6 +48,7 @@ func NewApp(
 		companyAdminHandler: companyAdminHandler,
 		resumeHandler:       resumeHandler,
 		pipelineHandler:     pipelineHandler,
+		applyQueueHandler:   applyQueueHandler,
 	}
 }
 
@@ -57,6 +61,7 @@ func (a *App) Handlers() []handler.RouteGroup {
 		a.jobHandler,
 		a.applicationHandler,
 		a.resumeHandler,
+		a.applyQueueHandler,
 	}
 }
 

@@ -124,15 +124,17 @@ router  := NewRestRouter(handler)
 
 ## Packages
 
-| Package        | Owns                                                                                 |
-| -------------- | ------------------------------------------------------------------------------------ |
-| `job/`         | Job listing: list, get, dismiss, save, set status, set notes                         |
-| `company/`     | Company CRUD, scan trigger, scan queue reads                                         |
-| `application/` | Application tracker: insert, update stage/note                                       |
-| `scan/`        | Scan result recording — used by the crawler worker, not the API                      |
-| `user/`        | User profile (Get / Provision / UpdateProfile / Delete), cache decorator, `/api/me`  |
-| `audit/`       | Admin audit log (Append / List); consumed by `AuditAdminMutation` middleware         |
-| `llm/`         | LLM business logic — `JobsRelevanceFilter` + `JobPostEnricher`, Gemini impl, prompts |
+| Package        | Owns                                                                                                                                           |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `job/`         | Job listing: list, get, dismiss, save, set status, set notes                                                                                   |
+| `company/`     | Company CRUD, scan trigger, scan queue reads                                                                                                   |
+| `application/` | Application tracker: insert, update stage/note                                                                                                 |
+| `scan/`        | Scan result recording — used by the crawler worker, not the API                                                                                |
+| `user/`        | User profile (Get / Provision / UpdateProfile / Delete), cache decorator, `/api/me`                                                            |
+| `audit/`       | Admin audit log (Append / List); consumed by `AuditAdminMutation` middleware                                                                   |
+| `llm/`         | LLM business logic — `JobsRelevanceFilter` + `JobPostEnricher` + `ResumeKeywordExtractor`, Gemini impl, prompts                                |
+| `resume/`      | Resume CRUD + object storage + best-effort keyword extraction (`textextract/` subpackage: PDF/DOCX → plain text)                               |
+| `applyqueue/`  | Apply-queue list + resume attachment; computes on-read keyword-match resume recommendations (Jaccard over `job_tech_tags` vs. resume keywords) |
 
 ---
 

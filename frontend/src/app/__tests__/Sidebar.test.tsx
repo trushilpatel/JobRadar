@@ -65,10 +65,11 @@ beforeEach(() => {
 })
 
 describe('Sidebar', () => {
-  it('renders the user nav (Jobs, Résumés) but no admin links for a non-admin', () => {
+  it('renders the user nav (Jobs, Apply Queue, Résumés) but no admin links for a non-admin', () => {
     renderSidebar()
     expect(screen.getByRole('link', { name: /Jobs/i })).toBeInTheDocument()
-    // Résumés are user-facing — visible to every authenticated user.
+    // Apply Queue and Résumés are user-facing — visible to every authenticated user.
+    expect(screen.getByRole('link', { name: /Apply Queue/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Resumes/i })).toBeInTheDocument()
     // Dashboard/Insights/Audit are removed from the nav entirely.
     expect(screen.queryByRole('link', { name: /Dashboard/i })).not.toBeInTheDocument()
@@ -169,6 +170,7 @@ describe('MobileSidebarNav', () => {
   it('shows the user-facing links for a non-admin (no admin group)', () => {
     renderMobile()
     expect(screen.getByRole('link', { name: /Jobs/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Apply Queue/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Resumes/i })).toBeInTheDocument()
     expect(screen.queryByText('Admin')).not.toBeInTheDocument()
   })

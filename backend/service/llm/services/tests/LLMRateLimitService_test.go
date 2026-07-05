@@ -50,10 +50,12 @@ func (r *recordingLogger) WithContext(_ context.Context) logger.Logger { return 
 func (r *recordingLogger) Warned() bool                                { return r.warned.Load() }
 
 type fakeScorer struct {
-	scoreErr  error
-	scoreOut  []string
-	enrichErr error
-	enrichOut []*dto.JobPostEnrichResult
+	scoreErr    error
+	scoreOut    []string
+	enrichErr   error
+	enrichOut   []*dto.JobPostEnrichResult
+	keywordsErr error
+	keywordsOut *dto.ResumeKeywordResult
 }
 
 func (f *fakeScorer) ScoreBatch(_ context.Context, _ []dto.JobsRelevanceFilterInput) ([]string, error) {
@@ -62,6 +64,10 @@ func (f *fakeScorer) ScoreBatch(_ context.Context, _ []dto.JobsRelevanceFilterIn
 
 func (f *fakeScorer) EnrichBatch(_ context.Context, _ []dto.JobPostEnrichInput) ([]*dto.JobPostEnrichResult, error) {
 	return f.enrichOut, f.enrichErr
+}
+
+func (f *fakeScorer) ExtractResumeKeywords(_ context.Context, _ dto.ResumeKeywordInput) (*dto.ResumeKeywordResult, error) {
+	return f.keywordsOut, f.keywordsErr
 }
 
 func TestRateLimit_DenyReturnsLocalQuota(t *testing.T) {
@@ -276,5 +282,66 @@ func TestRateLimit_WithLoggerLogsReleaseFailure(t *testing.T) {
 	_, _ = rl.ScoreBatch(context.Background(), nil)
 	if !rec.Warned() {
 		t.Fatal("expected logger to capture release failure warning")
+	}
+}
+
+func TestRateLimit_ExtractResumeKeywords_Success(t *testing.T) {
+	want := &dto.ResumeKeywordResult{Keywords: []string{"Go", "PostgreSQL"}}
+	inner := &fakeScorer{keywordsOut: want}
+	rs := store.NewLLMRateLimitMemoryStore()
+	rl := services.NewLLMRateLimitService(services.RateLimitSlot{
+		SlotID: "s1", RPM: 10, RPD: 100, TPMIn: 1_000_000,
+	}, inner, rs)
+
+	got, err := rl.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "Go, PostgreSQL"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got.Keywords) != 2 || got.Keywords[0] != "Go" {
+		t.Fatalf("unexpected output: %+v", got)
+	}
+}
+
+func TestRateLimit_ExtractResumeKeywords_DenyLocalQuota(t *testing.T) {
+	inner := &fakeScorer{}
+	rs := store.NewLLMRateLimitMemoryStore()
+	rl := services.NewLLMRateLimitService(services.RateLimitSlot{SlotID: "s1", RPM: 1, RPD: 100}, inner, rs)
+
+	if _, err := rl.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "x"}); err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	_, err := rl.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "x"})
+	if !errors.Is(err, llmerr.ErrLLMLocalQuotaExceeded) {
+		t.Fatalf("want local quota, got %v", err)
+	}
+}
+
+func TestRateLimit_ExtractResumeKeywords_ReleaseOnInnerError(t *testing.T) {
+	inner := &fakeScorer{keywordsErr: errors.New("network boom")}
+	rs := store.NewLLMRateLimitMemoryStore()
+	rl := services.NewLLMRateLimitService(services.RateLimitSlot{SlotID: "s1", RPM: 1, RPD: 100}, inner, rs)
+
+	if _, err := rl.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "x"}); err == nil {
+		t.Fatal("expected first call to error")
+	}
+	inner.keywordsErr = nil
+	if _, err := rl.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "x"}); err != nil {
+		t.Fatalf("expected success after release, got %v", err)
+	}
+}
+
+func TestRateLimit_ExtractResumeKeywords_KeepReservationOnProvider429(t *testing.T) {
+	inner := &fakeScorer{keywordsErr: llmerr.ErrLLMProviderRateLimited}
+	rs := store.NewLLMRateLimitMemoryStore()
+	rl := services.NewLLMRateLimitService(services.RateLimitSlot{SlotID: "s1", RPM: 1, RPD: 100}, inner, rs)
+
+	_, err := rl.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "x"})
+	if !errors.Is(err, llmerr.ErrLLMProviderRateLimited) {
+		t.Fatalf("want provider 429, got %v", err)
+	}
+	inner.keywordsErr = nil
+	_, err = rl.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "x"})
+	if !errors.Is(err, llmerr.ErrLLMLocalQuotaExceeded) {
+		t.Fatalf("want local quota after kept reservation, got %v", err)
 	}
 }

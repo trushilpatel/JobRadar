@@ -7,17 +7,23 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/logger"
+	commonredis "github.com/trushilpatel/jobradar/common/redis"
 	"github.com/trushilpatel/jobradar/platform/cache"
 	"github.com/trushilpatel/jobradar/platform/objectstorage"
 	"github.com/trushilpatel/jobradar/service/application"
 	services3 "github.com/trushilpatel/jobradar/service/application/services"
+	services5 "github.com/trushilpatel/jobradar/service/applyqueue/services"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	services "github.com/trushilpatel/jobradar/service/company/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
+	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
+	llmcore "github.com/trushilpatel/jobradar/service/llm/services"
+	llmstore "github.com/trushilpatel/jobradar/service/llm/store"
 	pipelinesvc "github.com/trushilpatel/jobradar/service/pipeline/services"
 	services4 "github.com/trushilpatel/jobradar/service/resume/services"
 	services2 "github.com/trushilpatel/jobradar/service/scan/services"
@@ -93,8 +99,10 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	if err != nil {
 		return nil, err
 	}
+	resumeKeywordExtractor := provideKeywordExtractor(cfg, log)
 	resumeRepositoryService := services4.NewRepositoryService(db)
-	resumeImplService := services4.NewImplService(resumeRepositoryService, objectStorage, log)
+	resumeKeywordStore := services4.NewKeywordStore(db)
+	resumeImplService := services4.NewImplService(resumeRepositoryService, objectStorage, resumeKeywordExtractor, resumeKeywordStore, log)
 	resumeValidationService := services4.NewValidationService(resumeImplService)
 	resumeRestService := services4.NewRestService(resumeValidationService)
 	resumeHandler := services4.NewRestRouter(resumeRestService)
@@ -107,7 +115,16 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	pipelineRestService := pipelinesvc.NewPipelineRestService(pipelineValidationService)
 	pipelineRestRouter := pipelinesvc.NewPipelineRestRouter(pipelineRestService)
 
-	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter, resumeHandler, pipelineRestRouter)
+	// ── Apply Queue ──────────────────────────────────────────────────────────
+	applyQueueRepositoryService := services5.NewRepositoryService(db)
+	applyQueueEngagementChecker := services5.NewEngagementChecker(db)
+	applyQueueResumeOwnershipChecker := services5.NewResumeOwnershipChecker(db)
+	applyQueueImplService := services5.NewImplService(applyQueueRepositoryService)
+	applyQueueValidationService := services5.NewValidationService(applyQueueImplService, applyQueueEngagementChecker, applyQueueResumeOwnershipChecker)
+	applyQueueRestService := services5.NewRestService(applyQueueValidationService)
+	applyQueueHandler := services5.NewRestRouter(applyQueueRestService)
+
+	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter, resumeHandler, pipelineRestRouter, applyQueueHandler)
 	return app, nil
 }
 
@@ -152,4 +169,64 @@ func provideObjectStorage(cfg *config.Config) (objectstorage.Storage, error) {
 		AccessKey: cfg.ObjectStorage.AccessKey,
 		SecretKey: cfg.ObjectStorage.SecretKey,
 	})
+}
+
+// noopKeywordExtractor is the resume slice's KeywordExtractor when the LLM
+// scorer could not be constructed (e.g. no LLM slots configured in this
+// environment) — resume upload/extraction remain fully functional, keywords
+// simply stay empty until the environment is configured. Never returned as
+// nil: ImplService's constructor would panic on a nil dependency, and a
+// typed no-op is clearer at the call site than threading an extra bool.
+type noopKeywordExtractor struct{ reason error }
+
+func (n noopKeywordExtractor) ExtractResumeKeywords(context.Context, llmdto.ResumeKeywordInput) (*llmdto.ResumeKeywordResult, error) {
+	return nil, fmt.Errorf("resume: keyword extraction unavailable: %w", n.reason)
+}
+
+// buildLLMQuotaStores returns Redis-backed rate-limit/cooldown stores, or an
+// in-memory fallback (non-fatal — matches buildMultiUserPlatform's Redis
+// fallback precedent) when Redis is unreachable. Resume keyword extraction
+// is best-effort, so a missing Redis must degrade the feature, never block
+// API startup.
+func buildLLMQuotaStores(ctx context.Context, cfg *config.Config, log logger.Logger) (llmstore.LLMRateLimitStore, llmstore.LLMCooldownStore) {
+	rdb, err := commonredis.New(ctx, cfg.Redis.URL)
+	if err != nil {
+		log.Warn("redis unavailable; resume keyword extraction will use in-memory LLM quota tracking", logger.Err(err))
+		return llmstore.NewLLMRateLimitMemoryStore(), llmstore.NewLLMCooldownMemoryStore(llmstore.CooldownPolicy{
+			Base:   time.Duration(cfg.Cooldown.BaseSeconds) * time.Second,
+			Max:    time.Duration(cfg.Cooldown.MaxSeconds) * time.Second,
+			Jitter: cfg.Cooldown.Jitter,
+		})
+	}
+	return llmstore.NewRedisStores(rdb, cfg.Cooldown)
+}
+
+// provideKeywordExtractor builds the LLM Scorer used for resume keyword
+// extraction, reusing the enricher's slot configuration (same model, same
+// env vars — see project convention against introducing a new LLM model)
+// so the API process shares the exact same Redis-backed per-slot RPM/RPD/TPM
+// budget as the analyzer worker rather than double-spending it. Never fails
+// API startup: any construction error degrades to a noopKeywordExtractor and
+// is logged, since resume upload must keep working even with no LLM slots
+// configured in a given environment (e.g. local dev without Doppler LLM keys).
+func provideKeywordExtractor(cfg *config.Config, log logger.Logger) services4.KeywordExtractor {
+	ctx, cancel := context.WithTimeout(context.Background(), redisConnectTimeout)
+	defer cancel()
+
+	rateStore, cooldownStore := buildLLMQuotaStores(ctx, cfg, log)
+
+	scorer, err := llmcore.NewScorer(ctx, llmcore.Options{
+		Provider:       cfg.LLM.Provider,
+		TargetRoles:    cfg.LLM.TargetRoles,
+		YearsExp:       cfg.LLM.YearsExp,
+		Log:            log,
+		Slots:          llmcore.SlotsFromConfig(cfg.Enricher.Slots),
+		RateLimitStore: rateStore,
+		CooldownStore:  cooldownStore,
+	})
+	if err != nil {
+		log.Warn("llm scorer init failed; resume keyword extraction disabled", logger.Err(err))
+		return noopKeywordExtractor{reason: err}
+	}
+	return scorer
 }

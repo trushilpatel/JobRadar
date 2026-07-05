@@ -4,7 +4,10 @@
 
 - **`JobsRelevanceFilter`** — batch-scores job summaries, returns IDs of relevant jobs. Used by the filter worker.
 - **`JobPostEnricher`** — extracts structured data from a full job posting. Used by the analyzer worker.
-- **`Scorer`** — combines both. Returned by `NewScorer`; callers receive the narrower interface they need.
+- **`ResumeKeywordExtractor`** — extracts technology/skill keywords from a resume's plain text body (`dto.ResumeKeywordInput` → `dto.ResumeKeywordResult`). Used by `service/resume` (best-effort after upload, and the explicit `POST /resumes/{id}/keywords` retry) via a narrow same-shaped interface declared in `service/resume/services/ResumeService.go` — the resume domain never depends on the full `Scorer` contract.
+- **`Scorer`** — combines all three. Returned by `NewScorer`; callers receive the narrower interface they need.
+
+Adding a method to `Scorer` requires implementing it on both decorators (`geminiScorer`, `rateLimitService`, `routerService`) — the router/rate-limit chain is mechanical per-method wrapping, not automatic delegation, so a new interface method is NOT free; it is, however, the _only_ place new plumbing is needed — no new decorator types, no new rate-limit/cooldown store shape.
 
 ## Decorator chain
 

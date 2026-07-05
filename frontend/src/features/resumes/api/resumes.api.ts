@@ -13,6 +13,9 @@ const ResumeSchema = z.object({
   ]),
   size_bytes: z.number(),
   created_at: z.string(),
+  // Backend always sends an array (possibly empty); `.catch([])` is a
+  // defensive normalizer in case an older/drifted response omits the field.
+  keywords: z.array(z.string()).catch([]),
 })
 const ResumeListSchema = z.array(ResumeSchema)
 
@@ -40,4 +43,11 @@ export async function renameResume(id: string, label: string): Promise<Resume> {
 
 export async function deleteResume(id: string): Promise<void> {
   await apiClient.delete<void>(`/resumes/${encodeURIComponent(id)}`)
+}
+
+// POST /resumes/:id/keywords — triggers/retries keyword extraction; returns
+// the updated resume (with populated `keywords` once extraction completes).
+export async function extractResumeKeywords(id: string): Promise<Resume> {
+  const raw = await apiClient.post<unknown>(`/resumes/${encodeURIComponent(id)}/keywords`)
+  return ResumeSchema.parse(raw) as Resume
 }

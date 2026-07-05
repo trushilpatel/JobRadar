@@ -22,9 +22,18 @@ type JobPostEnricher interface {
 	EnrichBatch(ctx context.Context, inputs []dto.JobPostEnrichInput) ([]*dto.JobPostEnrichResult, error)
 }
 
-// Scorer combines both interfaces. Returned by the factory — callers receive
-// the narrower interface they actually need.
+// ResumeKeywordExtractor extracts technology/skill keywords from a resume's
+// plain text body. Used by the resume service (best-effort after upload, and
+// on-demand via the explicit retry endpoint) — never called from the
+// filter/analyzer workers.
+type ResumeKeywordExtractor interface {
+	ExtractResumeKeywords(ctx context.Context, input dto.ResumeKeywordInput) (*dto.ResumeKeywordResult, error)
+}
+
+// Scorer combines all three interfaces. Returned by the factory — callers
+// receive the narrower interface they actually need.
 type Scorer interface {
 	JobsRelevanceFilter
 	JobPostEnricher
+	ResumeKeywordExtractor
 }

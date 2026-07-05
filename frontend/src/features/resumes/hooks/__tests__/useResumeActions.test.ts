@@ -25,6 +25,7 @@ const sampleResume = {
   content_type: 'application/pdf' as const,
   size_bytes: 10,
   created_at: '2026-07-03T00:00:00Z',
+  keywords: [] as string[],
 }
 
 describe('useResumeActions', () => {
