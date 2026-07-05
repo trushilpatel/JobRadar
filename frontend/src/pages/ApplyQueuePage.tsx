@@ -16,6 +16,7 @@ import {
 import { useResumes } from '@/features/resumes'
 import { useJob, useJobActions, JobDetailPanel } from '@/features/jobs'
 import type { Job, JobStatus } from '@/types'
+import { useApplyQueueResumeMatch } from './apply-queue/useApplyQueueResumeMatch'
 
 export function ApplyQueuePage() {
   const q = useApplyQueue()
@@ -23,6 +24,7 @@ export function ApplyQueuePage() {
   const setResume = useSetApplyQueueResume()
   const queryClient = useQueryClient()
   const jobActions = useJobActions()
+  const { getEffectiveResume, getMatchSummary } = useApplyQueueResumeMatch(q.items, resumes ?? [])
 
   // Which job's detail panel is open. Local component state — this page has
   // no URL-state hook of its own (see @/features/jobs/hooks/useJobUrlState
@@ -120,6 +122,8 @@ export function ApplyQueuePage() {
           resumeOptions={resumeOptions}
           onResumeChange={handleResumeChange}
           isResumeUpdatePending={isResumeUpdatePending}
+          getEffectiveResume={getEffectiveResume}
+          getMatchSummary={getMatchSummary}
           selectedJobId={selectedJobId}
           onRowClick={handleRowClick}
           page={q.page}
