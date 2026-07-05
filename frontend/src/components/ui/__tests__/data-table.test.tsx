@@ -113,7 +113,7 @@ describe('DataTable', () => {
   it('applies the selected highlight to the matching row', () => {
     render(<DataTable columns={columns} data={data} getRowId={(r) => r.id} selectedId="2" />)
     const selectedRow = screen.getByText('Bravo').closest('tr')
-    expect(selectedRow?.className).toContain('bg-violet-500/[0.08]')
+    expect(selectedRow?.className).toContain('bg-[var(--accent-dim)]')
   })
 
   it('applies a custom row className and row props', () => {
@@ -128,6 +128,25 @@ describe('DataTable', () => {
     const row = screen.getByText('Alpha').closest('tr')
     expect(row?.className).toContain('custom-row')
     expect(row).toHaveAttribute('aria-label', 'job row')
+  })
+
+  it('merges getRowProps className with getRowClassName instead of replacing it', () => {
+    // Regression test: getRowProps used to spread onto <tr> after className
+    // was set, so a caller-supplied className (e.g. focus-ring styles, as
+    // JobsTable provides) silently discarded the hover/active classes from
+    // getRowClassName instead of composing with them.
+    render(
+      <DataTable
+        columns={columns}
+        data={data}
+        getRowClassName={() => 'hover:bg-hover group/row'}
+        getRowProps={() => ({ className: 'focus-visible:ring-2' })}
+      />
+    )
+    const row = screen.getByText('Alpha').closest('tr')
+    expect(row?.className).toContain('hover:bg-hover')
+    expect(row?.className).toContain('group/row')
+    expect(row?.className).toContain('focus-visible:ring-2')
   })
 
   it('renders server pagination controls when serverPagination is provided', () => {
