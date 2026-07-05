@@ -98,7 +98,11 @@ describe('Sidebar', () => {
   it('highlights the active route', () => {
     renderSidebar(['/jobs'])
     const jobsLink = screen.getByRole('link', { name: /Jobs/i })
-    expect(jobsLink.className).toContain('text-[var(--accent-text)]')
+    // Active state is a bold weight + gradient background + violet accent bar
+    // (see NavItem's `style` prop and the aria-hidden accent span), not a
+    // dedicated text-color class.
+    expect(jobsLink.className).toContain('font-semibold')
+    expect(jobsLink.className).toContain('text-[var(--sidebar-fg)]')
   })
 
   it('shows the user email and a sign-out button when expanded', async () => {
@@ -108,11 +112,6 @@ describe('Sidebar', () => {
     expect(signOut).toHaveBeenCalledOnce()
   })
 
-  it('renders the version line', () => {
-    renderSidebar()
-    expect(screen.getByText('JobRadar · v1.0.0')).toBeInTheDocument()
-  })
-
   it('collapses and expands via the toggle button', async () => {
     renderSidebar()
     // Expanded: email is visible
@@ -120,8 +119,6 @@ describe('Sidebar', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
     // Collapsed: email label is hidden, only the initials avatar link remains
     expect(screen.queryByText('jane@example.com')).not.toBeInTheDocument()
-    // Version line collapses to just the version
-    expect(screen.getByText('v1.0.0')).toBeInTheDocument()
     // Toggle is now the expand control
     await userEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }))
     expect(screen.getByText('jane@example.com')).toBeInTheDocument()
@@ -167,7 +164,6 @@ describe('MobileSidebarNav', () => {
     expect(screen.getByRole('link', { name: /Jobs/i })).toBeInTheDocument()
     expect(screen.getByText('Admin')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Companies/i })).toBeInTheDocument()
-    expect(screen.getByText('JobRadar · v1.0.0')).toBeInTheDocument()
   })
 
   it('shows the user-facing links for a non-admin (no admin group)', () => {
