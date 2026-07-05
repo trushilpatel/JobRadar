@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	applyqueuesvc "github.com/trushilpatel/jobradar/service/applyqueue/services"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -224,6 +226,114 @@ func TestApplyQueueRepo_List_NoAttachment_ResumeFieldsNil(t *testing.T) {
 	}
 	if result.Items[0].ResumeID != nil || result.Items[0].ResumeLabel != nil {
 		t.Errorf("expected nil resume fields, got id=%v label=%v", result.Items[0].ResumeID, result.Items[0].ResumeLabel)
+	}
+}
+
+// ─── Job detail fields (Location/Remote/SalaryRange/AddedAt) ────────────────
+
+// TestApplyQueueRepo_List_JobDetailFields_NullLocationAndSalary_NoPanic covers
+// the common case: seedJob leaves jobs.location and jobs.salary_range NULL
+// (a job the pipeline never parsed a location/salary for). The repo must not
+// panic scanning these into QueueItem, Location must surface as a nil
+// pointer, and SalaryRange must marshal to valid JSON (`null`), never a
+// malformed byte sequence.
+func TestApplyQueueRepo_List_JobDetailFields_NullLocationAndSalary_NoPanic(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	before := time.Now().Add(-time.Second)
+	seedJob(t, db, "j1", "c1", "Engineer") // no location/remote/salary_range set — all zero values
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	result, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20)
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(result.Items))
+	}
+	item := result.Items[0]
+
+	if item.Location != nil {
+		t.Errorf("Location = %v, want nil for a job with no parsed location", *item.Location)
+	}
+	if item.Remote != false {
+		t.Errorf("Remote = %v, want false (default)", item.Remote)
+	}
+
+	if item.SalaryRange != nil {
+		t.Errorf("SalaryRange = %q, want nil for a job with no salary data", string(item.SalaryRange))
+	}
+	// Confirm the whole item still marshals to valid, non-malformed JSON with
+	// salary_range rendered as a JSON null — not omitted, not empty bytes.
+	raw, err := json.Marshal(item)
+	if err != nil {
+		t.Fatalf("marshal QueueItem with nil SalaryRange: %v", err)
+	}
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("marshalled QueueItem is not valid JSON: %v (raw=%s)", err, raw)
+	}
+	if string(decoded["salary_range"]) != "null" {
+		t.Errorf("salary_range in marshalled JSON = %s, want null", decoded["salary_range"])
+	}
+	if string(decoded["location"]) != "null" {
+		t.Errorf("location in marshalled JSON = %s, want null", decoded["location"])
+	}
+
+	if item.AddedAt.IsZero() {
+		t.Error("AddedAt is zero, want the job's autoCreateTime timestamp")
+	}
+	if item.AddedAt.Before(before) {
+		t.Errorf("AddedAt = %v, want at/after test start %v", item.AddedAt, before)
+	}
+}
+
+// TestApplyQueueRepo_List_JobDetailFields_PopulatedValues covers the
+// populated case: a job with location/remote/salary_range all set must
+// pass those values through to QueueItem unchanged.
+func TestApplyQueueRepo_List_JobDetailFields_PopulatedValues(t *testing.T) {
+	t.Parallel()
+	db := newApplyQueueTestDB(t)
+	seedCompany(t, db, "c1", "Acme")
+	location := "Remote - US"
+	salary := datatypes.JSON(`{"min":100000,"max":150000}`)
+	seedJobWithDetails(t, db, "j1", "c1", "Engineer", &location, true, salary)
+	now := time.Now()
+	savedAt := now
+	seedUserJobState(t, db, testUserID, "j1", nil, &savedAt, now)
+
+	repo := applyqueuesvc.NewRepositoryService(db)
+	result, err := repo.List(context.Background(), testUserID, applyqueuecommon.FilterAll, "", 20)
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(result.Items))
+	}
+	item := result.Items[0]
+
+	if item.Location == nil || *item.Location != "Remote - US" {
+		t.Errorf("Location = %v, want %q", item.Location, "Remote - US")
+	}
+	if item.Remote != true {
+		t.Errorf("Remote = %v, want true", item.Remote)
+	}
+
+	var got, want map[string]interface{}
+	if err := json.Unmarshal(item.SalaryRange, &got); err != nil {
+		t.Fatalf("SalaryRange not valid JSON: %v (raw=%q)", err, string(item.SalaryRange))
+	}
+	_ = json.Unmarshal(salary, &want)
+	if got["min"] != want["min"] || got["max"] != want["max"] {
+		t.Errorf("SalaryRange = %v, want %v", got, want)
+	}
+
+	if item.AddedAt.IsZero() {
+		t.Error("AddedAt is zero, want the job's autoCreateTime timestamp")
 	}
 }
 

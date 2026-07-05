@@ -7,6 +7,7 @@ import (
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	resumemodel "github.com/trushilpatel/jobradar/service/resume/models"
+	"gorm.io/datatypes"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -87,6 +88,27 @@ func seedJob(t *testing.T, db *gorm.DB, id, companyID, title string) {
 	}
 	if err := db.Create(&j).Error; err != nil {
 		t.Fatalf("seed job %s: %v", id, err)
+	}
+}
+
+// seedJobWithDetails inserts a job row with location/remote/salary_range set
+// explicitly — used by tests asserting QueueItem exposes these pass-through
+// fields (mirroring jobmodel.Job's Location/Remote/SalaryRange) distinctly
+// from the null-by-default case covered by seedJob.
+func seedJobWithDetails(t *testing.T, db *gorm.DB, id, companyID, title string, location *string, remote bool, salaryRange datatypes.JSON) {
+	t.Helper()
+	j := jobmodel.Job{
+		ID:          id,
+		JobPostID:   "p-" + id,
+		CompanyID:   companyID,
+		Title:       title,
+		URL:         "https://example.com/" + id,
+		Location:    location,
+		Remote:      remote,
+		SalaryRange: salaryRange,
+	}
+	if err := db.Create(&j).Error; err != nil {
+		t.Fatalf("seed job with details %s: %v", id, err)
 	}
 }
 

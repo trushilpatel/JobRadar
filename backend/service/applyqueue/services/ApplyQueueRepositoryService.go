@@ -12,6 +12,7 @@ import (
 	"github.com/trushilpatel/jobradar/service/applyqueue/dto"
 	applyqueuemodel "github.com/trushilpatel/jobradar/service/applyqueue/models"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -104,14 +105,18 @@ func applyCursorPredicate(query *gorm.DB, p *cursorPayload) *gorm.DB {
 // to this file, distinct from dto.QueueItem, so the derived-status
 // computation (deriveStatus) stays out of the SQL layer.
 type queueRow struct {
-	JobID       string    `gorm:"column:job_id"`
-	Title       string    `gorm:"column:title"`
-	Company     string    `gorm:"column:company"`
-	URL         string    `gorm:"column:url"`
-	Status      *string   `gorm:"column:status"`
-	UpdatedAt   time.Time `gorm:"column:updated_at"`
-	ResumeID    *string   `gorm:"column:resume_id"`
-	ResumeLabel *string   `gorm:"column:resume_label"`
+	JobID       string         `gorm:"column:job_id"`
+	Title       string         `gorm:"column:title"`
+	Company     string         `gorm:"column:company"`
+	URL         string         `gorm:"column:url"`
+	Status      *string        `gorm:"column:status"`
+	UpdatedAt   time.Time      `gorm:"column:updated_at"`
+	ResumeID    *string        `gorm:"column:resume_id"`
+	ResumeLabel *string        `gorm:"column:resume_label"`
+	Location    *string        `gorm:"column:location"`
+	Remote      bool           `gorm:"column:remote"`
+	SalaryRange datatypes.JSON `gorm:"column:salary_range"`
+	AddedAt     time.Time      `gorm:"column:added_at"`
 }
 
 // deriveStatus renders the client-facing status for a queue row: "saved"
@@ -186,7 +191,9 @@ func (r *repositoryService) List(ctx context.Context, userID, filter, cursor str
 	if err = query.
 		Select(`ujs.job_id AS job_id, jobs.title AS title, companies.name AS company, jobs.url AS url,
 			ujs.status AS status, ujs.updated_at AS updated_at,
-			resumes.id AS resume_id, resumes.label AS resume_label`).
+			resumes.id AS resume_id, resumes.label AS resume_label,
+			jobs.location AS location, jobs.remote AS remote,
+			jobs.salary_range AS salary_range, jobs.added_at AS added_at`).
 		Order("ujs.updated_at DESC, ujs.job_id DESC").
 		Limit(limit + 1).
 		Find(&rows).Error; err != nil {
@@ -210,6 +217,10 @@ func (r *repositoryService) List(ctx context.Context, userID, filter, cursor str
 			Status:      deriveStatus(row.Status),
 			ResumeID:    row.ResumeID,
 			ResumeLabel: row.ResumeLabel,
+			Location:    row.Location,
+			Remote:      row.Remote,
+			SalaryRange: row.SalaryRange,
+			AddedAt:     row.AddedAt,
 		}
 	}
 
