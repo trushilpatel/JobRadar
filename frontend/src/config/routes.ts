@@ -45,6 +45,9 @@ export const routes = {
   // ─── Resumes ──────────────────────────────────────────────────────────────
   resumeLibrary: () => '/resumes',
 
+  // ─── Apply Queue ──────────────────────────────────────────────────────────
+  applyQueue: () => '/apply-queue',
+
   // ─── Admin ────────────────────────────────────────────────────────────────
   adminCompanies: () => '/admin/companies',
   adminUsers: () => '/admin/users',

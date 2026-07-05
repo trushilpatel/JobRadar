@@ -6,6 +6,7 @@ describe('routes — static top-level', () => {
     [routes.account(), '/account'],
     [routes.login(), '/login'],
     [routes.resumeLibrary(), '/resumes'],
+    [routes.applyQueue(), '/apply-queue'],
     [routes.adminCompanies(), '/admin/companies'],
     [routes.adminUsers(), '/admin/users'],
     [routes.adminAudit(), '/admin/audit'],

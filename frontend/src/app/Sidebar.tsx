@@ -10,6 +10,7 @@ import {
   Users,
   Settings,
   FileText,
+  ListChecks,
 } from 'lucide-react'
 import { useAuth, useUser, useClerk } from '@clerk/react'
 import { cn } from '@/lib/utils/utils'
@@ -23,9 +24,10 @@ interface NavLinkSpec {
   icon: React.ReactNode
 }
 
-// Resumes is user-facing for every authenticated user — not admin-gated.
+// Resumes and Apply Queue are user-facing for every authenticated user — not admin-gated.
 const userNav: NavLinkSpec[] = [
   { to: routes.jobs(), label: COPY['nav.jobs'], icon: <Briefcase size={16} /> },
+  { to: routes.applyQueue(), label: COPY['nav.applyQueue'], icon: <ListChecks size={16} /> },
   { to: routes.resumeLibrary(), label: COPY['nav.resumes'], icon: <FileText size={16} /> },
 ]
 

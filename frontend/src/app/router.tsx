@@ -11,6 +11,7 @@ import { AdminUsersPage } from '@/pages/admin/AdminUsersPage'
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage'
 import { AdminPipelinePage } from '@/pages/admin/AdminPipelinePage'
 import { ResumeLibraryPage } from '@/pages/admin/ResumeLibraryPage'
+import { ApplyQueuePage } from '@/pages/ApplyQueuePage'
 import { AuthenticateWithRedirectCallback } from '@clerk/react'
 import { SignInPage, RequireAuth, RequireAdmin } from '@/features/auth'
 import { MobileJobDetailRoute } from '@/features/jobs'
@@ -68,8 +69,9 @@ function ProtectedLayout() {
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:id" element={<MobileJobDetailRoute />} />
           <Route path="/account" element={<AccountPage />} />
-          {/* Resumes are user-facing for every authenticated user, not admin-gated. */}
+          {/* Resumes and Apply Queue are user-facing for every authenticated user, not admin-gated. */}
           <Route path="/resumes" element={<ResumeLibraryPage />} />
+          <Route path="/apply-queue" element={<ApplyQueuePage />} />
           {/* Admin routes — server also enforces 403 for non-admins */}
           <Route element={<RequireAdmin />}>
             <Route path="/admin/companies" element={<CompaniesPage />} />
