@@ -37,6 +37,8 @@ const sampleItem = {
   status: 'saved',
   resume_id: null,
   resume_label: null,
+  recommended_resume_id: null,
+  recommended_resume_label: null,
 }
 
 const sampleResume = {
@@ -47,6 +49,7 @@ const sampleResume = {
   content_type: 'application/pdf' as const,
   size_bytes: 2048,
   created_at: '2026-07-03T00:00:00Z',
+  keywords: [] as string[],
 }
 
 describe('ApplyQueuePage', () => {
@@ -96,6 +99,23 @@ describe('ApplyQueuePage', () => {
     await waitFor(() =>
       expect(fetchApplyQueueMock).toHaveBeenCalledWith('saved', '', 20, expect.anything())
     )
+  })
+
+  it('shows a Recommended badge on the option matching recommended_resume_id', async () => {
+    const user = userEvent.setup()
+    fetchApplyQueueMock.mockResolvedValue({
+      items: [
+        { ...sampleItem, recommended_resume_id: 'resume-1', recommended_resume_label: 'My resume' },
+      ],
+      next_cursor: '',
+    })
+    fetchResumesMock.mockResolvedValue([sampleResume])
+    render(<ApplyQueuePage />, { wrapper: makeWrapper() })
+
+    await waitFor(() => expect(screen.getByText('Senior Engineer')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('combobox', { name: /select resume/i }))
+    expect(await screen.findByText('Recommended')).toBeInTheDocument()
   })
 
   it('selecting a resume in the picker calls the mutation and invalidates the list', async () => {

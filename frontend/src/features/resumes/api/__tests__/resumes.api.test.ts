@@ -6,6 +6,7 @@ import {
   downloadResume,
   renameResume,
   deleteResume,
+  extractResumeKeywords,
 } from '../resumes.api'
 
 vi.mock('@/lib/core/api-client', () => ({
@@ -20,6 +21,7 @@ vi.mock('@/lib/core/api-client', () => ({
 }))
 
 const mockGet = vi.mocked(apiClient.get)
+const mockPost = vi.mocked(apiClient.post)
 const mockUpload = vi.mocked(apiClient.upload)
 const mockPatch = vi.mocked(apiClient.patch)
 const mockDelete = vi.mocked(apiClient.delete)
@@ -33,6 +35,7 @@ const sampleResume = {
   content_type: 'application/pdf',
   size_bytes: 1024,
   created_at: '2026-07-03T00:00:00Z',
+  keywords: ['python', 'react'],
 }
 
 describe('resumes.api', () => {
@@ -49,6 +52,21 @@ describe('resumes.api', () => {
     it('throws on a malformed item', async () => {
       mockGet.mockResolvedValue([{ id: 'r1' }])
       await expect(fetchResumes()).rejects.toThrow()
+    })
+
+    it('normalizes a missing keywords field to an empty array', async () => {
+      const withoutKeywords = {
+        id: 'r1',
+        user_id: 'u1',
+        label: 'My resume',
+        original_filename: 'resume.pdf',
+        content_type: 'application/pdf',
+        size_bytes: 1024,
+        created_at: '2026-07-03T00:00:00Z',
+      }
+      mockGet.mockResolvedValue([withoutKeywords])
+      const result = await fetchResumes()
+      expect(result[0]!.keywords).toEqual([])
     })
   })
 
@@ -95,6 +113,20 @@ describe('resumes.api', () => {
       mockDelete.mockResolvedValue(undefined)
       await deleteResume('r/1')
       expect(mockDelete).toHaveBeenCalledWith('/resumes/r%2F1')
+    })
+  })
+
+  describe('extractResumeKeywords', () => {
+    it('POSTs to the keywords endpoint with the encoded id and returns the updated resume', async () => {
+      mockPost.mockResolvedValue(sampleResume)
+      const result = await extractResumeKeywords('r/1')
+      expect(mockPost).toHaveBeenCalledWith('/resumes/r%2F1/keywords')
+      expect(result.keywords).toEqual(['python', 'react'])
+    })
+
+    it('throws when the response is malformed', async () => {
+      mockPost.mockResolvedValue({ id: 'r1' })
+      await expect(extractResumeKeywords('r1')).rejects.toThrow()
     })
   })
 })

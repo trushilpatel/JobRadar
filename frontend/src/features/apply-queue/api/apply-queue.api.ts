@@ -24,6 +24,10 @@ const ApplyQueueItemSchema = z.object({
   status: ApplyQueueStatusSchema,
   resume_id: z.string().nullable(),
   resume_label: z.string().nullable(),
+  // Best keyword-match resume for this job (issue #264) — null when no
+  // recommendation is available (e.g. no resume has extracted keywords yet).
+  recommended_resume_id: z.string().nullable(),
+  recommended_resume_label: z.string().nullable(),
 })
 export type ApplyQueueItem = z.infer<typeof ApplyQueueItemSchema>
 

@@ -60,12 +60,19 @@ export function buildApplyQueueColumns(
       header: () => <span className="text-muted">Resume</span>,
       cell: ({ row }) => {
         const item = row.original
+        // Marks the option matching this row's keyword-match recommendation
+        // (issue #264) — computed per row since the recommendation differs
+        // per job, unlike the shared resumeOptions list itself.
+        const options = resumeOptions.map((opt) => ({
+          ...opt,
+          recommended: opt.id === item.recommended_resume_id,
+        }))
         return (
           <ResumePickerCell
             jobId={item.job_id}
             resumeId={item.resume_id}
             resumeLabel={item.resume_label}
-            options={resumeOptions}
+            options={options}
             onChange={onResumeChange}
             disabled={isResumeUpdatePending?.(item.job_id) ?? false}
           />

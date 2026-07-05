@@ -12,6 +12,8 @@ const item: ApplyQueueItem = {
   status: 'saved',
   resume_id: null,
   resume_label: null,
+  recommended_resume_id: null,
+  recommended_resume_label: null,
 }
 
 const resumeOptions = [{ id: 'resume-1', label: 'Software Engineer Resume' }]

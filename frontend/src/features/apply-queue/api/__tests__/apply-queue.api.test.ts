@@ -13,6 +13,8 @@ const validItem = {
   status: 'saved',
   resume_id: null,
   resume_label: null,
+  recommended_resume_id: null,
+  recommended_resume_label: null,
 }
 
 describe('apply-queue API', () => {
@@ -52,6 +54,18 @@ describe('apply-queue API', () => {
       expect(page.items).toHaveLength(1)
       expect(page.items[0]).toEqual(validItem)
       expect(page.next_cursor).toBe('next-1')
+    })
+
+    it('parses a recommended resume when present', async () => {
+      const recommendedItem = {
+        ...validItem,
+        recommended_resume_id: 'resume-9',
+        recommended_resume_label: 'Backend Resume',
+      }
+      vi.mocked(apiClient.get).mockResolvedValue({ items: [recommendedItem], next_cursor: '' })
+      const page = await fetchApplyQueue('all')
+      expect(page.items[0]?.recommended_resume_id).toBe('resume-9')
+      expect(page.items[0]?.recommended_resume_label).toBe('Backend Resume')
     })
 
     it('drops an individual malformed item instead of throwing (resilient parse)', async () => {

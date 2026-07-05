@@ -22,6 +22,8 @@ const item = {
   status: 'saved' as const,
   resume_id: null,
   resume_label: null,
+  recommended_resume_id: null,
+  recommended_resume_label: null,
 }
 
 const emptyPage: ApplyQueuePage = { items: [], next_cursor: '' }
