@@ -41,9 +41,6 @@ func (f *fakeQueueStore) EnqueueAll(_ context.Context, _ string) (int, error) {
 	f.enqueueAllCalled = true
 	return f.enqueueAllResult, f.err
 }
-func (f *fakeQueueStore) ClaimNext(_ context.Context, _ string) (*dto.ScanQueueItem, error) {
-	return nil, f.err
-}
 func (f *fakeQueueStore) Complete(_ context.Context, _ string) error { return f.err }
 func (f *fakeQueueStore) Remove(_ context.Context, _ string) error {
 	f.removeCalled = true

@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	stderrors "errors"
-	"fmt"
 	"time"
 
 	commondb "github.com/trushilpatel/jobradar/common/db"
@@ -49,11 +48,6 @@ type ScanQueueStore interface {
 	// manual "scan all" — bypasses the scan-interval cooldown. Returns the
 	// number of rows inserted.
 	EnqueueAll(ctx context.Context, source string) (int, error)
-
-	// ClaimNext atomically claims the next queued item for the given adapterType,
-	// enforcing the inter-company delay from adapter_configs via a FOR UPDATE lock.
-	// Returns nil, nil if the queue is empty or the delay has not elapsed.
-	ClaimNext(ctx context.Context, adapterType string) (*dto.ScanQueueItem, error)
 
 	// Complete removes the queue entry. Call after scan succeeds or fails.
 	// Returns ErrQueueRowMissing when no row matched (already removed/reassigned).
@@ -201,74 +195,6 @@ func (s *scanQueueStore) EnqueueAll(ctx context.Context, source string) (_ int, 
 	`, source).Scan(&ids).Error
 	return len(ids), err
 }
-
-func (s *scanQueueStore) ClaimNext(ctx context.Context, adapterType string) (_ *dto.ScanQueueItem, err error) {
-	ctx, span := tracing.Start(ctx, "scan.store.ClaimNext")
-	defer tracing.End(span, &err)
-
-	var item dto.ScanQueueItem
-	txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Step 1: Lock this adapter's config row and check if the inter-company delay
-		// has elapsed. FOR UPDATE serialises concurrent pod claims for this adapter type.
-		// If the row is absent or the delay has not passed, no row is returned and we
-		// return nil (worker sleeps and retries on the next poll interval).
-		var delayS int
-		res := tx.Raw(`
-			SELECT inter_company_delay_s
-			FROM ats
-			WHERE name = ?
-			  AND (
-			    last_scheduled_at IS NULL
-			    OR NOW() - last_scheduled_at >= inter_company_delay_s * INTERVAL '1 second'
-			  )
-			FOR UPDATE
-		`, adapterType).Scan(&delayS)
-		if res.Error != nil {
-			return res.Error
-		}
-		if res.RowsAffected == 0 {
-			// Delay not elapsed or adapter unknown — signal nil return via sentinel.
-			return errNoEligibleAdapter
-		}
-
-		// Step 2: Claim the oldest queued item for this adapter type.
-		if err := tx.Raw(`
-			UPDATE company_scan_queue
-			SET status = 'running', started_at = NOW(), heartbeat_at = NOW()
-			WHERE id = (
-			    SELECT id FROM company_scan_queue
-			    WHERE status = 'queued' AND adapter_type = ?
-			      AND COALESCE(next_attempt_at, '-infinity'::timestamptz) <= NOW()
-			    ORDER BY priority DESC, queued_at ASC
-			    LIMIT 1
-			    FOR UPDATE SKIP LOCKED
-			)
-			RETURNING id, company_id, adapter_type, source
-		`, adapterType).Scan(&item).Error; err != nil {
-			return err
-		}
-
-		// Step 3: Record when this adapter was last claimed so the next claim
-		// waits for inter_company_delay_s before proceeding.
-		return tx.Exec(`UPDATE ats SET last_scheduled_at = NOW() WHERE name = ?`, adapterType).Error
-	})
-
-	if txErr == errNoEligibleAdapter {
-		return nil, nil
-	}
-	if txErr != nil {
-		return nil, txErr
-	}
-	if item.ID == "" {
-		return nil, nil
-	}
-	return &item, nil
-}
-
-// errNoEligibleAdapter is a sentinel used inside the ClaimNext transaction to
-// signal that no adapter_configs row was eligible (delay not elapsed or unknown
-// adapter). It is never returned to callers — ClaimNext returns nil, nil instead.
-var errNoEligibleAdapter = fmt.Errorf("no eligible adapter row")
 
 func (s *scanQueueStore) PurgeInactive(ctx context.Context) (_ int, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.PurgeInactive")

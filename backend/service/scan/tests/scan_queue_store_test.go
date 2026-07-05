@@ -241,27 +241,6 @@ func TestScanQueueStore_EnqueueAll_EmitsActiveOnlyInsert(t *testing.T) {
 	}
 }
 
-func TestScanQueueStore_ClaimNext_EmitsForUpdateAndSkipLocked(t *testing.T) {
-	db, cap := newScanDryRunDB(t)
-	store := svc.NewQueueStore(db)
-
-	// DryRun + transaction: gorm still emits the statements through the
-	// logger when nested in a transaction begun on a DryRun session.
-	_, _ = store.ClaimNext(context.Background(), "greenhouse")
-
-	joined := strings.Join(cap.statements(), "\n")
-	// At minimum the first lock-check SELECT must be emitted with the
-	// FOR UPDATE clause that serialises concurrent pod claims.
-	for _, want := range []string{
-		"FROM ats",
-		"FOR UPDATE",
-	} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("expected SQL to contain %q; got:\n%s", want, joined)
-		}
-	}
-}
-
 func TestScanQueueStore_PurgeInactive_EmitsInactiveCriteria(t *testing.T) {
 	db, cap := newScanDryRunDB(t)
 	store := svc.NewQueueStore(db)

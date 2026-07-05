@@ -7,6 +7,7 @@ import (
 	"gorm.io/datatypes"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/service/ats/adaptermeta"
 	atsdto "github.com/trushilpatel/jobradar/service/ats/dto"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
@@ -209,7 +210,9 @@ func TestAdminValidator_UpdateScanSettings(t *testing.T) {
 		{name: "active-only patch allowed on Update", input: companydto.CompanyScanSettingsInput{Active: boolPtr(true)}},
 		// eightfold is registered but not admin-creatable — UpdateScanSettings
 		// uses requireAdapter=false so the is_admin_creatable check is skipped.
-		{name: "eightfold allowed on Update (requireAdapter=false)", input: companydto.CompanyScanSettingsInput{AdapterType: strPtr(companycommon.AdapterEightfold)}},
+		// eightfold also requires a non-empty adapter_config (adaptermeta.RequiresConfig),
+		// so one is supplied here to isolate this case to the is_admin_creatable behavior.
+		{name: "eightfold allowed on Update (requireAdapter=false)", input: companydto.CompanyScanSettingsInput{AdapterType: strPtr(companycommon.AdapterEightfold), AdapterConfig: jsonPtr(`{"host":"h","domain":"d"}`)}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -267,6 +270,13 @@ func TestAdminValidator_AdapterAllowList_DerivedFromMockAts(t *testing.T) {
 		at := at
 		t.Run(at, func(t *testing.T) {
 			settings := companydto.CompanyScanSettingsInput{AdapterType: strPtr(at)}
+			// Adapters that require adapter_config (adaptermeta.RequiresConfig)
+			// need one supplied here so this subtest isolates the
+			// is_admin_creatable behavior it's actually asserting — the
+			// requires-config check is covered by its own dedicated tests below.
+			if adaptermeta.RequiresConfig(at) {
+				settings.AdapterConfig = jsonPtr(`{"host":"h","site":"s","domain":"d"}`)
+			}
 			_, err := v.Create(context.Background(),
 				companydto.CompanyPublicInput{ID: "c", Name: "C", Slug: "c"}, settings)
 			wantRejected := companycommon.AdminUnsupportedAdapters[at]
@@ -293,6 +303,179 @@ func TestAdminValidator_AdapterAllowList_DerivedFromMockAts(t *testing.T) {
 		companydto.CompanyScanSettingsInput{AdapterType: strPtr("totally-unknown")})
 	if err == nil {
 		t.Errorf("unknown adapter must be rejected")
+	}
+}
+
+// asValidationErrors asserts err is a non-nil apperr.ValidationErrors and
+// returns it, failing the test otherwise.
+func asValidationErrors(t *testing.T, err error) apperr.ValidationErrors {
+	t.Helper()
+	errs, ok := err.(apperr.ValidationErrors)
+	if !ok {
+		t.Fatalf("err = %v (%T), want apperr.ValidationErrors", err, err)
+	}
+	return errs
+}
+
+// hasFieldError reports whether errs contains an entry for the given field.
+func hasFieldError(errs apperr.ValidationErrors, field string) bool {
+	for _, e := range errs {
+		if e.Field == field {
+			return true
+		}
+	}
+	return false
+}
+
+// TestAdminValidator_RequiresConfig_Create_WorkdayNilConfigRejects proves the
+// new check: workday is a known configurable adapter (adaptermeta.RequiresConfig)
+// so Create with adapter_config=nil must be rejected.
+func TestAdminValidator_RequiresConfig_Create_WorkdayNilConfigRejects(t *testing.T) {
+	v := newAdminValidator()
+	_, err := v.Create(context.Background(),
+		companydto.CompanyPublicInput{ID: "c", Name: "C", Slug: "c"},
+		companydto.CompanyScanSettingsInput{AdapterType: strPtr(companycommon.AdapterWorkday)})
+	errs := asValidationErrors(t, err)
+	if !hasFieldError(errs, "adapter_config") {
+		t.Errorf("expected adapter_config error, got %v", errs)
+	}
+}
+
+// TestAdminValidator_RequiresConfig_Create_WorkdayEmptyObjectAccepted documents
+// that this check is presence-only, not content validation: an empty JSON
+// object `{}` is non-nil/non-empty-length and is accepted at this layer even
+// though the workday adapter's own validate() will reject it at crawl time
+// for missing Host/Site.
+func TestAdminValidator_RequiresConfig_Create_WorkdayEmptyObjectAccepted(t *testing.T) {
+	v := newAdminValidator()
+	_, err := v.Create(context.Background(),
+		companydto.CompanyPublicInput{ID: "c", Name: "C", Slug: "c"},
+		companydto.CompanyScanSettingsInput{
+			AdapterType:   strPtr(companycommon.AdapterWorkday),
+			AdapterConfig: jsonPtr(`{}`),
+		})
+	if err != nil {
+		t.Errorf("expected no error for non-empty (if content-less) adapter_config, got %v", err)
+	}
+}
+
+// TestAdminValidator_RequiresConfig_Update_EightfoldNilConfigRejects confirms
+// the check applies to UpdateScanSettings too, not just Create — unlike the
+// Create-only is_admin_creatable gate.
+func TestAdminValidator_RequiresConfig_Update_EightfoldNilConfigRejects(t *testing.T) {
+	v := newAdminValidator()
+	err := v.UpdateScanSettings(context.Background(), "id",
+		companydto.CompanyScanSettingsInput{AdapterType: strPtr(companycommon.AdapterEightfold)})
+	errs := asValidationErrors(t, err)
+	if !hasFieldError(errs, "adapter_config") {
+		t.Errorf("expected adapter_config error, got %v", errs)
+	}
+}
+
+// TestAdminValidator_RequiresConfig_Update_AdapterTypeNilNotRejected documents
+// an accepted scope boundary: this check only evaluates when adapter_type is
+// present in the input DTO. A patch that omits adapter_type (e.g. only
+// toggling `active`) is never checked against RequiresConfig, even
+// conceptually against whatever adapter_type/adapter_config the row already
+// has in the DB — re-validating untouched fields on every patch is
+// explicitly out of scope for this fix.
+func TestAdminValidator_RequiresConfig_Update_AdapterTypeNilNotRejected(t *testing.T) {
+	v := newAdminValidator()
+	err := v.UpdateScanSettings(context.Background(), "id",
+		companydto.CompanyScanSettingsInput{Active: boolPtr(true)})
+	if err != nil {
+		t.Errorf("expected no error when adapter_type is omitted, got %v", err)
+	}
+}
+
+// TestAdminValidator_RequiresConfig_NonConfigurableAdapterNilConfigNotRejected
+// confirms an ordinary adapter (not in adaptermeta's hardcoded set) is never
+// rejected by this new check even with adapter_config=nil.
+func TestAdminValidator_RequiresConfig_NonConfigurableAdapterNilConfigNotRejected(t *testing.T) {
+	v := newAdminValidator()
+	err := v.UpdateScanSettings(context.Background(), "id",
+		companydto.CompanyScanSettingsInput{AdapterType: strPtr(companycommon.AdapterGreenhouse)})
+	if err != nil {
+		t.Errorf("expected no error for greenhouse with nil adapter_config, got %v", err)
+	}
+}
+
+// TestAdminValidator_RequiresConfig_UnknownAdapterType_OnlyExistingCheckFires
+// confirms an unrecognised adapter_type string is rejected only by the
+// pre-existing "not a recognised adapter" existence check, never by the new
+// requires-config check — adaptermeta.RequiresConfig returns false
+// (permissive default) for any name outside its hardcoded set, including
+// ones that aren't real adapters at all.
+//
+// Note: GetATS's not-found error for an unrecognised adapter_type is
+// propagated as a raw error (not converted into apperr.ValidationErrors) by
+// validateScanSettings's existing `apperr.IsNotFound` branch — a pre-existing
+// characteristic of that check, unrelated to and unchanged by this fix. This
+// test therefore only asserts err != nil, consistent with the existing
+// "invalid adapter_type rejects" test in TestAdminValidator_UpdateScanSettings.
+func TestAdminValidator_RequiresConfig_UnknownAdapterType_OnlyExistingCheckFires(t *testing.T) {
+	if adaptermeta.RequiresConfig("totally-unknown") {
+		t.Fatal("RequiresConfig(unknown) = true, want false")
+	}
+	v := newAdminValidator()
+	err := v.UpdateScanSettings(context.Background(), "id",
+		companydto.CompanyScanSettingsInput{AdapterType: strPtr("totally-unknown")})
+	if err == nil {
+		t.Fatal("expected an error for an unrecognised adapter_type")
+	}
+	if _, ok := err.(apperr.ValidationErrors); ok {
+		t.Errorf("expected the pre-existing unknown-adapter error path (not ValidationErrors), got %v", err)
+	}
+}
+
+// TestAdminValidator_RequiresConfig_MixedCaseNoNormalization documents that
+// RequiresConfig does no case folding — "Workday" does not match "workday" in
+// the hardcoded map, matching the exact-match convention used elsewhere for
+// adapter_type strings (e.g. the ats table's seed data / GetATS lookups).
+// "Workday" is consequently also not a recognised adapter, so the overall
+// call still rejects — via the same pre-existing unknown-adapter path as
+// above, proving the requires-config check never independently fires for
+// the mismatched case.
+func TestAdminValidator_RequiresConfig_MixedCaseNoNormalization(t *testing.T) {
+	if adaptermeta.RequiresConfig("Workday") {
+		t.Fatal(`RequiresConfig("Workday") = true, want false (exact match only)`)
+	}
+	v := newAdminValidator()
+	err := v.UpdateScanSettings(context.Background(), "id",
+		companydto.CompanyScanSettingsInput{AdapterType: strPtr("Workday")})
+	if err == nil {
+		t.Fatal(`expected an error for adapter_type "Workday" (unrecognised — exact-match only)`)
+	}
+}
+
+// TestAdminValidator_RequiresConfig_AggregatesWithOtherErrors confirms
+// validateScanSettings aggregates all failures instead of short-circuiting:
+// a request that fails both the new requires-config check (workday,
+// adapter_config nil) and the pre-existing scan_interval_override check
+// (must be > 0) must surface both errors in one response.
+//
+// Note: this cannot be combined with the *size-cap* (>10KB) check instead,
+// because both checks apply to the same adapter_config field and are
+// mutually exclusive by construction — a nil/empty adapter_config (required
+// to trigger the requires-config check) can never simultaneously exceed the
+// 10KB length cap. scan_interval_override is used as the second independent
+// failure to demonstrate aggregation without that contradiction.
+func TestAdminValidator_RequiresConfig_AggregatesWithOtherErrors(t *testing.T) {
+	v := newAdminValidator()
+	err := v.UpdateScanSettings(context.Background(), "id",
+		companydto.CompanyScanSettingsInput{
+			AdapterType:          strPtr(companycommon.AdapterWorkday),
+			ScanIntervalOverride: intPtr(0),
+		})
+	errs := asValidationErrors(t, err)
+	if !hasFieldError(errs, "adapter_config") {
+		t.Errorf("expected adapter_config error, got %v", errs)
+	}
+	if !hasFieldError(errs, "scan_interval_override") {
+		t.Errorf("expected scan_interval_override error, got %v", errs)
+	}
+	if len(errs) != 2 {
+		t.Errorf("expected exactly 2 errors, got %d: %v", len(errs), errs)
 	}
 }
 

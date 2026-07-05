@@ -54,11 +54,8 @@ func (f *schedulerFakeQueue) EnqueueDue(_ context.Context, m int, src string) (s
 	return f.enqueueDueRes, f.err
 }
 func (f *schedulerFakeQueue) EnqueueAll(context.Context, string) (int, error) { return 0, nil }
-func (f *schedulerFakeQueue) ClaimNext(context.Context, string) (*dto.ScanQueueItem, error) {
-	return nil, nil
-}
-func (f *schedulerFakeQueue) Complete(context.Context, string) error { return nil }
-func (f *schedulerFakeQueue) Remove(context.Context, string) error   { return nil }
+func (f *schedulerFakeQueue) Complete(context.Context, string) error          { return nil }
+func (f *schedulerFakeQueue) Remove(context.Context, string) error            { return nil }
 func (f *schedulerFakeQueue) ResetStuck(_ context.Context, d time.Duration) (int, error) {
 	f.resetStuckArg = d
 	return f.resetCount, f.err

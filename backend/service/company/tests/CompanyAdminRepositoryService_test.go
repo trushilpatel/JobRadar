@@ -3,7 +3,10 @@ package company_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -499,6 +502,262 @@ func TestAdminRepo_UpdateScanSettings_PauseKeepsConsecutiveErrors(t *testing.T) 
 	}
 	if got.ConsecutiveErrors != 5 {
 		t.Errorf("consecutive_errors = %d, want 5 (pause must not reset counter)", got.ConsecutiveErrors)
+	}
+}
+
+// seedScanSettingsWithFailureState seeds a scan_settings row with non-zero,
+// non-nil values across all four failure-history fields (consecutive_errors,
+// last_error_at, last_error_message, auto_paused) so tests can assert they
+// get reset (or don't) by a subsequent patch.
+func seedScanSettingsWithFailureState(t *testing.T, db *gorm.DB, companyID, adapter string) {
+	t.Helper()
+	now := time.Now()
+	if err := db.Exec(`INSERT INTO company_scan_settings
+        (company_id, adapter_type, active, auto_paused, consecutive_errors, last_error_at, last_error_message, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		companyID, adapter, true, true, 12, now, "connection refused", now, now).Error; err != nil {
+		t.Fatalf("seed scan_settings with failure state: %v", err)
+	}
+}
+
+// TestAdminRepo_UpdateScanSettings_AdapterChangeResetsFailureState asserts
+// P1: changing adapter_type to a genuinely different value resets the whole
+// failure-history quartet (consecutive_errors, last_error_at,
+// last_error_message, auto_paused). The new adapter has no relationship to
+// the old one's failure history — carrying it over would be misleading.
+func TestAdminRepo_UpdateScanSettings_AdapterChangeResetsFailureState(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	seedAdminCompany(t, db, "stripe", "Stripe")
+	seedScanSettingsWithFailureState(t, db, "stripe", companycommon.AdapterGreenhouse)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	newAdapter := companycommon.AdapterWorkday
+	if err := repo.UpdateScanSettings(context.Background(), "stripe",
+		companydto.CompanyScanSettingsInput{AdapterType: &newAdapter}); err != nil {
+		t.Fatalf("UpdateScanSettings: %v", err)
+	}
+
+	var got companymodel.CompanyScanSettings
+	if err := db.First(&got, "company_id = ?", "stripe").Error; err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if got.AdapterType != newAdapter {
+		t.Errorf("adapter_type = %q, want %q", got.AdapterType, newAdapter)
+	}
+	if got.ConsecutiveErrors != 0 {
+		t.Errorf("consecutive_errors = %d, want 0 (must reset on adapter change)", got.ConsecutiveErrors)
+	}
+	if got.LastErrorAt != nil {
+		t.Errorf("last_error_at = %v, want nil (must reset on adapter change)", got.LastErrorAt)
+	}
+	if got.LastErrorMessage != nil {
+		t.Errorf("last_error_message = %v, want nil (must reset on adapter change)", got.LastErrorMessage)
+	}
+	if got.AutoPaused {
+		t.Error("auto_paused should be cleared on adapter change")
+	}
+}
+
+// TestAdminRepo_UpdateScanSettings_AdapterTypeUnchangedNoReset asserts P1:
+// patching adapter_type to its OWN CURRENT value is not a real change and
+// must not reset the failure-history fields.
+func TestAdminRepo_UpdateScanSettings_AdapterTypeUnchangedNoReset(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	seedAdminCompany(t, db, "stripe", "Stripe")
+	seedScanSettingsWithFailureState(t, db, "stripe", companycommon.AdapterGreenhouse)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	sameAdapter := companycommon.AdapterGreenhouse
+	if err := repo.UpdateScanSettings(context.Background(), "stripe",
+		companydto.CompanyScanSettingsInput{AdapterType: &sameAdapter}); err != nil {
+		t.Fatalf("UpdateScanSettings: %v", err)
+	}
+
+	var got companymodel.CompanyScanSettings
+	if err := db.First(&got, "company_id = ?", "stripe").Error; err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if got.ConsecutiveErrors != 12 {
+		t.Errorf("consecutive_errors = %d, want 12 (no-op adapter patch must not reset)", got.ConsecutiveErrors)
+	}
+	if got.LastErrorAt == nil {
+		t.Error("last_error_at should be untouched, got nil")
+	}
+	if got.LastErrorMessage == nil || *got.LastErrorMessage != "connection refused" {
+		t.Errorf("last_error_message should be untouched, got %v", got.LastErrorMessage)
+	}
+	if !got.AutoPaused {
+		t.Error("auto_paused should be untouched (still true)")
+	}
+}
+
+// TestAdminRepo_UpdateScanSettings_OmittedAdapterTypeNoReset asserts P1:
+// a patch that never mentions adapter_type (e.g. patching only `active`,
+// matching the shape of TestAdminRepo_UpdateScanSettings_Patch) must not
+// touch the failure-history fields — the reset is strictly conditioned on
+// an actual, explicit adapter_type change in the same patch.
+func TestAdminRepo_UpdateScanSettings_OmittedAdapterTypeNoReset(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	seedAdminCompany(t, db, "stripe", "Stripe")
+	seedScanSettingsWithFailureState(t, db, "stripe", companycommon.AdapterGreenhouse)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	active := false
+	if err := repo.UpdateScanSettings(context.Background(), "stripe",
+		companydto.CompanyScanSettingsInput{Active: &active}); err != nil {
+		t.Fatalf("UpdateScanSettings: %v", err)
+	}
+
+	var got companymodel.CompanyScanSettings
+	if err := db.First(&got, "company_id = ?", "stripe").Error; err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if got.Active {
+		t.Error("active should have been patched to false")
+	}
+	if got.ConsecutiveErrors != 12 {
+		t.Errorf("consecutive_errors = %d, want 12 (adapter_type omitted, must not reset)", got.ConsecutiveErrors)
+	}
+	if got.LastErrorAt == nil || got.LastErrorMessage == nil || !got.AutoPaused {
+		t.Errorf("failure-history fields should be untouched, got last_error_at=%v last_error_message=%v auto_paused=%v",
+			got.LastErrorAt, got.LastErrorMessage, got.AutoPaused)
+	}
+}
+
+// TestAdminRepo_UpdateScanSettings_AdapterChangeWithExplicitAutoPausedWins
+// asserts P1 precedence: when the SAME patch both changes adapter_type
+// (which derives auto_paused=false as part of the reset) AND explicitly sets
+// AutoPaused, the explicit value wins over the derived one — the admin's
+// explicit instruction is never silently overwritten by the reset side
+// effect. The rest of the reset (consecutive_errors/last_error_*) still
+// applies since those have no explicit value in this patch.
+func TestAdminRepo_UpdateScanSettings_AdapterChangeWithExplicitAutoPausedWins(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	seedAdminCompany(t, db, "stripe", "Stripe")
+	seedScanSettingsWithFailureState(t, db, "stripe", companycommon.AdapterGreenhouse)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	newAdapter := companycommon.AdapterWorkday
+	explicitPause := true
+	if err := repo.UpdateScanSettings(context.Background(), "stripe",
+		companydto.CompanyScanSettingsInput{AdapterType: &newAdapter, AutoPaused: &explicitPause}); err != nil {
+		t.Fatalf("UpdateScanSettings: %v", err)
+	}
+
+	var got companymodel.CompanyScanSettings
+	if err := db.First(&got, "company_id = ?", "stripe").Error; err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if !got.AutoPaused {
+		t.Error("auto_paused should be true (explicit patch value wins over the derived reset)")
+	}
+	if got.ConsecutiveErrors != 0 {
+		t.Errorf("consecutive_errors = %d, want 0 (adapter-change reset still applies)", got.ConsecutiveErrors)
+	}
+	if got.LastErrorAt != nil {
+		t.Errorf("last_error_at = %v, want nil (adapter-change reset still applies)", got.LastErrorAt)
+	}
+	if got.LastErrorMessage != nil {
+		t.Errorf("last_error_message = %v, want nil (adapter-change reset still applies)", got.LastErrorMessage)
+	}
+}
+
+// TestAdminRepo_UpdateScanSettings_ConcurrentAdapterChangeAndErrorWrite
+// exercises the row lock under genuine concurrency: one goroutine changes
+// adapter_type through UpdateScanSettings (triggering the reset), while
+// another goroutine concurrently performs a raw, atomic scan-failure-style
+// write directly against the row (`consecutive_errors = consecutive_errors +
+// 1`), simulating a worker's error write racing the admin's adapter change.
+// This uses a real file-backed sqlite DB (not :memory:, which hands each new
+// connection its own empty, unshared database — plain in-memory sqlite
+// cannot host two genuinely concurrent connections at all) so the two
+// goroutines' connections observe and serialize against each other, the same
+// way two connections to a real Postgres instance would. The connection
+// pool is pinned to a single connection: mattn/go-sqlite3's shared-cache
+// in-memory mode surfaces "database table is locked" (SQLITE_LOCKED) races
+// between threads that busy_timeout does not retry (that failure mode is
+// specific to sqlite's shared-cache implementation, not something Postgres
+// exhibits), which made an earlier version of this test flaky. Pinning to
+// one connection makes Go's database/sql pool itself queue the two
+// goroutines' operations — a deterministic stand-in for "the second writer
+// waits for the first to finish" that avoids sqlite-specific lock-retry
+// timing entirely.
+//
+// UpdateScanSettings wraps its read-compare-write in one transaction and
+// locks the row (via clause.Locking{Strength: "UPDATE"}, which compiles to a
+// real `SELECT ... FOR UPDATE` on Postgres — verified separately by
+// inspecting the generated SQL — and is a documented no-op on sqlite). That
+// lock is held for the admin transaction's full duration, so the concurrent
+// raw UPDATE — which itself needs to acquire the row for writing — cannot
+// land in the middle of the admin transaction; it is forced to fully
+// complete either before the admin transaction starts or after it commits.
+// Because the admin transaction's write is a single atomic `.Updates(fields)`
+// call and the racing write is a single atomic SQL increment expression
+// (not an application-level read-then-write), every possible interleaving
+// collapses to one of exactly two valid serial orderings, so the final
+// consecutive_errors value is deterministically 0 or 1 — never a corrupted
+// hybrid (e.g. the pre-existing seed value incremented past the reset,
+// which is what an unresetting pre-fix implementation would have produced:
+// the old code never compared adapter_type at all, so it never wrote
+// consecutive_errors=0, and this race would have settled on 5+1=6 instead).
+func TestAdminRepo_UpdateScanSettings_ConcurrentAdapterChangeAndErrorWrite(t *testing.T) {
+	dsn := fmt.Sprintf("%s?_busy_timeout=5000", filepath.Join(t.TempDir(), "scan_settings_concurrent.db"))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("open file-backed sqlite: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql.DB: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	if err := db.AutoMigrate(&companymodel.Company{}, &companymodel.CompanyScanSettings{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	seedAdminCompany(t, db, "stripe", "Stripe")
+	seedScanSettingsWithFailureState(t, db, "stripe", companycommon.AdapterGreenhouse)
+
+	repo := companysvc.NewAdminRepositoryService(db, &fakeScanHistory{}, logger.NewNoop())
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		newAdapter := companycommon.AdapterWorkday
+		if err := repo.UpdateScanSettings(context.Background(), "stripe",
+			companydto.CompanyScanSettingsInput{AdapterType: &newAdapter}); err != nil {
+			errs <- err
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if err := db.Exec(`UPDATE company_scan_settings SET consecutive_errors = consecutive_errors + 1 WHERE company_id = ?`,
+			"stripe").Error; err != nil {
+			errs <- err
+		}
+	}()
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		t.Fatalf("concurrent update failed: %v", e)
+	}
+
+	var got companymodel.CompanyScanSettings
+	if err := db.First(&got, "company_id = ?", "stripe").Error; err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if got.AdapterType != companycommon.AdapterWorkday {
+		t.Errorf("adapter_type = %q, want %q", got.AdapterType, companycommon.AdapterWorkday)
+	}
+	if got.ConsecutiveErrors != 0 && got.ConsecutiveErrors != 1 {
+		t.Errorf("consecutive_errors = %d, want 0 or 1 (one of the two valid serializations) — "+
+			"anything else means the two writes interleaved into a corrupted hybrid", got.ConsecutiveErrors)
 	}
 }
 

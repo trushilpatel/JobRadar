@@ -11,11 +11,53 @@ import (
 
 	sqlite3 "github.com/mattn/go-sqlite3"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	atsdto "github.com/trushilpatel/jobradar/service/ats/dto"
+	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	"github.com/trushilpatel/jobradar/service/crawlernode/services"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
+
+// --- fake AtsService (backs AdapterDelayGate in these tests) ---
+
+// fakeAtsService is a minimal atssvc.AtsService double. delays maps adapter
+// name -> inter_company_delay_s; an adapter absent from the map mirrors
+// AtsService.GetATS returning ErrNotFound.
+type fakeAtsService struct {
+	delays map[string]int
+	err    error
+}
+
+func (f *fakeAtsService) ListATS(context.Context) ([]atsdto.ATSDTO, error) { return nil, nil }
+
+func (f *fakeAtsService) GetATS(_ context.Context, name string) (atsdto.ATSDTO, error) {
+	if f.err != nil {
+		return atsdto.ATSDTO{}, f.err
+	}
+	delay, ok := f.delays[name]
+	if !ok {
+		return atsdto.ATSDTO{}, domainerrs.ErrNotFound.WithMessage("unknown adapter " + name)
+	}
+	return atsdto.ATSDTO{Name: name, InterCompanyDelayS: delay}, nil
+}
+
+func (f *fakeAtsService) UpdateATS(_ context.Context, _ string, _ atsdto.UpdateATSInput) (atsdto.ATSDTO, error) {
+	return atsdto.ATSDTO{}, nil
+}
+
+var _ atssvc.AtsService = (*fakeAtsService)(nil)
+
+// alwaysEligibleGate returns a gate over adapters that never block (either
+// delay=0 or unused in a given test) so tests that are not exercising the
+// delay-gate itself can ignore it.
+func alwaysEligibleGate(adapterTypes ...string) *services.AdapterDelayGate {
+	delays := make(map[string]int, len(adapterTypes))
+	for _, a := range adapterTypes {
+		delays[a] = 0
+	}
+	return services.NewAdapterDelayGate(&fakeAtsService{delays: delays})
+}
 
 // --- DryRun SQL-probe helpers ---
 
@@ -45,7 +87,7 @@ func (c *assignSQLCapture) statements() []string {
 }
 
 // newAssignDryRunDB returns a DryRun GORM DB that never executes SQL.
-// Used for Postgres-specific statements (FOR UPDATE SKIP LOCKED, RETURNING, INTERVAL).
+// Used for Postgres-specific statements (RETURNING, INTERVAL).
 func newAssignDryRunDB(t *testing.T) (*gorm.DB, *assignSQLCapture) {
 	t.Helper()
 	cap := &assignSQLCapture{}
@@ -77,6 +119,22 @@ func ensureAssignDriver() {
 	})
 }
 
+const createQueueTableSQL = `
+	CREATE TABLE company_scan_queue (
+		id TEXT PRIMARY KEY,
+		company_id TEXT NOT NULL,
+		adapter_type TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'queued',
+		source TEXT NOT NULL,
+		priority INTEGER DEFAULT 0,
+		queued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		started_at TIMESTAMP,
+		heartbeat_at TIMESTAMP,
+		next_attempt_at TIMESTAMP,
+		locked_by TEXT
+	)
+`
+
 // newAssignExecDB returns a real in-memory SQLite DB with a minimal
 // company_scan_queue table and NOW() registered for heartbeat updates.
 func newAssignExecDB(t *testing.T) *gorm.DB {
@@ -86,21 +144,25 @@ func newAssignExecDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.Exec(`
-		CREATE TABLE company_scan_queue (
-			id TEXT PRIMARY KEY,
-			company_id TEXT NOT NULL,
-			adapter_type TEXT NOT NULL,
-			status TEXT NOT NULL DEFAULT 'queued',
-			source TEXT NOT NULL,
-			priority INTEGER DEFAULT 0,
-			queued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			started_at TIMESTAMP,
-			heartbeat_at TIMESTAMP,
-			next_attempt_at TIMESTAMP,
-			locked_by TEXT
-		)
-	`).Error; err != nil {
+	if err := db.Exec(createQueueTableSQL).Error; err != nil {
+		t.Fatalf("create company_scan_queue: %v", err)
+	}
+	return db
+}
+
+// newAssignExecDBShared returns a real SQLite DB using a shared-cache
+// in-memory database (multiple connections in this process see the same
+// data) — needed by the lost-claim-race test below, which injects a
+// side-effect UPDATE from a second *sql.DB handle mid-query.
+func newAssignExecDBShared(t *testing.T) *gorm.DB {
+	t.Helper()
+	ensureAssignDriver()
+	dsn := "file::memory:?cache=shared&_busy_timeout=5000"
+	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: assignTestDriverName, DSN: dsn}), &gorm.Config{Logger: gormlogger.Discard})
+	if err != nil {
+		t.Fatalf("open shared sqlite: %v", err)
+	}
+	if err := db.Exec(createQueueTableSQL).Error; err != nil {
 		t.Fatalf("create company_scan_queue: %v", err)
 	}
 	return db
@@ -108,10 +170,18 @@ func newAssignExecDB(t *testing.T) *gorm.DB {
 
 func seedQueueItem(t *testing.T, db *gorm.DB, id, status, lockedBy string) {
 	t.Helper()
+	seedQueueItemFull(t, db, id, status, lockedBy, "greenhouse", 0)
+}
+
+// seedQueueItemFull seeds a row with an explicit adapter_type and priority so
+// ORDER BY priority DESC, queued_at ASC is deterministic across rows inserted
+// within the same wall-clock second.
+func seedQueueItemFull(t *testing.T, db *gorm.DB, id, status, lockedBy, adapterType string, priority int) {
+	t.Helper()
 	if err := db.Exec(
-		`INSERT INTO company_scan_queue (id, company_id, adapter_type, status, source, locked_by)
-		 VALUES (?, 'co-1', 'greenhouse', ?, 'scheduler', ?)`,
-		id, status, lockedBy,
+		`INSERT INTO company_scan_queue (id, company_id, adapter_type, status, source, locked_by, priority)
+		 VALUES (?, 'co-1', ?, ?, 'scheduler', ?, ?)`,
+		id, adapterType, status, lockedBy, priority,
 	).Error; err != nil {
 		t.Fatalf("seed queue item %s: %v", id, err)
 	}
@@ -119,10 +189,13 @@ func seedQueueItem(t *testing.T, db *gorm.DB, id, status, lockedBy string) {
 
 // --- DryRun SQL-probe tests ---
 
-// ClaimNextForNode must emit FOR UPDATE SKIP LOCKED and RETURNING.
-func TestAssignmentRepositoryService_ClaimNextForNode_SQLShape(t *testing.T) {
+// ClaimNextForNode's candidate listing must emit RETURNING-free plain SELECT
+// with the priority/queued_at ordering and the due-gate — and must NOT lock
+// the batch (no FOR UPDATE): safety comes from the per-row targeted UPDATE,
+// not from locking the listing SELECT.
+func TestAssignmentRepositoryService_ClaimNextForNode_ListsCandidates_SQLShape(t *testing.T) {
 	db, cap := newAssignDryRunDB(t)
-	store := services.NewAssignmentRepositoryService(db)
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate("greenhouse"))
 
 	_, _ = store.ClaimNextForNode(context.Background(), "node-1", "greenhouse")
 
@@ -131,18 +204,21 @@ func TestAssignmentRepositoryService_ClaimNextForNode_SQLShape(t *testing.T) {
 		t.Fatal("ClaimNextForNode: no SQL emitted")
 	}
 	sql := strings.ToUpper(stmts[0])
-	if !strings.Contains(sql, "FOR UPDATE SKIP LOCKED") {
-		t.Errorf("ClaimNextForNode SQL missing FOR UPDATE SKIP LOCKED:\n%s", stmts[0])
+	if !strings.Contains(sql, "ORDER BY PRIORITY DESC, QUEUED_AT ASC") {
+		t.Errorf("ClaimNextForNode SQL missing ORDER BY priority DESC, queued_at ASC:\n%s", stmts[0])
 	}
-	if !strings.Contains(sql, "RETURNING") {
-		t.Errorf("ClaimNextForNode SQL missing RETURNING:\n%s", stmts[0])
+	if strings.Contains(sql, "FOR UPDATE") {
+		t.Errorf("ClaimNextForNode candidate listing must not lock the batch (FOR UPDATE):\n%s", stmts[0])
+	}
+	if !strings.Contains(sql, "STATUS = 'QUEUED'") {
+		t.Errorf("ClaimNextForNode SQL missing status='queued' filter:\n%s", stmts[0])
 	}
 }
 
 // ExtendHeartbeats must emit RETURNING id.
 func TestAssignmentRepositoryService_ExtendHeartbeats_SQLShape(t *testing.T) {
 	db, cap := newAssignDryRunDB(t)
-	store := services.NewAssignmentRepositoryService(db)
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate())
 
 	_, _, _ = store.ExtendHeartbeats(context.Background(), "node-1", []string{"q-1", "q-2"})
 
@@ -159,7 +235,7 @@ func TestAssignmentRepositoryService_ExtendHeartbeats_SQLShape(t *testing.T) {
 // ExtendHeartbeats with empty slice must return empty slices without a DB call.
 func TestAssignmentRepositoryService_ExtendHeartbeats_EmptySliceNoDBCall(t *testing.T) {
 	db, cap := newAssignDryRunDB(t)
-	store := services.NewAssignmentRepositoryService(db)
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate())
 
 	acked, missed, err := store.ExtendHeartbeats(context.Background(), "node-1", []string{})
 	if err != nil {
@@ -176,7 +252,7 @@ func TestAssignmentRepositoryService_ExtendHeartbeats_EmptySliceNoDBCall(t *test
 // ResetStuckForNodes must emit INTERVAL arithmetic in the WHERE clause.
 func TestAssignmentRepositoryService_ResetStuckForNodes_SQLShape(t *testing.T) {
 	db, cap := newAssignDryRunDB(t)
-	store := services.NewAssignmentRepositoryService(db)
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate())
 
 	n, err := store.ResetStuckForNodes(context.Background(), 5*time.Minute)
 	// DryRun never executes — count will be 0, error should be nil.
@@ -205,7 +281,7 @@ func TestAssignmentRepositoryService_ExtendHeartbeats_AckedMissedDiff(t *testing
 	db := newAssignExecDB(t)
 	seedQueueItem(t, db, "q-1", "running", "node-1")
 	seedQueueItem(t, db, "q-2", "running", "node-other") // locked by different node
-	store := services.NewAssignmentRepositoryService(db)
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate())
 
 	acked, missed, err := store.ExtendHeartbeats(context.Background(), "node-1", []string{"q-1", "q-2"})
 	if err != nil {
@@ -224,7 +300,7 @@ func TestAssignmentRepositoryService_ExtendHeartbeats_AckedMissedDiff(t *testing
 func TestAssignmentRepositoryService_CompleteForNode_DeletesRow(t *testing.T) {
 	db := newAssignExecDB(t)
 	seedQueueItem(t, db, "q-1", "running", "node-1")
-	store := services.NewAssignmentRepositoryService(db)
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate())
 
 	if err := store.CompleteForNode(context.Background(), "q-1", "node-1"); err != nil {
 		t.Fatalf("CompleteForNode() error = %v", err)
@@ -239,7 +315,7 @@ func TestAssignmentRepositoryService_CompleteForNode_DeletesRow(t *testing.T) {
 func TestAssignmentRepositoryService_CompleteForNode_ErrQueueRowMissingOnOwnershipMismatch(t *testing.T) {
 	db := newAssignExecDB(t)
 	seedQueueItem(t, db, "q-1", "running", "node-other")
-	store := services.NewAssignmentRepositoryService(db)
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate())
 
 	err := store.CompleteForNode(context.Background(), "q-1", "node-1")
 	if !stderrors.Is(err, domainerrs.ErrQueueRowMissing) {
@@ -249,7 +325,7 @@ func TestAssignmentRepositoryService_CompleteForNode_ErrQueueRowMissingOnOwnersh
 
 func TestAssignmentRepositoryService_CompleteForNode_ErrQueueRowMissingOnMissingRow(t *testing.T) {
 	db := newAssignExecDB(t)
-	store := services.NewAssignmentRepositoryService(db)
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate())
 
 	err := store.CompleteForNode(context.Background(), "nonexistent", "node-1")
 	if !stderrors.Is(err, domainerrs.ErrQueueRowMissing) {
@@ -272,7 +348,7 @@ func TestAssignmentRepositoryService_CompleteForNode_ErrQueueRowMissingOnMissing
 // locked_by ownership guard.
 func TestAssignmentRepositoryService_FailForNode_SQLShape_BackoffAndGuard(t *testing.T) {
 	db, cap := newAssignDryRunDB(t)
-	store := services.NewAssignmentRepositoryService(db)
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate())
 
 	_ = store.FailForNode(context.Background(), "q-1", "node-1")
 
@@ -307,7 +383,7 @@ func TestAssignmentRepositoryService_FailForNode_SQLShape_BackoffAndGuard(t *tes
 func TestAssignmentRepositoryService_ClaimNextForNode_DueGate_SQLShape(t *testing.T) {
 	for _, adapter := range []string{"greenhouse", ""} {
 		db, cap := newAssignDryRunDB(t)
-		store := services.NewAssignmentRepositoryService(db)
+		store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate("greenhouse"))
 
 		_, _ = store.ClaimNextForNode(context.Background(), "node-1", adapter)
 
@@ -338,7 +414,7 @@ func newClosedAssignDB(t *testing.T) *gorm.DB {
 }
 
 func TestAssignmentRepositoryService_ClaimNextForNode_ErrInternalOnDBError(t *testing.T) {
-	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t))
+	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t), alwaysEligibleGate("greenhouse"))
 	_, err := store.ClaimNextForNode(context.Background(), "node-1", "greenhouse")
 	if err == nil {
 		t.Fatal("ClaimNextForNode() on closed DB expected error, got nil")
@@ -346,7 +422,7 @@ func TestAssignmentRepositoryService_ClaimNextForNode_ErrInternalOnDBError(t *te
 }
 
 func TestAssignmentRepositoryService_ExtendHeartbeats_ErrInternalOnDBError(t *testing.T) {
-	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t))
+	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t), alwaysEligibleGate())
 	_, _, err := store.ExtendHeartbeats(context.Background(), "node-1", []string{"q-1"})
 	if err == nil {
 		t.Fatal("ExtendHeartbeats() on closed DB expected error, got nil")
@@ -354,7 +430,7 @@ func TestAssignmentRepositoryService_ExtendHeartbeats_ErrInternalOnDBError(t *te
 }
 
 func TestAssignmentRepositoryService_CompleteForNode_ErrInternalOnDBError(t *testing.T) {
-	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t))
+	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t), alwaysEligibleGate())
 	err := store.CompleteForNode(context.Background(), "q-1", "node-1")
 	if err == nil {
 		t.Fatal("CompleteForNode() on closed DB expected error, got nil")
@@ -362,7 +438,7 @@ func TestAssignmentRepositoryService_CompleteForNode_ErrInternalOnDBError(t *tes
 }
 
 func TestAssignmentRepositoryService_FailForNode_ErrInternalOnDBError(t *testing.T) {
-	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t))
+	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t), alwaysEligibleGate())
 	err := store.FailForNode(context.Background(), "q-1", "node-1")
 	if err == nil {
 		t.Fatal("FailForNode() on closed DB expected error, got nil")
@@ -370,7 +446,7 @@ func TestAssignmentRepositoryService_FailForNode_ErrInternalOnDBError(t *testing
 }
 
 func TestAssignmentRepositoryService_ResetStuckForNodes_ErrInternalOnDBError(t *testing.T) {
-	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t))
+	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t), alwaysEligibleGate())
 	_, err := store.ResetStuckForNodes(context.Background(), 5*time.Minute)
 	if err == nil {
 		t.Fatal("ResetStuckForNodes() on closed DB expected error, got nil")
@@ -380,7 +456,7 @@ func TestAssignmentRepositoryService_ResetStuckForNodes_ErrInternalOnDBError(t *
 // ClaimNextForNode with empty adapterType must NOT include "AND adapter_type = ?" in the WHERE clause.
 func TestAssignmentRepositoryService_ClaimNextForNode_EmptyAdapterType_SQLShape(t *testing.T) {
 	db, cap := newAssignDryRunDB(t)
-	store := services.NewAssignmentRepositoryService(db)
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate())
 
 	_, _ = store.ClaimNextForNode(context.Background(), "node-1", "")
 
@@ -389,20 +465,275 @@ func TestAssignmentRepositoryService_ClaimNextForNode_EmptyAdapterType_SQLShape(
 		t.Fatal("ClaimNextForNode (empty adapter): no SQL emitted")
 	}
 	sql := strings.ToUpper(stmts[0])
-	// The RETURNING clause always mentions adapter_type; the WHERE clause must not.
 	if strings.Contains(sql, "AND ADAPTER_TYPE") {
 		t.Errorf("ClaimNextForNode (empty adapter) SQL must not filter on adapter_type in WHERE:\n%s", stmts[0])
-	}
-	if !strings.Contains(sql, "FOR UPDATE SKIP LOCKED") {
-		t.Errorf("ClaimNextForNode (empty adapter) SQL missing FOR UPDATE SKIP LOCKED:\n%s", stmts[0])
 	}
 }
 
 // ClaimNextForNode with empty adapterType must propagate DB errors.
 func TestAssignmentRepositoryService_ClaimNextForNode_EmptyAdapterType_ErrInternalOnDBError(t *testing.T) {
-	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t))
+	store := services.NewAssignmentRepositoryService(newClosedAssignDB(t), alwaysEligibleGate())
 	_, err := store.ClaimNextForNode(context.Background(), "node-1", "")
 	if err == nil {
 		t.Fatal("ClaimNextForNode (empty adapter, closed DB) expected error, got nil")
+	}
+}
+
+// --- ClaimNextForNode: real SQLite exec, delay-gate + claim-race behavior ---
+
+// Empty queue must return (nil, nil) — not an error.
+func TestAssignmentRepositoryService_ClaimNextForNode_EmptyQueue_ReturnsNilNil(t *testing.T) {
+	db := newAssignExecDB(t)
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate("greenhouse"))
+
+	item, err := store.ClaimNextForNode(context.Background(), "node-1", "")
+	if err != nil {
+		t.Fatalf("ClaimNextForNode() error = %v, want nil", err)
+	}
+	if item != nil {
+		t.Errorf("ClaimNextForNode() = %+v, want nil (empty queue)", item)
+	}
+}
+
+// A single eligible candidate is claimed: status flips to running, locked_by
+// is stamped, and the returned item matches the row.
+func TestAssignmentRepositoryService_ClaimNextForNode_ClaimsEligibleRow(t *testing.T) {
+	db := newAssignExecDB(t)
+	seedQueueItemFull(t, db, "q-1", "queued", "", "greenhouse", 0)
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate("greenhouse"))
+
+	item, err := store.ClaimNextForNode(context.Background(), "node-1", "")
+	if err != nil {
+		t.Fatalf("ClaimNextForNode() error = %v", err)
+	}
+	if item == nil || item.ID != "q-1" {
+		t.Fatalf("ClaimNextForNode() = %+v, want q-1", item)
+	}
+
+	var status, lockedBy string
+	if err := db.Raw("SELECT status, locked_by FROM company_scan_queue WHERE id = 'q-1'").Row().Scan(&status, &lockedBy); err != nil {
+		t.Fatalf("read back row: %v", err)
+	}
+	if status != "running" {
+		t.Errorf("status = %q, want running", status)
+	}
+	if lockedBy != "node-1" {
+		t.Errorf("locked_by = %q, want node-1", lockedBy)
+	}
+}
+
+// When the highest-priority candidates' adapter types are on cooldown, the
+// walk must skip them and claim the first candidate that clears the gate —
+// proving the batch skip-and-continue behavior.
+func TestAssignmentRepositoryService_ClaimNextForNode_SkipsCooldownCandidates(t *testing.T) {
+	db := newAssignExecDB(t)
+	// Highest priority first per ORDER BY priority DESC, queued_at ASC.
+	seedQueueItemFull(t, db, "q-cooldown-1", "queued", "", "cooldown-adapter", 30)
+	seedQueueItemFull(t, db, "q-cooldown-2", "queued", "", "cooldown-adapter", 20)
+	seedQueueItemFull(t, db, "q-eligible", "queued", "", "eligible-adapter", 10)
+
+	gate := services.NewAdapterDelayGate(&fakeAtsService{delays: map[string]int{
+		"cooldown-adapter": 3600,
+		"eligible-adapter": 0,
+	}})
+	// Pre-reserve cooldown-adapter so both of its candidates are ineligible
+	// for the whole window of this test.
+	if ok, err := gate.TryReserve(context.Background(), "cooldown-adapter"); err != nil || !ok {
+		t.Fatalf("pre-reserve cooldown-adapter = (%v, %v), want (true, nil)", ok, err)
+	}
+
+	store := services.NewAssignmentRepositoryService(db, gate)
+	item, err := store.ClaimNextForNode(context.Background(), "node-1", "")
+	if err != nil {
+		t.Fatalf("ClaimNextForNode() error = %v", err)
+	}
+	if item == nil || item.ID != "q-eligible" {
+		t.Fatalf("ClaimNextForNode() = %+v, want q-eligible (both cooldown-adapter rows must be skipped)", item)
+	}
+}
+
+// When every candidate's adapter type is on cooldown, ClaimNextForNode must
+// return (nil, nil) — not an error — leaving all rows untouched.
+func TestAssignmentRepositoryService_ClaimNextForNode_AllOnCooldown_ReturnsNilNil(t *testing.T) {
+	db := newAssignExecDB(t)
+	seedQueueItemFull(t, db, "q-1", "queued", "", "greenhouse", 0)
+	seedQueueItemFull(t, db, "q-2", "queued", "", "greenhouse", 0)
+
+	gate := services.NewAdapterDelayGate(&fakeAtsService{delays: map[string]int{"greenhouse": 3600}})
+	if ok, err := gate.TryReserve(context.Background(), "greenhouse"); err != nil || !ok {
+		t.Fatalf("pre-reserve greenhouse = (%v, %v), want (true, nil)", ok, err)
+	}
+
+	store := services.NewAssignmentRepositoryService(db, gate)
+	item, err := store.ClaimNextForNode(context.Background(), "node-1", "")
+	if err != nil {
+		t.Fatalf("ClaimNextForNode() error = %v, want nil", err)
+	}
+	if item != nil {
+		t.Errorf("ClaimNextForNode() = %+v, want nil (every candidate on cooldown)", item)
+	}
+
+	var stillQueued int64
+	db.Raw("SELECT COUNT(*) FROM company_scan_queue WHERE status = 'queued'").Scan(&stillQueued)
+	if stillQueued != 2 {
+		t.Errorf("rows still queued = %d, want 2 (nothing should have been claimed)", stillQueued)
+	}
+}
+
+// adapterType filtering must still be respected: a queued row for a
+// different adapter type must never be claimed when a specific adapterType
+// is requested, even though it would otherwise be the only candidate.
+func TestAssignmentRepositoryService_ClaimNextForNode_RespectsAdapterTypeFilter(t *testing.T) {
+	db := newAssignExecDB(t)
+	seedQueueItemFull(t, db, "q-other", "queued", "", "lever", 100)
+	seedQueueItemFull(t, db, "q-match", "queued", "", "greenhouse", 0)
+
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate("greenhouse", "lever"))
+	item, err := store.ClaimNextForNode(context.Background(), "node-1", "greenhouse")
+	if err != nil {
+		t.Fatalf("ClaimNextForNode() error = %v", err)
+	}
+	if item == nil || item.ID != "q-match" {
+		t.Fatalf("ClaimNextForNode(adapterType=greenhouse) = %+v, want q-match", item)
+	}
+}
+
+// adapterType filtering: when no row matches the requested adapter type,
+// ClaimNextForNode returns (nil, nil), never claiming an unrelated row.
+func TestAssignmentRepositoryService_ClaimNextForNode_AdapterTypeFilter_NoMatch_ReturnsNilNil(t *testing.T) {
+	db := newAssignExecDB(t)
+	seedQueueItemFull(t, db, "q-other", "queued", "", "lever", 0)
+
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate("greenhouse", "lever"))
+	item, err := store.ClaimNextForNode(context.Background(), "node-1", "greenhouse")
+	if err != nil {
+		t.Fatalf("ClaimNextForNode() error = %v, want nil", err)
+	}
+	if item != nil {
+		t.Errorf("ClaimNextForNode(adapterType=greenhouse) = %+v, want nil (no greenhouse rows queued)", item)
+	}
+}
+
+// --- ClaimNextForNode: lost DB claim race falls through to next candidate ---
+
+// raceOnceLogger is a gormlogger.Interface that, the first time it observes
+// the candidate-listing SELECT (identified by its distinctive ORDER BY
+// clause — the per-row targeted UPDATE has no ORDER BY), synchronously runs a
+// side-effect UPDATE against targetID via a second *sql.DB handle on the same
+// shared-cache SQLite database. This deterministically simulates "another
+// claimant won the race for this row" in the window between
+// listClaimCandidates' SELECT and the subsequent per-row UPDATE — without
+// relying on real goroutine timing.
+type raceOnceLogger struct {
+	gormlogger.Interface
+	mu       sync.Mutex
+	fired    bool
+	sideDB   *sql.DB
+	targetID string
+}
+
+func (l *raceOnceLogger) Trace(_ context.Context, _ time.Time, fc func() (string, int64), _ error) {
+	sqlText, _ := fc()
+	upper := strings.ToUpper(sqlText)
+	isCandidateSelect := strings.Contains(upper, "FROM COMPANY_SCAN_QUEUE") &&
+		strings.Contains(upper, "ORDER BY PRIORITY DESC, QUEUED_AT ASC") &&
+		!strings.Contains(upper, "UPDATE")
+
+	l.mu.Lock()
+	shouldFire := isCandidateSelect && !l.fired
+	if shouldFire {
+		l.fired = true
+	}
+	l.mu.Unlock()
+
+	if shouldFire {
+		if _, err := l.sideDB.Exec(`UPDATE company_scan_queue SET status = 'running' WHERE id = ?`, l.targetID); err != nil {
+			panic("raceOnceLogger side-effect update failed: " + err.Error())
+		}
+	}
+}
+
+func TestAssignmentRepositoryService_ClaimNextForNode_LostClaimRaceFallsToNextCandidate(t *testing.T) {
+	db := newAssignExecDBShared(t)
+	// q-1 sorts first (higher priority); it will be claimed out from under
+	// the query by the injected side effect. q-2 is the fallback.
+	seedQueueItemFull(t, db, "q-1", "queued", "", "greenhouse", 10)
+	seedQueueItemFull(t, db, "q-2", "queued", "", "greenhouse", 5)
+
+	rawDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("raw db: %v", err)
+	}
+	db.Logger = &raceOnceLogger{sideDB: rawDB, targetID: "q-1"}
+
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate("greenhouse"))
+	item, err := store.ClaimNextForNode(context.Background(), "node-1", "")
+	if err != nil {
+		t.Fatalf("ClaimNextForNode() error = %v", err)
+	}
+	if item == nil {
+		t.Fatal("ClaimNextForNode() = nil, want q-2 (q-1 lost the race, should fall through)")
+	}
+	if item.ID != "q-2" {
+		t.Errorf("ClaimNextForNode() claimed %q, want q-2 (q-1 should have lost the claim race)", item.ID)
+	}
+
+	var q1Status string
+	if err := db.Raw("SELECT status FROM company_scan_queue WHERE id = 'q-1'").Row().Scan(&q1Status); err != nil {
+		t.Fatalf("read back q-1: %v", err)
+	}
+	if q1Status != "running" {
+		t.Errorf("q-1 status = %q, want running (claimed by the injected side effect, not by our store)", q1Status)
+	}
+}
+
+// closeOnceLogger closes sideDB the first time it observes the
+// candidate-listing SELECT — simulating a genuine DB failure (as opposed to
+// a lost claim race) between listClaimCandidates and the per-row UPDATE. A
+// real error here must propagate immediately, not be swallowed as "try the
+// next candidate".
+type closeOnceLogger struct {
+	gormlogger.Interface
+	mu     sync.Mutex
+	fired  bool
+	sideDB *sql.DB
+}
+
+func (l *closeOnceLogger) Trace(_ context.Context, _ time.Time, fc func() (string, int64), _ error) {
+	sqlText, _ := fc()
+	upper := strings.ToUpper(sqlText)
+	isCandidateSelect := strings.Contains(upper, "FROM COMPANY_SCAN_QUEUE") &&
+		strings.Contains(upper, "ORDER BY PRIORITY DESC, QUEUED_AT ASC") &&
+		!strings.Contains(upper, "UPDATE")
+
+	l.mu.Lock()
+	shouldFire := isCandidateSelect && !l.fired
+	if shouldFire {
+		l.fired = true
+	}
+	l.mu.Unlock()
+
+	if shouldFire {
+		_ = l.sideDB.Close()
+	}
+}
+
+func TestAssignmentRepositoryService_ClaimNextForNode_DBErrorDuringClaim_PropagatesError(t *testing.T) {
+	db := newAssignExecDB(t)
+	seedQueueItemFull(t, db, "q-1", "queued", "", "greenhouse", 0)
+
+	rawDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("raw db: %v", err)
+	}
+	db.Logger = &closeOnceLogger{sideDB: rawDB}
+
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate("greenhouse"))
+	item, err := store.ClaimNextForNode(context.Background(), "node-1", "")
+	if err == nil {
+		t.Fatal("ClaimNextForNode() expected error when the claim UPDATE hits a closed connection, got nil")
+	}
+	if item != nil {
+		t.Errorf("ClaimNextForNode() = %+v, want nil alongside the propagated error", item)
 	}
 }
