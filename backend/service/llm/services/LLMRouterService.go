@@ -119,6 +119,46 @@ func (r *routerService) EnrichBatch(ctx context.Context, inputs []dto.JobPostEnr
 	return nil, &llmerr.LLMAllExhaustedError{Slots: statuses, RetryAfter: earliestCooldown(statuses)}
 }
 
+func (r *routerService) ExtractResumeKeywords(ctx context.Context, input dto.ResumeKeywordInput) (*dto.ResumeKeywordResult, error) {
+	var statuses []llmerr.LLMSlotStatus
+	for _, s := range r.slots {
+		ok, cdErr := r.cooldown.IsAvailable(ctx, s.SlotID)
+		if cdErr != nil {
+			r.warnCooldown("cooldown availability check failed", s.SlotID, cdErr)
+			metrics.LLMCooldownMissTotal.Inc()
+		}
+		if !ok {
+			statuses = append(statuses, r.statusOf(ctx, s, llmcommon.OutcomeCooldownSkipped))
+			continue
+		}
+
+		out, err := s.Scorer.ExtractResumeKeywords(ctx, input)
+		if err == nil {
+			if sErr := r.cooldown.RecordSuccess(ctx, s.SlotID); sErr != nil {
+				r.warnCooldown("record success failed", s.SlotID, sErr)
+			}
+			return out, nil
+		}
+		if errors.Is(err, llmerr.ErrLLMValidation) {
+			return nil, err
+		}
+		if errors.Is(err, llmerr.ErrLLMLocalQuotaExceeded) {
+			statuses = append(statuses, r.statusOf(ctx, s, llmcommon.OutcomeLocalQuotaRPM))
+			continue
+		}
+		if errors.Is(err, llmerr.ErrLLMProviderRateLimited) {
+			if fErr := r.cooldown.RecordFailure(ctx, s.SlotID); fErr != nil {
+				r.warnCooldown("record failure failed", s.SlotID, fErr)
+			}
+			statuses = append(statuses, r.statusOf(ctx, s, llmcommon.OutcomeProvider429))
+			continue
+		}
+		return nil, err
+	}
+
+	return nil, &llmerr.LLMAllExhaustedError{Slots: statuses, RetryAfter: earliestCooldown(statuses)}
+}
+
 func (r *routerService) statusOf(ctx context.Context, s RouterSlot, reason string) llmerr.LLMSlotStatus {
 	cst, err := r.cooldown.Status(ctx, s.SlotID)
 	if err != nil {
