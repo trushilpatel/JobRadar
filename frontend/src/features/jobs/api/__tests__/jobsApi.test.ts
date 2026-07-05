@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { apiClient } from '@/lib/core/api-client'
 import {
   fetchJobs,
+  fetchJob,
   fetchJobCounts,
   fetchJobCompanies,
   setJobStatus,
@@ -9,6 +10,8 @@ import {
   setJobNotes,
   dismissJob,
   bulkDismissJobs,
+  fetchApplications,
+  createApplication,
 } from '@/features/jobs/api/jobs.api'
 import type { JobFilters, JobsPage, JobCounts } from '@/features/jobs/api/jobs.api'
 import { JOB_STATUS } from '@/config/constants/jobStatus'
@@ -126,6 +129,24 @@ describe('jobs API', () => {
       await fetchJobs({ status: JOB_STATUS.SAVED }, '', 20)
       const [url] = vi.mocked(apiClient.get).mock.calls[0]!
       expect(url).toContain('status=saved')
+    })
+
+    it('includes repeated statuses params and omits status when statuses is set', async () => {
+      const page: JobsPage = { items: [], next_cursor: '' }
+      vi.mocked(apiClient.get).mockResolvedValue(page)
+      await fetchJobs({ status: JOB_STATUS.APPLIED, statuses: ['applied', 'offer'] }, '', 20)
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
+      const params = new URL(String(url), 'http://x').searchParams
+      expect(params.getAll('statuses')).toEqual(['applied', 'offer'])
+      expect(params.has('status')).toBe(false)
+    })
+
+    it('falls back to status when statuses is empty', async () => {
+      const page: JobsPage = { items: [], next_cursor: '' }
+      vi.mocked(apiClient.get).mockResolvedValue(page)
+      await fetchJobs({ status: JOB_STATUS.NEW, statuses: [] }, '', 20)
+      const [url] = vi.mocked(apiClient.get).mock.calls[0]!
+      expect(url).toContain('status=new')
     })
 
     it('includes limit param in URL', async () => {
@@ -404,6 +425,66 @@ describe('jobs API', () => {
       const result = await bulkDismissJobs([])
       expect(apiClient.post).toHaveBeenCalledWith('/jobs/dismiss/bulk', { ids: [] })
       expect(result.dismissed).toBe(0)
+    })
+  })
+
+  // ── fetchJob ────────────────────────────────────────────────────────────────
+
+  describe('fetchJob', () => {
+    it('calls GET /jobs/:id and normalizes the response', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue(rawJob)
+      const job = await fetchJob('j1')
+      expect(apiClient.get).toHaveBeenCalledWith('/jobs/j1')
+      expect(job.id).toBe('j1')
+      expect(job.status).toBe(JOB_STATUS.NEW)
+    })
+  })
+
+  // ── fetchApplications ───────────────────────────────────────────────────────
+
+  describe('fetchApplications', () => {
+    it('calls GET /jobs/:id/applications and parses the response', async () => {
+      const rawApplications = [
+        {
+          id: 1,
+          job_result_id: 'j1',
+          stage: 'applied',
+          stage_at: '2024-01-01T00:00:00Z',
+          note: null,
+        },
+      ]
+      vi.mocked(apiClient.get).mockResolvedValue(rawApplications)
+      const applications = await fetchApplications('j1')
+      expect(apiClient.get).toHaveBeenCalledWith('/jobs/j1/applications')
+      expect(applications).toEqual(rawApplications)
+    })
+
+    it('returns an empty array when there are no applications', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue([])
+      const applications = await fetchApplications('j1')
+      expect(applications).toEqual([])
+    })
+  })
+
+  // ── createApplication ───────────────────────────────────────────────────────
+
+  describe('createApplication', () => {
+    it('calls POST /jobs/:id/applications with stage and note', async () => {
+      vi.mocked(apiClient.post).mockResolvedValue(undefined)
+      await createApplication('j1', 'applied', 'Referred by Jane')
+      expect(apiClient.post).toHaveBeenCalledWith('/jobs/j1/applications', {
+        stage: 'applied',
+        note: 'Referred by Jane',
+      })
+    })
+
+    it('defaults note to empty string when not provided', async () => {
+      vi.mocked(apiClient.post).mockResolvedValue(undefined)
+      await createApplication('j1', 'interviewing')
+      expect(apiClient.post).toHaveBeenCalledWith('/jobs/j1/applications', {
+        stage: 'interviewing',
+        note: '',
+      })
     })
   })
 })

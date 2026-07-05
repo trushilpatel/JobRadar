@@ -129,7 +129,10 @@ const JobApplicationSchema = z.object({
 // ── Input types (not validated — sent to backend) ───────────────────────────
 
 export interface JobFilters {
-  status: JobStatus
+  /** Single-status view (New/Saved/individual workflow stage). Ignored when `statuses` is set. */
+  status?: JobStatus
+  /** Combined multi-status view (the Tracking tab's checked stages). Takes precedence over `status`. */
+  statuses?: string[]
   search?: string
   companies?: string[]
   remote?: boolean
@@ -177,7 +180,11 @@ export async function fetchJobs(
   signal?: AbortSignal
 ): Promise<JobsPage> {
   const p = new URLSearchParams()
-  p.set('status', filters.status)
+  if (filters.statuses?.length) {
+    filters.statuses.forEach((s) => p.append('statuses', s))
+  } else if (filters.status) {
+    p.set('status', filters.status)
+  }
   p.set('limit', String(limit))
   if (cursor) p.set('cursor', cursor)
 

@@ -50,8 +50,10 @@ function PillButton({
       onClick={onClick}
       className={cn(
         'min-h-[44px] px-4 py-2 text-sm rounded-lg border transition-colors',
+        // `violet` is a flat token, not a numbered shade scale —
+        // `bg-violet-500`-style classes silently fail to generate.
         active
-          ? 'bg-violet-500/15 border-violet-500/30 text-violet-300'
+          ? 'bg-[color-mix(in_srgb,var(--violet)_15%,transparent)] border-[color-mix(in_srgb,var(--violet)_30%,transparent)] text-violet'
           : 'bg-subtle border-[var(--border)] text-secondary hover:bg-hover'
       )}
     >
@@ -202,7 +204,7 @@ export function MobileFilterDrawer({
           <DrawerClose asChild>
             <button
               type="button"
-              className="flex-1 min-h-[44px] rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500"
+              className="flex-1 min-h-[44px] rounded-lg bg-violet px-4 py-2 text-sm font-medium text-white transition-colors hover:brightness-110"
             >
               Done
             </button>

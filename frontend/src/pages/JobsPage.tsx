@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
 import { Keyboard } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { Job, JobStatus } from '@/types'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
-import { ResizeHandle } from '@/components/ui/resize-handle'
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { TabKey } from '@/config/constants/jobStatus'
 import {
@@ -35,9 +34,7 @@ export function JobsPage() {
   const isMobile = useIsMobile()
   const hiddenCompanies = useHiddenItems(HIDDEN_COMPANIES_CATEGORY)
 
-  // Local UI state — layout widths, overlay flags. None of these survive a
-  // refresh by design.
-  const [panelWidth, setPanelWidth] = useState(440)
+  // Local UI state — overlay flags. None of these survive a refresh by design.
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
@@ -171,6 +168,13 @@ export function JobsPage() {
     window.open(job.url, '_blank', 'noreferrer')
   }, [focus.focusedJob])
 
+  const handleApply = useCallback(
+    (job: Job) => {
+      actions.applyJob.mutate({ id: job.id, url: job.url })
+    },
+    [actions.applyJob]
+  )
+
   const handleEscape = useCallback(() => {
     if (jobs.openJobId) {
       setPanelClosedByUser(true)
@@ -220,9 +224,6 @@ export function JobsPage() {
     onOpenPreview: handleOpenFocused,
     onOpenUrl: handleOpenUrlFocused,
     onEscape: handleEscape,
-    onPrevPage: jobs.goToPrevPage,
-    onNextPage: jobs.goToNextPage,
-    onFirstPage: jobs.goToFirstPage,
     onGoToTab: handleGoToTab,
     onSetStatus: handleKeyboardSetStatus,
     onToggleSave: handleKeyboardToggleSave,
@@ -252,12 +253,14 @@ export function JobsPage() {
           setPanelClosedByUser(false)
         }}
         counts={jobs.counts}
+        trackingStages={jobs.trackingStages}
+        onTrackingStagesChange={jobs.setTrackingStages}
         leftSlot={
           <div className="flex items-baseline gap-3">
             <h1 className="text-lg font-semibold text-primary">Jobs</h1>
             <span className="text-xs text-muted">
               {activeFilterCount > 0 && (
-                <span className="text-violet-300">
+                <span style={{ color: 'var(--violet-bright)' }}>
                   {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
                 </span>
               )}
@@ -317,18 +320,12 @@ export function JobsPage() {
           <div ref={tableScrollRef} className="flex flex-1 min-w-0 overflow-hidden">
             <JobsTable
               jobs={visibleJobs}
-              loading={jobs.isLoading || jobs.isFetching}
-              isFetchingMore={false}
+              loading={jobs.isLoading}
+              isFetchingMore={jobs.isFetchingMore}
               isError={jobs.isError}
               onRetry={() => void jobs.refetch()}
               tab={jobs.tab}
-              page={jobs.page}
-              limit={jobs.limit}
-              itemsOnPage={jobs.itemsOnPage}
-              itemsBeforePage={jobs.itemsBeforePage}
               hasNextPage={jobs.hasNextPage}
-              hasPrevPage={jobs.hasPrevPage}
-              knownTotal={activeFilterCount === 0 ? jobs.counts[jobs.tab as TabKey] : undefined}
               hasActiveFilters={activeFilterCount > 0}
               activeJobId={jobs.openJobId ?? null}
               focusedIndex={focus.focusedIndex}
@@ -343,23 +340,50 @@ export function JobsPage() {
               }}
               onToggleSave={handleToggleSave}
               onDismiss={handleDismiss}
+              onApply={handleApply}
               getAttachmentState={() => null}
-              onNextPage={jobs.goToNextPage}
-              onPrevPage={jobs.goToPrevPage}
-              onFirstPage={jobs.goToFirstPage}
-              onLimitChange={jobs.setLimit}
+              onLoadMore={jobs.loadMore}
               sorting={jobs.sorting}
               onSortingChange={jobs.handleSortingChange}
             />
           </div>
+        </div>
+      </ErrorBoundary>
 
-          {!isMobile && openJob && !panelClosedByUser && (
-            <>
-              <ResizeHandle width={panelWidth} onChange={setPanelWidth} min={300} max={720} />
-              <div
-                style={{ '--panel-width': `${panelWidth}px` } as CSSProperties}
-                className="shrink-0 flex flex-col min-h-0 border-l border-[var(--border)] overflow-hidden [width:var(--panel-width)]"
-              >
+      {!isMobile && (
+        <Sheet
+          modal={false}
+          open={!!openJob && !panelClosedByUser}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPanelClosedByUser(true)
+              jobs.setOpenJobId(null)
+            }
+          }}
+        >
+          {/* Non-modal, no dimming overlay — the always-open reading pane
+              (Gmail/Superhuman pattern) must keep the table behind it fully
+              interactive: clicking another row switches the open job instead
+              of just closing the drawer, and arrow-key row navigation must
+              keep working while the drawer is open. Outside pointer/focus
+              interactions are suppressed so Radix never auto-dismisses on a
+              row click — only the explicit close button / Escape do. */}
+          <SheetContent
+            side="right"
+            showOverlay={false}
+            showCloseButton={false}
+            onPointerDownOutside={(e) => e.preventDefault()}
+            onInteractOutside={(e) => e.preventDefault()}
+            className="w-[32rem] flex flex-col p-0 border-l border-[var(--border)] shadow-[0_8px_24px_rgba(0,0,0,0.4)]"
+          >
+            {openJob && (
+              <>
+                {/* Radix Dialog requires an accessible title/description; the
+                    visible heading lives inside JobDetailPanel itself. */}
+                <SheetTitle className="sr-only">{openJob.title}</SheetTitle>
+                <SheetDescription className="sr-only">
+                  {openJob.company?.name ?? ''} job details
+                </SheetDescription>
                 <JobDetailPanel
                   job={openJob}
                   onClose={() => {
@@ -370,11 +394,11 @@ export function JobsPage() {
                   onToggleSave={handleToggleSave}
                   onDismiss={handleDismiss}
                 />
-              </div>
-            </>
-          )}
-        </div>
-      </ErrorBoundary>
+              </>
+            )}
+          </SheetContent>
+        </Sheet>
+      )}
 
       <JobCommandPalette
         open={paletteOpen}

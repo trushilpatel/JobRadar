@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchJobs, fetchJobCounts, fetchJobCompanies, type JobFilters } from '../api/jobs.api'
 import type { SortingState } from '@/components/ui/data-table'
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 import { jobQueryKeys } from '../queryKeys'
-import { type TabKey } from '@/config/constants/jobStatus'
+import { type JobStatus, type TabKey, type TrackingStage } from '@/config/constants/jobStatus'
+import type { Job } from '@/types'
 import {
   useJobUrlState,
   type DateFilter,
@@ -13,7 +14,7 @@ import {
   type VisaFilter,
 } from './useJobUrlState'
 
-export type { TabKey } from '@/config/constants/jobStatus'
+export type { TabKey, TrackingStage } from '@/config/constants/jobStatus'
 export type { DateFilter, LocationFilter, VisaFilter } from './useJobUrlState'
 
 // ── Cursor history helpers ────────────────────────────────────────────────────
@@ -99,9 +100,15 @@ export function useJobs() {
   const sortBy = urlState.sort || undefined
   const sortDir: 'asc' | 'desc' | undefined = urlState.sort ? urlState.dir : undefined
 
+  // The Tracking tab is a frontend-only synthetic value (never sent to the
+  // backend as `status=tracking`) — it translates into the combined
+  // `statuses` param instead. See config/constants/jobStatus.ts.
+  const isTracking = urlState.tab === 'tracking'
+
   const filters = useMemo<JobFilters>(
     () => ({
-      status: urlState.tab,
+      status: isTracking ? undefined : (urlState.tab as JobStatus),
+      statuses: isTracking ? (urlState.trackingStages as TrackingStage[]) : undefined,
       search: urlState.q || undefined,
       companies: urlState.companies.length > 0 ? urlState.companies : undefined,
       remote: urlState.loc === 'remote' || undefined,
@@ -121,7 +128,9 @@ export function useJobs() {
       sortDir,
     }),
     [
+      isTracking,
       urlState.tab,
+      urlState.trackingStages,
       urlState.q,
       urlState.companies,
       urlState.loc,
@@ -139,7 +148,8 @@ export function useJobs() {
   const filterFingerprint = useMemo(
     () =>
       JSON.stringify({
-        tab: filters.status,
+        tab: urlState.tab,
+        statuses: (filters.statuses ?? []).slice().sort(),
         q: filters.search ?? '',
         companies: (filters.companies ?? []).slice().sort(),
         loc: filters.remote
@@ -156,20 +166,45 @@ export function useJobs() {
         dir: filters.sortDir ?? 'asc',
         limit: urlState.limit,
       }),
-    [filters, urlState.limit]
+    [filters, urlState.tab, urlState.limit]
   )
 
   // Cursor history in React state, seeded from sessionStorage on mount.
-  // Reset to [''] whenever filters change (fingerprint changes).
-  const [cursorHistory, setCursorHistory] = useState<string[]>(() =>
-    restoreHistory(filterFingerprint)
-  )
+  // If the URL has page > 0 on mount (e.g. browser back restored the param),
+  // start fresh instead of restoring — loading mid-stream pages into an empty
+  // accumulated list would show only those few items.
+  const [cursorHistory, setCursorHistory] = useState<string[]>(() => {
+    if (urlState.page > 0) {
+      clearHistory(filterFingerprint)
+      return ['']
+    }
+    return restoreHistory(filterFingerprint)
+  })
 
-  // When filters change, reset cursor history. The useEffect compares the
-  // fingerprint so this only fires on genuine filter/limit changes, not on
-  // every render.
+  // Mirror the page reset to the URL once on mount so the address bar matches.
+  const mountedRef = useRef(false)
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true
+      if (urlState.page > 0) void urlState.setPage(0)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Accumulated jobs across every fetched page — infinite scroll, hand-rolled
+  // on top of useQuery + cursor history (NOT useInfiniteQuery, which is
+  // forbidden for this project's cursor-nav pattern — see frontend/CLAUDE.md).
+  // mergedCursorsRef guards against double-appending the same page: effects
+  // re-run on unrelated re-renders even when `currentPage` hasn't changed.
+  const [accumulatedJobs, setAccumulatedJobs] = useState<Job[]>([])
+  const mergedCursorsRef = useRef<Set<string>>(new Set())
+
+  // When filters change, reset cursor history AND the accumulated list — a
+  // new filter set starts a fresh infinite-scroll session from the top.
   useEffect(() => {
     setCursorHistory(restoreHistory(filterFingerprint))
+    setAccumulatedJobs([])
+    mergedCursorsRef.current = new Set()
   }, [filterFingerprint])
 
   const currentCursor = cursorHistory[pageIndex] ?? ''
@@ -181,16 +216,29 @@ export function useJobs() {
   })
 
   const currentPage = query.data
-  const jobs = useMemo(() => currentPage?.items ?? [], [currentPage])
+
+  // Merge each newly-fetched page into the accumulated list exactly once.
+  // The first page (`currentCursor === ''`) always REPLACES rather than
+  // appends — covers both the initial load and the page right after a reset.
+  useEffect(() => {
+    if (!currentPage) return
+    if (currentCursor === '') {
+      mergedCursorsRef.current = new Set([''])
+      setAccumulatedJobs(currentPage.items)
+      return
+    }
+    if (mergedCursorsRef.current.has(currentCursor)) return
+    mergedCursorsRef.current.add(currentCursor)
+    setAccumulatedJobs((prev) => [...prev, ...currentPage.items])
+  }, [currentPage, currentCursor])
+
+  const jobs = accumulatedJobs
   const itemsOnPage = jobs.length
 
-  // Approximate number of items before the current page.
-  // With useQuery we don't accumulate pages, so pageIndex * limit is used
-  // as an approximation. This is exact on non-sparse tabs and close on "new".
-  const itemsBeforePage = useMemo(() => pageIndex * urlState.limit, [pageIndex, urlState.limit])
-
-  const hasPrevPage = pageIndex > 0
   const hasNextPage = currentPage?.next_cursor ? currentPage.next_cursor !== '' : false
+  // True only while fetching a page BEYOND the first — the first page uses
+  // the table's own full-height loading state instead of the sentinel row.
+  const isFetchingMore = query.isFetching && currentCursor !== ''
 
   const countsQuery = useQuery({
     queryKey: jobQueryKeys.counts(),
@@ -206,6 +254,13 @@ export function useJobs() {
         interviewing: countsQuery.data.interviewing,
         offer: countsQuery.data.offer,
         rejected: countsQuery.data.rejected,
+        // Combined Tracking-tab badge — sum of the 4 workflow stages. Computed
+        // client-side from the existing per-status counts; no backend change.
+        tracking:
+          countsQuery.data.applied +
+          countsQuery.data.interviewing +
+          countsQuery.data.offer +
+          countsQuery.data.rejected,
       }
     : {}
 
@@ -230,30 +285,25 @@ export function useJobs() {
     // filterFingerprint will change → useEffect resets cursorHistory.
   }
 
-  function goToNextPage() {
+  // Fetches the next page and appends it to the accumulated list (via the
+  // merge effect above) — the infinite-scroll sentinel's only entry point.
+  // No-ops while already fetching or once the last page has been reached.
+  function loadMore() {
+    if (query.isFetching || !hasNextPage) return
     const nextCursor = query.data?.next_cursor
-    if (!nextCursor) return // last page — no-op
+    if (!nextCursor) return
 
-    // Slice to current position + 1 to handle the case where the user went
-    // back and is now going forward again (discards any stale future cursors).
     const extended = cursorHistory.slice(0, pageIndex + 1).concat(nextCursor)
     setCursorHistory(extended)
     persistHistory(filterFingerprint, extended)
     void setPageIndex(pageIndex + 1)
   }
 
-  function goToPrevPage() {
-    if (pageIndex > 0) void setPageIndex(pageIndex - 1)
-    // The cursor for the previous page is already in cursorHistory — no fetch needed.
-  }
-
-  function goToFirstPage() {
-    void setPageIndex(0)
-  }
-
   function resetFilters() {
     clearHistory(filterFingerprint)
     setCursorHistory([''])
+    setAccumulatedJobs([])
+    mergedCursorsRef.current = new Set()
     urlState.resetFilters()
     setSearchInput('')
     // urlState.resetFilters already writes page: 0
@@ -281,28 +331,28 @@ export function useJobs() {
   function setVisaFilter(visa: VisaFilter) {
     void urlState.setVisa(visa)
   }
-  function setLimit(limit: number) {
-    void urlState.setLimit(limit)
+  function setTrackingStages(stages: TrackingStage[]) {
+    void urlState.setTrackingStages(stages)
   }
 
   return {
     // Query state
     jobs,
     hasNextPage,
-    hasPrevPage,
-    page: pageIndex + 1, // 1-indexed for display
     itemsOnPage,
-    itemsBeforePage,
     companies,
     isLoading: query.isLoading,
     isError: query.isError,
     isFetching: query.isFetching,
+    isFetchingMore,
     refetch: query.refetch,
     counts,
 
     // Tab
     tab: urlState.tab,
     setTab,
+    trackingStages: urlState.trackingStages as TrackingStage[],
+    setTrackingStages,
 
     // Open job preview (URL-driven)
     openJobId: urlState.openJobId,
@@ -329,11 +379,8 @@ export function useJobs() {
     sorting,
     handleSortingChange,
 
-    // Pagination
-    goToNextPage,
-    goToPrevPage,
-    goToFirstPage,
+    // Infinite scroll
+    loadMore,
     limit: urlState.limit,
-    setLimit,
   }
 }

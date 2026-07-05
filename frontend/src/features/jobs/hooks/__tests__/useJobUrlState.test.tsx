@@ -26,6 +26,34 @@ describe('useJobUrlState', () => {
     expect(result.current.page).toBe(0)
     expect(result.current.limit).toBe(20)
     expect(result.current.visa).toBe('any')
+    expect(result.current.trackingStages).toEqual(['applied', 'interviewing', 'offer', 'rejected'])
+  })
+
+  it('setTrackingStages updates the URL and resets page', async () => {
+    const { result } = renderHook(() => useJobUrlState(), {
+      wrapper: makeWrapper('?tab=tracking&page=2'),
+    })
+    act(() => {
+      result.current.setTrackingStages(['applied', 'offer'])
+    })
+    await waitFor(() => expect(result.current.trackingStages).toEqual(['applied', 'offer']))
+    expect(result.current.page).toBe(0)
+  })
+
+  it('redirects a legacy single-stage tab into tracking with that stage pre-checked', async () => {
+    const { result } = renderHook(() => useJobUrlState(), {
+      wrapper: makeWrapper('?tab=applied'),
+    })
+    await waitFor(() => expect(result.current.tab).toBe('tracking'))
+    expect(result.current.trackingStages).toEqual(['applied'])
+  })
+
+  it('does not touch tab/trackingStages when already on a non-legacy tab', () => {
+    const { result } = renderHook(() => useJobUrlState(), {
+      wrapper: makeWrapper('?tab=saved'),
+    })
+    expect(result.current.tab).toBe('saved')
+    expect(result.current.trackingStages).toEqual(['applied', 'interviewing', 'offer', 'rejected'])
   })
 
   it('hydrates state from a populated query string', () => {
@@ -99,10 +127,10 @@ describe('useJobUrlState', () => {
   it('resetFilters clears every filter but preserves tab and openJobId', async () => {
     const { result } = renderHook(() => useJobUrlState(), {
       wrapper: makeWrapper(
-        '?tab=applied&job=keep-me&q=hello&companies=x,y&loc=remote&exp=5%2B&since=24h&sort=title&dir=desc&cursor=cur1&visa=true'
+        '?tab=saved&job=keep-me&q=hello&companies=x,y&loc=remote&exp=5%2B&since=24h&sort=title&dir=desc&cursor=cur1&visa=true'
       ),
     })
-    expect(result.current.tab).toBe('applied')
+    expect(result.current.tab).toBe('saved')
     expect(result.current.openJobId).toBe('keep-me')
 
     act(() => {
@@ -119,7 +147,7 @@ describe('useJobUrlState', () => {
     expect(result.current.page).toBe(0)
     expect(result.current.visa).toBe('any')
     // Preserved:
-    expect(result.current.tab).toBe('applied')
+    expect(result.current.tab).toBe('saved')
     expect(result.current.openJobId).toBe('keep-me')
   })
 

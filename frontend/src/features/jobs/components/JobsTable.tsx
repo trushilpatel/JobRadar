@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { DataTable, type SortingState } from '@/components/ui/data-table'
-import { Pagination } from '@/components/ui/pagination'
 import type { Job } from '@/types'
 import type { TabKey } from '../hooks/useJobs'
 import { buildJobColumns } from './jobs-columns'
 import { cn } from '@/lib/utils/utils'
+
+// Matches the approved mockup's sentinel: begin fetching the next page once
+// the sentinel is within 300px of entering the scroll viewport, so the next
+// page is usually ready before the user reaches the bottom.
+const SENTINEL_ROOT_MARGIN = '300px'
 
 interface JobsTableProps {
   jobs: Job[]
@@ -13,13 +17,7 @@ interface JobsTableProps {
   isError?: boolean
   onRetry?: () => void
   tab: TabKey
-  page: number
-  limit: number
-  itemsOnPage: number
-  itemsBeforePage: number
   hasNextPage: boolean
-  hasPrevPage: boolean
-  knownTotal?: number
   hasActiveFilters?: boolean
   activeJobId: string | null
   /** Index of the keyboard-focused row. -1 disables the focus indicator. */
@@ -27,14 +25,13 @@ interface JobsTableProps {
   onRowClick: (job: Job) => void
   onToggleSave: (job: Job) => void
   onDismiss: (job: Job) => void
+  onApply: (job: Job) => void
   /** Optional callback injected by the pages layer to provide cross-feature
    *  data (e.g. resume attachment state) without creating a cross-feature
    *  import inside features/jobs. */
   getAttachmentState?: (jobId: string) => string | null
-  onNextPage: () => void
-  onPrevPage: () => void
-  onFirstPage?: () => void
-  onLimitChange: (limit: number) => void
+  /** Fetches and appends the next page — fired by the infinite-scroll sentinel. */
+  onLoadMore: () => void
   sorting: SortingState
   onSortingChange: (sorting: SortingState) => void
 }
@@ -46,6 +43,7 @@ const EMPTY_MESSAGES: Record<TabKey, string> = {
   interviewing: 'No jobs in interviewing stage',
   offer: 'No jobs with offers',
   rejected: 'No rejected jobs yet',
+  tracking: 'No jobs in the selected stages',
 }
 
 export function JobsTable({
@@ -55,30 +53,22 @@ export function JobsTable({
   isError,
   onRetry,
   tab,
-  page,
-  limit,
-  itemsOnPage,
-  itemsBeforePage,
   hasNextPage,
-  hasPrevPage,
-  knownTotal,
   hasActiveFilters = false,
   activeJobId,
   focusedIndex,
   onRowClick,
   onToggleSave,
   onDismiss,
+  onApply,
   getAttachmentState,
-  onNextPage,
-  onPrevPage,
-  onFirstPage,
-  onLimitChange,
+  onLoadMore,
   sorting,
   onSortingChange,
 }: JobsTableProps) {
   const columns = useMemo(
-    () => buildJobColumns({ onToggleSave, onDismiss, getAttachmentState }),
-    [onToggleSave, onDismiss, getAttachmentState]
+    () => buildJobColumns({ onToggleSave, onDismiss, onApply, getAttachmentState }),
+    [onToggleSave, onDismiss, onApply, getAttachmentState]
   )
 
   // Scroll the focused row into view whenever the focused index changes.
@@ -91,6 +81,31 @@ export function JobsTable({
     el?.scrollIntoView({ block: 'nearest' })
   }, [focusedIndex])
 
+  // Infinite-scroll sentinel — observes its own visibility within the
+  // scrollable container (not the viewport) and fetches the next page once
+  // it comes within SENTINEL_ROOT_MARGIN, matching the approved mockup.
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const onLoadMoreRef = useRef(onLoadMore)
+  useEffect(() => {
+    onLoadMoreRef.current = onLoadMore
+  }, [onLoadMore])
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    const root = scrollRef.current
+    if (!sentinel || !root || !hasNextPage) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) onLoadMoreRef.current()
+      },
+      { root, rootMargin: SENTINEL_ROOT_MARGIN }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [hasNextPage, jobs.length])
+
   // Compose a screen-reader-friendly row label.
   function rowLabel(job: Job): string {
     const company = job.company?.name ?? job.company_id ?? ''
@@ -99,7 +114,7 @@ export function JobsTable({
 
   return (
     <div ref={containerRef} className="flex flex-col flex-1 overflow-hidden min-w-0">
-      <div className="flex-1 overflow-auto">
+      <div ref={scrollRef} className="flex-1 overflow-auto">
         <DataTable
           columns={columns}
           data={jobs}
@@ -126,8 +141,7 @@ export function JobsTable({
               // `group/row` enables Tailwind named-group hover for child cells
               // (the hover-revealed Dismiss button in jobs-columns.tsx).
               'group/row',
-              isFocused && 'ring-2 ring-violet ring-inset',
-              isActive ? 'bg-[var(--accent-dim)]' : 'hover:bg-hover'
+              isActive ? 'bg-[var(--accent-dim)]' : isFocused ? 'bg-hover' : 'hover:bg-hover'
             )
           }}
           getRowProps={(job) => ({
@@ -143,34 +157,26 @@ export function JobsTable({
             },
             className:
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet focus-visible:ring-inset',
+            // Reuses the `tr[data-has-edge]:hover` accent-bar utility already
+            // established for the Companies table (index.css) — jobs have no
+            // per-row hue source (unlike company adapter tints), so every row
+            // gets the same brand-violet edge on hover.
+            'data-has-edge': true,
+            style: { '--row-edge': 'var(--violet)' } as React.CSSProperties,
           })}
           sorting={sorting}
           onSortingChange={onSortingChange}
         />
-      </div>
 
-      {isFetchingMore && jobs.length > 0 && (
-        <div className="py-2 text-center text-xs text-muted shrink-0">
-          <span className="animate-pulse">Loading more…</span>
-        </div>
-      )}
-
-      <div className="border-t border-[var(--border)] shrink-0">
-        <Pagination
-          mode="cursor"
-          page={page}
-          limit={limit}
-          itemsOnPage={itemsOnPage}
-          itemsBeforePage={itemsBeforePage}
-          hasNext={hasNextPage}
-          hasPrev={hasPrevPage}
-          knownTotal={knownTotal}
-          onNext={onNextPage}
-          onPrev={onPrevPage}
-          onFirst={onFirstPage}
-          onLimitChange={onLimitChange}
-          loading={loading}
-        />
+        {jobs.length > 0 && (hasNextPage || isFetchingMore) && (
+          <div
+            ref={sentinelRef}
+            data-testid="jobs-table-sentinel"
+            className="grid place-items-center py-5 text-xs text-muted"
+          >
+            {isFetchingMore && <span className="animate-pulse">Loading more roles…</span>}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -21,18 +21,6 @@ export const JOB_COMMANDS = {
     category: 'navigation',
   },
   'jobs.nav.escape': { label: 'Close / clear', keys: ['escape'], category: 'navigation' },
-  'jobs.nav.prev-page': {
-    label: 'Previous page',
-    keys: ['left'],
-    category: 'navigation',
-    scope: 'list',
-  },
-  'jobs.nav.next-page': {
-    label: 'Next page',
-    keys: ['right'],
-    category: 'navigation',
-    scope: 'list',
-  },
   'jobs.nav.first-row': { label: 'Jump to top', keys: ['g>g'], category: 'navigation' },
   'jobs.nav.last-row': { label: 'Jump to bottom', keys: ['shift+g'], category: 'navigation' },
 
@@ -77,13 +65,8 @@ export const JOB_COMMANDS = {
 /** Derived id union — never hand-written. Adding a row grows this. */
 export type JobCommandId = keyof typeof JOB_COMMANDS
 
-/** Window during which two `←` presses are treated as "jump to first page". */
-export const DOUBLE_PRESS_MS = 200
-
 /**
- * The typed bag of page callbacks the handlers invoke. Mirrors the old
- * `UseJobKeyboardArgs` callbacks plus a ref holding the double-press-left
- * timestamp (state lives here, not in the engine).
+ * The typed bag of page callbacks the handlers invoke.
  */
 export interface JobsCallbacks {
   onFocusNext: () => void
@@ -93,9 +76,6 @@ export interface JobsCallbacks {
   onOpenPreview: () => void
   onOpenUrl: () => void
   onEscape: () => void
-  onPrevPage: () => void
-  onNextPage: () => void
-  onFirstPage?: () => void
   onGoToTab: (tab: TabKey) => void
   onSetStatus: (status: SettableStatus) => void
   onToggleSave: () => void
@@ -118,8 +98,6 @@ export function jobCommandHandlers(cb: JobsCallbacks): CommandHandlers<JobComman
     'jobs.nav.open-preview': () => cb.onOpenPreview(),
     'jobs.nav.open-url': () => cb.onOpenUrl(),
     'jobs.nav.escape': () => cb.onEscape(),
-    'jobs.nav.prev-page': () => cb.onPrevPage(),
-    'jobs.nav.next-page': () => cb.onNextPage(),
     'jobs.nav.first-row': () => cb.onFocusFirst(),
     'jobs.nav.last-row': () => cb.onFocusLast(),
     'jobs.tab.go-new': () => cb.onGoToTab('new'),
