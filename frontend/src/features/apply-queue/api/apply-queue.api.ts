@@ -38,10 +38,11 @@ const ApplyQueueItemSchema = z.object({
   status: ApplyQueueStatusSchema,
   resume_id: z.string().nullable(),
   resume_label: z.string().nullable(),
-  // Best keyword-match resume for this job (issue #264) — null when no
-  // recommendation is available (e.g. no resume has extracted keywords yet).
-  recommended_resume_id: z.string().nullable(),
-  recommended_resume_label: z.string().nullable(),
+  // Canonical job keywords (broadened past pure tech stack — see
+  // docs/superpowers/specs/2026-07-05-resume-job-keyword-match-design.md).
+  // The frontend computes any resume match against this client-side; the
+  // backend performs no scoring.
+  job_keywords: z.array(z.string()).catch([]),
   // Job info columns — same field names/shapes as the `Job` type's
   // equivalents (features/jobs/api/jobs.api.ts) so the Apply Queue table can
   // render the same location/salary/posted cells as the Jobs table.

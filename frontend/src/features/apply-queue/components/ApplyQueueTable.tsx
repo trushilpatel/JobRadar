@@ -12,12 +12,14 @@ interface ApplyQueueTableProps {
   onRetry?: () => void
   emptyMessage?: string
 
-  // Resume picker wiring — injected by the pages layer (see
+  // Resume picker + match wiring — injected by the pages layer (see
   // ResumePickerCell.tsx for why this feature never imports features/resumes
   // directly).
   resumeOptions: ApplyQueueColumnActions['resumeOptions']
   onResumeChange: ApplyQueueColumnActions['onResumeChange']
   isResumeUpdatePending?: ApplyQueueColumnActions['isResumeUpdatePending']
+  getEffectiveResume: ApplyQueueColumnActions['getEffectiveResume']
+  getMatchSummary: ApplyQueueColumnActions['getMatchSummary']
 
   // Row-click wiring — opens the job detail panel at the pages layer. Mirrors
   // features/jobs/components/JobsTable.tsx's onRowClick/getRowProps pattern
@@ -53,6 +55,8 @@ export function ApplyQueueTable({
   resumeOptions,
   onResumeChange,
   isResumeUpdatePending,
+  getEffectiveResume,
+  getMatchSummary,
   selectedJobId,
   onRowClick,
   page,
@@ -67,8 +71,15 @@ export function ApplyQueueTable({
   onFirst,
 }: ApplyQueueTableProps) {
   const columns = useMemo(
-    () => buildApplyQueueColumns({ resumeOptions, onResumeChange, isResumeUpdatePending }),
-    [resumeOptions, onResumeChange, isResumeUpdatePending]
+    () =>
+      buildApplyQueueColumns({
+        resumeOptions,
+        onResumeChange,
+        isResumeUpdatePending,
+        getEffectiveResume,
+        getMatchSummary,
+      }),
+    [resumeOptions, onResumeChange, isResumeUpdatePending, getEffectiveResume, getMatchSummary]
   )
 
   return (

@@ -1,4 +1,3 @@
-import { Star } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -17,11 +16,6 @@ import { cn } from '@/lib/utils/utils'
 export interface ApplyQueueResumeOption {
   id: string
   label: string
-  // True when this resume is the best keyword-match for the row's job
-  // (issue #264) — a hint surfaced as a "Recommended" badge, never a hard
-  // gate; the caller (apply-queue-columns.tsx) computes this per row from
-  // the item's recommended_resume_id.
-  recommended?: boolean
 }
 
 interface ResumePickerCellProps {
@@ -74,20 +68,7 @@ export function ResumePickerCell({
         )}
         {options.map((opt) => (
           <SelectItem key={opt.id} value={opt.id}>
-            <span className="flex items-center gap-1.5">
-              <span className="truncate">{opt.label}</span>
-              {opt.recommended && (
-                <span
-                  className={cn(
-                    'inline-flex items-center gap-0.5 shrink-0 rounded px-1 py-px text-[10px] font-medium leading-none text-violet',
-                    'bg-[color-mix(in_srgb,var(--violet)_14%,transparent)]'
-                  )}
-                >
-                  <Star size={9} className="fill-current" />
-                  Recommended
-                </span>
-              )}
-            </span>
+            <span className="truncate">{opt.label}</span>
           </SelectItem>
         ))}
       </SelectContent>
