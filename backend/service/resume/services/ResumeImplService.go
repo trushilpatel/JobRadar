@@ -3,14 +3,15 @@ package services
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 
 	"github.com/google/uuid"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	"github.com/trushilpatel/jobradar/platform/objectstorage"
-	resumecommon "github.com/trushilpatel/jobradar/service/resume/common"
 	"github.com/trushilpatel/jobradar/service/resume/dto"
 	resumemodel "github.com/trushilpatel/jobradar/service/resume/models"
 )
@@ -75,19 +76,22 @@ func (s *implService) Delete(ctx context.Context, userID, id string) (err error)
 	return nil
 }
 
-func (s *implService) PresignDownload(ctx context.Context, userID, id string) (_ string, err error) {
-	ctx, span := tracing.Start(ctx, "resume.impl.PresignDownload")
+func (s *implService) Download(ctx context.Context, userID, id string) (_ io.ReadCloser, _ *resumemodel.Resume, err error) {
+	ctx, span := tracing.Start(ctx, "resume.impl.Download")
 	defer tracing.End(span, &err)
 
 	resume, err := s.next.Get(ctx, userID, id)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
-	url, presignErr := s.storage.PresignGet(ctx, resume.StorageKey, resumecommon.PresignTTL)
-	if presignErr != nil {
-		return "", domainerrs.ErrInternal.WithMessage("resume impl: presign: " + presignErr.Error())
+	reader, _, getErr := s.storage.Get(ctx, resume.StorageKey)
+	if getErr != nil {
+		if errors.Is(getErr, objectstorage.ErrNotFound) {
+			return nil, nil, domainerrs.ErrNotFound.WithMessage("resume impl: object missing from storage: " + getErr.Error())
+		}
+		return nil, nil, domainerrs.ErrInternal.WithMessage("resume impl: storage get: " + getErr.Error())
 	}
-	return url, nil
+	return reader, resume, nil
 }
 
 var _ Service = (*implService)(nil)

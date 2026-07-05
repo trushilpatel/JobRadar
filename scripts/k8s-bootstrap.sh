@@ -81,6 +81,11 @@ REQUIRED_VARS=(
   CLERK_JWKS_URL
   CLERK_ISSUER_URL
   CLERK_SECRET_KEY
+  OCI_S3_ENDPOINT
+  OCI_S3_REGION
+  OCI_S3_BUCKET
+  OCI_S3_ACCESS_KEY
+  OCI_S3_SECRET_KEY
 )
 
 for var in "${REQUIRED_VARS[@]}"; do
@@ -173,6 +178,11 @@ CLERK_ISSUER_URL="$(env_val CLERK_ISSUER_URL)"
 CLERK_SECRET_KEY="$(env_val CLERK_SECRET_KEY)"
 CRAWLER_TOKEN_SECRET="$(env_val CRAWLER_TOKEN_SECRET)"
 CRAWLER_TOKEN="$(env_val CRAWLER_TOKEN)"
+OCI_S3_ENDPOINT="$(env_val OCI_S3_ENDPOINT)"
+OCI_S3_REGION="$(env_val OCI_S3_REGION)"
+OCI_S3_BUCKET="$(env_val OCI_S3_BUCKET)"
+OCI_S3_ACCESS_KEY="$(env_val OCI_S3_ACCESS_KEY)"
+OCI_S3_SECRET_KEY="$(env_val OCI_S3_SECRET_KEY)"
 
 # NATS credentials file
 apply_secret nats-creds \
@@ -187,7 +197,12 @@ apply_secret jobradar-api-secret \
   --from-literal="REDIS_URL=$REDIS_URL" \
   --from-literal="CLERK_JWKS_URL=$CLERK_JWKS_URL" \
   --from-literal="CLERK_ISSUER_URL=$CLERK_ISSUER_URL" \
-  --from-literal="CLERK_SECRET_KEY=$CLERK_SECRET_KEY"
+  --from-literal="CLERK_SECRET_KEY=$CLERK_SECRET_KEY" \
+  --from-literal="OCI_S3_ENDPOINT=$OCI_S3_ENDPOINT" \
+  --from-literal="OCI_S3_REGION=$OCI_S3_REGION" \
+  --from-literal="OCI_S3_BUCKET=$OCI_S3_BUCKET" \
+  --from-literal="OCI_S3_ACCESS_KEY=$OCI_S3_ACCESS_KEY" \
+  --from-literal="OCI_S3_SECRET_KEY=$OCI_S3_SECRET_KEY"
 
 # Migrate secret
 apply_secret jobradar-migrate-secret \

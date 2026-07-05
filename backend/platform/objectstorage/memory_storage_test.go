@@ -3,9 +3,9 @@ package objectstorage
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
-	"time"
 )
 
 type erroringReader struct{}
@@ -48,13 +48,30 @@ func TestMemoryStorage_DeleteMissingKeyIsNotAnError(t *testing.T) {
 	}
 }
 
-func TestMemoryStorage_PresignGetReturnsDeterministicURL(t *testing.T) {
+func TestMemoryStorage_GetReturnsStoredBytesAndSize(t *testing.T) {
 	m := NewMemoryStorage()
-	url, err := m.PresignGet(context.Background(), "k", 5*time.Minute)
+	_ = m.Put(context.Background(), "k", strings.NewReader("hello"), 5, "application/pdf")
+
+	r, size, err := m.Get(context.Background(), "k")
 	if err != nil {
-		t.Fatalf("PresignGet: %v", err)
+		t.Fatalf("Get: %v", err)
 	}
-	if !strings.Contains(url, "k") {
-		t.Fatalf("expected URL to contain the key, got %s", url)
+	defer r.Close()
+	if size != 5 {
+		t.Fatalf("expected size 5, got %d", size)
+	}
+	data, readErr := io.ReadAll(r)
+	if readErr != nil {
+		t.Fatalf("ReadAll: %v", readErr)
+	}
+	if string(data) != "hello" {
+		t.Fatalf("expected %q, got %q", "hello", data)
+	}
+}
+
+func TestMemoryStorage_GetMissingKeyReturnsErrNotFound(t *testing.T) {
+	m := NewMemoryStorage()
+	if _, _, err := m.Get(context.Background(), "never-existed"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }

@@ -1,11 +1,10 @@
 package objectstorage
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"sync"
-	"time"
 )
 
 // MemoryStorage is an in-process Storage implementation for tests. Objects
@@ -37,8 +36,14 @@ func (m *MemoryStorage) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-func (m *MemoryStorage) PresignGet(_ context.Context, key string, ttl time.Duration) (string, error) {
-	return fmt.Sprintf("https://memory-storage.test/%s?ttl=%s", key, ttl), nil
+func (m *MemoryStorage) Get(_ context.Context, key string) (io.ReadCloser, int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	data, ok := m.objects[key]
+	if !ok {
+		return nil, 0, ErrNotFound
+	}
+	return io.NopCloser(bytes.NewReader(data)), int64(len(data)), nil
 }
 
 // Has reports whether key currently exists. Test-only helper, not part of Storage.

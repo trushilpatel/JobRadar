@@ -79,22 +79,23 @@ describe('useResumeActions', () => {
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalled())
   })
 
-  it('download resolves the presigned url without invalidating the list', async () => {
-    vi.mocked(resumesApi.getResumeDownloadUrl).mockResolvedValue('https://example.test/signed')
+  it('download resolves the file blob without invalidating the list', async () => {
+    const blob = new Blob(['%PDF-1.4'], { type: 'application/pdf' })
+    vi.mocked(resumesApi.downloadResume).mockResolvedValue(blob)
     const { wrapper, qc } = makeWrapper()
     const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
     const { result } = renderHook(() => useResumeActions(), { wrapper })
 
-    let url = ''
+    let resolved: Blob | undefined
     await act(async () => {
-      url = await result.current.download.mutateAsync('r1')
+      resolved = await result.current.download.mutateAsync('r1')
     })
-    expect(url).toBe('https://example.test/signed')
+    expect(resolved).toBe(blob)
     expect(invalidateSpy).not.toHaveBeenCalled()
   })
 
   it('download surfaces an error on failure', async () => {
-    vi.mocked(resumesApi.getResumeDownloadUrl).mockRejectedValue(new Error('signing failed'))
+    vi.mocked(resumesApi.downloadResume).mockRejectedValue(new Error('storage unavailable'))
     const { wrapper } = makeWrapper()
     const { result } = renderHook(() => useResumeActions(), { wrapper })
 

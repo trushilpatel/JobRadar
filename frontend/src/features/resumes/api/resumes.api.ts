@@ -29,9 +29,8 @@ export async function uploadResume(file: File, label: string): Promise<Resume> {
   return ResumeSchema.parse(raw) as Resume
 }
 
-export async function getResumeDownloadUrl(id: string): Promise<string> {
-  const raw = await apiClient.get<{ url: string }>(`/resumes/${encodeURIComponent(id)}/download`)
-  return raw.url
+export async function downloadResume(id: string): Promise<Blob> {
+  return apiClient.getBlob(`/resumes/${encodeURIComponent(id)}/download`)
 }
 
 export async function renameResume(id: string, label: string): Promise<Resume> {

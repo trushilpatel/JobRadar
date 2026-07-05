@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { uploadResume, getResumeDownloadUrl, renameResume, deleteResume } from '../api/resumes.api'
+import { uploadResume, downloadResume, renameResume, deleteResume } from '../api/resumes.api'
 import { resumeQueryKeys } from '../queryKeys'
 
 export function useResumeActions() {
@@ -17,9 +17,8 @@ export function useResumeActions() {
   })
 
   const download = useMutation({
-    mutationFn: (id: string) => getResumeDownloadUrl(id),
-    onError: (err) =>
-      toast.error(err instanceof Error ? err.message : 'Failed to get download link'),
+    mutationFn: (id: string) => downloadResume(id),
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to download resume'),
   })
 
   const rename = useMutation({

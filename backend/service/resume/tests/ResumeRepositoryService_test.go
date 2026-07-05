@@ -20,7 +20,11 @@ import (
 // Postgres-only and is skipped by the repo when db.Name() != "postgres".
 func newResumeTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard})
+	// TranslateError maps SQLite's raw "UNIQUE constraint failed" error onto
+	// GORM's gorm.ErrDuplicatedKey sentinel, so isUniqueViolation (which checks
+	// for it) behaves the same in these SQLite-backed tests as it does against
+	// real Postgres — same pattern as service/company/tests.
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard, TranslateError: true})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -34,7 +38,8 @@ func newResumeTestDB(t *testing.T) *gorm.DB {
 			storage_key TEXT NOT NULL UNIQUE,
 			content_type TEXT NOT NULL,
 			size_bytes INTEGER NOT NULL,
-			created_at DATETIME NOT NULL
+			created_at DATETIME NOT NULL,
+			UNIQUE(user_id, label)
 		)`,
 	}
 	for _, s := range stmts {
@@ -95,7 +100,7 @@ func TestResumeRepository_UploadAtCapIsRejected(t *testing.T) {
 	for i := range resumecommon.ResumeLimitPerUser {
 		id := "r" + string(rune('a'+i%26)) + string(rune('0'+i/26))
 		_, err := repo.Upload(ctx, "user-1", dto.UploadInput{
-			ID: id, Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+			ID: id, Label: "L-" + id, OriginalFilename: "f.pdf", ContentType: "application/pdf",
 			Extension: "pdf", StorageKey: "key-" + id, DeclaredSize: 10,
 		})
 		if err != nil {
@@ -104,7 +109,7 @@ func TestResumeRepository_UploadAtCapIsRejected(t *testing.T) {
 	}
 
 	_, err := repo.Upload(ctx, "user-1", dto.UploadInput{
-		ID: "over-cap", Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		ID: "over-cap", Label: "L-over-cap", OriginalFilename: "f.pdf", ContentType: "application/pdf",
 		Extension: "pdf", StorageKey: "key-over-cap", DeclaredSize: 10,
 	})
 	if err == nil {
@@ -120,7 +125,7 @@ func TestResumeRepository_UploadAtExactly50thSucceeds(t *testing.T) {
 	for i := range resumecommon.ResumeLimitPerUser - 1 {
 		id := "r" + string(rune('a'+i%26)) + string(rune('0'+i/26))
 		if _, err := repo.Upload(ctx, "user-1", dto.UploadInput{
-			ID: id, Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+			ID: id, Label: "L-" + id, OriginalFilename: "f.pdf", ContentType: "application/pdf",
 			Extension: "pdf", StorageKey: "key-" + id, DeclaredSize: 10,
 		}); err != nil {
 			t.Fatalf("upload %d: %v", i+1, err)
@@ -128,7 +133,7 @@ func TestResumeRepository_UploadAtExactly50thSucceeds(t *testing.T) {
 	}
 	// This is the 50th — must succeed (cap is inclusive of 50).
 	if _, err := repo.Upload(ctx, "user-1", dto.UploadInput{
-		ID: "last", Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		ID: "last", Label: "L-last", OriginalFilename: "f.pdf", ContentType: "application/pdf",
 		Extension: "pdf", StorageKey: "key-last", DeclaredSize: 10,
 	}); err != nil {
 		t.Fatalf("expected the 50th upload to succeed, got %v", err)
@@ -302,10 +307,93 @@ func TestResumeRepository_UploadRejectsDuplicateStorageKey(t *testing.T) {
 	}
 }
 
-func TestResumeRepository_PresignDownloadIsUnreachableStub(t *testing.T) {
+func TestResumeRepository_UploadRejectsDuplicateLabelForSameUser(t *testing.T) {
 	db := newResumeTestDB(t)
 	repo := resumesvc.NewRepositoryService(db)
-	if _, err := repo.PresignDownload(context.Background(), "user-1", "r1"); err == nil {
+	ctx := context.Background()
+
+	_, err := repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "My resume", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k1", DeclaredSize: 10,
+	})
+	if err != nil {
+		t.Fatalf("first upload: %v", err)
+	}
+
+	_, err = repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r2", Label: "My resume", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k2", DeclaredSize: 10,
+	})
+	if !errors.Is(err, domainerrs.ErrConflict) {
+		t.Fatalf("expected ErrConflict for a duplicate label, got %v", err)
+	}
+}
+
+func TestResumeRepository_UploadAllowsSameLabelForDifferentUsers(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	_, err := repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "My resume", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k1", DeclaredSize: 10,
+	})
+	if err != nil {
+		t.Fatalf("first upload: %v", err)
+	}
+
+	_, err = repo.Upload(ctx, "user-2", dto.UploadInput{
+		ID: "r2", Label: "My resume", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k2", DeclaredSize: 10,
+	})
+	if err != nil {
+		t.Fatalf("expected the same label to be allowed for a different user, got %v", err)
+	}
+}
+
+func TestResumeRepository_RenameRejectsCollisionWithAnotherResumesLabel(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	_, _ = repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "Taken", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k1", DeclaredSize: 10,
+	})
+	_, _ = repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r2", Label: "Other", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k2", DeclaredSize: 10,
+	})
+
+	_, err := repo.Rename(ctx, "user-1", "r2", "Taken")
+	if !errors.Is(err, domainerrs.ErrConflict) {
+		t.Fatalf("expected ErrConflict when renaming to another resume's label, got %v", err)
+	}
+}
+
+func TestResumeRepository_RenameToOwnCurrentLabelSucceeds(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	ctx := context.Background()
+
+	_, _ = repo.Upload(ctx, "user-1", dto.UploadInput{
+		ID: "r1", Label: "Same", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", StorageKey: "k1", DeclaredSize: 10,
+	})
+
+	renamed, err := repo.Rename(ctx, "user-1", "r1", "Same")
+	if err != nil {
+		t.Fatalf("expected renaming a resume to its own current label to succeed, got %v", err)
+	}
+	if renamed.Label != "Same" {
+		t.Fatalf("expected label to remain 'Same', got %s", renamed.Label)
+	}
+}
+
+func TestResumeRepository_DownloadIsUnreachableStub(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	if _, _, err := repo.Download(context.Background(), "user-1", "r1"); err == nil {
 		t.Fatal("expected the repository-layer stub to always return an error")
 	}
 }

@@ -36,6 +36,8 @@ dev-backend: ## Start API on :8080 with air hot-reload (recompiles on .go save)
 dev-stop: ## Kill local dev processes (API :8080 + Vite :5173)
 	@-lsof -ti:8080 | xargs kill 2>/dev/null && echo "  killed API  (:8080)" || true
 	@-lsof -ti:5173 | xargs kill 2>/dev/null && echo "  killed Vite (:5173)" || true
+	@-pkill -f "doppler run -- air" 2>/dev/null && echo "  killed stray API supervisor" || true
+	@-pkill -f "doppler run -- npm run dev" 2>/dev/null && echo "  killed stray Vite supervisor" || true
 
 dev-check: ## Check whether local dev services are up
 	@printf "  API  :8080  "; curl -sf http://localhost:9100/health > /dev/null && echo "UP" || echo "DOWN (make dev-backend)"

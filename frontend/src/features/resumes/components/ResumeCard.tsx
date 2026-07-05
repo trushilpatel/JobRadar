@@ -5,14 +5,30 @@ import { Input } from '@/components/ui/input'
 import { useResumeActions } from '../hooks/useResumeActions'
 import type { Resume } from '../types'
 
+// Triggers a browser "save as" for an in-memory Blob via a throwaway <a
+// download> element — the standard DOM pattern for saving fetched bytes
+// without a server redirect. The object URL is revoked on the next tick
+// (not synchronously) since some browsers cancel the save if revoked before
+// they've had a chance to start reading it.
+function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
 export function ResumeCard({ resume }: { resume: Resume }) {
   const { download, rename, remove } = useResumeActions()
   const [editing, setEditing] = useState(false)
   const [label, setLabel] = useState(resume.label)
 
   async function handleDownload() {
-    const url = await download.mutateAsync(resume.id)
-    window.location.assign(url)
+    const blob = await download.mutateAsync(resume.id)
+    saveBlob(blob, resume.original_filename)
   }
 
   async function handleRenameSubmit() {

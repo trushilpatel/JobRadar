@@ -3,9 +3,9 @@ package tests
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
-	"time"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/logger"
@@ -17,13 +17,13 @@ import (
 
 // flakyStorage wraps MemoryStorage but can be told to fail any of its three
 // operations — used to exercise ImplService's storage-failure branches
-// (put failure, best-effort delete-after-success logging, presign failure)
+// (put failure, best-effort delete-after-success logging, get failure)
 // without a real S3-compatible endpoint.
 type flakyStorage struct {
 	*objectstorage.MemoryStorage
-	putErr     error
-	deleteErr  error
-	presignErr error
+	putErr    error
+	deleteErr error
+	getErr    error
 }
 
 func newFlakyStorage() *flakyStorage {
@@ -44,11 +44,11 @@ func (f *flakyStorage) Delete(ctx context.Context, key string) error {
 	return f.MemoryStorage.Delete(ctx, key)
 }
 
-func (f *flakyStorage) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
-	if f.presignErr != nil {
-		return "", f.presignErr
+func (f *flakyStorage) Get(ctx context.Context, key string) (io.ReadCloser, int64, error) {
+	if f.getErr != nil {
+		return nil, 0, f.getErr
 	}
-	return f.MemoryStorage.PresignGet(ctx, key, ttl)
+	return f.MemoryStorage.Get(ctx, key)
 }
 
 func TestResumeImpl_UploadWritesStorageBeforeDBRow(t *testing.T) {
@@ -81,9 +81,9 @@ func TestResumeImpl_UploadCleansUpStorageWhenDBInsertFails(t *testing.T) {
 	ctx := context.Background()
 
 	// Fill the user to the cap so the next upload's DB insert fails.
-	for range 50 {
+	for i := range 50 {
 		if _, err := impl.Upload(ctx, "user-1", dto.UploadInput{
-			Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+			Label: fmt.Sprintf("L-%d", i), OriginalFilename: "f.pdf", ContentType: "application/pdf",
 			Extension: "pdf", RawBytes: []byte("%PDF-1.4"), DeclaredSize: 8,
 		}); err != nil {
 			t.Fatalf("seed upload: %v", err)
@@ -149,7 +149,7 @@ func TestResumeImpl_DeleteForWrongUserReturnsNotFoundAndLeavesObjectIntact(t *te
 	}
 }
 
-func TestResumeImpl_PresignDownloadReturnsURLForOwner(t *testing.T) {
+func TestResumeImpl_DownloadReturnsReaderForOwner(t *testing.T) {
 	db := newResumeTestDB(t)
 	repo := resumesvc.NewRepositoryService(db)
 	storage := objectstorage.NewMemoryStorage()
@@ -161,16 +161,24 @@ func TestResumeImpl_PresignDownloadReturnsURLForOwner(t *testing.T) {
 		Extension: "pdf", RawBytes: []byte("%PDF-1.4"), DeclaredSize: 8,
 	})
 
-	url, err := impl.PresignDownload(ctx, "user-1", resume.ID)
+	reader, downloaded, err := impl.Download(ctx, "user-1", resume.ID)
 	if err != nil {
-		t.Fatalf("PresignDownload: %v", err)
+		t.Fatalf("Download: %v", err)
 	}
-	if url == "" {
-		t.Fatal("expected a non-empty presigned URL")
+	defer reader.Close()
+	if downloaded.ID != resume.ID {
+		t.Fatalf("expected the resume row for %s, got %s", resume.ID, downloaded.ID)
+	}
+	data, readErr := io.ReadAll(reader)
+	if readErr != nil {
+		t.Fatalf("ReadAll: %v", readErr)
+	}
+	if string(data) != "%PDF-1.4" {
+		t.Fatalf("expected the uploaded bytes back, got %q", data)
 	}
 }
 
-func TestResumeImpl_PresignDownloadForWrongUserReturnsNotFound(t *testing.T) {
+func TestResumeImpl_DownloadForWrongUserReturnsNotFound(t *testing.T) {
 	db := newResumeTestDB(t)
 	repo := resumesvc.NewRepositoryService(db)
 	storage := objectstorage.NewMemoryStorage()
@@ -182,7 +190,7 @@ func TestResumeImpl_PresignDownloadForWrongUserReturnsNotFound(t *testing.T) {
 		Extension: "pdf", RawBytes: []byte("%PDF-1.4"), DeclaredSize: 8,
 	})
 
-	if _, err := impl.PresignDownload(ctx, "user-2", resume.ID); !errors.Is(err, domainerrs.ErrNotFound) {
+	if _, _, err := impl.Download(ctx, "user-2", resume.ID); !errors.Is(err, domainerrs.ErrNotFound) {
 		t.Fatalf("expected NotFound for cross-user download, got %v", err)
 	}
 }
@@ -269,7 +277,7 @@ func TestResumeImpl_DeleteSucceedsEvenWhenStorageDeleteFails(t *testing.T) {
 	}
 }
 
-func TestResumeImpl_PresignDownloadPropagatesStorageError(t *testing.T) {
+func TestResumeImpl_DownloadPropagatesStorageError(t *testing.T) {
 	db := newResumeTestDB(t)
 	repo := resumesvc.NewRepositoryService(db)
 	storage := newFlakyStorage()
@@ -281,9 +289,27 @@ func TestResumeImpl_PresignDownloadPropagatesStorageError(t *testing.T) {
 		Extension: "pdf", RawBytes: []byte("%PDF-1.4"), DeclaredSize: 8,
 	})
 
-	storage.presignErr = errors.New("signing failed")
-	if _, err := impl.PresignDownload(ctx, "user-1", resume.ID); err == nil {
-		t.Fatal("expected the storage presign error to propagate")
+	storage.getErr = errors.New("bucket unreachable")
+	if _, _, err := impl.Download(ctx, "user-1", resume.ID); err == nil {
+		t.Fatal("expected the storage get error to propagate")
+	}
+}
+
+func TestResumeImpl_DownloadMapsStorageNotFoundToDomainNotFound(t *testing.T) {
+	db := newResumeTestDB(t)
+	repo := resumesvc.NewRepositoryService(db)
+	storage := newFlakyStorage()
+	impl := resumesvc.NewImplService(repo, storage, logger.NewNoop())
+	ctx := context.Background()
+
+	resume, _ := impl.Upload(ctx, "user-1", dto.UploadInput{
+		Label: "L", OriginalFilename: "f.pdf", ContentType: "application/pdf",
+		Extension: "pdf", RawBytes: []byte("%PDF-1.4"), DeclaredSize: 8,
+	})
+
+	storage.getErr = objectstorage.ErrNotFound
+	if _, _, err := impl.Download(ctx, "user-1", resume.ID); !errors.Is(err, domainerrs.ErrNotFound) {
+		t.Fatalf("expected domain ErrNotFound when the object is missing from storage, got %v", err)
 	}
 }
 
@@ -308,7 +334,7 @@ func TestNewImplService_PanicsOnNilNext(t *testing.T) {
 	resumesvc.NewImplService(nil, objectstorage.NewMemoryStorage(), logger.NewNoop())
 }
 
-func TestResumeImpl_PresignDownloadForDeletedResumeReturnsNotFound(t *testing.T) {
+func TestResumeImpl_DownloadForDeletedResumeReturnsNotFound(t *testing.T) {
 	db := newResumeTestDB(t)
 	repo := resumesvc.NewRepositoryService(db)
 	storage := objectstorage.NewMemoryStorage()
@@ -321,7 +347,7 @@ func TestResumeImpl_PresignDownloadForDeletedResumeReturnsNotFound(t *testing.T)
 	})
 	_ = impl.Delete(ctx, "user-1", resume.ID)
 
-	if _, err := impl.PresignDownload(ctx, "user-1", resume.ID); !errors.Is(err, domainerrs.ErrNotFound) {
+	if _, _, err := impl.Download(ctx, "user-1", resume.ID); !errors.Is(err, domainerrs.ErrNotFound) {
 		t.Fatalf("expected NotFound for a deleted resume, got %v", err)
 	}
 }

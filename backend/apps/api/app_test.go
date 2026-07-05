@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -261,8 +262,8 @@ func (f *fakeResumeService) Rename(_ context.Context, _, _, _ string) (*resumemo
 	return nil, nil
 }
 func (f *fakeResumeService) Delete(_ context.Context, _, _ string) error { return nil }
-func (f *fakeResumeService) PresignDownload(_ context.Context, _, _ string) (string, error) {
-	return "", nil
+func (f *fakeResumeService) Download(_ context.Context, _, _ string) (io.ReadCloser, *resumemodel.Resume, error) {
+	return nil, nil, nil
 }
 
 type fakeAtsService struct{}
