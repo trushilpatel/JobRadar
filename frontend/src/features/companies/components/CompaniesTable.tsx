@@ -3,6 +3,7 @@ import { DataTable, type SortingState } from '@/components/ui/data-table'
 import { Pagination } from '@/components/ui/pagination'
 import type { Company } from '@/types'
 import { buildCompanyColumns, type CompanyColumnActions } from './companies-columns'
+import { adapterEdge } from '@/lib/utils/adapterTokens'
 
 interface CompaniesTableProps {
   companies: Company[]
@@ -69,6 +70,10 @@ export function CompaniesTable({
           onRowClick={onRowClick}
           sorting={sorting}
           onSortingChange={onSortingChange}
+          getRowProps={(company) => ({
+            'data-has-edge': true,
+            style: { '--row-edge': adapterEdge(company.adapter_type) } as React.CSSProperties,
+          })}
         />
       </div>
 

@@ -95,13 +95,6 @@ export default defineConfig(({ mode }) => {
           'src/app/providers.tsx',
           'src/features/auth/components/SignInPage.tsx',
           'src/lib/core/queryClient.ts',
-          // resumes feature is mock-data WIP (no real api/ layer) — excluded until wired to the backend
-          'src/features/resumes/**',
-          'src/pages/admin/ResumeLibraryPage.tsx',
-          'src/pages/admin/ResumeDetailPage.tsx',
-          'src/pages/admin/ResumeEditorPage.tsx',
-          'src/pages/admin/ApplyQueuePage.tsx',
-          'src/pages/jobs/JobResumeSection.tsx',
         ],
       },
     },

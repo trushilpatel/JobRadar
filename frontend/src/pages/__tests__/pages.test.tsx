@@ -143,8 +143,10 @@ describe('AccountPage', () => {
   })
 
   it('renders email from identity', () => {
-    const { getByText } = render(<AccountPage />, { wrapper: makeWrapper() })
-    expect(getByText('test@test.com')).toBeInTheDocument()
+    const { getAllByText } = render(<AccountPage />, { wrapper: makeWrapper() })
+    const instances = getAllByText('test@test.com')
+    expect(instances.length).toBeGreaterThan(0)
+    instances.forEach((el) => expect(el).toBeInTheDocument())
   })
 
   it('shows Delete account button', () => {

@@ -15,25 +15,6 @@ interface JobsParams {
   since?: '24h' | '7d' | '30d' | 'all'
 }
 
-interface ResumeEditParams {
-  jobId?: string
-  queue?: string
-  returnTo?: string
-}
-
-export type ApplyQueueFilter =
-  | 'all'
-  | 'needs-resume'
-  | 'draft'
-  | 'final'
-  | 'submitted'
-  | 'interviewing'
-
-interface ApplyQueueParams {
-  state?: ApplyQueueFilter
-  edit?: string
-}
-
 // `withQuery` accepts any plain object whose values are stringable. The
 // loose typing keeps the call sites readable (interface props can be passed
 // directly without a cast). At runtime only string/number entries become
@@ -61,19 +42,8 @@ export const routes = {
     withQuery('/jobs', { ...params, job: jobId }),
   jobMobileRoute: (jobId: string) => `/jobs/${jobId}`,
 
-  // ─── Resumes (admin-only) ─────────────────────────────────────────────────
-  resumeLibrary: () => '/admin/resumes',
-  resumeDetail: (id: string) => `/admin/resumes/${id}`,
-  // ?job= turns the editor into split-view with the JD context loaded.
-  resumeEdit: (id: string, params?: ResumeEditParams) =>
-    withQuery(`/admin/resumes/${id}/edit`, {
-      job: params?.jobId,
-      queue: params?.queue,
-      return: params?.returnTo,
-    }),
-
-  // ─── Apply Queue ──────────────────────────────────────────────────────────
-  applyQueue: (params?: ApplyQueueParams) => withQuery('/admin/apply-queue', params),
+  // ─── Resumes ──────────────────────────────────────────────────────────────
+  resumeLibrary: () => '/resumes',
 
   // ─── Admin ────────────────────────────────────────────────────────────────
   adminCompanies: () => '/admin/companies',

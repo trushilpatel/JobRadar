@@ -11,9 +11,6 @@ import { AdminUsersPage } from '@/pages/admin/AdminUsersPage'
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage'
 import { AdminPipelinePage } from '@/pages/admin/AdminPipelinePage'
 import { ResumeLibraryPage } from '@/pages/admin/ResumeLibraryPage'
-import { ResumeDetailPage } from '@/pages/admin/ResumeDetailPage'
-import { ResumeEditorPage } from '@/pages/admin/ResumeEditorPage'
-import { ApplyQueuePage } from '@/pages/admin/ApplyQueuePage'
 import { SignInPage, RequireAuth, RequireAdmin } from '@/features/auth'
 import { MobileJobDetailRoute } from '@/features/jobs'
 import { routes } from '@/config/routes'
@@ -56,13 +53,8 @@ function ProtectedLayout() {
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:id" element={<MobileJobDetailRoute />} />
           <Route path="/account" element={<AccountPage />} />
-          {/* Résumés + Apply queue are frontend-only (no backend endpoints) —
-              user-facing for every authenticated user, not admin-gated. Paths
-              keep the /admin prefix to avoid a route rename. */}
-          <Route path="/admin/resumes" element={<ResumeLibraryPage />} />
-          <Route path="/admin/resumes/:id" element={<ResumeDetailPage />} />
-          <Route path="/admin/resumes/:id/edit" element={<ResumeEditorPage />} />
-          <Route path="/admin/apply-queue" element={<ApplyQueuePage />} />
+          {/* Resumes are user-facing for every authenticated user, not admin-gated. */}
+          <Route path="/resumes" element={<ResumeLibraryPage />} />
           {/* Admin routes — server also enforces 403 for non-admins */}
           <Route element={<RequireAdmin />}>
             <Route path="/admin/companies" element={<CompaniesPage />} />

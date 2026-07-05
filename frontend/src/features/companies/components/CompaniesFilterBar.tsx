@@ -122,7 +122,7 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
             value={p.search}
             onChange={(e) => p.onSearchChange(e.target.value)}
             placeholder="Search companies…"
-            className="pl-7 pr-7 py-1.5 text-xs bg-subtle border border-[var(--border-strong)] rounded-lg placeholder:text-placeholder focus:outline-none focus:border-violet-500 w-52 text-primary"
+            className="pl-8 pr-7 py-1.5 text-xs bg-[var(--bg-panel)] border border-[var(--border-strong)] rounded-full w-56 text-primary placeholder:text-placeholder focus:outline-none focus:border-[var(--violet)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--violet)_14%,transparent)]"
           />
           {p.search && (
             <button
@@ -160,7 +160,11 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
           <button
             type="button"
             onClick={handleAddAdapter}
-            className="text-[11px] px-2 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+            className="text-[11px] px-2 py-1.5 rounded-lg text-white transition-all"
+            style={{
+              background:
+                'linear-gradient(135deg, var(--violet), color-mix(in srgb, var(--violet) 60%, var(--cyan)))',
+            }}
           >
             + Add
           </button>
@@ -245,7 +249,13 @@ export function CompaniesFilterBar(p: CompaniesFilterBarProps) {
       <button
         type="button"
         onClick={p.onAddClick}
-        className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors shrink-0"
+        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-all"
+        style={{
+          background:
+            'linear-gradient(135deg, var(--violet), color-mix(in srgb, var(--violet) 60%, var(--cyan)))',
+          color: '#0b0b14',
+          boxShadow: 'var(--glow-violet)',
+        }}
       >
         <Plus size={12} />
         Add Company

@@ -9,7 +9,6 @@ export const COPY = {
   'nav.companies': 'Companies',
   'nav.users': 'Users',
   'nav.resumes': 'Resumes',
-  'nav.apply-queue': 'Apply Queue',
   'nav.audit-log': 'Audit Log',
   'nav.insights': 'Insights',
   'nav.pipeline': 'Pipeline',

@@ -1,0 +1,121 @@
+package services
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/handler"
+	"github.com/trushilpatel/jobradar/common/identity"
+	"github.com/trushilpatel/jobradar/service/resume/dto"
+)
+
+// multipartMaxMemory bounds how much of the multipart body chi/net/http
+// buffers in memory before spilling to disk. Set comfortably above the 2MB
+// file cap plus form-field/boundary overhead.
+const multipartMaxMemory = 4 << 20
+
+type RestService struct {
+	next Service
+}
+
+func NewRestService(next Service) *RestService {
+	if next == nil {
+		panic("resume.NewRestService: next must not be nil")
+	}
+	return &RestService{next: next}
+}
+
+func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
+	userID := identity.MustFromContext(r.Context()).UserID
+	resumes, err := h.next.List(r.Context(), userID)
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, resumes)
+}
+
+func (h *RestService) upload(w http.ResponseWriter, r *http.Request) {
+	userID := identity.MustFromContext(r.Context()).UserID
+
+	if err := r.ParseMultipartForm(multipartMaxMemory); err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid multipart form")
+		return
+	}
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "file is required")
+		return
+	}
+	defer file.Close()
+
+	data, readErr := io.ReadAll(file)
+	if readErr != nil {
+		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "failed to read uploaded file")
+		return
+	}
+
+	input := dto.UploadInput{
+		Label:            r.FormValue("label"),
+		OriginalFilename: fileHeader.Filename,
+		RawBytes:         data,
+		DeclaredSize:     int64(len(data)),
+	}
+
+	resume, uploadErr := h.next.Upload(r.Context(), userID, input)
+	if uploadErr != nil {
+		handler.HandleError(w, uploadErr)
+		return
+	}
+	handler.Respond(w, http.StatusCreated, resume)
+}
+
+type downloadResponse struct {
+	URL string `json:"url"`
+}
+
+func (h *RestService) download(w http.ResponseWriter, r *http.Request) {
+	userID := identity.MustFromContext(r.Context()).UserID
+	id := chi.URLParam(r, "id")
+
+	url, err := h.next.PresignDownload(r.Context(), userID, id)
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, downloadResponse{URL: url})
+}
+
+type renameRequest struct {
+	Label string `json:"label"`
+}
+
+func (h *RestService) rename(w http.ResponseWriter, r *http.Request) {
+	userID := identity.MustFromContext(r.Context()).UserID
+	id := chi.URLParam(r, "id")
+
+	var req renameRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+	resume, err := h.next.Rename(r.Context(), userID, id, req.Label)
+	if err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.Respond(w, http.StatusOK, resume)
+}
+
+func (h *RestService) remove(w http.ResponseWriter, r *http.Request) {
+	userID := identity.MustFromContext(r.Context()).UserID
+	id := chi.URLParam(r, "id")
+
+	if err := h.next.Delete(r.Context(), userID, id); err != nil {
+		handler.HandleError(w, err)
+		return
+	}
+	handler.RespondNoContent(w)
+}

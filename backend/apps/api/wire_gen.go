@@ -6,16 +6,19 @@
 package main
 
 import (
+	"context"
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/platform/cache"
+	"github.com/trushilpatel/jobradar/platform/objectstorage"
 	"github.com/trushilpatel/jobradar/service/application"
 	services3 "github.com/trushilpatel/jobradar/service/application/services"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	services "github.com/trushilpatel/jobradar/service/company/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
+	services4 "github.com/trushilpatel/jobradar/service/resume/services"
 	services2 "github.com/trushilpatel/jobradar/service/scan/services"
 	"gorm.io/gorm"
 )
@@ -84,7 +87,18 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	applicationRestService := services3.NewApplicationRestService(applicationValidationService)
 	applicationRestRouter := services3.NewApplicationRestRouter(applicationRestService)
 
-	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter)
+	// ── Resume ───────────────────────────────────────────────────────────────
+	objectStorage, err := provideObjectStorage(cfg)
+	if err != nil {
+		return nil, err
+	}
+	resumeRepositoryService := services4.NewRepositoryService(db)
+	resumeImplService := services4.NewImplService(resumeRepositoryService, objectStorage, log)
+	resumeValidationService := services4.NewValidationService(resumeImplService)
+	resumeRestService := services4.NewRestService(resumeValidationService)
+	resumeHandler := services4.NewRestRouter(resumeRestService)
+
+	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter, resumeHandler)
 	return app, nil
 }
 
@@ -115,4 +129,18 @@ func provideSeenLedgerWriter(s jobsvc.SeenLedgerStore) jobsvc.SeenLedgerWriter {
 // provideJobApplicationWriter constructs a dedicated ApplicationWriter for job.Service.
 func provideJobApplicationWriter(db *gorm.DB) jobsvc.ApplicationWriter {
 	return application.NewApplicationWriter(db)
+}
+
+// provideObjectStorage constructs the S3-compatible client used by the
+// resume slice. LoadDefaultConfig does no network I/O — it only assembles
+// client config — so context.Background() at boot time is the standard
+// pattern here (no request context exists yet).
+func provideObjectStorage(cfg *config.Config) (objectstorage.Storage, error) {
+	return objectstorage.NewS3Storage(context.Background(), objectstorage.Config{
+		Endpoint:  cfg.ObjectStorage.Endpoint,
+		Region:    cfg.ObjectStorage.Region,
+		Bucket:    cfg.ObjectStorage.Bucket,
+		AccessKey: cfg.ObjectStorage.AccessKey,
+		SecretKey: cfg.ObjectStorage.SecretKey,
+	})
 }

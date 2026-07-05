@@ -37,6 +37,8 @@ const (
 	FieldOffset        = "offset"
 	FieldUserID        = "user_id"
 	FieldEmailDomain   = "email_domain"
+	FieldResumeID      = "resume_id"
+	FieldStorageKey    = "storage_key"
 
 	// Worker / pipeline fields
 	FieldAdapterType         = "adapter_type"

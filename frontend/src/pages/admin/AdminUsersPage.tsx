@@ -8,6 +8,7 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { cn } from '@/lib/utils/utils'
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value'
 import { Pagination } from '@/components/ui/pagination'
+import { SegmentedSwitch } from '@/components/ui/segmented-switch'
 import { useIdentity } from '@/features/auth'
 import {
   fetchAdminUsers,
@@ -18,14 +19,55 @@ import {
   type AdminUserFilter,
 } from '@/features/auth'
 
+function UserAvatar({ name, email }: { name: string | null; email: string }) {
+  const src = name ?? email
+  const initials = (() => {
+    if (!src) return '?'
+    const words = src.trim().split(/\s+/).filter(Boolean)
+    if (words.length >= 2) {
+      return words
+        .slice(0, 2)
+        .map((w) => w[0]?.toUpperCase() ?? '')
+        .join('')
+    }
+    return (words[0] ?? '').slice(0, 2).toUpperCase()
+  })()
+
+  return (
+    <div
+      className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0"
+      aria-hidden="true"
+      style={{ background: 'linear-gradient(135deg, var(--violet), var(--cyan))' }}
+    >
+      {initials}
+    </div>
+  )
+}
+
 function StatusBadge({ status }: { status: 'active' | 'suspended' }) {
+  const isActive = status === 'active'
   return (
     <span
-      className={cn(
-        'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
-        status === 'active' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-red-900/30 text-red-400'
-      )}
+      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap"
+      style={
+        isActive
+          ? {
+              color: 'var(--ok)',
+              background: 'color-mix(in srgb, var(--ok) 12%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--ok) 28%, transparent)',
+            }
+          : {
+              color: 'var(--danger)',
+              background: 'color-mix(in srgb, var(--danger) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--danger) 26%, transparent)',
+            }
+      }
     >
+      <span
+        className="w-1.5 h-1.5 rounded-full shrink-0"
+        style={{ background: isActive ? 'var(--ok)' : 'var(--danger)' }}
+        aria-hidden="true"
+      />
       {status}
     </span>
   )
@@ -140,15 +182,20 @@ function UserRow({
     <>
       <tr className="border-b border-[var(--border)] hover:bg-hover transition-colors">
         <td className="px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div className="text-sm text-primary">{user.email}</div>
-            {isSelf && (
-              <span className="text-xs text-muted bg-subtle px-1.5 py-0.5 rounded">you</span>
-            )}
+          <div className="flex items-center gap-2.5">
+            <UserAvatar name={user.display_name} email={user.email} />
+            <div>
+              <div className="flex items-center gap-1.5">
+                <div className="text-sm text-primary">{user.email}</div>
+                {isSelf && (
+                  <span className="text-xs text-muted bg-subtle px-1.5 py-0.5 rounded">you</span>
+                )}
+              </div>
+              {user.display_name && (
+                <div className="text-xs text-muted mt-0.5">{user.display_name}</div>
+              )}
+            </div>
           </div>
-          {user.display_name && (
-            <div className="text-xs text-muted mt-0.5">{user.display_name}</div>
-          )}
         </td>
         <td className="px-4 py-3">
           <StatusBadge status={user.status} />
@@ -257,7 +304,18 @@ export function AdminUsersPage() {
   return (
     <div className="flex flex-col h-full bg-panel overflow-y-auto">
       <div className="border-b border-[var(--border)] px-6 py-4 shrink-0">
-        <h1 className="text-lg font-semibold text-primary">Users</h1>
+        <h1
+          className="text-2xl font-semibold tracking-tight"
+          style={{
+            background:
+              'linear-gradient(100deg, var(--text-primary) 38%, var(--violet-bright) 86%, var(--cyan))',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+          }}
+        >
+          Users
+        </h1>
       </div>
 
       {/* Filters */}
@@ -267,19 +325,20 @@ export function AdminUsersPage() {
           placeholder="Filter by email…"
           value={emailInput}
           onChange={(e) => setEmailInput(e.target.value)}
-          className="w-56 rounded-md bg-subtle border border-[var(--border-strong)] px-3 py-1.5 text-sm text-primary placeholder:text-placeholder focus:outline-none focus:ring-1 focus:ring-violet-500"
+          className="w-56 rounded-full bg-[var(--bg-panel)] border border-[var(--border-strong)] px-4 py-1.5 text-sm text-primary placeholder:text-placeholder focus:outline-none focus:border-[var(--violet)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--violet)_14%,transparent)]"
         />
-        <select
-          value={statusFilter ?? ''}
-          onChange={(e) =>
-            setStatusFilter((e.target.value as AdminUserFilter['status']) || undefined)
+        <SegmentedSwitch
+          aria-label="Status filter"
+          value={statusFilter ?? 'all'}
+          onChange={(v) =>
+            setStatusFilter(v === 'all' ? undefined : (v as AdminUserFilter['status']))
           }
-          className="rounded-md bg-subtle border border-[var(--border-strong)] px-3 py-1.5 text-sm text-primary focus:outline-none focus:ring-1 focus:ring-violet-500"
-        >
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="suspended">Suspended</option>
-        </select>
+          options={[
+            { value: 'all', label: 'All', accent: 'violet' },
+            { value: 'active', label: 'Active', accent: 'emerald' },
+            { value: 'suspended', label: 'Suspended', accent: 'violet' },
+          ]}
+        />
         <span className="text-xs text-muted ml-auto">
           {total} user{total !== 1 ? 's' : ''}
         </span>

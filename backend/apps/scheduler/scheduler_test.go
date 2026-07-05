@@ -393,7 +393,6 @@ func TestRunCycle_RefreshGaugeMetricsError_ContinuesToEnqueue(t *testing.T) {
 	}
 }
 
-
 // ── AC-6: ReclaimStuckFilteredRows in runCycle ────────────────────────────────
 
 // TestRunCycle_ReclaimStuckFilteredRows_CalledEachCycle asserts that

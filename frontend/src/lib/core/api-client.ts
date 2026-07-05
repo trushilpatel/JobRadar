@@ -80,7 +80,7 @@ async function rawFetch(method: HttpMethod, path: string, init?: RequestInit): P
   for (const [k, v] of Object.entries(auth)) {
     headers.set(k, v)
   }
-  if (init?.body && !headers.has('Content-Type')) {
+  if (init?.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
 
@@ -178,5 +178,8 @@ export const apiClient = {
       ...init,
       body: body === undefined ? undefined : JSON.stringify(body),
     })
+  },
+  upload<T>(path: string, form: FormData, init?: RequestInit): Promise<T> {
+    return request<T>('POST', path, { ...init, body: form })
   },
 }
