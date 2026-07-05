@@ -1,4 +1,7 @@
 import type { ColumnDef } from '@tanstack/react-table'
+import { DataTableColumnHeader } from '@/components/ui/data-table'
+import { JobLocationCell } from '@/components/shared/JobLocationCell'
+import { formatRelativeTime, formatExactDateTime, formatSalary } from '@/lib/utils/utils'
 import type { ApplyQueueItem } from '../api/apply-queue.api'
 import { ApplyQueueStatusPill } from './ApplyQueueStatusPill'
 import { ResumePickerCell, type ApplyQueueResumeOption } from './ResumePickerCell'
@@ -43,7 +46,36 @@ export function buildApplyQueueColumns(
       },
     },
 
-    // ── 2. Status ────────────────────────────────────────────────────────────
+    // ── 2. Location ──────────────────────────────────────────────────────────
+    // Shares JobLocationCell with the Jobs table (components/shared/) so both
+    // tables render remote/on-site jobs identically without duplicating JSX.
+    {
+      id: 'location',
+      size: 180,
+      enableSorting: false,
+      header: () => <span className="text-muted">Location</span>,
+      cell: ({ row }) => (
+        <JobLocationCell remote={row.original.remote} location={row.original.location} />
+      ),
+    },
+
+    // ── 3. Salary ──────────────────────────────────────────────────────────
+    {
+      id: 'salary',
+      size: 140,
+      enableSorting: false,
+      header: () => <span className="text-muted">Salary</span>,
+      cell: ({ row }) => {
+        const salary = formatSalary(row.original.salary_range)
+        return salary ? (
+          <span className="font-mono text-[13px] font-semibold text-salary">{salary}</span>
+        ) : (
+          <span className="text-[13px] text-placeholder">Not listed</span>
+        )
+      },
+    },
+
+    // ── 4. Status ────────────────────────────────────────────────────────────
     {
       id: 'status',
       size: 130,
@@ -52,7 +84,26 @@ export function buildApplyQueueColumns(
       cell: ({ row }) => <ApplyQueueStatusPill status={row.original.status} />,
     },
 
-    // ── 3. Resume picker ───────────────────────────────────────────────────
+    // ── 5. Posted (added) ────────────────────────────────────────────────────
+    {
+      accessorKey: 'added_at',
+      id: 'added_at',
+      size: 100,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Posted" />,
+      cell: ({ getValue }) => {
+        const addedAt = getValue() as string
+        return (
+          <span
+            className="text-[12.5px] text-muted"
+            title={`Added ${formatExactDateTime(addedAt)}`}
+          >
+            {formatRelativeTime(addedAt)}
+          </span>
+        )
+      },
+    },
+
+    // ── 6. Resume picker ───────────────────────────────────────────────────
     {
       id: 'resume',
       size: 240,

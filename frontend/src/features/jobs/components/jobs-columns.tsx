@@ -1,9 +1,10 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { MapPin, Wifi, Bookmark, X, Paperclip, ArrowUpRight } from 'lucide-react'
+import { Bookmark, X, Paperclip, ArrowUpRight } from 'lucide-react'
 import type { Job } from '@/types'
 import { DataTableColumnHeader } from '@/components/ui/data-table'
 import { formatRelativeTime, formatExactDateTime, cn, formatSalary } from '@/lib/utils/utils'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
+import { JobLocationCell } from '@/components/shared/JobLocationCell'
 import { JobStatusPill } from './JobStatusPill'
 
 export interface JobTableActions {
@@ -137,24 +138,9 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       size: 180,
       enableSorting: false,
       header: () => <span className="text-muted">Location</span>,
-      cell: ({ row }) => {
-        const j = row.original
-        if (j.remote)
-          return (
-            <span className="inline-flex items-center gap-1.5 text-[13px] text-remote">
-              <Wifi size={11} /> {j.location || 'Remote'}
-            </span>
-          )
-        if (j.location)
-          return (
-            <span className="inline-flex items-center gap-1.5 text-[13px] text-secondary">
-              <MapPin size={11} className="text-muted" /> {j.location}
-            </span>
-          )
-        // Empty cells render blank rather than an em-dash — per UX direction:
-        // absence of data should mean field disappears, not show a placeholder.
-        return null
-      },
+      cell: ({ row }) => (
+        <JobLocationCell remote={row.original.remote} location={row.original.location} />
+      ),
     },
 
     // ── 6. Salary ──────────────────────────────────────────────────────────

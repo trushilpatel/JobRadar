@@ -69,6 +69,12 @@ export function useApplyQueue() {
     queryKey: applyQueueQueryKeys.list(filter, limit, currentCursor),
     queryFn: ({ signal }) => fetchApplyQueue(filter, currentCursor, limit, signal),
     staleTime: 30_000,
+    // Always refetch on mount/navigation — a job's saved/applied/resume state
+    // can change from the Jobs page or another tab while this page isn't
+    // mounted, so trusting the 30s staleTime window on (re-)navigation would
+    // show stale queue contents. staleTime is kept for within-session query
+    // dedup (e.g. React StrictMode double-invoke), just not for mount gating.
+    refetchOnMount: 'always',
   })
 
   const items = query.data?.items ?? []

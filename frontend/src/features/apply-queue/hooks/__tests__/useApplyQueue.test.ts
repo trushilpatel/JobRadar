@@ -24,6 +24,10 @@ const item = {
   resume_label: null,
   recommended_resume_id: null,
   recommended_resume_label: null,
+  location: null,
+  remote: false,
+  salary_range: null,
+  added_at: '2024-01-01T00:00:00Z',
 }
 
 const emptyPage: ApplyQueuePage = { items: [], next_cursor: '' }
@@ -163,5 +167,28 @@ describe('useApplyQueue', () => {
       k.startsWith('jobradar:apply-queue-cursor-history:')
     )
     expect(keys.length).toBeGreaterThan(0)
+  })
+
+  it('refetches on remount even when the cached data is still within staleTime', async () => {
+    vi.mocked(applyQueueApi.fetchApplyQueue).mockResolvedValue({
+      items: [item],
+      next_cursor: '',
+    })
+    // Reuse the SAME QueryClient (and default gcTime, so cache survives
+    // unmount) across two renders to prove refetchOnMount:'always' overrides
+    // the fresh 30s staleTime window — without it, this second mount would
+    // reuse the cached data with zero additional fetchApplyQueue calls.
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: 0 } } })
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(QueryClientProvider, { client: qc }, children)
+
+    const { result, unmount } = renderHook(() => useApplyQueue(), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(applyQueueApi.fetchApplyQueue).toHaveBeenCalledTimes(1)
+
+    unmount()
+
+    renderHook(() => useApplyQueue(), { wrapper })
+    await waitFor(() => expect(applyQueueApi.fetchApplyQueue).toHaveBeenCalledTimes(2))
   })
 })

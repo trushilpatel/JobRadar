@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { apiClient } from '@/lib/core/api-client'
 import { parseItemsResilient } from '@/lib/core/resilient-parse'
+import type { SalaryRange } from '@/types'
 import type { ApplyQueueFilter } from '../constants'
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
@@ -16,6 +17,19 @@ const ApplyQueueStatusSchema = z.union([
 ])
 export type ApplyQueueStatus = z.infer<typeof ApplyQueueStatusSchema>
 
+// Mirrors JobRawSchema's salary_range in features/jobs/api/jobs.api.ts — same
+// backend shape, nullish min/max tolerated on parse. Normalized below (null ->
+// undefined) so the exported ApplyQueueItem type lines up exactly with the
+// shared `SalaryRange` interface used by formatSalary/JobDetailPanel.
+const ApplyQueueSalaryRangeSchema = z
+  .object({
+    min: z.number().nullish(),
+    max: z.number().nullish(),
+    currency: z.string().optional(),
+    period: z.string().optional(),
+  })
+  .nullable()
+
 const ApplyQueueItemSchema = z.object({
   job_id: z.string(),
   job_title: z.string(),
@@ -28,8 +42,38 @@ const ApplyQueueItemSchema = z.object({
   // recommendation is available (e.g. no resume has extracted keywords yet).
   recommended_resume_id: z.string().nullable(),
   recommended_resume_label: z.string().nullable(),
+  // Job info columns — same field names/shapes as the `Job` type's
+  // equivalents (features/jobs/api/jobs.api.ts) so the Apply Queue table can
+  // render the same location/salary/posted cells as the Jobs table.
+  location: z.string().nullable(),
+  remote: z.boolean(),
+  salary_range: ApplyQueueSalaryRangeSchema,
+  added_at: z.string(),
 })
-export type ApplyQueueItem = z.infer<typeof ApplyQueueItemSchema>
+
+type ApplyQueueItemRaw = z.infer<typeof ApplyQueueItemSchema>
+
+export interface ApplyQueueItem extends Omit<ApplyQueueItemRaw, 'salary_range'> {
+  salary_range: SalaryRange | null
+}
+
+// Normalizes the raw parsed salary_range (which tolerates null min/max for
+// backend leniency) into the exact SalaryRange shape (undefined, never null)
+// consumed by formatSalary/JobDetailPanel — mirrors normalizeJob in
+// features/jobs/api/jobs.api.ts.
+function normalizeApplyQueueItem(raw: ApplyQueueItemRaw): ApplyQueueItem {
+  return {
+    ...raw,
+    salary_range: raw.salary_range
+      ? {
+          min: raw.salary_range.min ?? undefined,
+          max: raw.salary_range.max ?? undefined,
+          currency: raw.salary_range.currency,
+          period: raw.salary_range.period,
+        }
+      : null,
+  }
+}
 
 // Resilient envelope for runtime: never throws. `items` is parsed per-item by
 // parseItemsResilient (a single drifted row is logged and dropped rather than
@@ -49,7 +93,9 @@ export interface ApplyQueuePage {
 
 function parseApplyQueuePage(raw: unknown): ApplyQueuePage {
   const env = ApplyQueuePageEnvelopeSchema.parse(raw)
-  const items = parseItemsResilient(ApplyQueueItemSchema, env.items, 'apply-queue')
+  const items = parseItemsResilient(ApplyQueueItemSchema, env.items, 'apply-queue').map(
+    normalizeApplyQueueItem
+  )
   return { items, next_cursor: env.next_cursor }
 }
 

@@ -15,6 +15,10 @@ const validItem = {
   resume_label: null,
   recommended_resume_id: null,
   recommended_resume_label: null,
+  location: 'New York, NY',
+  remote: false,
+  salary_range: null,
+  added_at: '2026-06-01T00:00:00Z',
 }
 
 describe('apply-queue API', () => {
@@ -66,6 +70,67 @@ describe('apply-queue API', () => {
       const page = await fetchApplyQueue('all')
       expect(page.items[0]?.recommended_resume_id).toBe('resume-9')
       expect(page.items[0]?.recommended_resume_label).toBe('Backend Resume')
+    })
+
+    it('parses location, remote, salary_range, and added_at', async () => {
+      const item = {
+        ...validItem,
+        location: 'Austin, TX',
+        remote: true,
+        salary_range: { min: 100000, max: 150000, currency: 'USD' },
+        added_at: '2026-06-15T12:00:00Z',
+      }
+      vi.mocked(apiClient.get).mockResolvedValue({ items: [item], next_cursor: '' })
+      const page = await fetchApplyQueue('all')
+      expect(page.items[0]?.location).toBe('Austin, TX')
+      expect(page.items[0]?.remote).toBe(true)
+      expect(page.items[0]?.salary_range).toEqual({
+        min: 100000,
+        max: 150000,
+        currency: 'USD',
+        period: undefined,
+      })
+      expect(page.items[0]?.added_at).toBe('2026-06-15T12:00:00Z')
+    })
+
+    it('normalizes null salary_range min/max to undefined rather than passing null through', async () => {
+      const item = {
+        ...validItem,
+        salary_range: { min: null, max: null, currency: 'USD' },
+      }
+      vi.mocked(apiClient.get).mockResolvedValue({ items: [item], next_cursor: '' })
+      const page = await fetchApplyQueue('all')
+      expect(page.items[0]?.salary_range).toEqual({
+        min: undefined,
+        max: undefined,
+        currency: 'USD',
+        period: undefined,
+      })
+    })
+
+    it('keeps salary_range null when the backend sends null', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [{ ...validItem, salary_range: null }],
+        next_cursor: '',
+      })
+      const page = await fetchApplyQueue('all')
+      expect(page.items[0]?.salary_range).toBeNull()
+    })
+
+    it('drops an item missing the new required job-info fields (resilient parse)', async () => {
+      const prevLogger = setSchemaDriftLogger(() => {})
+      try {
+        const missingLocation: Record<string, unknown> = { ...validItem }
+        delete missingLocation.location
+        vi.mocked(apiClient.get).mockResolvedValue({
+          items: [missingLocation],
+          next_cursor: '',
+        })
+        const page = await fetchApplyQueue('all')
+        expect(page.items).toHaveLength(0)
+      } finally {
+        setSchemaDriftLogger(prevLogger)
+      }
     })
 
     it('drops an individual malformed item instead of throwing (resilient parse)', async () => {

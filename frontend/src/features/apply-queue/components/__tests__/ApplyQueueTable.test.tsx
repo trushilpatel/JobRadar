@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ApplyQueueTable } from '../ApplyQueueTable'
 import type { ApplyQueueItem } from '../../api/apply-queue.api'
@@ -14,6 +14,10 @@ const item: ApplyQueueItem = {
   resume_label: null,
   recommended_resume_id: null,
   recommended_resume_label: null,
+  location: null,
+  remote: false,
+  salary_range: null,
+  added_at: '2024-01-01T00:00:00Z',
 }
 
 const resumeOptions = [{ id: 'resume-1', label: 'Software Engineer Resume' }]
@@ -115,5 +119,76 @@ describe('ApplyQueueTable', () => {
     )
     await user.click(screen.getByRole('button', { name: /next page/i }))
     expect(onNext).toHaveBeenCalled()
+  })
+
+  describe('row click wiring', () => {
+    it('does not make rows focusable/clickable when onRowClick is absent', () => {
+      render(
+        <ApplyQueueTable
+          items={[item]}
+          loading={false}
+          resumeOptions={resumeOptions}
+          onResumeChange={vi.fn()}
+          {...basePaginationProps}
+        />
+      )
+      expect(
+        screen.queryByRole('button', { name: /Senior Engineer at Acme/i })
+      ).not.toBeInTheDocument()
+    })
+
+    it('calls onRowClick with the clicked item when a row is clicked', async () => {
+      const user = userEvent.setup()
+      const onRowClick = vi.fn()
+      render(
+        <ApplyQueueTable
+          items={[item]}
+          loading={false}
+          resumeOptions={resumeOptions}
+          onResumeChange={vi.fn()}
+          onRowClick={onRowClick}
+          {...basePaginationProps}
+        />
+      )
+      await user.click(
+        screen.getByRole('button', { name: /Senior Engineer at Acme, status saved/i })
+      )
+      expect(onRowClick).toHaveBeenCalledWith(item)
+    })
+
+    it('calls onRowClick on Enter and Space keydown', async () => {
+      const onRowClick = vi.fn()
+      render(
+        <ApplyQueueTable
+          items={[item]}
+          loading={false}
+          resumeOptions={resumeOptions}
+          onResumeChange={vi.fn()}
+          onRowClick={onRowClick}
+          {...basePaginationProps}
+        />
+      )
+      const row = screen.getByRole('button', { name: /Senior Engineer at Acme, status saved/i })
+      fireEvent.keyDown(row, { key: 'Enter' })
+      expect(onRowClick).toHaveBeenCalledWith(item)
+      fireEvent.keyDown(row, { key: ' ' })
+      expect(onRowClick).toHaveBeenCalledTimes(2)
+    })
+
+    it('marks the selected row aria-selected when selectedJobId matches', () => {
+      render(
+        <ApplyQueueTable
+          items={[item]}
+          loading={false}
+          resumeOptions={resumeOptions}
+          onResumeChange={vi.fn()}
+          onRowClick={vi.fn()}
+          selectedJobId="job-1"
+          {...basePaginationProps}
+        />
+      )
+      const row = screen.getByRole('button', { name: /Senior Engineer at Acme, status saved/i })
+      expect(row).toHaveAttribute('aria-selected', 'true')
+    })
   })
 })
