@@ -2,14 +2,15 @@
 
 ## Multiple impl services
 
-The scan slice has four implementation files, each covering a different concern:
+The scan slice has three implementation files, each covering a different concern:
 
-| File                             | Interface implemented         | Purpose                                                                          |
-| -------------------------------- | ----------------------------- | -------------------------------------------------------------------------------- |
-| `ScanImplService.go`             | `Service` (via `BaseService`) | Business logic: enqueue, trigger, stats, queue management, retry                 |
-| `ScanCrawlerImplService.go`      | `CrawlerService`              | Crawler result recording (`RecordScanResult` → `company_scan_log` + scan state)  |
-| `ScanCrawlerQueueImplService.go` | Internal queue ops            | Queue claiming helpers used by orchestrator/crawler paths                        |
-| `ScanSchedulerService.go`        | `SchedulerService`            | Thin adapter exposing `SchedulerService` over `Service` for the scheduler binary |
+| File                        | Interface implemented         | Purpose                                                                          |
+| --------------------------- | ----------------------------- | -------------------------------------------------------------------------------- |
+| `ScanImplService.go`        | `Service` (via `BaseService`) | Business logic: enqueue, trigger, stats, queue management, retry                 |
+| `ScanCrawlerImplService.go` | `CrawlerService`              | Crawler result recording (`RecordScanResult` → `company_scan_log` + scan state)  |
+| `ScanSchedulerService.go`   | `SchedulerService`            | Thin adapter exposing `SchedulerService` over `Service` for the scheduler binary |
+
+Queue claiming for crawler-node polls is **not** in this slice — it lives in `service/crawlernode/services/CrawlerNodeAssignmentRepositoryService.go` (`AssignmentStore.ClaimNextForNode`), which is the only live claim path. The `ScanQueueStore.ClaimNext` + `CrawlerQueueService` wrapper that used to live here (`ScanCrawlerQueueImplService.go`) were dead code from the removed v1 monolith crawler — deleted; do not re-add a second claim path in this package.
 
 ## Interfaces
 

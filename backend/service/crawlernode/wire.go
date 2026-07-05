@@ -10,7 +10,8 @@ import (
 // Chain:
 //
 //	NodeRepositoryService      (NodeStore — terminal)
-//	AssignmentRepositoryService (AssignmentStore — terminal)
+//	AdapterDelayGate           (per-adapter inter-company delay cooldown; needs an ats.AtsService)
+//	AssignmentRepositoryService (AssignmentStore — terminal, needs an *AdapterDelayGate)
 //	LedgerRepositoryService    (LedgerStore — terminal, wraps job.LedgerService)
 //	ScanLogRepositoryService   (ScanLogStore — terminal, wraps scan.ScanLogWriter)
 //	ScanSettingsReader         (ScanSettingsReader — terminal)
@@ -23,8 +24,12 @@ import (
 //
 // Note: NewImplService takes a tokenSecret string parameter. Wire callers
 // must bind this via a named type provider or wire.Value at the app layer.
+// NewAdapterDelayGate needs an ats/services.AtsService — wire callers must
+// provide one (see ats.ProviderSet or the manual chain in
+// apps/orchestrator/main.go).
 var ProviderSet = wire.NewSet(
 	services.NewNodeRepositoryService,
+	services.NewAdapterDelayGate,
 	services.NewAssignmentRepositoryService,
 	services.NewLedgerRepositoryService,
 	services.NewScanLogRepositoryService,

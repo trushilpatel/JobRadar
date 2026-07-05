@@ -4,6 +4,7 @@ import (
 	"context"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/service/ats/adaptermeta"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
@@ -184,6 +185,11 @@ func validatePublicCreate(p companydto.CompanyPublicInput) apperr.ValidationErro
 // IsAdminCreatable flag is true — adapters that require extra configuration
 // (e.g. eightfold) are blocked until the admin UI supports their config form.
 //
+// On both Create and Update it also checks adaptermeta.RequiresConfig:
+// adapters that only work via FetchJobListingWithConfig (workday, eightfold)
+// must be saved with a non-empty adapter_config, or crawling always fails
+// generically at run time.
+//
 // Returns (ValidationErrors, nil) on validation failure, (nil, ServiceError)
 // on an unexpected AtsService error, or (nil, nil) when all checks pass.
 func (v *adminValidationService) validateScanSettings(ctx context.Context, s companydto.CompanyScanSettingsInput, requireAdapter bool) (apperr.ValidationErrors, error) {
@@ -213,6 +219,22 @@ func (v *adminValidationService) validateScanSettings(ctx context.Context, s com
 				Field:   "adapter_type",
 				Code:    "INVALID_VALUE",
 				Message: "adapter_type is not available for admin creation",
+			})
+		}
+		// Some adapters (workday, eightfold) always error on a plain crawl —
+		// they only work via FetchJobListingWithConfig, which requires a
+		// non-empty adapter_config. Catch that misconfiguration at write time
+		// instead of leaving it to fail generically at crawl time. Applies on
+		// both Create and Update (unlike the Create-only is_admin_creatable
+		// gate above) since either path can set adapter_type. This is a
+		// presence-only check — adapter_config content validity (e.g. `{}`
+		// missing required sub-fields) remains the adapter's own validate()
+		// responsibility at crawl time.
+		if adaptermeta.RequiresConfig(*s.AdapterType) && (s.AdapterConfig == nil || len(*s.AdapterConfig) == 0) {
+			errs = append(errs, apperr.ValidationError{
+				Field:   "adapter_config",
+				Code:    "INVALID_VALUE",
+				Message: "adapter_config is required (non-empty) for adapter_type " + *s.AdapterType,
 			})
 		}
 	}
