@@ -2,10 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ResumeCard } from '../ResumeCard'
 import * as actionsHook from '../../hooks/useResumeActions'
-import * as extractKeywordsHook from '../../hooks/useExtractResumeKeywords'
 
 vi.mock('../../hooks/useResumeActions')
-vi.mock('../../hooks/useExtractResumeKeywords')
 
 const sampleResume = {
   id: 'r1',
@@ -15,7 +13,7 @@ const sampleResume = {
   content_type: 'application/pdf' as const,
   size_bytes: 2048,
   created_at: '2026-07-03T00:00:00Z',
-  keywords: [] as string[],
+  extracted_text: 'Backend engineer with Go experience.',
 }
 
 const sampleBlob = new Blob(['%PDF-1.4'], { type: 'application/pdf' })
@@ -38,16 +36,6 @@ function mockActions(overrides: Partial<ReturnType<typeof actionsHook.useResumeA
   })
 }
 
-function mockExtractKeywords(
-  overrides: Partial<ReturnType<typeof extractKeywordsHook.useExtractResumeKeywords>> = {}
-) {
-  vi.mocked(extractKeywordsHook.useExtractResumeKeywords).mockReturnValue({
-    mutate: vi.fn(),
-    isPending: false,
-    ...overrides,
-  } as unknown as ReturnType<typeof extractKeywordsHook.useExtractResumeKeywords>)
-}
-
 describe('ResumeCard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -61,7 +49,6 @@ describe('ResumeCard', () => {
 
   it('renders label and filename', () => {
     mockActions()
-    mockExtractKeywords()
     render(<ResumeCard resume={sampleResume} />)
     expect(screen.getByText('My resume')).toBeInTheDocument()
     expect(screen.getByText('resume.pdf')).toBeInTheDocument()
@@ -69,7 +56,6 @@ describe('ResumeCard', () => {
 
   it('download button fetches the file blob and triggers a save', async () => {
     mockActions()
-    mockExtractKeywords()
     render(<ResumeCard resume={sampleResume} />)
     fireEvent.click(screen.getByLabelText('Download'))
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledWith(sampleBlob))
@@ -83,7 +69,6 @@ describe('ResumeCard', () => {
         typeof actionsHook.useResumeActions
       >['remove'],
     })
-    mockExtractKeywords()
     render(<ResumeCard resume={sampleResume} />)
     fireEvent.click(screen.getByLabelText('Delete'))
     expect(removeMutate).toHaveBeenCalledWith('r1')
@@ -96,7 +81,6 @@ describe('ResumeCard', () => {
         typeof actionsHook.useResumeActions
       >['rename'],
     })
-    mockExtractKeywords()
     render(<ResumeCard resume={sampleResume} />)
     fireEvent.click(screen.getByLabelText('Rename'))
     const input = screen.getByDisplayValue('My resume')
@@ -114,7 +98,6 @@ describe('ResumeCard', () => {
         typeof actionsHook.useResumeActions
       >['rename'],
     })
-    mockExtractKeywords()
     render(<ResumeCard resume={sampleResume} />)
     fireEvent.click(screen.getByLabelText('Rename'))
     const input = screen.getByDisplayValue('My resume')
@@ -123,61 +106,10 @@ describe('ResumeCard', () => {
     expect(renameMutateAsync).not.toHaveBeenCalled()
   })
 
-  it('renders no keyword badges and no "+N more" when keywords is empty', () => {
+  it('does not render keyword badges or an extract-keywords action', () => {
     mockActions()
-    mockExtractKeywords()
     render(<ResumeCard resume={sampleResume} />)
-    expect(screen.queryByText(/more$/)).not.toBeInTheDocument()
-  })
-
-  it('renders a badge per keyword when under the visible limit', () => {
-    mockActions()
-    mockExtractKeywords()
-    render(<ResumeCard resume={{ ...sampleResume, keywords: ['python', 'react', 'sql'] }} />)
-    expect(screen.getByText('python')).toBeInTheDocument()
-    expect(screen.getByText('react')).toBeInTheDocument()
-    expect(screen.getByText('sql')).toBeInTheDocument()
-    expect(screen.queryByText(/more$/)).not.toBeInTheDocument()
-  })
-
-  it('caps visible keyword badges and shows a "+N more" affordance beyond the limit', () => {
-    mockActions()
-    mockExtractKeywords()
-    const keywords = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
-    render(<ResumeCard resume={{ ...sampleResume, keywords }} />)
-    expect(screen.getByText('a')).toBeInTheDocument()
-    expect(screen.getByText('f')).toBeInTheDocument()
-    expect(screen.queryByText('g')).not.toBeInTheDocument()
-    expect(screen.getByText('+2 more')).toBeInTheDocument()
-  })
-
-  it('shows the "Extract keywords" action when keywords is empty', () => {
-    mockActions()
-    mockExtractKeywords()
-    render(<ResumeCard resume={sampleResume} />)
-    expect(screen.getByLabelText('Extract keywords')).toBeInTheDocument()
-  })
-
-  it('hides the "Extract keywords" action once keywords are present', () => {
-    mockActions()
-    mockExtractKeywords()
-    render(<ResumeCard resume={{ ...sampleResume, keywords: ['python'] }} />)
     expect(screen.queryByLabelText('Extract keywords')).not.toBeInTheDocument()
-  })
-
-  it('clicking "Extract keywords" calls the mutation with the resume id', () => {
-    const mutate = vi.fn()
-    mockActions()
-    mockExtractKeywords({ mutate })
-    render(<ResumeCard resume={sampleResume} />)
-    fireEvent.click(screen.getByLabelText('Extract keywords'))
-    expect(mutate).toHaveBeenCalledWith('r1')
-  })
-
-  it('disables the "Extract keywords" action while pending', () => {
-    mockActions()
-    mockExtractKeywords({ isPending: true })
-    render(<ResumeCard resume={sampleResume} />)
-    expect(screen.getByLabelText('Extract keywords')).toBeDisabled()
+    expect(screen.queryByText(/more$/)).not.toBeInTheDocument()
   })
 })

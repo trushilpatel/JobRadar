@@ -1,11 +1,8 @@
 import { useState } from 'react'
-import { FileText, Download, Trash2, Pencil, Sparkles } from 'lucide-react'
+import { FileText, Download, Trash2, Pencil } from 'lucide-react'
 import { cn, formatRelativeTime } from '@/lib/utils/utils'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import { useResumeActions } from '../hooks/useResumeActions'
-import { useExtractResumeKeywords } from '../hooks/useExtractResumeKeywords'
-import { RESUME_KEYWORDS_VISIBLE_LIMIT } from '../types'
 import type { Resume } from '../types'
 
 // Triggers a browser "save as" for an in-memory Blob via a throwaway <a
@@ -26,12 +23,8 @@ function saveBlob(blob: Blob, filename: string) {
 
 export function ResumeCard({ resume }: { resume: Resume }) {
   const { download, rename, remove } = useResumeActions()
-  const extractKeywords = useExtractResumeKeywords()
   const [editing, setEditing] = useState(false)
   const [label, setLabel] = useState(resume.label)
-
-  const visibleKeywords = resume.keywords.slice(0, RESUME_KEYWORDS_VISIBLE_LIMIT)
-  const hiddenKeywordCount = resume.keywords.length - visibleKeywords.length
 
   async function handleDownload() {
     const blob = await download.mutateAsync(resume.id)
@@ -70,34 +63,12 @@ export function ResumeCard({ resume }: { resume: Resume }) {
         </div>
       </div>
 
-      {visibleKeywords.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
-          {visibleKeywords.map((keyword) => (
-            <Badge key={keyword} variant="mono">
-              {keyword}
-            </Badge>
-          ))}
-          {hiddenKeywordCount > 0 && <Badge variant="ghost">+{hiddenKeywordCount} more</Badge>}
-        </div>
-      )}
-
       <div className="flex items-center justify-between text-xs text-muted">
         <span>
           {(resume.size_bytes / 1024).toFixed(0)} KB · Uploaded{' '}
           {formatRelativeTime(resume.created_at)}
         </span>
         <div className="flex items-center gap-2">
-          {resume.keywords.length === 0 && (
-            <button
-              type="button"
-              onClick={() => extractKeywords.mutate(resume.id)}
-              disabled={extractKeywords.isPending}
-              aria-label="Extract keywords"
-              className="hover:text-primary disabled:opacity-50"
-            >
-              <Sparkles size={13} />
-            </button>
-          )}
           <button
             type="button"
             onClick={() => setEditing(true)}
