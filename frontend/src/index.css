@@ -69,6 +69,42 @@
     --glass-stroke: rgba(10, 12, 30, 0.1);
     --glow-violet: 0 0 0 1px rgba(124, 92, 255, 0.25), 0 10px 36px -10px rgba(124, 92, 255, 0.35);
     --glow-cyan: 0 0 0 1px rgba(20, 160, 156, 0.25), 0 10px 36px -10px rgba(20, 160, 156, 0.3);
+
+    /* ── Per-adapter gradient ramps ── */
+    --adapter-greenhouse: linear-gradient(135deg, #11b3ad, #0e6fa8);
+    --adapter-lever: linear-gradient(135deg, #6d44ff, #d63ba0);
+    --adapter-ashby: linear-gradient(135deg, #4fae2e, #0e8a6c);
+    --adapter-workday: linear-gradient(135deg, #d98a14, #e05a72);
+    --adapter-google: linear-gradient(135deg, #11b3ad, #6d44ff);
+    --adapter-smartrecruiters: linear-gradient(135deg, #0e8a8a, #2f6dff);
+    --adapter-apple: linear-gradient(135deg, #8b909e, #4a505e);
+    --adapter-meta: linear-gradient(135deg, #2f6dff, #1746c8);
+    --adapter-microsoft: linear-gradient(135deg, #0e8a8a, #c47f10);
+    --adapter-netflix: linear-gradient(135deg, #d63b54, #8f0d18);
+    --adapter-uber: linear-gradient(135deg, #5a6478, #1c2330);
+    --adapter-deel: linear-gradient(135deg, #6d44ff, #11b3ad);
+    --adapter-gem: linear-gradient(135deg, #d63ba0, #6d44ff);
+    --adapter-rippling: linear-gradient(135deg, #d98a14, #b9701f);
+    --adapter-eightfold: linear-gradient(135deg, #2f8fff, #6d44ff);
+    --adapter-fallback: linear-gradient(135deg, var(--violet), var(--cyan));
+
+    /* ── Per-adapter solid edge tints (pill dot+border, row accent, drawer glow) ── */
+    --edge-greenhouse: #0e8a8a;
+    --edge-lever: #6d44ff;
+    --edge-ashby: #2f8a1e;
+    --edge-workday: #c47f10;
+    --edge-google: #0e8a8a;
+    --edge-smartrecruiters: #0e7aa8;
+    --edge-apple: #5a606e;
+    --edge-meta: #1746c8;
+    --edge-microsoft: #0e8a8a;
+    --edge-netflix: #b1121f;
+    --edge-uber: #3a4250;
+    --edge-deel: #6d44ff;
+    --edge-gem: #c4359a;
+    --edge-rippling: #b9701f;
+    --edge-eightfold: #2f6dff;
+    --edge-fallback: var(--violet);
   }
 
   /* ── Dark theme (default) ────────────────────────── */
@@ -123,6 +159,42 @@
     --glass-stroke: rgba(255, 255, 255, 0.12);
     --glow-violet: 0 0 0 1px rgba(124, 92, 255, 0.3), 0 8px 40px -8px rgba(124, 92, 255, 0.45);
     --glow-cyan: 0 0 0 1px rgba(47, 230, 224, 0.3), 0 8px 40px -8px rgba(47, 230, 224, 0.4);
+
+    /* ── Per-adapter gradient ramps (dark theme) ── */
+    --adapter-greenhouse: linear-gradient(135deg, #2fe6e0, #1186c9);
+    --adapter-lever: linear-gradient(135deg, #7c5cff, #ff5cc8);
+    --adapter-ashby: linear-gradient(135deg, #9bff5c, #11b3ad);
+    --adapter-workday: linear-gradient(135deg, #ffd166, #fb7185);
+    --adapter-google: linear-gradient(135deg, #5ffff9, #7c5cff);
+    --adapter-smartrecruiters: linear-gradient(135deg, #5ffff9, #2f8fff);
+    --adapter-apple: linear-gradient(135deg, #c8ccd6, #6b7180);
+    --adapter-meta: linear-gradient(135deg, #5b9dff, #2f6dff);
+    --adapter-microsoft: linear-gradient(135deg, #4fd1c5, #f6b042);
+    --adapter-netflix: linear-gradient(135deg, #ff5c7a, #b1121f);
+    --adapter-uber: linear-gradient(135deg, #9fb0c4, #1c2330);
+    --adapter-deel: linear-gradient(135deg, #7c5cff, #2fe6e0);
+    --adapter-gem: linear-gradient(135deg, #ff7ad1, #9b5cff);
+    --adapter-rippling: linear-gradient(135deg, #ffd166, #f59e3c);
+    --adapter-eightfold: linear-gradient(135deg, #5cc8ff, #6d44ff);
+    --adapter-fallback: linear-gradient(135deg, var(--violet), var(--cyan));
+
+    /* ── Per-adapter solid edge tints (dark theme) ── */
+    --edge-greenhouse: #2fe6e0;
+    --edge-lever: #b07cff;
+    --edge-ashby: #9bff5c;
+    --edge-workday: #ffd166;
+    --edge-google: #5ffff9;
+    --edge-smartrecruiters: #5ffff9;
+    --edge-apple: #b9bdc8;
+    --edge-meta: #5b9dff;
+    --edge-microsoft: #4fd1c5;
+    --edge-netflix: #ff5c7a;
+    --edge-uber: #9fb0c4;
+    --edge-deel: #8e74ff;
+    --edge-gem: #ff7ad1;
+    --edge-rippling: #ffd166;
+    --edge-eightfold: #7aa8ff;
+    --edge-fallback: var(--violet-bright);
   }
 
   html {
@@ -152,5 +224,12 @@
   ::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
     border-radius: 3px;
+  }
+}
+
+@layer utilities {
+  /* Adapter-tinted row left accent — uses --row-edge injected per-row via getRowProps */
+  tr[data-has-edge]:hover {
+    box-shadow: inset 3px 0 0 var(--row-edge, transparent);
   }
 }

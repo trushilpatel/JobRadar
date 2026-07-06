@@ -24,6 +24,7 @@ type Config struct {
 	Auth          AuthConfig
 	API           APIConfig
 	MultiUser     MultiUserConfig
+	ObjectStorage ObjectStorageConfig
 }
 
 // MultiUserConfig holds multi-user knobs: Clerk admin client credentials,
@@ -68,6 +69,18 @@ func (c AuthConfig) Validate() error {
 type APIConfig struct {
 	MaxBodyBytes int64
 	DevToken     string
+}
+
+// ObjectStorageConfig holds connection details for the S3-compatible object
+// storage bucket (OCI Object Storage in production). All fields are required
+// in production but left empty-safe here so tests that don't touch storage
+// don't need to set them.
+type ObjectStorageConfig struct {
+	Endpoint  string
+	Region    string
+	Bucket    string
+	AccessKey string
+	SecretKey string
 }
 
 type DatabaseConfig struct {
@@ -336,7 +349,11 @@ func Load() *Config {
 			ClerkIssuerURL: getEnv("CLERK_ISSUER_URL", ""),
 		},
 		API: APIConfig{
-			MaxBodyBytes: int64(getEnvInt("API_MAX_BODY_BYTES", 1048576)),
+			// 3MB covers the 2MB resume-upload cap plus multipart overhead
+			// (boundary, headers, label field). Global because BodyLimit wraps
+			// the whole /api tree — no other endpoint sends bodies anywhere
+			// near this size, so raising the ceiling here is safe.
+			MaxBodyBytes: int64(getEnvInt("API_MAX_BODY_BYTES", 3145728)),
 			DevToken:     os.Getenv("DEV_TOKEN"),
 		},
 		MultiUser: MultiUserConfig{
@@ -348,6 +365,13 @@ func Load() *Config {
 			CacheTTLCompanySeconds:       getEnvInt("CACHE_TTL_COMPANY_SECONDS", 60),
 			IdentityCacheLocalTTLSeconds: getEnvInt("IDENTITY_CACHE_LOCAL_TTL_SECONDS", 30),
 			IdentityCacheLocalMaxEntries: getEnvInt("IDENTITY_CACHE_LOCAL_MAX_ENTRIES", 10000),
+		},
+		ObjectStorage: ObjectStorageConfig{
+			Endpoint:  getEnv("OCI_S3_ENDPOINT", ""),
+			Region:    getEnv("OCI_S3_REGION", ""),
+			Bucket:    getEnv("OCI_S3_BUCKET", ""),
+			AccessKey: getEnv("OCI_S3_ACCESS_KEY", ""),
+			SecretKey: getEnv("OCI_S3_SECRET_KEY", ""),
 		},
 	}
 }

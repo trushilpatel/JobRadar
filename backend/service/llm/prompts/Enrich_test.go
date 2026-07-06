@@ -146,3 +146,40 @@ func TestBuildEnrich_DeterministicForSameInput(t *testing.T) {
 		t.Fatal("BuildEnrichBatch must be deterministic for identical inputs")
 	}
 }
+
+func TestBuildEnrichBatch_TechStackInstructionIncludesBroadenedCategories(t *testing.T) {
+	prompt := prompts.BuildEnrichBatch([]string{"Software Engineer"}, []dto.JobPostEnrichInput{{ID: "j1", RawText: "text"}})
+	for _, term := range []string{"methodologies", "Agile", "Jira", "Leadership", "certifications"} {
+		if !strings.Contains(prompt, term) {
+			t.Errorf("expected tech_stack instruction to mention %q, got prompt: %s", term, prompt)
+		}
+	}
+	if strings.Contains(prompt, "Exclude: methodologies") {
+		t.Error("expected the old blanket methodology exclusion wording to be gone")
+	}
+}
+
+func TestBuildEnrichBatch_TechStackPrefersSpecificNamedEntities(t *testing.T) {
+	prompt := prompts.BuildEnrichBatch([]string{"Software Engineer"}, []dto.JobPostEnrichInput{{ID: "j1", RawText: "text"}})
+
+	if !strings.Contains(prompt, "AWS Lambda") {
+		t.Error("expected tech_stack instruction to give a specific-named-entity example like \"AWS Lambda\"")
+	}
+	if !strings.Contains(prompt, "instead of — not in addition to — its generic parent") {
+		t.Error("expected an explicit rule against emitting both a specific entity and its generic parent")
+	}
+	if !strings.Contains(prompt, "1-4 words") {
+		t.Error("expected a word-count guardrail so the model doesn't extract full sentences as keywords")
+	}
+}
+
+func TestBuildEnrichBatch_TechStackDegreeCarveOut(t *testing.T) {
+	prompt := prompts.BuildEnrichBatch([]string{"Software Engineer"}, []dto.JobPostEnrichInput{{ID: "j1", RawText: "text"}})
+
+	if !strings.Contains(prompt, "Bachelor's in Computer Science") {
+		t.Error("expected tech_stack instruction to give a named-field degree example")
+	}
+	if !strings.Contains(prompt, "never extract a fieldless degree mention") {
+		t.Error("expected an explicit carve-out against extracting bare/fieldless degree mentions")
+	}
+}

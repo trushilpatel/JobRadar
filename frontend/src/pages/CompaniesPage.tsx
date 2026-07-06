@@ -53,7 +53,16 @@ export function CompaniesPage() {
   const bulkAllActive = c.companies.length > 0 && c.companies.every((co) => co.active)
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div
+      className="flex-1 flex flex-col min-h-0 relative"
+      style={{
+        background: [
+          'radial-gradient(1200px 560px at 6% -12%, color-mix(in srgb, var(--violet) 8%, transparent), transparent 60%)',
+          'radial-gradient(980px 520px at 102% 2%, color-mix(in srgb, var(--cyan) 6%, transparent), transparent 56%)',
+          'var(--bg-page)',
+        ].join(', '),
+      }}
+    >
       <CompaniesHeader autoRefresh={c.autoRefresh} onToggleAutoRefresh={c.toggleAutoRefresh} />
 
       <CompaniesFilterBar

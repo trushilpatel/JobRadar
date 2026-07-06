@@ -15,11 +15,10 @@ export const DATE_OPTIONS: { value: Exclude<DateFilter, 'all'>; label: string }[
 export const LOCATION_OPTIONS: {
   value: LocationFilter
   label: string
-  color?: 'violet' | 'emerald' | 'amber'
 }[] = [
-  { value: 'remote', label: 'Remote', color: 'emerald' },
-  { value: 'hybrid', label: 'Hybrid', color: 'amber' },
-  { value: 'onsite', label: 'On-site', color: 'violet' },
+  { value: 'remote', label: 'Remote' },
+  { value: 'hybrid', label: 'Hybrid' },
+  { value: 'onsite', label: 'On-site' },
 ]
 
 export const VISA_OPTIONS: { value: 'true' | 'false'; label: string }[] = [

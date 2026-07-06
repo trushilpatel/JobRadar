@@ -126,14 +126,16 @@ func (h *RestService) get(w http.ResponseWriter, r *http.Request) {
 	handler.Respond(w, http.StatusOK, job)
 }
 
+// setSavedRequest is the PATCH /api/jobs/{id}/save body envelope.
+type setSavedRequest struct {
+	Saved bool `json:"saved"`
+}
+
 // setSaved serves PATCH /api/jobs/{id}/save.
 func (h *RestService) setSaved(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var body struct {
-		Saved bool `json:"saved"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	body, ok := handler.DecodeBody[setSavedRequest](w, r)
+	if !ok {
 		return
 	}
 	if err := h.next.SetSaved(r.Context(), id, body.Saved); err != nil {
@@ -146,9 +148,8 @@ func (h *RestService) setSaved(w http.ResponseWriter, r *http.Request) {
 // setStatus serves PATCH /api/jobs/{id}/status.
 func (h *RestService) setStatus(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var input dto.SetStatusInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	input, ok := handler.DecodeBody[dto.SetStatusInput](w, r)
+	if !ok {
 		return
 	}
 	if err := h.next.SetStatus(r.Context(), id, input.Status); err != nil {
@@ -161,9 +162,8 @@ func (h *RestService) setStatus(w http.ResponseWriter, r *http.Request) {
 // setNotes serves PATCH /api/jobs/{id}/notes.
 func (h *RestService) setNotes(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var input dto.SetNotesInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	input, ok := handler.DecodeBody[dto.SetNotesInput](w, r)
+	if !ok {
 		return
 	}
 	if err := h.next.SetNotes(r.Context(), id, input.Notes); err != nil {
@@ -193,9 +193,8 @@ func (h *RestService) dismiss(w http.ResponseWriter, r *http.Request) {
 
 // bulkDismiss serves POST /api/jobs/dismiss/bulk.
 func (h *RestService) bulkDismiss(w http.ResponseWriter, r *http.Request) {
-	var input dto.BulkDismissInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	input, ok := handler.DecodeBody[dto.BulkDismissInput](w, r)
+	if !ok {
 		return
 	}
 	if input.Reason == "" {

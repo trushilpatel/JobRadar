@@ -26,7 +26,7 @@ Admin (/admin/users):
 ## Key invariants
 
 - `Provision` is idempotent — called by auth middleware on every first login. It must tolerate a race between two concurrent first-login requests (upsert semantics at the DB layer).
-- `Delete` (self-service) calls the Supabase admin API **before** the DB delete. These two steps must stay ordered — a DB delete without the Supabase delete leaves an orphaned auth identity.
+- `Delete` (self-service) calls the Clerk admin API (`clerkadmin.Client.DeleteUser`) **before** the DB delete. These two steps must stay ordered — a DB delete without the Clerk delete leaves an orphaned auth identity. (Leftover from the pre-Clerk migration: this previously called Supabase; identity now comes from Clerk everywhere per root `CLAUDE.md`.)
 - `AdminService.List` uses page+offset pagination — admin-only, small result set, needs page-jump UX; the keyset exception in `service/CLAUDE.md` applies.
 - `SetRoles` manages Clerk `publicMetadata.role` via the Clerk API — roles are **not** stored in a DB roles table. The `grantedBy` parameter is written to `admin_audit_log` by the caller's middleware, not by `SetRoles` itself.
 - `GetConfig` / `PatchConfig` read/write per-user config stored as JSONB in `users.config` — never add new config keys without a matching frontend consumer.

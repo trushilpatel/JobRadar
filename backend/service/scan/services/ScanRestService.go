@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -103,15 +102,17 @@ func (h *RestService) GetEffectiveScanConfig(w http.ResponseWriter, r *http.Requ
 	handler.Respond(w, http.StatusOK, config)
 }
 
+// updateScanIntervalOverrideRequest is the body for PATCH /companies/{id}/scan-interval-override.
+type updateScanIntervalOverrideRequest struct {
+	ScanIntervalMinutesOverride *int `json:"scan_interval_minutes_override"`
+}
+
 // PATCH /companies/{id}/scan-interval-override
 func (h *RestService) UpdateScanIntervalOverride(w http.ResponseWriter, r *http.Request) {
 	companyID := chi.URLParam(r, "id")
 
-	var body struct {
-		ScanIntervalMinutesOverride *int `json:"scan_interval_minutes_override"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	body, ok := handler.DecodeBody[updateScanIntervalOverrideRequest](w, r)
+	if !ok {
 		return
 	}
 

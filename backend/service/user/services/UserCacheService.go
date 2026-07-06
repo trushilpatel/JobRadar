@@ -40,8 +40,10 @@ func NewCacheService(next Service, c cache.Cache, ttl time.Duration) Service {
 func rowCacheKey(id string) string { return "user:row:" + id }
 
 // identityCacheKey is the cache key for the Identity bundle written by the
-// auth middleware. Defined here so the user service can invalidate it on
-// writes without taking a hard dependency on the middleware package.
+// auth middleware. Defined here (not in the middleware package, to avoid a
+// hard dependency) and shared by both chains that need to invalidate it on
+// writes: this file's self-service cacheService and the admin chain's
+// adminImplService (UserAdminImplService.go) — one definition, not two.
 func identityCacheKey(id string) string { return "user:" + id }
 
 // Get tries the cache first, falls back to the next layer on miss, and

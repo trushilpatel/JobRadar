@@ -23,9 +23,7 @@ TableHeader.displayName = 'TableHeader'
 const TableBody = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
->(({ className, ...props }, ref) => (
-  <tbody ref={ref} className={cn('divide-y divide-white/[0.04]', className)} {...props} />
-))
+>(({ className, ...props }, ref) => <tbody ref={ref} className={cn(className)} {...props} />)
 TableBody.displayName = 'TableBody'
 
 const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(
@@ -42,7 +40,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      'py-3 text-xs font-medium text-muted uppercase tracking-wider text-left pr-4',
+      'py-3 text-xs font-medium text-muted uppercase tracking-wider text-left pr-4 first:pl-4 last:pr-5',
       className
     )}
     {...props}
@@ -54,7 +52,11 @@ const TableCell = React.forwardRef<
   HTMLTableCellElement,
   React.TdHTMLAttributes<HTMLTableCellElement>
 >(({ className, ...props }, ref) => (
-  <td ref={ref} className={cn('py-3 pr-4', className)} {...props} />
+  <td
+    ref={ref}
+    className={cn('py-3 pr-4 first:pl-4 last:pr-5 border-b border-[var(--border)]', className)}
+    {...props}
+  />
 ))
 TableCell.displayName = 'TableCell'
 

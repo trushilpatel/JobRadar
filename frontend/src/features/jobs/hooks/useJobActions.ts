@@ -308,6 +308,41 @@ export function useJobActions() {
     },
   })
 
+  // Statuses that already represent "the user has engaged with this
+  // application" — applyJob skips the auto-status-change for these so it
+  // never regresses a job backwards in the funnel.
+  const TERMINAL_ISH_STATUSES: JobStatus[] = [
+    JOB_STATUS.APPLIED,
+    JOB_STATUS.INTERVIEWING,
+    JOB_STATUS.OFFER,
+    JOB_STATUS.REJECTED,
+  ]
+
+  // ── applyJob — row-level Apply action ─────────────────────────────────────
+  // Opens the posting URL in a new tab AND (unless already terminal-ish)
+  // advances status to "applied" in one click — matches the approved
+  // mockup's coupled Apply behavior exactly.
+  const applyJob = useMutation({
+    mutationFn: async ({ id, url }: { id: string; url: string }) => {
+      window.open(url, '_blank', 'noopener,noreferrer')
+      const priorStatus = lookupStatus(id)
+      if (!TERMINAL_ISH_STATUSES.includes(priorStatus)) {
+        await setJobStatus(id, JOB_STATUS.APPLIED)
+      }
+      return { id, priorStatus }
+    },
+    onSuccess: ({ id, priorStatus }) => {
+      if (!TERMINAL_ISH_STATUSES.includes(priorStatus)) {
+        pushHistory({ kind: 'status', id, priorStatus })
+        showUndoToast('Applied — status updated', undoLast)
+      } else {
+        toast.success('Opened posting')
+      }
+      invalidateJobs()
+    },
+    onError: () => toast.error('Failed to update status after applying'),
+  })
+
   // ── setSaved — ORTHOGONAL flag ────────────────────────────────────────────
   // Sends `saved_at = NOW()` (or NULL) to the backend; never touches status.
   // A saved job stays in whatever workflow stage it was in.
@@ -442,5 +477,5 @@ export function useJobActions() {
     onError: () => toast.error('Failed to bulk mark applied'),
   })
 
-  return { setStatus, setSaved, dismiss, bulkDismiss, bulkSave, bulkApplied, undoLast }
+  return { setStatus, setSaved, dismiss, applyJob, bulkDismiss, bulkSave, bulkApplied, undoLast }
 }

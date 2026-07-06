@@ -255,6 +255,94 @@ describe('useJobActions', () => {
     })
   })
 
+  describe('applyJob (row-level Apply action)', () => {
+    beforeEach(() => {
+      vi.spyOn(window, 'open').mockReturnValue(null)
+    })
+
+    it('opens the posting URL in a new tab', async () => {
+      vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
+      await act(async () => {
+        await result.current.applyJob.mutateAsync({ id: 'j1', url: 'https://x/j1' })
+      })
+      expect(window.open).toHaveBeenCalledWith('https://x/j1', '_blank', 'noopener,noreferrer')
+    })
+
+    it('sets status to applied when the job is not already terminal-ish', async () => {
+      vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
+      seedListCache([makeJob('j1', JOB_STATUS.NEW)])
+      await act(async () => {
+        await result.current.applyJob.mutateAsync({ id: 'j1', url: 'https://x/j1' })
+      })
+      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('j1', JOB_STATUS.APPLIED)
+    })
+
+    it.each([JOB_STATUS.APPLIED, JOB_STATUS.INTERVIEWING, JOB_STATUS.OFFER, JOB_STATUS.REJECTED])(
+      'does not call setJobStatus when the job is already %s',
+      async (status) => {
+        const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
+        seedListCache([makeJob('j1', status)])
+        await act(async () => {
+          await result.current.applyJob.mutateAsync({ id: 'j1', url: 'https://x/j1' })
+        })
+        expect(jobsApi.setJobStatus).not.toHaveBeenCalled()
+        expect(window.open).toHaveBeenCalled()
+      }
+    )
+
+    it('shows an undo toast only when the status actually changed', async () => {
+      vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
+      seedListCache([makeJob('j1', JOB_STATUS.NEW)])
+      await act(async () => {
+        await result.current.applyJob.mutateAsync({ id: 'j1', url: 'https://x/j1' })
+      })
+      expect(toast).toHaveBeenCalledWith('Applied — status updated', expect.any(Object))
+    })
+
+    it('shows a plain success toast (no undo) when already terminal-ish', async () => {
+      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
+      seedListCache([makeJob('j1', JOB_STATUS.OFFER)])
+      await act(async () => {
+        await result.current.applyJob.mutateAsync({ id: 'j1', url: 'https://x/j1' })
+      })
+      expect(toast.success).toHaveBeenCalledWith('Opened posting')
+      expect(toast).not.toHaveBeenCalledWith('Applied — status updated', expect.any(Object))
+    })
+
+    it('undoLast reverts the status change from an applyJob mutation', async () => {
+      vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
+      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
+      seedListCache([makeJob('j1', JOB_STATUS.NEW)])
+      await act(async () => {
+        await result.current.applyJob.mutateAsync({ id: 'j1', url: 'https://x/j1' })
+      })
+      vi.mocked(jobsApi.setJobStatus).mockClear()
+      await act(async () => {
+        await result.current.undoLast()
+      })
+      expect(jobsApi.setJobStatus).toHaveBeenCalledWith('j1', JOB_STATUS.NEW)
+    })
+
+    it('shows error toast when the status update fails', async () => {
+      vi.mocked(jobsApi.setJobStatus).mockRejectedValue(new Error('Server error'))
+      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
+      seedListCache([makeJob('j1', JOB_STATUS.NEW)])
+      await act(async () => {
+        try {
+          await result.current.applyJob.mutateAsync({ id: 'j1', url: 'https://x/j1' })
+        } catch {
+          // expected
+        }
+      })
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith('Failed to update status after applying')
+      )
+    })
+  })
+
   describe('bulkDismiss', () => {
     it('calls bulkDismissJobs with ids array', async () => {
       vi.mocked(jobsApi.bulkDismissJobs).mockResolvedValue({ dismissed: 3 })

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -11,12 +12,17 @@ import (
 	appdto "github.com/trushilpatel/jobradar/service/application/dto"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	appsvc "github.com/trushilpatel/jobradar/service/application/services"
+	applyqueuedto "github.com/trushilpatel/jobradar/service/applyqueue/dto"
+	applyqueuesvc "github.com/trushilpatel/jobradar/service/applyqueue/services"
 	atsdto "github.com/trushilpatel/jobradar/service/ats/dto"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
+	resumedto "github.com/trushilpatel/jobradar/service/resume/dto"
+	resumemodel "github.com/trushilpatel/jobradar/service/resume/models"
+	resumesvc "github.com/trushilpatel/jobradar/service/resume/services"
 	scandto "github.com/trushilpatel/jobradar/service/scan/dto"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
@@ -32,26 +38,34 @@ func buildTestApp() *App {
 	scanH := scansvc.NewRestRouter(scanRest)
 
 	fakeAts := &fakeAtsService{}
-	atsRest := atssvc.NewAtsRestService(fakeAts)
-	atsH := atssvc.NewAtsRestRouter(atsRest)
+	atsRest := atssvc.NewRestService(fakeAts)
+	atsH := atssvc.NewRestRouter(atsRest)
 
 	fakeJob := &fakeJobService{}
 	jobRest := jobsvc.NewRestService(fakeJob)
 	jobH := jobsvc.NewRestRouter(jobRest)
 
 	fakeApp := &fakeAppService{}
-	appImpl := appsvc.NewApplicationImplService(fakeApp, fakeJob)
-	appValidation := appsvc.NewApplicationValidationService(appImpl)
-	appRest := appsvc.NewApplicationRestService(appValidation)
-	appH := appsvc.NewApplicationRestRouter(appRest)
+	appImpl := appsvc.NewImplService(fakeApp, fakeJob)
+	appValidation := appsvc.NewValidationService(appImpl)
+	appRest := appsvc.NewRestService(appValidation)
+	appH := appsvc.NewRestRouter(appRest)
 
-	return NewApp(companyH, scanH, atsH, jobH, appH, nil)
+	fakeResume := &fakeResumeService{}
+	resumeRest := resumesvc.NewRestService(fakeResume)
+	resumeH := resumesvc.NewRestRouter(resumeRest)
+
+	fakeApplyQueue := &fakeApplyQueueService{}
+	applyQueueRest := applyqueuesvc.NewRestService(fakeApplyQueue)
+	applyQueueH := applyqueuesvc.NewRestRouter(applyQueueRest)
+
+	return NewApp(companyH, scanH, atsH, jobH, appH, nil, resumeH, nil, applyQueueH)
 }
 
 func TestApp_Handlers_ReturnsExpectedCount(t *testing.T) {
 	app := buildTestApp()
-	if got := len(app.Handlers()); got != 4 {
-		t.Fatalf("expected 4 route groups, got %d", got)
+	if got := len(app.Handlers()); got != 6 {
+		t.Fatalf("expected 6 route groups, got %d", got)
 	}
 }
 
@@ -111,6 +125,15 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 		{http.MethodDelete, "/api/companies/queue/{entry_id}"},
 		{http.MethodGet, "/api/companies/{id}/scan-stats"},
 		{http.MethodPost, "/api/companies/{id}/scan"},
+		// Resumes
+		{http.MethodGet, "/api/resumes"},
+		{http.MethodPost, "/api/resumes"},
+		{http.MethodGet, "/api/resumes/{id}/download"},
+		{http.MethodPatch, "/api/resumes/{id}"},
+		{http.MethodDelete, "/api/resumes/{id}"},
+		// Apply Queue
+		{http.MethodGet, "/api/apply-queue"},
+		{http.MethodPut, "/api/apply-queue/{jobId}/resume"},
 	}
 
 	for _, tc := range expected {
@@ -233,6 +256,28 @@ func (f *fakeAppService) UpdateNote(_ context.Context, _, _ string, _ appdto.Upd
 	return nil
 }
 
+type fakeResumeService struct{}
+
+func (f *fakeResumeService) List(_ context.Context, _ string) ([]resumemodel.Resume, error) {
+	return nil, nil
+}
+func (f *fakeResumeService) Get(_ context.Context, _, _ string) (*resumemodel.Resume, error) {
+	return nil, nil
+}
+func (f *fakeResumeService) Upload(_ context.Context, _ string, _ resumedto.UploadInput) (*resumemodel.Resume, error) {
+	return nil, nil
+}
+func (f *fakeResumeService) Rename(_ context.Context, _, _, _ string) (*resumemodel.Resume, error) {
+	return nil, nil
+}
+func (f *fakeResumeService) Delete(_ context.Context, _, _ string) error { return nil }
+func (f *fakeResumeService) Download(_ context.Context, _, _ string) (io.ReadCloser, *resumemodel.Resume, error) {
+	return nil, nil, nil
+}
+func (f *fakeResumeService) ExtractKeywords(_ context.Context, _, _ string) (*resumemodel.Resume, error) {
+	return nil, nil
+}
+
 type fakeAtsService struct{}
 
 func (f *fakeAtsService) ListATS(_ context.Context) ([]atsdto.ATSDTO, error) {
@@ -245,9 +290,20 @@ func (f *fakeAtsService) UpdateATS(_ context.Context, _ string, _ atsdto.UpdateA
 	return atsdto.ATSDTO{}, nil
 }
 
+type fakeApplyQueueService struct{}
+
+func (f *fakeApplyQueueService) List(_ context.Context, _, _, _ string, _ int) (applyqueuedto.QueueListResult, error) {
+	return applyqueuedto.QueueListResult{}, nil
+}
+func (f *fakeApplyQueueService) SetResume(_ context.Context, _, _ string, _ *string) (*applyqueuedto.AttachmentView, error) {
+	return nil, nil
+}
+
 // Ensure fakes implement interfaces.
 var _ companysvc.CompanyService = (*fakeCompanyService)(nil)
 var _ scansvc.Service = (*fakeScanService)(nil)
 var _ atssvc.AtsService = (*fakeAtsService)(nil)
 var _ jobsvc.JobService = (*fakeJobService)(nil)
 var _ appsvc.ApplicationRepository = (*fakeAppService)(nil)
+var _ resumesvc.Service = (*fakeResumeService)(nil)
+var _ applyqueuesvc.Service = (*fakeApplyQueueService)(nil)

@@ -13,69 +13,136 @@ import (
 
 var _ AssignmentStore = (*assignmentRepositoryService)(nil)
 
+// claimBatchSize bounds how many delay-eligible candidates ClaimNextForNode
+// walks per poll before giving up for this cycle. Sized generously above the
+// realistic number of distinct adapter types that could be simultaneously on
+// cooldown or lose a claim race in one batch.
+const claimBatchSize = 20
+
+// queueCandidate is the narrow projection ClaimNextForNode uses to walk the
+// claim batch before committing to a per-row UPDATE.
+type queueCandidate struct {
+	ID          string `gorm:"column:id"`
+	CompanyID   string `gorm:"column:company_id"`
+	AdapterType string `gorm:"column:adapter_type"`
+}
+
 // assignmentRepositoryService implements AssignmentStore against company_scan_queue
 // using the locked_by column (migration 079) for node-specific ownership.
 // Terminal — no next, no BaseNodeService.
 type assignmentRepositoryService struct {
-	db *gorm.DB
+	db   *gorm.DB
+	gate *AdapterDelayGate
 }
 
-// NewAssignmentRepositoryService constructs an AssignmentStore backed by Postgres.
-func NewAssignmentRepositoryService(db *gorm.DB) AssignmentStore {
-	return &assignmentRepositoryService{db: db}
+// NewAssignmentRepositoryService constructs an AssignmentStore backed by
+// Postgres. gate enforces the ats.inter_company_delay_s politeness cooldown
+// across claims (see AdapterDelayGate.go) — never claim without consulting it.
+func NewAssignmentRepositoryService(db *gorm.DB, gate *AdapterDelayGate) AssignmentStore {
+	return &assignmentRepositoryService{db: db, gate: gate}
 }
 
-// ClaimNextForNode claims the next queued row using FOR UPDATE SKIP LOCKED and
-// sets locked_by = nodeID atomically. When adapterType is empty, any adapter type
-// is eligible (the crawler-node is generic and supports all adapters).
+// ClaimNextForNode lists up to claimBatchSize queued, due candidates (ordered
+// by priority DESC, queued_at ASC) and walks them in order: a candidate whose
+// adapter type is still on its inter-company delay cooldown (AdapterDelayGate)
+// is skipped without touching the DB; the first candidate that both clears
+// the gate and wins a targeted per-row UPDATE (status='queued' -> 'running')
+// is returned. Losing the UPDATE (0 rows affected — another claimant or
+// ResetStuckForNodes got there first) is not fatal: the walk continues to the
+// next candidate in the same batch rather than aborting the poll. Returns
+// (nil, nil) when the queue is empty, every candidate is on cooldown, or
+// every candidate lost its claim race — same "no work this poll" contract as
+// before. When adapterType is empty, any adapter type is eligible (the
+// crawler-node is generic and supports all adapters).
 func (s *assignmentRepositoryService) ClaimNextForNode(ctx context.Context, nodeID, adapterType string) (_ *dto.ScanQueueItem, err error) {
 	ctx, span := tracing.Start(ctx, "crawlernode.store.ClaimNextForNode")
 	defer tracing.End(span, &err)
 
-	var item dto.ScanQueueItem
+	candidates, err := s.listClaimCandidates(ctx, adapterType)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, c := range candidates {
+		eligible, gateErr := s.gate.TryReserve(ctx, c.AdapterType)
+		if gateErr != nil || !eligible {
+			// On cooldown, or the delay-gate lookup failed (fail-safe,
+			// non-fatal) — try the next candidate.
+			continue
+		}
+
+		item, claimErr := s.claimQueueRow(ctx, c.ID, nodeID)
+		if claimErr != nil {
+			return nil, claimErr
+		}
+		if item == nil {
+			// Lost the race to another claimant (or ResetStuckForNodes) —
+			// move on to the next candidate rather than aborting the poll.
+			continue
+		}
+		return item, nil
+	}
+
+	return nil, nil
+}
+
+// listClaimCandidates returns up to claimBatchSize queued, due rows ordered
+// by priority DESC, queued_at ASC. No row lock is taken here — it is a
+// read-only snapshot; safety against double-claiming comes from the targeted
+// per-row UPDATE in claimQueueRow, not from locking this SELECT.
+//
+// The due-gate omits an explicit ::timestamptz cast on the '-infinity'
+// literal — Postgres resolves the untyped literal's type from the other
+// COALESCE argument (next_attempt_at) automatically, so the cast is
+// redundant, and dropping it keeps the statement parseable by SQLite in
+// unit tests (SQLite's parser rejects the `::type` cast operator outright).
+func (s *assignmentRepositoryService) listClaimCandidates(ctx context.Context, adapterType string) (_ []queueCandidate, err error) {
+	var candidates []queueCandidate
 	var result *gorm.DB
 	if adapterType != "" {
 		result = s.db.WithContext(ctx).Raw(`
-			UPDATE company_scan_queue
-			SET status = 'running',
-			    locked_by = ?,
-			    started_at = NOW(),
-			    heartbeat_at = NOW()
-			WHERE id = (
-			    SELECT id FROM company_scan_queue
-			    WHERE status = 'queued'
-			      AND adapter_type = ?
-			      AND COALESCE(next_attempt_at, '-infinity'::timestamptz) <= NOW()
-			    ORDER BY priority DESC, queued_at ASC
-			    LIMIT 1
-			    FOR UPDATE SKIP LOCKED
-			)
-			RETURNING id, company_id, adapter_type, status, source, started_at, heartbeat_at
-		`, nodeID, adapterType).Scan(&item)
+			SELECT id, company_id, adapter_type
+			FROM company_scan_queue
+			WHERE status = 'queued'
+			  AND adapter_type = ?
+			  AND COALESCE(next_attempt_at, '-infinity') <= NOW()
+			ORDER BY priority DESC, queued_at ASC
+			LIMIT ?
+		`, adapterType, claimBatchSize).Scan(&candidates)
 	} else {
 		result = s.db.WithContext(ctx).Raw(`
-			UPDATE company_scan_queue
-			SET status = 'running',
-			    locked_by = ?,
-			    started_at = NOW(),
-			    heartbeat_at = NOW()
-			WHERE id = (
-			    SELECT id FROM company_scan_queue
-			    WHERE status = 'queued'
-			      AND COALESCE(next_attempt_at, '-infinity'::timestamptz) <= NOW()
-			    ORDER BY priority DESC, queued_at ASC
-			    LIMIT 1
-			    FOR UPDATE SKIP LOCKED
-			)
-			RETURNING id, company_id, adapter_type, status, source, started_at, heartbeat_at
-		`, nodeID).Scan(&item)
+			SELECT id, company_id, adapter_type
+			FROM company_scan_queue
+			WHERE status = 'queued'
+			  AND COALESCE(next_attempt_at, '-infinity') <= NOW()
+			ORDER BY priority DESC, queued_at ASC
+			LIMIT ?
+		`, claimBatchSize).Scan(&candidates)
 	}
+	if result.Error != nil {
+		return nil, errors.ErrInternal.WithMessage("list claim candidates: " + result.Error.Error())
+	}
+	return candidates, nil
+}
 
+// claimQueueRow attempts a targeted claim of a single queued row. Returns
+// (nil, nil) — not an error — when the row is no longer status='queued'
+// (lost the claim race between listClaimCandidates and this UPDATE).
+func (s *assignmentRepositoryService) claimQueueRow(ctx context.Context, queueID, nodeID string) (_ *dto.ScanQueueItem, err error) {
+	var item dto.ScanQueueItem
+	result := s.db.WithContext(ctx).Raw(`
+		UPDATE company_scan_queue
+		SET status = 'running',
+		    locked_by = ?,
+		    started_at = NOW(),
+		    heartbeat_at = NOW()
+		WHERE id = ? AND status = 'queued'
+		RETURNING id, company_id, adapter_type, status, source, started_at, heartbeat_at
+	`, nodeID, queueID).Scan(&item)
 	if result.Error != nil {
 		return nil, errors.ErrInternal.WithMessage("claim next for node: " + result.Error.Error())
 	}
 	if item.ID == "" {
-		// No eligible row — queue empty or all rows SKIP LOCKED by other claimants.
 		return nil, nil
 	}
 	return &item, nil

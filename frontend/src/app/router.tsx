@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { Sidebar, MobileSidebarNav } from './Sidebar'
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { LogoLockup } from '@/components/brand/Logo'
+import { LogoMark } from '@/components/brand/Logo'
 import { CompaniesPage } from '@/pages/CompaniesPage'
 import { JobsPage } from '@/pages/JobsPage'
 import { AccountPage } from '@/pages/AccountPage'
@@ -11,9 +11,8 @@ import { AdminUsersPage } from '@/pages/admin/AdminUsersPage'
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage'
 import { AdminPipelinePage } from '@/pages/admin/AdminPipelinePage'
 import { ResumeLibraryPage } from '@/pages/admin/ResumeLibraryPage'
-import { ResumeDetailPage } from '@/pages/admin/ResumeDetailPage'
-import { ResumeEditorPage } from '@/pages/admin/ResumeEditorPage'
-import { ApplyQueuePage } from '@/pages/admin/ApplyQueuePage'
+import { ApplyQueuePage } from '@/pages/ApplyQueuePage'
+import { AuthenticateWithRedirectCallback } from '@clerk/react'
 import { SignInPage, RequireAuth, RequireAdmin } from '@/features/auth'
 import { MobileJobDetailRoute } from '@/features/jobs'
 import { routes } from '@/config/routes'
@@ -29,6 +28,7 @@ function ProtectedLayout() {
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         <SheetContent
           side="left"
+          showCloseButton={false}
           className="w-64 max-w-[80%] bg-sidebar backdrop-blur-xl border-[var(--sidebar-border)] p-0"
         >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
@@ -48,7 +48,20 @@ function ProtectedLayout() {
           >
             <Menu size={18} />
           </button>
-          <LogoLockup className="text-sidebar-fg" />
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+              style={{
+                background: 'linear-gradient(135deg, var(--violet), var(--cyan))',
+                boxShadow: 'var(--glow-violet)',
+              }}
+            >
+              <LogoMark className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-sm font-bold tracking-tight text-[var(--sidebar-fg)]">
+              JobRadar
+            </span>
+          </div>
         </div>
 
         <Routes>
@@ -56,13 +69,9 @@ function ProtectedLayout() {
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:id" element={<MobileJobDetailRoute />} />
           <Route path="/account" element={<AccountPage />} />
-          {/* Résumés + Apply queue are frontend-only (no backend endpoints) —
-              user-facing for every authenticated user, not admin-gated. Paths
-              keep the /admin prefix to avoid a route rename. */}
-          <Route path="/admin/resumes" element={<ResumeLibraryPage />} />
-          <Route path="/admin/resumes/:id" element={<ResumeDetailPage />} />
-          <Route path="/admin/resumes/:id/edit" element={<ResumeEditorPage />} />
-          <Route path="/admin/apply-queue" element={<ApplyQueuePage />} />
+          {/* Resumes and Apply Queue are user-facing for every authenticated user, not admin-gated. */}
+          <Route path="/resumes" element={<ResumeLibraryPage />} />
+          <Route path="/apply-queue" element={<ApplyQueuePage />} />
           {/* Admin routes — server also enforces 403 for non-admins */}
           <Route element={<RequireAdmin />}>
             <Route path="/admin/companies" element={<CompaniesPage />} />
@@ -80,6 +89,7 @@ export function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<SignInPage />} />
+      <Route path="/sso-callback" element={<AuthenticateWithRedirectCallback />} />
       <Route element={<RequireAuth />}>
         <Route path="/*" element={<ProtectedLayout />} />
       </Route>

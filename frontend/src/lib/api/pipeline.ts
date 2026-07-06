@@ -30,7 +30,7 @@ const PipelineStatsSchema = z
 const DrainedSchema = z.object({ drained: z.number() })
 
 export async function fetchPipelineStats(): Promise<PipelineStats> {
-  const raw = await apiClient.get<unknown>('/admin/dashboard/pipeline')
+  const raw = await apiClient.get<unknown>('/admin/pipeline/stats')
   const data = PipelineStatsSchema.parse(raw)
   const emptyRetries: RetryTierCounts = { '1m': 0, '10m': 0, '1h': 0, dlq: 0 }
   return {
@@ -51,6 +51,6 @@ export async function triggerRetry(
   worker: 'filter' | 'enricher',
   tier: '1m' | '10m' | '1h' | 'dlq'
 ): Promise<{ drained: number }> {
-  const raw = await apiClient.post<unknown>('/admin/dashboard/pipeline/retry', { worker, tier })
+  const raw = await apiClient.post<unknown>('/admin/pipeline/retry', { worker, tier })
   return DrainedSchema.parse(raw)
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
@@ -14,6 +15,7 @@ import (
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	scancommon "github.com/trushilpatel/jobradar/service/scan/common"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // adminCursor is the decoded form of the opaque admin list cursor.
@@ -266,6 +268,16 @@ func (r *adminRepositoryService) UpdatePublic(ctx context.Context, id string, p 
 }
 
 // UpdateScanSettings patches the `company_scan_settings` row.
+//
+// The whole read-compare-write sequence runs inside one transaction that
+// locks the row up front (`SELECT ... FOR UPDATE` on Postgres, via
+// clause.Locking — a documented no-op on sqlite, which is what the test
+// suite runs against). This closes a TOCTOU race: without the lock, two
+// concurrent admin patches (or an admin patch racing a worker's write to the
+// same row) could each decide whether adapter_type "changed" based on a
+// stale read, corrupting the failure-history reset below. Holding the lock
+// for the transaction's full duration forces any other writer targeting this
+// row to wait until this transaction commits.
 func (r *adminRepositoryService) UpdateScanSettings(ctx context.Context, id string, p companydto.CompanyScanSettingsInput) (err error) {
 	if p.IsEmpty() {
 		return apperr.ErrBadRequest.WithMessage("at least one field must be provided")
@@ -273,20 +285,57 @@ func (r *adminRepositoryService) UpdateScanSettings(ctx context.Context, id stri
 	ctx, span := tracing.Start(ctx, "company.admin.repo.UpdateScanSettings")
 	defer tracing.End(span, &err)
 
-	fields := scanSettingsInputToFields(p)
-	res := r.db.WithContext(ctx).
-		Model(&companymodel.CompanyScanSettings{}).
-		Where("company_id = ?", id).
-		Updates(fields)
-	if res.Error != nil {
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var current companymodel.CompanyScanSettings
+		if lockErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("adapter_type").
+			Where("company_id = ?", id).
+			Take(&current).Error; lockErr != nil {
+			if apperr.IsNotFound(lockErr) {
+				return apperr.ErrNotFound.WithMessage("scan settings not found")
+			}
+			return lockErr
+		}
+
+		fields := scanSettingsInputToFields(p)
+		// Only a genuine adapter_type change (present in this patch AND
+		// different from what's locked-in-place above) resets the failure
+		// history. The new adapter has no relationship to the old one's
+		// error streak — carrying it over would misrepresent the new
+		// adapter's health. An explicit AutoPaused value in the SAME patch
+		// (already captured in `fields` by scanSettingsInputToFields above)
+		// wins over this derived value, so re-apply it last if present.
+		if p.AdapterType != nil && *p.AdapterType != current.AdapterType {
+			fields["consecutive_errors"] = 0
+			fields["last_error_at"] = nil
+			fields["last_error_message"] = nil
+			fields["auto_paused"] = false
+			if p.AutoPaused != nil {
+				fields["auto_paused"] = *p.AutoPaused
+			}
+		}
+
+		res := tx.Model(&companymodel.CompanyScanSettings{}).
+			Where("company_id = ?", id).
+			Updates(fields)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return apperr.ErrNotFound.WithMessage("scan settings not found")
+		}
+		return nil
+	})
+	if err != nil {
+		var se *apperr.ServiceError
+		if errors.As(err, &se) {
+			return err
+		}
 		r.log.Warn("failed to update scan settings",
 			logger.Str(logger.FieldCompany, id),
 			logger.Str(logger.FieldAdapterType, adapterTypeFromInput(p)),
-			logger.Err(res.Error))
+			logger.Err(err))
 		return apperr.ErrInternal.WithMessage("failed to update scan settings")
-	}
-	if res.RowsAffected == 0 {
-		return apperr.ErrNotFound.WithMessage("scan settings not found")
 	}
 	return nil
 }

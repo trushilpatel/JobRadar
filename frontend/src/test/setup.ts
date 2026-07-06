@@ -27,8 +27,39 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver
 }
 
+// jsdom has no native IntersectionObserver (used by the jobs infinite-scroll
+// sentinel). This inert default is enough for tests that don't specifically
+// exercise scroll-triggered loading — those tests (see JobsTable.test.tsx)
+// stub a callback-capturing version themselves via vi.stubGlobal.
+class MockIntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+if (typeof globalThis.IntersectionObserver === 'undefined') {
+  globalThis.IntersectionObserver =
+    MockIntersectionObserver as unknown as typeof IntersectionObserver
+}
+
 if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = function () {}
+}
+
+// jsdom has no Pointer Events implementation. Radix's Select (and other
+// Radix primitives that support pointer-drag selection) call
+// hasPointerCapture/setPointerCapture/releasePointerCapture on the trigger
+// element during open/select interactions — without these no-op stubs, any
+// test that opens a Radix Select throws "target.hasPointerCapture is not a
+// function".
+if (typeof Element !== 'undefined' && !Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false
+}
+if (typeof Element !== 'undefined' && !Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => {}
+}
+if (typeof Element !== 'undefined' && !Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = () => {}
 }
 
 if (typeof window !== 'undefined' && !window.matchMedia) {

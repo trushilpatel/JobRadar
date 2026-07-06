@@ -166,7 +166,7 @@ export function DataTable<TData>({
           <button
             type="button"
             onClick={onRetry}
-            className="rounded-lg border border-[var(--border)] bg-subtle px-3 py-1.5 text-xs text-primary hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+            className="rounded-lg border border-[var(--border)] bg-subtle px-3 py-1.5 text-xs text-primary hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet"
           >
             Try again
           </button>
@@ -256,9 +256,13 @@ export function DataTable<TData>({
             const rowBg = getRowClassName
               ? getRowClassName(row.original)
               : isSelected
-                ? 'bg-violet-500/[0.08]'
+                ? 'bg-[var(--accent-dim)]'
                 : 'hover:bg-hover'
-            const extraProps = getRowProps?.(row.original) ?? {}
+            // Spreading `extraProps` after `className` would otherwise let a
+            // caller-supplied `className` (e.g. focus-ring styles) silently
+            // replace `rowBg` instead of composing with it — pull it out and
+            // merge explicitly via `cn()`.
+            const { className: extraClassName, ...extraProps } = getRowProps?.(row.original) ?? {}
             return (
               <TableRow
                 key={row.id}
@@ -266,7 +270,7 @@ export function DataTable<TData>({
                   rowRefs.current[index] = el
                 }}
                 onClick={() => handleRowClick(row.original)}
-                className={cn(onRowClick && 'cursor-pointer', rowBg)}
+                className={cn(onRowClick && 'cursor-pointer', rowBg, extraClassName)}
                 {...extraProps}
               >
                 {row.getVisibleCells().map((cell) => (
@@ -323,7 +327,7 @@ export function DataTableColumnHeader<TData, TValue>({
       onClick={column.getToggleSortingHandler()}
       aria-label={`Sort by ${title}, currently ${direction}`}
       className={cn(
-        'inline-flex items-center gap-1 text-muted hover:text-primary transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:rounded',
+        'inline-flex items-center gap-1 text-muted hover:text-primary transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet focus-visible:rounded',
         className
       )}
     >

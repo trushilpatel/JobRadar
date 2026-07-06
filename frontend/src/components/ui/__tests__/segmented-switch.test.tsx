@@ -80,7 +80,11 @@ describe('SegmentedSwitch', () => {
     const opts: SegmentedOption<'a'>[] = [{ value: 'a', label: 'A' }]
     render(<SegmentedSwitch options={opts} value="a" onChange={() => {}} />)
     const item = screen.getByRole('radio')
-    // data-[state=on] accent class is violet by default
-    expect(item.className).toContain('data-[state=on]:bg-violet-500/20')
+    // data-[state=on] accent class is violet by default — a color-mix()
+    // against the bare `--violet` token, since `violet` is a flat design
+    // token (not a numbered Tailwind shade scale); see tailwind.config.js.
+    expect(item.className).toContain(
+      'data-[state=on]:bg-[color-mix(in_srgb,var(--violet)_20%,transparent)]'
+    )
   })
 })

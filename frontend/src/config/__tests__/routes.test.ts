@@ -5,8 +5,8 @@ describe('routes — static top-level', () => {
   it.each([
     [routes.account(), '/account'],
     [routes.login(), '/login'],
-    [routes.resumeLibrary(), '/admin/resumes'],
-    [routes.applyQueue(), '/admin/apply-queue'],
+    [routes.resumeLibrary(), '/resumes'],
+    [routes.applyQueue(), '/apply-queue'],
     [routes.adminCompanies(), '/admin/companies'],
     [routes.adminUsers(), '/admin/users'],
     [routes.adminAudit(), '/admin/audit'],
@@ -47,39 +47,5 @@ describe('routes.jobOpen', () => {
 describe('routes — id-based builders', () => {
   it('jobMobileRoute embeds the id', () => {
     expect(routes.jobMobileRoute('xyz')).toBe('/jobs/xyz')
-  })
-
-  it('resumeDetail embeds the id', () => {
-    expect(routes.resumeDetail('r1')).toBe('/admin/resumes/r1')
-  })
-})
-
-describe('routes.resumeEdit — param remapping', () => {
-  it('returns the bare edit path when no params', () => {
-    expect(routes.resumeEdit('r1')).toBe('/admin/resumes/r1/edit')
-  })
-
-  it('remaps jobId→job, queue→queue, returnTo→return', () => {
-    expect(routes.resumeEdit('r1', { jobId: 'j1', queue: 'all', returnTo: '/jobs' })).toBe(
-      '/admin/resumes/r1/edit?job=j1&queue=all&return=%2Fjobs'
-    )
-  })
-
-  it('drops absent optional params', () => {
-    expect(routes.resumeEdit('r1', { jobId: 'j1' })).toBe('/admin/resumes/r1/edit?job=j1')
-  })
-})
-
-describe('routes.applyQueue — filter params', () => {
-  it('composes a state filter', () => {
-    expect(routes.applyQueue({ state: 'needs-resume' })).toBe(
-      '/admin/apply-queue?state=needs-resume'
-    )
-  })
-
-  it('composes state + edit', () => {
-    expect(routes.applyQueue({ state: 'draft', edit: 'e1' })).toBe(
-      '/admin/apply-queue?state=draft&edit=e1'
-    )
   })
 })

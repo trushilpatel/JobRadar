@@ -9,8 +9,8 @@ type implService struct {
 	BaseAtsService
 }
 
-// NewAtsImplService constructs the orchestration layer.
-func NewAtsImplService(next AtsService) AtsService {
+// NewImplService constructs the orchestration layer.
+func NewImplService(next AtsService) AtsService {
 	return &implService{BaseAtsService: NewBaseAtsService(next)}
 }
 

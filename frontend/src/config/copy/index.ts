@@ -9,7 +9,7 @@ export const COPY = {
   'nav.companies': 'Companies',
   'nav.users': 'Users',
   'nav.resumes': 'Resumes',
-  'nav.apply-queue': 'Apply Queue',
+  'nav.applyQueue': 'Apply Queue',
   'nav.audit-log': 'Audit Log',
   'nav.insights': 'Insights',
   'nav.pipeline': 'Pipeline',
@@ -22,6 +22,7 @@ export const COPY = {
   'jobs.tab.interviewing': 'Interviewing',
   'jobs.tab.offer': 'Offer',
   'jobs.tab.rejected': 'Rejected',
+  'jobs.tab.tracking': 'Tracking',
 
   // Search
   'jobs.search.placeholder': 'Search jobs…',

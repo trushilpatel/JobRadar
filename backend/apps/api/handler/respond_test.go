@@ -1,15 +1,42 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/logger"
 )
+
+// spyLogger captures Error calls so tests can assert whether HandleError
+// logged the underlying cause of a 5xx ServiceError versus staying silent
+// for routine 4xx ones.
+type spyLogger struct {
+	mu     sync.Mutex
+	errors []error
+}
+
+func (s *spyLogger) Debug(string, ...logger.Field) {}
+func (s *spyLogger) Info(string, ...logger.Field)  {}
+func (s *spyLogger) Warn(string, ...logger.Field)  {}
+func (s *spyLogger) Error(_ string, err error, _ ...logger.Field) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.errors = append(s.errors, err)
+}
+func (s *spyLogger) With(...logger.Field) logger.Logger        { return s }
+func (s *spyLogger) WithContext(context.Context) logger.Logger { return s }
+
+func (s *spyLogger) errorCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.errors)
+}
 
 // TestSetLogger_NonNil replaces the package-level logger and confirms that a
 // subsequent 500 path in HandleError uses it (indirectly via no panic).
@@ -118,6 +145,58 @@ func TestHandleError(t *testing.T) {
 	}
 }
 
+// TestHandleError_ServiceError_5xx_IsLogged confirms the InternalMessage on a
+// 5xx ServiceError (e.g. domainerrs.ErrInternal.WithMessage(...), what the
+// resume upload path returns on a storage failure) reaches the logger — this
+// was previously silently discarded, making the underlying cause of a 500
+// invisible in the API logs.
+func TestHandleError_ServiceError_5xx_IsLogged(t *testing.T) {
+	original := pkgLogger
+	t.Cleanup(func() { pkgLogger = original })
+
+	spy := &spyLogger{}
+	SetLogger(spy)
+
+	const internal = "resume impl: storage put: 403 SignatureDoesNotMatch"
+	w := httptest.NewRecorder()
+	HandleError(w, apperr.ErrInternal.WithMessage(internal))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("got status %d want 500", w.Code)
+	}
+	if spy.errorCount() != 1 {
+		t.Fatalf("got %d Error() calls, want 1", spy.errorCount())
+	}
+	if got := spy.errors[0].Error(); got != internal {
+		t.Fatalf("logged error = %q, want %q", got, internal)
+	}
+}
+
+// TestHandleError_ServiceError_4xx_NotLogged confirms routine client errors
+// (NOT_FOUND, CONFLICT, BAD_REQUEST) are not logged at Error level — they are
+// expected outcomes already visible in the INFO-level access log, and logging
+// every one of them would be noise, not signal.
+func TestHandleError_ServiceError_4xx_NotLogged(t *testing.T) {
+	original := pkgLogger
+	t.Cleanup(func() { pkgLogger = original })
+
+	spy := &spyLogger{}
+	SetLogger(spy)
+
+	for _, err := range []error{
+		apperr.ErrNotFound.WithMessage("company not found"),
+		apperr.ErrConflict.WithMessage("already exists"),
+		apperr.ErrBadRequest.WithMessage("bad input"),
+	} {
+		w := httptest.NewRecorder()
+		HandleError(w, err)
+	}
+
+	if spy.errorCount() != 0 {
+		t.Fatalf("got %d Error() calls for 4xx ServiceErrors, want 0", spy.errorCount())
+	}
+}
+
 func TestRespond(t *testing.T) {
 	w := httptest.NewRecorder()
 	Respond(w, http.StatusOK, map[string]string{"id": "123"})
@@ -147,5 +226,68 @@ func TestRespondPaged(t *testing.T) {
 	}
 	if !strings.Contains(body, `"page"`) {
 		t.Errorf("body %q does not contain 'page'", body)
+	}
+}
+
+type decodeBodyFixture struct {
+	Name string `json:"name"`
+}
+
+func TestDecodeBody_Valid(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"stripe"}`))
+	w := httptest.NewRecorder()
+
+	got, ok := DecodeBody[decodeBodyFixture](w, req)
+	if !ok {
+		t.Fatalf("ok = false, want true; body = %q", w.Body.String())
+	}
+	if got.Name != "stripe" {
+		t.Errorf("Name = %q, want %q", got.Name, "stripe")
+	}
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want no response written (default 200)", w.Code)
+	}
+}
+
+func TestDecodeBody_MalformedJSON(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":`))
+	w := httptest.NewRecorder()
+
+	_, ok := DecodeBody[decodeBodyFixture](w, req)
+	if ok {
+		t.Fatal("ok = true, want false for malformed JSON")
+	}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "BAD_REQUEST") {
+		t.Errorf("body %q does not contain BAD_REQUEST", w.Body.String())
+	}
+}
+
+func TestDecodeBody_EmptyBody(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
+	w := httptest.NewRecorder()
+
+	_, ok := DecodeBody[decodeBodyFixture](w, req)
+	if ok {
+		t.Fatal("ok = true, want false for empty body")
+	}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestDecodeBody_WrongShape(t *testing.T) {
+	// A JSON array where the target type expects an object.
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`[1,2,3]`))
+	w := httptest.NewRecorder()
+
+	_, ok := DecodeBody[decodeBodyFixture](w, req)
+	if ok {
+		t.Fatal("ok = true, want false for a body shape mismatch")
+	}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
 	}
 }

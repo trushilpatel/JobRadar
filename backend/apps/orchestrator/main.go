@@ -19,6 +19,8 @@ import (
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
+	"github.com/trushilpatel/jobradar/platform/cache"
+	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	crawlernodesvc "github.com/trushilpatel/jobradar/service/crawlernode/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
@@ -32,6 +34,11 @@ const (
 
 	resetStuckInterval = 5 * time.Minute
 	listenAddr         = ":8082"
+
+	// atsCacheTTL matches the TTL apps/api/wire_gen.go uses for the same
+	// AtsService read-through cache — inter_company_delay_s changes rarely
+	// enough that a shared 5-minute staleness window is acceptable here too.
+	atsCacheTTL = 5 * time.Minute
 )
 
 func main() {
@@ -74,7 +81,17 @@ func main() {
 	// --- Wire service dependencies ---
 	publisher := js.NewPublisher(njs)
 	nodeStore := crawlernodesvc.NewNodeRepositoryService(database)
-	assignStore := crawlernodesvc.NewAssignmentRepositoryService(database)
+
+	// AtsService chain (mirrors apps/api/wire_gen.go's repository->impl->cache
+	// chain, minus the validation/REST layers this internal caller has no use
+	// for) backs the AdapterDelayGate's inter_company_delay_s lookups.
+	atsStore := atssvc.NewAtsStore(database)
+	atsRepositoryService := atssvc.NewRepositoryService(atsStore)
+	atsImplService := atssvc.NewImplService(atsRepositoryService)
+	atsService := atssvc.NewCacheService(atsImplService, cache.NewMemoryCache(), atsCacheTTL)
+
+	delayGate := crawlernodesvc.NewAdapterDelayGate(atsService)
+	assignStore := crawlernodesvc.NewAssignmentRepositoryService(database, delayGate)
 	seenLedger := jobsvc.NewSeenLedgerStore(database)
 	ledgerSvc := jobsvc.NewLedgerService(seenLedger)
 	ledgerStore := crawlernodesvc.NewLedgerRepositoryService(ledgerSvc)

@@ -1,14 +1,19 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { MapPin, Wifi, Bookmark, X, Paperclip } from 'lucide-react'
+import { Bookmark, X, Paperclip, ArrowUpRight } from 'lucide-react'
 import type { Job } from '@/types'
 import { DataTableColumnHeader } from '@/components/ui/data-table'
 import { formatRelativeTime, formatExactDateTime, cn, formatSalary } from '@/lib/utils/utils'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
+import { JobLocationCell } from '@/components/shared/JobLocationCell'
 import { JobStatusPill } from './JobStatusPill'
 
 export interface JobTableActions {
   onToggleSave: (job: Job) => void
   onDismiss: (job: Job) => void
+  /** Opens the posting URL and auto-advances status to "applied" — matches
+   *  the approved mockup's row-level Apply action. Always visible, unlike
+   *  the hover-revealed Dismiss button. */
+  onApply: (job: Job) => void
   /** Optional callback used by the pages layer to inject cross-feature data
    *  (e.g. resume attachment state) without creating a cross-feature import
    *  inside the jobs feature. Returns the attachment state string or null. */
@@ -16,7 +21,7 @@ export interface JobTableActions {
 }
 
 export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknown>[] {
-  const { onToggleSave, onDismiss, getAttachmentState } = actions
+  const { onToggleSave, onDismiss, onApply, getAttachmentState } = actions
 
   return [
     // ── 1. Bookmark / save column ───────────────────────────────────────────
@@ -58,8 +63,16 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
     },
 
     // ── 2. Title (role) ────────────────────────────────────────────────────
+    // Bounded width (unlike the other flexible columns, this one has no
+    // `size` upstream default other than TanStack's 150 fallback) — without
+    // an explicit size the browser hands it all the table's leftover space,
+    // stretching short titles across most of the row. Long titles that still
+    // overflow the bound get an ellipsis plus a native tooltip so the full
+    // text stays reachable, matching the tooltip pattern already used by the
+    // Posted column below.
     {
       accessorKey: 'title',
+      size: 120,
       header: ({ column }) => <DataTableColumnHeader column={column} title="Role" />,
       cell: ({ row, getValue }) => {
         // Mockup paperclip indicator — shown when a resume is attached to
@@ -68,6 +81,7 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
         // via getAttachmentState by the pages layer to avoid a cross-feature
         // import inside features/jobs.
         const attachmentState = getAttachmentState?.(row.original.id) ?? null
+        const title = getValue() as string
         return (
           <div className="flex items-center gap-1.5 min-w-0">
             {attachmentState && (
@@ -77,8 +91,11 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
                 aria-label={`Resume attached (${attachmentState})`}
               />
             )}
-            <span className="font-semibold text-primary text-sm truncate leading-tight">
-              {getValue() as string}
+            <span
+              title={title}
+              className="font-semibold text-primary text-sm truncate leading-tight"
+            >
+              {title}
             </span>
           </div>
         )
@@ -121,24 +138,9 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       size: 180,
       enableSorting: false,
       header: () => <span className="text-muted">Location</span>,
-      cell: ({ row }) => {
-        const j = row.original
-        if (j.remote)
-          return (
-            <span className="inline-flex items-center gap-1.5 text-[13px] text-remote">
-              <Wifi size={11} /> {j.location || 'Remote'}
-            </span>
-          )
-        if (j.location)
-          return (
-            <span className="inline-flex items-center gap-1.5 text-[13px] text-secondary">
-              <MapPin size={11} className="text-muted" /> {j.location}
-            </span>
-          )
-        // Empty cells render blank rather than an em-dash — per UX direction:
-        // absence of data should mean field disappears, not show a placeholder.
-        return null
-      },
+      cell: ({ row }) => (
+        <JobLocationCell remote={row.original.remote} location={row.original.location} />
+      ),
     },
 
     // ── 6. Salary ──────────────────────────────────────────────────────────
@@ -175,7 +177,35 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
       },
     },
 
-    // ── 8. Dismiss (hover-revealed) ────────────────────────────────────────
+    // ── 8. Apply (always visible) ──────────────────────────────────────────
+    // Opens the posting URL in a new tab and auto-advances status to
+    // "applied" (no-op on status if already applied/interviewing/offer/
+    // rejected) — the coupled behavior the approved mockup's Apply action has.
+    {
+      id: 'apply',
+      size: 40,
+      enableSorting: false,
+      header: () => null,
+      cell: ({ row }) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onApply(row.original)
+          }}
+          aria-label={`Apply to ${row.original.title}`}
+          title="Apply"
+          className={cn(
+            'p-1.5 rounded-md transition-colors text-muted hover:text-violet hover:bg-hover',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet'
+          )}
+        >
+          <ArrowUpRight size={14} />
+        </button>
+      ),
+    },
+
+    // ── 9. Dismiss (hover-revealed) ────────────────────────────────────────
     // Anchored to the row's right edge. Hidden by default, shown on row hover
     // or when the row is focused via keyboard. Keyboard users hit `D` on the
     // focused row instead.

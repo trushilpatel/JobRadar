@@ -4,11 +4,11 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import type { Company, ATS } from '@/types'
 import { QUEUE_STATUS, SCAN_STATUS } from '../constants'
 import { CompanyAvatar } from '@/components/shared/CompanyAvatar'
-import { Badge } from '@/components/ui/badge'
 import { StatusPill, type StatusKind } from '@/components/ui/status-pill'
 import { ScanHistoryBar, type HistoryPoint } from '@/components/ui/scan-history-bar'
 import { DataTableColumnHeader } from '@/components/ui/data-table'
 import { cn } from '@/lib/utils/utils'
+import { adapterEdge } from '@/lib/utils/adapterTokens'
 
 const HISTORY_SLOTS = 10
 
@@ -36,7 +36,7 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
         const c = row.original
         return (
           <div className="flex items-center gap-2.5 min-w-0">
-            <CompanyAvatar name={c.name} />
+            <CompanyAvatar name={c.name} adapterType={c.adapter_type} />
             <div className="min-w-0 flex items-center gap-1.5">
               <p className="text-sm font-medium text-primary truncate">{c.name}</p>
               <a
@@ -61,7 +61,24 @@ export function buildCompanyColumns(actions: CompanyColumnActions): ColumnDef<Co
       cell: ({ getValue }) => {
         const raw = getValue() as string
         const display = actions.atsMap?.get(raw)?.display_name
-        return <Badge variant="mono">{display ?? raw}</Badge>
+        const edge = adapterEdge(raw)
+        return (
+          <span
+            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold font-mono whitespace-nowrap"
+            style={{
+              color: 'var(--text-secondary)',
+              background: `color-mix(in srgb, ${edge} 11%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${edge} 34%, transparent)`,
+            }}
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              aria-hidden="true"
+              style={{ background: edge }}
+            />
+            {display ?? raw}
+          </span>
+        )
       },
     },
 

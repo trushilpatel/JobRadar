@@ -27,8 +27,6 @@ function makeArgs(): UseJobKeyboardArgs {
     onOpenPreview: vi.fn(),
     onOpenUrl: vi.fn(),
     onEscape: vi.fn(),
-    onPrevPage: vi.fn(),
-    onNextPage: vi.fn(),
     onGoToTab: vi.fn(),
     onSetStatus: vi.fn(),
     onToggleSave: vi.fn(),
@@ -104,40 +102,6 @@ describe('useJobKeyboard', () => {
     expect(args.onEscape).toHaveBeenCalledTimes(1)
   })
 
-  it('ArrowRight pages forward', () => {
-    renderHook(() => useJobKeyboard(args))
-    fireKey({ key: 'ArrowRight' })
-    expect(args.onNextPage).toHaveBeenCalledTimes(1)
-  })
-
-  it('single ArrowLeft fires onPrevPage only (not onFirstPage)', () => {
-    const onFirstPage = vi.fn()
-    renderHook(() => useJobKeyboard({ ...args, onFirstPage }))
-    fireKey({ key: 'ArrowLeft' })
-    expect(args.onPrevPage).toHaveBeenCalledTimes(1)
-    expect(onFirstPage).not.toHaveBeenCalled()
-  })
-
-  it('double ArrowLeft within 200ms fires onFirstPage on the second press', () => {
-    const onFirstPage = vi.fn()
-    renderHook(() => useJobKeyboard({ ...args, onFirstPage }))
-    fireKey({ key: 'ArrowLeft' })
-    expect(args.onPrevPage).toHaveBeenCalledTimes(1)
-    fireKey({ key: 'ArrowLeft' })
-    expect(onFirstPage).toHaveBeenCalledTimes(1)
-    expect(args.onPrevPage).toHaveBeenCalledTimes(1)
-  })
-
-  it('three ArrowLeft presses fire prev → first → prev (window resets)', () => {
-    const onFirstPage = vi.fn()
-    renderHook(() => useJobKeyboard({ ...args, onFirstPage }))
-    fireKey({ key: 'ArrowLeft' })
-    fireKey({ key: 'ArrowLeft' })
-    fireKey({ key: 'ArrowLeft' })
-    expect(args.onPrevPage).toHaveBeenCalledTimes(2)
-    expect(onFirstPage).toHaveBeenCalledTimes(1)
-  })
-
   it.each([
     ['a', 'applied'],
     ['i', 'interviewing'],
@@ -162,24 +126,6 @@ describe('useJobKeyboard', () => {
     fireKey({ key: 'u' })
     expect(args.onDismiss).toHaveBeenCalledTimes(1)
     expect(args.onUndo).toHaveBeenCalledTimes(1)
-  })
-
-  it('ArrowLeft / ArrowRight are suppressed inside a Radix popover', () => {
-    function Harness() {
-      useJobKeyboard(args)
-      return (
-        <div role="listbox">
-          <button data-testid="opt">option</button>
-        </div>
-      )
-    }
-    const { getByTestId } = render(<Harness />)
-    const opt = getByTestId('opt') as HTMLElement
-    opt.focus()
-    fireEvent.keyDown(opt, { code: 'ArrowLeft', key: 'ArrowLeft' })
-    fireEvent.keyDown(opt, { code: 'ArrowRight', key: 'ArrowRight' })
-    expect(args.onPrevPage).not.toHaveBeenCalled()
-    expect(args.onNextPage).not.toHaveBeenCalled()
   })
 
   it('"/" focuses search; Cmd+K opens palette; ? opens help', () => {

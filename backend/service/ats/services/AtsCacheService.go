@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/trushilpatel/jobradar/platform/cache"
@@ -27,8 +28,8 @@ type atsCacheService struct {
 	ttl   time.Duration
 }
 
-// NewAtsCacheService wraps next with a read-through cache.
-func NewAtsCacheService(next AtsService, c cache.Cache, ttl time.Duration) AtsService {
+// NewCacheService wraps next with a read-through cache.
+func NewCacheService(next AtsService, c cache.Cache, ttl time.Duration) AtsService {
 	return &atsCacheService{
 		BaseAtsService: NewBaseAtsService(next),
 		cache:          c,
@@ -52,7 +53,7 @@ func (s *atsCacheService) ListATS(ctx context.Context) ([]atsdto.ATSDTO, error) 
 	}
 	items, err := s.next.ListATS(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ats.cache.ListATS: %w", err)
 	}
 	// Best-effort write — never block the caller on a cache failure.
 	_ = s.cache.Set(ctx, atsListKey, items, s.ttl)
@@ -72,7 +73,7 @@ func (s *atsCacheService) GetATS(ctx context.Context, name string) (atsdto.ATSDT
 	}
 	item, err := s.next.GetATS(ctx, name)
 	if err != nil {
-		return atsdto.ATSDTO{}, err
+		return atsdto.ATSDTO{}, fmt.Errorf("ats.cache.GetATS: %w", err)
 	}
 	// Best-effort write.
 	_ = s.cache.Set(ctx, key, item, s.ttl)
@@ -90,7 +91,10 @@ func (s *atsCacheService) UpdateATS(ctx context.Context, name string, input atsd
 	if s.cache != nil {
 		_ = s.cache.Delete(ctx, atsListKey, atsNameKey(name))
 	}
-	return result, err
+	if err != nil {
+		return atsdto.ATSDTO{}, fmt.Errorf("ats.cache.UpdateATS: %w", err)
+	}
+	return result, nil
 }
 
 // Compile-time assertion: atsCacheService implements AtsService.

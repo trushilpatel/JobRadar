@@ -135,10 +135,56 @@ describe('useJobs', () => {
     expect(result.current.tab).toBe(JOB_STATUS.SAVED)
   })
 
-  it('setTab resets page to 1', async () => {
+  // ── Tracking tab ─────────────────────────────────────────────────────────────
+
+  it('defaults trackingStages to all 4 workflow stages', () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper('?tab=tracking') })
+    expect(result.current.trackingStages).toEqual(['applied', 'interviewing', 'offer', 'rejected'])
+  })
+
+  it('sends statuses (not status) to fetchJobs when tab is tracking', async () => {
+    renderHook(() => useJobs(), {
+      wrapper: makeWrapper('?tab=tracking&trackingStages=applied,offer'),
+    })
+    await waitFor(() => {
+      const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)
+      expect(lastCall?.[0].statuses).toEqual(['applied', 'offer'])
+    })
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].status).toBeUndefined()
+  })
+
+  it('sends status (not statuses) on a non-tracking tab', async () => {
+    renderHook(() => useJobs(), { wrapper: makeWrapper('?tab=saved') })
+    await waitFor(() => {
+      const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)
+      expect(lastCall?.[0].status).toBe('saved')
+    })
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].statuses).toBeUndefined()
+  })
+
+  it('setTrackingStages updates trackingStages and re-queries with the new set', async () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper('?tab=tracking') })
+    vi.mocked(jobsApi.fetchJobs).mockClear()
+    act(() => result.current.setTrackingStages(['offer', 'rejected']))
+    await waitFor(() => expect(result.current.trackingStages).toEqual(['offer', 'rejected']))
+    await waitFor(() => expect(jobsApi.fetchJobs).toHaveBeenCalled())
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].statuses).toEqual(['offer', 'rejected'])
+  })
+
+  it('counts.tracking sums the 4 workflow stage counts', async () => {
+    vi.mocked(jobsApi.fetchJobCounts).mockResolvedValue({
+      new: 1,
+      saved: 2,
+      applied: 3,
+      interviewing: 4,
+      offer: 5,
+      rejected: 6,
+    })
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    act(() => result.current.setTab(JOB_STATUS.APPLIED))
-    expect(result.current.page).toBe(1)
+    await waitFor(() => expect(result.current.counts.tracking).toBe(18))
   })
 
   // ── Search ─────────────────────────────────────────────────────────────────
@@ -205,6 +251,38 @@ describe('useJobs', () => {
     expect(result.current.dateFilter).toBe('7d')
   })
 
+  it('setDateFilter("24h") maps to daysAdded=1 on the resulting fetchJobs call', async () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    act(() => result.current.setDateFilter('24h'))
+    await waitFor(() => expect(result.current.dateFilter).toBe('24h'))
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].daysAdded).toBe(1)
+  })
+
+  it('setDateFilter("30d") maps to daysAdded=30 on the resulting fetchJobs call', async () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    act(() => result.current.setDateFilter('30d'))
+    await waitFor(() => expect(result.current.dateFilter).toBe('30d'))
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].daysAdded).toBe(30)
+  })
+
+  it('setLocationFilter("onsite") maps to onSite=true on the resulting fetchJobs call', async () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    act(() => result.current.setLocationFilter('onsite'))
+    await waitFor(() => expect(result.current.locationFilter).toBe('onsite'))
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].onSite).toBe(true)
+  })
+
+  it('setLocationFilter("hybrid") maps to hybrid=true on the resulting fetchJobs call', async () => {
+    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
+    act(() => result.current.setLocationFilter('hybrid'))
+    await waitFor(() => expect(result.current.locationFilter).toBe('hybrid'))
+    const lastCall = vi.mocked(jobsApi.fetchJobs).mock.calls.at(-1)!
+    expect(lastCall[0].hybrid).toBe(true)
+  })
+
   it('setVisaFilter updates visaFilter', () => {
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
     act(() => result.current.setVisaFilter('true'))
@@ -251,12 +329,6 @@ describe('useJobs', () => {
     expect(result.current.expFilter).toEqual([])
     expect(result.current.dateFilter).toBe('all')
     expect(result.current.visaFilter).toBe('any')
-  })
-
-  it('resetFilters resets page to 1', () => {
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    act(() => result.current.resetFilters())
-    expect(result.current.page).toBe(1)
   })
 
   // ── Counts ─────────────────────────────────────────────────────────────────
@@ -313,16 +385,6 @@ describe('useJobs', () => {
 
   // ── Pagination ─────────────────────────────────────────────────────────────
 
-  it('page starts at 1', () => {
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    expect(result.current.page).toBe(1)
-  })
-
-  it('hasPrevPage is false on first page', () => {
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    expect(result.current.hasPrevPage).toBe(false)
-  })
-
   it('hasNextPage is false when next_cursor is empty', async () => {
     vi.mocked(jobsApi.fetchJobs).mockResolvedValue({ items: [mockJob], next_cursor: '' })
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
@@ -335,18 +397,6 @@ describe('useJobs', () => {
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.hasNextPage).toBe(true)
-  })
-
-  it('goToPrevPage does not go below page 1', () => {
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    act(() => result.current.goToPrevPage())
-    expect(result.current.page).toBe(1)
-  })
-
-  it('goToFirstPage resets page to 1', async () => {
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    act(() => result.current.goToFirstPage())
-    expect(result.current.page).toBe(1)
   })
 
   // ── Sorting ────────────────────────────────────────────────────────────────
@@ -362,12 +412,6 @@ describe('useJobs', () => {
     expect(result.current.sorting).toEqual([{ id: 'added_at', desc: true }])
   })
 
-  it('handleSortingChange resets page to 1', () => {
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    act(() => result.current.handleSortingChange([{ id: 'title', desc: false }]))
-    expect(result.current.page).toBe(1)
-  })
-
   // ── Limit ──────────────────────────────────────────────────────────────────
 
   it('initial limit is 20', () => {
@@ -375,23 +419,11 @@ describe('useJobs', () => {
     expect(result.current.limit).toBe(20)
   })
 
-  it('setLimit updates limit', () => {
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    act(() => result.current.setLimit(50))
-    expect(result.current.limit).toBe(50)
-  })
-
-  // ── itemsOnPage / itemsBeforePage ──────────────────────────────────────────
+  // ── itemsOnPage ──────────────────────────────────────────────────────────
 
   it('itemsOnPage reflects number of jobs on current page', async () => {
     const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.itemsOnPage).toBe(1)
-  })
-
-  it('itemsBeforePage is 0 on first page', async () => {
-    const { result } = renderHook(() => useJobs(), { wrapper: makeWrapper() })
-    await waitFor(() => expect(result.current.isLoading).toBe(false))
-    expect(result.current.itemsBeforePage).toBe(0)
   })
 })

@@ -59,11 +59,17 @@ type SchedulerService interface {
 	RefreshGaugeMetrics(ctx context.Context) error
 }
 
-// Service defines all business operations for the scan domain.
-// It embeds SchedulerService so the scheduler worker can depend on the
-// narrower interface while the REST decorator chain uses the full Service.
+// Service defines all business operations for the scan domain, consumed by
+// the REST decorator chain. It does NOT embed SchedulerService: the
+// scheduler binary's sweep/reclaim/auto-pause/gauge-refresh operations run
+// entirely outside the REST chain via the standalone schedulerService type
+// (ScanSchedulerService.go, constructed by NewSchedulerService /
+// NewSchedulerServiceWithSweeper) — no concrete Service implementation
+// (repositoryService, the REST/Validation decorators) has ever routed a
+// SchedulerService method through HTTP. Embedding it here previously forced
+// every Service implementor to carry 9 methods nothing called; see the ISP
+// finding in docs/tech-debt/2026-07-05-backend-service-boilerplate-debt.md.
 type Service interface {
-	SchedulerService
 	TriggerScan(ctx context.Context, companyID string) error
 	TriggerScanAll(ctx context.Context) (int, error)
 	GetStats(ctx context.Context, companyID string) (*dto.ScanStatsView, error)
@@ -91,42 +97,6 @@ func NewBaseService(next Service) BaseService {
 		panic("BaseService: next must not be nil — check wire setup")
 	}
 	return BaseService{next: next}
-}
-
-func (b *BaseService) EnqueueDue(ctx context.Context, intervalMinutes int) (SchedulerCycleResult, error) {
-	return b.next.EnqueueDue(ctx, intervalMinutes)
-}
-
-func (b *BaseService) ResetStuck(ctx context.Context, staleDur time.Duration) (int, error) {
-	return b.next.ResetStuck(ctx, staleDur)
-}
-
-func (b *BaseService) PurgeInactive(ctx context.Context) (int, error) {
-	return b.next.PurgeInactive(ctx)
-}
-
-func (b *BaseService) RetryDueJobs(ctx context.Context) error {
-	return b.next.RetryDueJobs(ctx)
-}
-
-func (b *BaseService) EscalateStuckRetryJobs(ctx context.Context) (int64, error) {
-	return b.next.EscalateStuckRetryJobs(ctx)
-}
-
-func (b *BaseService) ReclaimStuckFetchRows(ctx context.Context) (int64, error) {
-	return b.next.ReclaimStuckFetchRows(ctx)
-}
-
-func (b *BaseService) ReclaimStuckFilteredRows(ctx context.Context) (int64, error) {
-	return b.next.ReclaimStuckFilteredRows(ctx)
-}
-
-func (b *BaseService) AutoPauseChronicFailures(ctx context.Context) (int, error) {
-	return b.next.AutoPauseChronicFailures(ctx)
-}
-
-func (b *BaseService) RefreshGaugeMetrics(ctx context.Context) error {
-	return b.next.RefreshGaugeMetrics(ctx)
 }
 
 func (b *BaseService) TriggerScan(ctx context.Context, companyID string) error {

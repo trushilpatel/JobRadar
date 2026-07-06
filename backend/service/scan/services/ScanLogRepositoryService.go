@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/tracing"
@@ -68,7 +69,10 @@ func (s *scanLogStore) InsertCompanyScanLog(ctx context.Context, companyID strin
 		DurationMs:  &durationMs,
 		Error:       errMsg,
 	}
-	return s.db.WithContext(ctx).Create(&row).Error
+	if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
+		return fmt.Errorf("scan.store.InsertCompanyScanLog: %w", err)
+	}
+	return nil
 }
 
 func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ dto.ScanStatsView, err error) {
@@ -101,7 +105,7 @@ func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ dt
 		FROM company_scan_log
 		WHERE company_id = ?
 	`, companyID).Scan(&a).Error; err != nil {
-		return stats, err
+		return stats, fmt.Errorf("scan.store.GetScanStats: aggregate: %w", err)
 	}
 	stats.TotalScans = a.TotalScans
 	stats.TotalFetched = a.TotalFetched
@@ -119,7 +123,7 @@ func (s *scanLogStore) GetScanStats(ctx context.Context, companyID string) (_ dt
 		Limit(recentRunsLimit).
 		Select("company_id, scanned_at, jobs_fetched, jobs_new, error, duration_ms").
 		Scan(&recent).Error; err != nil {
-		return stats, err
+		return stats, fmt.Errorf("scan.store.GetScanStats: recent runs: %w", err)
 	}
 	stats.RecentRuns = recent
 
@@ -132,7 +136,7 @@ func (s *scanLogStore) RecordScanResult(ctx context.Context, companyID, status s
 	// Phase 2: write the scan log row AND patch company_scan_settings (the
 	// new home for last_scan_at / last_success_at / last_error_at /
 	// last_error_message / consecutive_errors) atomically.
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if txErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		row := scanmodel.CompanyScanLog{
 			CompanyID:   companyID,
 			JobsFetched: jobsFetched,
@@ -165,7 +169,10 @@ func (s *scanLogStore) RecordScanResult(ctx context.Context, companyID, status s
 		return tx.Model(&companymodel.CompanyScanSettings{}).
 			Where("company_id = ?", companyID).
 			Updates(fields).Error
-	})
+	}); txErr != nil {
+		return fmt.Errorf("scan.store.RecordScanResult: %w", txErr)
+	}
+	return nil
 }
 
 func (s *scanLogStore) GetScanHistories(ctx context.Context, companyIDs []string) (_ map[string][]bool, err error) {
@@ -194,7 +201,7 @@ func (s *scanLogStore) GetScanHistories(ctx context.Context, companyIDs []string
 		ORDER BY company_id, rn DESC
 	`, companyIDs).Scan(&rows).Error
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan.store.GetScanHistories: %w", err)
 	}
 
 	result := make(map[string][]bool, len(companyIDs))
@@ -208,23 +215,27 @@ func (s *scanLogStore) GetJobsScannedToday(ctx context.Context) (_ int64, err er
 	ctx, span := tracing.Start(ctx, "scan.store.GetJobsScannedToday")
 	defer tracing.End(span, &err)
 	var count int64
-	err = s.db.WithContext(ctx).Model(&scanmodel.CompanyScanLog{}).
+	if err = s.db.WithContext(ctx).Model(&scanmodel.CompanyScanLog{}).
 		Where("DATE(scanned_at) = CURRENT_DATE").
 		Select("COALESCE(SUM(jobs_fetched), 0)").
-		Scan(&count).Error
-	return count, err
+		Scan(&count).Error; err != nil {
+		return 0, fmt.Errorf("scan.store.GetJobsScannedToday: %w", err)
+	}
+	return count, nil
 }
 
 func (s *scanLogStore) GetScansByDay(ctx context.Context, days int) (results []dto.DailyScanCount, err error) {
 	ctx, span := tracing.Start(ctx, "scan.store.GetScansByDay")
 	defer tracing.End(span, &err)
-	err = s.db.WithContext(ctx).Model(&scanmodel.CompanyScanLog{}).
+	if err = s.db.WithContext(ctx).Model(&scanmodel.CompanyScanLog{}).
 		Select("DATE(scanned_at) as date, SUM(jobs_fetched) as scanned, SUM(jobs_new) as new_jobs").
 		Where("scanned_at >= NOW() - ? * INTERVAL '1 day'", days).
 		Group("DATE(scanned_at)").
 		Order("date ASC").
-		Scan(&results).Error
-	return results, err
+		Scan(&results).Error; err != nil {
+		return nil, fmt.Errorf("scan.store.GetScansByDay: %w", err)
+	}
+	return results, nil
 }
 
 func (s *scanLogStore) GetCompanyAnalytics(ctx context.Context, companyID string) (_ dto.CompanyAnalytics, err error) {
@@ -248,7 +259,7 @@ func (s *scanLogStore) GetCompanyAnalytics(ctx context.Context, companyID string
 		GROUP BY DATE_TRUNC('month', snapshotted_at)
 		ORDER BY month_start
 	`, companyID).Scan(&newRows).Error; err != nil {
-		return dto.CompanyAnalytics{}, err
+		return dto.CompanyAnalytics{}, fmt.Errorf("scan.store.GetCompanyAnalytics: monthly new: %w", err)
 	}
 
 	// Monthly removed jobs from job_pipeline_ledger
@@ -269,7 +280,7 @@ func (s *scanLogStore) GetCompanyAnalytics(ctx context.Context, companyID string
 		GROUP BY DATE_TRUNC('month', removed_at)
 		ORDER BY month_start
 	`, companyID).Scan(&removedRows).Error; err != nil {
-		return dto.CompanyAnalytics{}, err
+		return dto.CompanyAnalytics{}, fmt.Errorf("scan.store.GetCompanyAnalytics: monthly removed: %w", err)
 	}
 
 	// Velocity: this week vs last week (from job_analytics)
@@ -286,7 +297,7 @@ func (s *scanLogStore) GetCompanyAnalytics(ctx context.Context, companyID string
 		WHERE company_id = ?
 		  AND snapshotted_at >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
 	`, companyID).Scan(&vel).Error; err != nil {
-		return dto.CompanyAnalytics{}, err
+		return dto.CompanyAnalytics{}, fmt.Errorf("scan.store.GetCompanyAnalytics: velocity: %w", err)
 	}
 
 	// Build ordered month index covering all 12 months

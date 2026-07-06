@@ -80,7 +80,7 @@ async function rawFetch(method: HttpMethod, path: string, init?: RequestInit): P
   for (const [k, v] of Object.entries(auth)) {
     headers.set(k, v)
   }
-  if (init?.body && !headers.has('Content-Type')) {
+  if (init?.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
 
@@ -121,7 +121,12 @@ async function rawFetch(method: HttpMethod, path: string, init?: RequestInit): P
   }
 }
 
-async function request<T>(method: HttpMethod, path: string, init?: RequestInit): Promise<T> {
+// fetchOk runs the shared request pipeline (auth, timeout, 401/429/error-status
+// handling) and returns the raw ok Response — shared by request<T> (which
+// JSON-unwraps it) and getBlob (which reads it as binary instead). Keeping
+// this in one place means blob downloads never drift from the 401-redirect /
+// rate-limit / timeout behaviour every other call gets.
+async function fetchOk(method: HttpMethod, path: string, init?: RequestInit): Promise<Response> {
   let res: Response
   try {
     res = await rawFetch(method, path, init)
@@ -148,6 +153,11 @@ async function request<T>(method: HttpMethod, path: string, init?: RequestInit):
     throw await parseApiError(res, `Request failed: ${res.status}`)
   }
 
+  return res
+}
+
+async function request<T>(method: HttpMethod, path: string, init?: RequestInit): Promise<T> {
+  const res = await fetchOk(method, path, init)
   return unwrap<T>(res)
 }
 
@@ -178,5 +188,13 @@ export const apiClient = {
       ...init,
       body: body === undefined ? undefined : JSON.stringify(body),
     })
+  },
+  upload<T>(path: string, form: FormData, init?: RequestInit): Promise<T> {
+    return request<T>('POST', path, { ...init, body: form })
+  },
+  // getBlob is for binary downloads (files) — unwrap()'s res.text() + JSON.parse
+  // would corrupt binary bytes, so this skips it and returns the raw Blob.
+  getBlob(path: string, init?: RequestInit): Promise<Blob> {
+    return fetchOk('GET', path, init).then((res) => res.blob())
   },
 }

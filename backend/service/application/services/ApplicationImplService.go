@@ -23,14 +23,14 @@ type implService struct {
 	jobSvc jobsvc.JobService
 }
 
-// NewApplicationImplService constructs the terminal ApplicationService
+// NewImplService constructs the terminal ApplicationService
 // chain link, composed over the per-user repository and the job service.
-func NewApplicationImplService(repo ApplicationRepository, jobSvc jobsvc.JobService) ApplicationService {
+func NewImplService(repo ApplicationRepository, jobSvc jobsvc.JobService) ApplicationService {
 	if repo == nil {
-		panic("NewApplicationImplService: repo must not be nil — check wire setup")
+		panic("NewImplService: repo must not be nil — check wire setup")
 	}
 	if jobSvc == nil {
-		panic("NewApplicationImplService: jobSvc must not be nil — check wire setup")
+		panic("NewImplService: jobSvc must not be nil — check wire setup")
 	}
 	return &implService{repo: repo, jobSvc: jobSvc}
 }

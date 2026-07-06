@@ -7,8 +7,8 @@ type RestRouter struct {
 	handler *RestService
 }
 
-// NewApplicationRestRouter constructs a RestRouter.
-func NewApplicationRestRouter(h *RestService) *RestRouter {
+// NewRestRouter constructs a RestRouter.
+func NewRestRouter(h *RestService) *RestRouter {
 	return &RestRouter{handler: h}
 }
 

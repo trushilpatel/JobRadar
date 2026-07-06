@@ -6,16 +6,21 @@
 package main
 
 import (
+	"context"
 	"time"
 
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/platform/cache"
+	"github.com/trushilpatel/jobradar/platform/objectstorage"
 	"github.com/trushilpatel/jobradar/service/application"
 	services3 "github.com/trushilpatel/jobradar/service/application/services"
+	services5 "github.com/trushilpatel/jobradar/service/applyqueue/services"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	services "github.com/trushilpatel/jobradar/service/company/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
+	pipelinesvc "github.com/trushilpatel/jobradar/service/pipeline/services"
+	services4 "github.com/trushilpatel/jobradar/service/resume/services"
 	services2 "github.com/trushilpatel/jobradar/service/scan/services"
 	"gorm.io/gorm"
 )
@@ -34,13 +39,13 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	scanSettingsRepository := services.NewScanSettingsRepositoryService(db)
 	// ── ATS (built first — company admin validator depends on it) ────────────
 	atsStore := atssvc.NewAtsStore(db)
-	atsRepositoryService := atssvc.NewAtsRepositoryService(atsStore)
-	atsImplService := atssvc.NewAtsImplService(atsRepositoryService)
+	atsRepositoryService := atssvc.NewRepositoryService(atsStore)
+	atsImplService := atssvc.NewImplService(atsRepositoryService)
 	atsMemoryCache := cache.NewMemoryCache()
-	atsCacheService := atssvc.NewAtsCacheService(atsImplService, atsMemoryCache, 5*time.Minute)
-	atsValidationService := atssvc.NewAtsValidationService(atsCacheService)
-	atsRestService := atssvc.NewAtsRestService(atsValidationService)
-	atsRestRouter := atssvc.NewAtsRestRouter(atsRestService)
+	atsCacheService := atssvc.NewCacheService(atsImplService, atsMemoryCache, 5*time.Minute)
+	atsValidationService := atssvc.NewValidationService(atsCacheService)
+	atsRestService := atssvc.NewRestService(atsValidationService)
+	atsRestRouter := atssvc.NewRestRouter(atsRestService)
 
 	scanLogStoreForCompany := services2.NewLogStore(db)
 	scanHistoryReader := provideScanHistoryReader(scanLogStoreForCompany)
@@ -78,13 +83,41 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	jobHandler := jobsvc.NewRestRouter(jobRestService)
 
 	// ── Application ──────────────────────────────────────────────────────────
-	applicationRepositoryService := services3.NewApplicationRepositoryService(db)
-	applicationImplService := services3.NewApplicationImplService(applicationRepositoryService, jobImplService)
-	applicationValidationService := services3.NewApplicationValidationService(applicationImplService)
-	applicationRestService := services3.NewApplicationRestService(applicationValidationService)
-	applicationRestRouter := services3.NewApplicationRestRouter(applicationRestService)
+	applicationRepositoryService := services3.NewRepositoryService(db)
+	applicationImplService := services3.NewImplService(applicationRepositoryService, jobImplService)
+	applicationValidationService := services3.NewValidationService(applicationImplService)
+	applicationRestService := services3.NewRestService(applicationValidationService)
+	applicationRestRouter := services3.NewRestRouter(applicationRestService)
 
-	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter)
+	// ── Resume ───────────────────────────────────────────────────────────────
+	objectStorage, err := provideObjectStorage(cfg)
+	if err != nil {
+		return nil, err
+	}
+	resumeRepositoryService := services4.NewRepositoryService(db)
+	resumeImplService := services4.NewImplService(resumeRepositoryService, objectStorage, log)
+	resumeValidationService := services4.NewValidationService(resumeImplService)
+	resumeRestService := services4.NewRestService(resumeValidationService)
+	resumeHandler := services4.NewRestRouter(resumeRestService)
+
+	// ── Pipeline ─────────────────────────────────────────────────────────────
+	pipelineStore := pipelinesvc.NewPipelineStore(db)
+	pipelineRepositoryService := pipelinesvc.NewRepositoryService(pipelineStore)
+	pipelineImplService := pipelinesvc.NewImplService(pipelineRepositoryService)
+	pipelineValidationService := pipelinesvc.NewValidationService(pipelineImplService)
+	pipelineRestService := pipelinesvc.NewRestService(pipelineValidationService)
+	pipelineRestRouter := pipelinesvc.NewRestRouter(pipelineRestService)
+
+	// ── Apply Queue ──────────────────────────────────────────────────────────
+	applyQueueRepositoryService := services5.NewRepositoryService(db)
+	applyQueueEngagementChecker := services5.NewEngagementChecker(db)
+	applyQueueResumeOwnershipChecker := services5.NewResumeOwnershipChecker(db)
+	applyQueueImplService := services5.NewImplService(applyQueueRepositoryService)
+	applyQueueValidationService := services5.NewValidationService(applyQueueImplService, applyQueueEngagementChecker, applyQueueResumeOwnershipChecker)
+	applyQueueRestService := services5.NewRestService(applyQueueValidationService)
+	applyQueueHandler := services5.NewRestRouter(applyQueueRestService)
+
+	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter, resumeHandler, pipelineRestRouter, applyQueueHandler)
 	return app, nil
 }
 
@@ -115,4 +148,18 @@ func provideSeenLedgerWriter(s jobsvc.SeenLedgerStore) jobsvc.SeenLedgerWriter {
 // provideJobApplicationWriter constructs a dedicated ApplicationWriter for job.Service.
 func provideJobApplicationWriter(db *gorm.DB) jobsvc.ApplicationWriter {
 	return application.NewApplicationWriter(db)
+}
+
+// provideObjectStorage constructs the S3-compatible client used by the
+// resume slice. LoadDefaultConfig does no network I/O — it only assembles
+// client config — so context.Background() at boot time is the standard
+// pattern here (no request context exists yet).
+func provideObjectStorage(cfg *config.Config) (objectstorage.Storage, error) {
+	return objectstorage.NewS3Storage(context.Background(), objectstorage.Config{
+		Endpoint:  cfg.ObjectStorage.Endpoint,
+		Region:    cfg.ObjectStorage.Region,
+		Bucket:    cfg.ObjectStorage.Bucket,
+		AccessKey: cfg.ObjectStorage.AccessKey,
+		SecretKey: cfg.ObjectStorage.SecretKey,
+	})
 }

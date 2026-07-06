@@ -312,3 +312,31 @@ describe('apiClient — timeout & abort', () => {
     await expectation
   })
 })
+
+describe('apiClient.upload', () => {
+  it('sends FormData without JSON.stringify and without forcing a Content-Type header', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ data: { id: 'r1' } }), { status: 201 })
+    )
+    const form = new FormData()
+    form.append('file', new Blob(['data']), 'resume.pdf')
+
+    await apiClient.upload('/resumes', form)
+
+    const init = fetchMock.mock.calls[0]![1] as RequestInit
+    expect(init?.body).toBe(form)
+    const headers = new Headers(init?.headers)
+    expect(headers.has('Content-Type')).toBe(false)
+  })
+
+  it('resolves the unwrapped response data', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ data: { id: 'r1' } }), { status: 201 })
+    )
+    const form = new FormData()
+    form.append('file', new Blob(['data']), 'resume.pdf')
+
+    const result = await apiClient.upload<{ id: string }>('/resumes', form)
+    expect(result).toEqual({ id: 'r1' })
+  })
+})

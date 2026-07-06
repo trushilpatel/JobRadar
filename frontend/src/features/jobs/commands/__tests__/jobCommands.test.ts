@@ -16,9 +16,6 @@ function makeCallbacks(): JobsCallbacks {
     onOpenPreview: vi.fn(),
     onOpenUrl: vi.fn(),
     onEscape: vi.fn(),
-    onPrevPage: vi.fn(),
-    onNextPage: vi.fn(),
-    onFirstPage: vi.fn(),
     onGoToTab: vi.fn(),
     onSetStatus: vi.fn(),
     onToggleSave: vi.fn(),
@@ -38,8 +35,8 @@ describe('JOB_COMMANDS registry', () => {
     expect(() => buildDispatch(JOB_COMMANDS)).not.toThrow()
   })
 
-  it('contains exactly 26 commands', () => {
-    expect(Object.keys(JOB_COMMANDS)).toHaveLength(26)
+  it('contains exactly 24 commands', () => {
+    expect(Object.keys(JOB_COMMANDS)).toHaveLength(24)
   })
 
   it('every command id matches the dot-kebab naming convention', () => {
@@ -79,7 +76,6 @@ describe('jobCommandHandlers', () => {
     { id: 'jobs.nav.open-preview', assert: (cb) => expect(cb.onOpenPreview).toHaveBeenCalled() },
     { id: 'jobs.nav.open-url', assert: (cb) => expect(cb.onOpenUrl).toHaveBeenCalled() },
     { id: 'jobs.nav.escape', assert: (cb) => expect(cb.onEscape).toHaveBeenCalled() },
-    { id: 'jobs.nav.next-page', assert: (cb) => expect(cb.onNextPage).toHaveBeenCalled() },
     { id: 'jobs.tab.go-new', assert: (cb) => expect(cb.onGoToTab).toHaveBeenCalledWith('new') },
     { id: 'jobs.tab.go-saved', assert: (cb) => expect(cb.onGoToTab).toHaveBeenCalledWith('saved') },
     {
@@ -124,12 +120,4 @@ describe('jobCommandHandlers', () => {
       assert(cb)
     })
   }
-})
-
-describe('jobs.nav.prev-page', () => {
-  it('delegates to onPrevPage (double-press timing lives in useJobKeyboard)', () => {
-    const cb = makeCallbacks()
-    jobCommandHandlers(cb)['jobs.nav.prev-page'](evt())
-    expect(cb.onPrevPage).toHaveBeenCalledTimes(1)
-  })
 })

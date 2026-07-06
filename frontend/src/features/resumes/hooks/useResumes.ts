@@ -1,14 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { resumeQueryKeys } from '../queryKeys'
-import { MOCK_RESUMES } from '../mockData'
-import type { Resume } from '../types'
+import { fetchResumes } from '../api/resumes.api'
+import { CACHE_TTL } from '@/lib/core/cacheConfig'
 
-// Mockup hook — returns stub list. Will be replaced with `fetchResumes()`
-// against /admin/resumes once the backend slice lands.
 export function useResumes() {
-  return useQuery<Resume[]>({
+  return useQuery({
     queryKey: resumeQueryKeys.list(),
-    queryFn: () => Promise.resolve(MOCK_RESUMES.filter((r) => !r.archived_at)),
-    staleTime: 30_000,
+    queryFn: () => fetchResumes(),
+    staleTime: CACHE_TTL.resumes.staleTime,
+    gcTime: CACHE_TTL.resumes.gcTime,
   })
 }

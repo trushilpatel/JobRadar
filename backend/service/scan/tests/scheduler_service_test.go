@@ -54,11 +54,8 @@ func (f *schedulerFakeQueue) EnqueueDue(_ context.Context, m int, src string) (s
 	return f.enqueueDueRes, f.err
 }
 func (f *schedulerFakeQueue) EnqueueAll(context.Context, string) (int, error) { return 0, nil }
-func (f *schedulerFakeQueue) ClaimNext(context.Context, string) (*dto.ScanQueueItem, error) {
-	return nil, nil
-}
-func (f *schedulerFakeQueue) Complete(context.Context, string) error { return nil }
-func (f *schedulerFakeQueue) Remove(context.Context, string) error   { return nil }
+func (f *schedulerFakeQueue) Complete(context.Context, string) error          { return nil }
+func (f *schedulerFakeQueue) Remove(context.Context, string) error            { return nil }
 func (f *schedulerFakeQueue) ResetStuck(_ context.Context, d time.Duration) (int, error) {
 	f.resetStuckArg = d
 	return f.resetCount, f.err
@@ -184,38 +181,6 @@ func TestSchedulerService_RetryDueJobs_NoOp(t *testing.T) {
 	if err := s.RetryDueJobs(context.Background()); err != nil {
 		t.Fatalf("RetryDueJobs() error = %v, want nil", err)
 	}
-}
-
-// TestRepositoryService_RetryDueJobs_NoOp asserts that the repository-layer
-// RetryDueJobs is always a no-op — it satisfies the Service interface but the
-// sweeper is implemented on schedulerService, not the decorator chain.
-func TestRepositoryService_RetryDueJobs_NoOp(t *testing.T) {
-	s := newImplService(&fakeQueueStore{}, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
-	if err := s.RetryDueJobs(context.Background()); err != nil {
-		t.Fatalf("RetryDueJobs() through decorator chain error = %v, want nil", err)
-	}
-}
-
-// TestRepositoryService_RefreshGaugeMetrics_NoOp asserts that the
-// repository-layer RefreshGaugeMetrics is always a no-op — it satisfies the
-// Service interface but the gauge-refresh path is implemented on
-// schedulerService, not the decorator chain.
-func TestRepositoryService_RefreshGaugeMetrics_NoOp(t *testing.T) {
-	s := newImplService(&fakeQueueStore{}, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
-	if err := s.RefreshGaugeMetrics(context.Background()); err != nil {
-		t.Fatalf("RefreshGaugeMetrics() through decorator chain error = %v, want nil", err)
-	}
-}
-
-// TestBaseService_RetryDueJobs_Delegates asserts that BaseService.RetryDueJobs
-// delegates to the next layer without modification.
-func TestBaseService_RetryDueJobs_Delegates(t *testing.T) {
-	var called bool
-	fake := &fakeScanService{} // returns f.err (nil)
-	b := svc.NewBaseService(fake)
-	// noopService.RetryDueJobs will set called via the interface check
-	_ = b.RetryDueJobs(context.Background())
-	_ = called // suppress unused
 }
 
 // assertInternal fails the test if err is not a wrapped *ServiceError with

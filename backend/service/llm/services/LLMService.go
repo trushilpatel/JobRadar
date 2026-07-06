@@ -22,8 +22,8 @@ type JobPostEnricher interface {
 	EnrichBatch(ctx context.Context, inputs []dto.JobPostEnrichInput) ([]*dto.JobPostEnrichResult, error)
 }
 
-// Scorer combines both interfaces. Returned by the factory — callers receive
-// the narrower interface they actually need.
+// Scorer combines both interfaces. Returned by the factory — callers
+// receive the narrower interface they actually need.
 type Scorer interface {
 	JobsRelevanceFilter
 	JobPostEnricher

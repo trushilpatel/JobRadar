@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { JobsTable } from '../JobsTable'
 import { JOB_STATUS } from '@/config/constants/jobStatus'
@@ -12,6 +12,8 @@ vi.mock('@/components/ui/data-table', () => ({
     data,
     loading,
     emptyMessage,
+    getRowClassName,
+    getRowProps,
   }: {
     data: Job[]
     loading?: boolean
@@ -21,6 +23,7 @@ vi.mock('@/components/ui/data-table', () => ({
     selectedId?: string
     onRowClick?: (row: Job) => void
     getRowClassName?: (row: Job) => string
+    getRowProps?: (row: Job) => Record<string, unknown>
     sorting?: unknown
     onSortingChange?: (sorting: unknown) => void
   }) => {
@@ -32,24 +35,59 @@ vi.mock('@/components/ui/data-table', () => ({
         <div data-testid="column-header-title">Title</div>
         <div data-testid="column-header-location">Location</div>
         <div data-testid="column-header-added">Added</div>
-        {data.map((job) => (
-          <div key={job.id} data-testid={`row-${job.id}`}>
-            <span data-testid={`job-title-${job.id}`}>{job.title}</span>
-            <span data-testid={`job-company-${job.id}`}>{job.company?.name}</span>
-          </div>
-        ))}
+        {data.map((job) => {
+          // Invoke the real getRowClassName/getRowProps closures JobsTable
+          // passes down (rather than stubbing them away) so tests can assert
+          // on the actual hover/focus/edge-accent behavior they compute.
+          // Mirrors the real DataTable's merge (className composes, it isn't
+          // replaced by getRowProps' own className).
+          const { style, className: extraClassName, ...rowProps } = getRowProps?.(job) ?? {}
+          return (
+            <div
+              key={job.id}
+              data-testid={`row-${job.id}`}
+              className={[getRowClassName?.(job), extraClassName].filter(Boolean).join(' ')}
+              style={style as React.CSSProperties}
+              {...rowProps}
+            >
+              <span data-testid={`job-title-${job.id}`}>{job.title}</span>
+              <span data-testid={`job-company-${job.id}`}>{job.company?.name}</span>
+            </div>
+          )
+        })}
       </div>
     )
   },
 }))
 
-vi.mock('@/components/ui/pagination', () => ({
-  Pagination: () => <div data-testid="pagination" />,
-}))
-
 vi.mock('@/features/jobs/components/jobs-columns', () => ({
   buildJobColumns: () => [],
 }))
+
+// ── IntersectionObserver mock ────────────────────────────────────────────────
+// jsdom has no native IntersectionObserver. Capture the callback per instance
+// so tests can manually fire an "isIntersecting" entry to simulate the
+// sentinel scrolling into view.
+let ioInstances: { callback: IntersectionObserverCallback; disconnect: () => void }[] = []
+
+class MockIntersectionObserver {
+  callback: IntersectionObserverCallback
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback
+    ioInstances.push(this)
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+function fireIntersection(isIntersecting: boolean) {
+  const instance = ioInstances.at(-1)
+  instance?.callback(
+    [{ isIntersecting } as IntersectionObserverEntry],
+    instance as unknown as IntersectionObserver
+  )
+}
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -101,19 +139,13 @@ const defaultProps = {
   jobs: [mockJob],
   loading: false,
   tab: JOB_STATUS.NEW,
-  page: 1,
-  limit: 20,
-  itemsOnPage: 1,
-  itemsBeforePage: 0,
   hasNextPage: false,
-  hasPrevPage: false,
   activeJobId: null,
   onRowClick: vi.fn(),
   onToggleSave: vi.fn(),
   onDismiss: vi.fn(),
-  onNextPage: vi.fn(),
-  onPrevPage: vi.fn(),
-  onLimitChange: vi.fn(),
+  onApply: vi.fn(),
+  onLoadMore: vi.fn(),
   sorting: [],
   onSortingChange: vi.fn(),
 }
@@ -121,6 +153,15 @@ const defaultProps = {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('JobsTable', () => {
+  beforeEach(() => {
+    ioInstances = []
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('renders without crashing', () => {
     const { container } = render(<JobsTable {...defaultProps} />)
     expect(container).toBeTruthy()
@@ -152,11 +193,6 @@ describe('JobsTable', () => {
     expect(screen.getByTestId('column-header-title')).toBeInTheDocument()
   })
 
-  it('renders pagination component', () => {
-    render(<JobsTable {...defaultProps} />)
-    expect(screen.getByTestId('pagination')).toBeInTheDocument()
-  })
-
   it('shows empty state message when jobs is empty and not loading', () => {
     render(<JobsTable {...defaultProps} jobs={[]} />)
     const empty = screen.getByTestId('data-table-empty')
@@ -181,9 +217,15 @@ describe('JobsTable', () => {
     expect(empty).toHaveTextContent('No applied jobs yet')
   })
 
+  it('shows tab-specific empty message for the tracking tab', () => {
+    render(<JobsTable {...defaultProps} jobs={[]} tab="tracking" />)
+    const empty = screen.getByTestId('data-table-empty')
+    expect(empty).toHaveTextContent('No jobs in the selected stages')
+  })
+
   it('renders multiple jobs', () => {
     const job2: Job = { ...mockJob, id: 'j2', title: 'Product Manager' }
-    render(<JobsTable {...defaultProps} jobs={[mockJob, job2]} itemsOnPage={2} />)
+    render(<JobsTable {...defaultProps} jobs={[mockJob, job2]} />)
     expect(screen.getByTestId('row-j1')).toBeInTheDocument()
     expect(screen.getByTestId('row-j2')).toBeInTheDocument()
   })
@@ -193,5 +235,83 @@ describe('JobsTable', () => {
     expect(() =>
       render(<JobsTable {...defaultProps} jobs={[mockJob, job2]} focusedIndex={1} />)
     ).not.toThrow()
+  })
+
+  // ── Infinite-scroll sentinel ─────────────────────────────────────────────────
+
+  it('does not render a sentinel when there is no next page and nothing is fetching', () => {
+    render(<JobsTable {...defaultProps} hasNextPage={false} isFetchingMore={false} />)
+    expect(screen.queryByTestId('jobs-table-sentinel')).not.toBeInTheDocument()
+  })
+
+  it('renders a sentinel when hasNextPage is true', () => {
+    render(<JobsTable {...defaultProps} hasNextPage={true} />)
+    expect(screen.getByTestId('jobs-table-sentinel')).toBeInTheDocument()
+  })
+
+  it('calls onLoadMore when the sentinel intersects', () => {
+    const onLoadMore = vi.fn()
+    render(<JobsTable {...defaultProps} hasNextPage={true} onLoadMore={onLoadMore} />)
+    fireIntersection(true)
+    expect(onLoadMore).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not call onLoadMore when the sentinel is not intersecting', () => {
+    const onLoadMore = vi.fn()
+    render(<JobsTable {...defaultProps} hasNextPage={true} onLoadMore={onLoadMore} />)
+    fireIntersection(false)
+    expect(onLoadMore).not.toHaveBeenCalled()
+  })
+
+  it('shows the "Loading more roles…" indicator while isFetchingMore is true', () => {
+    render(<JobsTable {...defaultProps} hasNextPage={true} isFetchingMore={true} />)
+    expect(screen.getByText('Loading more roles…')).toBeInTheDocument()
+  })
+
+  it('does not show the loading-more indicator when isFetchingMore is false', () => {
+    render(<JobsTable {...defaultProps} hasNextPage={true} isFetchingMore={false} />)
+    expect(screen.queryByText('Loading more roles…')).not.toBeInTheDocument()
+  })
+
+  // ── Apply action ─────────────────────────────────────────────────────────────
+
+  it('passes onApply through to buildJobColumns without crashing', () => {
+    const onApply = vi.fn()
+    expect(() => render(<JobsTable {...defaultProps} onApply={onApply} />)).not.toThrow()
+  })
+
+  // ── Row hover / focus / active classes ──────────────────────────────────────
+  // Regression coverage for the DataTable merge bug: JobsTable relies on
+  // getRowProps' className composing with (not replacing) getRowClassName's
+  // hover/focus/active classes.
+
+  it('gives a default row the hover background and the violet edge-accent hook', () => {
+    render(<JobsTable {...defaultProps} />)
+    const row = screen.getByTestId('row-j1')
+    expect(row.className).toContain('hover:bg-hover')
+    expect(row.className).toContain('group/row')
+    expect(row).toHaveAttribute('data-has-edge', 'true')
+    expect(row.style.getPropertyValue('--row-edge')).toBe('var(--violet)')
+  })
+
+  it('rings the keyboard-focused row', () => {
+    render(<JobsTable {...defaultProps} focusedIndex={0} />)
+    const row = screen.getByTestId('row-j1')
+    expect(row.className).toContain('ring-2')
+    expect(row.className).toContain('ring-violet')
+  })
+
+  it('highlights the active row with the accent-dim background instead of the hover class', () => {
+    render(<JobsTable {...defaultProps} activeJobId="j1" />)
+    const row = screen.getByTestId('row-j1')
+    expect(row.className).toContain('bg-[var(--accent-dim)]')
+    expect(row.className).not.toContain('hover:bg-hover')
+  })
+
+  it('applies the row-level focus-ring className passed via getRowProps alongside the hover class', () => {
+    render(<JobsTable {...defaultProps} />)
+    const row = screen.getByTestId('row-j1')
+    expect(row.className).toContain('focus-visible:ring-2')
+    expect(row.className).toContain('focus-visible:ring-violet')
   })
 })

@@ -1,4 +1,5 @@
 export { useJobs } from './hooks/useJobs'
+export { useJob } from './hooks/useJob'
 export { useJobActions } from './hooks/useJobActions'
 export { useJobKeyboard } from './hooks/useJobKeyboard'
 export { useFocusedJob } from './hooks/useFocusedJob'

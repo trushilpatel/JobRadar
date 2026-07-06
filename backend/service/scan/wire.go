@@ -6,6 +6,9 @@ import (
 )
 
 // ProviderSet is the Wire provider set for the scan domain.
+//
+// NOTE: this ProviderSet documents the intended composition only — it is
+// never fed through Wire's codegen; see apps/api/CLAUDE.md.
 var ProviderSet = wire.NewSet(
 	svc.NewRestRouter,
 	svc.NewRestService,

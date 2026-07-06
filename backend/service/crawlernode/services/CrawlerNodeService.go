@@ -30,8 +30,11 @@ type NodeStore interface {
 // AssignmentStore manages the company_scan_queue in node-claiming mode.
 // Terminal — no next, no BaseNodeService.
 type AssignmentStore interface {
-	// ClaimNextForNode claims the next queued row for the given adapterType using
-	// FOR UPDATE SKIP LOCKED and sets locked_by = nodeID.
+	// ClaimNextForNode claims the next queued row for the given adapterType and
+	// sets locked_by = nodeID. Safety against double-claiming comes from a
+	// targeted per-row UPDATE ... WHERE status = 'queued' check, not from row
+	// locking — there is deliberately no FOR UPDATE SKIP LOCKED in this path;
+	// see crawlernode/CLAUDE.md for why.
 	// Returns nil, nil when no eligible row exists.
 	ClaimNextForNode(ctx context.Context, nodeID, adapterType string) (*dto.ScanQueueItem, error)
 

@@ -3,9 +3,12 @@ package main
 import (
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/service/application"
+	applyqueuesvc "github.com/trushilpatel/jobradar/service/applyqueue/services"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
+	pipelinesvc "github.com/trushilpatel/jobradar/service/pipeline/services"
+	resumesvc "github.com/trushilpatel/jobradar/service/resume/services"
 	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
@@ -18,6 +21,9 @@ type App struct {
 	jobHandler          *jobsvc.RestRouter
 	applicationHandler  *application.Handler
 	companyAdminHandler *companysvc.AdminRestRouter
+	resumeHandler       *resumesvc.RestRouter
+	pipelineHandler     *pipelinesvc.PipelineRestRouter
+	applyQueueHandler   *applyqueuesvc.RestRouter
 }
 
 // NewApp constructs the App from fully-wired domain handlers.
@@ -29,6 +35,9 @@ func NewApp(
 	jobHandler *jobsvc.RestRouter,
 	applicationHandler *application.Handler,
 	companyAdminHandler *companysvc.AdminRestRouter,
+	resumeHandler *resumesvc.RestRouter,
+	pipelineHandler *pipelinesvc.PipelineRestRouter,
+	applyQueueHandler *applyqueuesvc.RestRouter,
 ) *App {
 	return &App{
 		companyHandler:      companyHandler,
@@ -37,6 +46,9 @@ func NewApp(
 		jobHandler:          jobHandler,
 		applicationHandler:  applicationHandler,
 		companyAdminHandler: companyAdminHandler,
+		resumeHandler:       resumeHandler,
+		pipelineHandler:     pipelineHandler,
+		applyQueueHandler:   applyQueueHandler,
 	}
 }
 
@@ -48,6 +60,8 @@ func (a *App) Handlers() []handler.RouteGroup {
 		a.scanHandler,
 		a.jobHandler,
 		a.applicationHandler,
+		a.resumeHandler,
+		a.applyQueueHandler,
 	}
 }
 
@@ -65,4 +79,12 @@ func (a *App) CompanyAdminHandler() handler.RouteGroup {
 		return nil
 	}
 	return a.companyAdminHandler
+}
+
+// PipelineHandler returns the pipeline router for admin mounting.
+func (a *App) PipelineHandler() handler.RouteGroup {
+	if a.pipelineHandler == nil {
+		return nil
+	}
+	return a.pipelineHandler
 }

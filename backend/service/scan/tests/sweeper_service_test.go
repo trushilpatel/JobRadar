@@ -151,11 +151,8 @@ func (q *sweeperFakeQueue) EnqueueDue(_ context.Context, _ int, _ string) (svc.E
 	return svc.EnqueueDueResult{}, nil
 }
 func (q *sweeperFakeQueue) EnqueueAll(_ context.Context, _ string) (int, error) { return 0, nil }
-func (q *sweeperFakeQueue) ClaimNext(_ context.Context, _ string) (*scandto.ScanQueueItem, error) {
-	return nil, nil
-}
-func (q *sweeperFakeQueue) Complete(_ context.Context, _ string) error { return nil }
-func (q *sweeperFakeQueue) Remove(_ context.Context, _ string) error   { return nil }
+func (q *sweeperFakeQueue) Complete(_ context.Context, _ string) error          { return nil }
+func (q *sweeperFakeQueue) Remove(_ context.Context, _ string) error            { return nil }
 func (q *sweeperFakeQueue) ResetStuck(_ context.Context, _ time.Duration) (int, error) {
 	return 0, nil
 }

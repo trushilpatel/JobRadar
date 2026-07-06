@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Keyboard } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { Job, JobStatus } from '@/types'
@@ -19,7 +18,6 @@ import {
   JobCommandPalette,
   JobShortcutSheet,
 } from '@/features/jobs'
-import { JobResumeSection } from '@/pages/jobs/JobResumeSection'
 import { useIsMobile } from '@/lib/hooks/use-media-query'
 import { useHiddenItems } from '@/lib/hooks/hidden-items'
 import { showDismissStripe } from '@/components/ui/dismiss-stripe'
@@ -28,6 +26,7 @@ import { HIDDEN_COMPANIES_CATEGORY } from '@/config/constants/hiddenItems'
 type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new' | 'saved'>
 
 const SCROLL_RESTORATION_KEY = 'jobs-page-scroll-y'
+const DEFAULT_PANEL_WIDTH = 480
 
 export function JobsPage() {
   const jobs = useJobs()
@@ -36,15 +35,14 @@ export function JobsPage() {
   const isMobile = useIsMobile()
   const hiddenCompanies = useHiddenItems(HIDDEN_COMPANIES_CATEGORY)
 
-  // Local UI state — layout widths, overlay flags. None of these survive a
-  // refresh by design.
-  const [panelWidth, setPanelWidth] = useState(440)
+  // Local UI state — overlay flags. None of these survive a refresh by design.
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
   // User can dismiss the always-open detail panel; honored until they click a
   // row or change tabs.
   const [panelClosedByUser, setPanelClosedByUser] = useState(false)
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
 
   // ── Hide-list filtering ────────────────────────────────────────────────────
   // Jobs from a hidden company are pruned at the page level (after fetch).
@@ -172,6 +170,13 @@ export function JobsPage() {
     window.open(job.url, '_blank', 'noreferrer')
   }, [focus.focusedJob])
 
+  const handleApply = useCallback(
+    (job: Job) => {
+      actions.applyJob.mutate({ id: job.id, url: job.url })
+    },
+    [actions.applyJob]
+  )
+
   const handleEscape = useCallback(() => {
     if (jobs.openJobId) {
       setPanelClosedByUser(true)
@@ -221,9 +226,6 @@ export function JobsPage() {
     onOpenPreview: handleOpenFocused,
     onOpenUrl: handleOpenUrlFocused,
     onEscape: handleEscape,
-    onPrevPage: jobs.goToPrevPage,
-    onNextPage: jobs.goToNextPage,
-    onFirstPage: jobs.goToFirstPage,
     onGoToTab: handleGoToTab,
     onSetStatus: handleKeyboardSetStatus,
     onToggleSave: handleKeyboardToggleSave,
@@ -241,6 +243,7 @@ export function JobsPage() {
     jobs.locationFilter !== 'any',
     jobs.expFilter.length > 0,
     jobs.dateFilter !== 'all',
+    jobs.visaFilter !== 'any',
   ].filter(Boolean).length
 
   return (
@@ -252,12 +255,14 @@ export function JobsPage() {
           setPanelClosedByUser(false)
         }}
         counts={jobs.counts}
+        trackingStages={jobs.trackingStages}
+        onTrackingStagesChange={jobs.setTrackingStages}
         leftSlot={
           <div className="flex items-baseline gap-3">
             <h1 className="text-lg font-semibold text-primary">Jobs</h1>
             <span className="text-xs text-muted">
               {activeFilterCount > 0 && (
-                <span className="text-violet-300">
+                <span style={{ color: 'var(--violet-bright)' }}>
                   {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
                 </span>
               )}
@@ -302,6 +307,8 @@ export function JobsPage() {
         onExpChange={jobs.setExpFilter}
         dateFilter={jobs.dateFilter}
         onDateChange={jobs.setDateFilter}
+        visaFilter={jobs.visaFilter}
+        onVisaChange={jobs.setVisaFilter}
         onReset={jobs.resetFilters}
         hasActiveFilters={activeFilterCount > 0}
         mobileOpen={mobileFilterOpen}
@@ -309,24 +316,20 @@ export function JobsPage() {
         activeFilterCount={activeFilterCount}
       />
 
-      {/* Content: table + always-open detail panel */}
+      {/* Content: table + always-open detail panel. The panel is a flex
+          sibling of the table (not a portal/overlay) so the table genuinely
+          reflows to make room — same pattern as CompaniesPage's drawer. */}
       <ErrorBoundary>
         <div className="flex-1 flex min-h-0 overflow-hidden">
           <div ref={tableScrollRef} className="flex flex-1 min-w-0 overflow-hidden">
             <JobsTable
               jobs={visibleJobs}
-              loading={jobs.isLoading || jobs.isFetching}
-              isFetchingMore={false}
+              loading={jobs.isLoading}
+              isFetchingMore={jobs.isFetchingMore}
               isError={jobs.isError}
               onRetry={() => void jobs.refetch()}
               tab={jobs.tab}
-              page={jobs.page}
-              limit={jobs.limit}
-              itemsOnPage={jobs.itemsOnPage}
-              itemsBeforePage={jobs.itemsBeforePage}
               hasNextPage={jobs.hasNextPage}
-              hasPrevPage={jobs.hasPrevPage}
-              knownTotal={activeFilterCount === 0 ? jobs.counts[jobs.tab as TabKey] : undefined}
               hasActiveFilters={activeFilterCount > 0}
               activeJobId={jobs.openJobId ?? null}
               focusedIndex={focus.focusedIndex}
@@ -341,11 +344,9 @@ export function JobsPage() {
               }}
               onToggleSave={handleToggleSave}
               onDismiss={handleDismiss}
+              onApply={handleApply}
               getAttachmentState={() => null}
-              onNextPage={jobs.goToNextPage}
-              onPrevPage={jobs.goToPrevPage}
-              onFirstPage={jobs.goToFirstPage}
-              onLimitChange={jobs.setLimit}
+              onLoadMore={jobs.loadMore}
               sorting={jobs.sorting}
               onSortingChange={jobs.handleSortingChange}
             />
@@ -353,10 +354,10 @@ export function JobsPage() {
 
           {!isMobile && openJob && !panelClosedByUser && (
             <>
-              <ResizeHandle width={panelWidth} onChange={setPanelWidth} min={300} max={720} />
-              <div
-                style={{ '--panel-width': `${panelWidth}px` } as CSSProperties}
-                className="shrink-0 flex flex-col min-h-0 border-l border-[var(--border)] overflow-hidden [width:var(--panel-width)]"
+              <ResizeHandle width={panelWidth} onChange={setPanelWidth} />
+              <aside
+                style={{ ['--panel-width' as string]: `${panelWidth}px` } as CSSProperties}
+                className="flex flex-col shrink-0 min-h-0 h-full border-l border-[var(--border)] overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.4)] [width:var(--panel-width)]"
               >
                 <JobDetailPanel
                   job={openJob}
@@ -367,9 +368,8 @@ export function JobsPage() {
                   onStatusChange={handleStatusChange}
                   onToggleSave={handleToggleSave}
                   onDismiss={handleDismiss}
-                  resumeSection={<JobResumeSection jobId={openJob.id} />}
                 />
-              </div>
+              </aside>
             </>
           )}
         </div>

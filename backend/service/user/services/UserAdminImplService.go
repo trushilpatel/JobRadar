@@ -29,10 +29,6 @@ func NewAdminImplService(next AdminService, clerk clerkadmin.Client, c cache.Cac
 	}
 }
 
-// adminIdentityCacheKey returns the cache key used by RequireIdentity to
-// store a user's identity bundle. Must match middleware.userCacheKey.
-func adminIdentityCacheKey(id string) string { return "user:" + id }
-
 // SetRoles delegates to the repository, then evicts the user's cached
 // identity so the new role set takes effect on their next request.
 func (s *adminImplService) SetRoles(ctx context.Context, id string, roleIDs []string, grantedBy string) error {
@@ -72,12 +68,14 @@ func (s *adminImplService) AdminDelete(ctx context.Context, id string) error {
 	return nil
 }
 
-// evictIdentity removes the user's identity bundle from the cache. A nil
-// cache or a Delete error is silently ignored — the identity TTL is the
-// fallback and the operation has already committed to the DB.
+// evictIdentity removes the user's identity bundle from the cache, using the
+// same identityCacheKey the self-service chain's CacheService writes to
+// (UserCacheService.go) — one key format, one definition. A nil cache or a
+// Delete error is silently ignored — the identity TTL is the fallback and
+// the operation has already committed to the DB.
 func (s *adminImplService) evictIdentity(ctx context.Context, id string) {
 	if s.cache != nil {
-		_ = s.cache.Delete(ctx, adminIdentityCacheKey(id))
+		_ = s.cache.Delete(ctx, identityCacheKey(id))
 	}
 }
 

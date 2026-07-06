@@ -15,7 +15,7 @@ import (
 func TestAtsValidation_ListATS_PassThrough(t *testing.T) {
 	t.Parallel()
 	next := &recordingAtsNext{listResult: []atsdto.ATSDTO{{Name: "greenhouse"}}}
-	svc := atssvc.NewAtsValidationService(next)
+	svc := atssvc.NewValidationService(next)
 
 	items, err := svc.ListATS(context.Background())
 	if err != nil {
@@ -34,7 +34,7 @@ func TestAtsValidation_ListATS_PassThrough(t *testing.T) {
 func TestAtsValidation_GetATS_PassThrough(t *testing.T) {
 	t.Parallel()
 	next := &recordingAtsNext{getResult: &atsdto.ATSDTO{Name: "lever"}}
-	svc := atssvc.NewAtsValidationService(next)
+	svc := atssvc.NewValidationService(next)
 
 	got, err := svc.GetATS(context.Background(), "lever")
 	if err != nil {
@@ -64,7 +64,7 @@ func asValidationErrors(t *testing.T, err error) domainerrs.ValidationErrors {
 func TestAtsValidation_UpdateATS_EmptyName(t *testing.T) {
 	t.Parallel()
 	next := &recordingAtsNext{}
-	svc := atssvc.NewAtsValidationService(next)
+	svc := atssvc.NewValidationService(next)
 
 	active := true
 	_, err := svc.UpdateATS(context.Background(), "", atsdto.UpdateATSInput{IsActive: &active})
@@ -89,7 +89,7 @@ func TestAtsValidation_UpdateATS_EmptyName(t *testing.T) {
 func TestAtsValidation_UpdateATS_ScanIntervalTooLow(t *testing.T) {
 	t.Parallel()
 	next := &recordingAtsNext{}
-	svc := atssvc.NewAtsValidationService(next)
+	svc := atssvc.NewValidationService(next)
 
 	_, err := svc.UpdateATS(context.Background(), "greenhouse", atsdto.UpdateATSInput{ScanIntervalMin: ptr(0)})
 	if err == nil {
@@ -110,7 +110,7 @@ func TestAtsValidation_UpdateATS_ScanIntervalTooLow(t *testing.T) {
 func TestAtsValidation_UpdateATS_ScanIntervalTooHigh(t *testing.T) {
 	t.Parallel()
 	next := &recordingAtsNext{}
-	svc := atssvc.NewAtsValidationService(next)
+	svc := atssvc.NewValidationService(next)
 
 	_, err := svc.UpdateATS(context.Background(), "greenhouse", atsdto.UpdateATSInput{ScanIntervalMin: ptr(10081)})
 	if err == nil {
@@ -131,7 +131,7 @@ func TestAtsValidation_UpdateATS_ScanIntervalTooHigh(t *testing.T) {
 func TestAtsValidation_UpdateATS_InterCompanyDelayNegative(t *testing.T) {
 	t.Parallel()
 	next := &recordingAtsNext{}
-	svc := atssvc.NewAtsValidationService(next)
+	svc := atssvc.NewValidationService(next)
 
 	_, err := svc.UpdateATS(context.Background(), "greenhouse", atsdto.UpdateATSInput{InterCompanyDelayS: ptr(-1)})
 	if err == nil {
@@ -152,7 +152,7 @@ func TestAtsValidation_UpdateATS_InterCompanyDelayNegative(t *testing.T) {
 func TestAtsValidation_UpdateATS_InterCompanyDelayTooHigh(t *testing.T) {
 	t.Parallel()
 	next := &recordingAtsNext{}
-	svc := atssvc.NewAtsValidationService(next)
+	svc := atssvc.NewValidationService(next)
 
 	_, err := svc.UpdateATS(context.Background(), "greenhouse", atsdto.UpdateATSInput{InterCompanyDelayS: ptr(3601)})
 	if err == nil {
@@ -173,7 +173,7 @@ func TestAtsValidation_UpdateATS_InterCompanyDelayTooHigh(t *testing.T) {
 func TestAtsValidation_UpdateATS_NoFieldsProvided(t *testing.T) {
 	t.Parallel()
 	next := &recordingAtsNext{}
-	svc := atssvc.NewAtsValidationService(next)
+	svc := atssvc.NewValidationService(next)
 
 	_, err := svc.UpdateATS(context.Background(), "greenhouse", atsdto.UpdateATSInput{})
 	if err == nil {
@@ -193,7 +193,7 @@ func TestAtsValidation_UpdateATS_NoFieldsProvided(t *testing.T) {
 func TestAtsValidation_UpdateATS_HappyPath(t *testing.T) {
 	t.Parallel()
 	next := &recordingAtsNext{updateResult: &atsdto.ATSDTO{Name: "greenhouse"}}
-	svc := atssvc.NewAtsValidationService(next)
+	svc := atssvc.NewValidationService(next)
 
 	active := true
 	got, err := svc.UpdateATS(context.Background(), "greenhouse", atsdto.UpdateATSInput{IsActive: &active})
@@ -224,7 +224,7 @@ func TestAtsValidation_UpdateATS_BoundaryValues(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			next := &recordingAtsNext{updateResult: &atsdto.ATSDTO{Name: "greenhouse"}}
-			svc := atssvc.NewAtsValidationService(next)
+			svc := atssvc.NewValidationService(next)
 			if _, err := svc.UpdateATS(context.Background(), "greenhouse", tc.input); err != nil {
 				t.Errorf("boundary %q got unexpected error: %v", tc.name, err)
 			}

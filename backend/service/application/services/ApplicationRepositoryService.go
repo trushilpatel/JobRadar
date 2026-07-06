@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
@@ -25,8 +26,8 @@ type applicationRepository struct {
 	db *gorm.DB
 }
 
-// NewApplicationRepositoryService constructs the per-user ApplicationRepository.
-func NewApplicationRepositoryService(db *gorm.DB) ApplicationRepository {
+// NewRepositoryService constructs the per-user ApplicationRepository.
+func NewRepositoryService(db *gorm.DB) ApplicationRepository {
 	return &applicationRepository{db: db}
 }
 
@@ -60,7 +61,10 @@ func (s *applicationRepository) ListByJob(ctx context.Context, userID, jobID str
 		Order("stage_at ASC").
 		Limit(100).
 		Find(&apps).Error
-	return apps, err
+	if err != nil {
+		return nil, fmt.Errorf("application.repo.ListByJob: %w", err)
+	}
+	return apps, nil
 }
 
 // ListAll returns a paginated list of the latest application per
@@ -78,7 +82,7 @@ func (s *applicationRepository) ListAll(ctx context.Context, userID string, page
 	if err = s.db.WithContext(ctx).
 		Raw(`SELECT COUNT(DISTINCT job_result_id) FROM job_application_tracker WHERE user_id = ?`, userID).
 		Scan(&total).Error; err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("application.repo.ListAll: count: %w", err)
 	}
 
 	offset := (page - 1) * limit
@@ -95,7 +99,10 @@ func (s *applicationRepository) ListAll(ctx context.Context, userID string, page
 		ORDER BY ja.job_result_id, ja.stage_at DESC
 		LIMIT ? OFFSET ?
 	`, userID, limit, offset).Scan(&results).Error
-	return results, int(total), err
+	if err != nil {
+		return nil, 0, fmt.Errorf("application.repo.ListAll: query: %w", err)
+	}
+	return results, int(total), nil
 }
 
 // ListActive returns the latest application per (user, job_result_id) for
@@ -126,7 +133,10 @@ func (s *applicationRepository) ListActive(ctx context.Context, userID string) (
 		WHERE ja.user_id = ? AND ja.stage IN ?
 		ORDER BY ja.job_result_id, ja.stage_at DESC
 	`, userID, interviewingStages).Scan(&results).Error
-	return results, err
+	if err != nil {
+		return nil, fmt.Errorf("application.repo.ListActive: %w", err)
+	}
+	return results, nil
 }
 
 // Create inserts a new application row scoped to (user, jobResultID).
@@ -199,8 +209,10 @@ func (s *applicationRepository) InsertAppliedApplication(ctx context.Context, jo
 	if userID == "" {
 		return errNoUser()
 	}
-	_, err := s.insertApplication(ctx, userID, jobResultID, appcommon.StageApplied, "")
-	return err
+	if _, err := s.insertApplication(ctx, userID, jobResultID, appcommon.StageApplied, ""); err != nil {
+		return fmt.Errorf("application.repo.InsertAppliedApplication: %w", err)
+	}
+	return nil
 }
 
 // --- unexported helpers ---
@@ -228,7 +240,7 @@ func (s *applicationRepository) insertApplication(ctx context.Context, userID, j
 		Note:        notePtr,
 	}
 	if err = s.db.WithContext(ctx).Create(&row).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("application.repo.insertApplication: %w", err)
 	}
 	return &row, nil
 }

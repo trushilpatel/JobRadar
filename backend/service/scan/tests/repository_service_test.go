@@ -105,29 +105,6 @@ func TestRepo_GetAnalytics_StoreError(t *testing.T) {
 	assertInternal(t, err)
 }
 
-func TestRepo_PurgeInactive_OK(t *testing.T) {
-	// fakeQueueStore.PurgeInactive returns (0, f.err) — without an err this
-	// confirms the no-rows case is treated as success.
-	q := &fakeQueueStore{}
-	s := newImplService(q, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
-
-	n, err := s.PurgeInactive(context.Background())
-	if err != nil {
-		t.Fatalf("PurgeInactive() error = %v", err)
-	}
-	if n != 0 {
-		t.Errorf("expected 0 purged, got %d", n)
-	}
-}
-
-func TestRepo_PurgeInactive_StoreError(t *testing.T) {
-	q := &fakeQueueStore{err: errors.New("db down")}
-	s := newImplService(q, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})
-
-	_, err := s.PurgeInactive(context.Background())
-	assertInternal(t, err)
-}
-
 func TestRepo_ListQueue_StoreError(t *testing.T) {
 	q := &fakeQueueStore{err: errors.New("db down")}
 	s := newImplService(q, &fakeScanLogReader{}, &fakeScanSettingsRepo{}, &fakeCompanyAdminService{}, svc.Config{})

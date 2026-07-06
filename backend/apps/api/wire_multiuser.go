@@ -30,6 +30,7 @@ func buildMultiUser(
 	log logger.Logger,
 	companyAdminRouter handler.RouteGroup,
 	atsRouter handler.RouteGroup,
+	pipelineRouter handler.RouteGroup,
 ) *multiUser {
 	userRepo := usersvc.NewRepositoryService(db)
 	userImpl := usersvc.NewImplService(userRepo, clerkClient)
@@ -72,6 +73,7 @@ func buildMultiUser(
 			auditAdminRouter,
 			companyAdminRouter,
 			atsRouter,
+			pipelineRouter,
 		},
 	}
 

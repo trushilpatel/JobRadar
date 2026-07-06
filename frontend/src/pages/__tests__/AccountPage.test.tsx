@@ -138,7 +138,9 @@ describe('AccountPage', () => {
   it('renders the current email', () => {
     mockUserConfig(false)
     render(<AccountPage />, { wrapper: makeWrapper() })
-    expect(screen.getByText('test@test.com')).toBeInTheDocument()
+    const instances = screen.getAllByText('test@test.com')
+    expect(instances.length).toBeGreaterThan(0)
+    instances.forEach((el) => expect(el).toBeInTheDocument())
   })
 
   // ── Profile save ───────────────────────────────────────────────────────────

@@ -59,7 +59,7 @@ func closedApplicationDB(t *testing.T) *gorm.DB {
 
 func TestRepo_ListByJob_HappyAndScope(t *testing.T) {
 	db := newApplicationTestDB(t)
-	repo := svc.NewApplicationRepositoryService(db)
+	repo := svc.NewRepositoryService(db)
 	ctx := context.Background()
 
 	// Seed two rows for user-1 / job-1, one for user-1 / job-2, one for user-2 / job-1.
@@ -90,7 +90,7 @@ func TestRepo_ListByJob_HappyAndScope(t *testing.T) {
 
 func TestRepo_ListByJob_DBError(t *testing.T) {
 	db := closedApplicationDB(t)
-	repo := svc.NewApplicationRepositoryService(db)
+	repo := svc.NewRepositoryService(db)
 	if _, err := repo.ListByJob(context.Background(), "u1", "j1"); err == nil {
 		t.Fatal("expected DB error, got nil")
 	}
@@ -98,7 +98,7 @@ func TestRepo_ListByJob_DBError(t *testing.T) {
 
 func TestRepo_Create_HappyAndScope(t *testing.T) {
 	db := newApplicationTestDB(t)
-	repo := svc.NewApplicationRepositoryService(db)
+	repo := svc.NewRepositoryService(db)
 
 	out, err := repo.Create(context.Background(), "u1", "j1", dto.CreateApplicationInput{Stage: "applied", Note: "first try"})
 	if err != nil {
@@ -123,7 +123,7 @@ func TestRepo_Create_HappyAndScope(t *testing.T) {
 
 func TestRepo_Create_DBError(t *testing.T) {
 	db := closedApplicationDB(t)
-	repo := svc.NewApplicationRepositoryService(db)
+	repo := svc.NewRepositoryService(db)
 	_, err := repo.Create(context.Background(), "u1", "j1", dto.CreateApplicationInput{Stage: "applied"})
 	if err == nil {
 		t.Fatal("expected DB error, got nil")
@@ -132,7 +132,7 @@ func TestRepo_Create_DBError(t *testing.T) {
 
 func TestRepo_UpdateStage_HappyAndBadID(t *testing.T) {
 	db := newApplicationTestDB(t)
-	repo := svc.NewApplicationRepositoryService(db)
+	repo := svc.NewRepositoryService(db)
 
 	created, err := repo.Create(context.Background(), "u1", "j1", dto.CreateApplicationInput{Stage: "applied"})
 	if err != nil {
@@ -181,7 +181,7 @@ func TestRepo_UpdateStage_HappyAndBadID(t *testing.T) {
 
 	t.Run("db error", func(t *testing.T) {
 		bad := closedApplicationDB(t)
-		badRepo := svc.NewApplicationRepositoryService(bad)
+		badRepo := svc.NewRepositoryService(bad)
 		err := badRepo.UpdateStage(context.Background(), "u1", "1", dto.UpdateStageInput{Stage: "applied"})
 		if err == nil {
 			t.Fatal("expected DB error")
@@ -191,7 +191,7 @@ func TestRepo_UpdateStage_HappyAndBadID(t *testing.T) {
 
 func TestRepo_UpdateNote_HappyAndBadID(t *testing.T) {
 	db := newApplicationTestDB(t)
-	repo := svc.NewApplicationRepositoryService(db)
+	repo := svc.NewRepositoryService(db)
 
 	created, err := repo.Create(context.Background(), "u1", "j1", dto.CreateApplicationInput{Stage: "applied"})
 	if err != nil {
@@ -243,7 +243,7 @@ func TestRepo_UpdateNote_HappyAndBadID(t *testing.T) {
 
 	t.Run("db error", func(t *testing.T) {
 		bad := closedApplicationDB(t)
-		badRepo := svc.NewApplicationRepositoryService(bad)
+		badRepo := svc.NewRepositoryService(bad)
 		err := badRepo.UpdateNote(context.Background(), "u1", "1", dto.UpdateNoteInput{Note: "x"})
 		if err == nil {
 			t.Fatal("expected DB error")
@@ -278,18 +278,31 @@ func TestRepo_InsertAppliedApplication_HappyAndAnonCtx(t *testing.T) {
 }
 
 func TestRepo_ListAll_DBError(t *testing.T) {
-	// Happy path needs Postgres DISTINCT ON; cover the error branch via closed DB.
+	// Happy path needs Postgres DISTINCT ON; cover the count-query error branch via closed DB.
 	db := closedApplicationDB(t)
-	repo := svc.NewApplicationRepositoryService(db)
+	repo := svc.NewRepositoryService(db)
 	_, _, err := repo.ListAll(context.Background(), "u1", 1, 20)
 	if err == nil {
 		t.Fatal("expected DB error")
 	}
 }
 
+// TestRepo_ListAll_SecondQueryError covers the DISTINCT ON query's own error
+// branch specifically: an open (not closed) sqlite DB lets the portable
+// COUNT(DISTINCT ...) succeed, then fails on the Postgres-only DISTINCT ON
+// syntax in the second query — the two queries have independent wrap points.
+func TestRepo_ListAll_SecondQueryError(t *testing.T) {
+	db := newApplicationTestDB(t)
+	repo := svc.NewRepositoryService(db)
+	_, _, err := repo.ListAll(context.Background(), "u1", 1, 20)
+	if err == nil {
+		t.Fatal("expected DISTINCT ON syntax error from sqlite")
+	}
+}
+
 func TestRepo_ListActive_DBError(t *testing.T) {
 	db := closedApplicationDB(t)
-	repo := svc.NewApplicationRepositoryService(db)
+	repo := svc.NewRepositoryService(db)
 	_, err := repo.ListActive(context.Background(), "u1")
 	if err == nil {
 		t.Fatal("expected DB error")
