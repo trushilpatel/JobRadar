@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { SegmentedSwitch } from '@/components/ui/segmented-switch'
-import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { ResizeHandle } from '@/components/ui/resize-handle'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import {
   useApplyQueue,
@@ -18,6 +18,8 @@ import { useJob, useJobActions, JobDetailPanel } from '@/features/jobs'
 import type { Job, JobStatus } from '@/types'
 import { useApplyQueueResumeMatch } from './apply-queue/useApplyQueueResumeMatch'
 
+const DEFAULT_PANEL_WIDTH = 480
+
 export function ApplyQueuePage() {
   const q = useApplyQueue()
   const { data: resumes } = useResumes()
@@ -31,6 +33,7 @@ export function ApplyQueuePage() {
   // for the pattern that exists on the Jobs page); a plain useState matches
   // the project's "component-local UI state -> useState" rule.
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
   const selectedJob = useJob(selectedJobId ?? undefined)
 
   const resumeOptions: ApplyQueueResumeOption[] = (resumes ?? []).map((r) => ({
@@ -109,95 +112,77 @@ export function ApplyQueuePage() {
       </div>
 
       <ErrorBoundary>
-        <ApplyQueueTable
-          items={q.items}
-          loading={q.isLoading}
-          isError={q.isError}
-          onRetry={q.refetch}
-          emptyMessage={
-            q.filter === APPLY_QUEUE_FILTER.SAVED
-              ? 'No saved jobs yet'
-              : 'No jobs in your apply queue yet'
-          }
-          resumeOptions={resumeOptions}
-          onResumeChange={handleResumeChange}
-          isResumeUpdatePending={isResumeUpdatePending}
-          getEffectiveResume={getEffectiveResume}
-          getMatchSummary={getMatchSummary}
-          selectedJobId={selectedJobId}
-          onRowClick={handleRowClick}
-          page={q.page}
-          itemsOnPage={q.itemsOnPage}
-          itemsBeforePage={q.itemsBeforePage}
-          limit={q.limit}
-          onLimitChange={q.setLimit}
-          hasNextPage={q.hasNextPage}
-          hasPrevPage={q.hasPrevPage}
-          onNext={q.goToNextPage}
-          onPrev={q.goToPrevPage}
-          onFirst={q.goToFirstPage}
-        />
-      </ErrorBoundary>
+        {/* Table + on-demand detail panel as flex siblings (not a portal/
+            overlay) so the table genuinely reflows to make room — same
+            pattern as CompaniesPage's drawer. */}
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          <ApplyQueueTable
+            items={q.items}
+            loading={q.isLoading}
+            isError={q.isError}
+            onRetry={q.refetch}
+            emptyMessage={
+              q.filter === APPLY_QUEUE_FILTER.SAVED
+                ? 'No saved jobs yet'
+                : 'No jobs in your apply queue yet'
+            }
+            resumeOptions={resumeOptions}
+            onResumeChange={handleResumeChange}
+            isResumeUpdatePending={isResumeUpdatePending}
+            getEffectiveResume={getEffectiveResume}
+            getMatchSummary={getMatchSummary}
+            selectedJobId={selectedJobId}
+            onRowClick={handleRowClick}
+            page={q.page}
+            itemsOnPage={q.itemsOnPage}
+            itemsBeforePage={q.itemsBeforePage}
+            limit={q.limit}
+            onLimitChange={q.setLimit}
+            hasNextPage={q.hasNextPage}
+            hasPrevPage={q.hasPrevPage}
+            onNext={q.goToNextPage}
+            onPrev={q.goToPrevPage}
+            onFirst={q.goToFirstPage}
+          />
 
-      {/* Non-modal detail panel — same UI pattern as JobsPage's always-open
-          reading pane (see pages/JobsPage.tsx), opened on demand here rather
-          than always-open since the Apply Queue is a working list, not a
-          browse feed. */}
-      <Sheet
-        modal={false}
-        open={!!selectedJobId}
-        onOpenChange={(open) => {
-          if (!open) handlePanelClose()
-        }}
-      >
-        <SheetContent
-          side="right"
-          showOverlay={false}
-          showCloseButton={false}
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}
-          className="w-[32rem] flex flex-col p-0 border-l border-[var(--border)] shadow-[0_8px_24px_rgba(0,0,0,0.4)]"
-        >
           {selectedJobId && (
             <>
-              {/* Radix Dialog requires an accessible title/description; the
-                  visible heading lives inside JobDetailPanel itself. */}
-              <SheetTitle className="sr-only">
-                {selectedJob.data?.title ?? 'Job details'}
-              </SheetTitle>
-              <SheetDescription className="sr-only">
-                {selectedJob.data?.company?.name ?? ''} job details
-              </SheetDescription>
-              {selectedJob.isLoading ? (
-                <div className="flex flex-1 flex-col gap-3 p-6">
-                  <div className="h-6 w-2/3 animate-pulse rounded bg-subtle" />
-                  <div className="h-4 w-1/3 animate-pulse rounded bg-subtle" />
-                  <div className="mt-4 h-32 animate-pulse rounded bg-subtle" />
-                </div>
-              ) : selectedJob.isError || !selectedJob.data ? (
-                <div className="flex flex-1 flex-col items-start gap-3 p-6">
-                  <p className="text-sm text-red-400">Couldn't load this job.</p>
-                  <button
-                    type="button"
-                    onClick={handlePanelClose}
-                    className="rounded-lg border border-[var(--border-strong)] bg-subtle px-3 py-1.5 text-sm text-secondary"
-                  >
-                    Close
-                  </button>
-                </div>
-              ) : (
-                <JobDetailPanel
-                  job={selectedJob.data}
-                  onClose={handlePanelClose}
-                  onStatusChange={handleStatusChange}
-                  onToggleSave={handleToggleSave}
-                  onDismiss={handleDismiss}
-                />
-              )}
+              <ResizeHandle width={panelWidth} onChange={setPanelWidth} />
+              <aside
+                style={{ ['--panel-width' as string]: `${panelWidth}px` } as CSSProperties}
+                className="flex flex-col shrink-0 min-h-0 h-full border-l border-[var(--border)] overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.4)] [width:var(--panel-width)]"
+              >
+                {selectedJob.isLoading ? (
+                  <div className="flex flex-1 flex-col gap-3 p-6">
+                    <div className="h-6 w-2/3 animate-pulse rounded bg-subtle" />
+                    <div className="h-4 w-1/3 animate-pulse rounded bg-subtle" />
+                    <div className="mt-4 h-32 animate-pulse rounded bg-subtle" />
+                  </div>
+                ) : selectedJob.isError || !selectedJob.data ? (
+                  <div className="flex flex-1 flex-col items-start gap-3 p-6">
+                    <p className="text-sm text-red-400">Couldn't load this job.</p>
+                    <button
+                      type="button"
+                      onClick={handlePanelClose}
+                      className="rounded-lg border border-[var(--border-strong)] bg-subtle px-3 py-1.5 text-sm text-secondary"
+                    >
+                      Close
+                    </button>
+                  </div>
+                ) : (
+                  <JobDetailPanel
+                    job={selectedJob.data}
+                    onClose={handlePanelClose}
+                    onStatusChange={handleStatusChange}
+                    onToggleSave={handleToggleSave}
+                    onDismiss={handleDismiss}
+                  />
+                )}
+              </aside>
             </>
           )}
-        </SheetContent>
-      </Sheet>
+        </div>
+      </ErrorBoundary>
     </div>
   )
 }
