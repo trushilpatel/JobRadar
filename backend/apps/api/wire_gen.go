@@ -107,7 +107,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCf
 	pipelineImplService := pipelinesvc.NewImplService(pipelineRepositoryService)
 	pipelineValidationService := pipelinesvc.NewValidationService(pipelineImplService)
 	pipelineRestService := pipelinesvc.NewRestService(pipelineValidationService)
-	pipelineRestRouter := pipelinesvc.NewRestRouter(pipelineRestService)
+	pipelineRestRouter := pipelinesvc.NewRestRouter(pipelineRestService, adminZoneCfg)
 
 	// ── Apply Queue ──────────────────────────────────────────────────────────
 	applyQueueRepositoryService := services5.NewRepositoryService(db)

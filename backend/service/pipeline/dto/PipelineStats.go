@@ -32,9 +32,12 @@ type PipelineStats struct {
 // TriggerRetryInput identifies which worker/tier an admin wants to nudge.
 // NATS JetStream's BackOff/MaxDeliver handles actual redelivery
 // automatically — validating the pair is all this input drives today.
+// required:"false" on both fields matches the pre-Huma handler's plain
+// json.Decode (an absent field just leaves "", which ValidationService
+// rejects as an unknown worker/tier — never a framework-level 422).
 type TriggerRetryInput struct {
-	Worker string `json:"worker"`
-	Tier   string `json:"tier"`
+	Worker string `json:"worker" required:"false"`
+	Tier   string `json:"tier" required:"false"`
 }
 
 // TriggerRetryResult reports how many messages were drained. Always zero

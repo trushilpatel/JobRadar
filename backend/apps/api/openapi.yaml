@@ -506,6 +506,49 @@ components:
         - page
         - limit
       type: object
+    PipelineStats:
+      additionalProperties: false
+      properties:
+        active_companies:
+          format: int64
+          type: integer
+        awaiting_enrichment:
+          format: int64
+          type: integer
+        awaiting_filter:
+          format: int64
+          type: integer
+        crawling:
+          format: int64
+          type: integer
+        enricher_retries:
+          $ref: "#/components/schemas/RetryTierCounts"
+        errors_24h:
+          format: int64
+          type: integer
+        filter_retries:
+          $ref: "#/components/schemas/RetryTierCounts"
+        new_jobs_24h:
+          format: int64
+          type: integer
+        queued:
+          format: int64
+          type: integer
+        total_companies:
+          format: int64
+          type: integer
+      required:
+        - total_companies
+        - active_companies
+        - queued
+        - crawling
+        - awaiting_filter
+        - filter_retries
+        - awaiting_enrichment
+        - enricher_retries
+        - new_jobs_24h
+        - errors_24h
+      type: object
     QueueEntryView:
       additionalProperties: false
       properties:
@@ -803,6 +846,14 @@ components:
       required:
         - data
       type: object
+    ResponsePipelineStats:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/PipelineStats"
+      required:
+        - data
+      type: object
     ResponseQueueListResult:
       additionalProperties: false
       properties:
@@ -832,6 +883,14 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/StageResponse"
+      required:
+        - data
+      type: object
+    ResponseTriggerRetryResult:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/TriggerRetryResult"
       required:
         - data
       type: object
@@ -873,6 +932,27 @@ components:
         - size_bytes
         - created_at
         - extracted_text
+      type: object
+    RetryTierCounts:
+      additionalProperties: false
+      properties:
+        10m:
+          format: int64
+          type: integer
+        1h:
+          format: int64
+          type: integer
+        1m:
+          format: int64
+          type: integer
+        dlq:
+          format: int64
+          type: integer
+      required:
+        - 1m
+        - 10m
+        - 1h
+        - dlq
       type: object
     ScanRun:
       additionalProperties: false
@@ -991,6 +1071,23 @@ components:
       required:
         - app_id
         - stage
+      type: object
+    TriggerRetryInput:
+      additionalProperties: false
+      properties:
+        tier:
+          type: string
+        worker:
+          type: string
+      type: object
+    TriggerRetryResult:
+      additionalProperties: false
+      properties:
+        drained:
+          format: int64
+          type: integer
+      required:
+        - drained
       type: object
     UpdateATSInput:
       additionalProperties: false
@@ -1146,6 +1243,50 @@ paths:
       summary: Update an ATS adapter
       tags:
         - ats
+  /admin/pipeline/retry:
+    post:
+      operationId: triggerPipelineRetry
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TriggerRetryInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseTriggerRetryResult"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Trigger a retry redelivery nudge
+      tags:
+        - pipeline
+  /admin/pipeline/stats:
+    get:
+      operationId: getPipelineStats
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponsePipelineStats"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get pipeline health stats
+      tags:
+        - pipeline
   /api/applications:
     get:
       operationId: listAllApplications
