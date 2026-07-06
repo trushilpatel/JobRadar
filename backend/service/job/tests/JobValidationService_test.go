@@ -100,10 +100,14 @@ func TestValidate_List_StatusesFilter(t *testing.T) {
 	}
 }
 
-func TestValidate_SetStatus_RejectsNew(t *testing.T) {
+// TestValidate_SetStatus_AllowsNew — 'new' clears the workflow status
+// (UserJobStateRepositoryService.Upsert sets status = NULL, leaving saved_at
+// untouched); it is a writable value, not merely a list-filter synonym for
+// "no row".
+func TestValidate_SetStatus_AllowsNew(t *testing.T) {
 	v := newValidator()
-	if err := v.SetStatus(context.Background(), "j1", jobcommon.JobStatusNew); err == nil {
-		t.Fatal("'new' must be rejected — delete the row instead")
+	if err := v.SetStatus(context.Background(), "j1", jobcommon.JobStatusNew); err != nil {
+		t.Fatalf("'new' must be allowed through to clear workflow status: %v", err)
 	}
 }
 
@@ -179,12 +183,13 @@ func TestValidate_List_ExperienceRanges(t *testing.T) {
 	}
 }
 
-// TestValidate_SetStatus_AllValidStatuses asserts every writable workflow
-// status passes. 'saved' and 'new' are NOT writable workflow statuses and
-// are rejected by the validator (saved goes through SetSaved instead).
+// TestValidate_SetStatus_AllValidStatuses asserts every writable status
+// passes, including 'new' (clears workflow status). 'saved' is NOT writable
+// via this path — it is orthogonal and goes through SetSaved instead.
 func TestValidate_SetStatus_AllValidStatuses(t *testing.T) {
 	v := newValidator()
 	allowed := []string{
+		jobcommon.JobStatusNew,
 		jobcommon.JobStatusApplied,
 		jobcommon.JobStatusDismissed,
 		jobcommon.JobStatusInterviewing,
@@ -198,7 +203,7 @@ func TestValidate_SetStatus_AllValidStatuses(t *testing.T) {
 			}
 		})
 	}
-	rejected := []string{"", "garbage", "NEW", "Saved", jobcommon.JobStatusSaved, jobcommon.JobStatusNew}
+	rejected := []string{"", "garbage", "NEW", "Saved", jobcommon.JobStatusSaved}
 	for _, s := range rejected {
 		t.Run("reject "+s, func(t *testing.T) {
 			if err := v.SetStatus(context.Background(), "j1", s); err == nil {

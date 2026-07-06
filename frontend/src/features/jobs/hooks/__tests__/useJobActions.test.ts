@@ -86,11 +86,17 @@ function makeJob(id: string, status: Job['status'] = JOB_STATUS.NEW): Job {
   }
 }
 
+// Each `jobQueryKeys.list(...)` cache entry is a flat `JobsPage`
+// (`{ items, next_cursor }`) — useJobs.ts uses `useQuery` + explicit cursor
+// history, NOT `useInfiniteQuery`, so there is no `.pages` wrapper. Seeding
+// the wrong (`.pages`-wrapped) shape here previously let the "regression"
+// test below pass while the real production cache-scanning code was broken
+// against the real shape — see useJobActions.ts's snapshotAndPatch.
 function seedListCache(jobs: Job[]) {
   const filters = { status: JOB_STATUS.NEW } as jobsApi.JobFilters
   lastQc?.setQueryData(jobQueryKeys.list(filters, 20), {
-    pages: [{ items: jobs, next_cursor: '' }],
-    pageParams: [''],
+    items: jobs,
+    next_cursor: '',
   })
 }
 
@@ -567,10 +573,10 @@ describe('useJobActions', () => {
 
       // Wait for the optimistic onMutate hook to finish patching the cache.
       await waitFor(() => {
-        const cached = lastQc!.getQueryData<{ pages: jobsApi.JobsPage[] }>(
+        const cached = lastQc!.getQueryData<jobsApi.JobsPage>(
           jobQueryKeys.list({ status: JOB_STATUS.NEW }, 20)
         )
-        expect(cached?.pages[0]?.items[0]?.status).toBe(JOB_STATUS.APPLIED)
+        expect(cached?.items[0]?.status).toBe(JOB_STATUS.APPLIED)
       })
 
       // Resolve and tidy up so the test exits cleanly.
@@ -594,10 +600,10 @@ describe('useJobActions', () => {
       })
 
       // Cache should have rolled back to NEW.
-      const cached = lastQc!.getQueryData<{ pages: jobsApi.JobsPage[] }>(
+      const cached = lastQc!.getQueryData<jobsApi.JobsPage>(
         jobQueryKeys.list({ status: JOB_STATUS.NEW }, 20)
       )
-      expect(cached?.pages[0]?.items[0]?.status).toBe(JOB_STATUS.NEW)
+      expect(cached?.items[0]?.status).toBe(JOB_STATUS.NEW)
     })
   })
 
