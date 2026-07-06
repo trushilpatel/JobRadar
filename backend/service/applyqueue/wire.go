@@ -12,6 +12,9 @@ import (
 // own constructor over the same stateless repositoryService struct — see
 // services/ApplyQueueService.go for why three separate constructors exist
 // instead of one combined interface.
+//
+// NOTE: this ProviderSet documents the intended composition only — it is
+// never fed through Wire's codegen; see apps/api/CLAUDE.md.
 var ProviderSet = wire.NewSet(
 	services.NewRestRouter,
 	services.NewRestService,

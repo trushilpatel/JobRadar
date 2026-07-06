@@ -90,6 +90,14 @@ func (s *implService) Create(ctx context.Context, input dto.CreateInput) error {
 
 Same shape as `ImplService` — embeds `BaseService`, overrides only methods that need validation. Methods without validation rules pass through unmodified.
 
+**"Validation" covers three genuinely different things across slices — don't assume a new slice's `ValidationService` matches the one you last read:**
+
+1. **Pure field checks** (the default: `job/JobValidationService.go`, `company/CompanyValidationService.go`) — in-memory shape/range/enum checks only, no DB reads, no side effects.
+2. **Authorization / ownership reads** (`applyqueue/ApplyQueueValidationService.go` — `HasEngagement`, `ResumeOwnedByUser`) — hits the DB to confirm the caller is allowed to act on a resource. This is a real dependency on the DB, not a pure function; treat it as an authorization gate, not a field check.
+3. **Input mutation** (`resume/ResumeValidationService.go` — content-type sniffing via `filetype.Detect`, filename→label fallback) — the validated input coming out is not byte-identical to what went in.
+
+If you're implementing a new slice's `ValidationService` by copying an existing one, know which of the three you're copying — don't assume side-effect-free just because that's the majority case.
+
 ### RestService — HTTP adapter
 
 Has `next {Domain}Service` as its **only** dependency. Parses request → calls `next` → responds. Does **not** implement the domain interface. No routing logic — that belongs in `RestRouter`.

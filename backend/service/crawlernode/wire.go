@@ -27,6 +27,10 @@ import (
 // NewAdapterDelayGate needs an ats/services.AtsService — wire callers must
 // provide one (see ats.ProviderSet or the manual chain in
 // apps/orchestrator/main.go).
+//
+// NOTE: this ProviderSet is never fed through Wire's codegen and isn't
+// consumed by apps/orchestrator/ at all — see crawlernode/CLAUDE.md and
+// apps/api/CLAUDE.md.
 var ProviderSet = wire.NewSet(
 	services.NewNodeRestRouter,
 	services.NewAdminRestRouter,

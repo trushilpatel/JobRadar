@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"io"
 	"mime"
 	"net/http"
@@ -104,9 +103,8 @@ func (h *RestService) rename(w http.ResponseWriter, r *http.Request) {
 	userID := identity.MustFromContext(r.Context()).UserID
 	id := chi.URLParam(r, "id")
 
-	var req renameRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	req, ok := handler.DecodeBody[renameRequest](w, r)
+	if !ok {
 		return
 	}
 	resume, err := h.next.Rename(r.Context(), userID, id, req.Label)

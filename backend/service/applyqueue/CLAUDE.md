@@ -1,4 +1,4 @@
-# applyqueue/ — Apply-queue list + resume attachment; on-read resume-match recommendations
+# applyqueue/ — Apply-queue list + resume attachment; serves job keywords, does not match them
 
 ## Deviation from canonical calling convention
 
@@ -26,14 +26,11 @@ This is deliberate, not accidental duplication: a single constructor returning a
 
 `ApplyQueueValidationService.go`'s `SetResume` calls `EngagementChecker.HasEngagement` and `ResumeOwnershipChecker.ResumeOwnedByUser` — both hit the DB. This is authorization/ownership checking, not the pure in-memory field validation `job/`'s and `company/`'s `ValidationService` layers do. If you're using another slice's `ValidationService` as a template, don't assume "Validation" always means side-effect-free.
 
-## Resume-match recommendations (`ApplyQueueMatching.go`)
+## Job keywords are served raw — no server-side matching (as of 2026-07-05)
 
-Computed on every `List` read, never cached, never stored:
+An earlier design computed a server-side "best matching resume" recommendation per job (Jaccard similarity over `job_tech_tags` vs. an LLM-derived resume-keywords column) in `ApplyQueueMatching.go`. That file, the LLM-based resume keyword extraction it depended on, and `dto.QueueItem`'s `RecommendedResumeID`/`RecommendedResumeLabel` fields are **all deleted** — see `docs/superpowers/specs/2026-07-05-resume-job-keyword-match-design.md`. If you're reading old code, a commit, or a stale doc that references `ApplyQueueMatching.go`, `jaccardSimilarity`, `bestMatchingResume`, or `loadUserResumeKeywords`, it no longer exists.
 
-- `loadJobTechTags` reads `job_tech_tags` (the cleaned tags — see `techtag.Clean` — not the raw, uncleaned `jobs.tech_stack` JSONB column) for every job on the page in one query.
-- `loadUserResumeKeywords` reads every resume owned by the caller (id, label, keywords) in one query.
-- Matching itself (Jaccard similarity over the in-memory tag/keyword sets) is pure Go — deliberately not a SQL computation or a cached fit-score table, mirroring the frozen spec's own precedent of no fit-score cache until proven necessary by p95 latency (see issue #264).
-- Two queries total per page, never one query per row — the "join once per page" requirement.
+Current behavior: `attachJobKeywords` (in `ApplyQueueRepositoryService.go`) reads `job_tech_tags` (the cleaned tags — see `techtag.Clean` — not the raw, uncleaned `jobs.tech_stack` JSONB column) for every job on the page in one query and attaches them verbatim to `dto.QueueItem.JobKeywords` — plain data, no scoring, one query per page (never one per row). The frontend computes any resume-vs-job match client-side (`src/lib/resumeJobMatch.ts`) against `resume.extracted_text` (see `resume/CLAUDE.md`) — this backend slice has zero matching/scoring logic and should stay that way; "serve data, not a verdict" was an explicit goal of the redesign.
 
 ## Key invariants
 
