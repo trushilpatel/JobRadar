@@ -125,6 +125,16 @@ jobs:
 
       - uses: ./.github/actions/setup-frontend
 
+      - name: Regenerate API types and check for drift
+        # Fails the build if src/lib/api/schema.gen.ts doesn't match
+        # backend/apps/api/openapi.yaml — the frontend's generated types can
+        # never silently drift from the backend contract. Reads the already
+        # checked-out (committed) openapi.yaml; no Go build needed.
+        run: |
+          npm run gen:api-types
+          git diff --exit-code -- src/lib/api/schema.gen.ts
+        working-directory: frontend
+
       - name: Lint
         run: npm run lint
         working-directory: frontend

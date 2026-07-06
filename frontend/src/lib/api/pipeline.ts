@@ -4,6 +4,7 @@
 import { z } from 'zod'
 import type { PipelineStats, RetryTierCounts } from '@/types'
 import { apiClient } from '@/lib/core/api-client'
+import type { components } from '@/lib/api/schema.gen'
 
 const RetryTierCountsSchema = z.object({
   '1m': z.number().default(0),
@@ -51,6 +52,9 @@ export async function triggerRetry(
   worker: 'filter' | 'enricher',
   tier: '1m' | '10m' | '1h' | 'dlq'
 ): Promise<{ drained: number }> {
-  const raw = await apiClient.post<unknown>('/admin/pipeline/retry', { worker, tier })
+  // `satisfies` cross-checks this request body against the backend's
+  // generated OpenAPI contract at compile time.
+  const body = { worker, tier } satisfies components['schemas']['TriggerRetryInput']
+  const raw = await apiClient.post<unknown>('/admin/pipeline/retry', body)
   return DrainedSchema.parse(raw)
 }
