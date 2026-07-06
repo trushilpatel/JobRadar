@@ -145,29 +145,30 @@ interface OptimisticDismissContext extends Snapshots {
 }
 
 /**
- * Snapshot every jobs-list cache and patch each matching row via `patch`.
+ * Snapshot every jobs-list cache and patch the matching row via `patch`.
  * Used for optimistic updates with rollback on mutation error.
+ *
+ * Each `jobQueryKeys.list(...)` cache entry is a flat `JobsPage`
+ * (`{ items, next_cursor }`, one page per cursor — see `useJobs.ts`, which
+ * uses `useQuery` + explicit cursor history, NOT `useInfiniteQuery`). There
+ * is no `.pages` wrapper anywhere in the real cache.
  */
 function snapshotAndPatch(
   queryClient: QueryClient,
   id: string,
   patch: (job: Job) => Job
 ): Snapshots {
-  const entries = queryClient.getQueriesData<{ pages: JobsPage[] }>({
+  const entries = queryClient.getQueriesData<JobsPage>({
     predicate: (q) => isJobListKey(q.queryKey),
   })
   const snapshots: { queryKey: readonly unknown[]; data: unknown }[] = []
   for (const [key, data] of entries) {
-    if (!data?.pages) continue
+    if (!data?.items?.some((j) => j.id === id)) continue
     snapshots.push({ queryKey: key, data })
-    const nextPages = data.pages.map((page) => {
-      if (!page.items.some((j: Job) => j.id === id)) return page
-      return {
-        ...page,
-        items: page.items.map((j: Job) => (j.id === id ? patch(j) : j)),
-      }
+    queryClient.setQueryData(key, {
+      ...data,
+      items: data.items.map((j) => (j.id === id ? patch(j) : j)),
     })
-    queryClient.setQueryData(key, { ...data, pages: nextPages })
   }
   return { snapshots }
 }
@@ -187,20 +188,18 @@ export function useJobActions() {
 
   /**
    * Find the current workflow status of a job by scanning every jobs list
-   * cache. Returns NEW as a last-resort fallback for first-paint races where
-   * a mutation lands before any list query has populated the cache.
+   * cache (each cache entry is a flat `JobsPage` — see `snapshotAndPatch`).
+   * Returns NEW as a last-resort fallback for first-paint races where a
+   * mutation lands before any list query has populated the cache.
    */
   const lookupStatus = useCallback(
     (id: string): JobStatus => {
-      const caches = queryClient.getQueriesData<{ pages: JobsPage[] }>({
+      const caches = queryClient.getQueriesData<JobsPage>({
         predicate: (q) => isJobListKey(q.queryKey),
       })
       for (const [, data] of caches) {
-        if (!data?.pages) continue
-        for (const page of data.pages) {
-          const match = page.items.find((j: Job) => j.id === id)
-          if (match) return match.status
-        }
+        const match = data?.items.find((j) => j.id === id)
+        if (match) return match.status
       }
       return JOB_STATUS.NEW
     },
@@ -210,15 +209,12 @@ export function useJobActions() {
   /** Find the current saved flag of a job from cache. Defaults to false. */
   const lookupSaved = useCallback(
     (id: string): boolean => {
-      const caches = queryClient.getQueriesData<{ pages: JobsPage[] }>({
+      const caches = queryClient.getQueriesData<JobsPage>({
         predicate: (q) => isJobListKey(q.queryKey),
       })
       for (const [, data] of caches) {
-        if (!data?.pages) continue
-        for (const page of data.pages) {
-          const match = page.items.find((j: Job) => j.id === id)
-          if (match) return match.user_state?.saved_at != null
-        }
+        const match = data?.items.find((j) => j.id === id)
+        if (match) return match.user_state?.saved_at != null
       }
       return false
     },

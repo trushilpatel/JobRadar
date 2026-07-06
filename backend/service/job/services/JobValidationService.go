@@ -130,10 +130,12 @@ func (v *validationService) Dismiss(ctx context.Context, id string, reason, note
 	return v.next.Dismiss(ctx, id, reason, note)
 }
 
-// SetStatus validates the status value before delegating. "new" is
-// rejected because it is not a writable status (delete the row instead).
-// "saved" is rejected because saved is orthogonal to workflow status and
-// must go through the dedicated SetSaved path.
+// SetStatus validates the status value before delegating. "new" is allowed —
+// UserJobStateRepositoryService.Upsert interprets it as clearing the
+// workflow status (status = NULL), leaving saved_at untouched; it is the
+// documented revert-to-new path, not merely a list-filter synonym. "saved"
+// is rejected because saved is orthogonal to workflow status and must go
+// through the dedicated SetSaved path.
 func (v *validationService) SetStatus(ctx context.Context, id, status string) error {
 	if status == jobcommon.JobStatusSaved {
 		return errors.ValidationErrors{{
@@ -142,11 +144,11 @@ func (v *validationService) SetStatus(ctx context.Context, id, status string) er
 			Message: "'saved' is not a workflow status; use the save endpoint",
 		}}
 	}
-	if status == jobcommon.JobStatusNew || !validJobStatuses[status] {
+	if !validJobStatuses[status] {
 		return errors.ValidationErrors{{
 			Field:   "status",
 			Code:    "INVALID_VALUE",
-			Message: "status must be one of: applied, interviewing, offer, dismissed, rejected",
+			Message: "status must be one of: new, applied, interviewing, offer, dismissed, rejected",
 		}}
 	}
 	return v.next.SetStatus(ctx, id, status)

@@ -69,6 +69,14 @@ describe('fetchAuditLog', () => {
     expect(result.data[0]!.payload).toBeNull()
   })
 
+  it('accepts a row missing the actor_email key entirely (Go omitempty on a nil pointer)', async () => {
+    const rowWithoutActorEmail = entry({ actor_user_id: null }) as Record<string, unknown>
+    delete rowWithoutActorEmail.actor_email
+    get.mockResolvedValue(listResult({ data: [rowWithoutActorEmail] }))
+    const result = await fetchAuditLog({})
+    expect(result.data[0]!.actor_email).toBeUndefined()
+  })
+
   it('uses default page/limit and omits filters when not provided', async () => {
     get.mockResolvedValue(listResult())
     await fetchAuditLog({})

@@ -7,6 +7,7 @@ import (
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/platform/cache"
+	"github.com/trushilpatel/jobradar/platform/clerkadmin"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
 )
 
@@ -257,6 +258,54 @@ func TestAdminImpl_AdminDelete_AbortsOnClerkFailure(t *testing.T) {
 	}
 	if se := asUserSvcErr(t, err); se.Code != domainerrs.ErrInternal.Code {
 		t.Errorf("code = %q, want INTERNAL", se.Code)
+	}
+}
+
+// If the Clerk account is already gone (e.g. a prior delete attempt's Clerk
+// call succeeded but the DB delete step afterward failed, or a retried
+// delete), clerkadmin.ErrUserNotFound must be treated as "already deleted,
+// proceed" — not as a fatal error. Otherwise the local `users` row is
+// permanently orphaned: the UI's only delete action always fails with a
+// hard error and offers no way to remove that row afterward.
+func TestAdminImpl_AdminDelete_ProceedsWhenClerkUserAlreadyGone(t *testing.T) {
+	t.Parallel()
+	repo := &fakeAdminRepo{}
+	sb := &fakeAdminClerk{err: clerkadmin.ErrUserNotFound}
+	c := cache.NewMemoryCache()
+	ctx := context.Background()
+	if err := c.Set(ctx, "user:u1", "anything", 0); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	svc := usersvc.NewAdminImplService(repo, sb, c)
+
+	if err := svc.AdminDelete(ctx, "u1"); err != nil {
+		t.Fatalf("AdminDelete must succeed when the Clerk user is already gone: %v", err)
+	}
+	if !repo.deleteCalled {
+		t.Error("repo.AdminDelete must still run when Clerk returns ErrUserNotFound")
+	}
+	if repo.deleteID != "u1" {
+		t.Errorf("repo delete id = %q, want u1", repo.deleteID)
+	}
+	var dest string
+	if hit, _ := c.Get(ctx, "user:u1", &dest); hit {
+		t.Error("identity cache must still be evicted")
+	}
+}
+
+// A genuine Clerk failure (not "already gone") must still abort before the
+// DB delete — only ErrUserNotFound is tolerated.
+func TestAdminImpl_AdminDelete_StillAbortsOnRealClerkFailure(t *testing.T) {
+	t.Parallel()
+	repo := &fakeAdminRepo{}
+	sb := &fakeAdminClerk{err: errors.New("clerk 500")}
+	svc := usersvc.NewAdminImplService(repo, sb, nil)
+	err := svc.AdminDelete(context.Background(), "u1")
+	if err == nil {
+		t.Fatal("expected non-404 clerk failure to still propagate")
+	}
+	if repo.deleteCalled {
+		t.Error("repo.AdminDelete must not run after a real clerk failure")
 	}
 }
 
