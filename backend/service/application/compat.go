@@ -33,7 +33,7 @@ type UpdateNoteInput = dto.UpdateNoteInput
 
 // NewStore constructs the per-user ApplicationRepository (terminal repo).
 func NewStore(db *gorm.DB) services.ApplicationRepository {
-	return services.NewApplicationRepositoryService(db)
+	return services.NewRepositoryService(db)
 }
 
 // NewApplicationWriter constructs an ApplicationWriter backed by the repository.

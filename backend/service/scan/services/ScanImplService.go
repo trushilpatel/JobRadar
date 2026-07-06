@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	stderrors "errors"
+	"fmt"
 	"time"
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
@@ -66,7 +67,7 @@ func (s *implService) ListQueue(ctx context.Context, filter dto.QueueFilter) (_ 
 
 	views, err := s.next.ListQueue(ctx, filter)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan.impl.ListQueue: %w", err)
 	}
 
 	seen := make(map[string]struct{}, len(views))

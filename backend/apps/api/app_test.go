@@ -38,18 +38,18 @@ func buildTestApp() *App {
 	scanH := scansvc.NewRestRouter(scanRest)
 
 	fakeAts := &fakeAtsService{}
-	atsRest := atssvc.NewAtsRestService(fakeAts)
-	atsH := atssvc.NewAtsRestRouter(atsRest)
+	atsRest := atssvc.NewRestService(fakeAts)
+	atsH := atssvc.NewRestRouter(atsRest)
 
 	fakeJob := &fakeJobService{}
 	jobRest := jobsvc.NewRestService(fakeJob)
 	jobH := jobsvc.NewRestRouter(jobRest)
 
 	fakeApp := &fakeAppService{}
-	appImpl := appsvc.NewApplicationImplService(fakeApp, fakeJob)
-	appValidation := appsvc.NewApplicationValidationService(appImpl)
-	appRest := appsvc.NewApplicationRestService(appValidation)
-	appH := appsvc.NewApplicationRestRouter(appRest)
+	appImpl := appsvc.NewImplService(fakeApp, fakeJob)
+	appValidation := appsvc.NewValidationService(appImpl)
+	appRest := appsvc.NewRestService(appValidation)
+	appH := appsvc.NewRestRouter(appRest)
 
 	fakeResume := &fakeResumeService{}
 	resumeRest := resumesvc.NewRestService(fakeResume)

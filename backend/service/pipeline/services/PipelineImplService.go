@@ -9,8 +9,8 @@ type implService struct {
 	BasePipelineService
 }
 
-// NewPipelineImplService constructs the orchestration layer.
-func NewPipelineImplService(next PipelineService) PipelineService {
+// NewImplService constructs the orchestration layer.
+func NewImplService(next PipelineService) PipelineService {
 	return &implService{BasePipelineService: NewBasePipelineService(next)}
 }
 

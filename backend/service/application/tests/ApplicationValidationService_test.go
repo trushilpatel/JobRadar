@@ -42,7 +42,7 @@ func (n *noopService) UpdateNote(_ context.Context, _, _ string, _ dto.UpdateNot
 }
 
 func newValidation() svc.ApplicationService {
-	return svc.NewApplicationValidationService(&noopService{})
+	return svc.NewValidationService(&noopService{})
 }
 
 func TestValidateCreate(t *testing.T) {

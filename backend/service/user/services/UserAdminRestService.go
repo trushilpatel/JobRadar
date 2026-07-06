@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -70,9 +69,8 @@ func (h *AdminRestService) setRoles(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	grantedBy := identity.UserIDFrom(r.Context())
 
-	var body setRolesRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	body, ok := handler.DecodeBody[setRolesRequest](w, r)
+	if !ok {
 		return
 	}
 	if body.RoleIDs == nil {
@@ -95,9 +93,8 @@ type setStatusRequest struct {
 func (h *AdminRestService) setStatus(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	var body setStatusRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	body, ok := handler.DecodeBody[setStatusRequest](w, r)
+	if !ok {
 		return
 	}
 	if body.Status == "" {

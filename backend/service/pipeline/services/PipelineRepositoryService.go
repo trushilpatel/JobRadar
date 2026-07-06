@@ -88,10 +88,10 @@ type pipelineRepositoryService struct {
 	store PipelineStore
 }
 
-// NewPipelineRepositoryService constructs the terminal PipelineService
+// NewRepositoryService constructs the terminal PipelineService
 // implementation. Returning the interface keeps higher layers
 // dependency-inverted at compile time.
-func NewPipelineRepositoryService(store PipelineStore) PipelineService {
+func NewRepositoryService(store PipelineStore) PipelineService {
 	return &pipelineRepositoryService{store: store}
 }
 

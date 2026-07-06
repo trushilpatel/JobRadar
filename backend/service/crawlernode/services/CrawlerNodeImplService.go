@@ -302,16 +302,9 @@ func (s *implService) ProvisionNode(ctx context.Context, name string) (_ *dto.Cr
 		return nil, err // already wrapped with ErrConflict or ErrInternal
 	}
 
-	now := time.Now()
 	return &dto.CreateNodeResponse{
-		NodeView: dto.NodeView{
-			ID:        created.ID,
-			Name:      created.Name,
-			Status:    created.Status,
-			Online:    false, // just provisioned — never seen yet
-			CreatedAt: now,
-		},
-		Token: tokenStr, // returned exactly once; never stored
+		NodeView: toNodeView(*created), // Online: false — LastSeenAt is nil on a freshly created node
+		Token:    tokenStr,             // returned exactly once; never stored
 	}, nil
 }
 
@@ -327,17 +320,24 @@ func (s *implService) ListNodes(ctx context.Context, status string) (_ []dto.Nod
 
 	views := make([]dto.NodeView, 0, len(nodes))
 	for _, n := range nodes {
-		online := n.LastSeenAt != nil && time.Since(*n.LastSeenAt) <= crawlernodecommon.OnlineThreshold
-		views = append(views, dto.NodeView{
-			ID:         n.ID,
-			Name:       n.Name,
-			Status:     n.Status,
-			Online:     online,
-			LastSeenAt: n.LastSeenAt,
-			CreatedAt:  n.CreatedAt,
-		})
+		views = append(views, toNodeView(n))
 	}
 	return views, nil
+}
+
+// toNodeView converts a persisted CrawlerNode row into its public view,
+// deriving Online from LastSeenAt. A freshly created node (LastSeenAt nil)
+// always computes Online: false.
+func toNodeView(n crawlernodemodel.CrawlerNode) dto.NodeView {
+	online := n.LastSeenAt != nil && time.Since(*n.LastSeenAt) <= crawlernodecommon.OnlineThreshold
+	return dto.NodeView{
+		ID:         n.ID,
+		Name:       n.Name,
+		Status:     n.Status,
+		Online:     online,
+		LastSeenAt: n.LastSeenAt,
+		CreatedAt:  n.CreatedAt,
+	}
 }
 
 // SetNodeStatus updates the status of a crawler node.

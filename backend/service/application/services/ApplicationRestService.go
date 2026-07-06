@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -17,8 +16,8 @@ type RestService struct {
 	next ApplicationService
 }
 
-// NewApplicationRestService constructs a RestService.
-func NewApplicationRestService(next ApplicationService) *RestService {
+// NewRestService constructs a RestService.
+func NewRestService(next ApplicationService) *RestService {
 	return &RestService{next: next}
 }
 
@@ -39,9 +38,8 @@ func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
 func (h *RestService) create(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
 
-	var input dto.CreateApplicationInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	input, ok := handler.DecodeBody[dto.CreateApplicationInput](w, r)
+	if !ok {
 		return
 	}
 
@@ -72,9 +70,8 @@ func (h *RestService) updateStage(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "app_id")
 
-	var input dto.UpdateStageInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	input, ok := handler.DecodeBody[dto.UpdateStageInput](w, r)
+	if !ok {
 		return
 	}
 
@@ -90,9 +87,8 @@ func (h *RestService) updateStage(w http.ResponseWriter, r *http.Request) {
 func (h *RestService) updateStageByID(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "id")
 
-	var input dto.UpdateStageInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	input, ok := handler.DecodeBody[dto.UpdateStageInput](w, r)
+	if !ok {
 		return
 	}
 
@@ -109,9 +105,8 @@ func (h *RestService) updateNote(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "app_id")
 
-	var input dto.UpdateNoteInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	input, ok := handler.DecodeBody[dto.UpdateNoteInput](w, r)
+	if !ok {
 		return
 	}
 

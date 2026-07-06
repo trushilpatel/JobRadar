@@ -30,14 +30,24 @@ The user-facing `JobService` chain (`ImplService` terminal) uses `JobStore` + `U
 
 ## Non-canonical files
 
-| File                                 | Purpose                                                                               |
-| ------------------------------------ | ------------------------------------------------------------------------------------- |
-| `UserJobCounterRepositoryService.go` | Counter machinery for `GetCounts` — separated from `UserJobStateRepositoryService.go` |
-| `JobPipelineImplService.go`          | Implements `PipelineService` (analyzer path)                                          |
-| `location/classifier.go`             | Pure USA location classifier (`IsNonUSA`) — no DB, no context, testable in isolation  |
-| `services/cursor_internal_test.go`   | Tests unexported cursor encode/decode helpers                                         |
-| `services/handler_internal_test.go`  | Tests unexported handler parsing helpers                                              |
-| `services/sqlprobe_internal_test.go` | Tests unexported SQL probe helpers                                                    |
+| File                                    | Purpose                                                                                                                                   |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `UserJobCounterRepositoryService.go`    | Counter machinery for `GetCounts` — separated from `UserJobStateRepositoryService.go`                                                     |
+| `JobPipelineImplService.go`             | Implements `PipelineService` (analyzer path)                                                                                              |
+| `location/classifier.go`                | Pure USA location classifier (`IsNonUSA`) — no DB, no context, testable in isolation                                                      |
+| `services/cursor_internal_test.go`      | Tests unexported cursor encode/decode helpers                                                                                             |
+| `services/handler_internal_test.go`     | Tests unexported handler parsing helpers                                                                                                  |
+| `services/sqlprobe_internal_test.go`    | Tests unexported SQL probe helpers                                                                                                        |
+| `tests/JobImplService_test.go`          | Shared fixtures (fakeJobReader, fakeUserState, `newSvc`, ...) + read-path (List/Get) tests                                                |
+| `tests/JobImplServiceMutations_test.go` | SetSaved/SetStatus/SetNotes/Dismiss/BulkDismiss behavioral tests (split out of JobImplService_test.go 2026-07-05 — it had hit 1113 lines) |
+| `tests/JobImplServiceCache_test.go`     | Page cache + per-user counts cache tests, incl. invalidation on every mutating method (split out 2026-07-05)                              |
+
+## Caching deviates from the `CacheService` decorator pattern — intentionally
+
+`JobImplService.go` caches inline (`s.cache cache.Cache` field, `pageCacheKey`/`userCountsKey`, `cache.GetOrLoad` calls inside `List` and `GetCounts`) instead of extracting a separate `JobCacheService.go` decorator like `user/` and `ats/` do. This is not an oversight:
+
+- `implService` is the terminal `JobService` — it composes five narrow repo interfaces (`JobReader`, `UserJobStateRepository`, `SnapshotWriter`, `ApplicationWriter`, `SeenLedgerWriter`) directly; there is no `next JobService` to wrap the canonical way.
+- More importantly, `List`'s cached entry (`pageCacheEntry`) holds only the **global, pre-overlay** page — `s.jobs.GetJobs(...)`'s raw result — before the per-user `user_job_state` overlay is merged in. A canonical outer `CacheService` decorator sitting in front of `List` would instead cache `List`'s full return value, which already has one caller's overlay merged in — that cached entry would then leak into a **different user's** cache hit on the same (cursor, filter) key. Do not "fix" this deviation by extracting an outer decorator; it would introduce a cross-user data leak. If this ever needs to change, the overlay merge must stay outside whatever layer is cached.
 
 ## Key invariants
 

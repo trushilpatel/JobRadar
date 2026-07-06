@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/trushilpatel/jobradar/apps/api/handler"
@@ -70,9 +69,8 @@ func (h *RestService) getMe(w http.ResponseWriter, r *http.Request) {
 func (h *RestService) updateMe(w http.ResponseWriter, r *http.Request) {
 	id := identity.MustFromContext(r.Context())
 
-	var req updateMeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	req, ok := handler.DecodeBody[updateMeRequest](w, r)
+	if !ok {
 		return
 	}
 	if err := h.next.UpdateProfile(r.Context(), id.UserID, req.DisplayName); err != nil {
@@ -113,9 +111,8 @@ func (h *RestService) getMyConfig(w http.ResponseWriter, r *http.Request) {
 // body — so an attacker cannot target another user's preferences.
 func (h *RestService) updateMyConfig(w http.ResponseWriter, r *http.Request) {
 	id := identity.MustFromContext(r.Context())
-	var partial userdto.UserConfig
-	if err := json.NewDecoder(r.Body).Decode(&partial); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	partial, ok := handler.DecodeBody[userdto.UserConfig](w, r)
+	if !ok {
 		return
 	}
 	cfg, err := h.next.PatchConfig(r.Context(), id.UserID, partial)

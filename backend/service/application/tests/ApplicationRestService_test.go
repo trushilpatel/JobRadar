@@ -53,8 +53,8 @@ func (f *fakeService) UpdateNote(_ context.Context, _, _ string, _ dto.UpdateNot
 // declared by ApplicationRestRouter.
 func newTestRouter(next svc.ApplicationService) *chi.Mux {
 	r := chi.NewRouter()
-	h := svc.NewApplicationRestService(next)
-	rt := svc.NewApplicationRestRouter(h)
+	h := svc.NewRestService(next)
+	rt := svc.NewRestRouter(h)
 	rt.Register(r)
 	return r
 }
@@ -172,8 +172,8 @@ func TestHandlerCreate_BadJSON(t *testing.T) {
 	called := false
 	fake := &fakeServiceWithFlag{flag: &called}
 	r := chi.NewRouter()
-	h := svc.NewApplicationRestService(fake)
-	rt := svc.NewApplicationRestRouter(h)
+	h := svc.NewRestService(fake)
+	rt := svc.NewRestRouter(h)
 	rt.Register(r)
 
 	req := httptest.NewRequest(http.MethodPost, "/jobs/j1/applications", bytes.NewReader([]byte("{not-json")))
@@ -208,7 +208,7 @@ func TestHandlerUpdateStage_BadJSON(t *testing.T) {
 	called := false
 	fake := &fakeServiceWithFlag{flag: &called}
 	r := chi.NewRouter()
-	rt := svc.NewApplicationRestRouter(svc.NewApplicationRestService(fake))
+	rt := svc.NewRestRouter(svc.NewRestService(fake))
 	rt.Register(r)
 
 	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/applications/1/stage", bytes.NewReader([]byte("not-json")))
@@ -258,7 +258,7 @@ func TestHandlerUpdateStageByID_BadJSON(t *testing.T) {
 	called := false
 	fake := &fakeServiceWithFlag{flag: &called}
 	r := chi.NewRouter()
-	rt := svc.NewApplicationRestRouter(svc.NewApplicationRestService(fake))
+	rt := svc.NewRestRouter(svc.NewRestService(fake))
 	rt.Register(r)
 
 	req := httptest.NewRequest(http.MethodPatch, "/applications/1/stage", bytes.NewReader([]byte("not-json")))
@@ -290,7 +290,7 @@ func TestHandlerUpdateNote_BadJSON(t *testing.T) {
 	called := false
 	fake := &fakeServiceWithFlag{flag: &called}
 	r := chi.NewRouter()
-	rt := svc.NewApplicationRestRouter(svc.NewApplicationRestService(fake))
+	rt := svc.NewRestRouter(svc.NewRestService(fake))
 	rt.Register(r)
 
 	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/applications/1/note", bytes.NewReader([]byte("not-json")))

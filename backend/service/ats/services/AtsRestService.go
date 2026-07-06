@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -19,10 +18,10 @@ type AtsRestService struct {
 	next AtsService
 }
 
-// NewAtsRestService constructs the HTTP adapter.
-func NewAtsRestService(next AtsService) *AtsRestService {
+// NewRestService constructs the HTTP adapter.
+func NewRestService(next AtsService) *AtsRestService {
 	if next == nil {
-		panic("ats.NewAtsRestService: next must not be nil")
+		panic("ats.NewRestService: next must not be nil")
 	}
 	return &AtsRestService{next: next}
 }
@@ -52,9 +51,8 @@ func (h *AtsRestService) GetATS(w http.ResponseWriter, r *http.Request) {
 func (h *AtsRestService) UpdateATS(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
-	var input atsdto.UpdateATSInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	input, ok := handler.DecodeBody[atsdto.UpdateATSInput](w, r)
+	if !ok {
 		return
 	}
 

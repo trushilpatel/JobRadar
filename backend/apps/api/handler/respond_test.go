@@ -228,3 +228,66 @@ func TestRespondPaged(t *testing.T) {
 		t.Errorf("body %q does not contain 'page'", body)
 	}
 }
+
+type decodeBodyFixture struct {
+	Name string `json:"name"`
+}
+
+func TestDecodeBody_Valid(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"stripe"}`))
+	w := httptest.NewRecorder()
+
+	got, ok := DecodeBody[decodeBodyFixture](w, req)
+	if !ok {
+		t.Fatalf("ok = false, want true; body = %q", w.Body.String())
+	}
+	if got.Name != "stripe" {
+		t.Errorf("Name = %q, want %q", got.Name, "stripe")
+	}
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want no response written (default 200)", w.Code)
+	}
+}
+
+func TestDecodeBody_MalformedJSON(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":`))
+	w := httptest.NewRecorder()
+
+	_, ok := DecodeBody[decodeBodyFixture](w, req)
+	if ok {
+		t.Fatal("ok = true, want false for malformed JSON")
+	}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "BAD_REQUEST") {
+		t.Errorf("body %q does not contain BAD_REQUEST", w.Body.String())
+	}
+}
+
+func TestDecodeBody_EmptyBody(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(""))
+	w := httptest.NewRecorder()
+
+	_, ok := DecodeBody[decodeBodyFixture](w, req)
+	if ok {
+		t.Fatal("ok = true, want false for empty body")
+	}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestDecodeBody_WrongShape(t *testing.T) {
+	// A JSON array where the target type expects an object.
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`[1,2,3]`))
+	w := httptest.NewRecorder()
+
+	_, ok := DecodeBody[decodeBodyFixture](w, req)
+	if ok {
+		t.Fatal("ok = true, want false for a body shape mismatch")
+	}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}

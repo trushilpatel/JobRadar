@@ -93,7 +93,7 @@ func ctxAs(userID string) context.Context {
 func TestImpl_Create_JobNotFound(t *testing.T) {
 	repo := &fakeRepo{}
 	jobs := &fakeJobService{err: apperr.ErrNotFound.WithMessage("job not found")}
-	service := svc.NewApplicationImplService(repo, jobs)
+	service := svc.NewImplService(repo, jobs)
 
 	_, err := service.Create(ctxAs(testUserID), "j1", dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	if err == nil {
@@ -112,7 +112,7 @@ func TestImpl_Create_OK(t *testing.T) {
 	repo := &fakeRepo{
 		app: &appmodel.JobApplication{UserID: testUserID, JobResultID: "j1", Stage: appcommon.StagePhoneScreen},
 	}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{view: &jobdto.JobView{}})
+	service := svc.NewImplService(repo, &fakeJobService{view: &jobdto.JobView{}})
 
 	app, err := service.Create(ctxAs(testUserID), "j1", dto.CreateApplicationInput{Stage: appcommon.StagePhoneScreen})
 	if err != nil {
@@ -128,7 +128,7 @@ func TestImpl_Create_OK(t *testing.T) {
 
 func TestImpl_Create_NoIdentity(t *testing.T) {
 	repo := &fakeRepo{}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{view: &jobdto.JobView{}})
+	service := svc.NewImplService(repo, &fakeJobService{view: &jobdto.JobView{}})
 
 	_, err := service.Create(context.Background(), "j1", dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	if err == nil {
@@ -141,7 +141,7 @@ func TestImpl_Create_NoIdentity(t *testing.T) {
 
 func TestImpl_ListAll_PassesUserID(t *testing.T) {
 	repo := &fakeRepo{appsWithJob: []svc.ApplicationWithJob{{JobTitle: "Backend Eng"}}, total: 1}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	result, total, err := service.ListAll(ctxAs(testUserID), 1, 20)
 	if err != nil {
@@ -157,7 +157,7 @@ func TestImpl_ListAll_PassesUserID(t *testing.T) {
 
 func TestImpl_ListByJob_NoIdentity(t *testing.T) {
 	repo := &fakeRepo{}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	_, err := service.ListByJob(context.Background(), "j1")
 	if err == nil {
@@ -170,7 +170,7 @@ func TestImpl_ListByJob_NoIdentity(t *testing.T) {
 // user B's identity, and the repo receives them distinctly.
 func TestImpl_CrossUserIsolation(t *testing.T) {
 	repo := &fakeRepo{appsWithJob: []svc.ApplicationWithJob{}}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	if _, _, err := service.ListAll(ctxAs("user-A"), 1, 20); err != nil {
 		t.Fatalf("user A ListAll: %v", err)
@@ -193,7 +193,7 @@ func TestImpl_CrossUserIsolation(t *testing.T) {
 // handlers see a stable typed error.
 func TestImpl_Create_RepoError_WrappedAsInternal(t *testing.T) {
 	repo := &fakeRepo{err: errors.New("boom")}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{view: &jobdto.JobView{}})
+	service := svc.NewImplService(repo, &fakeJobService{view: &jobdto.JobView{}})
 
 	_, err := service.Create(ctxAs(testUserID), "j1", dto.CreateApplicationInput{Stage: appcommon.StageApplied})
 	if err == nil {
@@ -213,7 +213,7 @@ func TestImpl_Create_RepoError_WrappedAsInternal(t *testing.T) {
 
 func TestImpl_ListAll_NoIdentity(t *testing.T) {
 	repo := &fakeRepo{}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	_, _, err := service.ListAll(context.Background(), 1, 20)
 	if err == nil {
@@ -226,7 +226,7 @@ func TestImpl_ListAll_NoIdentity(t *testing.T) {
 
 func TestImpl_ListByJob_OK(t *testing.T) {
 	repo := &fakeRepo{apps: []appmodel.JobApplication{{UserID: testUserID, JobResultID: "j1"}}}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	got, err := service.ListByJob(ctxAs(testUserID), "j1")
 	if err != nil {
@@ -242,7 +242,7 @@ func TestImpl_ListByJob_OK(t *testing.T) {
 
 func TestImpl_ListByJob_RepoError(t *testing.T) {
 	repo := &fakeRepo{err: errors.New("db down")}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	_, err := service.ListByJob(ctxAs(testUserID), "j1")
 	if err == nil {
@@ -252,7 +252,7 @@ func TestImpl_ListByJob_RepoError(t *testing.T) {
 
 func TestImpl_ListActive_OK(t *testing.T) {
 	repo := &fakeRepo{appsWithJob: []svc.ApplicationWithJob{{JobTitle: "BE"}}}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	got, err := service.ListActive(ctxAs(testUserID))
 	if err != nil {
@@ -268,7 +268,7 @@ func TestImpl_ListActive_OK(t *testing.T) {
 
 func TestImpl_ListActive_NoIdentity(t *testing.T) {
 	repo := &fakeRepo{}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	_, err := service.ListActive(context.Background())
 	if err == nil {
@@ -281,7 +281,7 @@ func TestImpl_ListActive_NoIdentity(t *testing.T) {
 
 func TestImpl_UpdateStage_OK(t *testing.T) {
 	repo := &fakeRepo{}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	if err := service.UpdateStage(ctxAs(testUserID), "j1", "1", dto.UpdateStageInput{Stage: appcommon.StageOffer}); err != nil {
 		t.Fatalf("UpdateStage() error = %v", err)
@@ -296,7 +296,7 @@ func TestImpl_UpdateStage_OK(t *testing.T) {
 
 func TestImpl_UpdateStage_NoIdentity(t *testing.T) {
 	repo := &fakeRepo{}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	err := service.UpdateStage(context.Background(), "j1", "1", dto.UpdateStageInput{Stage: appcommon.StageOffer})
 	if err == nil {
@@ -309,7 +309,7 @@ func TestImpl_UpdateStage_NoIdentity(t *testing.T) {
 
 func TestImpl_UpdateStage_RepoError(t *testing.T) {
 	repo := &fakeRepo{err: errors.New("db")}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	if err := service.UpdateStage(ctxAs(testUserID), "j1", "1", dto.UpdateStageInput{Stage: appcommon.StageOffer}); err == nil {
 		t.Fatal("expected repo error to propagate")
@@ -318,7 +318,7 @@ func TestImpl_UpdateStage_RepoError(t *testing.T) {
 
 func TestImpl_UpdateStageByID_OK(t *testing.T) {
 	repo := &fakeRepo{}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	if err := service.UpdateStageByID(ctxAs(testUserID), "42", dto.UpdateStageInput{Stage: appcommon.StageOffer}); err != nil {
 		t.Fatalf("UpdateStageByID() error = %v", err)
@@ -333,7 +333,7 @@ func TestImpl_UpdateStageByID_OK(t *testing.T) {
 
 func TestImpl_UpdateStageByID_NoIdentity(t *testing.T) {
 	repo := &fakeRepo{}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	err := service.UpdateStageByID(context.Background(), "42", dto.UpdateStageInput{Stage: appcommon.StageOffer})
 	if err == nil {
@@ -346,7 +346,7 @@ func TestImpl_UpdateStageByID_NoIdentity(t *testing.T) {
 
 func TestImpl_UpdateNote_OK(t *testing.T) {
 	repo := &fakeRepo{}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	if err := service.UpdateNote(ctxAs(testUserID), "j1", "1", dto.UpdateNoteInput{Note: "hello"}); err != nil {
 		t.Fatalf("UpdateNote() error = %v", err)
@@ -361,7 +361,7 @@ func TestImpl_UpdateNote_OK(t *testing.T) {
 
 func TestImpl_UpdateNote_NoIdentity(t *testing.T) {
 	repo := &fakeRepo{}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	err := service.UpdateNote(context.Background(), "j1", "1", dto.UpdateNoteInput{Note: "x"})
 	if err == nil {
@@ -374,7 +374,7 @@ func TestImpl_UpdateNote_NoIdentity(t *testing.T) {
 
 func TestImpl_UpdateNote_RepoError(t *testing.T) {
 	repo := &fakeRepo{err: errors.New("db")}
-	service := svc.NewApplicationImplService(repo, &fakeJobService{})
+	service := svc.NewImplService(repo, &fakeJobService{})
 
 	if err := service.UpdateNote(ctxAs(testUserID), "j1", "1", dto.UpdateNoteInput{Note: "x"}); err == nil {
 		t.Fatal("expected repo error to propagate")
@@ -390,7 +390,7 @@ func TestImpl_Constructor_PanicsOnNilRepo(t *testing.T) {
 			t.Fatal("expected panic for nil repo")
 		}
 	}()
-	_ = svc.NewApplicationImplService(nil, &fakeJobService{})
+	_ = svc.NewImplService(nil, &fakeJobService{})
 }
 
 // TestImpl_Constructor_PanicsOnNilJobSvc — same as above for the job service.
@@ -400,7 +400,7 @@ func TestImpl_Constructor_PanicsOnNilJobSvc(t *testing.T) {
 			t.Fatal("expected panic for nil jobSvc")
 		}
 	}()
-	_ = svc.NewApplicationImplService(&fakeRepo{}, nil)
+	_ = svc.NewImplService(&fakeRepo{}, nil)
 }
 
 // Ensure test doubles implement the production interfaces.

@@ -66,7 +66,7 @@ func TestAtsCacheService_ListATS_CacheMissCallsNext(t *testing.T) {
 	next := newCountingAtsNext()
 	next.listResult = []atsdto.ATSDTO{{Name: "greenhouse"}}
 	c := cache.NewMemoryCache()
-	svc := atssvc.NewAtsCacheService(next, c, atsCacheTTL)
+	svc := atssvc.NewCacheService(next, c, atsCacheTTL)
 	ctx := context.Background()
 
 	items, err := svc.ListATS(ctx)
@@ -86,7 +86,7 @@ func TestAtsCacheService_ListATS_CacheHitDoesNotCallNext(t *testing.T) {
 	next := newCountingAtsNext()
 	next.listResult = []atsdto.ATSDTO{{Name: "lever"}}
 	c := cache.NewMemoryCache()
-	svc := atssvc.NewAtsCacheService(next, c, atsCacheTTL)
+	svc := atssvc.NewCacheService(next, c, atsCacheTTL)
 	ctx := context.Background()
 
 	// First call populates cache.
@@ -109,7 +109,7 @@ func TestAtsCacheService_GetATS_CacheMissCallsNext(t *testing.T) {
 	next := newCountingAtsNext()
 	next.getResult["ashby"] = atsdto.ATSDTO{Name: "ashby", DisplayName: "Ashby"}
 	c := cache.NewMemoryCache()
-	svc := atssvc.NewAtsCacheService(next, c, atsCacheTTL)
+	svc := atssvc.NewCacheService(next, c, atsCacheTTL)
 	ctx := context.Background()
 
 	got, err := svc.GetATS(ctx, "ashby")
@@ -129,7 +129,7 @@ func TestAtsCacheService_GetATS_CacheHitDoesNotCallNext(t *testing.T) {
 	next := newCountingAtsNext()
 	next.getResult["lever"] = atsdto.ATSDTO{Name: "lever"}
 	c := cache.NewMemoryCache()
-	svc := atssvc.NewAtsCacheService(next, c, atsCacheTTL)
+	svc := atssvc.NewCacheService(next, c, atsCacheTTL)
 	ctx := context.Background()
 
 	if _, err := svc.GetATS(ctx, "lever"); err != nil {
@@ -152,7 +152,7 @@ func TestAtsCacheService_UpdateATS_InvalidatesBothKeys(t *testing.T) {
 	next.getResult["greenhouse"] = atsdto.ATSDTO{Name: "greenhouse"}
 	next.updateResult = atsdto.ATSDTO{Name: "greenhouse", IsActive: false}
 	c := cache.NewMemoryCache()
-	svc := atssvc.NewAtsCacheService(next, c, atsCacheTTL)
+	svc := atssvc.NewCacheService(next, c, atsCacheTTL)
 	ctx := context.Background()
 
 	// Populate both cache keys.
@@ -190,7 +190,7 @@ func TestAtsCacheService_NilCache_Passthrough(t *testing.T) {
 	t.Parallel()
 	next := newCountingAtsNext()
 	next.listResult = []atsdto.ATSDTO{{Name: "lever"}}
-	svc := atssvc.NewAtsCacheService(next, nil, atsCacheTTL)
+	svc := atssvc.NewCacheService(next, nil, atsCacheTTL)
 	ctx := context.Background()
 
 	if _, err := svc.ListATS(ctx); err != nil {
@@ -209,7 +209,7 @@ func TestAtsCacheService_ZeroTTL_Passthrough(t *testing.T) {
 	next := newCountingAtsNext()
 	next.listResult = []atsdto.ATSDTO{{Name: "lever"}}
 	c := cache.NewMemoryCache()
-	svc := atssvc.NewAtsCacheService(next, c, 0)
+	svc := atssvc.NewCacheService(next, c, 0)
 	ctx := context.Background()
 
 	if _, err := svc.ListATS(ctx); err != nil {
@@ -228,7 +228,7 @@ func TestAtsCacheService_GetATS_ZeroTTL_Passthrough(t *testing.T) {
 	next := newCountingAtsNext()
 	next.getResult["lever"] = atsdto.ATSDTO{Name: "lever"}
 	c := cache.NewMemoryCache()
-	svc := atssvc.NewAtsCacheService(next, c, 0)
+	svc := atssvc.NewCacheService(next, c, 0)
 	ctx := context.Background()
 
 	if _, err := svc.GetATS(ctx, "lever"); err != nil {
@@ -250,7 +250,7 @@ func TestAtsCacheService_UpdateATS_PropagatesError(t *testing.T) {
 	next := newCountingAtsNext()
 	next.updateErr = wantErr
 	c := cache.NewMemoryCache()
-	svc := atssvc.NewAtsCacheService(next, c, atsCacheTTL)
+	svc := atssvc.NewCacheService(next, c, atsCacheTTL)
 
 	active := true
 	_, err := svc.UpdateATS(context.Background(), "lever", atsdto.UpdateATSInput{IsActive: &active})
@@ -269,7 +269,7 @@ func TestAtsCacheService_ListATS_PropagatesDownstreamError(t *testing.T) {
 	next := newCountingAtsNext()
 	next.listErr = wantErr
 	c := cache.NewMemoryCache()
-	svc := atssvc.NewAtsCacheService(next, c, atsCacheTTL)
+	svc := atssvc.NewCacheService(next, c, atsCacheTTL)
 
 	_, err := svc.ListATS(context.Background())
 	if !errors.Is(err, wantErr) {
@@ -290,7 +290,7 @@ func TestAtsCacheService_GetATS_PropagatesDownstreamError(t *testing.T) {
 	next := newCountingAtsNext()
 	next.getErr = wantErr
 	c := cache.NewMemoryCache()
-	svc := atssvc.NewAtsCacheService(next, c, atsCacheTTL)
+	svc := atssvc.NewCacheService(next, c, atsCacheTTL)
 
 	_, err := svc.GetATS(context.Background(), "lever")
 	if !errors.Is(err, wantErr) {
@@ -310,7 +310,7 @@ func TestAtsCacheService_ConcurrentReads_NoDataRace(t *testing.T) {
 	next := newCountingAtsNext()
 	next.listResult = []atsdto.ATSDTO{{Name: "greenhouse"}, {Name: "lever"}}
 	c := cache.NewMemoryCache()
-	svc := atssvc.NewAtsCacheService(next, c, atsCacheTTL)
+	svc := atssvc.NewCacheService(next, c, atsCacheTTL)
 	ctx := context.Background()
 
 	const goroutines = 20

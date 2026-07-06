@@ -15,7 +15,7 @@ import (
 // the guard must fire before any db.WithContext call, so a forgotten
 // ctx scoping cannot accidentally broaden a query to all users.
 func TestApplicationRepository_UserScopedGuards(t *testing.T) {
-	repo := svc.NewApplicationRepositoryService(nil)
+	repo := svc.NewRepositoryService(nil)
 	ctx := context.Background()
 
 	testutil.AssertUserScoped(t, "ListByJob", func(uid string) error {

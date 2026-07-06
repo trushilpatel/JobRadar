@@ -10,8 +10,8 @@ type PipelineRestRouter struct {
 	handler *PipelineRestService
 }
 
-// NewPipelineRestRouter constructs a PipelineRestRouter.
-func NewPipelineRestRouter(h *PipelineRestService) *PipelineRestRouter {
+// NewRestRouter constructs a PipelineRestRouter.
+func NewRestRouter(h *PipelineRestService) *PipelineRestRouter {
 	return &PipelineRestRouter{handler: h}
 }
 

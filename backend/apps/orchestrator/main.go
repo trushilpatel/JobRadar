@@ -86,9 +86,9 @@ func main() {
 	// chain, minus the validation/REST layers this internal caller has no use
 	// for) backs the AdapterDelayGate's inter_company_delay_s lookups.
 	atsStore := atssvc.NewAtsStore(database)
-	atsRepositoryService := atssvc.NewAtsRepositoryService(atsStore)
-	atsImplService := atssvc.NewAtsImplService(atsRepositoryService)
-	atsService := atssvc.NewAtsCacheService(atsImplService, cache.NewMemoryCache(), atsCacheTTL)
+	atsRepositoryService := atssvc.NewRepositoryService(atsStore)
+	atsImplService := atssvc.NewImplService(atsRepositoryService)
+	atsService := atssvc.NewCacheService(atsImplService, cache.NewMemoryCache(), atsCacheTTL)
 
 	delayGate := crawlernodesvc.NewAdapterDelayGate(atsService)
 	assignStore := crawlernodesvc.NewAssignmentRepositoryService(database, delayGate)

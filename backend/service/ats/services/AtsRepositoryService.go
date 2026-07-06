@@ -68,9 +68,9 @@ type atsRepositoryService struct {
 	store AtsStore
 }
 
-// NewAtsRepositoryService constructs the terminal AtsService implementation.
+// NewRepositoryService constructs the terminal AtsService implementation.
 // Returning the interface keeps higher layers dependency-inverted at compile time.
-func NewAtsRepositoryService(store AtsStore) AtsService {
+func NewRepositoryService(store AtsStore) AtsService {
 	return &atsRepositoryService{store: store}
 }
 

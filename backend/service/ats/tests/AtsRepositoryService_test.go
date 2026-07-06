@@ -83,7 +83,7 @@ func TestAtsRepo_ListAll_HappyPath(t *testing.T) {
 	seedAts(t, db, "greenhouse", "Greenhouse")
 	seedAts(t, db, "lever", "Lever")
 
-	svc := atssvc.NewAtsRepositoryService(atssvc.NewAtsStore(db))
+	svc := atssvc.NewRepositoryService(atssvc.NewAtsStore(db))
 	items, err := svc.ListATS(context.Background())
 	if err != nil {
 		t.Fatalf("ListATS: %v", err)
@@ -95,7 +95,7 @@ func TestAtsRepo_ListAll_HappyPath(t *testing.T) {
 
 func TestAtsRepo_ListAll_DBError(t *testing.T) {
 	t.Parallel()
-	svc := atssvc.NewAtsRepositoryService(atssvc.NewAtsStore(closedAtsDB(t)))
+	svc := atssvc.NewRepositoryService(atssvc.NewAtsStore(closedAtsDB(t)))
 	_, err := svc.ListATS(context.Background())
 	if err == nil {
 		t.Fatal("expected error on closed DB")
@@ -113,7 +113,7 @@ func TestAtsRepo_GetByName_Found(t *testing.T) {
 	db := newAtsTestDB(t)
 	seedAts(t, db, "ashby", "Ashby")
 
-	svc := atssvc.NewAtsRepositoryService(atssvc.NewAtsStore(db))
+	svc := atssvc.NewRepositoryService(atssvc.NewAtsStore(db))
 	got, err := svc.GetATS(context.Background(), "ashby")
 	if err != nil {
 		t.Fatalf("GetATS: %v", err)
@@ -129,7 +129,7 @@ func TestAtsRepo_GetByName_Found(t *testing.T) {
 func TestAtsRepo_GetByName_NotFound(t *testing.T) {
 	t.Parallel()
 	db := newAtsTestDB(t)
-	svc := atssvc.NewAtsRepositoryService(atssvc.NewAtsStore(db))
+	svc := atssvc.NewRepositoryService(atssvc.NewAtsStore(db))
 	_, err := svc.GetATS(context.Background(), "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for missing row")
@@ -142,7 +142,7 @@ func TestAtsRepo_GetByName_NotFound(t *testing.T) {
 
 func TestAtsRepo_GetByName_DBError(t *testing.T) {
 	t.Parallel()
-	svc := atssvc.NewAtsRepositoryService(atssvc.NewAtsStore(closedAtsDB(t)))
+	svc := atssvc.NewRepositoryService(atssvc.NewAtsStore(closedAtsDB(t)))
 	_, err := svc.GetATS(context.Background(), "greenhouse")
 	if err == nil {
 		t.Fatal("expected error on closed DB")
@@ -162,7 +162,7 @@ func TestAtsRepo_Update_HappyPath(t *testing.T) {
 	db := newAtsTestDB(t)
 	seedAts(t, db, "lever", "Lever")
 
-	svc := atssvc.NewAtsRepositoryService(atssvc.NewAtsStore(db))
+	svc := atssvc.NewRepositoryService(atssvc.NewAtsStore(db))
 	got, err := svc.UpdateATS(context.Background(), "lever", atsdto.UpdateATSInput{IsActive: boolPtr(false)})
 	if err != nil {
 		t.Fatalf("UpdateATS: %v", err)
@@ -176,7 +176,7 @@ func TestAtsRepo_Update_RowsAffectedZero(t *testing.T) {
 	t.Parallel()
 	db := newAtsTestDB(t)
 	// No seed — update targets a row that does not exist.
-	svc := atssvc.NewAtsRepositoryService(atssvc.NewAtsStore(db))
+	svc := atssvc.NewRepositoryService(atssvc.NewAtsStore(db))
 	_, err := svc.UpdateATS(context.Background(), "nonexistent", atsdto.UpdateATSInput{IsActive: boolPtr(true)})
 	if err == nil {
 		t.Fatal("expected error for missing row")
@@ -194,7 +194,7 @@ func TestAtsRepo_Update_AllFields(t *testing.T) {
 	db := newAtsTestDB(t)
 	seedAts(t, db, "gem", "Gem")
 
-	svc := atssvc.NewAtsRepositoryService(atssvc.NewAtsStore(db))
+	svc := atssvc.NewRepositoryService(atssvc.NewAtsStore(db))
 	interval := 720
 	delay := 10
 	active := false
@@ -218,7 +218,7 @@ func TestAtsRepo_Update_AllFields(t *testing.T) {
 
 func TestAtsRepo_Update_DBError(t *testing.T) {
 	t.Parallel()
-	svc := atssvc.NewAtsRepositoryService(atssvc.NewAtsStore(closedAtsDB(t)))
+	svc := atssvc.NewRepositoryService(atssvc.NewAtsStore(closedAtsDB(t)))
 	_, err := svc.UpdateATS(context.Background(), "greenhouse", atsdto.UpdateATSInput{IsActive: boolPtr(true)})
 	if err == nil {
 		t.Fatal("expected error on closed DB")

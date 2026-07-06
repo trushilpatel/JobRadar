@@ -11,6 +11,6 @@ import (
 
 // ProviderSet is the Wire provider set for the audit domain.
 var ProviderSet = wire.NewSet(
-	services.NewRepositoryService,
 	services.NewImplService,
+	services.NewRepositoryService,
 )

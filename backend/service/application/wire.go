@@ -19,9 +19,9 @@ import (
 // userID explicitly) — the terminal ApplicationService implementation is
 // the ImplService, which derives userID from ctx.
 var ProviderSet = wire.NewSet(
-	services.NewApplicationRestRouter,
-	services.NewApplicationRestService,
-	services.NewApplicationValidationService,
-	services.NewApplicationImplService,
-	services.NewApplicationRepositoryService,
+	services.NewRestRouter,
+	services.NewRestService,
+	services.NewValidationService,
+	services.NewImplService,
+	services.NewRepositoryService,
 )

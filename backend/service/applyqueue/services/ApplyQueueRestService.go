@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -57,9 +56,8 @@ func (h *RestService) setResume(w http.ResponseWriter, r *http.Request) {
 	userID := identity.MustFromContext(r.Context()).UserID
 	jobID := chi.URLParam(r, "jobId")
 
-	var input dto.SetResumeInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	input, ok := handler.DecodeBody[dto.SetResumeInput](w, r)
+	if !ok {
 		return
 	}
 

@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -103,11 +102,15 @@ type adminCreateRequest struct {
 	ScanSettings *companydto.CompanyScanSettingsInput `json:"scan_settings"`
 }
 
+// setAllActiveRequest is the PATCH /admin/companies/active body envelope.
+type setAllActiveRequest struct {
+	Active *bool `json:"active"`
+}
+
 // create handles POST /admin/companies.
 func (h *AdminRestService) create(w http.ResponseWriter, r *http.Request) {
-	var body adminCreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	body, ok := handler.DecodeBody[adminCreateRequest](w, r)
+	if !ok {
 		return
 	}
 	settings := companydto.CompanyScanSettingsInput{}
@@ -125,9 +128,8 @@ func (h *AdminRestService) create(w http.ResponseWriter, r *http.Request) {
 // updatePublic handles PATCH /admin/companies/{id}.
 func (h *AdminRestService) updatePublic(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var input companydto.CompanyPublicInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	input, ok := handler.DecodeBody[companydto.CompanyPublicInput](w, r)
+	if !ok {
 		return
 	}
 	if err := h.next.UpdatePublic(r.Context(), id, input); err != nil {
@@ -140,9 +142,8 @@ func (h *AdminRestService) updatePublic(w http.ResponseWriter, r *http.Request) 
 // updateScanSettings handles PATCH /admin/companies/{id}/scan-settings.
 func (h *AdminRestService) updateScanSettings(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var input companydto.CompanyScanSettingsInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	input, ok := handler.DecodeBody[companydto.CompanyScanSettingsInput](w, r)
+	if !ok {
 		return
 	}
 	if err := h.next.UpdateScanSettings(r.Context(), id, input); err != nil {
@@ -164,11 +165,8 @@ func (h *AdminRestService) delete(w http.ResponseWriter, r *http.Request) {
 
 // setAllActive handles PATCH /admin/companies/active.
 func (h *AdminRestService) setAllActive(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Active *bool `json:"active"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	body, ok := handler.DecodeBody[setAllActiveRequest](w, r)
+	if !ok {
 		return
 	}
 	if body.Active == nil {

@@ -35,8 +35,8 @@ func (s *stubPipelineService) TriggerRetry(
 
 // newPipelineTestRouter wires a chi router with the pipeline RestRouter registered.
 func newPipelineTestRouter(svc pipelinesvc.PipelineService) http.Handler {
-	rest := pipelinesvc.NewPipelineRestService(svc)
-	router := pipelinesvc.NewPipelineRestRouter(rest)
+	rest := pipelinesvc.NewRestService(svc)
+	router := pipelinesvc.NewRestRouter(rest)
 	mux := chi.NewMux()
 	router.Register(mux)
 	return mux
@@ -172,5 +172,5 @@ func TestPipelineRestService_NilNextPanics(t *testing.T) {
 			t.Fatal("expected panic on nil next")
 		}
 	}()
-	_ = pipelinesvc.NewPipelineRestService(nil)
+	_ = pipelinesvc.NewRestService(nil)
 }

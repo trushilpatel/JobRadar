@@ -23,8 +23,8 @@ type validationService struct {
 	BasePipelineService
 }
 
-// NewPipelineValidationService constructs the validation layer.
-func NewPipelineValidationService(next PipelineService) PipelineService {
+// NewValidationService constructs the validation layer.
+func NewValidationService(next PipelineService) PipelineService {
 	return &validationService{BasePipelineService: NewBasePipelineService(next)}
 }
 

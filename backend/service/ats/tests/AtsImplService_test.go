@@ -15,7 +15,7 @@ func TestAtsImplService_PassesThroughListATS(t *testing.T) {
 	t.Parallel()
 	want := []atsdto.ATSDTO{{Name: "greenhouse"}}
 	next := &recordingAtsNext{listResult: want}
-	svc := atssvc.NewAtsImplService(next)
+	svc := atssvc.NewImplService(next)
 
 	got, err := svc.ListATS(context.Background())
 	if err != nil {
@@ -34,7 +34,7 @@ func TestAtsImplService_PassesThroughGetATS(t *testing.T) {
 	t.Parallel()
 	want := &atsdto.ATSDTO{Name: "lever"}
 	next := &recordingAtsNext{getResult: want}
-	svc := atssvc.NewAtsImplService(next)
+	svc := atssvc.NewImplService(next)
 
 	got, err := svc.GetATS(context.Background(), "lever")
 	if err != nil {
@@ -53,7 +53,7 @@ func TestAtsImplService_PassesThroughUpdateATS(t *testing.T) {
 	t.Parallel()
 	want := &atsdto.ATSDTO{Name: "ashby"}
 	next := &recordingAtsNext{updateResult: want}
-	svc := atssvc.NewAtsImplService(next)
+	svc := atssvc.NewImplService(next)
 
 	interval := 720
 	got, err := svc.UpdateATS(context.Background(), "ashby", atsdto.UpdateATSInput{ScanIntervalMin: &interval})
@@ -73,7 +73,7 @@ func TestAtsImplService_PropagatesErrors(t *testing.T) {
 	t.Parallel()
 	wantErr := errors.New("next error")
 	next := &recordingAtsNext{listErr: wantErr, getErr: wantErr, updateErr: wantErr}
-	svc := atssvc.NewAtsImplService(next)
+	svc := atssvc.NewImplService(next)
 	ctx := context.Background()
 
 	if _, err := svc.ListATS(ctx); !errors.Is(err, wantErr) {
