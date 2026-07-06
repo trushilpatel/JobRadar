@@ -68,7 +68,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCf
 	scanImplService := services2.NewService(scanRepositoryService, scanSettingsRepository, companyAdminValidationService, servicesConfig)
 	scanValidationService := services2.NewValidator(scanImplService)
 	scanRestService := services2.NewRestService(scanValidationService)
-	scanRestRouter := services2.NewRestRouter(scanRestService)
+	scanRestRouter := services2.NewRestRouter(scanRestService, apiZoneCfg)
 
 	// ── Job ──────────────────────────────────────────────────────────────────
 	jobStore := jobsvc.NewJobStore(db)

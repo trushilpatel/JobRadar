@@ -78,6 +78,21 @@ components:
         - created_at
         - updated_at
       type: object
+    CompanyAnalytics:
+      additionalProperties: false
+      properties:
+        monthly:
+          items:
+            $ref: "#/components/schemas/MonthlyJobPoint"
+          type:
+            - array
+            - "null"
+        velocity:
+          $ref: "#/components/schemas/CompanyVelocity"
+      required:
+        - monthly
+        - velocity
+      type: object
     CompanyPublicView:
       additionalProperties: false
       properties:
@@ -105,6 +120,19 @@ components:
         - slug
         - created_at
         - updated_at
+      type: object
+    CompanyVelocity:
+      additionalProperties: false
+      properties:
+        last_week:
+          format: int64
+          type: integer
+        this_week:
+          format: int64
+          type: integer
+      required:
+        - this_week
+        - last_week
       type: object
     Counts:
       additionalProperties: false
@@ -171,6 +199,35 @@ components:
         - total
         - limit
         - next_cursor
+      type: object
+    EffectiveScanConfigDTO:
+      additionalProperties: false
+      properties:
+        adapter_scan_interval_minutes:
+          format: int64
+          type: integer
+        adapter_type:
+          type: string
+        company_id:
+          type: string
+        effective_scan_interval_minutes:
+          format: int64
+          type: integer
+        inter_company_delay_s:
+          format: int64
+          type: integer
+        scan_interval_minutes_override:
+          format: int64
+          type:
+            - integer
+            - "null"
+      required:
+        - company_id
+        - adapter_type
+        - adapter_scan_interval_minutes
+        - effective_scan_interval_minutes
+        - scan_interval_minutes_override
+        - inter_company_delay_s
       type: object
     ErrorDetail:
       additionalProperties: false
@@ -323,6 +380,22 @@ components:
         - added_at
         - company
       type: object
+    MonthlyJobPoint:
+      additionalProperties: false
+      properties:
+        month:
+          type: string
+        new:
+          format: int64
+          type: integer
+        removed:
+          format: int64
+          type: integer
+      required:
+        - month
+        - new
+        - removed
+      type: object
     NoteResponse:
       additionalProperties: false
       properties:
@@ -372,6 +445,49 @@ components:
         - total
         - page
         - limit
+      type: object
+    QueueEntryView:
+      additionalProperties: false
+      properties:
+        adapter_type:
+          type: string
+        company_id:
+          type: string
+        company_name:
+          type: string
+        id:
+          type: string
+        next_scan_at:
+          format: date-time
+          type:
+            - string
+            - "null"
+        priority:
+          format: int64
+          type: integer
+        queued_at:
+          format: date-time
+          type: string
+        source:
+          type: string
+        started_at:
+          format: date-time
+          type:
+            - string
+            - "null"
+        status:
+          type: string
+      required:
+        - id
+        - company_id
+        - company_name
+        - adapter_type
+        - status
+        - source
+        - priority
+        - queued_at
+        - started_at
+        - next_scan_at
       type: object
     QueueItem:
       additionalProperties: false
@@ -447,6 +563,14 @@ components:
         label:
           type: string
       type: object
+    ResponseCompanyAnalytics:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/CompanyAnalytics"
+      required:
+        - data
+      type: object
     ResponseCompanyPublicView:
       additionalProperties: false
       properties:
@@ -460,6 +584,14 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Counts"
+      required:
+        - data
+      type: object
+    ResponseEffectiveScanConfigDTO:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/EffectiveScanConfigDTO"
       required:
         - data
       type: object
@@ -485,6 +617,18 @@ components:
         data:
           items:
             $ref: "#/components/schemas/JobApplication"
+          type:
+            - array
+            - "null"
+      required:
+        - data
+      type: object
+    ResponseListQueueEntryView:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/QueueEntryView"
           type:
             - array
             - "null"
@@ -536,6 +680,15 @@ components:
       required:
         - data
       type: object
+    ResponseMapStringInterface {}:
+      additionalProperties: false
+      properties:
+        data:
+          additionalProperties: {}
+          type: object
+      required:
+        - data
+      type: object
     ResponseMapStringString:
       additionalProperties: false
       properties:
@@ -578,6 +731,14 @@ components:
       required:
         - data
       type: object
+    ResponseScanStats:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/ScanStats"
+      required:
+        - data
+      type: object
     ResponseStageResponse:
       additionalProperties: false
       properties:
@@ -616,6 +777,79 @@ components:
         - size_bytes
         - created_at
         - extracted_text
+      type: object
+    ScanRun:
+      additionalProperties: false
+      properties:
+        company_id:
+          type: string
+        duration_ms:
+          format: int64
+          type:
+            - integer
+            - "null"
+        error:
+          type:
+            - string
+            - "null"
+        jobs_fetched:
+          format: int64
+          type: integer
+        jobs_new:
+          format: int64
+          type: integer
+        scanned_at:
+          format: date-time
+          type: string
+      required:
+        - company_id
+        - scanned_at
+        - jobs_fetched
+        - jobs_new
+        - error
+        - duration_ms
+      type: object
+    ScanStats:
+      additionalProperties: false
+      properties:
+        avg_duration_ms:
+          format: double
+          type:
+            - number
+            - "null"
+        error_count:
+          format: int64
+          type: integer
+        new_this_month:
+          format: int64
+          type: integer
+        new_today:
+          format: int64
+          type: integer
+        recent_runs:
+          items:
+            $ref: "#/components/schemas/ScanRun"
+          type:
+            - array
+            - "null"
+        total_fetched:
+          format: int64
+          type: integer
+        total_new:
+          format: int64
+          type: integer
+        total_scans:
+          format: int64
+          type: integer
+      required:
+        - total_scans
+        - total_fetched
+        - total_new
+        - error_count
+        - avg_duration_ms
+        - new_today
+        - new_this_month
+        - recent_runs
       type: object
     ServiceError:
       additionalProperties: false
@@ -667,6 +901,15 @@ components:
       properties:
         note:
           type: string
+      type: object
+    UpdateScanIntervalOverrideInputBody:
+      additionalProperties: false
+      properties:
+        scan_interval_minutes_override:
+          format: int64
+          type:
+            - integer
+            - "null"
       type: object
     UpdateStageInput:
       additionalProperties: false
@@ -895,6 +1138,80 @@ paths:
       summary: List companies
       tags:
         - companies
+  /api/companies/queue:
+    get:
+      operationId: listScanQueue
+      parameters:
+        - explode: false
+          in: query
+          name: status
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: source
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseListQueueEntryView"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List the company scan queue
+      tags:
+        - scan
+  /api/companies/queue/{entry_id}:
+    delete:
+      operationId: removeFromScanQueue
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringString"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Remove an entry from the scan queue
+      tags:
+        - scan
+  /api/companies/scan-all:
+    post:
+      operationId: triggerScanAll
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringInterface {}"
+          description: Accepted
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Trigger a scan for every active company
+      tags:
+        - scan
   /api/companies/{id}:
     get:
       operationId: getCompanyPublic
@@ -920,6 +1237,137 @@ paths:
       summary: Get a company by ID
       tags:
         - companies
+  /api/companies/{id}/analytics:
+    get:
+      operationId: getCompanyAnalytics
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseCompanyAnalytics"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get analytics for a company
+      tags:
+        - scan
+  /api/companies/{id}/scan:
+    post:
+      operationId: triggerScan
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringString"
+          description: Accepted
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Trigger a scan for a company
+      tags:
+        - scan
+  /api/companies/{id}/scan-config:
+    get:
+      operationId: getEffectiveScanConfig
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseEffectiveScanConfigDTO"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get the effective scan config for a company
+      tags:
+        - scan
+  /api/companies/{id}/scan-interval-override:
+    patch:
+      operationId: updateScanIntervalOverride
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateScanIntervalOverrideInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringString"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Set or clear a company's scan interval override
+      tags:
+        - scan
+  /api/companies/{id}/scan-stats:
+    get:
+      operationId: getScanStats
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseScanStats"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get scan stats for a company
+      tags:
+        - scan
   /api/jobs:
     get:
       operationId: listJobs

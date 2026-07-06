@@ -42,7 +42,7 @@ func buildTestApp() *App {
 
 	fakeScan := &fakeScanService{}
 	scanRest := scansvc.NewRestService(fakeScan)
-	scanH := scansvc.NewRestRouter(scanRest)
+	scanH := scansvc.NewRestRouter(scanRest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 
 	fakeAts := &fakeAtsService{}
 	atsRest := atssvc.NewRestService(fakeAts)
