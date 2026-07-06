@@ -7,12 +7,30 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 )
+
+// TestNewZoneConfig_ConcurrentCallsAreRaceFree guards a real finding from
+// Slice 7: NewZoneConfig used to call InstallLegacyErrorModel() on every
+// invocation, an unsynchronized write to huma's process-global NewError var.
+// Any test package using t.Parallel() (many do) that builds a zone config
+// per-test triggers a genuine data race under `go test -race` — first
+// caught in service/user/tests. NewZoneConfig must be safe to call
+// concurrently from many goroutines.
+func TestNewZoneConfig_ConcurrentCallsAreRaceFree(t *testing.T) {
+	var wg sync.WaitGroup
+	for range 50 {
+		wg.Go(func() {
+			NewZoneConfig("test", "0.0.0", NewSharedRegistry())
+		})
+	}
+	wg.Wait()
+}
 
 type widget struct {
 	Name string `json:"name"`
@@ -63,9 +81,16 @@ func TestNewZoneConfig_SharesRegistryAcrossZones(t *testing.T) {
 // that call path — a request that fails Huma's OWN body/param validation
 // (e.g. malformed JSON, before the handler ever runs) would silently get
 // Huma's default RFC 9457 shape instead of the legacy one, even though the
-// real server never does. NewZoneConfig must install it itself so every
-// caller — production or test — gets consistent behavior regardless of
-// whether they remembered the explicit call.
+// real server never does. NewZoneConfig must install it itself (at least
+// once per process, see legacyErrorModelOnce) so every caller — production
+// or test — gets consistent behavior regardless of whether they remembered
+// the explicit call.
+//
+// legacyErrorModelOnce is reset here to simulate NewZoneConfig's very first
+// call in a process — the guarantee this test protects only holds for that
+// first call (see the sync.Once fix for the Slice 7 data race); every other
+// test in this package process has almost certainly already consumed the
+// real Once by the time this test runs.
 func TestNewZoneConfig_InstallsLegacyErrorModel(t *testing.T) {
 	original := huma.NewError
 	defer func() { huma.NewError = original }()
@@ -73,6 +98,7 @@ func TestNewZoneConfig_InstallsLegacyErrorModel(t *testing.T) {
 		return &huma.ErrorModel{Status: status, Detail: msg}
 	}
 
+	legacyErrorModelOnce = sync.Once{}
 	NewZoneConfig("spike", "0.0.0", NewSharedRegistry())
 
 	err := huma.NewError(http.StatusBadRequest, "boom")

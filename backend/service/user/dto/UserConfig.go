@@ -6,5 +6,8 @@ package userdto
 // for every field (e.g. false for booleans) so a missing row is equivalent to
 // an all-zero struct.
 type UserConfig struct {
-	ShowKeyboardShortcuts bool `json:"show_keyboard_shortcuts"`
+	// required:"false" — PATCH /api/me/config is a partial merge; an absent
+	// key must leave the field at its Go zero value, matching the pre-Huma
+	// handler's plain json.Decode rather than requiring every field present.
+	ShowKeyboardShortcuts bool `json:"show_keyboard_shortcuts" required:"false"`
 }

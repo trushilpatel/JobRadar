@@ -380,6 +380,30 @@ components:
         - added_at
         - company
       type: object
+    MeResponse:
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+        email:
+          type: string
+        roles:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        status:
+          type: string
+        user_id:
+          type: string
+      required:
+        - user_id
+        - email
+        - roles
+        - status
+        - display_name
+      type: object
     MonthlyJobPoint:
       additionalProperties: false
       properties:
@@ -699,6 +723,14 @@ components:
       required:
         - data
       type: object
+    ResponseMeResponse:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/MeResponse"
+      required:
+        - data
+      type: object
     ResponseNoteResponse:
       additionalProperties: false
       properties:
@@ -744,6 +776,14 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/StageResponse"
+      required:
+        - data
+      type: object
+    ResponseUserConfig:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/UserConfig"
       required:
         - data
       type: object
@@ -896,6 +936,12 @@ components:
         - app_id
         - stage
       type: object
+    UpdateMeInputBody:
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+      type: object
     UpdateNoteInput:
       additionalProperties: false
       properties:
@@ -916,6 +962,12 @@ components:
       properties:
         stage:
           type: string
+      type: object
+    UserConfig:
+      additionalProperties: false
+      properties:
+        show_keyboard_shortcuts:
+          type: boolean
       type: object
     UserJobStateView:
       additionalProperties: false
@@ -1825,6 +1877,106 @@ paths:
       summary: Set a job's status
       tags:
         - jobs
+  /api/me:
+    delete:
+      operationId: deleteMe
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Delete the current user's account
+      tags:
+        - me
+    get:
+      operationId: getMe
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMeResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get the current user's identity bundle
+      tags:
+        - me
+    patch:
+      operationId: updateMe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringString"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update the current user's profile
+      tags:
+        - me
+  /api/me/config:
+    get:
+      operationId: getMyConfig
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseUserConfig"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get the current user's config
+      tags:
+        - me
+    patch:
+      operationId: updateMyConfig
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserConfig"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseUserConfig"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update the current user's config
+      tags:
+        - me
   /api/resumes:
     get:
       operationId: listResumes

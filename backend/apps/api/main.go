@@ -101,7 +101,7 @@ func main() {
 		log.Warn("clerk admin client unavailable — account deletion degraded", logger.Err(clerkErr))
 	}
 
-	mu := buildMultiUser(database, cfg, muCache, muLimiter, clerkClient, log, app.CompanyAdminHandler(), app.AtsHandler(), app.PipelineHandler())
+	mu := buildMultiUser(database, cfg, muCache, muLimiter, clerkClient, log, app.CompanyAdminHandler(), app.AtsHandler(), app.PipelineHandler(), apiZoneCfg)
 
 	apiGroups := append(app.Handlers(), mu.APIHandlers()...)
 	apiRouter := NewRouter(log, cfg, authMW, mu.IdentityMW(), mu.RateLimitMW(), apiGroups, mu.AdminHandlers())

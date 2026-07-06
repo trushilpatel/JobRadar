@@ -2,11 +2,21 @@ package apihuma
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 )
+
+// legacyErrorModelOnce guards NewZoneConfig's automatic install of the
+// legacy error model (see NewZoneConfig's doc comment) so concurrent calls
+// — e.g. from t.Parallel() tests each building their own zone config — never
+// race on huma's process-global NewError var. Direct tests of
+// InstallLegacyErrorModel() itself bypass this guard by calling it
+// directly, so their manual override/restore-via-defer pattern is
+// unaffected.
+var legacyErrorModelOnce sync.Once
 
 // schemaPrefix and docsSecurityHeaders mirror huma.DefaultConfig's own
 // internal choices — kept identical so the served spec/docs look the same
@@ -36,16 +46,21 @@ func NewSharedRegistry() huma.Registry {
 // response header — an uninvited byte-level difference from the legacy
 // envelope that would break frontend-untouched parity (3.1).
 //
-// Also (re-)installs the legacy error model every call. huma.NewError is a
+// Also installs the legacy error model, once per process. huma.NewError is a
 // process-global var; production only gets the legacy shape because
 // main()/printSpec() call InstallLegacyErrorModel() before any
 // registration. A slice's own tests, run as their own `go test` process,
 // never hit that call path otherwise — a request that fails Huma's own
 // body/param validation (before the handler runs) would silently get
 // Huma's default RFC 9457 shape. Calling it here guarantees every caller —
-// production or test — gets the same behavior, idempotently.
+// production or test — gets the same behavior. Guarded by sync.Once because
+// NewZoneConfig itself must be safe under concurrent calls (e.g. from
+// t.Parallel() tests each building their own zone config) — an
+// unsynchronized repeat write to huma.NewError is a genuine data race.
+// Tests that need to directly reset/reassert the override (error_test.go)
+// call InstallLegacyErrorModel() itself, which remains unguarded/reentrant.
 func NewZoneConfig(title, version string, registry huma.Registry) huma.Config {
-	InstallLegacyErrorModel()
+	legacyErrorModelOnce.Do(InstallLegacyErrorModel)
 	cfg := huma.DefaultConfig(title, version)
 	cfg.Components.Schemas = registry
 	cfg.OpenAPIPath = ""
