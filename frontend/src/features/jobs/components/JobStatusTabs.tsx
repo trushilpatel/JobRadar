@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import * as Select from '@radix-ui/react-select'
 import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils/utils'
@@ -75,8 +76,15 @@ function TrackingStageMenu({
   stageCounts: Partial<Record<TrackingStage, number>>
   onSelect: () => void
 }) {
+  // Controlled open state — Radix's *uncontrolled* Popover notifies via a
+  // useEffect, which React StrictMode double-invokes in dev and immediately
+  // flips the menu open then closed on every click. Controlled mode routes
+  // onOpenChange through a synchronous callback instead, sidestepping that
+  // effect entirely.
+  const [open, setOpen] = useState(false)
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"

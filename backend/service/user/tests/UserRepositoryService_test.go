@@ -3,10 +3,12 @@ package tests
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
 
+	commondb "github.com/trushilpatel/jobradar/common/db"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	userdto "github.com/trushilpatel/jobradar/service/user/dto"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
@@ -124,6 +126,31 @@ func TestUserRepo_Get_DBError(t *testing.T) {
 	}
 	if se := asUserSvcErr(t, err); se.Code != domainerrs.ErrInternal.Code {
 		t.Errorf("code = %q, want INTERNAL", se.Code)
+	}
+}
+
+// TestWithRetry_UserGetClosureShape_TransientThenSucceeds locks the exact
+// closure contract Get relies on: db.WithRetry retries a transient
+// connection-drop (io.ErrUnexpectedEOF — the Supavisor idle-drop symptom that
+// previously surfaced as a 500 from RequireIdentity on every /api/* route)
+// and succeeds once the raw query stops erroring. The sqlite harness cannot
+// inject an EOF mid-query, so the retry behaviour is verified here at the
+// seam Get wraps, matching the ledger store's unit-tier tolerance note.
+func TestWithRetry_UserGetClosureShape_TransientThenSucceeds(t *testing.T) {
+	t.Parallel()
+	attempts := 0
+	err := commondb.WithRetry(context.Background(), func() error {
+		attempts++
+		if attempts < 2 {
+			return io.ErrUnexpectedEOF // transient conn drop
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WithRetry err = %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2 (retried once)", attempts)
 	}
 }
 

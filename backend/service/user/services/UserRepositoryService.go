@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	commondb "github.com/trushilpatel/jobradar/common/db"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
 	userdto "github.com/trushilpatel/jobradar/service/user/dto"
@@ -34,8 +35,14 @@ func (r *repositoryService) Get(ctx context.Context, id string) (_ *usermodel.Us
 	ctx, span := tracing.Start(ctx, "user.repo.Get")
 	defer tracing.End(span, &err)
 
+	// Read-only lookup is trivially idempotent; retry on a transient
+	// connection-drop (e.g. Supavisor closing an idle pooled connection) so a
+	// single dropped connection doesn't 500 every /api/* request — this store
+	// backs RequireIdentity, which runs on every authenticated route.
 	var u usermodel.User
-	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&u).Error; err != nil {
+	if err := commondb.WithRetry(ctx, func() error {
+		return r.db.WithContext(ctx).Where("id = ?", id).First(&u).Error
+	}); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, domainerrs.ErrNotFound.WithMessage("user not found")
 		}
