@@ -112,6 +112,19 @@ func main() {
 	nodeRouter := crawlernodesvc.NewNodeRestRouter(nodeRestSvc, authMw)
 	adminRouter := crawlernodesvc.NewAdminRestRouter(adminRestSvc)
 
+	// Admin JWT pipeline init — populates the package-level JWT verifier
+	// apimiddleware.VerifyJWT (called internally by RequireIdentity) reads
+	// from. Deliberately NOT fatal on failure (unlike apps/api's identical
+	// call): /node/* (the core crawl-assignment pipeline) never depends on
+	// Clerk and must stay up even if Clerk is unreachable — wireAdminGate
+	// mounts a 503 stub for /admin/crawler-nodes/* instead of crashing the
+	// whole process. See wire_admin_gate.go.
+	_, authErr := apimiddleware.Auth(cfg.Auth, cfg.API.DevToken, log)
+	if authErr != nil {
+		log.Error("orchestrator: auth init failed — /admin/crawler-nodes unavailable", authErr)
+	}
+	adminGate := wireAdminGate(database, cfg, log, authErr, adminRouter)
+
 	// --- HTTP server ---
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Recoverer)
@@ -125,7 +138,7 @@ func main() {
 	registerHealthRoutes(r, nc)
 
 	r.Route("/node", nodeRouter.Register)
-	r.Route("/admin/crawler-nodes", adminRouter.Register)
+	r.Route("/admin/crawler-nodes", adminGate.Register)
 
 	srv := &http.Server{
 		Addr:              listenAddr,
