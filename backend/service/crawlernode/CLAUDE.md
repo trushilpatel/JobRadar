@@ -2,7 +2,7 @@
 
 ## Wire status
 
-`wire.go` has a full `ProviderSet` listing all 12 constructors, but it is **not actually consumed anywhere** — `apps/orchestrator/` has no `wire.go` of its own; the crawlernode slice is wired by hand in `apps/orchestrator/main.go`. Wire's DI graph can't auto-resolve this slice's decorator chain from `ProviderSet` alone in any case — see the wire-codegen note in `docs/tech-debt/2026-07-05-backend-service-boilerplate-debt.md` (the same "multiple bindings" issue affects every slice's chain, not just this one). Treat `ProviderSet` here as documentation of the intended composition, not as live wiring; do not assume `go generate`/`wire` against it does anything.
+`wire.go` has a full `ProviderSet` listing all 12 constructors, but it is **not actually consumed anywhere** — `apps/orchestrator/` has no `wire.go` of its own; the crawlernode slice is wired by hand in `apps/orchestrator/wire_app.go`. Wire's DI graph can't auto-resolve this slice's decorator chain from `ProviderSet` alone in any case — see the wire-codegen note in `docs/tech-debt/2026-07-05-backend-service-boilerplate-debt.md` (the same "multiple bindings" issue affects every slice's chain, not just this one). Treat `ProviderSet` here as documentation of the intended composition, not as live wiring; do not assume `go generate`/`wire` against it does anything.
 
 ## Decorator chain
 
@@ -17,6 +17,8 @@ Separate stores (not in the main chain):
 ```
 
 The admin surface is a separate `CrawlerNodeAdminRestService` + `CrawlerNodeAdminRestRouter` wired outside the main decorator chain (same pattern as `audit/`).
+
+Both `NodeRestRouter` and `AdminRestRouter` (`CrawlerNodeRestRouter.go`) register via Huma, each onto its own zone config (`apps/orchestrator/wire_spec.go`'s `nodeZoneConfig()`/`adminZoneConfig()`) — orchestrator's OpenAPI document is entirely separate from `apps/api`'s (see `docs/superpowers/plans/2026-06-13-huma-migration-plan.md` Section 9). `AdminRestRouter` now sits behind `apps/orchestrator/wire_admin_gate.go`'s JWT admin-auth stack, not just the bare chi mount it used to have.
 
 ## Interfaces
 

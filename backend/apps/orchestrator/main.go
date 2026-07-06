@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,20 +11,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	apimiddleware "github.com/trushilpatel/jobradar/apps/api/middleware"
-	orchmiddleware "github.com/trushilpatel/jobradar/apps/orchestrator/middleware"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/db"
 	js "github.com/trushilpatel/jobradar/common/jetstream"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/common/metrics"
 	"github.com/trushilpatel/jobradar/common/tracing"
-	"github.com/trushilpatel/jobradar/platform/cache"
-	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
-	crawlernodesvc "github.com/trushilpatel/jobradar/service/crawlernode/services"
-	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
-	scansvc "github.com/trushilpatel/jobradar/service/scan/services"
 )
 
 const (
@@ -34,14 +30,17 @@ const (
 
 	resetStuckInterval = 5 * time.Minute
 	listenAddr         = ":8082"
-
-	// atsCacheTTL matches the TTL apps/api/wire_gen.go uses for the same
-	// AtsService read-through cache — inter_company_delay_s changes rarely
-	// enough that a shared 5-minute staleness window is acceptable here too.
-	atsCacheTTL = 5 * time.Minute
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == printSpecFlag {
+		if err := printSpec(); err != nil {
+			fmt.Fprintf(os.Stderr, "print-spec: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	cfg := config.Load()
 	log := logger.Init("orchestrator")
 
@@ -78,39 +77,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// --- Wire service dependencies ---
 	publisher := js.NewPublisher(njs)
-	nodeStore := crawlernodesvc.NewNodeRepositoryService(database)
-
-	// AtsService chain (mirrors apps/api/wire_gen.go's repository->impl->cache
-	// chain, minus the validation/REST layers this internal caller has no use
-	// for) backs the AdapterDelayGate's inter_company_delay_s lookups.
-	atsStore := atssvc.NewAtsStore(database)
-	atsRepositoryService := atssvc.NewRepositoryService(atsStore)
-	atsImplService := atssvc.NewImplService(atsRepositoryService)
-	atsService := atssvc.NewCacheService(atsImplService, cache.NewMemoryCache(), atsCacheTTL)
-
-	delayGate := crawlernodesvc.NewAdapterDelayGate(atsService)
-	assignStore := crawlernodesvc.NewAssignmentRepositoryService(database, delayGate)
-	seenLedger := jobsvc.NewSeenLedgerStore(database)
-	ledgerSvc := jobsvc.NewLedgerService(seenLedger)
-	ledgerStore := crawlernodesvc.NewLedgerRepositoryService(ledgerSvc)
-	logStore := scansvc.NewLogStore(database)
-	scanLogStore := crawlernodesvc.NewScanLogRepositoryService(logStore)
-	scanSettings := crawlernodesvc.NewScanSettingsReader(database)
-
-	implSvc := crawlernodesvc.NewImplService(
-		nodeStore, assignStore, ledgerStore, scanLogStore,
-		publisher, scanSettings, cfg.Crawler.CrawlerTokenSecret,
-	)
-	nodeSvc := crawlernodesvc.NewValidationService(implSvc)
-
-	// --- REST handlers ---
-	nodeRestSvc := crawlernodesvc.NewNodeRestService(nodeSvc)
-	adminRestSvc := crawlernodesvc.NewAdminRestService(nodeSvc)
-	authMw := orchmiddleware.RequireNodeToken(nodeStore, cfg.Crawler.CrawlerTokenSecret)
-	nodeRouter := crawlernodesvc.NewNodeRestRouter(nodeRestSvc, authMw)
-	adminRouter := crawlernodesvc.NewAdminRestRouter(adminRestSvc)
 
 	// Admin JWT pipeline init — populates the package-level JWT verifier
 	// apimiddleware.VerifyJWT (called internally by RequireIdentity) reads
@@ -123,7 +90,14 @@ func main() {
 	if authErr != nil {
 		log.Error("orchestrator: auth init failed — /admin/crawler-nodes unavailable", authErr)
 	}
-	adminGate := wireAdminGate(database, cfg, log, authErr, adminRouter)
+
+	// Built exactly once and threaded through: NodeRestRouter/AdminRestRouter
+	// register their Huma operations onto these so they share one document
+	// per zone — see wire_spec.go.
+	nodeZoneCfg := nodeZoneConfig()
+	adminZoneCfg := adminZoneConfig()
+
+	app := wireApp(database, cfg, log, publisher, authErr, nodeZoneCfg, adminZoneCfg)
 
 	// --- HTTP server ---
 	r := chi.NewRouter()
@@ -137,8 +111,14 @@ func main() {
 	// is always co-located with the handler definitions (see health.go).
 	registerHealthRoutes(r, nc)
 
-	r.Route("/node", nodeRouter.Register)
-	r.Route("/admin/crawler-nodes", adminGate.Register)
+	r.Route("/node", app.nodeRouter.Register)
+	r.Route("/admin/crawler-nodes", app.adminGate.Register)
+
+	// Combined OpenAPI spec + docs UI, served unauthenticated on the main
+	// router — this binary has no separate ops listener the way apps/api
+	// does; health checks already live here unauthenticated, so this is
+	// consistent with the existing convention for this binary specifically.
+	apihuma.MountCombinedSpec(r, buildOrchestratorSpec(nodeZoneCfg, adminZoneCfg))
 
 	srv := &http.Server{
 		Addr:              listenAddr,
@@ -150,7 +130,7 @@ func main() {
 	}
 
 	// Background: reset stuck assignments every 5 minutes.
-	go runResetStuck(ctx, assignStore, resetStuckInterval, log)
+	go runResetStuck(ctx, app.assignStore, resetStuckInterval, log)
 
 	log.Info("orchestrator listening", logger.Str("addr", listenAddr))
 

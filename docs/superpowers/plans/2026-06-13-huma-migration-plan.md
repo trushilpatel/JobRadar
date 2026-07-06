@@ -451,7 +451,7 @@ Each slice is an independent PR onto its feature branch. Because legacy and Huma
 routing coexist, reverting a single slice's commit restores its chi handlers without
 touching other slices. The foundation package is additive until Slice 1 adopts it.
 
-## 9. Out of scope: `apps/orchestrator` / crawler-node — and a finding worth flagging separately
+## 9. `apps/orchestrator` / crawler-node — originally out of scope, completed 2026-07-06
 
 `CrawlerNodeRestRouter` (`service/crawlernode/services/CrawlerNodeRestRouter.go`) is
 **not mounted in `apps/api`**. It is wired into the standalone `apps/orchestrator`
@@ -461,25 +461,51 @@ no `SecurityHeaders`, no `BodyLimit`) and mounts `r.Route("/node", nodeRouter.Re
 and `r.Route("/admin/crawler-nodes", adminRouter.Register)` directly, bypassing the
 `handler.RouteGroup`/`apiGroups`/`rootGroups` convention this plan builds on entirely.
 
-Two consequences:
+This section originally declared the orchestrator out of scope (correcting the
+2026-06-13 draft's internally-contradictory Slice 13 listing). Both flagged items
+were subsequently done, in order:
 
-1. **Architecturally**, migrating it would mean standing up a second, independent
-   Huma/OpenAPI surface on a different binary/process/port with a different
-   middleware baseline — not a 13th slice in the same sequence. If/when this is
-   pursued, it should be its own plan, not an appendage to this one (this corrects
-   the 2026-06-13 draft, which listed crawler-node as Slice 13 in Section 5 while
-   also declaring the orchestrator out of scope in Section 2 — an internal
-   contradiction).
-2. **Security finding, surfaced but not fixed here:** `/admin/crawler-nodes/*` on the
-   orchestrator has **no `RequireRole` and no `AuditAdminMutation`** — confirmed by
-   reading the orchestrator's route registration; only node-token auth
-   (`RequireNodeToken`) exists, and only on `/node/*`, not `/admin/crawler-nodes/*`.
-   This is a pre-existing gap, not something this plan introduces, but it is worth
-   fixing (adding the same `RequireRole("admin")` + `AuditAdminMutation` gating that
-   every other `/admin/*` route already has) as its **own small PR, independent of
-   Huma**, and ideally _before_ any future decision to document this surface in a
-   public-facing OpenAPI spec — publishing an ungated admin endpoint in machine-readable
-   docs makes the gap easier to find, not harder.
+1. **Security fix (its own commit, independent of Huma):** `/admin/crawler-nodes/*`
+   had **no `RequireRole` and no `AuditAdminMutation`** — only node-token auth
+   (`RequireNodeToken`) existed, and only on `/node/*`. Fixed by `wireAdminGate`
+   (`apps/orchestrator/wire_admin_gate.go`): the same `RequireIdentity` ->
+   `RequireRole("admin")` -> `AuditAdminMutation` stack every `/admin/*` route in
+   `apps/api` uses, backed by the same `users`/`admin_audit_log` tables. JWKS init
+   failure is deliberately **not** fatal at boot (unlike `apps/api`'s identical call)
+   — `/node/*` (the core crawl-assignment pipeline) has never depended on Clerk and
+   must stay up regardless; a failed auth init instead degrades only the admin
+   surface to a 503.
+2. **Huma migration, as its own independent spec/document** (confirming point 1 of
+   this section's original architectural note): `apps/orchestrator` now has its own
+   `nodeZoneConfig()`/`adminZoneConfig()` (`apps/orchestrator/wire_spec.go`) — a
+   completely separate `huma.Config`/registry pair from `apps/api`'s, since this is a
+   genuinely different binary/process/port with its own middleware baseline. Both
+   `NodeRestRouter` and `AdminRestRouter` (`service/crawlernode/services/`) register
+   through Huma exactly like every `apps/api` slice. The combined spec is served
+   unauthenticated directly on the main router (`/openapi.json`, `/docs`) — this
+   binary has no separate ops listener the way `apps/api` does, and health checks
+   already live unauthenticated on the same router, so this is consistent with the
+   existing convention for this binary specifically. `apps/orchestrator/genspec.go`
+   mirrors `apps/api/genspec.go`'s `--print-spec` pattern exactly (reusing the same
+   `wireApp` wiring function main() calls, a noop `StreamPublisher` standing in for
+   NATS during spec generation); the CI stale-spec guard now regenerates and diffs
+   both `apps/api/openapi.yaml` and `apps/orchestrator/openapi.yaml`.
+
+**Coverage-gate finding:** `apps/orchestrator`'s package coverage initially fell to
+88.4% after adding `genspec.go`/`wire_spec.go` — `apps/api`'s own `genspec.go` has
+near-identical uncovered error branches (~85%) but its _package_ average stays
+comfortably above 95% because dozens of other well-tested files dilute it;
+`apps/orchestrator` has far fewer files, so the same absolute gap moved the needle
+much further. Fixed two ways: (1) closed a genuine, pre-existing gap in
+`registerHealthRoutes` (the `nc != nil` branch was never exercised) with a real test
+using a zero-value `&nats.Conn{}` (safe — `Status()` only reads a mutex-guarded
+field, no network I/O); (2) `buildOrchestratorSpec`'s `MergeSpecs` error branch was
+structurally unreachable — the two zone prefixes (`/node`, `/admin/crawler-nodes`)
+are fixed, distinct literals, so a duplicate-path collision can never occur through
+this function's contract. Removed the error return entirely (panics instead, since
+this could only ever fire on a programming error) rather than write a hollow test
+around dead code — matches the "don't add error handling for scenarios that can't
+happen" rule in `.claude/rules/engineering-principles.md`.
 
 ---
 

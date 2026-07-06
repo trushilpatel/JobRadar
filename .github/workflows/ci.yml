@@ -32,13 +32,16 @@ jobs:
           working-directory: backend
           args: --config ../.github/.golangci.yml --new-from-rev=origin/main --timeout 5m --path-mode=abs
 
-      - name: Regenerate OpenAPI spec and check for drift
-        # Fails the build if apps/api/openapi.yaml doesn't match what the API
-        # actually serves — the spec can never silently drift from the code.
-        # See docs/superpowers/plans/2026-06-13-huma-migration-plan.md, Section 3.5.
+      - name: Regenerate OpenAPI specs and check for drift
+        # Fails the build if apps/api/openapi.yaml or apps/orchestrator/openapi.yaml
+        # doesn't match what each server actually serves — the spec can never
+        # silently drift from the code. See
+        # docs/superpowers/plans/2026-06-13-huma-migration-plan.md, Section 3.5
+        # and Section 9 (orchestrator is a separate binary/spec, not a 13th slice).
         run: |
           go run ./apps/api --print-spec
-          git diff --exit-code -- apps/api/openapi.yaml
+          go run ./apps/orchestrator --print-spec
+          git diff --exit-code -- apps/api/openapi.yaml apps/orchestrator/openapi.yaml
         working-directory: backend
 
   backend-test:
