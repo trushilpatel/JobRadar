@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Keyboard } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { Job, JobStatus } from '@/types'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
-import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { ResizeHandle } from '@/components/ui/resize-handle'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { TabKey } from '@/config/constants/jobStatus'
 import {
@@ -26,6 +26,7 @@ import { HIDDEN_COMPANIES_CATEGORY } from '@/config/constants/hiddenItems'
 type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new' | 'saved'>
 
 const SCROLL_RESTORATION_KEY = 'jobs-page-scroll-y'
+const DEFAULT_PANEL_WIDTH = 480
 
 export function JobsPage() {
   const jobs = useJobs()
@@ -41,6 +42,7 @@ export function JobsPage() {
   // User can dismiss the always-open detail panel; honored until they click a
   // row or change tabs.
   const [panelClosedByUser, setPanelClosedByUser] = useState(false)
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
 
   // ── Hide-list filtering ────────────────────────────────────────────────────
   // Jobs from a hidden company are pruned at the page level (after fetch).
@@ -314,7 +316,9 @@ export function JobsPage() {
         activeFilterCount={activeFilterCount}
       />
 
-      {/* Content: table + always-open detail panel */}
+      {/* Content: table + always-open detail panel. The panel is a flex
+          sibling of the table (not a portal/overlay) so the table genuinely
+          reflows to make room — same pattern as CompaniesPage's drawer. */}
       <ErrorBoundary>
         <div className="flex-1 flex min-h-0 overflow-hidden">
           <div ref={tableScrollRef} className="flex flex-1 min-w-0 overflow-hidden">
@@ -347,43 +351,14 @@ export function JobsPage() {
               onSortingChange={jobs.handleSortingChange}
             />
           </div>
-        </div>
-      </ErrorBoundary>
 
-      {!isMobile && (
-        <Sheet
-          modal={false}
-          open={!!openJob && !panelClosedByUser}
-          onOpenChange={(open) => {
-            if (!open) {
-              setPanelClosedByUser(true)
-              jobs.setOpenJobId(null)
-            }
-          }}
-        >
-          {/* Non-modal, no dimming overlay — the always-open reading pane
-              (Gmail/Superhuman pattern) must keep the table behind it fully
-              interactive: clicking another row switches the open job instead
-              of just closing the drawer, and arrow-key row navigation must
-              keep working while the drawer is open. Outside pointer/focus
-              interactions are suppressed so Radix never auto-dismisses on a
-              row click — only the explicit close button / Escape do. */}
-          <SheetContent
-            side="right"
-            showOverlay={false}
-            showCloseButton={false}
-            onPointerDownOutside={(e) => e.preventDefault()}
-            onInteractOutside={(e) => e.preventDefault()}
-            className="w-[32rem] sm:max-w-[32rem] flex flex-col p-0 border-l border-[var(--border)] shadow-[0_8px_24px_rgba(0,0,0,0.4)]"
-          >
-            {openJob && (
-              <>
-                {/* Radix Dialog requires an accessible title/description; the
-                    visible heading lives inside JobDetailPanel itself. */}
-                <SheetTitle className="sr-only">{openJob.title}</SheetTitle>
-                <SheetDescription className="sr-only">
-                  {openJob.company?.name ?? ''} job details
-                </SheetDescription>
+          {!isMobile && openJob && !panelClosedByUser && (
+            <>
+              <ResizeHandle width={panelWidth} onChange={setPanelWidth} />
+              <aside
+                style={{ ['--panel-width' as string]: `${panelWidth}px` } as CSSProperties}
+                className="flex flex-col shrink-0 min-h-0 h-full border-l border-[var(--border)] overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.4)] [width:var(--panel-width)]"
+              >
                 <JobDetailPanel
                   job={openJob}
                   onClose={() => {
@@ -394,11 +369,11 @@ export function JobsPage() {
                   onToggleSave={handleToggleSave}
                   onDismiss={handleDismiss}
                 />
-              </>
-            )}
-          </SheetContent>
-        </Sheet>
-      )}
+              </aside>
+            </>
+          )}
+        </div>
+      </ErrorBoundary>
 
       <JobCommandPalette
         open={paletteOpen}
