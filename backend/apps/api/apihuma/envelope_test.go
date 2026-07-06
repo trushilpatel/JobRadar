@@ -78,21 +78,31 @@ func TestCursorPageOutputNextCursorNilRendersNull(t *testing.T) {
 	}
 }
 
+// TestAdminCursorPageOutputMatchesLegacyAdminListShape guards a real,
+// previously-undetected discrepancy: the actual pre-Huma admin list handler
+// calls handler.Respond(w, status, adminListEnvelope{...}), and
+// handler.Respond ALWAYS wraps its argument in response.Response[T]{Data:
+// data} — producing a genuinely double-nested body
+// ({"data":{"data":[...],...}}), unlike the single-level public CursorPage.
+// This was undetected until Slice 10 (company admin) became the first
+// slice to actually use AdminCursorPageOutput.
 func TestAdminCursorPageOutputMatchesLegacyAdminListShape(t *testing.T) {
 	out := AdminCursorPageOutput[testResource]{}
-	out.Body = AdminCursorPage[testResource]{
-		Data:        []testResource{{ID: "abc", Name: "Widget"}},
-		Total:       5,
-		TotalActive: 3,
-		Limit:       20,
-		NextCursor:  nil,
+	out.Body = response.Response[AdminCursorPage[testResource]]{
+		Data: AdminCursorPage[testResource]{
+			Data:        []testResource{{ID: "abc", Name: "Widget"}},
+			Total:       5,
+			TotalActive: 3,
+			Limit:       20,
+			NextCursor:  nil,
+		},
 	}
 
 	got, err := json.Marshal(out.Body)
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
 	}
-	want := `{"data":[{"id":"abc","name":"Widget"}],"total":5,"total_active":3,"limit":20,"next_cursor":null}`
+	want := `{"data":{"data":[{"id":"abc","name":"Widget"}],"total":5,"total_active":3,"limit":20,"next_cursor":null}}`
 	if string(got) != want {
 		t.Fatalf("got %s, want %s", got, want)
 	}

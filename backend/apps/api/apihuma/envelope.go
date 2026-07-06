@@ -51,7 +51,18 @@ type AdminCursorPage[T any] struct {
 	NextCursor  *string `json:"next_cursor"`
 }
 
-// AdminCursorPageOutput wraps AdminCursorPage as a Huma operation output body.
+// AdminCursorPageOutput wraps AdminCursorPage as a Huma operation output
+// body. Unlike CursorPageOutput, this wraps AdminCursorPage in
+// response.Response — the real pre-Huma admin list handler calls
+// handler.Respond(w, status, adminListEnvelope{...}), and handler.Respond
+// ALWAYS wraps its argument in response.Response[T]{Data: data}, producing
+// a genuinely double-nested body: {"data": {"data": [...], "total", ...}}.
+// This is a real discrepancy from the public CursorPage (single-level,
+// since the pre-Huma public list handler never went through
+// handler.Respond) — first caught in Slice 10 (company admin), the first
+// slice to actually exercise this type; the original Phase 0 version of
+// this type (single-level, mirroring CursorPageOutput) was never used by
+// any shipped slice and so this bug went undetected until now.
 type AdminCursorPageOutput[T any] struct {
-	Body AdminCursorPage[T]
+	Body response.Response[AdminCursorPage[T]]
 }

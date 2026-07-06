@@ -31,6 +31,12 @@ func TestBuildSpecYAML_ContainsMigratedSliceOperations(t *testing.T) {
 	if !strings.Contains(got, "/admin/pipeline/retry:") {
 		t.Errorf("expected /admin/pipeline/retry in generated spec, got:\n%s", got)
 	}
+	if !strings.Contains(got, "/admin/companies/active:") {
+		t.Errorf("expected /admin/companies/active (literal, distinct from {id}) in generated spec, got:\n%s", got)
+	}
+	if !strings.Contains(got, "/admin/companies/{id}/scan-settings:") {
+		t.Errorf("expected /admin/companies/{id}/scan-settings in generated spec, got:\n%s", got)
+	}
 }
 
 // TestBuildSpecYAML_DocumentsLegacyErrorShape guards the registration-order

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	companycommon "github.com/trushilpatel/jobradar/service/company/common"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
@@ -15,9 +16,13 @@ import (
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
 )
 
+// newAdminRouter wires a chi router with the admin RestRouter registered.
+// Uses a fresh, isolated zone config/registry per call — never
+// apispec.APIZoneConfig()/AdminZoneConfig() (see apps/api/app_test.go for
+// why that matters).
 func newAdminRouter(svc companysvc.CompanyAdminService) *chi.Mux {
 	rest := companysvc.NewAdminRestService(svc)
-	router := companysvc.NewAdminRestRouter(rest)
+	router := companysvc.NewAdminRestRouter(rest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 	r := chi.NewRouter()
 	router.Register(r)
 	return r

@@ -57,7 +57,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCf
 	companyAdminImplService := services.NewAdminImplService(companyAdminRepositoryService, nil, nil)
 	companyAdminValidationService := services.NewAdminValidationService(companyAdminImplService, atsValidationService)
 	companyAdminRestService := services.NewAdminRestService(companyAdminValidationService)
-	companyAdminRouter := services.NewAdminRestRouter(companyAdminRestService)
+	companyAdminRouter := services.NewAdminRestRouter(companyAdminRestService, adminZoneCfg)
 
 	// ── Scan ─────────────────────────────────────────────────────────────────
 	scanLogStore := services2.NewLogStore(db)

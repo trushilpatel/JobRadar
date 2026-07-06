@@ -36,6 +36,67 @@ components:
         - created_at
         - updated_at
       type: object
+    ActiveResponse:
+      additionalProperties: false
+      properties:
+        active:
+          type: boolean
+      required:
+        - active
+      type: object
+    AdminCreateRequest:
+      additionalProperties: false
+      properties:
+        careers_url:
+          type:
+            - string
+            - "null"
+        id:
+          type: string
+        logo_url:
+          type:
+            - string
+            - "null"
+        name:
+          type: string
+        scan_settings:
+          $ref: "#/components/schemas/CompanyScanSettingsInput"
+        slug:
+          type: string
+        website:
+          type:
+            - string
+            - "null"
+      type: object
+    AdminCursorPageCompanyAdminListView:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/CompanyAdminListView"
+          type:
+            - array
+            - "null"
+        limit:
+          format: int64
+          type: integer
+        next_cursor:
+          type:
+            - string
+            - "null"
+        total:
+          format: int64
+          type: integer
+        total_active:
+          format: int64
+          type: integer
+      required:
+        - data
+        - total
+        - total_active
+        - limit
+        - next_cursor
+      type: object
     ApplicationWithJob:
       additionalProperties: false
       properties:
@@ -114,6 +175,82 @@ components:
         - created_at
         - updated_at
       type: object
+    CompanyAdminListView:
+      additionalProperties: false
+      properties:
+        careers_url:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        logo_url:
+          type: string
+        name:
+          type: string
+        queue_status:
+          type: string
+        scan_history:
+          items:
+            type: boolean
+          type:
+            - array
+            - "null"
+        scan_settings:
+          $ref: "#/components/schemas/CompanyScanSettingsListView"
+        slug:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+        website:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - created_at
+        - updated_at
+      type: object
+    CompanyAdminView:
+      additionalProperties: false
+      properties:
+        careers_url:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        logo_url:
+          type: string
+        name:
+          type: string
+        queue_status:
+          type: string
+        scan_history:
+          items:
+            type: boolean
+          type:
+            - array
+            - "null"
+        scan_settings:
+          $ref: "#/components/schemas/CompanyScanSettingsView"
+        slug:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+        website:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - created_at
+        - updated_at
+      type: object
     CompanyAnalytics:
       additionalProperties: false
       properties:
@@ -128,6 +265,28 @@ components:
       required:
         - monthly
         - velocity
+      type: object
+    CompanyPublicInput:
+      additionalProperties: false
+      properties:
+        careers_url:
+          type:
+            - string
+            - "null"
+        id:
+          type: string
+        logo_url:
+          type:
+            - string
+            - "null"
+        name:
+          type: string
+        slug:
+          type: string
+        website:
+          type:
+            - string
+            - "null"
       type: object
     CompanyPublicView:
       additionalProperties: false
@@ -154,6 +313,119 @@ components:
         - id
         - name
         - slug
+        - created_at
+        - updated_at
+      type: object
+    CompanyScanSettingsInput:
+      additionalProperties: false
+      properties:
+        active:
+          type:
+            - boolean
+            - "null"
+        adapter_config:
+          contentEncoding: base64
+          type: string
+        adapter_type:
+          type:
+            - string
+            - "null"
+        auto_paused:
+          type:
+            - boolean
+            - "null"
+        scan_interval_override:
+          format: int64
+          type:
+            - integer
+            - "null"
+      type: object
+    CompanyScanSettingsListView:
+      additionalProperties: false
+      properties:
+        active:
+          type: boolean
+        adapter_type:
+          type: string
+        auto_paused:
+          type: boolean
+        company_id:
+          type: string
+        consecutive_errors:
+          format: int64
+          type: integer
+        created_at:
+          format: date-time
+          type: string
+        last_error_at:
+          format: date-time
+          type: string
+        last_error_message:
+          type: string
+        last_scan_at:
+          format: date-time
+          type: string
+        last_success_at:
+          format: date-time
+          type: string
+        scan_interval_override:
+          format: int64
+          type: integer
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - company_id
+        - adapter_type
+        - active
+        - auto_paused
+        - consecutive_errors
+        - created_at
+        - updated_at
+      type: object
+    CompanyScanSettingsView:
+      additionalProperties: false
+      properties:
+        active:
+          type: boolean
+        adapter_config:
+          contentEncoding: base64
+          type: string
+        adapter_type:
+          type: string
+        auto_paused:
+          type: boolean
+        company_id:
+          type: string
+        consecutive_errors:
+          format: int64
+          type: integer
+        created_at:
+          format: date-time
+          type: string
+        last_error_at:
+          format: date-time
+          type: string
+        last_error_message:
+          type: string
+        last_scan_at:
+          format: date-time
+          type: string
+        last_success_at:
+          format: date-time
+          type: string
+        scan_interval_override:
+          format: int64
+          type: integer
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - company_id
+        - adapter_type
+        - active
+        - auto_paused
+        - consecutive_errors
         - created_at
         - updated_at
       type: object
@@ -293,6 +565,14 @@ components:
         - IsSet
         - Size
         - Filename
+      type: object
+    IdResponse:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+      required:
+        - id
       type: object
     JobApplication:
       additionalProperties: false
@@ -674,6 +954,30 @@ components:
       required:
         - data
       type: object
+    ResponseActiveResponse:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/ActiveResponse"
+      required:
+        - data
+      type: object
+    ResponseAdminCursorPageCompanyAdminListView:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminCursorPageCompanyAdminListView"
+      required:
+        - data
+      type: object
+    ResponseCompanyAdminView:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/CompanyAdminView"
+      required:
+        - data
+      type: object
     ResponseCompanyAnalytics:
       additionalProperties: false
       properties:
@@ -703,6 +1007,14 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/EffectiveScanConfigDTO"
+      required:
+        - data
+      type: object
+    ResponseIdResponse:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/IdResponse"
       required:
         - data
       type: object
@@ -1035,6 +1347,14 @@ components:
       required:
         - error
       type: object
+    SetAllActiveInputBody:
+      additionalProperties: false
+      properties:
+        active:
+          type: boolean
+      required:
+        - active
+      type: object
     SetNotesInput:
       additionalProperties: false
       properties:
@@ -1243,6 +1563,255 @@ paths:
       summary: Update an ATS adapter
       tags:
         - ats
+  /admin/companies:
+    get:
+      operationId: listCompaniesAdmin
+      parameters:
+        - description: Repeatable ATS adapter type filter
+          explode: true
+          in: query
+          name: adapter_types
+          schema:
+            description: Repeatable ATS adapter type filter
+            items:
+              type: string
+            type:
+              - array
+              - "null"
+        - description: Singular adapter type filter, used when adapter_types is absent
+          explode: false
+          in: query
+          name: adapter_type
+          schema:
+            description: Singular adapter type filter, used when adapter_types is absent
+            type: string
+        - description: true or false
+          explode: false
+          in: query
+          name: active
+          schema:
+            description: true or false
+            type: string
+        - description: true or false
+          explode: false
+          in: query
+          name: has_settings
+          schema:
+            description: true or false
+            type: string
+        - description: ILIKE match on company name
+          explode: false
+          in: query
+          name: search
+          schema:
+            description: ILIKE match on company name
+            type: string
+        - explode: false
+          in: query
+          name: sort_by
+          schema:
+            type: string
+        - description: asc or desc
+          explode: false
+          in: query
+          name: sort_dir
+          schema:
+            description: asc or desc
+            type: string
+        - description: ok, error, queued, or running
+          explode: false
+          in: query
+          name: scan_status
+          schema:
+            description: ok, error, queued, or running
+            type: string
+        - description: Opaque keyset pagination cursor
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: Opaque keyset pagination cursor
+            type: string
+        - description: Page size 1-100; invalid or missing values default to 20
+          explode: false
+          in: query
+          name: limit
+          schema:
+            description: Page size 1-100; invalid or missing values default to 20
+            examples:
+              - "20"
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseAdminCursorPageCompanyAdminListView"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List companies (admin)
+      tags:
+        - companies
+    post:
+      operationId: createCompanyAdmin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseCompanyAdminView"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Create a company
+      tags:
+        - companies
+  /admin/companies/active:
+    patch:
+      operationId: setAllCompaniesActive
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetAllActiveInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseActiveResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Set active flag for all companies
+      tags:
+        - companies
+  /admin/companies/{id}:
+    delete:
+      operationId: deleteCompanyAdmin
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Delete a company
+      tags:
+        - companies
+    get:
+      operationId: getCompanyAdmin
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseCompanyAdminView"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get a company by ID (admin)
+      tags:
+        - companies
+    patch:
+      operationId: updateCompanyPublic
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanyPublicInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseIdResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update a company's public fields
+      tags:
+        - companies
+  /admin/companies/{id}/scan-settings:
+    patch:
+      operationId: updateCompanyScanSettings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanyScanSettingsInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseIdResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update a company's scan settings
+      tags:
+        - companies
   /admin/pipeline/retry:
     post:
       operationId: triggerPipelineRetry
