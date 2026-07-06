@@ -14,6 +14,12 @@
 // Both chains share the same *cache.Cache and the same TTL pulled from
 // MultiUserConfig.CacheTTLCompanySeconds. The admin chain calls
 // cache.Cache.Delete on company:public:{id} after every mutating method.
+// (In production neither cache is actually wired — see company/CLAUDE.md.)
+//
+// NOTE: neither ProviderSet below is ever fed through Wire's codegen — Wire
+// can't auto-resolve a linear chain of providers that all return the same
+// CompanyService (or CompanyAdminService) interface. See apps/api/CLAUDE.md;
+// the actual wiring is hand-maintained in apps/api/wire_gen.go.
 package company
 
 import (

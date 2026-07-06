@@ -49,6 +49,10 @@ The user-facing `JobService` chain (`ImplService` terminal) uses `JobStore` + `U
 - `implService` is the terminal `JobService` — it composes five narrow repo interfaces (`JobReader`, `UserJobStateRepository`, `SnapshotWriter`, `ApplicationWriter`, `SeenLedgerWriter`) directly; there is no `next JobService` to wrap the canonical way.
 - More importantly, `List`'s cached entry (`pageCacheEntry`) holds only the **global, pre-overlay** page — `s.jobs.GetJobs(...)`'s raw result — before the per-user `user_job_state` overlay is merged in. A canonical outer `CacheService` decorator sitting in front of `List` would instead cache `List`'s full return value, which already has one caller's overlay merged in — that cached entry would then leak into a **different user's** cache hit on the same (cursor, filter) key. Do not "fix" this deviation by extracting an outer decorator; it would introduce a cross-user data leak. If this ever needs to change, the overlay merge must stay outside whatever layer is cached.
 
+## `ImplService` doesn't embed `BaseService` — unlike every other slice's Impl layer
+
+`JobImplService.go`'s `implService` implements all 11 `JobService` methods directly with zero `BaseService` embedding, unlike the `{Domain}ImplService` in every other slice (which embeds `BaseService` and overrides only the methods it owns). This isn't an oversight either, and it isn't safe to "fix" by adding the embed: `BaseService` exists to delegate to a `next {Domain}Service` — but `implService` here has no `next JobService`, it terminates directly against five narrow repo interfaces (`JobReader`, `UserJobStateRepository`, `SnapshotWriter`, `ApplicationWriter`, `SeenLedgerWriter`), the same reason it can't use the `CacheService` decorator pattern (see above). There is nothing to delegate to, so there is nothing for an embedded `BaseService` to wrap.
+
 ## Key invariants
 
 - `job_post_id` is UNIQUE (`uq_jobs_job_post_id`, migration 071). `InsertJob` is idempotent via `ON CONFLICT DO NOTHING` and surfaces `ErrJobAlreadyExists` when the caller needs to know.

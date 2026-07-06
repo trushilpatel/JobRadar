@@ -8,6 +8,9 @@ import (
 // ProviderSet is the Wire provider set for the job domain. The decorator
 // chain is composed RestRouter → RestService → ValidationService →
 // ImplService (terminal, holds JobReader + UserJobStateRepository + cache).
+//
+// NOTE: this ProviderSet documents the intended composition only — it is
+// never fed through Wire's codegen; see apps/api/CLAUDE.md.
 var ProviderSet = wire.NewSet(
 	svc.NewRestRouter,
 	svc.NewRestService,
