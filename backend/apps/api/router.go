@@ -3,9 +3,11 @@ package main
 import (
 	"net/http"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/apps/api/middleware"
 	"github.com/trushilpatel/jobradar/common/config"
@@ -62,10 +64,13 @@ func NewRouter(
 }
 
 // NewOpsRouter builds the operational router bound to the metrics listener.
-// It exposes /metrics (Prometheus), /health (liveness), and /ready
-// (DB ping). Kept separate from the public API so Prometheus scrapes never
-// traverse the auth or rate-limit middleware stacks.
-func NewOpsRouter(database *gorm.DB) *chi.Mux {
+// It exposes /metrics (Prometheus), /health (liveness), /ready (DB ping),
+// and the combined OpenAPI spec + docs UI (/openapi.json, /openapi.yaml,
+// /docs) built from apiSpec — see apihuma.MergeSpecs. Kept separate from the
+// public API so Prometheus scrapes and API documentation never traverse the
+// auth or rate-limit middleware stacks (docs/superpowers/plans/2026-06-13-huma-migration-plan.md,
+// Section 3.5).
+func NewOpsRouter(database *gorm.DB, apiSpec *huma.OpenAPI) *chi.Mux {
 	r := chi.NewRouter()
 	r.Handle("/metrics", promhttp.Handler())
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -78,5 +83,6 @@ func NewOpsRouter(database *gorm.DB) *chi.Mux {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
+	apihuma.MountCombinedSpec(r, apiSpec)
 	return r
 }

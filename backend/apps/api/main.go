@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
+	"github.com/trushilpatel/jobradar/apps/api/apispec"
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/apps/api/middleware"
 	"github.com/trushilpatel/jobradar/common/config"
@@ -35,6 +37,12 @@ func main() {
 	// handler.HandleError silently returns "internal server error" with no log
 	// line — diagnosing a 500 in production then requires reading code.
 	handler.SetLogger(log)
+	// Huma migration foundation (Phase 0) — mirrors handler.SetLogger above,
+	// and installs the legacy error envelope for errors Huma itself raises
+	// (e.g. malformed request bodies) so migrated slices need zero frontend
+	// changes. See docs/superpowers/plans/2026-06-13-huma-migration-plan.md.
+	apihuma.SetLogger(log)
+	apihuma.InstallLegacyErrorModel()
 
 	if err := cfg.Auth.Validate(); err != nil {
 		log.Error("auth config invalid", err)
@@ -83,7 +91,15 @@ func main() {
 
 	apiGroups := append(app.Handlers(), mu.APIHandlers()...)
 	apiRouter := NewRouter(log, cfg, authMW, mu.IdentityMW(), mu.RateLimitMW(), apiGroups, mu.AdminHandlers())
-	opsRouter := NewOpsRouter(database)
+
+	// Combined OpenAPI spec served on the ops listener (never behind /api or
+	// /admin auth) — see apps/api/apispec for the current zone list.
+	apiSpec, err := apispec.Build()
+	if err != nil {
+		log.Error("huma spec build failed", err)
+		os.Exit(1)
+	}
+	opsRouter := NewOpsRouter(database, apiSpec)
 
 	apiSrv := &http.Server{
 		Addr:              ":8080",

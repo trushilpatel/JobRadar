@@ -9,7 +9,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/logger"
@@ -17,6 +19,19 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
+
+// newTestSpec builds a minimal combined OpenAPI document for NewOpsRouter
+// tests — no zones are registered yet (no slice has migrated to Huma), so
+// this mirrors exactly what main.go builds today: an empty-but-valid spec
+// that will gain real paths as each slice migrates.
+func newTestSpec(t *testing.T) *huma.OpenAPI {
+	t.Helper()
+	spec, err := apihuma.MergeSpecs("jobradar-api", "test", apihuma.NewSharedRegistry())
+	if err != nil {
+		t.Fatalf("MergeSpecs: %v", err)
+	}
+	return spec
+}
 
 // passthroughAuth is an Auth middleware stand-in for router-shape tests that
 // only need to verify mounting + middleware chaining, not signature checking.
@@ -220,7 +235,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 }
 
 func TestNewOpsRouter_HealthReturns200(t *testing.T) {
-	r := NewOpsRouter(newTestDB(t))
+	r := NewOpsRouter(newTestDB(t), newTestSpec(t))
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -230,7 +245,7 @@ func TestNewOpsRouter_HealthReturns200(t *testing.T) {
 }
 
 func TestNewOpsRouter_MetricsExposed(t *testing.T) {
-	r := NewOpsRouter(newTestDB(t))
+	r := NewOpsRouter(newTestDB(t), newTestSpec(t))
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -245,7 +260,7 @@ func TestNewOpsRouter_MetricsExposed(t *testing.T) {
 
 func TestNewOpsRouter_ReadyReturns200WhenDBOpen(t *testing.T) {
 	db := newTestDB(t)
-	r := NewOpsRouter(db)
+	r := NewOpsRouter(db, newTestSpec(t))
 	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -266,7 +281,7 @@ func TestNewOpsRouter_ReadyReturns503WhenSqlDBClosed(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	r := NewOpsRouter(db)
+	r := NewOpsRouter(db, newTestSpec(t))
 	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -309,7 +324,7 @@ func (stubConnPool) QueryRowContext(_ context.Context, _ string, _ ...any) *sql.
 func TestNewOpsRouter_Ready503WhenPoolNotReady(t *testing.T) {
 	badDB := &gorm.DB{Config: &gorm.Config{ConnPool: stubConnPool{}}}
 
-	r := NewOpsRouter(badDB)
+	r := NewOpsRouter(badDB, newTestSpec(t))
 	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -319,5 +334,51 @@ func TestNewOpsRouter_Ready503WhenPoolNotReady(t *testing.T) {
 	}
 	if rr.Body.Len() == 0 {
 		t.Fatal("/ready 503 must include the error text in the body")
+	}
+}
+
+func TestNewOpsRouter_ServesOpenAPIJSON(t *testing.T) {
+	spec, err := apihuma.MergeSpecs("jobradar-api", "test", apihuma.NewSharedRegistry(),
+		apihuma.ZoneSpec{Prefix: "/api", OpenAPI: &huma.OpenAPI{Paths: map[string]*huma.PathItem{
+			"/companies": {},
+		}}})
+	if err != nil {
+		t.Fatalf("MergeSpecs: %v", err)
+	}
+
+	r := NewOpsRouter(newTestDB(t), spec)
+	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/openapi.json got %d want 200", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "/api/companies") {
+		t.Fatalf("/openapi.json body missing merged zone path /api/companies: %s", rr.Body.String())
+	}
+}
+
+func TestNewOpsRouter_ServesDocsUI(t *testing.T) {
+	r := NewOpsRouter(newTestDB(t), newTestSpec(t))
+	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/docs got %d want 200", rr.Code)
+	}
+}
+
+func TestNewOpsRouter_DocsAndSpecUnauthenticated(t *testing.T) {
+	// The whole point of serving docs on the ops listener is that they never
+	// traverse the /api or /admin auth/rate-limit middleware — NewOpsRouter
+	// applies none, so a bare request with no credentials must succeed.
+	r := NewOpsRouter(newTestDB(t), newTestSpec(t))
+	for _, path := range []string{"/openapi.json", "/docs"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s got %d want 200 with no auth header", path, rr.Code)
+		}
 	}
 }
