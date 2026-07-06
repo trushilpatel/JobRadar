@@ -56,7 +56,7 @@ func buildMultiUser(
 	userAdminRouter := usersvc.NewAdminRestRouter(userAdminRest, adminZoneCfg)
 
 	auditAdminRest := auditsvc.NewAdminRestService(auditImpl)
-	auditAdminRouter := auditsvc.NewAdminRestRouter(auditAdminRest)
+	auditAdminRouter := auditsvc.NewAdminRestRouter(auditAdminRest, adminZoneCfg)
 
 	identityMW := middleware.RequireIdentity(
 		userValid,
