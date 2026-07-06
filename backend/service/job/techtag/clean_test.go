@@ -200,3 +200,106 @@ func TestClean_PreservesUniqueCaseSensitiveTerms(t *testing.T) {
 		t.Errorf("expected Foo,Bar,Baz order; got %v", got)
 	}
 }
+
+// TestClean_CanonicalizesSpecificCloudServices — specific named services
+// extracted per the tech_stack prompt's "prefer specific over generic"
+// instruction normalize consistently, distinct from their generic parent.
+func TestClean_CanonicalizesSpecificCloudServices(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want string
+	}{
+		{"aws lambda", "AWS Lambda"},
+		{"AWS Lambda", "AWS Lambda"},
+		{"amazon lambda", "AWS Lambda"},
+		{"azure functions", "Azure Functions"},
+		{"google cloud functions", "Google Cloud Functions"},
+		{"ec2", "EC2"},
+		{"amazon ec2", "EC2"},
+		{"s3", "S3"},
+		{"eks", "EKS"},
+		{"rds", "RDS"},
+	}
+	for _, c := range cases {
+		t.Run(c.raw, func(t *testing.T) {
+			got := techtag.Clean([]string{c.raw})
+			if len(got) != 1 || got[0] != c.want {
+				t.Errorf("Clean(%q) = %v, want [%q]", c.raw, got, c.want)
+			}
+		})
+	}
+}
+
+// TestClean_ReconcilesDescriptivePhrasingToCanonicalForm — if the LLM still
+// emits a descriptive variant like "CI/CD pipelines" despite the prompt's
+// canonical-naming instruction, Clean normalizes it to the same "CI/CD" used
+// for the bare form, preventing fragmented tech_tags for the same concept.
+func TestClean_ReconcilesDescriptivePhrasingToCanonicalForm(t *testing.T) {
+	got := techtag.Clean([]string{"CI/CD pipelines", "ci cd pipelines"})
+	want := []string{"CI/CD"}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Errorf("Clean(CI/CD pipelines variants) = %v, want %v", got, want)
+	}
+}
+
+// TestClean_BlocklistDropsGenericDegreeMentions — fieldless degree mentions
+// are noise regardless of the tech_stack prompt's degree carve-out, since an
+// LLM slip that emits a bare degree would otherwise appear in nearly every
+// job and dilute the resume-match signal.
+func TestClean_BlocklistDropsGenericDegreeMentions(t *testing.T) {
+	noise := []string{
+		"Bachelor's degree", "bachelors degree", "bachelor degree",
+		"Master's degree", "masters degree", "master degree",
+		"college degree", "undergraduate degree", "degree required",
+	}
+	got := techtag.Clean(noise)
+	if len(got) != 0 {
+		t.Errorf("expected all generic degree mentions filtered, got %v", got)
+	}
+}
+
+// TestClean_AllowsFieldSpecificDegree — a degree mention naming a specific
+// field of study is not blocklisted (only the bare/fieldless form is noise).
+func TestClean_AllowsFieldSpecificDegree(t *testing.T) {
+	got := techtag.Clean([]string{"Bachelor's in Computer Science"})
+	want := []string{"Bachelor's in Computer Science"}
+	if len(got) != 1 || got[0] != want[0] {
+		t.Errorf("Clean(field-specific degree) = %v, want %v", got, want)
+	}
+}
+
+// TestClean_CollapsesInternalWhitespace — multi-word phrases with irregular
+// internal whitespace (double spaces, tabs) normalize to single-spaced form,
+// so the frontend's literal-substring regex matcher has one exact string to
+// search for regardless of how the LLM spaced the phrase.
+func TestClean_CollapsesInternalWhitespace(t *testing.T) {
+	got := techtag.Clean([]string{"AWS   Lambda", "Some\tProprietary  Framework"})
+	want := []string{"AWS Lambda", "Some Proprietary Framework"}
+	if len(got) != len(want) {
+		t.Fatalf("len mismatch: got %v want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("pos %d: got %q want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// TestClean_DoesNotSuppressRedundantSpecificAndGenericPair — documents current
+// behavior: Clean has no cross-item awareness, so if the LLM emits both a
+// generic parent and its specific child for the same job (e.g. "AWS" and "AWS
+// Lambda"), both survive as distinct entries. Avoiding this pair is the
+// prompt's responsibility (see Enrich.go's "instead of — not in addition to"
+// instruction); Clean only canonicalizes and dedupes exact-match strings.
+func TestClean_DoesNotSuppressRedundantSpecificAndGenericPair(t *testing.T) {
+	got := techtag.Clean([]string{"AWS", "AWS Lambda"})
+	want := []string{"AWS", "AWS Lambda"}
+	if len(got) != len(want) {
+		t.Fatalf("len mismatch: got %v want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("pos %d: got %q want %q", i, got[i], want[i])
+		}
+	}
+}

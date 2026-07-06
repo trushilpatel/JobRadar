@@ -92,6 +92,22 @@ var canonical = map[string]string{
 	"spring":        "Spring",
 	"spring boot":   "Spring Boot",
 	"springboot":    "Spring Boot",
+	// Specific cloud services (kept distinct from their generic parent, e.g. AWS)
+	"aws lambda":             "AWS Lambda",
+	"amazon lambda":          "AWS Lambda",
+	"azure functions":        "Azure Functions",
+	"google cloud functions": "Google Cloud Functions",
+	"amazon ec2":             "EC2",
+	"ec2":                    "EC2",
+	"amazon s3":              "S3",
+	"s3":                     "S3",
+	"amazon eks":             "EKS",
+	"eks":                    "EKS",
+	"amazon rds":             "RDS",
+	"rds":                    "RDS",
+	// Reconciles "CI/CD pipelines" (descriptive phrasing) to the canonical short form
+	"ci/cd pipelines": "CI/CD",
+	"ci cd pipelines": "CI/CD",
 	// Methodologies / practices
 	"agile":                  "Agile",
 	"scrum":                  "Scrum",
@@ -165,6 +181,17 @@ var blocklist = map[string]bool{
 	"sql":             true,
 	"nosql":           true,
 	"version control": true,
+	// Generic/fieldless degree mentions (no discriminating signal — see tech_stack
+	// prompt carve-out requiring a named field of study)
+	"bachelor's degree":    true,
+	"bachelors degree":     true,
+	"bachelor degree":      true,
+	"master's degree":      true,
+	"masters degree":       true,
+	"master degree":        true,
+	"college degree":       true,
+	"undergraduate degree": true,
+	"degree required":      true,
 }
 
 // Clean normalizes and filters a raw tech_stack slice from LLM extraction.
@@ -174,7 +201,11 @@ func Clean(raw []string) []string {
 	result := make([]string, 0, len(raw))
 
 	for _, t := range raw {
-		t = strings.TrimSpace(t)
+		// Fields+Join collapses internal whitespace runs (tabs, double spaces,
+		// newlines) to a single space so multi-word phrases match exactly one
+		// way — the frontend's regex matcher requires the resume text to
+		// contain this exact literal string.
+		t = strings.Join(strings.Fields(t), " ")
 		if t == "" {
 			continue
 		}
