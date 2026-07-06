@@ -99,7 +99,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCf
 	resumeImplService := services4.NewImplService(resumeRepositoryService, objectStorage, log)
 	resumeValidationService := services4.NewValidationService(resumeImplService)
 	resumeRestService := services4.NewRestService(resumeValidationService)
-	resumeHandler := services4.NewRestRouter(resumeRestService)
+	resumeHandler := services4.NewRestRouter(resumeRestService, apiZoneCfg)
 
 	// ── Pipeline ─────────────────────────────────────────────────────────────
 	pipelineStore := pipelinesvc.NewPipelineStore(db)

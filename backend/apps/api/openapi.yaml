@@ -183,6 +183,24 @@ components:
         - code
         - message
       type: object
+    FormFile:
+      additionalProperties: false
+      properties:
+        ContentType:
+          type: string
+        Filename:
+          type: string
+        IsSet:
+          type: boolean
+        Size:
+          format: int64
+          type: integer
+      required:
+        - ContentType
+        - IsSet
+        - Size
+        - Filename
+      type: object
     JobApplication:
       additionalProperties: false
       properties:
@@ -423,6 +441,12 @@ components:
         - items
         - next_cursor
       type: object
+    RenameInputBody:
+      additionalProperties: false
+      properties:
+        label:
+          type: string
+      type: object
     ResponseCompanyPublicView:
       additionalProperties: false
       properties:
@@ -461,6 +485,18 @@ components:
         data:
           items:
             $ref: "#/components/schemas/JobApplication"
+          type:
+            - array
+            - "null"
+      required:
+        - data
+      type: object
+    ResponseListResume:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/Resume"
           type:
             - array
             - "null"
@@ -534,6 +570,14 @@ components:
       required:
         - data
       type: object
+    ResponseResume:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/Resume"
+      required:
+        - data
+      type: object
     ResponseStageResponse:
       additionalProperties: false
       properties:
@@ -541,6 +585,37 @@ components:
           $ref: "#/components/schemas/StageResponse"
       required:
         - data
+      type: object
+    Resume:
+      additionalProperties: false
+      properties:
+        content_type:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        extracted_text:
+          type: string
+        id:
+          type: string
+        label:
+          type: string
+        original_filename:
+          type: string
+        size_bytes:
+          format: int64
+          type: integer
+        user_id:
+          type: string
+      required:
+        - id
+        - user_id
+        - label
+        - original_filename
+        - content_type
+        - size_bytes
+        - created_at
+        - extracted_text
       type: object
     ServiceError:
       additionalProperties: false
@@ -1302,3 +1377,134 @@ paths:
       summary: Set a job's status
       tags:
         - jobs
+  /api/resumes:
+    get:
+      operationId: listResumes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseListResume"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List the current user's resumes
+      tags:
+        - resumes
+    post:
+      operationId: uploadResume
+      requestBody:
+        content:
+          multipart/form-data:
+            encoding:
+              file:
+                contentType: application/octet-stream
+              label:
+                contentType: text/plain
+            schema:
+              properties:
+                file:
+                  contentEncoding: binary
+                  contentMediaType: application/octet-stream
+                  description: The resume file (PDF or DOCX)
+                  format: binary
+                  type: string
+                label:
+                  description: Optional display label; defaults to the filename
+                  type: string
+              required:
+                - file
+              type: object
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseResume"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Upload a resume (PDF or DOCX)
+      tags:
+        - resumes
+  /api/resumes/{id}:
+    delete:
+      operationId: deleteResume
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Delete a resume
+      tags:
+        - resumes
+    patch:
+      operationId: renameResume
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenameInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseResume"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Rename a resume
+      tags:
+        - resumes
+  /api/resumes/{id}/download:
+    get:
+      operationId: downloadResume
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Download a resume's original file
+      tags:
+        - resumes
