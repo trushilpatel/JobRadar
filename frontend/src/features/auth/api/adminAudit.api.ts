@@ -4,7 +4,10 @@ import { apiClient } from '@/lib/core/api-client'
 const AuditEntrySchema = z.object({
   id: z.string(),
   actor_user_id: z.string().nullable(),
-  actor_email: z.string().nullable(),
+  // Backend tags ActorEmail `json:"actor_email,omitempty"` — a nil pointer
+  // (system-generated rows with no human actor) omits the key entirely
+  // rather than emitting `null`, so this must accept an absent key too.
+  actor_email: z.string().nullish(),
   action: z.string(),
   target_type: z.string().nullable(),
   target_id: z.string().nullable(),
