@@ -122,6 +122,15 @@ func codeForStatus(status int) string {
 // covers errors the framework itself raises.
 func InstallLegacyErrorModel() {
 	huma.NewError = func(status int, msg string, errs ...error) huma.StatusError {
+		if len(errs) == 1 && isBodySyntaxError(errs[0]) {
+			// A malformed-JSON-syntax body has no specific field to blame —
+			// Huma reports it with the bare "body" location. The pre-Huma
+			// handler.DecodeBody always reported exactly this failure mode as
+			// a single BAD_REQUEST error, never the field-list validation
+			// shape (reserved for genuine per-field failures like
+			// "body.active"). Preserve that distinction.
+			return &serviceError{status: http.StatusBadRequest, ErrorBody: errorDetail{Code: "BAD_REQUEST", Message: "invalid request body"}}
+		}
 		if len(errs) > 0 {
 			fields := make([]validationFieldError, 0, len(errs))
 			for _, e := range errs {
@@ -136,4 +145,16 @@ func InstallLegacyErrorModel() {
 		}
 		return &serviceError{status: status, ErrorBody: errorDetail{Code: codeForStatus(status), Message: msg}}
 	}
+}
+
+// isBodySyntaxError reports whether e is a Huma error detail whose location
+// is the bare "body" placeholder — i.e. a whole-body parse failure (invalid
+// JSON syntax) rather than a specific field's validation failure (which
+// would carry a location like "body.active").
+func isBodySyntaxError(e error) bool {
+	detailer, ok := e.(huma.ErrorDetailer)
+	if !ok {
+		return false
+	}
+	return detailer.ErrorDetail().Location == "body"
 }

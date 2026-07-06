@@ -88,7 +88,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCf
 	applicationImplService := services3.NewImplService(applicationRepositoryService, jobImplService)
 	applicationValidationService := services3.NewValidationService(applicationImplService)
 	applicationRestService := services3.NewRestService(applicationValidationService)
-	applicationRestRouter := services3.NewRestRouter(applicationRestService)
+	applicationRestRouter := services3.NewRestRouter(applicationRestService, apiZoneCfg)
 
 	// ── Resume ───────────────────────────────────────────────────────────────
 	objectStorage, err := provideObjectStorage(cfg)

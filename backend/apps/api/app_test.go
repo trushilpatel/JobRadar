@@ -56,7 +56,7 @@ func buildTestApp() *App {
 	appImpl := appsvc.NewImplService(fakeApp, fakeJob)
 	appValidation := appsvc.NewValidationService(appImpl)
 	appRest := appsvc.NewRestService(appValidation)
-	appH := appsvc.NewRestRouter(appRest)
+	appH := appsvc.NewRestRouter(appRest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 
 	fakeResume := &fakeResumeService{}
 	resumeRest := resumesvc.NewRestService(fakeResume)

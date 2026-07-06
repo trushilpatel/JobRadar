@@ -35,7 +35,17 @@ func NewSharedRegistry() huma.Registry {
 // injects a "$schema" field into every JSON response body and a "Link"
 // response header — an uninvited byte-level difference from the legacy
 // envelope that would break frontend-untouched parity (3.1).
+//
+// Also (re-)installs the legacy error model every call. huma.NewError is a
+// process-global var; production only gets the legacy shape because
+// main()/printSpec() call InstallLegacyErrorModel() before any
+// registration. A slice's own tests, run as their own `go test` process,
+// never hit that call path otherwise — a request that fails Huma's own
+// body/param validation (before the handler runs) would silently get
+// Huma's default RFC 9457 shape. Calling it here guarantees every caller —
+// production or test — gets the same behavior, idempotently.
 func NewZoneConfig(title, version string, registry huma.Registry) huma.Config {
+	InstallLegacyErrorModel()
 	cfg := huma.DefaultConfig(title, version)
 	cfg.Components.Schemas = registry
 	cfg.OpenAPIPath = ""

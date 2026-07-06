@@ -55,6 +55,36 @@ func TestNewZoneConfig_SharesRegistryAcrossZones(t *testing.T) {
 	}
 }
 
+// TestNewZoneConfig_InstallsLegacyErrorModel guards against a real gap found
+// while writing Slice 3's tests: huma.NewError is a process-global var, and
+// production only gets the legacy error shape because main()/printSpec()
+// explicitly call InstallLegacyErrorModel() before any registration. A
+// slice's own unit tests, run as their own process via `go test`, never hit
+// that call path — a request that fails Huma's OWN body/param validation
+// (e.g. malformed JSON, before the handler ever runs) would silently get
+// Huma's default RFC 9457 shape instead of the legacy one, even though the
+// real server never does. NewZoneConfig must install it itself so every
+// caller — production or test — gets consistent behavior regardless of
+// whether they remembered the explicit call.
+func TestNewZoneConfig_InstallsLegacyErrorModel(t *testing.T) {
+	original := huma.NewError
+	defer func() { huma.NewError = original }()
+	huma.NewError = func(status int, msg string, errs ...error) huma.StatusError {
+		return &huma.ErrorModel{Status: status, Detail: msg}
+	}
+
+	NewZoneConfig("spike", "0.0.0", NewSharedRegistry())
+
+	err := huma.NewError(http.StatusBadRequest, "boom")
+	got, marshalErr := json.Marshal(err)
+	if marshalErr != nil {
+		t.Fatalf("marshal failed: %v", marshalErr)
+	}
+	if !strings.Contains(string(got), `"error"`) {
+		t.Fatalf("expected NewZoneConfig to install the legacy error model, got default-shaped error: %s", got)
+	}
+}
+
 // TestNewZoneConfig_NoSchemaLinkInjection guards byte-for-byte envelope
 // parity (3.1): huma.DefaultConfig's own CreateHook injects a "$schema"
 // field and Link headers into every JSON response by default (a discoverability

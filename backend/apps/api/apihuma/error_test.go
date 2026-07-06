@@ -165,6 +165,40 @@ func TestSetLogger_Nil_InstallsNoop(t *testing.T) {
 	}
 }
 
+// TestInstallLegacyErrorModel_MalformedBodySyntax_UsesSingleErrorShape
+// guards a real finding from Slice 3: a malformed-JSON-syntax body failure
+// (caught by Huma itself, before any handler runs) carries a single
+// huma.ErrorDetail whose Location is the bare "body" placeholder — Huma has
+// no specific field to point to. The pre-Huma handler (handler.DecodeBody)
+// always reported this exact failure mode as a single
+// {"error":{"code":"BAD_REQUEST","message":"invalid request body"}}, never
+// the field-list validation shape — that shape is reserved for genuine
+// per-field validation failures (Location like "body.active"). Losing this
+// distinction would be a real contract break for every migrated slice with
+// a JSON body.
+func TestInstallLegacyErrorModel_MalformedBodySyntax_UsesSingleErrorShape(t *testing.T) {
+	original := huma.NewError
+	defer func() { huma.NewError = original }()
+	InstallLegacyErrorModel()
+
+	err := huma.NewError(http.StatusUnprocessableEntity, "validation failed", &huma.ErrorDetail{
+		Message:  "invalid character 'n' looking for beginning of object key string",
+		Location: "body",
+	})
+
+	if err.GetStatus() != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", err.GetStatus())
+	}
+	got, marshalErr := json.Marshal(err)
+	if marshalErr != nil {
+		t.Fatalf("marshal failed: %v", marshalErr)
+	}
+	want := `{"error":{"code":"BAD_REQUEST","message":"invalid request body"}}`
+	if string(got) != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+}
+
 func TestInstallLegacyErrorModel_ValidationErrorsUseLegacyShape(t *testing.T) {
 	original := huma.NewError
 	defer func() { huma.NewError = original }()
