@@ -5,12 +5,10 @@ import { ResizeHandle } from '@/components/ui/resize-handle'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import {
   useApplyQueue,
-  useSetApplyQueueResume,
   ApplyQueueTable,
   applyQueueQueryKeys,
   APPLY_QUEUE_FILTER,
   type ApplyQueueFilter,
-  type ApplyQueueResumeOption,
   type ApplyQueueItem,
 } from '@/features/apply-queue'
 import { useResumes } from '@/features/resumes'
@@ -23,10 +21,12 @@ const DEFAULT_PANEL_WIDTH = 480
 export function ApplyQueuePage() {
   const q = useApplyQueue()
   const { data: resumes } = useResumes()
-  const setResume = useSetApplyQueueResume()
   const queryClient = useQueryClient()
   const jobActions = useJobActions()
-  const { getEffectiveResume, getMatchSummary } = useApplyQueueResumeMatch(q.items, resumes ?? [])
+  const { getEffectiveResume, getMatchSummary, getResumeMatchOptions } = useApplyQueueResumeMatch(
+    q.items,
+    resumes ?? []
+  )
 
   // Which job's detail panel is open. Local component state — this page has
   // no URL-state hook of its own (see @/features/jobs/hooks/useJobUrlState
@@ -35,19 +35,6 @@ export function ApplyQueuePage() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
   const selectedJob = useJob(selectedJobId ?? undefined)
-
-  const resumeOptions: ApplyQueueResumeOption[] = (resumes ?? []).map((r) => ({
-    id: r.id,
-    label: r.label,
-  }))
-
-  function handleResumeChange(jobId: string, resumeId: string | null) {
-    setResume.mutate({ jobId, resumeId })
-  }
-
-  function isResumeUpdatePending(jobId: string): boolean {
-    return setResume.isPending && setResume.variables?.jobId === jobId
-  }
 
   // The detail panel's actions (status/save/dismiss) live in features/jobs's
   // useJobActions and only invalidate that feature's own query keys. A change
@@ -126,11 +113,9 @@ export function ApplyQueuePage() {
                 ? 'No saved jobs yet'
                 : 'No jobs in your apply queue yet'
             }
-            resumeOptions={resumeOptions}
-            onResumeChange={handleResumeChange}
-            isResumeUpdatePending={isResumeUpdatePending}
             getEffectiveResume={getEffectiveResume}
             getMatchSummary={getMatchSummary}
+            getResumeMatchOptions={getResumeMatchOptions}
             selectedJobId={selectedJobId}
             onRowClick={handleRowClick}
             page={q.page}

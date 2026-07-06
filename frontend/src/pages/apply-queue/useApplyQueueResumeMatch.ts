@@ -1,6 +1,11 @@
 import { useMemo } from 'react'
-import { matchResume, pickBestResume, type ResumeForMatch } from '@/lib/utils/resumeJobMatch'
-import type { ApplyQueueItem, EffectiveResume } from '@/features/apply-queue'
+import {
+  matchResume,
+  matchResumeDetailed,
+  pickBestResume,
+  type ResumeForMatch,
+} from '@/lib/utils/resumeJobMatch'
+import type { ApplyQueueItem, EffectiveResume, ResumeMatchOption } from '@/features/apply-queue'
 import type { Resume } from '@/features/resumes'
 
 // useApplyQueueResumeMatch computes, per apply-queue row, which resume is
@@ -54,5 +59,31 @@ export function useApplyQueueResumeMatch(items: ApplyQueueItem[], resumes: Resum
     return `${matched}/${total} matched`
   }
 
-  return { getEffectiveResume, getMatchSummary }
+  // Resume-picker dialog data: every resume's match detail against this job,
+  // sorted best-match-first. Array.prototype.sort is stable, so ties keep
+  // resumesForMatch's original (upload) order — same tie-break semantics as
+  // pickBestResume.
+  function getResumeMatchOptions(jobId: string): ResumeMatchOption[] {
+    const item = itemByJobId.get(jobId)
+    if (!item) return []
+    return resumesForMatch
+      .map((r) => {
+        const { matchedKeywords, missingKeywords } = matchResumeDetailed(
+          item.job_keywords,
+          r.extractedText
+        )
+        return {
+          id: r.id,
+          label: r.label,
+          matched: matchedKeywords.length,
+          total: item.job_keywords.length,
+          matchedKeywords,
+          missingKeywords,
+          hasExtractedText: r.extractedText.length > 0,
+        }
+      })
+      .sort((a, b) => b.matched - a.matched)
+  }
+
+  return { getEffectiveResume, getMatchSummary, getResumeMatchOptions }
 }

@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { CellContext } from '@tanstack/react-table'
-import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { buildApplyQueueColumns } from '../apply-queue-columns'
 import type { ApplyQueueItem } from '../../api/apply-queue.api'
 
@@ -23,14 +22,13 @@ const baseItem: ApplyQueueItem = {
 
 describe('buildApplyQueueColumns', () => {
   const actions = {
-    resumeOptions: [{ id: 'resume-1', label: 'Resume One' }],
-    onResumeChange: vi.fn(),
     isResumeUpdatePending: vi.fn().mockReturnValue(false),
     getEffectiveResume: vi.fn().mockReturnValue(null),
     getMatchSummary: vi.fn().mockReturnValue(null),
+    onOpenResumePicker: vi.fn(),
   }
 
-  it('builds the job, location, salary, status, posted, resume, and match columns in order', () => {
+  it('builds the job, location, salary, status, posted, and resume columns in order', () => {
     const columns = buildApplyQueueColumns(actions)
     expect(columns.map((c) => c.id)).toEqual([
       'job',
@@ -39,7 +37,6 @@ describe('buildApplyQueueColumns', () => {
       'status',
       'added_at',
       'resume',
-      'match',
     ])
   })
 
@@ -50,7 +47,6 @@ describe('buildApplyQueueColumns', () => {
     expect(byId('salary')?.enableSorting).toBe(false)
     expect(byId('status')?.enableSorting).toBe(false)
     expect(byId('resume')?.enableSorting).toBe(false)
-    expect(byId('match')?.enableSorting).toBe(false)
     expect(byId('added_at')?.enableSorting).not.toBe(false)
   })
 
@@ -123,60 +119,71 @@ describe('buildApplyQueueColumns', () => {
   })
 
   describe('resume column', () => {
-    function TestTable({ data }: { data: ApplyQueueItem[] }) {
-      const columns = buildApplyQueueColumns(actions)
-      const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() })
-      const resumeCell = table.getRowModel().rows[0]!.getVisibleCells()[5]!
-      return <>{flexRender(resumeCell.column.columnDef.cell, resumeCell.getContext())}</>
-    }
+    it('shows "Select resume" when getEffectiveResume returns null', () => {
+      renderCell(columnById('resume'), baseItem)
+      expect(screen.getByRole('button', { name: /select resume/i })).toHaveTextContent(
+        'Select resume'
+      )
+    })
 
-    it('shows the effective resume as selected when getEffectiveResume returns one', async () => {
-      const user = userEvent.setup()
+    it('shows the effective resume label when one is resolved', () => {
       const localActions = {
         ...actions,
         getEffectiveResume: vi.fn().mockReturnValue({ id: 'resume-1', label: 'Resume One' }),
       }
-      function Table() {
-        const columns = buildApplyQueueColumns(localActions)
-        const table = useReactTable({
-          data: [baseItem],
-          columns,
-          getCoreRowModel: getCoreRowModel(),
-        })
-        const resumeCell = table.getRowModel().rows[0]!.getVisibleCells()[5]!
-        return <>{flexRender(resumeCell.column.columnDef.cell, resumeCell.getContext())}</>
-      }
-      render(<Table />)
-      expect(screen.getByRole('combobox')).toHaveTextContent('Resume One')
-      await user.click(screen.getByRole('combobox'))
-    })
-
-    it('shows "No resume selected" when getEffectiveResume returns null', () => {
-      render(<TestTable data={[baseItem]} />)
-      expect(screen.getByRole('combobox')).toHaveTextContent('No resume selected')
-    })
-  })
-
-  describe('match column', () => {
-    it('renders the match summary for the row', () => {
-      const localActions = { ...actions, getMatchSummary: vi.fn().mockReturnValue('3/5 matched') }
       const columns = buildApplyQueueColumns(localActions)
-      const matchColumn = columns.find((c) => c.id === 'match')!
-      const cellFn = matchColumn.cell as (
+      const resumeColumn = columns.find((c) => c.id === 'resume')!
+      const cellFn = resumeColumn.cell as (
         ctx: CellContext<ApplyQueueItem, unknown>
       ) => React.ReactNode
       render(<>{cellFn(makeContext(baseItem))}</>)
-      expect(screen.getByText('3/5 matched')).toBeInTheDocument()
+      expect(screen.getByRole('button')).toHaveTextContent('Resume One')
     })
 
-    it('renders a placeholder when no match summary is available', () => {
-      const columns = buildApplyQueueColumns(actions)
-      const matchColumn = columns.find((c) => c.id === 'match')!
-      const cellFn = matchColumn.cell as (
+    it('shows the match summary count alongside the resume label', () => {
+      const localActions = {
+        ...actions,
+        getEffectiveResume: vi.fn().mockReturnValue({ id: 'resume-1', label: 'Resume One' }),
+        getMatchSummary: vi.fn().mockReturnValue('3/5 matched'),
+      }
+      const columns = buildApplyQueueColumns(localActions)
+      const resumeColumn = columns.find((c) => c.id === 'resume')!
+      const cellFn = resumeColumn.cell as (
         ctx: CellContext<ApplyQueueItem, unknown>
       ) => React.ReactNode
       render(<>{cellFn(makeContext(baseItem))}</>)
-      expect(screen.getByText('—')).toBeInTheDocument()
+      expect(screen.getByRole('button')).toHaveTextContent('3/5')
+      expect(screen.getByRole('button')).not.toHaveTextContent('matched')
+    })
+
+    it('omits the count when there is no match summary', () => {
+      renderCell(columnById('resume'), baseItem)
+      const button = screen.getByRole('button')
+      expect(button).not.toHaveTextContent('/')
+    })
+
+    it('calls onOpenResumePicker with the job id when clicked', async () => {
+      const user = userEvent.setup()
+      const onOpenResumePicker = vi.fn()
+      const columns = buildApplyQueueColumns({ ...actions, onOpenResumePicker })
+      const resumeColumn = columns.find((c) => c.id === 'resume')!
+      const cellFn = resumeColumn.cell as (
+        ctx: CellContext<ApplyQueueItem, unknown>
+      ) => React.ReactNode
+      render(<>{cellFn(makeContext(baseItem))}</>)
+      await user.click(screen.getByRole('button'))
+      expect(onOpenResumePicker).toHaveBeenCalledWith('job-1')
+    })
+
+    it('disables the trigger while a resume update is pending for this job', () => {
+      const localActions = { ...actions, isResumeUpdatePending: vi.fn().mockReturnValue(true) }
+      const columns = buildApplyQueueColumns(localActions)
+      const resumeColumn = columns.find((c) => c.id === 'resume')!
+      const cellFn = resumeColumn.cell as (
+        ctx: CellContext<ApplyQueueItem, unknown>
+      ) => React.ReactNode
+      render(<>{cellFn(makeContext(baseItem))}</>)
+      expect(screen.getByRole('button')).toBeDisabled()
     })
   })
 })

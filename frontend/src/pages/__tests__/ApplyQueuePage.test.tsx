@@ -192,18 +192,19 @@ describe('ApplyQueuePage', () => {
     )
   })
 
-  it('auto-picks the best-matching resume and shows the match summary when none is attached', async () => {
+  it('auto-picks the best-matching resume and shows the match count on the trigger button', async () => {
     fetchApplyQueueMock.mockResolvedValue({ items: [sampleItem], next_cursor: '' })
     fetchResumesMock.mockResolvedValue([sampleResume])
     render(<ApplyQueuePage />, { wrapper: makeWrapper() })
 
     await waitFor(() => expect(screen.getByText('Senior Engineer')).toBeInTheDocument())
 
-    expect(screen.getByText('2/2 matched')).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: /select resume/i })).toHaveTextContent('My resume')
+    const trigger = screen.getByRole('button', { name: /select resume/i })
+    expect(trigger).toHaveTextContent('My resume')
+    expect(trigger).toHaveTextContent('2/2')
   })
 
-  it('shows a placeholder in the match column when no resume matches', async () => {
+  it('shows "Select resume" with no count when no resume matches', async () => {
     fetchApplyQueueMock.mockResolvedValue({
       items: [{ ...sampleItem, job_keywords: ['Rust'] }],
       next_cursor: '',
@@ -212,13 +213,14 @@ describe('ApplyQueuePage', () => {
     render(<ApplyQueuePage />, { wrapper: makeWrapper() })
 
     await waitFor(() => expect(screen.getByText('Senior Engineer')).toBeInTheDocument())
-    expect(screen.getByText('—')).toBeInTheDocument()
+    const trigger = screen.getByRole('button', { name: /select resume/i })
+    expect(trigger).toHaveTextContent('Select resume')
   })
 
-  it('selecting a resume in the picker calls the mutation and invalidates the list', async () => {
+  it('selecting a resume in the picker dialog calls the mutation and invalidates the list', async () => {
     const user = userEvent.setup()
-    // No job_keywords here — auto-pick must never kick in, so the picker
-    // starts at "No resume selected" and this test exercises a plain manual
+    // No job_keywords here — auto-pick must never kick in, so the trigger
+    // starts at "Select resume" and this test exercises a plain manual
     // selection unaffected by the auto-pick behavior covered separately above.
     fetchApplyQueueMock.mockResolvedValue({
       items: [{ ...sampleItem, job_keywords: [] }],
@@ -230,8 +232,9 @@ describe('ApplyQueuePage', () => {
 
     await waitFor(() => expect(screen.getByText('Senior Engineer')).toBeInTheDocument())
 
-    await user.click(screen.getByRole('combobox', { name: /select resume/i }))
+    await user.click(screen.getByRole('button', { name: /select resume/i }))
     await user.click(await screen.findByText('My resume'))
+    await user.click(screen.getByRole('button', { name: /use this resume/i }))
 
     await waitFor(() => expect(setApplyQueueResumeMock).toHaveBeenCalledWith('job-1', 'resume-1'))
   })
