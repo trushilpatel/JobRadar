@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
@@ -97,7 +98,8 @@ var _ jobsvc.JobService = (*fakeRestSvc)(nil)
 
 func newRouter(svc jobsvc.JobService) *chi.Mux {
 	rest := jobsvc.NewRestService(svc)
-	router := jobsvc.NewRestRouter(rest)
+	zoneCfg := apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry())
+	router := jobsvc.NewRestRouter(rest, zoneCfg)
 	r := chi.NewRouter()
 	router.Register(r)
 	return r

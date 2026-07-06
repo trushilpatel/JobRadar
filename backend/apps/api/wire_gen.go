@@ -81,7 +81,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCf
 	jobImplService := jobsvc.NewImplService(jobStore, userJobStateRepository, snapshotWriter, applicationWriter, seenLedgerWriter, nil, log)
 	jobValidationService := jobsvc.NewValidationService(jobImplService)
 	jobRestService := jobsvc.NewRestService(jobValidationService)
-	jobHandler := jobsvc.NewRestRouter(jobRestService)
+	jobHandler := jobsvc.NewRestRouter(jobRestService, apiZoneCfg)
 
 	// ── Application ──────────────────────────────────────────────────────────
 	applicationRepositoryService := services3.NewRepositoryService(db)

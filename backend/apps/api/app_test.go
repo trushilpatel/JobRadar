@@ -50,7 +50,7 @@ func buildTestApp() *App {
 
 	fakeJob := &fakeJobService{}
 	jobRest := jobsvc.NewRestService(fakeJob)
-	jobH := jobsvc.NewRestRouter(jobRest)
+	jobH := jobsvc.NewRestRouter(jobRest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 
 	fakeApp := &fakeAppService{}
 	appImpl := appsvc.NewImplService(fakeApp, fakeJob)

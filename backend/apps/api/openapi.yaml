@@ -1,5 +1,47 @@
 components:
   schemas:
+    BulkDismissInput:
+      additionalProperties: false
+      properties:
+        ids:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        note:
+          type: string
+        reason:
+          type: string
+      type: object
+    Company:
+      additionalProperties: false
+      properties:
+        careers_url:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        logo_url:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+        website:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - created_at
+        - updated_at
+      type: object
     CompanyPublicView:
       additionalProperties: false
       properties:
@@ -27,6 +69,39 @@ components:
         - slug
         - created_at
         - updated_at
+      type: object
+    Counts:
+      additionalProperties: false
+      properties:
+        applied:
+          format: int64
+          type: integer
+        dismissed:
+          format: int64
+          type: integer
+        interviewing:
+          format: int64
+          type: integer
+        new:
+          format: int64
+          type: integer
+        offer:
+          format: int64
+          type: integer
+        rejected:
+          format: int64
+          type: integer
+        saved:
+          format: int64
+          type: integer
+      required:
+        - new
+        - saved
+        - applied
+        - dismissed
+        - interviewing
+        - offer
+        - rejected
       type: object
     CursorPageCompanyPublicView:
       additionalProperties: false
@@ -64,11 +139,188 @@ components:
         - code
         - message
       type: object
+    JobView:
+      additionalProperties: false
+      properties:
+        added_at:
+          format: date-time
+          type: string
+        company:
+          $ref: "#/components/schemas/Company"
+        company_id:
+          type: string
+        country:
+          type:
+            - string
+            - "null"
+        department:
+          type:
+            - string
+            - "null"
+        employ_type:
+          type:
+            - string
+            - "null"
+        experience_years:
+          format: int64
+          type:
+            - integer
+            - "null"
+        id:
+          type: string
+        job_post_id:
+          type: string
+        llm_summary:
+          type:
+            - string
+            - "null"
+        location:
+          type:
+            - string
+            - "null"
+        remote:
+          type: boolean
+        requires_citizen:
+          type: boolean
+        responsibilities:
+          contentEncoding: base64
+          type: string
+        role_brief:
+          type:
+            - string
+            - "null"
+        salary_range:
+          contentEncoding: base64
+          type: string
+        security_clearance:
+          type: boolean
+        sponsorship:
+          type: boolean
+        state:
+          type:
+            - string
+            - "null"
+        tech_stack:
+          contentEncoding: base64
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+        user_state:
+          $ref: "#/components/schemas/UserJobStateView"
+      required:
+        - user_state
+        - id
+        - job_post_id
+        - company_id
+        - title
+        - location
+        - country
+        - state
+        - remote
+        - url
+        - department
+        - employ_type
+        - experience_years
+        - tech_stack
+        - salary_range
+        - llm_summary
+        - sponsorship
+        - requires_citizen
+        - security_clearance
+        - role_brief
+        - responsibilities
+        - added_at
+        - company
+      type: object
+    PageResult:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/JobView"
+          type:
+            - array
+            - "null"
+        next_cursor:
+          type: string
+      required:
+        - items
+        - next_cursor
+      type: object
     ResponseCompanyPublicView:
       additionalProperties: false
       properties:
         data:
           $ref: "#/components/schemas/CompanyPublicView"
+      required:
+        - data
+      type: object
+    ResponseCounts:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/Counts"
+      required:
+        - data
+      type: object
+    ResponseJobView:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/JobView"
+      required:
+        - data
+      type: object
+    ResponseListString:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - data
+      type: object
+    ResponseMapStringBool:
+      additionalProperties: false
+      properties:
+        data:
+          additionalProperties:
+            type: boolean
+          type: object
+      required:
+        - data
+      type: object
+    ResponseMapStringInt:
+      additionalProperties: false
+      properties:
+        data:
+          additionalProperties:
+            format: int64
+            type: integer
+          type: object
+      required:
+        - data
+      type: object
+    ResponseMapStringString:
+      additionalProperties: false
+      properties:
+        data:
+          additionalProperties:
+            type: string
+          type: object
+      required:
+        - data
+      type: object
+    ResponsePageResult:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/PageResult"
       required:
         - data
       type: object
@@ -79,6 +331,44 @@ components:
           $ref: "#/components/schemas/ErrorDetail"
       required:
         - error
+      type: object
+    SetNotesInput:
+      additionalProperties: false
+      properties:
+        notes:
+          type: string
+      type: object
+    SetSavedInputBody:
+      additionalProperties: false
+      properties:
+        saved:
+          type: boolean
+      type: object
+    SetStatusInput:
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+      type: object
+    UserJobStateView:
+      additionalProperties: false
+      properties:
+        applied_at:
+          type: string
+        dismissal_note:
+          type: string
+        dismissal_reason:
+          type: string
+        dismissed_at:
+          type: string
+        notes:
+          type: string
+        saved_at:
+          type: string
+        status:
+          type: string
+      required:
+        - status
       type: object
 info:
   title: jobradar-api
@@ -167,3 +457,333 @@ paths:
       summary: Get a company by ID
       tags:
         - companies
+  /api/jobs:
+    get:
+      operationId: listJobs
+      parameters:
+        - explode: false
+          in: query
+          name: status
+          schema:
+            type: string
+        - explode: true
+          in: query
+          name: statuses
+          schema:
+            items:
+              type: string
+            type:
+              - array
+              - "null"
+        - explode: true
+          in: query
+          name: companies
+          schema:
+            items:
+              type: string
+            type:
+              - array
+              - "null"
+        - explode: true
+          in: query
+          name: employ_types
+          schema:
+            items:
+              type: string
+            type:
+              - array
+              - "null"
+        - explode: true
+          in: query
+          name: experience_ranges
+          schema:
+            items:
+              type: string
+            type:
+              - array
+              - "null"
+        - explode: false
+          in: query
+          name: search
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: remote
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: sponsorship
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: requires_citizen
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: on_site
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: hybrid
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: no_requirements
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: days_added
+          schema:
+            type: string
+        - description: title, company, added_at, or experience_years; unrecognized values fall back to the default
+          explode: false
+          in: query
+          name: sort_by
+          schema:
+            description: title, company, added_at, or experience_years; unrecognized values fall back to the default
+            type: string
+        - description: asc or desc
+          explode: false
+          in: query
+          name: sort_dir
+          schema:
+            description: asc or desc
+            type: string
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - description: Page size; missing/invalid/non-positive values default to 20 (no upper clamp here — the validator enforces the cap)
+          explode: false
+          in: query
+          name: limit
+          schema:
+            description: Page size; missing/invalid/non-positive values default to 20 (no upper clamp here — the validator enforces the cap)
+            examples:
+              - "20"
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponsePageResult"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List jobs
+      tags:
+        - jobs
+  /api/jobs/companies:
+    get:
+      operationId: getJobCompanies
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseListString"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List distinct job company names
+      tags:
+        - jobs
+  /api/jobs/counts:
+    get:
+      operationId: getJobCounts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseCounts"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get per-status job counts for the current user
+      tags:
+        - jobs
+  /api/jobs/dismiss/bulk:
+    post:
+      operationId: bulkDismissJobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkDismissInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringInt"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Dismiss multiple jobs at once
+      tags:
+        - jobs
+  /api/jobs/{id}:
+    delete:
+      operationId: dismissJob
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Dismiss a job
+      tags:
+        - jobs
+    get:
+      operationId: getJob
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseJobView"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get a job by ID
+      tags:
+        - jobs
+  /api/jobs/{id}/notes:
+    patch:
+      operationId: setJobNotes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetNotesInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringString"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Set a job's notes
+      tags:
+        - jobs
+  /api/jobs/{id}/save:
+    patch:
+      operationId: setJobSaved
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetSavedInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringBool"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Save or unsave a job
+      tags:
+        - jobs
+  /api/jobs/{id}/status:
+    patch:
+      operationId: setJobStatus
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetStatusInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringString"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Set a job's status
+      tags:
+        - jobs
