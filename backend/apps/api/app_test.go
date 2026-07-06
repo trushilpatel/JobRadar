@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	appdto "github.com/trushilpatel/jobradar/service/application/dto"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	appsvc "github.com/trushilpatel/jobradar/service/application/services"
@@ -31,7 +32,13 @@ import (
 func buildTestApp() *App {
 	fakeCompany := &fakeCompanyService{}
 	companyRest := companysvc.NewRestService(fakeCompany)
-	companyH := companysvc.NewRestRouter(companyRest)
+	// A fresh, isolated zone config/registry per test — NOT apispec.APIZoneConfig(),
+	// which shares apispec's package-level production registry. Reusing that
+	// singleton across independent tests risks cross-test schema pollution
+	// (e.g. a test that registers before apihuma.InstallLegacyErrorModel()
+	// runs would seed huma's default ErrorDetail/ErrorModel schemas into the
+	// same registry a later test expects to be clean).
+	companyH := companysvc.NewRestRouter(companyRest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 
 	fakeScan := &fakeScanService{}
 	scanRest := scansvc.NewRestService(fakeScan)

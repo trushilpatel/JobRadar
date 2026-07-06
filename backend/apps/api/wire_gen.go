@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/platform/cache"
@@ -27,13 +28,13 @@ import (
 
 // Injectors from wire.go:
 
-func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, error) {
+func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCfg huma.Config) (*App, error) {
 	// ── Company (public chain) ───────────────────────────────────────────────
 	companyRepositoryService := services.NewRepositoryService(db)
 	companyImplService := services.NewImplService(companyRepositoryService)
 	companyValidationService := services.NewValidationService(companyImplService)
 	companyRestService := services.NewRestService(companyValidationService)
-	companyHandler := services.NewRestRouter(companyRestService)
+	companyHandler := services.NewRestRouter(companyRestService, apiZoneCfg)
 
 	// ── Company (admin chain — needed by scan service + /admin/companies) ──────
 	scanSettingsRepository := services.NewScanSettingsRepositoryService(db)

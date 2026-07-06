@@ -37,7 +37,7 @@ jobs:
         # actually serves — the spec can never silently drift from the code.
         # See docs/superpowers/plans/2026-06-13-huma-migration-plan.md, Section 3.5.
         run: |
-          go run ./apps/genspec
+          go run ./apps/api --print-spec
           git diff --exit-code -- apps/api/openapi.yaml
         working-directory: backend
 

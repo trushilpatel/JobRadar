@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	companydto "github.com/trushilpatel/jobradar/service/company/dto"
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
 	companysvc "github.com/trushilpatel/jobradar/service/company/services"
@@ -16,7 +17,8 @@ import (
 
 func newPublicRouter(svc companysvc.CompanyService) *chi.Mux {
 	rest := companysvc.NewRestService(svc)
-	router := companysvc.NewRestRouter(rest)
+	zoneCfg := apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry())
+	router := companysvc.NewRestRouter(rest, zoneCfg)
 	r := chi.NewRouter()
 	router.Register(r)
 	return r

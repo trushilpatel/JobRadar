@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -30,6 +31,14 @@ const (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == printSpecFlag {
+		if err := printSpec(); err != nil {
+			fmt.Fprintf(os.Stderr, "print-spec: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	cfg := config.Load()
 	log := logger.Init("api")
 
@@ -58,7 +67,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	app, err := InitializeApp(database, cfg, log)
+	// Built exactly once and threaded through: every /api-zone slice's
+	// RestRouter registers its Huma operations onto this same config so they
+	// share one zone document — see apispec.APIZoneConfig.
+	apiZoneCfg := apispec.APIZoneConfig()
+
+	app, err := InitializeApp(database, cfg, log, apiZoneCfg)
 	if err != nil {
 		log.Error("wire initialization failed", err)
 		os.Exit(1)
@@ -93,8 +107,11 @@ func main() {
 	apiRouter := NewRouter(log, cfg, authMW, mu.IdentityMW(), mu.RateLimitMW(), apiGroups, mu.AdminHandlers())
 
 	// Combined OpenAPI spec served on the ops listener (never behind /api or
-	// /admin auth) — see apps/api/apispec for the current zone list.
-	apiSpec, err := apispec.Build()
+	// /admin auth). Built AFTER NewRouter above, since that's what invokes
+	// every RouteGroup.Register — including migrated slices' huma.Register
+	// calls that populate apiZoneCfg.OpenAPI.Paths. See apps/api/apispec for
+	// the current zone list.
+	apiSpec, err := apispec.Build(apihuma.ZoneSpec{Prefix: "/api", OpenAPI: apiZoneCfg.OpenAPI})
 	if err != nil {
 		log.Error("huma spec build failed", err)
 		os.Exit(1)

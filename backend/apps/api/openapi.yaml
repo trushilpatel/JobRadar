@@ -1,6 +1,169 @@
 components:
-  schemas: {}
+  schemas:
+    CompanyPublicView:
+      additionalProperties: false
+      properties:
+        careers_url:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        logo_url:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+        website:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - created_at
+        - updated_at
+      type: object
+    CursorPageCompanyPublicView:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/CompanyPublicView"
+          type:
+            - array
+            - "null"
+        limit:
+          format: int64
+          type: integer
+        next_cursor:
+          type:
+            - string
+            - "null"
+        total:
+          format: int64
+          type: integer
+      required:
+        - data
+        - total
+        - limit
+        - next_cursor
+      type: object
+    ErrorDetail:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required:
+        - code
+        - message
+      type: object
+    ResponseCompanyPublicView:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/CompanyPublicView"
+      required:
+        - data
+      type: object
+    ServiceError:
+      additionalProperties: false
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+      required:
+        - error
+      type: object
 info:
   title: jobradar-api
   version: 1.0.0
 openapi: 3.1.0
+paths:
+  /api/companies:
+    get:
+      operationId: listCompaniesPublic
+      parameters:
+        - description: ILIKE match on company name
+          explode: false
+          in: query
+          name: search
+          schema:
+            description: ILIKE match on company name
+            type: string
+        - description: Sort column (defaults to name if unrecognized)
+          explode: false
+          in: query
+          name: sort_by
+          schema:
+            description: Sort column (defaults to name if unrecognized)
+            type: string
+        - description: asc or desc
+          explode: false
+          in: query
+          name: sort_dir
+          schema:
+            description: asc or desc
+            type: string
+        - description: Opaque keyset pagination cursor
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: Opaque keyset pagination cursor
+            type: string
+        - description: Page size 1-100; invalid or missing values default to 20
+          explode: false
+          in: query
+          name: limit
+          schema:
+            description: Page size 1-100; invalid or missing values default to 20
+            examples:
+              - "20"
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CursorPageCompanyPublicView"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List companies
+      tags:
+        - companies
+  /api/companies/{id}:
+    get:
+      operationId: getCompanyPublic
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseCompanyPublicView"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get a company by ID
+      tags:
+        - companies

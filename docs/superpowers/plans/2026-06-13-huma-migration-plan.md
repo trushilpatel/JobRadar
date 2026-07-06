@@ -275,16 +275,41 @@ Edge cases above must each keep a test — see Appendix B.
   chi router by binding humachi directly to the pre-merged spec, registering zero
   operations of its own).
 - `apps/api/apispec/apispec.go`: the single place that knows the current zone list
-  (`Build()`) — shared by `apps/api/main.go` (serves it via `NewOpsRouter`, now
-  wired on the ops listener) and `apps/genspec` (writes it to `apps/api/openapi.yaml`
-  for the CI guard). Today `Build()` registers zero zones (no slice has migrated
-  yet); each slice appends its `apihuma.ZoneSpec` here as it lands — a one-line
-  change per slice, per the extensibility-by-design rule.
-- `.github/workflows/ci.yml` `backend-lint` job: runs `go run ./apps/genspec` then
-  `git diff --exit-code -- apps/api/openapi.yaml`.
-- Verified end-to-end: `go run ./apps/genspec` produces a valid (currently
-  empty-paths) `apps/api/openapi.yaml`; `NewOpsRouter`'s new tests confirm
-  `/openapi.json` and `/docs` return 200 with no auth header required.
+  (`Build(zones ...apihuma.ZoneSpec)`, `APIZoneConfig()`) — every `/api`-zone slice's
+  `RestRouter` constructor takes the `huma.Config` `APIZoneConfig()` returns (built
+  exactly once in `main.go` and threaded through `InitializeApp`), so their
+  operations land in one shared zone document.
+- **Correction to the original plan:** a standalone `apps/genspec` binary (as
+  originally sketched) cannot reuse `apps/api`'s `InitializeApp` — Go does not allow
+  importing another `package main`, and `apps/<name>` binaries are wiring-only by
+  convention (no cross-binary composition reuse exists elsewhere in this codebase).
+  The alternative (genspec independently re-registering every migrated router with
+  its own stub services) would create a second, parallel "which slices are
+  migrated" list that could silently drift from `main.go`'s real one — defeating
+  the guard's entire purpose. Resolved instead as a **mode of `apps/api` itself**:
+  `go run ./apps/api --print-spec` (see `apps/api/genspec.go`) builds an in-memory
+  sqlite `*gorm.DB` (route registration never queries it), calls the exact same
+  `InitializeApp`, registers every `/api`-zone `RestRouter`, and writes the merged
+  spec to `apps/api/openapi.yaml` — zero parallel state, by construction.
+- `.github/workflows/ci.yml` `backend-lint` job: runs `go run ./apps/api --print-spec`
+  then `git diff --exit-code -- apps/api/openapi.yaml`.
+- **Two more findings surfaced while wiring this up, both fixed in `apihuma`:**
+  1. `huma.DefaultConfig`'s built-in `CreateHooks` entry adds a schema-link
+     transformer that injects a `"$schema"` field into every JSON response body
+     and a `Link` response header — an uninvited byte-level difference from the
+     legacy envelope. `NewZoneConfig` now clears `CreateHooks` to disable it
+     (`TestNewZoneConfig_NoSchemaLinkInjection`).
+  2. Huma derives the _documented_ error response schema from `huma.NewError`'s
+     return type at operation-registration time (`defineErrors` calls
+     `NewError(0, "")` to get a sample to reflect over) — `apihuma.InstallLegacyErrorModel()`
+     must run **before** `InitializeApp`/`Register`, not just before the server starts
+     serving, or the generated docs describe Huma's default RFC 9457 shape instead
+     of the legacy envelope the API actually returns. Both `main()` and `printSpec()`
+     now call it first.
+- Verified end-to-end: `go run ./apps/api --print-spec` produces a real
+  `apps/api/openapi.yaml` documenting both Slice 1 operations with correct
+  parameters, response schemas, and the legacy error shape; `NewOpsRouter`'s tests
+  confirm `/openapi.json` and `/docs` return 200 with no auth header required.
 
 ### Phase 0 Definition of Done — **COMPLETE 2026-07-06**
 
@@ -323,20 +348,22 @@ edge-case discovery pass and ensure every case has a test (Appendix B is the see
 Ordered simplest→hardest so the foundation is exercised gently first and the riskiest
 auth surfaces come last. Each step ends with the Section 4 gate.
 
-| #   | Slice                             | Why this position                                                                                                                                                                                                                                           |
-| --- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **company (public)** — 2 read ops | Pilot. Pure reads; validates envelope + spec + path param + frontend-untouched with minimal blast radius.                                                                                                                                                   |
-| 2   | **job** — 9 ops                   | Hardest input surface (rich filters, keyset cursor, PATCH/DELETE bodies, 204, bulk). Do early so input-parity helpers are proven before the long tail.                                                                                                      |
-| 3   | **application** — 6 ops           | Nested path params (`/jobs/{id}/applications/{app_id}/...`) + writes.                                                                                                                                                                                       |
-| 4   | **apply-queue** — 2 ops           | Small slice; also the one that collapses the duplicate pagination-default logic onto the shared Huma param type (3.4).                                                                                                                                      |
-| 5   | **resume** — 5 ops                | First non-JSON surface: multipart upload input + binary streamed download output (3.0 items 4-5). Do this once the input/output foundation is proven on simpler slices, but before the long tail of admin routers so the non-JSON pattern is settled early. |
-| 6   | **scan** — 8 ops                  | Mixed reads + scan-trigger writes; path + body.                                                                                                                                                                                                             |
-| 7   | **user `/me`** — 5 ops            | Middleware self-injection outlier (3.0 item 3); validates the humachi group pattern handles both caller-applies and self-applies middleware.                                                                                                                |
-| 8   | **ats** — 3 ops                   | First full `/admin`-zone slice: validates `RequireIdentity + RequireRole + RateLimit + AuditAdminMutation` together on a small surface before the larger admin slices.                                                                                      |
-| 9   | **pipeline** — 2 ops              | Admin read + retry write; same zone, still small.                                                                                                                                                                                                           |
-| 10  | **company (admin)** — 7 ops       | Largest admin slice; `AuditAdminMutation` must still fire on every 2xx mutation; literal-vs-`{id}` route ordering (`/companies/active`) must be preserved.                                                                                                  |
-| 11  | **user (admin)** — 5 ops          | Admin zone; literal-vs-`{id}` route ordering (`/users/{id}/roles`, `/users/{id}/status`) must be preserved.                                                                                                                                                 |
-| 12  | **audit (admin)** — 1 op          | Trivial; last in the primary sequence; confirms the full admin chain end-to-end on the simplest possible slice.                                                                                                                                             |
+| #   | Slice                             | Why this position                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **company (public)** — 2 read ops | Pilot. Pure reads; validates envelope + spec + path param + frontend-untouched with minimal blast radius. **DONE 2026-07-06** — gate items 1-7, 9 automated and green (see below); item 8 (`make dev` / live-server curl smoke test) not run in this session — no Postgres instance was available in the sandbox this work was done in; `go run ./apps/api --print-spec` (which exercises the identical `InitializeApp`+`Register` path against an in-memory DB) is the closest automatable proxy and is green. |
+
+**Test-isolation footgun found while writing Slice 1's tests, relevant to every remaining slice:** `apispec.APIZoneConfig()` returns a `huma.Config` whose `.Components.Schemas` is `apispec`'s package-level `sharedRegistry` — a singleton, by design, so every real `/api`-zone slice shares one schema namespace in production. **Never call `apispec.APIZoneConfig()` from a test.** A test in `app_test.go` originally did, and registering a router through it — before `apihuma.InstallLegacyErrorModel()` had run — silently seeded huma's default `ErrorDetail`/`ErrorModel` schemas into that shared singleton; a later, unrelated test in the same test binary (any test calling `buildSpecYAML()`, which does call `InstallLegacyErrorModel()` first) then panicked with `duplicate name: ErrorDetail, new type: apihuma.errorDetail, existing type: huma.ErrorDetail`. Fixed by giving that test its own isolated `apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry())` instead. **Every slice's tests must do the same** — a fresh registry per test (or per test file, via a shared `newTestZoneConfig(t)` helper), never the production singleton.
+| 2 | **job** — 9 ops | Hardest input surface (rich filters, keyset cursor, PATCH/DELETE bodies, 204, bulk). Do early so input-parity helpers are proven before the long tail. |
+| 3 | **application** — 6 ops | Nested path params (`/jobs/{id}/applications/{app_id}/...`) + writes. |
+| 4 | **apply-queue** — 2 ops | Small slice; also the one that collapses the duplicate pagination-default logic onto the shared Huma param type (3.4). |
+| 5 | **resume** — 5 ops | First non-JSON surface: multipart upload input + binary streamed download output (3.0 items 4-5). Do this once the input/output foundation is proven on simpler slices, but before the long tail of admin routers so the non-JSON pattern is settled early. |
+| 6 | **scan** — 8 ops | Mixed reads + scan-trigger writes; path + body. |
+| 7 | **user `/me`** — 5 ops | Middleware self-injection outlier (3.0 item 3); validates the humachi group pattern handles both caller-applies and self-applies middleware. |
+| 8 | **ats** — 3 ops | First full `/admin`-zone slice: validates `RequireIdentity + RequireRole + RateLimit + AuditAdminMutation` together on a small surface before the larger admin slices. |
+| 9 | **pipeline** — 2 ops | Admin read + retry write; same zone, still small. |
+| 10 | **company (admin)** — 7 ops | Largest admin slice; `AuditAdminMutation` must still fire on every 2xx mutation; literal-vs-`{id}` route ordering (`/companies/active`) must be preserved. |
+| 11 | **user (admin)** — 5 ops | Admin zone; literal-vs-`{id}` route ordering (`/users/{id}/roles`, `/users/{id}/status`) must be preserved. |
+| 12 | **audit (admin)** — 1 op | Trivial; last in the primary sequence; confirms the full admin chain end-to-end on the simplest possible slice. |
 
 Rule between steps: legacy chi routes and Huma routes **coexist** on the same mux
 during the migration (Huma registers specific paths; untouched slices keep their chi

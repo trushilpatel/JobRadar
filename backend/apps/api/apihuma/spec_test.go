@@ -3,8 +3,10 @@ package apihuma
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -50,6 +52,38 @@ func TestNewZoneConfig_SharesRegistryAcrossZones(t *testing.T) {
 	}
 	if _, ok := names["Widget"]; !ok {
 		t.Fatalf("expected a single shared \"Widget\" schema entry, got: %v", names)
+	}
+}
+
+// TestNewZoneConfig_NoSchemaLinkInjection guards byte-for-byte envelope
+// parity (3.1): huma.DefaultConfig's own CreateHook injects a "$schema"
+// field and Link headers into every JSON response by default (a discoverability
+// feature for editors) — that is an uninvited extra field the legacy frontend
+// has never seen. NewZoneConfig must disable it.
+func TestNewZoneConfig_NoSchemaLinkInjection(t *testing.T) {
+	registry := NewSharedRegistry()
+	cfg := NewZoneConfig("spike", "0.0.0", registry)
+	router := chi.NewRouter()
+	registerPing(t, cfg, router, "ping-noschema")
+
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/ping")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer res.Body.Close()
+
+	if got := res.Header.Get("Link"); got != "" {
+		t.Fatalf("expected no Link header (schema-link transformer must be disabled), got %q", got)
+	}
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if strings.Contains(string(body), "$schema") {
+		t.Fatalf("expected no $schema field in response body (breaks byte parity with the legacy envelope), got: %s", body)
 	}
 }
 

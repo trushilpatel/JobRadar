@@ -30,12 +30,17 @@ func NewSharedRegistry() huma.Registry {
 // (left blank) — per-zone auto-serving would put spec/docs behind that
 // zone's auth middleware, which Phase 0 (Section 3.5) explicitly avoids;
 // the combined document is served separately via MountCombinedSpec on the
-// unauthenticated ops listener instead.
+// unauthenticated ops listener instead. CreateHooks is cleared to disable
+// huma.DefaultConfig's built-in schema-link transformer, which otherwise
+// injects a "$schema" field into every JSON response body and a "Link"
+// response header — an uninvited byte-level difference from the legacy
+// envelope that would break frontend-untouched parity (3.1).
 func NewZoneConfig(title, version string, registry huma.Registry) huma.Config {
 	cfg := huma.DefaultConfig(title, version)
 	cfg.Components.Schemas = registry
 	cfg.OpenAPIPath = ""
 	cfg.DocsPath = ""
+	cfg.CreateHooks = nil
 	return cfg
 }
 
