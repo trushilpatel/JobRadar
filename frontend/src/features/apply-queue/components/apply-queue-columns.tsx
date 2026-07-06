@@ -1,22 +1,33 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTableColumnHeader } from '@/components/ui/data-table'
 import { JobLocationCell } from '@/components/shared/JobLocationCell'
-import { formatRelativeTime, formatExactDateTime, formatSalary } from '@/lib/utils/utils'
+import { formatRelativeTime, formatExactDateTime, formatSalary, cn } from '@/lib/utils/utils'
 import type { ApplyQueueItem } from '../api/apply-queue.api'
 import { ApplyQueueStatusPill } from './ApplyQueueStatusPill'
-import { ResumePickerCell, type ApplyQueueResumeOption } from './ResumePickerCell'
-
-export type { ApplyQueueResumeOption }
 
 export interface EffectiveResume {
   id: string
   label: string
 }
 
+// One resume's match detail against a specific job's keywords, for the
+// resume-picker dialog's table (sorted best-match-first by the hook that
+// builds this). Defined here (not in pages/apply-queue/useApplyQueueResumeMatch.ts)
+// because features/ may not import from pages/ — the hook and the dialog
+// component both import this shape from the feature barrel instead.
+export interface ResumeMatchOption {
+  id: string
+  label: string
+  matched: number
+  total: number
+  matchedKeywords: string[]
+  missingKeywords: string[]
+  /** False when the resume predates extracted_text backfill or extraction otherwise produced nothing — distinct from a genuine 0/N poor match. */
+  hasExtractedText: boolean
+}
+
 export interface ApplyQueueColumnActions {
-  resumeOptions: ApplyQueueResumeOption[]
-  onResumeChange: (jobId: string, resumeId: string | null) => void
-  /** True while a resume-attach mutation for this job is in flight — disables its picker. */
+  /** True while a resume-attach mutation for this job is in flight — disables its picker trigger. */
   isResumeUpdatePending?: (jobId: string) => boolean
   /**
    * Resolves the resume actually shown as selected for a row — the user's
@@ -28,18 +39,14 @@ export interface ApplyQueueColumnActions {
   getEffectiveResume: (jobId: string) => EffectiveResume | null
   /** One-line "N/M matched" summary for the row's effective resume, or null when none is selected or the job has no keywords. */
   getMatchSummary: (jobId: string) => string | null
+  /** Opens the resume-picker dialog for this job — the dialog itself is a single shared instance owned by ApplyQueueTable, not per-row. */
+  onOpenResumePicker: (jobId: string) => void
 }
 
 export function buildApplyQueueColumns(
   actions: ApplyQueueColumnActions
 ): ColumnDef<ApplyQueueItem, unknown>[] {
-  const {
-    resumeOptions,
-    onResumeChange,
-    isResumeUpdatePending,
-    getEffectiveResume,
-    getMatchSummary,
-  } = actions
+  const { isResumeUpdatePending, getEffectiveResume, getMatchSummary, onOpenResumePicker } = actions
 
   return [
     // ── 1. Job (title, linked to posting + company) ────────────────────────
@@ -124,42 +131,37 @@ export function buildApplyQueueColumns(
       },
     },
 
-    // ── 6. Resume picker ───────────────────────────────────────────────────
+    // ── 6. Resume + match — opens the shared resume-picker dialog ──────────
     {
       id: 'resume',
-      size: 220,
+      size: 240,
       enableSorting: false,
       header: () => <span className="text-muted">Resume</span>,
       cell: ({ row }) => {
         const item = row.original
         const effective = getEffectiveResume(item.job_id)
+        const summary = getMatchSummary(item.job_id)
+        const pending = isResumeUpdatePending?.(item.job_id) ?? false
         return (
-          <ResumePickerCell
-            jobId={item.job_id}
-            resumeId={effective?.id ?? null}
-            resumeLabel={effective?.label ?? null}
-            options={resumeOptions}
-            onChange={onResumeChange}
-            disabled={isResumeUpdatePending?.(item.job_id) ?? false}
-          />
-        )
-      },
-    },
-
-    // ── 7. Match ─────────────────────────────────────────────────────────────
-    // One-line "N/M matched" summary against the effective resume — only
-    // meaningful once a resume is selected (auto-picked or user-chosen).
-    {
-      id: 'match',
-      size: 110,
-      enableSorting: false,
-      header: () => <span className="text-muted">Match</span>,
-      cell: ({ row }) => {
-        const summary = getMatchSummary(row.original.job_id)
-        return summary ? (
-          <span className="text-[12.5px] font-mono text-secondary">{summary}</span>
-        ) : (
-          <span className="text-[12.5px] text-placeholder">—</span>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenResumePicker(item.job_id)
+            }}
+            aria-label={`Select resume for ${item.job_id}`}
+            className={cn(
+              'flex h-7 w-full max-w-[240px] items-center gap-2 rounded-md border border-[var(--border)] bg-panel px-2 text-xs hover:bg-subtle disabled:opacity-60'
+            )}
+          >
+            <span className="truncate text-primary">{effective?.label ?? 'Select resume'}</span>
+            {summary && (
+              <span className="ml-auto shrink-0 font-mono text-[11px] text-secondary">
+                {summary.replace(' matched', '')}
+              </span>
+            )}
+          </button>
         )
       },
     },

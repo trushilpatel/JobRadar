@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchResume, pickBestResume } from '../resumeJobMatch'
+import { matchResume, matchResumeDetailed, pickBestResume } from '../resumeJobMatch'
 
 describe('matchResume', () => {
   it('counts case-insensitive whole-word matches', () => {
@@ -34,6 +34,51 @@ describe('matchResume', () => {
 
   it('returns matched 0 for empty resume text', () => {
     expect(matchResume(['Go'], '')).toEqual({ matched: 0, total: 1 })
+  })
+})
+
+describe('matchResumeDetailed', () => {
+  it('partitions keywords into matched and missing', () => {
+    const result = matchResumeDetailed(
+      ['Go', 'PostgreSQL', 'Kubernetes'],
+      'Backend engineer using Go and PostgreSQL daily.'
+    )
+    expect(result).toEqual({
+      matchedKeywords: ['Go', 'PostgreSQL'],
+      missingKeywords: ['Kubernetes'],
+    })
+  })
+
+  it('preserves input order within each partition', () => {
+    const result = matchResumeDetailed(
+      ['Kubernetes', 'Go', 'Rust', 'PostgreSQL'],
+      'Go and PostgreSQL developer.'
+    )
+    expect(result).toEqual({
+      matchedKeywords: ['Go', 'PostgreSQL'],
+      missingKeywords: ['Kubernetes', 'Rust'],
+    })
+  })
+
+  it('returns all-missing for empty resume text', () => {
+    const result = matchResumeDetailed(['Go', 'PostgreSQL'], '')
+    expect(result).toEqual({ matchedKeywords: [], missingKeywords: ['Go', 'PostgreSQL'] })
+  })
+
+  it('returns empty partitions for an empty keyword list', () => {
+    expect(matchResumeDetailed([], 'some resume text')).toEqual({
+      matchedKeywords: [],
+      missingKeywords: [],
+    })
+  })
+
+  it("agrees with matchResume's counts", () => {
+    const jobKeywords = ['Go', 'PostgreSQL', 'Kubernetes']
+    const resumeText = 'Go and PostgreSQL developer.'
+    const { matched, total } = matchResume(jobKeywords, resumeText)
+    const { matchedKeywords, missingKeywords } = matchResumeDetailed(jobKeywords, resumeText)
+    expect(matchedKeywords.length).toBe(matched)
+    expect(matchedKeywords.length + missingKeywords.length).toBe(total)
   })
 })
 

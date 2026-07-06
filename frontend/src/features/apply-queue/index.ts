@@ -2,8 +2,8 @@ export { useApplyQueue } from './hooks/useApplyQueue'
 export { useSetApplyQueueResume } from './hooks/useSetApplyQueueResume'
 export { ApplyQueueTable } from './components/ApplyQueueTable'
 export { ApplyQueueStatusPill } from './components/ApplyQueueStatusPill'
-export type { ApplyQueueResumeOption } from './components/ResumePickerCell'
-export type { EffectiveResume } from './components/apply-queue-columns'
+export type { EffectiveResume, ResumeMatchOption } from './components/apply-queue-columns'
+export { ResumePickerDialog } from './components/ResumePickerDialog'
 export type { ApplyQueueItem, ApplyQueueStatus } from './api/apply-queue.api'
 export {
   APPLY_QUEUE_FILTER,

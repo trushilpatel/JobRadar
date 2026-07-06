@@ -29,17 +29,33 @@ export interface MatchResult {
   total: number
 }
 
+export interface MatchDetail {
+  matchedKeywords: string[]
+  missingKeywords: string[]
+}
+
+// matchResumeDetailed partitions jobKeywords into those found (whole-word,
+// case-insensitive) in resumeText and those not — the per-keyword breakdown
+// the resume-picker dialog shows on row expansion. matchResume derives its
+// count summary from this so the two never disagree.
+export function matchResumeDetailed(jobKeywords: string[], resumeText: string): MatchDetail {
+  const matchedKeywords: string[] = []
+  const missingKeywords: string[] = []
+  for (const keyword of jobKeywords) {
+    if (keywordRegExp(keyword).test(resumeText)) matchedKeywords.push(keyword)
+    else missingKeywords.push(keyword)
+  }
+  return { matchedKeywords, missingKeywords }
+}
+
 // matchResume counts how many of jobKeywords appear as whole-word,
 // case-insensitive matches in resumeText.
 export function matchResume(jobKeywords: string[], resumeText: string): MatchResult {
   const total = jobKeywords.length
   if (total === 0) return { matched: 0, total: 0 }
 
-  let matched = 0
-  for (const keyword of jobKeywords) {
-    if (keywordRegExp(keyword).test(resumeText)) matched++
-  }
-  return { matched, total }
+  const { matchedKeywords } = matchResumeDetailed(jobKeywords, resumeText)
+  return { matched: matchedKeywords.length, total }
 }
 
 export interface ResumeForMatch {
