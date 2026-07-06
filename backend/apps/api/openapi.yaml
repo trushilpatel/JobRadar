@@ -1,5 +1,41 @@
 components:
   schemas:
+    ATSDTO:
+      additionalProperties: false
+      properties:
+        base_url:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        display_name:
+          type: string
+        inter_company_delay_s:
+          format: int64
+          type: integer
+        is_active:
+          type: boolean
+        is_admin_creatable:
+          type: boolean
+        name:
+          type: string
+        scan_interval_min:
+          format: int64
+          type: integer
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - name
+        - display_name
+        - base_url
+        - is_active
+        - is_admin_creatable
+        - scan_interval_min
+        - inter_company_delay_s
+        - created_at
+        - updated_at
+      type: object
     ApplicationWithJob:
       additionalProperties: false
       properties:
@@ -587,6 +623,14 @@ components:
         label:
           type: string
       type: object
+    ResponseATSDTO:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/ATSDTO"
+      required:
+        - data
+      type: object
     ResponseCompanyAnalytics:
       additionalProperties: false
       properties:
@@ -632,6 +676,18 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/JobView"
+      required:
+        - data
+      type: object
+    ResponseListATSDTO:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/ATSDTO"
+          type:
+            - array
+            - "null"
       required:
         - data
       type: object
@@ -936,6 +992,28 @@ components:
         - app_id
         - stage
       type: object
+    UpdateATSInput:
+      additionalProperties: false
+      properties:
+        inter_company_delay_s:
+          format: int64
+          type:
+            - integer
+            - "null"
+        is_active:
+          type:
+            - boolean
+            - "null"
+        is_admin_creatable:
+          type:
+            - boolean
+            - "null"
+        scan_interval_min:
+          format: int64
+          type:
+            - integer
+            - "null"
+      type: object
     UpdateMeInputBody:
       additionalProperties: false
       properties:
@@ -994,6 +1072,80 @@ info:
   version: 1.0.0
 openapi: 3.1.0
 paths:
+  /admin/ats:
+    get:
+      operationId: listAts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseListATSDTO"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List ATS adapters
+      tags:
+        - ats
+  /admin/ats/{name}:
+    get:
+      operationId: getAts
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseATSDTO"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get an ATS adapter by name
+      tags:
+        - ats
+    patch:
+      operationId: updateAts
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateATSInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseATSDTO"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update an ATS adapter
+      tags:
+        - ats
   /api/applications:
     get:
       operationId: listAllApplications

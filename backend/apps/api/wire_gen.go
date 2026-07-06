@@ -28,7 +28,7 @@ import (
 
 // Injectors from wire.go:
 
-func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCfg huma.Config) (*App, error) {
+func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCfg huma.Config, adminZoneCfg huma.Config) (*App, error) {
 	// ── Company (public chain) ───────────────────────────────────────────────
 	companyRepositoryService := services.NewRepositoryService(db)
 	companyImplService := services.NewImplService(companyRepositoryService)
@@ -46,7 +46,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCf
 	atsCacheService := atssvc.NewCacheService(atsImplService, atsMemoryCache, 5*time.Minute)
 	atsValidationService := atssvc.NewValidationService(atsCacheService)
 	atsRestService := atssvc.NewRestService(atsValidationService)
-	atsRestRouter := atssvc.NewRestRouter(atsRestService)
+	atsRestRouter := atssvc.NewRestRouter(atsRestService, adminZoneCfg)
 
 	scanLogStoreForCompany := services2.NewLogStore(db)
 	scanHistoryReader := provideScanHistoryReader(scanLogStoreForCompany)

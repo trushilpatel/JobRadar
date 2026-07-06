@@ -20,10 +20,12 @@ type ATSDTO struct {
 
 // UpdateATSInput carries the optional fields an admin may change on an
 // existing ATS row. All fields are pointers so the handler can distinguish
-// between "not supplied" (nil) and "set to zero value".
+// between "not supplied" (nil) and "set to zero value". required:"false" on
+// every field matches the pre-Huma handler's plain json.Decode, which never
+// errors on an absent key — Huma marks Body fields required by default.
 type UpdateATSInput struct {
-	ScanIntervalMin    *int  `json:"scan_interval_min"`
-	InterCompanyDelayS *int  `json:"inter_company_delay_s"`
-	IsActive           *bool `json:"is_active"`
-	IsAdminCreatable   *bool `json:"is_admin_creatable"`
+	ScanIntervalMin    *int  `json:"scan_interval_min" required:"false"`
+	InterCompanyDelayS *int  `json:"inter_company_delay_s" required:"false"`
+	IsActive           *bool `json:"is_active" required:"false"`
+	IsAdminCreatable   *bool `json:"is_admin_creatable" required:"false"`
 }

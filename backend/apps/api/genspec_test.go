@@ -19,6 +19,12 @@ func TestBuildSpecYAML_ContainsMigratedSliceOperations(t *testing.T) {
 	if !strings.Contains(got, "/api/companies/{id}:") {
 		t.Errorf("expected /api/companies/{id} in generated spec, got:\n%s", got)
 	}
+	if !strings.Contains(got, "/admin/ats:") {
+		t.Errorf("expected /admin/ats (first migrated /admin-zone slice) in generated spec, got:\n%s", got)
+	}
+	if !strings.Contains(got, "/admin/ats/{name}:") {
+		t.Errorf("expected /admin/ats/{name} in generated spec, got:\n%s", got)
+	}
 }
 
 // TestBuildSpecYAML_DocumentsLegacyErrorShape guards the registration-order

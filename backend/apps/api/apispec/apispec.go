@@ -31,6 +31,19 @@ func APIZoneConfig() huma.Config {
 	return apihuma.NewZoneConfig("jobradar-api", Version, sharedRegistry)
 }
 
+// AdminZoneConfig builds a fresh huma.Config for the /admin middleware zone.
+// Same one-call-per-process rule as APIZoneConfig — every /admin-zone
+// slice's RestRouter constructor takes the same returned value so their
+// operations share one zone document. Uses the same sharedRegistry as
+// APIZoneConfig so component schemas never fragment across zones (see
+// apihuma.NewSharedRegistry), while keeping a completely independent Paths
+// map — required because /admin routers register relative paths on the
+// already-"/admin"-mounted subrouter (see adminRouteGroup.Register), which
+// would collide with /api's relative paths if they shared one document.
+func AdminZoneConfig() huma.Config {
+	return apihuma.NewZoneConfig("jobradar-api", Version, sharedRegistry)
+}
+
 // Build constructs the current combined OpenAPI spec from every migrated
 // zone's ZoneSpec. No zone has migrated yet — main.go passes zero ZoneSpecs
 // until Slice 1 (company public) lands, then one more per slice as each

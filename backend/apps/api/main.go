@@ -71,8 +71,10 @@ func main() {
 	// RestRouter registers its Huma operations onto this same config so they
 	// share one zone document — see apispec.APIZoneConfig.
 	apiZoneCfg := apispec.APIZoneConfig()
+	// Same one-per-process rule for the /admin zone — see apispec.AdminZoneConfig.
+	adminZoneCfg := apispec.AdminZoneConfig()
 
-	app, err := InitializeApp(database, cfg, log, apiZoneCfg)
+	app, err := InitializeApp(database, cfg, log, apiZoneCfg, adminZoneCfg)
 	if err != nil {
 		log.Error("wire initialization failed", err)
 		os.Exit(1)
@@ -109,9 +111,12 @@ func main() {
 	// Combined OpenAPI spec served on the ops listener (never behind /api or
 	// /admin auth). Built AFTER NewRouter above, since that's what invokes
 	// every RouteGroup.Register — including migrated slices' huma.Register
-	// calls that populate apiZoneCfg.OpenAPI.Paths. See apps/api/apispec for
-	// the current zone list.
-	apiSpec, err := apispec.Build(apihuma.ZoneSpec{Prefix: "/api", OpenAPI: apiZoneCfg.OpenAPI})
+	// calls that populate apiZoneCfg.OpenAPI.Paths and adminZoneCfg.OpenAPI.Paths.
+	// See apps/api/apispec for the current zone list.
+	apiSpec, err := apispec.Build(
+		apihuma.ZoneSpec{Prefix: "/api", OpenAPI: apiZoneCfg.OpenAPI},
+		apihuma.ZoneSpec{Prefix: "/admin", OpenAPI: adminZoneCfg.OpenAPI},
+	)
 	if err != nil {
 		log.Error("huma spec build failed", err)
 		os.Exit(1)

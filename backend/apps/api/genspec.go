@@ -67,8 +67,9 @@ func buildSpecYAML() ([]byte, error) {
 	}
 
 	apiZoneCfg := apispec.APIZoneConfig()
+	adminZoneCfg := apispec.AdminZoneConfig()
 
-	app, err := InitializeApp(db, &config.Config{}, logger.NewNoop(), apiZoneCfg)
+	app, err := InitializeApp(db, &config.Config{}, logger.NewNoop(), apiZoneCfg, adminZoneCfg)
 	if err != nil {
 		return nil, fmt.Errorf("wire app: %w", err)
 	}
@@ -99,7 +100,10 @@ func buildSpecYAML() ([]byte, error) {
 		g.Register(r)
 	}
 
-	spec, err := apispec.Build(apihuma.ZoneSpec{Prefix: "/api", OpenAPI: apiZoneCfg.OpenAPI})
+	spec, err := apispec.Build(
+		apihuma.ZoneSpec{Prefix: "/api", OpenAPI: apiZoneCfg.OpenAPI},
+		apihuma.ZoneSpec{Prefix: "/admin", OpenAPI: adminZoneCfg.OpenAPI},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("build spec: %w", err)
 	}
