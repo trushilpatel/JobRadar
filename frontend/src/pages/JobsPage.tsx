@@ -374,7 +374,7 @@ export function JobsPage() {
             showCloseButton={false}
             onPointerDownOutside={(e) => e.preventDefault()}
             onInteractOutside={(e) => e.preventDefault()}
-            className="w-[32rem] flex flex-col p-0 border-l border-[var(--border)] shadow-[0_8px_24px_rgba(0,0,0,0.4)]"
+            className="w-[32rem] sm:max-w-[32rem] flex flex-col p-0 border-l border-[var(--border)] shadow-[0_8px_24px_rgba(0,0,0,0.4)]"
           >
             {openJob && (
               <>
