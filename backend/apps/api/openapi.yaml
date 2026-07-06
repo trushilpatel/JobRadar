@@ -355,6 +355,74 @@ components:
         - page
         - limit
       type: object
+    QueueItem:
+      additionalProperties: false
+      properties:
+        added_at:
+          format: date-time
+          type: string
+        company:
+          type: string
+        job_id:
+          type: string
+        job_keywords:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        job_title:
+          type: string
+        job_url:
+          type: string
+        location:
+          type:
+            - string
+            - "null"
+        remote:
+          type: boolean
+        resume_id:
+          type:
+            - string
+            - "null"
+        resume_label:
+          type:
+            - string
+            - "null"
+        salary_range:
+          contentEncoding: base64
+          type: string
+        status:
+          type: string
+      required:
+        - job_id
+        - job_title
+        - company
+        - job_url
+        - status
+        - resume_id
+        - resume_label
+        - job_keywords
+        - location
+        - remote
+        - salary_range
+        - added_at
+      type: object
+    QueueListResult:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/QueueItem"
+          type:
+            - array
+            - "null"
+        next_cursor:
+          type: string
+      required:
+        - items
+        - next_cursor
+      type: object
     ResponseCompanyPublicView:
       additionalProperties: false
       properties:
@@ -458,6 +526,14 @@ components:
       required:
         - data
       type: object
+    ResponseQueueListResult:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/QueueListResult"
+      required:
+        - data
+      type: object
     ResponseStageResponse:
       additionalProperties: false
       properties:
@@ -479,6 +555,14 @@ components:
       properties:
         notes:
           type: string
+      type: object
+    SetResumeInput:
+      additionalProperties: false
+      properties:
+        resume_id:
+          type:
+            - string
+            - "null"
       type: object
     SetSavedInputBody:
       additionalProperties: false
@@ -609,6 +693,76 @@ paths:
       summary: Update an application's stage by application ID
       tags:
         - applications
+  /api/apply-queue:
+    get:
+      operationId: listApplyQueue
+      parameters:
+        - description: all or saved; defaults to all
+          explode: false
+          in: query
+          name: filter
+          schema:
+            description: all or saved; defaults to all
+            type: string
+        - description: Opaque keyset pagination cursor
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: Opaque keyset pagination cursor
+            type: string
+        - description: Page size 1-100; invalid or missing values default to 20
+          explode: false
+          in: query
+          name: limit
+          schema:
+            description: Page size 1-100; invalid or missing values default to 20
+            examples:
+              - "20"
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseQueueListResult"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List the current user's apply queue
+      tags:
+        - apply-queue
+  /api/apply-queue/{jobId}/resume:
+    put:
+      operationId: setApplyQueueResume
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetResumeInput"
+        required: true
+      responses:
+        "200":
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Attach or clear a resume for a job in the apply queue
+      tags:
+        - apply-queue
   /api/companies:
     get:
       operationId: listCompaniesPublic

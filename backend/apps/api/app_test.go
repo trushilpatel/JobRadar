@@ -64,7 +64,7 @@ func buildTestApp() *App {
 
 	fakeApplyQueue := &fakeApplyQueueService{}
 	applyQueueRest := applyqueuesvc.NewRestService(fakeApplyQueue)
-	applyQueueH := applyqueuesvc.NewRestRouter(applyQueueRest)
+	applyQueueH := applyqueuesvc.NewRestRouter(applyQueueRest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 
 	return NewApp(companyH, scanH, atsH, jobH, appH, nil, resumeH, nil, applyQueueH)
 }

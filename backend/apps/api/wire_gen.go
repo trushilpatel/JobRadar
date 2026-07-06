@@ -116,7 +116,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCf
 	applyQueueImplService := services5.NewImplService(applyQueueRepositoryService)
 	applyQueueValidationService := services5.NewValidationService(applyQueueImplService, applyQueueEngagementChecker, applyQueueResumeOwnershipChecker)
 	applyQueueRestService := services5.NewRestService(applyQueueValidationService)
-	applyQueueHandler := services5.NewRestRouter(applyQueueRestService)
+	applyQueueHandler := services5.NewRestRouter(applyQueueRestService, apiZoneCfg)
 
 	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter, resumeHandler, pipelineRestRouter, applyQueueHandler)
 	return app, nil

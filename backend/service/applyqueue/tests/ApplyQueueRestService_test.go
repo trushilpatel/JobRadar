@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/identity"
 	applyqueuedto "github.com/trushilpatel/jobradar/service/applyqueue/dto"
@@ -52,7 +53,8 @@ func withUser(r *http.Request, userID string) *http.Request {
 
 func newTestRouter(fake *fakeRestService) *chi.Mux {
 	h := applyqueuesvc.NewRestService(fake)
-	router := applyqueuesvc.NewRestRouter(h)
+	zoneCfg := apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry())
+	router := applyqueuesvc.NewRestRouter(h, zoneCfg)
 	mux := chi.NewRouter()
 	router.Register(mux)
 	return mux

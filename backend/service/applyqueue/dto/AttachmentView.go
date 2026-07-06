@@ -11,7 +11,9 @@ type AttachmentView struct {
 }
 
 // SetResumeInput is the request body for PUT /api/apply-queue/{jobId}/resume.
-// ResumeID nil clears any existing attachment for the job.
+// ResumeID nil clears any existing attachment for the job. required:"false"
+// matches the pre-Huma handler's plain json.Decode — a missing key leaves
+// the Go zero value (nil), same as an explicit null.
 type SetResumeInput struct {
-	ResumeID *string `json:"resume_id"`
+	ResumeID *string `json:"resume_id" required:"false"`
 }
