@@ -52,8 +52,8 @@ func (s *stubAtsService) UpdateATS(_ context.Context, _ string, _ atsdto.UpdateA
 
 // newAtsTestRouter wires a chi router with the ATS RestRouter registered.
 func newAtsTestRouter(svc atssvc.AtsService) http.Handler {
-	rest := atssvc.NewAtsRestService(svc)
-	router := atssvc.NewAtsRestRouter(rest)
+	rest := atssvc.NewRestService(svc)
+	router := atssvc.NewRestRouter(rest)
 	mux := chi.NewMux()
 	router.Register(mux)
 	return mux
@@ -286,7 +286,7 @@ func TestAtsRestService_NilNextPanics(t *testing.T) {
 			t.Fatal("expected panic on nil next")
 		}
 	}()
-	_ = atssvc.NewAtsRestService(nil)
+	_ = atssvc.NewRestService(nil)
 }
 
 // Verify that errors.Is wiring is correct (used by the test itself).

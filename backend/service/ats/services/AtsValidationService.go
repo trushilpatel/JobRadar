@@ -13,8 +13,8 @@ type validationService struct {
 	BaseAtsService
 }
 
-// NewAtsValidationService constructs the validation layer.
-func NewAtsValidationService(next AtsService) AtsService {
+// NewValidationService constructs the validation layer.
+func NewValidationService(next AtsService) AtsService {
 	return &validationService{BaseAtsService: NewBaseAtsService(next)}
 }
 

@@ -10,8 +10,8 @@ type AtsRestRouter struct {
 	handler *AtsRestService
 }
 
-// NewAtsRestRouter constructs an AtsRestRouter.
-func NewAtsRestRouter(h *AtsRestService) *AtsRestRouter {
+// NewRestRouter constructs an AtsRestRouter.
+func NewRestRouter(h *AtsRestService) *AtsRestRouter {
 	return &AtsRestRouter{handler: h}
 }
 

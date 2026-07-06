@@ -4,11 +4,11 @@
 
 The scan slice has three implementation files, each covering a different concern:
 
-| File                        | Interface implemented         | Purpose                                                                          |
-| --------------------------- | ----------------------------- | -------------------------------------------------------------------------------- |
-| `ScanImplService.go`        | `Service` (via `BaseService`) | Business logic: enqueue, trigger, stats, queue management, retry                 |
-| `ScanCrawlerImplService.go` | `CrawlerService`              | Crawler result recording (`RecordScanResult` → `company_scan_log` + scan state)  |
-| `ScanSchedulerService.go`   | `SchedulerService`            | Thin adapter exposing `SchedulerService` over `Service` for the scheduler binary |
+| File                        | Interface implemented         | Purpose                                                                                                                                                                                                                                                                                |
+| --------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ScanImplService.go`        | `Service` (via `BaseService`) | Business logic: enqueue, trigger, stats, queue management, retry                                                                                                                                                                                                                       |
+| `ScanCrawlerImplService.go` | `CrawlerService`              | Crawler result recording (`RecordScanResult` → `company_scan_log` + scan state)                                                                                                                                                                                                        |
+| `ScanSchedulerService.go`   | `SchedulerService`            | Standalone ~470-line service with its own state (`queue`, `ledger`, `publisher`, `auditor`, `nodeReader`, `settingsReader`) — not a thin wrapper over `Service`. Owns the retry sweeper, stuck-row reclaimers, auto-pause, and gauge-metric refresh logic used by the scheduler binary |
 
 Queue claiming for crawler-node polls is **not** in this slice — it lives in `service/crawlernode/services/CrawlerNodeAssignmentRepositoryService.go` (`AssignmentStore.ClaimNextForNode`), which is the only live claim path. The `ScanQueueStore.ClaimNext` + `CrawlerQueueService` wrapper that used to live here (`ScanCrawlerQueueImplService.go`) were dead code from the removed v1 monolith crawler — deleted; do not re-add a second claim path in this package.
 
@@ -20,7 +20,7 @@ Queue claiming for crawler-node polls is **not** in this slice — it lives in `
 | `SchedulerService` | Scheduler binary worker loop                  |
 | `CrawlerService`   | Orchestrator / crawler result submission path |
 
-`SchedulerService` is a strict subset of `Service` — all 5 of its methods (`EnqueueDue`, `ResetStuck`, `PurgeInactive`, `RetryDueJobs`, `EscalateStuckRetryJobs`) are also on `Service`. `ScanSchedulerService` is a shim that satisfies `SchedulerService` by wrapping a `Service` implementation.
+`Service` and `SchedulerService` are **fully independent interfaces** — `Service` does not embed `SchedulerService` (fixed 2026-07-05; it used to, which forced `ScanRepositoryService.go` to fake-implement 6 `SchedulerService` methods as hardcoded no-ops purely to satisfy the embed, none of which were ever called through the REST decorator chain — an ISP violation). `ScanSchedulerService.go`'s `schedulerService` struct holds its own `ScanQueueStore`/`SeenLedgerStore`/etc. and is the _only_ implementation of `SchedulerService`; it is never wrapped around a `Service` implementation. If a REST-facing method and a `SchedulerService` method happen to share a name (there are none left after the split), that is coincidence, not a shared contract.
 
 ## Separate stores
 

@@ -20,10 +20,10 @@ type validationService struct {
 	BaseService
 }
 
-// NewApplicationValidationService constructs the input-validation layer of
+// NewValidationService constructs the input-validation layer of
 // the application chain. It overrides only methods that have validation
 // rules; everything else passes through BaseService.
-func NewApplicationValidationService(next ApplicationService) ApplicationService {
+func NewValidationService(next ApplicationService) ApplicationService {
 	return &validationService{BaseService: NewBaseService(next)}
 }
 

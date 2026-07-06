@@ -28,16 +28,16 @@ import (
 // provide one (see ats.ProviderSet or the manual chain in
 // apps/orchestrator/main.go).
 var ProviderSet = wire.NewSet(
+	services.NewNodeRestRouter,
+	services.NewAdminRestRouter,
+	services.NewNodeRestService,
+	services.NewAdminRestService,
+	services.NewValidationService,
+	services.NewImplService,
 	services.NewNodeRepositoryService,
 	services.NewAdapterDelayGate,
 	services.NewAssignmentRepositoryService,
 	services.NewLedgerRepositoryService,
 	services.NewScanLogRepositoryService,
 	services.NewScanSettingsReader,
-	services.NewImplService,
-	services.NewValidationService,
-	services.NewNodeRestService,
-	services.NewAdminRestService,
-	services.NewNodeRestRouter,
-	services.NewAdminRestRouter,
 )

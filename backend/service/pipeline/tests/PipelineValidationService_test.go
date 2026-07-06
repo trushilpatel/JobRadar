@@ -16,7 +16,7 @@ func TestPipelineValidation_GetStats_PassThrough(t *testing.T) {
 	t.Parallel()
 	want := pipelinedto.PipelineStats{TotalCompanies: 3}
 	next := &recordingPipelineNext{statsResult: want}
-	svc := pipelinesvc.NewPipelineValidationService(next)
+	svc := pipelinesvc.NewValidationService(next)
 
 	got, err := svc.GetStats(context.Background())
 	if err != nil {
@@ -35,7 +35,7 @@ func TestPipelineValidation_GetStats_PassThrough(t *testing.T) {
 func TestPipelineValidation_TriggerRetry_UnknownWorker(t *testing.T) {
 	t.Parallel()
 	next := &recordingPipelineNext{}
-	svc := pipelinesvc.NewPipelineValidationService(next)
+	svc := pipelinesvc.NewValidationService(next)
 
 	_, err := svc.TriggerRetry(context.Background(), pipelinedto.TriggerRetryInput{Worker: "analyzer", Tier: "1m"})
 	if err == nil {
@@ -53,7 +53,7 @@ func TestPipelineValidation_TriggerRetry_UnknownWorker(t *testing.T) {
 func TestPipelineValidation_TriggerRetry_UnknownTier(t *testing.T) {
 	t.Parallel()
 	next := &recordingPipelineNext{}
-	svc := pipelinesvc.NewPipelineValidationService(next)
+	svc := pipelinesvc.NewValidationService(next)
 
 	_, err := svc.TriggerRetry(context.Background(), pipelinedto.TriggerRetryInput{Worker: "filter", Tier: "5m"})
 	if err == nil {
@@ -78,7 +78,7 @@ func TestPipelineValidation_TriggerRetry_AllValidCombinations(t *testing.T) {
 			t.Run(w+"/"+tier, func(t *testing.T) {
 				t.Parallel()
 				next := &recordingPipelineNext{retryResult: pipelinedto.TriggerRetryResult{Drained: 0}}
-				svc := pipelinesvc.NewPipelineValidationService(next)
+				svc := pipelinesvc.NewValidationService(next)
 
 				got, err := svc.TriggerRetry(context.Background(), pipelinedto.TriggerRetryInput{Worker: w, Tier: tier})
 				if err != nil {

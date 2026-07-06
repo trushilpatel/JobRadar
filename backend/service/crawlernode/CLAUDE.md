@@ -2,7 +2,7 @@
 
 ## Wire status
 
-`wire.go` is an **empty stub** (`package crawlernode` — no `ProviderSet`). The crawlernode slice is wired directly in `apps/orchestrator/wire.go`. Do not add a `ProviderSet` here without coordinating with the orchestrator wiring.
+`wire.go` has a full `ProviderSet` listing all 12 constructors, but it is **not actually consumed anywhere** — `apps/orchestrator/` has no `wire.go` of its own; the crawlernode slice is wired by hand in `apps/orchestrator/main.go`. Wire's DI graph can't auto-resolve this slice's decorator chain from `ProviderSet` alone in any case — see the wire-codegen note in `docs/tech-debt/2026-07-05-backend-service-boilerplate-debt.md` (the same "multiple bindings" issue affects every slice's chain, not just this one). Treat `ProviderSet` here as documentation of the intended composition, not as live wiring; do not assume `go generate`/`wire` against it does anything.
 
 ## Decorator chain
 

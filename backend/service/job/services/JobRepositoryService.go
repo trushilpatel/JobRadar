@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -189,7 +190,7 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, cursor str
 
 	p, err := decodeCursor(cursor)
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("job.store.GetJobs: decode cursor: %w", err)
 	}
 
 	query := s.db.WithContext(ctx).Model(&jobmodel.Job{}).Joins("Company")
@@ -262,7 +263,7 @@ func (s *jobStore) GetJobs(ctx context.Context, filter dto.JobFilter, cursor str
 
 	var jobs []jobmodel.Job
 	if err = query.Order(sortOrderClause(filter.SortBy, filter.SortDir)).Limit(limit + 1).Find(&jobs).Error; err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("job.store.GetJobs: query: %w", err)
 	}
 
 	var next string
@@ -305,7 +306,7 @@ func (s *jobStore) GetJobByID(ctx context.Context, id string) (_ *jobmodel.Job, 
 	defer tracing.End(span, &err)
 	var job jobmodel.Job
 	if err = s.db.WithContext(ctx).Joins("Company").Where("jobs.id = ?", id).First(&job).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("job.store.GetJobByID: %w", err)
 	}
 	return &job, nil
 }
@@ -320,7 +321,7 @@ func (s *jobStore) GetJobsByIDs(ctx context.Context, ids []string) (_ []jobmodel
 	}
 	var jobs []jobmodel.Job
 	if err = s.db.WithContext(ctx).Joins("Company").Where("jobs.id IN ?", ids).Find(&jobs).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("job.store.GetJobsByIDs: %w", err)
 	}
 	return jobs, nil
 }
@@ -331,10 +332,12 @@ func (s *jobStore) GetJobPostIDs(ctx context.Context, ids []string) (jobPostIDs 
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	err = s.db.WithContext(ctx).Model(&jobmodel.Job{}).
+	if err = s.db.WithContext(ctx).Model(&jobmodel.Job{}).
 		Where("id IN ?", ids).
-		Pluck("job_post_id", &jobPostIDs).Error
-	return jobPostIDs, err
+		Pluck("job_post_id", &jobPostIDs).Error; err != nil {
+		return nil, fmt.Errorf("job.store.GetJobPostIDs: %w", err)
+	}
+	return jobPostIDs, nil
 }
 
 // InsertJob is idempotent on job_post_id. A replay of the same job_post_id
@@ -366,13 +369,15 @@ func (s *jobStore) DeleteJob(ctx context.Context, id string) (err error) {
 func (s *jobStore) GetJobsAddedByDay(ctx context.Context, days int) (results []dto.DailyJobCount, err error) {
 	ctx, span := tracing.Start(ctx, "job.store.GetJobsAddedByDay")
 	defer tracing.End(span, &err)
-	err = s.db.WithContext(ctx).Model(&jobmodel.Job{}).
+	if err = s.db.WithContext(ctx).Model(&jobmodel.Job{}).
 		Select("DATE(added_at) as date, COUNT(*) as count").
 		Where("added_at >= NOW() - ? * INTERVAL '1 day'", days).
 		Group("DATE(added_at)").
 		Order("date ASC").
-		Scan(&results).Error
-	return results, err
+		Scan(&results).Error; err != nil {
+		return nil, fmt.Errorf("job.store.GetJobsAddedByDay: %w", err)
+	}
+	return results, nil
 }
 
 // CountAll returns the total number of rows in the jobs table.
@@ -381,7 +386,7 @@ func (s *jobStore) CountAll(ctx context.Context) (_ int64, err error) {
 	defer tracing.End(span, &err)
 	var n int64
 	if err = s.db.WithContext(ctx).Model(&jobmodel.Job{}).Count(&n).Error; err != nil {
-		return 0, err
+		return 0, fmt.Errorf("job.store.CountAll: %w", err)
 	}
 	return n, nil
 }
@@ -398,7 +403,7 @@ func (s *jobStore) GetDistinctCompanyNames(ctx context.Context) (_ []string, err
 		Distinct("companies.name").
 		Order("companies.name").
 		Pluck("companies.name", &names).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("job.store.GetDistinctCompanyNames: %w", err)
 	}
 	return names, nil
 }

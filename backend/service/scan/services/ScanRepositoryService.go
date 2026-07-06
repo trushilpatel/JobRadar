@@ -362,26 +362,6 @@ func NewRepositoryService(queue ScanQueueStore, scanLog ScanLogReader, cfg Confi
 	return &repositoryService{queue: queue, scanLog: scanLog, config: cfg, db: db, atsSvc: atsSvc}
 }
 
-func (s *repositoryService) EnqueueDue(ctx context.Context, intervalMinutes int) (_ SchedulerCycleResult, err error) {
-	ctx, span := tracing.Start(ctx, "scan.repository.EnqueueDue")
-	defer tracing.End(span, &err)
-	res, err := s.queue.EnqueueDue(ctx, intervalMinutes, scancommon.QueueSourceScheduler)
-	if err != nil {
-		return SchedulerCycleResult{}, errors.ErrInternal.WithMessage("failed to enqueue due companies")
-	}
-	return SchedulerCycleResult(res), nil
-}
-
-func (s *repositoryService) ResetStuck(ctx context.Context, staleDur time.Duration) (_ int, err error) {
-	ctx, span := tracing.Start(ctx, "scan.repository.ResetStuck")
-	defer tracing.End(span, &err)
-	n, err := s.queue.ResetStuck(ctx, staleDur)
-	if err != nil {
-		return 0, errors.ErrInternal.WithMessage("failed to reset stuck queue entries")
-	}
-	return n, nil
-}
-
 // TriggerScan enqueues a manual scan by company ID. No existence check — that's ImplService's job.
 func (s *repositoryService) TriggerScan(ctx context.Context, companyID string) (err error) {
 	ctx, span := tracing.Start(ctx, "scan.repository.TriggerScan")
@@ -433,16 +413,6 @@ func (s *repositoryService) ListQueue(ctx context.Context, filter dto.QueueFilte
 		})
 	}
 	return views, nil
-}
-
-func (s *repositoryService) PurgeInactive(ctx context.Context) (_ int, err error) {
-	ctx, span := tracing.Start(ctx, "scan.repository.PurgeInactive")
-	defer tracing.End(span, &err)
-	n, err := s.queue.PurgeInactive(ctx)
-	if err != nil {
-		return 0, errors.ErrInternal.WithMessage("failed to purge inactive queue entries")
-	}
-	return n, nil
 }
 
 func (s *repositoryService) RemoveFromQueue(ctx context.Context, entryID string) (err error) {
@@ -498,49 +468,6 @@ func (s *repositoryService) GetEffectiveScanConfig(ctx context.Context, companyI
 		ScanIntervalMinutesOverride:  settings.ScanIntervalOverride,
 		InterCompanyDelayS:           ats.InterCompanyDelayS,
 	}, nil
-}
-
-// RetryDueJobs is a no-op on the repository service. The sweeper is implemented
-// directly on schedulerService, which never routes through the REST decorator
-// chain. This satisfies the Service interface so the REST + validation
-// decorators compile without adding sweeper logic to the HTTP path.
-func (s *repositoryService) RetryDueJobs(_ context.Context) error {
-	return nil
-}
-
-// EscalateStuckRetryJobs is a no-op on the repository service for the same
-// reason as RetryDueJobs — the scheduler-only sweeper path is never wired
-// through the REST decorator chain.
-func (s *repositoryService) EscalateStuckRetryJobs(_ context.Context) (int64, error) {
-	return 0, nil
-}
-
-// ReclaimStuckFetchRows is a no-op on the repository service for the same
-// reason as RetryDueJobs/EscalateStuckRetryJobs — the scheduler-only reclaimer
-// path is never wired through the REST decorator chain.
-func (s *repositoryService) ReclaimStuckFetchRows(_ context.Context) (int64, error) {
-	return 0, nil
-}
-
-// ReclaimStuckFilteredRows is a no-op on the repository service for the same
-// reason as ReclaimStuckFetchRows — the scheduler-only reclaimer path is never
-// wired through the REST decorator chain.
-func (s *repositoryService) ReclaimStuckFilteredRows(_ context.Context) (int64, error) {
-	return 0, nil
-}
-
-// AutoPauseChronicFailures is a no-op on the repository service for the same
-// reason as the other scheduler-only sweeps — the auto-pause path is never
-// wired through the REST decorator chain.
-func (s *repositoryService) AutoPauseChronicFailures(_ context.Context) (int, error) {
-	return 0, nil
-}
-
-// RefreshGaugeMetrics is a no-op on the repository service for the same
-// reason as the other scheduler-only sweeps — the gauge-refresh path is
-// never wired through the REST decorator chain.
-func (s *repositoryService) RefreshGaugeMetrics(_ context.Context) error {
-	return nil
 }
 
 func (s *repositoryService) UpdateScanIntervalOverride(ctx context.Context, companyID string, override *int) (err error) {

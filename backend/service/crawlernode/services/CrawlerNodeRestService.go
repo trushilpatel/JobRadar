@@ -1,13 +1,11 @@
 package services
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/apps/orchestrator/nodeidentity"
-	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/crawlernode/dto"
 )
 
@@ -44,9 +42,8 @@ func (h *NodeRestService) GetWork(w http.ResponseWriter, r *http.Request) {
 
 // SubmitResults handles POST /node/results
 func (h *NodeRestService) SubmitResults(w http.ResponseWriter, r *http.Request) {
-	var req dto.ResultsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		handler.HandleError(w, domainerrs.ErrBadRequest.WithMessage("invalid request body: "+err.Error()))
+	req, ok := handler.DecodeBody[dto.ResultsRequest](w, r)
+	if !ok {
 		return
 	}
 
@@ -61,9 +58,8 @@ func (h *NodeRestService) SubmitResults(w http.ResponseWriter, r *http.Request) 
 
 // ReportError handles POST /node/error
 func (h *NodeRestService) ReportError(w http.ResponseWriter, r *http.Request) {
-	var req dto.ErrorRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		handler.HandleError(w, domainerrs.ErrBadRequest.WithMessage("invalid request body: "+err.Error()))
+	req, ok := handler.DecodeBody[dto.ErrorRequest](w, r)
+	if !ok {
 		return
 	}
 

@@ -15,7 +15,7 @@ Shared:
   ScanSettingsRepositoryService  (implements ScanSettingsRepository — used by both chains and background workers)
 ```
 
-Both chains share the same `*cache.Cache` instance. The admin `ImplService` invalidates `company:public:{id}` after every mutation so public readers never see stale data.
+`CompanyCacheService.go` (public chain) and the admin `ImplService`'s invalidation logic exist and are unit-tested, but **neither is wired in production**: `apps/api/wire_gen.go` builds `companyImplService` directly from `RepositoryService` with no cache decorator, and passes `nil` for the admin chain's `cache.Cache` argument — every `if s.cache != nil` invalidation guard is a no-op today. `InitializeApp` has no `cache.Cache` input at all, so there is currently no path that wires a real cache into either chain. Re-enabling this is a deliberate perf decision, not a doc fix — see `docs/tech-debt/2026-07-05-backend-service-boilerplate-debt.md`.
 
 ## Interfaces
 

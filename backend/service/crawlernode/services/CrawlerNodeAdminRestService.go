@@ -1,12 +1,10 @@
 package services
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/apps/api/handler"
-	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 )
 
 // AdminRestService is the HTTP adapter for admin-facing crawler-node endpoints.
@@ -43,9 +41,8 @@ func (h *AdminRestService) ListNodes(w http.ResponseWriter, r *http.Request) {
 
 // ProvisionNode handles POST /admin/crawler-nodes
 func (h *AdminRestService) ProvisionNode(w http.ResponseWriter, r *http.Request) {
-	var req provisionNodeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		handler.HandleError(w, domainerrs.ErrBadRequest.WithMessage("invalid request body: "+err.Error()))
+	req, ok := handler.DecodeBody[provisionNodeRequest](w, r)
+	if !ok {
 		return
 	}
 	resp, err := h.next.ProvisionNode(r.Context(), req.Name)
@@ -59,9 +56,8 @@ func (h *AdminRestService) ProvisionNode(w http.ResponseWriter, r *http.Request)
 // SetNodeStatus handles PATCH /admin/crawler-nodes/{id}
 func (h *AdminRestService) SetNodeStatus(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var req setNodeStatusRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		handler.HandleError(w, domainerrs.ErrBadRequest.WithMessage("invalid request body: "+err.Error()))
+	req, ok := handler.DecodeBody[setNodeStatusRequest](w, r)
+	if !ok {
 		return
 	}
 	if err := h.next.SetNodeStatus(r.Context(), id, req.Status); err != nil {

@@ -1,11 +1,11 @@
 // Package ats is the feature-slice root for the ats domain. The wire
 // provider set here composes the decorator chain in the canonical order:
 //
-//	Repository → Impl → Cache → Validation → Rest → RestRouter
+//	RestRouter → RestService → Validation → Cache → Impl → Repository
 //
-// Wire builds the chain right-to-left from the constructor signatures.
-// Each constructor returns the same AtsService interface so composition
-// is straightforward.
+// Wire builds the chain from the constructor signatures regardless of
+// listed order. Each constructor returns the same AtsService interface so
+// composition is straightforward.
 package ats
 
 import (
@@ -15,10 +15,10 @@ import (
 
 // ProviderSet is the Wire provider set for the ats domain.
 var ProviderSet = wire.NewSet(
-	services.NewAtsRepositoryService,
-	services.NewAtsImplService,
-	services.NewAtsCacheService,
-	services.NewAtsValidationService,
-	services.NewAtsRestService,
-	services.NewAtsRestRouter,
+	services.NewRestRouter,
+	services.NewRestService,
+	services.NewValidationService,
+	services.NewCacheService,
+	services.NewImplService,
+	services.NewRepositoryService,
 )

@@ -39,13 +39,13 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	scanSettingsRepository := services.NewScanSettingsRepositoryService(db)
 	// ── ATS (built first — company admin validator depends on it) ────────────
 	atsStore := atssvc.NewAtsStore(db)
-	atsRepositoryService := atssvc.NewAtsRepositoryService(atsStore)
-	atsImplService := atssvc.NewAtsImplService(atsRepositoryService)
+	atsRepositoryService := atssvc.NewRepositoryService(atsStore)
+	atsImplService := atssvc.NewImplService(atsRepositoryService)
 	atsMemoryCache := cache.NewMemoryCache()
-	atsCacheService := atssvc.NewAtsCacheService(atsImplService, atsMemoryCache, 5*time.Minute)
-	atsValidationService := atssvc.NewAtsValidationService(atsCacheService)
-	atsRestService := atssvc.NewAtsRestService(atsValidationService)
-	atsRestRouter := atssvc.NewAtsRestRouter(atsRestService)
+	atsCacheService := atssvc.NewCacheService(atsImplService, atsMemoryCache, 5*time.Minute)
+	atsValidationService := atssvc.NewValidationService(atsCacheService)
+	atsRestService := atssvc.NewRestService(atsValidationService)
+	atsRestRouter := atssvc.NewRestRouter(atsRestService)
 
 	scanLogStoreForCompany := services2.NewLogStore(db)
 	scanHistoryReader := provideScanHistoryReader(scanLogStoreForCompany)
@@ -83,11 +83,11 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	jobHandler := jobsvc.NewRestRouter(jobRestService)
 
 	// ── Application ──────────────────────────────────────────────────────────
-	applicationRepositoryService := services3.NewApplicationRepositoryService(db)
-	applicationImplService := services3.NewApplicationImplService(applicationRepositoryService, jobImplService)
-	applicationValidationService := services3.NewApplicationValidationService(applicationImplService)
-	applicationRestService := services3.NewApplicationRestService(applicationValidationService)
-	applicationRestRouter := services3.NewApplicationRestRouter(applicationRestService)
+	applicationRepositoryService := services3.NewRepositoryService(db)
+	applicationImplService := services3.NewImplService(applicationRepositoryService, jobImplService)
+	applicationValidationService := services3.NewValidationService(applicationImplService)
+	applicationRestService := services3.NewRestService(applicationValidationService)
+	applicationRestRouter := services3.NewRestRouter(applicationRestService)
 
 	// ── Resume ───────────────────────────────────────────────────────────────
 	objectStorage, err := provideObjectStorage(cfg)
@@ -102,11 +102,11 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 
 	// ── Pipeline ─────────────────────────────────────────────────────────────
 	pipelineStore := pipelinesvc.NewPipelineStore(db)
-	pipelineRepositoryService := pipelinesvc.NewPipelineRepositoryService(pipelineStore)
-	pipelineImplService := pipelinesvc.NewPipelineImplService(pipelineRepositoryService)
-	pipelineValidationService := pipelinesvc.NewPipelineValidationService(pipelineImplService)
-	pipelineRestService := pipelinesvc.NewPipelineRestService(pipelineValidationService)
-	pipelineRestRouter := pipelinesvc.NewPipelineRestRouter(pipelineRestService)
+	pipelineRepositoryService := pipelinesvc.NewRepositoryService(pipelineStore)
+	pipelineImplService := pipelinesvc.NewImplService(pipelineRepositoryService)
+	pipelineValidationService := pipelinesvc.NewValidationService(pipelineImplService)
+	pipelineRestService := pipelinesvc.NewRestService(pipelineValidationService)
+	pipelineRestRouter := pipelinesvc.NewRestRouter(pipelineRestService)
 
 	// ── Apply Queue ──────────────────────────────────────────────────────────
 	applyQueueRepositoryService := services5.NewRepositoryService(db)

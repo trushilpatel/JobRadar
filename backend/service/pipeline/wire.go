@@ -2,11 +2,11 @@
 // wire provider set here composes the decorator chain in the canonical
 // order:
 //
-//	Repository → Impl → Validation → Rest → RestRouter
+//	RestRouter → RestService → Validation → Impl → Repository
 //
-// Wire builds the chain right-to-left from the constructor signatures. Each
-// constructor returns the same PipelineService interface so composition is
-// straightforward.
+// Wire builds the chain from the constructor signatures regardless of listed
+// order. Each constructor returns the same PipelineService interface so
+// composition is straightforward.
 //
 // NOTE: apps/api/wire.go's wire.Build graph currently fails to regenerate
 // (pre-existing multiple-bindings conflicts across company/scan/job/
@@ -22,10 +22,10 @@ import (
 
 // ProviderSet is the Wire provider set for the pipeline domain.
 var ProviderSet = wire.NewSet(
+	services.NewRestRouter,
+	services.NewRestService,
+	services.NewValidationService,
+	services.NewImplService,
+	services.NewRepositoryService,
 	services.NewPipelineStore,
-	services.NewPipelineRepositoryService,
-	services.NewPipelineImplService,
-	services.NewPipelineValidationService,
-	services.NewPipelineRestService,
-	services.NewPipelineRestRouter,
 )

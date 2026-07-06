@@ -15,7 +15,7 @@ func TestPipelineImplService_PassesThroughGetStats(t *testing.T) {
 	t.Parallel()
 	want := pipelinedto.PipelineStats{TotalCompanies: 7}
 	next := &recordingPipelineNext{statsResult: want}
-	svc := pipelinesvc.NewPipelineImplService(next)
+	svc := pipelinesvc.NewImplService(next)
 
 	got, err := svc.GetStats(context.Background())
 	if err != nil {
@@ -34,7 +34,7 @@ func TestPipelineImplService_PassesThroughGetStats(t *testing.T) {
 func TestPipelineImplService_PassesThroughTriggerRetry(t *testing.T) {
 	t.Parallel()
 	next := &recordingPipelineNext{retryResult: pipelinedto.TriggerRetryResult{Drained: 0}}
-	svc := pipelinesvc.NewPipelineImplService(next)
+	svc := pipelinesvc.NewImplService(next)
 
 	got, err := svc.TriggerRetry(context.Background(), pipelinedto.TriggerRetryInput{Worker: "enricher", Tier: "dlq"})
 	if err != nil {
@@ -53,7 +53,7 @@ func TestPipelineImplService_PropagatesErrors(t *testing.T) {
 	t.Parallel()
 	wantErr := errors.New("next error")
 	next := &recordingPipelineNext{statsErr: wantErr, retryErr: wantErr}
-	svc := pipelinesvc.NewPipelineImplService(next)
+	svc := pipelinesvc.NewImplService(next)
 	ctx := context.Background()
 
 	if _, err := svc.GetStats(ctx); !errors.Is(err, wantErr) {

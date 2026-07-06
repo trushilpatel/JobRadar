@@ -118,7 +118,7 @@ func TestPipelineRepo_GetStats_HappyPath(t *testing.T) {
 		recent, stale, // p5 recent error counts, p6 stale error does not
 	)
 
-	svc := pipelinesvc.NewPipelineRepositoryService(pipelinesvc.NewPipelineStore(db))
+	svc := pipelinesvc.NewRepositoryService(pipelinesvc.NewPipelineStore(db))
 	stats, err := svc.GetStats(context.Background())
 	if err != nil {
 		t.Fatalf("GetStats: %v", err)
@@ -142,7 +142,7 @@ func TestPipelineRepo_GetStats_HappyPath(t *testing.T) {
 func TestPipelineRepo_GetStats_EmptyDB(t *testing.T) {
 	t.Parallel()
 	db := newPipelineTestDB(t)
-	svc := pipelinesvc.NewPipelineRepositoryService(pipelinesvc.NewPipelineStore(db))
+	svc := pipelinesvc.NewRepositoryService(pipelinesvc.NewPipelineStore(db))
 	stats, err := svc.GetStats(context.Background())
 	if err != nil {
 		t.Fatalf("GetStats: %v", err)
@@ -154,7 +154,7 @@ func TestPipelineRepo_GetStats_EmptyDB(t *testing.T) {
 
 func TestPipelineRepo_GetStats_DBError(t *testing.T) {
 	t.Parallel()
-	svc := pipelinesvc.NewPipelineRepositoryService(pipelinesvc.NewPipelineStore(closedPipelineDB(t)))
+	svc := pipelinesvc.NewRepositoryService(pipelinesvc.NewPipelineStore(closedPipelineDB(t)))
 	_, err := svc.GetStats(context.Background())
 	if err == nil {
 		t.Fatal("expected error on closed DB")
@@ -170,7 +170,7 @@ func TestPipelineRepo_GetStats_DBError(t *testing.T) {
 func TestPipelineRepo_TriggerRetry_AlwaysNoOp(t *testing.T) {
 	t.Parallel()
 	db := newPipelineTestDB(t)
-	svc := pipelinesvc.NewPipelineRepositoryService(pipelinesvc.NewPipelineStore(db))
+	svc := pipelinesvc.NewRepositoryService(pipelinesvc.NewPipelineStore(db))
 
 	cases := []pipelinedto.TriggerRetryInput{
 		{Worker: "filter", Tier: "1m"},

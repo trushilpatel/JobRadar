@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/trushilpatel/jobradar/apps/api/handler"
@@ -18,10 +17,10 @@ type PipelineRestService struct {
 	next PipelineService
 }
 
-// NewPipelineRestService constructs the HTTP adapter.
-func NewPipelineRestService(next PipelineService) *PipelineRestService {
+// NewRestService constructs the HTTP adapter.
+func NewRestService(next PipelineService) *PipelineRestService {
 	if next == nil {
-		panic("pipeline.NewPipelineRestService: next must not be nil")
+		panic("pipeline.NewRestService: next must not be nil")
 	}
 	return &PipelineRestService{next: next}
 }
@@ -39,9 +38,8 @@ func (h *PipelineRestService) GetStats(w http.ResponseWriter, r *http.Request) {
 // TriggerRetry handles POST /pipeline/retry — validates a (worker, tier)
 // redelivery request.
 func (h *PipelineRestService) TriggerRetry(w http.ResponseWriter, r *http.Request) {
-	var input pipelinedto.TriggerRetryInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+	input, ok := handler.DecodeBody[pipelinedto.TriggerRetryInput](w, r)
+	if !ok {
 		return
 	}
 

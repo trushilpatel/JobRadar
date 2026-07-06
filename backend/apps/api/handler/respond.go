@@ -71,6 +71,24 @@ func RespondNoContent(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// DecodeBody decodes r.Body as JSON into T. On failure (malformed JSON, an
+// empty body, or a body that doesn't match T's shape) it writes a 400
+// BAD_REQUEST response itself and returns the zero value with ok=false —
+// callers just check ok and return:
+//
+//	input, ok := handler.DecodeBody[dto.CreateApplicationInput](w, r)
+//	if !ok {
+//		return
+//	}
+func DecodeBody[T any](w http.ResponseWriter, r *http.Request) (_ T, ok bool) {
+	var body T
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		RespondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return body, false
+	}
+	return body, true
+}
+
 // HandleError inspects err and writes the appropriate error response.
 // ValidationErrors → 400 with field list, *ValidationError → 400 (single field),
 // ServiceError → its Status, anything else → 500.
