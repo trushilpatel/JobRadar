@@ -151,20 +151,20 @@ type updatePublicInput struct {
 	Body companydto.CompanyPublicInput
 }
 
-// idResponse is the response body for a partial-patch endpoint that only
+// companyIDResponse is the response body for a partial-patch endpoint that only
 // echoes back the ID of the row it touched.
-type idResponse struct {
+type companyIDResponse struct {
 	ID string `json:"id"`
 }
 
 // updatePublic handles PATCH /admin/companies/{id}.
-func (h *AdminRestService) updatePublic(ctx context.Context, in *updatePublicInput) (*apihuma.SingleOutput[idResponse], error) {
+func (h *AdminRestService) updatePublic(ctx context.Context, in *updatePublicInput) (*apihuma.SingleOutput[companyIDResponse], error) {
 	if err := h.next.UpdatePublic(ctx, in.ID, in.Body); err != nil {
 		return nil, apihuma.MapError(err)
 	}
 
-	out := &apihuma.SingleOutput[idResponse]{}
-	out.Body = response.Response[idResponse]{Data: idResponse{ID: in.ID}}
+	out := &apihuma.SingleOutput[companyIDResponse]{}
+	out.Body = response.Response[companyIDResponse]{Data: companyIDResponse{ID: in.ID}}
 	return out, nil
 }
 
@@ -175,13 +175,13 @@ type updateScanSettingsInput struct {
 }
 
 // updateScanSettings handles PATCH /admin/companies/{id}/scan-settings.
-func (h *AdminRestService) updateScanSettings(ctx context.Context, in *updateScanSettingsInput) (*apihuma.SingleOutput[idResponse], error) {
+func (h *AdminRestService) updateScanSettings(ctx context.Context, in *updateScanSettingsInput) (*apihuma.SingleOutput[companyIDResponse], error) {
 	if err := h.next.UpdateScanSettings(ctx, in.ID, in.Body); err != nil {
 		return nil, apihuma.MapError(err)
 	}
 
-	out := &apihuma.SingleOutput[idResponse]{}
-	out.Body = response.Response[idResponse]{Data: idResponse{ID: in.ID}}
+	out := &apihuma.SingleOutput[companyIDResponse]{}
+	out.Body = response.Response[companyIDResponse]{Data: companyIDResponse{ID: in.ID}}
 	return out, nil
 }
 

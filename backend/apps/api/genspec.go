@@ -84,7 +84,7 @@ func buildSpecYAML() ([]byte, error) {
 	noopLimiter := ratelimit.NewMemoryLimiter(genspecRateLimitBurst, genspecRateLimitRefillPerSec)
 	clerkClient, _ := clerkadmin.NewRESTClient(genspecClerkAPIBaseURLPlaceholder, "", nil)
 	mu := buildMultiUser(db, &config.Config{}, noopCache, noopLimiter, clerkClient, logger.NewNoop(),
-		app.CompanyAdminHandler(), app.AtsHandler(), app.PipelineHandler(), apiZoneCfg)
+		app.CompanyAdminHandler(), app.AtsHandler(), app.PipelineHandler(), apiZoneCfg, adminZoneCfg)
 
 	// Register every /api-zone RestRouter directly — no middleware, no
 	// listener. Huma-migrated routers populate apiZoneCfg.OpenAPI as a side
