@@ -8,17 +8,38 @@ import { ResumePickerCell, type ApplyQueueResumeOption } from './ResumePickerCel
 
 export type { ApplyQueueResumeOption }
 
+export interface EffectiveResume {
+  id: string
+  label: string
+}
+
 export interface ApplyQueueColumnActions {
   resumeOptions: ApplyQueueResumeOption[]
   onResumeChange: (jobId: string, resumeId: string | null) => void
   /** True while a resume-attach mutation for this job is in flight — disables its picker. */
   isResumeUpdatePending?: (jobId: string) => boolean
+  /**
+   * Resolves the resume actually shown as selected for a row — the user's
+   * explicit attachment when one exists, otherwise the best client-side
+   * auto-pick, otherwise null. Computed at the page layer (see
+   * pages/apply-queue/useApplyQueueResumeMatch.ts) since it needs both this
+   * feature's items and the resumes feature's data.
+   */
+  getEffectiveResume: (jobId: string) => EffectiveResume | null
+  /** One-line "N/M matched" summary for the row's effective resume, or null when none is selected or the job has no keywords. */
+  getMatchSummary: (jobId: string) => string | null
 }
 
 export function buildApplyQueueColumns(
   actions: ApplyQueueColumnActions
 ): ColumnDef<ApplyQueueItem, unknown>[] {
-  const { resumeOptions, onResumeChange, isResumeUpdatePending } = actions
+  const {
+    resumeOptions,
+    onResumeChange,
+    isResumeUpdatePending,
+    getEffectiveResume,
+    getMatchSummary,
+  } = actions
 
   return [
     // ── 1. Job (title, linked to posting + company) ────────────────────────
@@ -106,27 +127,39 @@ export function buildApplyQueueColumns(
     // ── 6. Resume picker ───────────────────────────────────────────────────
     {
       id: 'resume',
-      size: 240,
+      size: 220,
       enableSorting: false,
       header: () => <span className="text-muted">Resume</span>,
       cell: ({ row }) => {
         const item = row.original
-        // Marks the option matching this row's keyword-match recommendation
-        // (issue #264) — computed per row since the recommendation differs
-        // per job, unlike the shared resumeOptions list itself.
-        const options = resumeOptions.map((opt) => ({
-          ...opt,
-          recommended: opt.id === item.recommended_resume_id,
-        }))
+        const effective = getEffectiveResume(item.job_id)
         return (
           <ResumePickerCell
             jobId={item.job_id}
-            resumeId={item.resume_id}
-            resumeLabel={item.resume_label}
-            options={options}
+            resumeId={effective?.id ?? null}
+            resumeLabel={effective?.label ?? null}
+            options={resumeOptions}
             onChange={onResumeChange}
             disabled={isResumeUpdatePending?.(item.job_id) ?? false}
           />
+        )
+      },
+    },
+
+    // ── 7. Match ─────────────────────────────────────────────────────────────
+    // One-line "N/M matched" summary against the effective resume — only
+    // meaningful once a resume is selected (auto-picked or user-chosen).
+    {
+      id: 'match',
+      size: 110,
+      enableSorting: false,
+      header: () => <span className="text-muted">Match</span>,
+      cell: ({ row }) => {
+        const summary = getMatchSummary(row.original.job_id)
+        return summary ? (
+          <span className="text-[12.5px] font-mono text-secondary">{summary}</span>
+        ) : (
+          <span className="text-[12.5px] text-placeholder">—</span>
         )
       },
     },

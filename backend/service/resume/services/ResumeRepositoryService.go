@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +13,6 @@ import (
 	resumecommon "github.com/trushilpatel/jobradar/service/resume/common"
 	"github.com/trushilpatel/jobradar/service/resume/dto"
 	resumemodel "github.com/trushilpatel/jobradar/service/resume/models"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -98,6 +96,7 @@ func (r *repositoryService) Upload(ctx context.Context, userID string, input dto
 		ContentType:      input.ContentType,
 		SizeBytes:        input.DeclaredSize,
 		CreatedAt:        time.Now().UTC(),
+		ExtractedText:    input.ExtractedText,
 	}
 
 	txErr := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -172,58 +171,4 @@ func (r *repositoryService) Download(_ context.Context, _, _ string) (io.ReadClo
 	return nil, nil, domainerrs.ErrInternal.WithMessage("resume repo: download not supported at repository layer")
 }
 
-// ExtractKeywords is unreachable in the real chain: ImplService overrides it
-// and never delegates further down (text extraction + the LLM call do not
-// belong in the GORM-only repository layer — see NewKeywordStore for the
-// narrow interface ImplService actually uses to persist the result).
-// Implemented only so repositoryService satisfies Service completely.
-func (r *repositoryService) ExtractKeywords(_ context.Context, _, _ string) (*resumemodel.Resume, error) {
-	return nil, domainerrs.ErrInternal.WithMessage("resume repo: extract keywords not supported at repository layer")
-}
-
-// NewKeywordStore constructs the KeywordStore implementation used by
-// ImplService to persist extraction results, backed by the same stateless
-// repositoryService struct as NewRepositoryService — see ResumeService.go
-// for why this is a separate constructor/interface rather than a Service method.
-func NewKeywordStore(db *gorm.DB) KeywordStore {
-	return &repositoryService{db: db}
-}
-
-// UpdateKeywords overwrites the keywords column for id with the marshalled
-// keywords slice. A nil/empty slice marshals to "[]" (never SQL NULL or the
-// JSON literal "null") so the column always holds a valid JSON array,
-// matching the migration 089 NOT NULL DEFAULT '[]'::jsonb constraint.
-func (r *repositoryService) UpdateKeywords(ctx context.Context, id string, keywords []string) (err error) {
-	ctx, span := tracing.Start(ctx, "resume.repo.UpdateKeywords")
-	defer tracing.End(span, &err)
-
-	raw, marshalErr := marshalKeywords(keywords)
-	if marshalErr != nil {
-		return domainerrs.ErrInternal.WithMessage("resume repo: marshal keywords: " + marshalErr.Error())
-	}
-
-	res := r.db.WithContext(ctx).Model(&resumemodel.Resume{}).
-		Where("id = ?", id).
-		Update("keywords", datatypes.JSON(raw))
-	if res.Error != nil {
-		return domainerrs.ErrInternal.WithMessage("resume repo: update keywords: " + res.Error.Error())
-	}
-	if res.RowsAffected == 0 {
-		return domainerrs.ErrNotFound.WithMessage("resume not found")
-	}
-	return nil
-}
-
-// marshalKeywords renders keywords as a JSON array, normalizing a nil/empty
-// slice to the literal "[]" rather than json.Marshal's "null" — the keywords
-// column is NOT NULL and every reader (frontend zod schema, this domain's
-// own Resume.Keywords) expects an array, never a JSON null.
-func marshalKeywords(keywords []string) ([]byte, error) {
-	if len(keywords) == 0 {
-		return []byte("[]"), nil
-	}
-	return json.Marshal(keywords)
-}
-
 var _ Service = (*repositoryService)(nil)
-var _ KeywordStore = (*repositoryService)(nil)

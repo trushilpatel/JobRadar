@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,7 +13,6 @@ import (
 	"google.golang.org/genai"
 
 	llmerr "github.com/trushilpatel/jobradar/common/errors"
-	llmcommon "github.com/trushilpatel/jobradar/service/llm/common"
 	"github.com/trushilpatel/jobradar/service/llm/dto"
 )
 
@@ -297,96 +295,6 @@ func TestGemini_EnrichBatch_RejectsUnparseableJSON(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "gemini enrich batch: parse response") {
 		t.Fatalf("error should mention parse response, got %v", err)
-	}
-}
-
-// ─── ExtractResumeKeywords ───────────────────────────────────────────────────
-
-func TestGemini_ExtractResumeKeywords_EmptyTextReturnsValidationError(t *testing.T) {
-	s := newTestGeminiScorer(t, "http://127.0.0.1:0", "m1", []string{"SWE"}, 3)
-	_, err := s.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "   "})
-	if !errors.Is(err, llmerr.ErrLLMValidation) {
-		t.Fatalf("expected ErrLLMValidation for blank resume text, got %v", err)
-	}
-}
-
-func TestGemini_ExtractResumeKeywords_HappyPath(t *testing.T) {
-	var seenPath atomic.Value
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seenPath.Store(r.URL.Path)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(mldevResponse(`["Go","PostgreSQL"]`)))
-	}))
-	defer ts.Close()
-
-	s := newTestGeminiScorer(t, ts.URL, "gemma-4-31b-it", []string{"SWE"}, 3)
-	out, err := s.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "Experienced with Go and PostgreSQL."})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(out.Keywords) != 2 || out.Keywords[0] != "Go" || out.Keywords[1] != "PostgreSQL" {
-		t.Fatalf("unexpected output: %+v", out)
-	}
-	if p, ok := seenPath.Load().(string); !ok || !strings.Contains(p, "gemma-4-31b-it:generateContent") {
-		t.Fatalf("expected request path to contain model + :generateContent, got %v", p)
-	}
-}
-
-func TestGemini_ExtractResumeKeywords_TruncatesOversizedText(t *testing.T) {
-	var capturedBody atomic.Value
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		capturedBody.Store(string(body))
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(mldevResponse(`[]`)))
-	}))
-	defer ts.Close()
-
-	oversized := strings.Repeat("a", llmcommon.ResumeKeywordMaxTextChars+500)
-	s := newTestGeminiScorer(t, ts.URL, "m1", []string{"SWE"}, 3)
-	_, err := s.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: oversized})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	body, _ := capturedBody.Load().(string)
-	truncated := strings.Repeat("a", llmcommon.ResumeKeywordMaxTextChars)
-	if !strings.Contains(body, truncated) {
-		t.Fatal("expected request body to contain the truncated (not full) resume text")
-	}
-	if strings.Contains(body, oversized) {
-		t.Fatal("expected oversized resume text to be truncated before being sent")
-	}
-}
-
-func TestGemini_ExtractResumeKeywords_RejectsUnparseableJSON(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(mldevResponse(`not json at all`)))
-	}))
-	defer ts.Close()
-
-	s := newTestGeminiScorer(t, ts.URL, "m1", []string{"SWE"}, 3)
-	_, err := s.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "Go, PostgreSQL"})
-	if err == nil {
-		t.Fatal("expected JSON parse error")
-	}
-	if !strings.Contains(err.Error(), "gemini extract resume keywords: parse response") {
-		t.Fatalf("error should mention parse response, got %v", err)
-	}
-}
-
-func TestGemini_ExtractResumeKeywords_Maps429ToSentinel(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusTooManyRequests)
-		_, _ = w.Write([]byte(`{"error":{"code":429,"message":"rl","status":"RESOURCE_EXHAUSTED"}}`))
-	}))
-	defer ts.Close()
-
-	s := newTestGeminiScorer(t, ts.URL, "m1", []string{"SWE"}, 3)
-	_, err := s.ExtractResumeKeywords(context.Background(), dto.ResumeKeywordInput{Text: "Go, PostgreSQL"})
-	if !errors.Is(err, llmerr.ErrLLMProviderRateLimited) {
-		t.Fatalf("expected ErrLLMProviderRateLimited, got %v", err)
 	}
 }
 

@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"encoding/json"
 	"testing"
 
 	companymodel "github.com/trushilpatel/jobradar/service/company/models"
@@ -48,7 +47,7 @@ func newApplyQueueTestDB(t *testing.T) *gorm.DB {
 			content_type TEXT NOT NULL,
 			size_bytes INTEGER NOT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			keywords TEXT NOT NULL DEFAULT '[]'
+			extracted_text TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE TABLE resume_job_attachments (
 			user_id TEXT NOT NULL,
@@ -129,27 +128,9 @@ func seedResume(t *testing.T, db *gorm.DB, id, userID, label string) {
 	}
 }
 
-// seedResumeWithKeywords inserts a resume row owned by userID with its
-// keywords column pre-populated — used by the resume-recommendation tests in
-// ApplyQueueRepositoryService_test.go. Insert-then-update (rather than
-// setting Resume.Keywords directly on Create) sidesteps datatypes.JSON's
-// GORM scan/value quirks in the same way ResumeKeywordStore.UpdateKeywords
-// does in production.
-func seedResumeWithKeywords(t *testing.T, db *gorm.DB, id, userID, label string, keywords []string) {
-	t.Helper()
-	seedResume(t, db, id, userID, label)
-	raw, err := json.Marshal(keywords)
-	if err != nil {
-		t.Fatalf("marshal keywords for resume %s: %v", id, err)
-	}
-	if err := db.Exec("UPDATE resumes SET keywords = ? WHERE id = ?", string(raw), id).Error; err != nil {
-		t.Fatalf("seed resume keywords %s: %v", id, err)
-	}
-}
-
 // seedTechTags inserts job_tech_tags rows for jobID — the canonical
-// (techtag.Clean-cleaned) tech set the resume-recommendation match reads,
-// as opposed to the uncleaned jobs.tech_stack JSONB column.
+// (techtag.Clean-cleaned) tech set attached to apply-queue items as
+// JobKeywords, as opposed to the uncleaned jobs.tech_stack JSONB column.
 func seedTechTags(t *testing.T, db *gorm.DB, jobID, companyID string, tags ...string) {
 	t.Helper()
 	for _, tag := range tags {

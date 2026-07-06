@@ -21,9 +21,6 @@ const (
 	enrichBatchBaseTokens    = 500
 	enrichBaseTokens         = 50
 	enrichTokensPerCharRatio = 4
-
-	resumeKeywordBaseTokens    = 200
-	resumeKeywordTokensPerChar = 4
 )
 
 // RateLimitSlot describes a single provider/key/model slot's local quota limits.
@@ -83,20 +80,6 @@ func (s *rateLimitService) EnrichBatch(ctx context.Context, inputs []dto.JobPost
 	}
 
 	out, innerErr := s.inner.EnrichBatch(ctx, inputs)
-	if err := s.aftercall(ctx, reqID, innerErr); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (s *rateLimitService) ExtractResumeKeywords(ctx context.Context, input dto.ResumeKeywordInput) (*dto.ResumeKeywordResult, error) {
-	reqID := uuid.NewString()
-	tokens := estimateResumeKeywordTokens(input)
-	if err := s.reserve(ctx, reqID, tokens); err != nil {
-		return nil, err
-	}
-
-	out, innerErr := s.inner.ExtractResumeKeywords(ctx, input)
 	if err := s.aftercall(ctx, reqID, innerErr); err != nil {
 		return nil, err
 	}
@@ -182,11 +165,4 @@ func estimateEnrichBatchTokens(inputs []dto.JobPostEnrichInput) int {
 		total += enrichBaseTokens + len(in.RawText)/enrichTokensPerCharRatio
 	}
 	return total
-}
-
-// estimateResumeKeywordTokens returns a coarse input-token estimate for a
-// single resume-keyword extraction call, following the same base +
-// chars/4 discipline as estimateEnrichBatchTokens.
-func estimateResumeKeywordTokens(input dto.ResumeKeywordInput) int {
-	return resumeKeywordBaseTokens + len(input.Text)/resumeKeywordTokensPerChar
 }

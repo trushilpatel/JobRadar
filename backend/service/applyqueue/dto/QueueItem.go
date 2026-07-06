@@ -23,13 +23,13 @@ import (
 // JSON field names for Title/URL are job_title/job_url (not the bare
 // title/url used elsewhere, e.g. dto.JobView) — matches the already-shipped
 // frontend contract in frontend/src/features/apply-queue/api/apply-queue.api.ts.
-// RecommendedResumeID/RecommendedResumeLabel identify the caller's best
-// keyword-match resume for this job (issue #264), computed on-read as the
-// Jaccard similarity between the job's canonical job_tech_tags and each
-// resume's extracted keywords — the highest-scoring resume with score > 0,
-// or both fields nil when no resume scores above zero (no recommendation is
-// better than a meaningless one; a resume with empty keywords — extraction
-// never ran or failed — is simply never a candidate).
+//
+// JobKeywords is the job's canonical (techtag.Clean-cleaned) job_tech_tags,
+// attached on-read per page (see loadJobTechTags in
+// ApplyQueueRepositoryService.go) — plain data, no scoring. The frontend
+// computes any resume-match against it client-side (see
+// docs/superpowers/specs/2026-07-05-resume-job-keyword-match-design.md);
+// the backend no longer recommends a resume.
 //
 // Location/Remote/SalaryRange/AddedAt are a verbatim pass-through of
 // jobmodel.Job's fields of the same name — same JSON tags, same Go types —
@@ -39,19 +39,18 @@ import (
 // level (a job may have no parsed location or salary) and surface as nil /
 // JSON null respectively rather than panicking or omitting the field.
 type QueueItem struct {
-	JobID                  string         `json:"job_id"`
-	Title                  string         `json:"job_title"`
-	Company                string         `json:"company"`
-	URL                    string         `json:"job_url"`
-	Status                 string         `json:"status"`
-	ResumeID               *string        `json:"resume_id"`
-	ResumeLabel            *string        `json:"resume_label"`
-	RecommendedResumeID    *string        `json:"recommended_resume_id"`
-	RecommendedResumeLabel *string        `json:"recommended_resume_label"`
-	Location               *string        `json:"location"`
-	Remote                 bool           `json:"remote"`
-	SalaryRange            datatypes.JSON `json:"salary_range"`
-	AddedAt                time.Time      `json:"added_at"`
+	JobID       string         `json:"job_id"`
+	Title       string         `json:"job_title"`
+	Company     string         `json:"company"`
+	URL         string         `json:"job_url"`
+	Status      string         `json:"status"`
+	ResumeID    *string        `json:"resume_id"`
+	ResumeLabel *string        `json:"resume_label"`
+	JobKeywords []string       `json:"job_keywords"`
+	Location    *string        `json:"location"`
+	Remote      bool           `json:"remote"`
+	SalaryRange datatypes.JSON `json:"salary_range"`
+	AddedAt     time.Time      `json:"added_at"`
 }
 
 // QueueListResult is the keyset-pagination response shape for

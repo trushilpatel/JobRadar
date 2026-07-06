@@ -111,10 +111,16 @@ func extractDOCX(data []byte) (string, error) {
 	return docxWhitespace.ReplaceAllString(unescaped, " "), nil
 }
 
-// collapseWhitespace normalizes runs of horizontal whitespace to a single
-// space, leaving newlines intact so paragraph structure survives for the
-// LLM prompt while stray double-spaces from tag stripping don't inflate the
-// text unnecessarily.
+// allWhitespace collapses any run of whitespace — spaces, tabs, newlines —
+// into a single space. The sole consumer of ExtractText's output is
+// client-side keyword matching against a job's keywords, which needs one
+// clean string rather than preserved paragraph structure; a stray line break
+// from PDF line-wrapping or DOCX markup must never split a multi-word
+// keyword like "machine learning" across an unmatched newline.
+var allWhitespace = regexp.MustCompile(`\s+`)
+
+// collapseWhitespace normalizes every run of whitespace (including newlines)
+// to a single space.
 func collapseWhitespace(s string) string {
-	return docxWhitespace.ReplaceAllString(s, " ")
+	return allWhitespace.ReplaceAllString(s, " ")
 }

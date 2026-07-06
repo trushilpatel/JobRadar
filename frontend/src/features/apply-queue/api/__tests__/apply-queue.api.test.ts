@@ -13,8 +13,7 @@ const validItem = {
   status: 'saved',
   resume_id: null,
   resume_label: null,
-  recommended_resume_id: null,
-  recommended_resume_label: null,
+  job_keywords: [],
   location: 'New York, NY',
   remote: false,
   salary_range: null,
@@ -60,16 +59,22 @@ describe('apply-queue API', () => {
       expect(page.next_cursor).toBe('next-1')
     })
 
-    it('parses a recommended resume when present', async () => {
-      const recommendedItem = {
+    it('parses job_keywords when present', async () => {
+      const itemWithKeywords = {
         ...validItem,
-        recommended_resume_id: 'resume-9',
-        recommended_resume_label: 'Backend Resume',
+        job_keywords: ['Go', 'PostgreSQL'],
       }
-      vi.mocked(apiClient.get).mockResolvedValue({ items: [recommendedItem], next_cursor: '' })
+      vi.mocked(apiClient.get).mockResolvedValue({ items: [itemWithKeywords], next_cursor: '' })
       const page = await fetchApplyQueue('all')
-      expect(page.items[0]?.recommended_resume_id).toBe('resume-9')
-      expect(page.items[0]?.recommended_resume_label).toBe('Backend Resume')
+      expect(page.items[0]?.job_keywords).toEqual(['Go', 'PostgreSQL'])
+    })
+
+    it('normalizes a missing job_keywords field to an empty array', async () => {
+      const withoutKeywords: Record<string, unknown> = { ...validItem }
+      delete withoutKeywords.job_keywords
+      vi.mocked(apiClient.get).mockResolvedValue({ items: [withoutKeywords], next_cursor: '' })
+      const page = await fetchApplyQueue('all')
+      expect(page.items[0]?.job_keywords).toEqual([])
     })
 
     it('parses location, remote, salary_range, and added_at', async () => {

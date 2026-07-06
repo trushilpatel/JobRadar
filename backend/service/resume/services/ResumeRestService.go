@@ -127,20 +127,3 @@ func (h *RestService) remove(w http.ResponseWriter, r *http.Request) {
 	}
 	handler.RespondNoContent(w)
 }
-
-// extractKeywords serves POST /resumes/{id}/keywords — synchronously
-// re-runs text extraction + LLM keyword extraction for an owned resume and
-// returns the updated row. Used both to retry a failed best-effort
-// extraction and to backfill keywords for resumes uploaded before this
-// feature existed.
-func (h *RestService) extractKeywords(w http.ResponseWriter, r *http.Request) {
-	userID := identity.MustFromContext(r.Context()).UserID
-	id := chi.URLParam(r, "id")
-
-	resume, err := h.next.ExtractKeywords(r.Context(), userID, id)
-	if err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, resume)
-}

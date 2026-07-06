@@ -26,7 +26,7 @@ describe('useResumes', () => {
         content_type: 'application/pdf',
         size_bytes: 10,
         created_at: '2026-07-03T00:00:00Z',
-        keywords: [],
+        extracted_text: '',
       },
     ])
     const { result } = renderHook(() => useResumes(), { wrapper: makeWrapper() })

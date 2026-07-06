@@ -89,42 +89,6 @@ describe('ResumePickerCell', () => {
     expect(onChange).toHaveBeenCalledWith('job-1', null)
   })
 
-  it('shows a Recommended badge next to the matching option', async () => {
-    const user = userEvent.setup()
-    render(
-      <ResumePickerCell
-        jobId="job-1"
-        resumeId={null}
-        resumeLabel={null}
-        options={[
-          { id: 'resume-1', label: 'Software Engineer Resume', recommended: true },
-          { id: 'resume-2', label: 'Backend Resume' },
-        ]}
-        onChange={vi.fn()}
-      />
-    )
-
-    await user.click(screen.getByRole('combobox'))
-    expect(await screen.findByText('Recommended')).toBeInTheDocument()
-  })
-
-  it('shows no Recommended badge when no option is marked recommended', async () => {
-    const user = userEvent.setup()
-    render(
-      <ResumePickerCell
-        jobId="job-1"
-        resumeId={null}
-        resumeLabel={null}
-        options={options}
-        onChange={vi.fn()}
-      />
-    )
-
-    await user.click(screen.getByRole('combobox'))
-    expect(await screen.findByText('Backend Resume')).toBeInTheDocument()
-    expect(screen.queryByText('Recommended')).not.toBeInTheDocument()
-  })
-
   it('disables the trigger when disabled is true', () => {
     render(
       <ResumePickerCell

@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 
-	llmdto "github.com/trushilpatel/jobradar/service/llm/dto"
 	"github.com/trushilpatel/jobradar/service/resume/dto"
 	resumemodel "github.com/trushilpatel/jobradar/service/resume/models"
 )
@@ -20,13 +19,6 @@ type Service interface {
 	// its metadata row (for content-type/filename/size) — the REST layer
 	// streams the reader directly to the client. Callers must Close() it.
 	Download(ctx context.Context, userID, id string) (io.ReadCloser, *resumemodel.Resume, error)
-	// ExtractKeywords re-runs text extraction + LLM keyword extraction for an
-	// existing resume and persists the result, returning the updated row.
-	// Unlike the best-effort background extraction kicked off by Upload,
-	// this is synchronous — the caller explicitly asked for it (first-time
-	// extraction for a pre-feature resume, or a retry after a failed
-	// best-effort attempt) and expects to see the outcome.
-	ExtractKeywords(ctx context.Context, userID, id string) (*resumemodel.Resume, error)
 }
 
 type BaseService struct {
@@ -62,29 +54,4 @@ func (b *BaseService) Delete(ctx context.Context, userID, id string) error {
 
 func (b *BaseService) Download(ctx context.Context, userID, id string) (io.ReadCloser, *resumemodel.Resume, error) {
 	return b.next.Download(ctx, userID, id)
-}
-
-func (b *BaseService) ExtractKeywords(ctx context.Context, userID, id string) (*resumemodel.Resume, error) {
-	return b.next.ExtractKeywords(ctx, userID, id)
-}
-
-// KeywordExtractor is the narrow dependency ImplService needs from the LLM
-// domain — satisfied structurally by service/llm/services.Scorer (which
-// carries this method plus ScoreBatch/EnrichBatch the resume domain never
-// calls). Declaring the narrow interface here, rather than depending on the
-// full Scorer contract, mirrors service/job's ApplicationWriter precedent
-// for a cross-domain dependency.
-type KeywordExtractor interface {
-	ExtractResumeKeywords(ctx context.Context, input llmdto.ResumeKeywordInput) (*llmdto.ResumeKeywordResult, error)
-}
-
-// KeywordStore persists an extraction result. Separate from Service because
-// UpdateKeywords is an internal write invoked only by ImplService's own
-// orchestration (both the post-upload background path and the explicit
-// retry endpoint) — never exposed 1:1 through the public decorator chain the
-// way List/Upload/Rename/Delete/Download are. Implemented by the same
-// repositoryService struct via NewKeywordStore, mirroring
-// service/applyqueue's EngagementChecker/ResumeOwnershipChecker precedent.
-type KeywordStore interface {
-	UpdateKeywords(ctx context.Context, id string, keywords []string) error
 }

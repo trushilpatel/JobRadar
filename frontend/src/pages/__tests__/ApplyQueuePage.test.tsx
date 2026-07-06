@@ -81,8 +81,7 @@ const sampleItem = {
   status: 'saved',
   resume_id: null,
   resume_label: null,
-  recommended_resume_id: null,
-  recommended_resume_label: null,
+  job_keywords: ['Go', 'PostgreSQL'],
   location: 'Austin, TX',
   remote: false,
   salary_range: null,
@@ -97,7 +96,7 @@ const sampleResume = {
   content_type: 'application/pdf' as const,
   size_bytes: 2048,
   created_at: '2026-07-03T00:00:00Z',
-  keywords: [] as string[],
+  extracted_text: 'Backend engineer with Go and PostgreSQL experience.',
 }
 
 const sampleJob: Job = {
@@ -193,26 +192,38 @@ describe('ApplyQueuePage', () => {
     )
   })
 
-  it('shows a Recommended badge on the option matching recommended_resume_id', async () => {
-    const user = userEvent.setup()
+  it('auto-picks the best-matching resume and shows the match summary when none is attached', async () => {
+    fetchApplyQueueMock.mockResolvedValue({ items: [sampleItem], next_cursor: '' })
+    fetchResumesMock.mockResolvedValue([sampleResume])
+    render(<ApplyQueuePage />, { wrapper: makeWrapper() })
+
+    await waitFor(() => expect(screen.getByText('Senior Engineer')).toBeInTheDocument())
+
+    expect(screen.getByText('2/2 matched')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /select resume/i })).toHaveTextContent('My resume')
+  })
+
+  it('shows a placeholder in the match column when no resume matches', async () => {
     fetchApplyQueueMock.mockResolvedValue({
-      items: [
-        { ...sampleItem, recommended_resume_id: 'resume-1', recommended_resume_label: 'My resume' },
-      ],
+      items: [{ ...sampleItem, job_keywords: ['Rust'] }],
       next_cursor: '',
     })
     fetchResumesMock.mockResolvedValue([sampleResume])
     render(<ApplyQueuePage />, { wrapper: makeWrapper() })
 
     await waitFor(() => expect(screen.getByText('Senior Engineer')).toBeInTheDocument())
-
-    await user.click(screen.getByRole('combobox', { name: /select resume/i }))
-    expect(await screen.findByText('Recommended')).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
   })
 
   it('selecting a resume in the picker calls the mutation and invalidates the list', async () => {
     const user = userEvent.setup()
-    fetchApplyQueueMock.mockResolvedValue({ items: [sampleItem], next_cursor: '' })
+    // No job_keywords here — auto-pick must never kick in, so the picker
+    // starts at "No resume selected" and this test exercises a plain manual
+    // selection unaffected by the auto-pick behavior covered separately above.
+    fetchApplyQueueMock.mockResolvedValue({
+      items: [{ ...sampleItem, job_keywords: [] }],
+      next_cursor: '',
+    })
     fetchResumesMock.mockResolvedValue([sampleResume])
     setApplyQueueResumeMock.mockResolvedValue(undefined)
     render(<ApplyQueuePage />, { wrapper: makeWrapper() })

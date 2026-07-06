@@ -12,8 +12,7 @@ const item: ApplyQueueItem = {
   status: 'saved',
   resume_id: null,
   resume_label: null,
-  recommended_resume_id: null,
-  recommended_resume_label: null,
+  job_keywords: [],
   location: null,
   remote: false,
   salary_range: null,
@@ -41,6 +40,8 @@ describe('ApplyQueueTable', () => {
         items={[]}
         loading
         resumeOptions={resumeOptions}
+        getEffectiveResume={() => null}
+        getMatchSummary={() => null}
         onResumeChange={vi.fn()}
         {...basePaginationProps}
       />
@@ -59,6 +60,8 @@ describe('ApplyQueueTable', () => {
         isError
         onRetry={onRetry}
         resumeOptions={resumeOptions}
+        getEffectiveResume={() => null}
+        getMatchSummary={() => null}
         onResumeChange={vi.fn()}
         {...basePaginationProps}
       />
@@ -75,6 +78,8 @@ describe('ApplyQueueTable', () => {
         loading={false}
         emptyMessage="No jobs in your apply queue yet"
         resumeOptions={resumeOptions}
+        getEffectiveResume={() => null}
+        getMatchSummary={() => null}
         onResumeChange={vi.fn()}
         {...basePaginationProps}
       />
@@ -88,6 +93,8 @@ describe('ApplyQueueTable', () => {
         items={[item]}
         loading={false}
         resumeOptions={resumeOptions}
+        getEffectiveResume={() => null}
+        getMatchSummary={() => null}
         onResumeChange={vi.fn()}
         {...basePaginationProps}
       />
@@ -111,6 +118,8 @@ describe('ApplyQueueTable', () => {
         items={[item]}
         loading={false}
         resumeOptions={resumeOptions}
+        getEffectiveResume={() => null}
+        getMatchSummary={() => null}
         onResumeChange={vi.fn()}
         {...basePaginationProps}
         hasNextPage
@@ -128,6 +137,8 @@ describe('ApplyQueueTable', () => {
           items={[item]}
           loading={false}
           resumeOptions={resumeOptions}
+          getEffectiveResume={() => null}
+          getMatchSummary={() => null}
           onResumeChange={vi.fn()}
           {...basePaginationProps}
         />
@@ -145,6 +156,8 @@ describe('ApplyQueueTable', () => {
           items={[item]}
           loading={false}
           resumeOptions={resumeOptions}
+          getEffectiveResume={() => null}
+          getMatchSummary={() => null}
           onResumeChange={vi.fn()}
           onRowClick={onRowClick}
           {...basePaginationProps}
@@ -163,6 +176,8 @@ describe('ApplyQueueTable', () => {
           items={[item]}
           loading={false}
           resumeOptions={resumeOptions}
+          getEffectiveResume={() => null}
+          getMatchSummary={() => null}
           onResumeChange={vi.fn()}
           onRowClick={onRowClick}
           {...basePaginationProps}
@@ -181,6 +196,8 @@ describe('ApplyQueueTable', () => {
           items={[item]}
           loading={false}
           resumeOptions={resumeOptions}
+          getEffectiveResume={() => null}
+          getMatchSummary={() => null}
           onResumeChange={vi.fn()}
           onRowClick={vi.fn()}
           selectedJobId="job-1"

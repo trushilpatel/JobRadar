@@ -14,8 +14,7 @@ const baseItem: ApplyQueueItem = {
   status: 'saved',
   resume_id: null,
   resume_label: null,
-  recommended_resume_id: null,
-  recommended_resume_label: null,
+  job_keywords: [],
   location: null,
   remote: false,
   salary_range: null,
@@ -27,9 +26,11 @@ describe('buildApplyQueueColumns', () => {
     resumeOptions: [{ id: 'resume-1', label: 'Resume One' }],
     onResumeChange: vi.fn(),
     isResumeUpdatePending: vi.fn().mockReturnValue(false),
+    getEffectiveResume: vi.fn().mockReturnValue(null),
+    getMatchSummary: vi.fn().mockReturnValue(null),
   }
 
-  it('builds the job, location, salary, status, posted, and resume columns in order', () => {
+  it('builds the job, location, salary, status, posted, resume, and match columns in order', () => {
     const columns = buildApplyQueueColumns(actions)
     expect(columns.map((c) => c.id)).toEqual([
       'job',
@@ -38,6 +39,7 @@ describe('buildApplyQueueColumns', () => {
       'status',
       'added_at',
       'resume',
+      'match',
     ])
   })
 
@@ -48,6 +50,7 @@ describe('buildApplyQueueColumns', () => {
     expect(byId('salary')?.enableSorting).toBe(false)
     expect(byId('status')?.enableSorting).toBe(false)
     expect(byId('resume')?.enableSorting).toBe(false)
+    expect(byId('match')?.enableSorting).toBe(false)
     expect(byId('added_at')?.enableSorting).not.toBe(false)
   })
 
@@ -119,15 +122,7 @@ describe('buildApplyQueueColumns', () => {
     })
   })
 
-  describe('resume column recommendation wiring', () => {
-    const item: ApplyQueueItem = {
-      ...baseItem,
-      resume_id: null,
-      resume_label: null,
-      recommended_resume_id: 'resume-1',
-      recommended_resume_label: 'Resume One',
-    }
-
+  describe('resume column', () => {
     function TestTable({ data }: { data: ApplyQueueItem[] }) {
       const columns = buildApplyQueueColumns(actions)
       const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() })
@@ -135,19 +130,53 @@ describe('buildApplyQueueColumns', () => {
       return <>{flexRender(resumeCell.column.columnDef.cell, resumeCell.getContext())}</>
     }
 
-    it('marks the option matching recommended_resume_id as recommended', async () => {
+    it('shows the effective resume as selected when getEffectiveResume returns one', async () => {
       const user = userEvent.setup()
-      render(<TestTable data={[item]} />)
+      const localActions = {
+        ...actions,
+        getEffectiveResume: vi.fn().mockReturnValue({ id: 'resume-1', label: 'Resume One' }),
+      }
+      function Table() {
+        const columns = buildApplyQueueColumns(localActions)
+        const table = useReactTable({
+          data: [baseItem],
+          columns,
+          getCoreRowModel: getCoreRowModel(),
+        })
+        const resumeCell = table.getRowModel().rows[0]!.getVisibleCells()[5]!
+        return <>{flexRender(resumeCell.column.columnDef.cell, resumeCell.getContext())}</>
+      }
+      render(<Table />)
+      expect(screen.getByRole('combobox')).toHaveTextContent('Resume One')
       await user.click(screen.getByRole('combobox'))
-      expect(await screen.findByText('Recommended')).toBeInTheDocument()
     })
 
-    it('does not mark any option recommended when recommended_resume_id is null', async () => {
-      const user = userEvent.setup()
-      render(<TestTable data={[{ ...item, recommended_resume_id: null }]} />)
-      await user.click(screen.getByRole('combobox'))
-      expect(await screen.findByText('Resume One')).toBeInTheDocument()
-      expect(screen.queryByText('Recommended')).not.toBeInTheDocument()
+    it('shows "No resume selected" when getEffectiveResume returns null', () => {
+      render(<TestTable data={[baseItem]} />)
+      expect(screen.getByRole('combobox')).toHaveTextContent('No resume selected')
+    })
+  })
+
+  describe('match column', () => {
+    it('renders the match summary for the row', () => {
+      const localActions = { ...actions, getMatchSummary: vi.fn().mockReturnValue('3/5 matched') }
+      const columns = buildApplyQueueColumns(localActions)
+      const matchColumn = columns.find((c) => c.id === 'match')!
+      const cellFn = matchColumn.cell as (
+        ctx: CellContext<ApplyQueueItem, unknown>
+      ) => React.ReactNode
+      render(<>{cellFn(makeContext(baseItem))}</>)
+      expect(screen.getByText('3/5 matched')).toBeInTheDocument()
+    })
+
+    it('renders a placeholder when no match summary is available', () => {
+      const columns = buildApplyQueueColumns(actions)
+      const matchColumn = columns.find((c) => c.id === 'match')!
+      const cellFn = matchColumn.cell as (
+        ctx: CellContext<ApplyQueueItem, unknown>
+      ) => React.ReactNode
+      render(<>{cellFn(makeContext(baseItem))}</>)
+      expect(screen.getByText('—')).toBeInTheDocument()
     })
   })
 })
