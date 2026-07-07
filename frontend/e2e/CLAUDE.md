@@ -1,9 +1,9 @@
 # e2e/ — Playwright end-to-end suite
 
-Full-flow browser tests against the real local dev stack (`make dev` — Vite :5173 +
-Go API :8080). Not wired into CI yet; run manually via `npm run test:e2e`.
+Full-flow browser tests against a live stack (Vite :5173 + Go API :8080). Gated in
+CI on every dev→main PR; run locally via `npm run test:e2e` any time.
 
-## Running
+## Running locally
 
 1. Make sure `make dev` is already running (this suite does not manage it).
 2. `npm run test:e2e` — full suite, Chromium only, both roles.
@@ -12,6 +12,29 @@ Go API :8080). Not wired into CI yet; run manually via `npm run test:e2e`.
 
 Everything runs through `doppler run --config dev --` so `TEST_ROLE_*` credentials and
 `CLERK_SECRET_KEY` are present in `process.env`.
+
+## Running in CI
+
+The `e2e` job in `.github/workflows/ci.yml` runs on every PR/push to `main`: it runs
+migrations, starts the API and Vite dev server as background processes against the
+same shared dev Supabase DB and Clerk instance local runs use, waits for both to
+respond, installs Chromium, then runs `npm run test:e2e`. The job's `concurrency`
+group has no `cancel-in-progress` — a second run queues behind the first instead of
+being cancelled, so two PRs' E2E runs can never write to the shared TEST*ROLE*\*
+accounts at the same time. Playwright's HTML report is uploaded as an artifact on
+every run (`if: always()`) for debugging a CI-only failure.
+
+**Required one-time setup (not something an agent can do — needs a human in the
+Doppler + GitHub UI):** the job needs a `DOPPLER_TOKEN` repo secret to fetch real
+credentials non-interactively.
+
+1. In the Doppler dashboard: `job-radar` project → `dev` config → Access → Service
+   Tokens → create a new **read-only** token scoped to that one config.
+2. Add it as a GitHub Actions secret: `gh secret set DOPPLER_TOKEN` (paste the token
+   when prompted), or via the repo's Settings → Secrets and variables → Actions UI.
+
+Without that secret, the `e2e` job's Doppler-dependent steps fail immediately with
+an auth error — the other CI jobs (lint/test) don't need it and are unaffected.
 
 ## Structure
 

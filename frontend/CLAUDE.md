@@ -179,7 +179,7 @@ npm run test:e2e:ui                     # Playwright's interactive UI mode
 npm run test:e2e:report                 # open the last HTML report
 ```
 
-Not wired into CI yet — run it manually when touching a flow it covers.
+Gated in CI on every dev→main PR (the `e2e` job in `.github/workflows/ci.yml`) — also run it manually when touching a flow it covers, since it's not required on every dev-branch PR.
 
 ### ResizeObserver mock (required for Recharts)
 
