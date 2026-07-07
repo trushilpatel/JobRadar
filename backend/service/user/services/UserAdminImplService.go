@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/platform/cache"
@@ -52,12 +53,19 @@ func (s *adminImplService) SetStatus(ctx context.Context, id string, status stri
 // AdminDelete removes the Clerk auth user first, then the DB row, then evicts
 // any cached identity bundle so in-flight sessions see the deletion on their
 // next request.
+//
+// clerkadmin.ErrUserNotFound (Clerk 404) is tolerated, not fatal: it means
+// the Clerk account is already gone — e.g. a prior delete attempt's Clerk
+// call succeeded but the DB delete step afterward failed, or this delete is
+// simply being retried. Treating it as fatal would permanently orphan the
+// local `users` row with no way to remove it (every retry would 500 the
+// same way, forever, since the Clerk account can never be "deleted" again).
 func (s *adminImplService) AdminDelete(ctx context.Context, id string) error {
 	if id == "" {
 		return domainerrs.ErrBadRequest.WithMessage("user id required")
 	}
 	if s.clerk != nil {
-		if err := s.clerk.DeleteUser(ctx, id); err != nil {
+		if err := s.clerk.DeleteUser(ctx, id); err != nil && !errors.Is(err, clerkadmin.ErrUserNotFound) {
 			return domainerrs.ErrInternal.WithMessage("user admin delete: clerk: " + err.Error())
 		}
 	}

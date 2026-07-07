@@ -13,7 +13,10 @@
     "test:coverage": "vitest run --coverage",
     "test:changed": "vitest run --changed origin/main",
     "test:watch": "vitest",
-    "gen:api-types": "openapi-typescript ../backend/apps/api/openapi.yaml -o src/lib/api/schema.gen.ts"
+    "gen:api-types": "openapi-typescript ../backend/apps/api/openapi.yaml -o src/lib/api/schema.gen.ts",
+    "test:e2e": "doppler run --config dev -- playwright test --config=e2e/playwright.config.ts",
+    "test:e2e:ui": "doppler run --config dev -- playwright test --config=e2e/playwright.config.ts --ui",
+    "test:e2e:report": "playwright show-report playwright-report"
   },
   "dependencies": {
     "@clerk/react": "^6.9.1",
@@ -54,6 +57,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",

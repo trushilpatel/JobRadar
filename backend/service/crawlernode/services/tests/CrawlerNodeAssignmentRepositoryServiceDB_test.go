@@ -135,6 +135,17 @@ const createQueueTableSQL = `
 	)
 `
 
+// createSettingsTableSQL mirrors the columns listClaimCandidates joins
+// against — a minimal projection of company_scan_settings, not the full
+// production schema.
+const createSettingsTableSQL = `
+	CREATE TABLE company_scan_settings (
+		company_id TEXT PRIMARY KEY,
+		active BOOLEAN NOT NULL DEFAULT 1,
+		auto_paused BOOLEAN NOT NULL DEFAULT 0
+	)
+`
+
 // newAssignExecDB returns a real in-memory SQLite DB with a minimal
 // company_scan_queue table and NOW() registered for heartbeat updates.
 func newAssignExecDB(t *testing.T) *gorm.DB {
@@ -146,6 +157,9 @@ func newAssignExecDB(t *testing.T) *gorm.DB {
 	}
 	if err := db.Exec(createQueueTableSQL).Error; err != nil {
 		t.Fatalf("create company_scan_queue: %v", err)
+	}
+	if err := db.Exec(createSettingsTableSQL).Error; err != nil {
+		t.Fatalf("create company_scan_settings: %v", err)
 	}
 	return db
 }
@@ -165,6 +179,9 @@ func newAssignExecDBShared(t *testing.T) *gorm.DB {
 	if err := db.Exec(createQueueTableSQL).Error; err != nil {
 		t.Fatalf("create company_scan_queue: %v", err)
 	}
+	if err := db.Exec(createSettingsTableSQL).Error; err != nil {
+		t.Fatalf("create company_scan_settings: %v", err)
+	}
 	return db
 }
 
@@ -175,15 +192,46 @@ func seedQueueItem(t *testing.T, db *gorm.DB, id, status, lockedBy string) {
 
 // seedQueueItemFull seeds a row with an explicit adapter_type and priority so
 // ORDER BY priority DESC, queued_at ASC is deterministic across rows inserted
-// within the same wall-clock second.
+// within the same wall-clock second. Every row here belongs to company 'co-1'
+// — seedSettingsRow is called idempotently so any number of calls across a
+// test share one active, non-paused settings row for it.
 func seedQueueItemFull(t *testing.T, db *gorm.DB, id, status, lockedBy, adapterType string, priority int) {
 	t.Helper()
+	seedSettingsRow(t, db, "co-1", true, false)
 	if err := db.Exec(
 		`INSERT INTO company_scan_queue (id, company_id, adapter_type, status, source, locked_by, priority)
 		 VALUES (?, 'co-1', ?, ?, 'scheduler', ?, ?)`,
 		id, adapterType, status, lockedBy, priority,
 	).Error; err != nil {
 		t.Fatalf("seed queue item %s: %v", id, err)
+	}
+}
+
+// seedSettingsRow idempotently inserts (or leaves untouched, on repeat calls
+// for the same companyID) a company_scan_settings row with explicit
+// active/auto_paused state — the two flags listClaimCandidates gates on.
+func seedSettingsRow(t *testing.T, db *gorm.DB, companyID string, active, autoPaused bool) {
+	t.Helper()
+	if err := db.Exec(
+		`INSERT OR IGNORE INTO company_scan_settings (company_id, active, auto_paused) VALUES (?, ?, ?)`,
+		companyID, active, autoPaused,
+	).Error; err != nil {
+		t.Fatalf("seed settings row for %s: %v", companyID, err)
+	}
+}
+
+// seedQueueItemForCompany seeds a queued row for an explicit company_id with
+// its own settings row — used by tests that need a company distinct from the
+// shared 'co-1' fixture (e.g. to exercise the active/auto_paused gate).
+func seedQueueItemForCompany(t *testing.T, db *gorm.DB, id, companyID, adapterType string, priority int, active, autoPaused bool) {
+	t.Helper()
+	seedSettingsRow(t, db, companyID, active, autoPaused)
+	if err := db.Exec(
+		`INSERT INTO company_scan_queue (id, company_id, adapter_type, status, source, priority)
+		 VALUES (?, ?, ?, 'queued', 'scheduler', ?)`,
+		id, companyID, adapterType, priority,
+	).Error; err != nil {
+		t.Fatalf("seed queue item %s for company %s: %v", id, companyID, err)
 	}
 }
 
@@ -204,7 +252,7 @@ func TestAssignmentRepositoryService_ClaimNextForNode_ListsCandidates_SQLShape(t
 		t.Fatal("ClaimNextForNode: no SQL emitted")
 	}
 	sql := strings.ToUpper(stmts[0])
-	if !strings.Contains(sql, "ORDER BY PRIORITY DESC, QUEUED_AT ASC") {
+	if !strings.Contains(sql, "ORDER BY Q.PRIORITY DESC, Q.QUEUED_AT ASC") {
 		t.Errorf("ClaimNextForNode SQL missing ORDER BY priority DESC, queued_at ASC:\n%s", stmts[0])
 	}
 	if strings.Contains(sql, "FOR UPDATE") {
@@ -522,6 +570,50 @@ func TestAssignmentRepositoryService_ClaimNextForNode_ClaimsEligibleRow(t *testi
 	}
 }
 
+// A queued row belonging to an auto_paused company must never be claimed,
+// even when it is the only (or highest-priority) candidate — the scheduler's
+// PurgeInactive sweep is a best-effort cleanup, not the authoritative gate;
+// ClaimNextForNode's join against company_scan_settings is.
+func TestAssignmentRepositoryService_ClaimNextForNode_SkipsAutoPausedCompany(t *testing.T) {
+	db := newAssignExecDB(t)
+	seedQueueItemForCompany(t, db, "q-paused", "co-paused", "greenhouse", 100, true, true)
+	seedQueueItemForCompany(t, db, "q-active", "co-active", "greenhouse", 0, true, false)
+
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate("greenhouse"))
+	item, err := store.ClaimNextForNode(context.Background(), "node-1", "")
+	if err != nil {
+		t.Fatalf("ClaimNextForNode() error = %v", err)
+	}
+	if item == nil || item.ID != "q-active" {
+		t.Fatalf("ClaimNextForNode() = %+v, want q-active (q-paused's company is auto_paused, must be skipped)", item)
+	}
+
+	var pausedStatus string
+	if err := db.Raw("SELECT status FROM company_scan_queue WHERE id = 'q-paused'").Row().Scan(&pausedStatus); err != nil {
+		t.Fatalf("read back q-paused: %v", err)
+	}
+	if pausedStatus != "queued" {
+		t.Errorf("q-paused status = %q, want queued (must remain untouched)", pausedStatus)
+	}
+}
+
+// A queued row belonging to a deactivated (active=false) company must never
+// be claimed — mirrors the auto_paused gate above for the other half of the
+// PurgeInactive eligibility check.
+func TestAssignmentRepositoryService_ClaimNextForNode_SkipsInactiveCompany(t *testing.T) {
+	db := newAssignExecDB(t)
+	seedQueueItemForCompany(t, db, "q-inactive", "co-inactive", "greenhouse", 100, false, false)
+
+	store := services.NewAssignmentRepositoryService(db, alwaysEligibleGate("greenhouse"))
+	item, err := store.ClaimNextForNode(context.Background(), "node-1", "")
+	if err != nil {
+		t.Fatalf("ClaimNextForNode() error = %v", err)
+	}
+	if item != nil {
+		t.Errorf("ClaimNextForNode() = %+v, want nil (only candidate belongs to an inactive company)", item)
+	}
+}
+
 // When the highest-priority candidates' adapter types are on cooldown, the
 // walk must skip them and claim the first candidate that clears the gate —
 // proving the batch skip-and-continue behavior.
@@ -636,7 +728,7 @@ func (l *raceOnceLogger) Trace(_ context.Context, _ time.Time, fc func() (string
 	sqlText, _ := fc()
 	upper := strings.ToUpper(sqlText)
 	isCandidateSelect := strings.Contains(upper, "FROM COMPANY_SCAN_QUEUE") &&
-		strings.Contains(upper, "ORDER BY PRIORITY DESC, QUEUED_AT ASC") &&
+		strings.Contains(upper, "ORDER BY Q.PRIORITY DESC, Q.QUEUED_AT ASC") &&
 		!strings.Contains(upper, "UPDATE")
 
 	l.mu.Lock()
@@ -703,7 +795,7 @@ func (l *closeOnceLogger) Trace(_ context.Context, _ time.Time, fc func() (strin
 	sqlText, _ := fc()
 	upper := strings.ToUpper(sqlText)
 	isCandidateSelect := strings.Contains(upper, "FROM COMPANY_SCAN_QUEUE") &&
-		strings.Contains(upper, "ORDER BY PRIORITY DESC, QUEUED_AT ASC") &&
+		strings.Contains(upper, "ORDER BY Q.PRIORITY DESC, Q.QUEUED_AT ASC") &&
 		!strings.Contains(upper, "UPDATE")
 
 	l.mu.Lock()

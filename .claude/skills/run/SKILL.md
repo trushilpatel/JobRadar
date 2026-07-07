@@ -96,3 +96,16 @@ curl -s -H "$H" "http://localhost:8080/api/jobs?limit=5" | python3 -m json.tool
 ## After a frontend code change
 
 Vite HMR applies the change instantly in the browser. No reload needed for component/style changes. Full page reload only needed for router or provider changes.
+
+## Deeper verification: Playwright E2E suite
+
+For a real end-to-end check (not just a curl smoke-test) — full browser flows, both
+a regular user and an admin — once the stack above is up:
+
+```bash
+cd frontend && npm run test:e2e
+```
+
+See `frontend/e2e/CLAUDE.md` for conventions and what's covered. Not part of this
+skill's baseline check; run it when verifying a change to a flow it covers (Jobs,
+Account, Resumes, Apply Queue, auth/admin-gating, or any admin page).

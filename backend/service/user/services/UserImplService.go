@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/tracing"
@@ -35,6 +36,11 @@ func NewImplService(next Service, clerk clerkadmin.Client) Service {
 // aborts the chain so we never leave the application users row referencing a
 // now-orphaned auth identity. A nil clerk client is tolerated so unit tests
 // can exercise the DB-only path.
+//
+// clerkadmin.ErrUserNotFound (Clerk 404) is tolerated, not fatal — it means
+// the Clerk account is already gone (e.g. a prior delete attempt's Clerk
+// call succeeded but the DB delete step afterward failed). Treating it as
+// fatal would permanently block that account from ever being deleted.
 func (s *implService) Delete(ctx context.Context, id string) (err error) {
 	ctx, span := tracing.Start(ctx, "user.impl.Delete")
 	defer tracing.End(span, &err)
@@ -43,7 +49,7 @@ func (s *implService) Delete(ctx context.Context, id string) (err error) {
 		return domainerrs.ErrBadRequest.WithMessage("user id required")
 	}
 	if s.clerk != nil {
-		if err := s.clerk.DeleteUser(ctx, id); err != nil {
+		if err := s.clerk.DeleteUser(ctx, id); err != nil && !errors.Is(err, clerkadmin.ErrUserNotFound) {
 			return domainerrs.ErrInternal.WithMessage("user delete: clerk: " + err.Error())
 		}
 	}
