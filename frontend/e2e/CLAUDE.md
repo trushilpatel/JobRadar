@@ -20,7 +20,7 @@ migrations, starts the API and Vite dev server as background processes against t
 same shared dev Supabase DB and Clerk instance local runs use, waits for both to
 respond, installs Chromium, then runs `npm run test:e2e`. The job's `concurrency`
 group has no `cancel-in-progress` — a second run queues behind the first instead of
-being cancelled, so two PRs' E2E runs can never write to the shared TEST*ROLE*\*
+being cancelled, so two PRs' E2E runs can never write to the shared `TEST_ROLE_*`
 accounts at the same time. Playwright's HTML report is uploaded as an artifact on
 every run (`if: always()`) for debugging a CI-only failure.
 
