@@ -1,7 +1,9 @@
 # Migration plan — move the REST API from raw chi handlers to Huma (OpenAPI 3.1)
 
 Tracking issue: [#157](https://github.com/trushilpatel/JobRadar/issues/157)
-Status: **active** (delete this file when the migration merges)
+Status: **code-complete, pending merge** — all 12 primary slices, Phase F cleanup,
+and the orchestrator follow-on (security fix + its own Huma migration) are done.
+Delete this file once this work merges.
 
 > **Revision 2026-07-05:** the 2026-06-13 draft was written against a codebase
 > snapshot that has since moved on. This revision re-verifies every router,
@@ -415,21 +417,34 @@ Rule between steps: legacy chi routes and Huma routes **coexist** on the same mu
 during the migration (Huma registers specific paths; untouched slices keep their chi
 registration). Never migrate two slices in one step.
 
-## 6. Cleanup (Phase F) — after slice 12 is green
+## 6. Cleanup (Phase F) — after slice 12 is green — **DONE 2026-07-06**
 
-1. Remove now-dead helpers if fully unused (`handler.Respond*` may be replaced by the
-   Huma output wrappers; keep only what's still referenced). Verify with `grep`.
-2. Confirm `handler.RouteGroup`/`router.go` shrink to Huma registration only; update
-   `apps/api/CLAUDE.md` and `service/CLAUDE.md` to describe the Huma pattern as the
-   new standard for the `RestService`/`RestRouter` layers.
-3. (Optional, high payoff) Generate a typed TypeScript client for the frontend from
-   `openapi.yaml` and migrate `frontend/src/lib/api/*` onto it — separate PR.
-4. Update the `dev-ergonomics` / engineering-principles docs to note that new
-   endpoints are now "one Huma operation + one input/output struct"
-   (extensibility-by-design).
-5. Decide on Section 9 (orchestrator/crawler-node) as a follow-up initiative, or
-   explicitly defer indefinitely — record the decision here.
-6. Delete this plan file.
+1. ✅ **Verified, nothing removed.** `handler.Respond*`/`HandleError` are still genuinely
+   used — by `service/crawlernode/` and `apps/orchestrator/` (out of scope at the time
+   this item ran; both were migrated separately, see item 5) and by every middleware
+   that runs _before_ Huma routing (`auth.go`, `identity.go`, `ratelimit.go`, `role.go`)
+   and therefore can't use Huma's response mechanism. Nothing was dead.
+2. ✅ **Confirmed already true.** `router.go`/`handler.RouteGroup` were already
+   Huma-agnostic (`router.go` only ever called `RouteGroup.Register`, never knew about
+   Huma) — no code change needed, only doc updates. `apps/api/CLAUDE.md` and
+   `service/CLAUDE.md` now describe the Huma operation pattern as the standard for
+   every `RestService`/`RestRouter`, with a concrete "adding a new route" checklist.
+3. ✅ **Done.** `openapi-typescript` generates `frontend/src/lib/api/schema.gen.ts` from
+   `apps/api/openapi.yaml` (`npm run gen:api-types`), wired into CI with a drift guard
+   mirroring the backend's own. Kept the existing zod-schema-per-endpoint pattern
+   untouched for _response_ parsing (the runtime validation layer) — applied the
+   generated types to a few representative _request_ bodies via `satisfies` as the
+   adoption pattern (`setUserRoles`/`setUserStatus`, `triggerRetry`), not a blanket
+   rewrite of all ten `.api.ts` files. See `frontend/CLAUDE.md`.
+4. ✅ **Done.** Added a bullet to `.claude/rules/engineering-principles.md`'s
+   Extensibility-by-design section: a new REST endpoint is one Huma operation + one
+   input/output struct, no router-wide switch, no hand-maintained OpenAPI doc.
+5. ✅ **Done — not deferred, both parts executed.** Fixed the `/admin/crawler-nodes/*`
+   security gap (`apps/orchestrator/wire_admin_gate.go`: `RequireIdentity` ->
+   `RequireRole("admin")` -> `AuditAdminMutation`, its own commit) and then migrated
+   `apps/orchestrator` to Huma as its own independent OpenAPI document (Section 9).
+6. ⏳ **Pending merge.** Delete this plan file once this branch merges — per this
+   file's own header, not before.
 
 ## 7. Risks & mitigations
 
