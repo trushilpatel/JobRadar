@@ -36,6 +36,13 @@ credentials non-interactively.
 Without that secret, the `e2e` job's Doppler-dependent steps fail immediately with
 an auth error — the other CI jobs (lint/test) don't need it and are unaffected.
 
+**Dry-run the CI job locally before trusting it in Actions:**
+`scripts/ci-e2e-local.sh` runs the exact same sequence the `e2e` job does (migrate →
+start API → start Vite → wait for both → install Chromium → `npm run test:e2e`),
+using your own `doppler login` session instead of `DOPPLER_TOKEN`. It kills and
+restarts whatever's on :8080/:5173 first — `make dev` again afterward to get your
+normal dev stack back.
+
 ## Structure
 
 - `playwright.config.ts` — two authenticated projects, `chromium-user` (testDir
