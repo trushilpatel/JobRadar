@@ -34,6 +34,18 @@ export default defineConfig({
       testDir: './specs/user',
       use: { ...devices['Desktop Chrome'], storageState: path.join(dirname, '.auth/user.json') },
       dependencies: ['setup'],
+      // Several specs here (jobs.spec.ts, apply-queue.spec.ts) act on the
+      // SAME small set of live Tracking/Apply-Queue rows in the shared dev
+      // dataset — e.g. both can end up targeting "whichever job happens to
+      // be first" in their respective views. Running spec FILES within this
+      // project in parallel let one test's dismiss/status-change race
+      // another file's read of that identical row (confirmed: jobs.spec.ts's
+      // dismiss/undo test timed out waiting for a row that apply-queue.spec.ts
+      // was concurrently mutating). jobs.spec.ts already serializes its own
+      // tests internally; this serializes across files too, since the
+      // underlying data is effectively one more shared, non-disposable
+      // resource (like the TEST_ROLE_USER account itself).
+      fullyParallel: false,
     },
     {
       name: 'chromium-admin',

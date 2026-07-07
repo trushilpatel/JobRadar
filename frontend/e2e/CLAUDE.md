@@ -1,9 +1,9 @@
 # e2e/ — Playwright end-to-end suite
 
-Full-flow browser tests against the real local dev stack (`make dev` — Vite :5173 +
-Go API :8080). Not wired into CI yet; run manually via `npm run test:e2e`.
+Full-flow browser tests against a live stack (Vite :5173 + Go API :8080). Gated in
+CI on every dev→main PR; run locally via `npm run test:e2e` any time.
 
-## Running
+## Running locally
 
 1. Make sure `make dev` is already running (this suite does not manage it).
 2. `npm run test:e2e` — full suite, Chromium only, both roles.
@@ -12,6 +12,36 @@ Go API :8080). Not wired into CI yet; run manually via `npm run test:e2e`.
 
 Everything runs through `doppler run --config dev --` so `TEST_ROLE_*` credentials and
 `CLERK_SECRET_KEY` are present in `process.env`.
+
+## Running in CI
+
+The `e2e` job in `.github/workflows/ci.yml` runs on every PR/push to `main`: it runs
+migrations, starts the API and Vite dev server as background processes against the
+same shared dev Supabase DB and Clerk instance local runs use, waits for both to
+respond, installs Chromium, then runs `npm run test:e2e`. The job's `concurrency`
+group has no `cancel-in-progress` — a second run queues behind the first instead of
+being cancelled, so two PRs' E2E runs can never write to the shared `TEST_ROLE_*`
+accounts at the same time. Playwright's HTML report is uploaded as an artifact on
+every run (`if: always()`) for debugging a CI-only failure.
+
+**Required one-time setup (not something an agent can do — needs a human in the
+Doppler + GitHub UI):** the job needs a `DOPPLER_TOKEN` repo secret to fetch real
+credentials non-interactively.
+
+1. In the Doppler dashboard: `job-radar` project → `dev` config → Access → Service
+   Tokens → create a new **read-only** token scoped to that one config.
+2. Add it as a GitHub Actions secret: `gh secret set DOPPLER_TOKEN` (paste the token
+   when prompted), or via the repo's Settings → Secrets and variables → Actions UI.
+
+Without that secret, the `e2e` job's Doppler-dependent steps fail immediately with
+an auth error — the other CI jobs (lint/test) don't need it and are unaffected.
+
+**Dry-run the CI job locally before trusting it in Actions:**
+`scripts/ci-e2e-local.sh` runs the exact same sequence the `e2e` job does (migrate →
+start API → start Vite → wait for both → install Chromium → `npm run test:e2e`),
+using your own `doppler login` session instead of `DOPPLER_TOKEN`. It kills and
+restarts whatever's on :8080/:5173 first — `make dev` again afterward to get your
+normal dev stack back.
 
 ## Structure
 
@@ -117,3 +147,31 @@ dev environment.
   `UserAdminImplService.AdminDelete` or `UserImplService.Delete` — both now tolerate
   it. Found while cleaning up two orphaned disposable users left over from this
   suite's own development.
+
+## Real bug found — documented, not fixed (out of scope here)
+
+- **The Jobs detail panel doesn't refresh when a status change moves the open job
+  out of the currently-viewed tab's filter.** `JobDetailPanel` receives its `job` as
+  a prop looked up by ID from the currently-active list query's cache, not fetched
+  independently. Changing status while viewing a tab that would no longer include
+  the job after the change (e.g. New → Applied while viewing the New tab, or
+  Applied/Interviewing → New while viewing Tracking) leaves the still-open panel
+  showing stale data — confirmed live: the `PATCH` returns `200`, but the radio's
+  `aria-checked` never updates, indefinitely. `jobs.spec.ts` avoids this by
+  navigating to whichever tab still includes the job (or reloading) before reading
+  status, rather than trusting an already-open panel instance across a
+  filter-crossing transition — same technique a real user would need (switch tabs,
+  or refresh, to see the change reflected). Worth a real fix later: either give the
+  panel its own `useQuery(['job', id])`, or have the parent close/reopen the panel
+  when its underlying job drops out of the active list.
+
+## Fragile-ambient-data lesson — self-seed instead of depending on live Tracking data
+
+`jobs.spec.ts` originally read whatever the live dev account's Tracking tab already
+contained (status applied/interviewing/offer/rejected). That ambient data drained to
+zero during real usage — 623 accumulated dismissed jobs, 0 left in any workflow
+status — which silently broke both the status-change and dismiss/undo tests (no
+data to act on). Both now self-seed by promoting a New-tab job to Applied first
+(same convention as `resumes.spec.ts`/`apply-queue.spec.ts`'s own disposable-record
+seeding) and fully revert it to New when done — self-contained, no dependency on
+what the shared account happens to already have tracked.

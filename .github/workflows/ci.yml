@@ -124,3 +124,96 @@ jobs:
       - name: Test
         run: npm run test
         working-directory: frontend
+
+  e2e:
+    name: E2E / Playwright
+    needs: [backend-lint, backend-test, frontend-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    # Every run hits the SAME shared dev Supabase DB and the SAME
+    # TEST_ROLE_USER/TEST_ROLE_ADMIN Clerk accounts real developers also use
+    # locally (see frontend/e2e/CLAUDE.md's "operational constraint" note) -
+    # this is a deliberate tradeoff, not an oversight. No `cancel-in-progress`
+    # here: a second concurrent run on this group QUEUES behind the first
+    # instead of being cancelled, so two PRs' E2E runs never write to the
+    # shared account at the same time. A human running the suite locally at
+    # the exact moment a dev->main PR's CI is also running it is a residual,
+    # accepted risk - rare in practice since main-promotion PRs are
+    # infrequent.
+    concurrency:
+      group: e2e-shared-dev-resources
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - uses: ./.github/actions/setup-frontend
+
+      - name: Install Doppler CLI
+        run: (curl -Ls https://cli.doppler.com/install.sh || wget -qO- https://cli.doppler.com/install.sh) | sudo sh
+
+      - name: Run DB migrations
+        run: doppler run --config dev -- go run ./apps/migrate
+        working-directory: backend
+
+      - name: Start API server
+        run: |
+          doppler run --config dev -- go run ./apps/api &
+          echo $! > /tmp/api.pid
+        working-directory: backend
+
+      - name: Start Vite dev server
+        run: |
+          doppler run --config dev -- npm run dev &
+          echo $! > /tmp/vite.pid
+        working-directory: frontend
+
+      - name: Wait for API and Vite to be ready
+        run: |
+          API_UP=""
+          VITE_UP=""
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9100/health > /dev/null && API_UP=1 && break
+            sleep 2
+          done
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:5173/ > /dev/null && VITE_UP=1 && break
+            sleep 2
+          done
+          if [ -z "$API_UP" ] || [ -z "$VITE_UP" ]; then
+            echo "API up: ${API_UP:-no}, Vite up: ${VITE_UP:-no}"
+            echo "Stack failed to come up in time"
+            exit 1
+          fi
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      - name: Run E2E suite
+        run: npm run test:e2e
+        working-directory: frontend
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Stop background processes
+        if: always()
+        run: |
+          [ -f /tmp/api.pid ] && kill "$(cat /tmp/api.pid)" 2>/dev/null || true
+          [ -f /tmp/vite.pid ] && kill "$(cat /tmp/vite.pid)" 2>/dev/null || true
