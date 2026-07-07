@@ -94,76 +94,53 @@ test.describe('Jobs feed', () => {
   test('changing status in the detail panel updates the radio and reverting restores it', async ({
     page,
   }) => {
-    // Toggles between two workflow statuses ("Applied" <-> "Interviewing")
-    // on an already-tracked job, using the "Tracking" tab (combined view
-    // over the 4 workflow stages) so the row never leaves view and the
-    // revert path is provably real. (PATCH .../status now also accepts
-    // 'new' — see jobs.spec.ts test 5 and useJobActions.ts — but this test
-    // doesn't need that path since both statuses here were already
-    // writable.)
+    // Self-seeds a Tracking-tab job from the New tab instead of depending on
+    // whatever the live dev account's Tracking tab already contains — that
+    // ambient data drained to zero during real usage (the account
+    // accumulated 623 dismissed jobs and 0 in any workflow status), which is
+    // exactly the fragility this avoids. Promoting New -> Applied -> ... ->
+    // New is fully self-contained and reverts completely, now that
+    // PATCH .../status accepts 'new' (see useJobActions.ts /
+    // JobValidationService.go).
     const jobsPage = new JobsPage(page)
-    await jobsPage.goto()
+    const seed = await seedTrackedJob(page, jobsPage)
+    const stableRow = () =>
+      jobsPage.rows().filter({ hasText: seed.title }).filter({ hasText: seed.company })
 
-    await page.getByRole('tab', { name: /^Tracking/ }).click()
-    await page.keyboard.press('Escape') // Tracking tab doubles as a Popover trigger; close it if it opened
-
-    const trackingRows = page.getByRole('button', { name: /, status (applied|interviewing)$/ })
-    await expect(async () => {
-      expect(await trackingRows.count()).toBeGreaterThan(0)
-    }).toPass({ timeout: 10_000 })
-
-    const row = trackingRows.first()
-    const title = await jobsPage.titleOf(row)
-    const company = await jobsPage.companyOf(row)
-    const rowLabel = await row.getAttribute('aria-label')
-    const originalStatus = rowLabel?.endsWith('applied') ? 'Applied' : 'Interviewing'
-    const otherStatus = originalStatus === 'Applied' ? 'Interviewing' : 'Applied'
-
-    // Precondition: the detail panel's status control starts checked on
-    // whichever of the two statuses this row currently has.
-    await jobsPage.openRow(row)
-    await expect(jobsPage.detailStatusRadio(originalStatus)).toHaveAttribute('aria-checked', 'true')
-
-    const stableRow = () => jobsPage.rows().filter({ hasText: title }).filter({ hasText: company })
+    await expect(jobsPage.detailStatusRadio('Applied')).toHaveAttribute('aria-checked', 'true')
 
     // The mutating action + its post-mutation assertions are wrapped in
     // try/finally: if any assertion between changing the status and
     // reverting it throws (the very regression this test exists to catch),
-    // the finally block still fires the revert click so the real tracked
-    // job is never left permanently changed from its original status.
+    // the finally block still fires the revert so the job is never left
+    // permanently changed — and, since we created it, "changed" here means
+    // fully reverted to New, not left at some other tracked status.
     try {
-      // Action: click the other status radio.
-      await jobsPage.detailStatusRadio(otherStatus).click()
+      // Action: click Interviewing.
+      await jobsPage.detailStatusRadio('Interviewing').click()
 
-      // Assertion: the SAME job's row (matched by title+company, since it
-      // stays visible in the combined Tracking view throughout) now
-      // announces the new status, and reopening shows that radio checked
-      // instead.
-      await expect(stableRow()).toHaveAttribute(
-        'aria-label',
-        new RegExp(`, status ${otherStatus.toLowerCase()}$`),
-        { timeout: 10_000 }
-      )
+      // Assertion: the same job's row (found via the Tracking tab, since
+      // Applied/Interviewing are excluded from New) now announces the new
+      // status, and reopening shows that radio checked instead.
+      await page.getByRole('tab', { name: /^Tracking/ }).click()
+      await page.keyboard.press('Escape') // Tracking tab doubles as a Popover trigger; close it if it opened
+      await expect(stableRow()).toHaveAttribute('aria-label', /, status interviewing$/, {
+        timeout: 10_000,
+      })
       await jobsPage.openRow(stableRow())
-      await expect(jobsPage.detailStatusRadio(otherStatus)).toHaveAttribute('aria-checked', 'true')
-    } finally {
-      // Teardown: idempotent — re-reads the row's CURRENT status rather
-      // than assuming the click above landed, and only reverts if it still
-      // differs from the original, so a failed first click can't cause this
-      // to click past the original status.
-      const currentLabel = await stableRow().getAttribute('aria-label')
-      if (!currentLabel?.endsWith(`, status ${originalStatus.toLowerCase()}`)) {
-        await jobsPage.openRow(stableRow())
-        await jobsPage.detailStatusRadio(originalStatus).click()
-      }
-
-      // Assertion: the row is back to exactly the status it started with —
-      // no residual change to live dev data.
-      await expect(stableRow()).toHaveAttribute(
-        'aria-label',
-        new RegExp(`, status ${originalStatus.toLowerCase()}$`),
-        { timeout: 10_000 }
+      await expect(jobsPage.detailStatusRadio('Interviewing')).toHaveAttribute(
+        'aria-checked',
+        'true'
       )
+
+      // Action: revert to Applied — proves the revert path is real, not
+      // just that Interviewing landed.
+      await jobsPage.detailStatusRadio('Applied').click()
+      await expect(stableRow()).toHaveAttribute('aria-label', /, status applied$/, {
+        timeout: 10_000,
+      })
+    } finally {
+      await revertSeedToNew(page, jobsPage, seed, stableRow)
     }
   })
 
@@ -181,43 +158,38 @@ test.describe('Jobs feed', () => {
     // This test now exercises the REAL, working recovery path end-to-end —
     // no manual authenticated-fetch workaround needed, since Undo itself is
     // the recovery mechanism.
+    //
+    // Self-seeds its own Tracking-tab job (see the previous test's comment
+    // for why) rather than dismissing whatever real job happens to be first
+    // in the live account's Tracking tab.
     const jobsPage = new JobsPage(page)
-    await jobsPage.goto()
+    const seed = await seedTrackedJob(page, jobsPage)
+    const targetRow = () =>
+      jobsPage.rows().filter({ hasText: seed.title }).filter({ hasText: seed.company })
 
     await page.getByRole('tab', { name: /^Tracking/ }).click()
     await page.keyboard.press('Escape') // Tracking tab doubles as a Popover trigger; close it if it opened
-
-    const trackingRows = page.getByRole('button', {
-      name: /, status (applied|interviewing|offer|rejected)$/,
+    await expect(targetRow()).toHaveAttribute('aria-label', /, status applied$/, {
+      timeout: 10_000,
     })
-    await expect(async () => {
-      expect(await trackingRows.count()).toBeGreaterThan(0)
-    }).toPass({ timeout: 10_000 })
-
-    const row = trackingRows.first()
-    const title = await jobsPage.titleOf(row)
-    const company = await jobsPage.companyOf(row)
-    const rowLabel = await row.getAttribute('aria-label')
-    const originalStatus = rowLabel?.match(/, status (\w+)$/)?.[1]
-    if (!originalStatus) throw new Error(`could not parse status from row aria-label: ${rowLabel}`)
-    const targetRow = () => jobsPage.rows().filter({ hasText: title }).filter({ hasText: company })
+    const row = targetRow()
 
     // The dismiss + undo click are wrapped in try/finally: if undo itself
     // ever regresses again, the finally block still fires a direct restore
-    // so this test can never leave a real, pre-existing tracked job
-    // permanently dismissed — belt-and-suspenders even though undo is now
-    // the primary, verified-working recovery path.
+    // so this test can never leave the seeded job permanently dismissed —
+    // belt-and-suspenders even though undo is now the primary,
+    // verified-working recovery path.
     try {
       // Action: hover the row (reveals the dismiss button, matching real
       // user interaction) then click "Dismiss <title>".
       await row.hover()
-      await jobsPage.dismissButton(row, title).click()
+      await jobsPage.dismissButton(row, seed.title).click()
 
       // Assertion: the DismissStripe undo toast appears and names this
       // exact job (message "Dismissed", submessage "<title> at <company>").
       await expect(jobsPage.dismissStripe).toBeVisible()
       await expect(jobsPage.dismissStripe).toContainText('Dismissed')
-      await expect(jobsPage.dismissStripe).toContainText(title)
+      await expect(jobsPage.dismissStripe).toContainText(seed.title)
 
       // Assertion: the row is gone from the Tracking-tab feed (dismissed
       // jobs are excluded from the 4 workflow-stage statuses).
@@ -236,45 +208,137 @@ test.describe('Jobs feed', () => {
       // "Undo failed" and the row stayed absent.
       await expect(page.getByText('Undone', { exact: true })).toBeVisible({ timeout: 10_000 })
       await expect(targetRow()).toHaveCount(1, { timeout: 10_000 })
-      await expect(targetRow()).toHaveAttribute(
-        'aria-label',
-        new RegExp(`, status ${originalStatus}$`)
-      )
+      await expect(targetRow()).toHaveAttribute('aria-label', /, status applied$/)
     } finally {
-      // Safety net only — expected to be a no-op now that undo genuinely
-      // works. Re-checks final state and force-restores via the same
-      // authenticated endpoint the app itself uses if, for any reason, the
-      // row isn't back to its original status.
-      const stillWrong =
-        (await targetRow().count()) === 0 ||
-        !(await targetRow().getAttribute('aria-label'))?.endsWith(`, status ${originalStatus}`)
-      if (stillWrong) {
-        await jobsPage.openRow(row.or(targetRow()))
-        const jobId = new URL(page.url()).searchParams.get('job')
-        if (jobId) {
-          await page.evaluate(
-            async ({ id, status }) => {
-              const clerk = (
-                window as unknown as {
-                  Clerk?: {
-                    session?: { getToken: (o: { template: string }) => Promise<string | null> }
-                  }
-                }
-              ).Clerk
-              const token = await clerk?.session?.getToken({ template: 'job-radar-jwt-template' })
-              await fetch(`/api/jobs/${id}/status`, {
-                method: 'PATCH',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-                body: JSON.stringify({ status }),
-              })
-            },
-            { id: jobId, status: originalStatus }
-          )
-        }
-      }
+      await revertSeedToNew(page, jobsPage, seed, targetRow)
     }
   })
 })
+
+// ── Shared seed/revert helpers for tests 4 and 5 ────────────────────────────
+// Both self-seed a Tracking-tab job from the New tab (see each test's own
+// comment for why) and must fully revert it back to New afterward — this
+// logic is identical in both, so it's factored out rather than duplicated.
+
+interface SeededJob {
+  title: string
+  company: string
+  jobId: string | null
+}
+
+/**
+ * Promotes the first New-tab row to "Applied", returning its identity.
+ *
+ * Real, live-verified app bug found while writing this: JobDetailPanel
+ * receives its `job` as a prop looked up by ID from the currently-active
+ * list query's cache (not fetched independently) — so changing a New job's
+ * status while still viewing the New tab moves it out of that tab's own
+ * list on invalidation/refetch, and the still-open panel never re-syncs
+ * (confirmed live: the PATCH returns 200, but the radio's aria-checked
+ * stays "false" indefinitely). The original version of this test never hit
+ * this because it only ever toggled between two Tracking-tab statuses while
+ * viewing the Tracking tab, which shows all 4 workflow stages together —
+ * the job never disappeared from the currently-viewed list. Documented in
+ * frontend/e2e/CLAUDE.md rather than fixed here (out of scope for this
+ * change); worked around below by switching to the Tracking tab and
+ * re-opening the row there — reading fresh data instead of trusting the
+ * stale, still-open New-tab panel instance, same as a real user would need
+ * to do to see the update reflected.
+ */
+async function seedTrackedJob(
+  page: import('@playwright/test').Page,
+  jobsPage: JobsPage
+): Promise<SeededJob> {
+  await jobsPage.goto()
+  const row = jobsPage.firstRow()
+  const title = await jobsPage.titleOf(row)
+  const company = await jobsPage.companyOf(row)
+
+  await jobsPage.openRow(row)
+  const jobId = new URL(page.url()).searchParams.get('job')
+
+  // Wait for the panel to be fully open and showing THIS job (not just
+  // "some detail panel") before interacting with its status control —
+  // clicking immediately after openRow() raced the panel's own data fetch
+  // often enough to be a real, reproducible flake (the click landed before
+  // the radio group's mutation handler was wired up, so aria-checked never
+  // flipped).
+  await expect(jobsPage.detailPanel).toBeVisible()
+  await expect(jobsPage.detailTitle).toHaveText(title)
+  await expect(jobsPage.detailStatusRadio('New')).toHaveAttribute('aria-checked', 'true')
+
+  await jobsPage.detailStatusRadio('Applied').click()
+
+  // Don't trust the still-open New-tab panel instance (see doc comment
+  // above) — switch to Tracking and re-open the row there for fresh data.
+  const stableRow = () => jobsPage.rows().filter({ hasText: title }).filter({ hasText: company })
+  await page.getByRole('tab', { name: /^Tracking/ }).click()
+  await page.keyboard.press('Escape')
+  await expect(stableRow()).toHaveAttribute('aria-label', /, status applied$/, {
+    timeout: 10_000,
+  })
+  await jobsPage.openRow(stableRow())
+  await expect(jobsPage.detailStatusRadio('Applied')).toHaveAttribute('aria-checked', 'true')
+
+  return { title, company, jobId }
+}
+
+/**
+ * Reverts a job seeded by seedTrackedJob() back to New. Tries the real UI
+ * path first (find it via the Tracking tab, click the New radio); falls
+ * back to a direct authenticated PATCH (same pattern as the rest of this
+ * suite's safety nets) if the UI path can't find or revert it — e.g. undo
+ * left it dismissed, or an assertion threw before the row was locatable.
+ */
+async function revertSeedToNew(
+  page: import('@playwright/test').Page,
+  jobsPage: JobsPage,
+  seed: SeededJob,
+  findRow: () => import('@playwright/test').Locator
+) {
+  await page.getByRole('tab', { name: /^Tracking/ }).click()
+  await page.keyboard.press('Escape')
+  const count = await findRow().count()
+  if (count > 0) {
+    await jobsPage.openRow(findRow())
+    const current = await jobsPage.detailStatusRadio('New').getAttribute('aria-checked')
+    if (current !== 'true') {
+      await jobsPage.detailStatusRadio('New').click()
+      // Same stale-list app bug documented on seedTrackedJob: moving a job
+      // OUT of the currently-viewed tab's filter (here, Tracking losing a
+      // job that just went back to New) doesn't live-refresh the list —
+      // confirmed live (PATCH 200, row still rendered 20+ polls over 10s).
+      // Reload rather than trust in-session cache reactivity, same pattern
+      // as this suite's other direct-restore fallbacks.
+      await page.waitForTimeout(500)
+      await page.reload()
+      await page.getByRole('tab', { name: /^Tracking/ }).click()
+      await page.keyboard.press('Escape')
+    }
+    await expect(findRow()).toHaveCount(0, { timeout: 10_000 }) // gone from Tracking once back to New
+    return
+  }
+
+  // Not found via the UI (e.g. still dismissed) — force it directly.
+  if (seed.jobId) {
+    await page.evaluate(
+      async ({ id }) => {
+        const clerk = (
+          window as unknown as {
+            Clerk?: { session?: { getToken: (o: { template: string }) => Promise<string | null> } }
+          }
+        ).Clerk
+        const token = await clerk?.session?.getToken({ template: 'job-radar-jwt-template' })
+        await fetch(`/api/jobs/${id}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ status: 'new' }),
+        })
+      },
+      { id: seed.jobId }
+    )
+  }
+}

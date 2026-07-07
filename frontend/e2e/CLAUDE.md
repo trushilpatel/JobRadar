@@ -147,3 +147,31 @@ dev environment.
   `UserAdminImplService.AdminDelete` or `UserImplService.Delete` — both now tolerate
   it. Found while cleaning up two orphaned disposable users left over from this
   suite's own development.
+
+## Real bug found — documented, not fixed (out of scope here)
+
+- **The Jobs detail panel doesn't refresh when a status change moves the open job
+  out of the currently-viewed tab's filter.** `JobDetailPanel` receives its `job` as
+  a prop looked up by ID from the currently-active list query's cache, not fetched
+  independently. Changing status while viewing a tab that would no longer include
+  the job after the change (e.g. New → Applied while viewing the New tab, or
+  Applied/Interviewing → New while viewing Tracking) leaves the still-open panel
+  showing stale data — confirmed live: the `PATCH` returns `200`, but the radio's
+  `aria-checked` never updates, indefinitely. `jobs.spec.ts` avoids this by
+  navigating to whichever tab still includes the job (or reloading) before reading
+  status, rather than trusting an already-open panel instance across a
+  filter-crossing transition — same technique a real user would need (switch tabs,
+  or refresh, to see the change reflected). Worth a real fix later: either give the
+  panel its own `useQuery(['job', id])`, or have the parent close/reopen the panel
+  when its underlying job drops out of the active list.
+
+## Fragile-ambient-data lesson — self-seed instead of depending on live Tracking data
+
+`jobs.spec.ts` originally read whatever the live dev account's Tracking tab already
+contained (status applied/interviewing/offer/rejected). That ambient data drained to
+zero during real usage — 623 accumulated dismissed jobs, 0 left in any workflow
+status — which silently broke both the status-change and dismiss/undo tests (no
+data to act on). Both now self-seed by promoting a New-tab job to Applied first
+(same convention as `resumes.spec.ts`/`apply-queue.spec.ts`'s own disposable-record
+seeding) and fully revert it to New when done — self-contained, no dependency on
+what the shared account happens to already have tracked.
