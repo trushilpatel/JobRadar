@@ -51,3 +51,19 @@ func AdminZoneConfig() huma.Config {
 func Build(zones ...apihuma.ZoneSpec) (*huma.OpenAPI, error) {
 	return apihuma.MergeSpecs("jobradar-api", Version, sharedRegistry, zones...)
 }
+
+// ApplyPublicURL sets spec's servers entry to publicURL, a no-op when
+// publicURL is empty. Call this on the live-served spec only (main.go),
+// never on the spec genspec.go writes to the committed apps/api/openapi.yaml
+// — that file must stay environment-agnostic.
+//
+// The docs UI is served from the ops listener (a different port than the
+// real API — see apps/api/main.go), so without an explicit servers entry,
+// Stoplight's "Try it" console defaults to sending requests to the docs
+// page's own origin instead of the API.
+func ApplyPublicURL(spec *huma.OpenAPI, publicURL string) {
+	if publicURL == "" {
+		return
+	}
+	spec.Servers = []*huma.Server{{URL: publicURL}}
+}

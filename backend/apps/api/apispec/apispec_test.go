@@ -56,6 +56,28 @@ func TestAPIZoneConfig_UsesSharedRegistryAndDisablesAutoServe(t *testing.T) {
 	}
 }
 
+func TestApplyPublicURL_SetsServersEntry(t *testing.T) {
+	spec, err := Build()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ApplyPublicURL(spec, "http://localhost:8080")
+	if len(spec.Servers) != 1 || spec.Servers[0].URL != "http://localhost:8080" {
+		t.Fatalf("expected one servers entry with the given URL, got: %+v", spec.Servers)
+	}
+}
+
+func TestApplyPublicURL_EmptyURLIsNoOp(t *testing.T) {
+	spec, err := Build()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ApplyPublicURL(spec, "")
+	if spec.Servers != nil {
+		t.Fatalf("expected no servers entry for an empty publicURL, got: %+v", spec.Servers)
+	}
+}
+
 func TestAPIZoneConfig_EachCallIsIndependent(t *testing.T) {
 	// Callers must build the zone config exactly ONCE and thread the same
 	// value through both router wiring and the later Build() call — two

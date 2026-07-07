@@ -121,6 +121,7 @@ func main() {
 		log.Error("huma spec build failed", err)
 		os.Exit(1)
 	}
+	apispec.ApplyPublicURL(apiSpec, cfg.API.PublicURL)
 	opsRouter := NewOpsRouter(database, apiSpec)
 
 	apiSrv := &http.Server{
