@@ -155,6 +155,8 @@ Every feature must ship with:
 
 **Coverage gate details.** Statement-weighted: `covered_statements / total_statements` per package. Excluded from the unit tier: `main.go`, `wire.go`, `wire_*.go`, `wire_gen.go`, `/compat/`, `/dto/`, `/models/`, `/testutil/`, plus broker/Postgres infrastructure (`common/db`, `common/jetstream`). The integration tier exists in code with `//go:build integration` but has no active CI workflow — run locally via `go test -tags=integration -race ./...` against real Postgres/NATS/Redis.
 
+**End-to-end (Playwright).** `frontend/e2e/` is a full-flow browser suite (both user and admin roles) against the real local dev stack — see `frontend/e2e/CLAUDE.md` for conventions, known gaps, and the how-to. Not wired into CI yet; not a required gate for every change, but run it (`cd frontend && npm run test:e2e` with `make dev` already running) when touching a flow it covers — Jobs, Account, Resumes, Apply Queue, auth/admin-gating, or any admin page.
+
 After implementation: write a brief spec doc to `docs/superpowers/specs/` with date prefix — file-level references only, no code snippets, no filler.
 
 ## Plan execution
@@ -179,6 +181,7 @@ This file and the project's skill files evolve as the codebase is worked on. Whe
 - `.claude/rules/engineering-principles.md` — hard rules applied globally: SOLID (strict), loose coupling, no magic values, extensibility by design, test-first, formatting — _"how must the code be written?"_
 - `.claude/rules/dev-ergonomics.md` — developer-ergonomics model: friction to change, consistency, extensibility, agent-legibility — _"is it ergonomic to keep it good?"_ Audited by the `dev-ergonomics` skill (read-only, recommends; never edits) via the `dev-ergonomics-auditor` agent
 - Subdirectory `CLAUDE.md` files cover each `backend/*` and `frontend/*` area and auto-load when you work there
+- `frontend/e2e/CLAUDE.md` — Playwright E2E suite: how to run it, page-object/auth conventions, known gaps, real bugs it has surfaced
 - `.claude/skills/` — project skills; each has a self-improvement footer that invokes `skill-self-improvement` after completion
 
 ## Docs layout

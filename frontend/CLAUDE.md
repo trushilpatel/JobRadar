@@ -164,6 +164,23 @@ const setStatus = useMutation({
 
 90% statement coverage per file. Run: `cd frontend && npx vitest run --coverage`.
 
+### End-to-end (Playwright)
+
+`frontend/e2e/` is a separate, full-flow browser suite — a distinct tier from the
+unit tests above, not a replacement. Covers every page except the mobile-only
+`/jobs/:id` route, for both a regular user and an admin. See `frontend/e2e/CLAUDE.md`
+for the full runbook, conventions (Page Object Model, auth via cached `storageState`,
+data-safety rules), and known gaps.
+
+```bash
+make dev                    # start the local stack first (frontend/e2e/ doesn't manage it)
+cd frontend && npm run test:e2e         # full suite, headless
+npm run test:e2e:ui                     # Playwright's interactive UI mode
+npm run test:e2e:report                 # open the last HTML report
+```
+
+Not wired into CI yet — run it manually when touching a flow it covers.
+
 ### ResizeObserver mock (required for Recharts)
 
 ```ts
