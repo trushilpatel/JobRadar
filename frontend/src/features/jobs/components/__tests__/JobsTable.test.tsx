@@ -289,7 +289,6 @@ describe('JobsTable', () => {
     render(<JobsTable {...defaultProps} />)
     const row = screen.getByTestId('row-j1')
     expect(row.className).toContain('hover:bg-hover')
-    expect(row.className).toContain('group/row')
     expect(row).toHaveAttribute('data-has-edge', 'true')
     expect(row.style.getPropertyValue('--row-edge')).toBe('var(--violet)')
   })

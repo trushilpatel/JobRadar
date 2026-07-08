@@ -67,7 +67,7 @@ normal dev stack back.
   test MUST pass `{ storageState: undefined }` explicitly, or it silently inherits
   the project's real session (see `account.spec.ts`, `admin-users.spec.ts`).
 - **Locators: accessible name first.** Only `JobsPage` has real `data-testid` hooks
-  (`jobs-table-sentinel`, `dismiss-stripe`, `job-tab-count`, ...). Every other page
+  (`jobs-table-sentinel`, `job-tab-count`, ...). Every other page
   has none — use `getByRole` / `getByLabel` / `getByText` / `getByPlaceholder` /
   `getByTitle` against real aria-labels, button text, and `title` attributes read
   from the actual component source. Do not add `data-testid` to app source for a

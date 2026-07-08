@@ -4,8 +4,6 @@ import type { Job, JobStatus } from '@/types'
 import { useJob } from '../hooks/useJob'
 import { useJobActions } from '../hooks/useJobActions'
 import { JobDetailPanel } from './JobDetailPanel'
-import { showDismissStripe } from '@/components/ui/dismiss-stripe'
-import { HIDDEN_COMPANIES_CATEGORY } from '@/config/constants/hiddenItems'
 
 export function MobileJobDetailRoute() {
   const { id } = useParams<{ id: string }>()
@@ -47,25 +45,6 @@ export function MobileJobDetailRoute() {
       actions.setSaved.mutate({ id: target.id, saved: !currentlySaved })
     },
     [actions.setSaved]
-  )
-
-  // Mobile dismiss mirrors the desktop flow — no modal, no reason picker,
-  // optional "Don't show <Company> again" via DismissStripe.
-  const handleDismiss = useCallback(
-    (target: Job) => {
-      const companyName = target.company?.name ?? ''
-      actions.dismiss.mutate({ id: target.id, reason: 'user_dismissed' })
-      showDismissStripe({
-        message: 'Dismissed',
-        submessage: `${target.title}${companyName ? ` at ${companyName}` : ''}`,
-        onUndo: () => actions.undoLast(),
-        hideTarget: companyName
-          ? { category: HIDDEN_COMPANIES_CATEGORY, value: companyName, label: companyName }
-          : undefined,
-      })
-      safeBack()
-    },
-    [actions, safeBack]
   )
 
   if (job.isLoading) {
@@ -129,7 +108,6 @@ export function MobileJobDetailRoute() {
       onClose={safeBack}
       onStatusChange={handleStatusChange}
       onToggleSave={handleToggleSave}
-      onDismiss={handleDismiss}
     />
   )
 }

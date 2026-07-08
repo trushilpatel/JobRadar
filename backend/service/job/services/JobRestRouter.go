@@ -45,10 +45,6 @@ func (rr *RestRouter) Register(router chi.Router) {
 		Summary: "Get a job by ID", Tags: []string{"jobs"},
 	}, rr.handler.get)
 	huma.Register(api, huma.Operation{
-		OperationID: "dismissJob", Method: http.MethodDelete, Path: "/jobs/{id}",
-		Summary: "Dismiss a job", Tags: []string{"jobs"},
-	}, rr.handler.dismiss)
-	huma.Register(api, huma.Operation{
 		OperationID: "setJobSaved", Method: http.MethodPatch, Path: "/jobs/{id}/save",
 		Summary: "Save or unsave a job", Tags: []string{"jobs"},
 	}, rr.handler.setSaved)
@@ -60,8 +56,4 @@ func (rr *RestRouter) Register(router chi.Router) {
 		OperationID: "setJobNotes", Method: http.MethodPatch, Path: "/jobs/{id}/notes",
 		Summary: "Set a job's notes", Tags: []string{"jobs"},
 	}, rr.handler.setNotes)
-	huma.Register(api, huma.Operation{
-		OperationID: "bulkDismissJobs", Method: http.MethodPost, Path: "/jobs/dismiss/bulk",
-		Summary: "Dismiss multiple jobs at once", Tags: []string{"jobs"},
-	}, rr.handler.bulkDismiss)
 }

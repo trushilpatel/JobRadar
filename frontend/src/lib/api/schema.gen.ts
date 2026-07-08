@@ -519,23 +519,6 @@ export interface paths {
     patch?: never
     trace?: never
   }
-  '/api/jobs/dismiss/bulk': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** Dismiss multiple jobs at once */
-    post: operations['bulkDismissJobs']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
   '/api/jobs/{id}': {
     parameters: {
       query?: never
@@ -547,8 +530,7 @@ export interface paths {
     get: operations['getJob']
     put?: never
     post?: never
-    /** Dismiss a job */
-    delete: operations['dismissJob']
+    delete?: never
     options?: never
     head?: never
     patch?: never
@@ -800,11 +782,6 @@ export interface components {
       /** Format: date-time */
       stage_at: string
       user_id: string
-    }
-    BulkDismissInput: {
-      ids?: string[] | null
-      note?: string
-      reason?: string
     }
     Company: {
       careers_url?: string
@@ -1189,11 +1166,6 @@ export interface components {
     ResponseMapStringBool: {
       data: {
         [key: string]: boolean
-      }
-    }
-    ResponseMapStringInt: {
-      data: {
-        [key: string]: number
       }
     }
     'ResponseMapStringInterface {}': {
@@ -2568,39 +2540,6 @@ export interface operations {
       }
     }
   }
-  bulkDismissJobs: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['BulkDismissInput']
-      }
-    }
-    responses: {
-      /** @description OK */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['ResponseMapStringInt']
-        }
-      }
-      /** @description Error */
-      default: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['ServiceError']
-        }
-      }
-    }
-  }
   getJob: {
     parameters: {
       query?: never
@@ -2620,35 +2559,6 @@ export interface operations {
         content: {
           'application/json': components['schemas']['ResponseJobView']
         }
-      }
-      /** @description Error */
-      default: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['ServiceError']
-        }
-      }
-    }
-  }
-  dismissJob: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        id: string
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description No Content */
-      204: {
-        headers: {
-          [name: string]: unknown
-        }
-        content?: never
       }
       /** @description Error */
       default: {

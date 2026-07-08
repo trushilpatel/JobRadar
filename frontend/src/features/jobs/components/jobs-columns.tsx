@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { Bookmark, X, Paperclip, ArrowUpRight } from 'lucide-react'
+import { Bookmark, Paperclip, ArrowUpRight } from 'lucide-react'
 import type { Job } from '@/types'
 import { DataTableColumnHeader } from '@/components/ui/data-table'
 import { formatRelativeTime, formatExactDateTime, cn, formatSalary } from '@/lib/utils/utils'
@@ -9,10 +9,8 @@ import { JobStatusPill } from './JobStatusPill'
 
 export interface JobTableActions {
   onToggleSave: (job: Job) => void
-  onDismiss: (job: Job) => void
   /** Opens the posting URL and auto-advances status to "applied" — matches
-   *  the approved mockup's row-level Apply action. Always visible, unlike
-   *  the hover-revealed Dismiss button. */
+   *  the approved mockup's row-level Apply action. */
   onApply: (job: Job) => void
   /** Optional callback used by the pages layer to inject cross-feature data
    *  (e.g. resume attachment state) without creating a cross-feature import
@@ -21,7 +19,7 @@ export interface JobTableActions {
 }
 
 export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknown>[] {
-  const { onToggleSave, onDismiss, onApply, getAttachmentState } = actions
+  const { onToggleSave, onApply, getAttachmentState } = actions
 
   return [
     // ── 1. Bookmark / save column ───────────────────────────────────────────
@@ -201,35 +199,6 @@ export function buildJobColumns(actions: JobTableActions): ColumnDef<Job, unknow
           )}
         >
           <ArrowUpRight size={14} />
-        </button>
-      ),
-    },
-
-    // ── 9. Dismiss (hover-revealed) ────────────────────────────────────────
-    // Anchored to the row's right edge. Hidden by default, shown on row hover
-    // or when the row is focused via keyboard. Keyboard users hit `D` on the
-    // focused row instead.
-    {
-      id: 'dismiss',
-      size: 48,
-      enableSorting: false,
-      header: () => null,
-      cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onDismiss(row.original)
-          }}
-          aria-label={`Dismiss ${row.original.title}`}
-          title="Dismiss"
-          className={cn(
-            'p-1.5 rounded-md transition-all text-muted hover:text-danger hover:bg-hover',
-            'opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100',
-            'focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet'
-          )}
-        >
-          <X size={14} />
         </button>
       ),
     },

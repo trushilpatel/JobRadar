@@ -29,9 +29,6 @@ func TestUserJobStateRepository_UserScopedGuards(t *testing.T) {
 	testutil.AssertUserScoped(t, "Upsert", func(uid string) error {
 		return repo.Upsert(ctx, uid, "job-1", dto.UpsertState{Status: "saved"})
 	})
-	testutil.AssertUserScoped(t, "UpsertBulkDismiss", func(uid string) error {
-		return repo.UpsertBulkDismiss(ctx, uid, []string{"job-1"}, "user_dismissed", "")
-	})
 	testutil.AssertUserScoped(t, "Delete", func(uid string) error {
 		return repo.Delete(ctx, uid, "job-1")
 	})

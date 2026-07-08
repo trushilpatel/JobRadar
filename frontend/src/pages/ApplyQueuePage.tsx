@@ -36,11 +36,11 @@ export function ApplyQueuePage() {
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
   const selectedJob = useJob(selectedJobId ?? undefined)
 
-  // The detail panel's actions (status/save/dismiss) live in features/jobs's
+  // The detail panel's actions (status/save) live in features/jobs's
   // useJobActions and only invalidate that feature's own query keys. A change
   // made from here can also move the job in or out of the Apply Queue list
-  // (e.g. dismissing removes it, unsaving an otherwise-untouched job removes
-  // it) — so every mutation here additionally busts the apply-queue cache.
+  // (e.g. unsaving an otherwise-untouched job removes it) — so every
+  // mutation here additionally busts the apply-queue cache.
   // Composed at this page level rather than inside useJobActions itself,
   // which must stay unaware of apply-queue's query keys (features/jobs may
   // not depend on another feature).
@@ -66,16 +66,6 @@ export function ApplyQueuePage() {
       { id: job.id, saved: !currentlySaved },
       { onSuccess: invalidateApplyQueue }
     )
-  }
-
-  function handleDismiss(job: Job) {
-    jobActions.dismiss.mutate(
-      { id: job.id, reason: 'user_dismissed' },
-      { onSuccess: invalidateApplyQueue }
-    )
-    // A dismissed job can never remain in the apply queue — close the panel
-    // immediately rather than waiting on the invalidated refetch.
-    setSelectedJobId(null)
   }
 
   return (
@@ -160,7 +150,6 @@ export function ApplyQueuePage() {
                     onClose={handlePanelClose}
                     onStatusChange={handleStatusChange}
                     onToggleSave={handleToggleSave}
-                    onDismiss={handleDismiss}
                   />
                 )}
               </aside>

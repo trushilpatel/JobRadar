@@ -21,8 +21,6 @@ type JobService interface {
 	SetSaved(ctx context.Context, id string, saved bool) error
 	SetStatus(ctx context.Context, id string, status string) error
 	SetNotes(ctx context.Context, id string, notes string) error
-	Dismiss(ctx context.Context, id string, reason, note string) error
-	BulkDismiss(ctx context.Context, ids []string, reason, note string) error
 	GetCounts(ctx context.Context) (dto.Counts, error)
 	GetCompanies(ctx context.Context) ([]string, error)
 }
@@ -61,14 +59,6 @@ func (b *BaseService) SetStatus(ctx context.Context, id, status string) error {
 
 func (b *BaseService) SetNotes(ctx context.Context, id, notes string) error {
 	return b.next.SetNotes(ctx, id, notes)
-}
-
-func (b *BaseService) Dismiss(ctx context.Context, id string, reason, note string) error {
-	return b.next.Dismiss(ctx, id, reason, note)
-}
-
-func (b *BaseService) BulkDismiss(ctx context.Context, ids []string, reason, note string) error {
-	return b.next.BulkDismiss(ctx, ids, reason, note)
 }
 
 func (b *BaseService) GetCounts(ctx context.Context) (dto.Counts, error) {
@@ -145,7 +135,6 @@ type UserJobStateRepository interface {
 	// SetSaved is the orthogonal save/unsave path. Idempotent. Never touches
 	// the workflow status column; saved_at IS NOT NULL is the source of truth.
 	SetSaved(ctx context.Context, userID, jobID string, saved bool) error
-	UpsertBulkDismiss(ctx context.Context, userID string, jobIDs []string, reason, note string) error
 	Delete(ctx context.Context, userID, jobID string) error
 	CountsByUser(ctx context.Context, userID string) (dto.Counts, error)
 }

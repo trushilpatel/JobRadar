@@ -1,19 +1,27 @@
 package common
 
 // JobStatus values for the per-user job status. Workflow values (applied /
-// dismissed / interviewing / offer / rejected) mirror the CHECK constraint
-// on user_job_state.status. JobStatusNew and JobStatusSaved are NOT stored:
+// interviewing / offer / rejected) mirror the CHECK constraint on
+// user_job_state.status. JobStatusNew and JobStatusSaved are NOT stored:
 //
 //   - JobStatusNew is synthetic — absence of a workflow status; only
 //     returned via the overlay or accepted as a filter/tab key.
 //   - JobStatusSaved is a filter/tab key — `saved_at IS NOT NULL` is the
 //     source of truth for the saved flag; it is orthogonal to the workflow
 //     status column.
+//
+// JobStatusDismissed is no longer writable (the dismiss feature has been
+// removed — see migration 091) but the constant remains: existing
+// 'dismissed' rows stay in the DB permanently (never deleted, to avoid
+// resurfacing the non-USA jobs migration 084 hid), and code that reads
+// historical rows — the apply-queue's terminal-status exclusion, the
+// per-user counters, the "New" tab count math — still needs to recognize
+// the value.
 const (
 	JobStatusNew          = "new"   // synthetic — never written; overlay/filter only
 	JobStatusSaved        = "saved" // filter/tab key — never written to status column; saved_at IS NOT NULL is the source of truth
 	JobStatusApplied      = "applied"
-	JobStatusDismissed    = "dismissed"
+	JobStatusDismissed    = "dismissed" // historical only — no longer writable via any API
 	JobStatusInterviewing = "interviewing"
 	JobStatusOffer        = "offer"
 	JobStatusRejected     = "rejected"
@@ -32,18 +40,9 @@ const (
 	SeenReasonFiltered      SeenReason = "filtered" // passed filter, published to jobs.filtered.*
 	SeenReasonLLMIrrelevant SeenReason = "llm_irrelevant"
 	SeenReasonRetry         SeenReason = "retry"
-	SeenReasonUserDismissed SeenReason = "user_dismissed"
 	SeenReasonError         SeenReason = "error"
 	SeenReasonNonUSA        SeenReason = "non_usa_location"
 	SeenReasonSaved         SeenReason = "saved" // job successfully written to the jobs table
-)
-
-// DismissalReason values stored on user_job_state.dismissal_reason. The
-// allowed set is enforced at the application layer (the table itself does
-// not constrain it) so all dismissal flows write one of these values.
-const (
-	DismissalReasonUserDismissed = "user_dismissed"
-	DismissalReasonNotRelevant   = "user_not_relevant"
 )
 
 // EmployType values for jobs.employ_type

@@ -56,10 +56,8 @@ vi.mock('@/lib/hooks/use-media-query', () => ({
 }))
 
 import * as jobsApi from '@/features/jobs'
-import { toast } from 'sonner'
 import { JobsPage } from '@/pages/JobsPage'
 import { JOB_STATUS } from '@/config/constants/jobStatus'
-import { hiddenItems } from '@/lib/hooks/hidden-items'
 import type { Job } from '@/types'
 
 function makeJob(id: string, overrides: Partial<Job> = {}): Job {
@@ -140,7 +138,6 @@ beforeEach(() => {
   vi.mocked(jobsApi.fetchJobCompanies).mockResolvedValue(['Acme'])
   vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
   vi.mocked(jobsApi.setJobSaved).mockResolvedValue(undefined)
-  vi.mocked(jobsApi.dismissJob).mockResolvedValue(undefined)
 })
 
 describe('JobsPage — regression coverage for audit fixes', () => {
@@ -170,7 +167,7 @@ describe('JobsPage — regression coverage for audit fixes', () => {
   })
 })
 
-describe('JobsPage — bookmark and dismiss flows', () => {
+describe('JobsPage — bookmark flows', () => {
   it('bookmark button on an unsaved row calls setJobSaved(true) — orthogonal to status', async () => {
     render(wrap(<JobsPage />))
     // Row "a" is unsaved (saved_at = null) → bookmark says "Save Title a"
@@ -213,36 +210,5 @@ describe('JobsPage — bookmark and dismiss flows', () => {
     await waitFor(() => {
       expect(jobsApi.setJobSaved).toHaveBeenCalledWith('c', false)
     })
-  })
-
-  it('dismiss button calls dismissJob with default reason and shows DismissStripe toast', async () => {
-    render(wrap(<JobsPage />))
-    const dismissBtn = await screen.findByRole('button', { name: /Dismiss Title a/i })
-    fireEvent.click(dismissBtn)
-
-    await waitFor(() => {
-      expect(jobsApi.dismissJob).toHaveBeenCalledWith('a', 'user_dismissed', undefined)
-    })
-
-    // The dismiss stripe is rendered via toast.custom — assert it was invoked.
-    expect(vi.mocked(toast).custom).toHaveBeenCalled()
-  })
-
-  it('hides jobs whose company is in the hidden-items list', async () => {
-    hiddenItems.add('companies', 'Acme')
-    render(wrap(<JobsPage />))
-
-    // All three jobs were from "Acme" — none should render
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /Title a at Acme/i })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: /Title b at Acme/i })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: /Title c at Acme/i })).not.toBeInTheDocument()
-    })
-  })
-
-  it('renders normally when no companies are hidden', async () => {
-    render(wrap(<JobsPage />))
-    expect(await screen.findByRole('button', { name: /Title a at Acme/i })).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: /Title b at Acme/i })).toBeInTheDocument()
   })
 })

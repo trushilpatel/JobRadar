@@ -21,7 +21,6 @@ const {
   fetchJobMock,
   setJobStatusMock,
   setJobSavedMock,
-  dismissJobMock,
 } = vi.hoisted(() => ({
   fetchApplyQueueMock: vi.fn(),
   setApplyQueueResumeMock: vi.fn(),
@@ -29,7 +28,6 @@ const {
   fetchJobMock: vi.fn(),
   setJobStatusMock: vi.fn(),
   setJobSavedMock: vi.fn(),
-  dismissJobMock: vi.fn(),
 }))
 vi.mock('@/features/apply-queue/api/apply-queue.api', () => ({
   fetchApplyQueue: fetchApplyQueueMock,
@@ -39,15 +37,12 @@ vi.mock('@/features/resumes/api/resumes.api', () => ({
   fetchResumes: fetchResumesMock,
 }))
 // The detail panel (features/jobs) hits jobs.api.ts directly via useJob /
-// useJobActions — mocked so panel-open / status / save / dismiss flows can be
-// exercised without a real backend. bulkDismissJobs is imported (unused here)
-// by useJobActions at module load — stub it too so that import isn't undefined.
+// useJobActions — mocked so panel-open / status / save flows can be
+// exercised without a real backend.
 vi.mock('@/features/jobs/api/jobs.api', () => ({
   fetchJob: fetchJobMock,
   setJobStatus: setJobStatusMock,
   setJobSaved: setJobSavedMock,
-  dismissJob: dismissJobMock,
-  bulkDismissJobs: vi.fn(),
 }))
 vi.mock('sonner', () => {
   // useJobActions's undo toast calls `toast(message, opts)` as a function AND
@@ -326,26 +321,6 @@ describe('ApplyQueuePage', () => {
       await user.click(screen.getByRole('radio', { name: 'Applied' }))
 
       expect(setJobStatusMock).toHaveBeenCalledWith('job-1', JOB_STATUS.APPLIED)
-      await waitFor(() => expect(fetchApplyQueueMock).toHaveBeenCalled())
-    })
-
-    it('dismissing from the panel closes it and invalidates the apply-queue list', async () => {
-      const user = userEvent.setup()
-      fetchJobMock.mockResolvedValue(sampleJob)
-      dismissJobMock.mockResolvedValue(undefined)
-      render(<ApplyQueuePage />, { wrapper: makeWrapper() })
-
-      await waitFor(() => expect(screen.getByText('Senior Engineer')).toBeInTheDocument())
-      await user.click(screen.getByRole('button', { name: /Senior Engineer at Acme/i }))
-      await waitFor(() =>
-        expect(screen.getByRole('region', { name: 'Job details' })).toBeInTheDocument()
-      )
-
-      fetchApplyQueueMock.mockClear()
-      await user.click(screen.getByRole('button', { name: 'Dismiss job' }))
-
-      expect(dismissJobMock).toHaveBeenCalledWith('job-1', 'user_dismissed', undefined)
-      expect(screen.queryByRole('region', { name: 'Job details' })).not.toBeInTheDocument()
       await waitFor(() => expect(fetchApplyQueueMock).toHaveBeenCalled())
     })
 

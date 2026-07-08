@@ -16,19 +16,13 @@ type recordingService struct {
 	setSavedCalls  int
 	setStatusCalls int
 	setNotesCalls  int
-	dismissCalls   int
-	bulkCalls      int
 	countsCalls    int
 	companiesCalls int
 	lastID         string
 	lastStatus     string
 	lastNotes      string
-	lastDismissID  string
-	lastBulkIDs    []string
 	lastSavedBool  bool
 	lastSavedID    string
-	lastReason     string
-	lastNote       string
 	lastListCursor string
 	lastListLimit  int
 	lastListFilter jobdto.JobFilter
@@ -63,20 +57,6 @@ func (r *recordingService) SetNotes(_ context.Context, id, notes string) error {
 	r.setNotesCalls++
 	r.lastID = id
 	r.lastNotes = notes
-	return nil
-}
-func (r *recordingService) Dismiss(_ context.Context, id, reason, note string) error {
-	r.dismissCalls++
-	r.lastDismissID = id
-	r.lastReason = reason
-	r.lastNote = note
-	return nil
-}
-func (r *recordingService) BulkDismiss(_ context.Context, ids []string, reason, note string) error {
-	r.bulkCalls++
-	r.lastBulkIDs = ids
-	r.lastReason = reason
-	r.lastNote = note
 	return nil
 }
 func (r *recordingService) GetCounts(_ context.Context) (jobdto.Counts, error) {
@@ -163,23 +143,6 @@ func TestBaseService_DelegatesEveryMethod(t *testing.T) {
 	}
 	if next.lastNotes != "hello" {
 		t.Errorf("SetNotes forwarded wrong notes: %q", next.lastNotes)
-	}
-
-	// Dismiss
-	if err := pt.Dismiss(ctx, "j-d", "user_dismissed", "n1"); err != nil {
-		t.Fatalf("Dismiss err = %v", err)
-	}
-	if next.lastDismissID != "j-d" || next.lastReason != "user_dismissed" || next.lastNote != "n1" {
-		t.Errorf("Dismiss forwarded wrong: id=%q reason=%q note=%q",
-			next.lastDismissID, next.lastReason, next.lastNote)
-	}
-
-	// BulkDismiss
-	if err := pt.BulkDismiss(ctx, []string{"a", "b"}, "user_not_relevant", "n2"); err != nil {
-		t.Fatalf("BulkDismiss err = %v", err)
-	}
-	if len(next.lastBulkIDs) != 2 || next.lastReason != "user_not_relevant" {
-		t.Errorf("BulkDismiss forwarded wrong: ids=%v reason=%q", next.lastBulkIDs, next.lastReason)
 	}
 
 	// GetCounts

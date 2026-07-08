@@ -272,9 +272,9 @@ func (s *implService) SetSaved(ctx context.Context, id string, saved bool) (err 
 }
 
 // SetStatus upserts the per-user workflow status (applied / interviewing /
-// offer / rejected / dismissed). 'saved' is rejected — saved is orthogonal
-// to workflow status and must go through SetSaved; the validation layer
-// catches this earlier, but the impl guards as defence in depth.
+// offer / rejected). 'saved' is rejected — saved is orthogonal to workflow
+// status and must go through SetSaved; the validation layer catches this
+// earlier, but the impl guards as defence in depth.
 func (s *implService) SetStatus(ctx context.Context, id, status string) (err error) {
 	ctx, span := tracing.Start(ctx, "job.impl.SetStatus")
 	defer tracing.End(span, &err)
@@ -300,10 +300,6 @@ func (s *implService) SetStatus(ctx context.Context, id, status string) (err err
 		}
 		if err = s.appWriter.InsertAppliedApplication(ctx, id); err != nil {
 			s.logger.Warn("applied application insert failed", logger.Err(err))
-		}
-	case jobmodel.StatusDismissed:
-		if err = s.snapshot.UpdateSnapshotAction(ctx, id, jobmodel.StatusDismissed); err != nil {
-			s.logger.Warn("snapshot action update failed", logger.Err(err))
 		}
 	}
 	return nil
@@ -350,81 +346,6 @@ func (s *implService) SetNotes(ctx context.Context, id, notes string) (err error
 	// alone, so we skip the invalidation there.
 	if existing == nil {
 		s.invalidateUserCounts(ctx, userID)
-	}
-	return nil
-}
-
-// Dismiss upserts the per-user row to 'dismissed' with reason+note, and
-// (best-effort) updates the analytics snapshot + the global ledger so
-// downstream pipelines stop reconsidering the job.
-func (s *implService) Dismiss(ctx context.Context, id string, reason, note string) (err error) {
-	ctx, span := tracing.Start(ctx, "job.impl.Dismiss")
-	defer tracing.End(span, &err)
-
-	userID := identity.UserIDFrom(ctx)
-	if userID == "" {
-		return apperr.ErrInternal.WithMessage("user id required")
-	}
-
-	job, err := s.jobs.GetJobByID(ctx, id)
-	if err != nil {
-		if apperr.IsNotFound(err) {
-			return apperr.ErrNotFound.WithMessage("job not found")
-		}
-		return apperr.ErrInternal.WithMessage("failed to fetch job")
-	}
-
-	reasonPtr := &reason
-	var notePtr *string
-	if note != "" {
-		notePtr = &note
-	}
-	if err = s.userState.Upsert(ctx, userID, id, dto.UpsertState{
-		Status:          jobmodel.StatusDismissed,
-		DismissalReason: reasonPtr,
-		DismissalNote:   notePtr,
-	}); err != nil {
-		return err
-	}
-	s.invalidateUserCounts(ctx, userID)
-
-	// Best-effort side effects.
-	if err = s.ledger.UpdateSeenReason(ctx, job.JobPostID, jobcommon.SeenReasonUserDismissed); err != nil {
-		s.logger.Warn("ledger seen reason update failed", logger.Err(err))
-	}
-	if err = s.snapshot.UpdateSnapshotAction(ctx, id, jobmodel.StatusDismissed); err != nil {
-		s.logger.Warn("snapshot action update failed", logger.Err(err))
-	}
-	return nil
-}
-
-// BulkDismiss upserts every (user, job) pair in one round trip with the
-// shared reason+note, then best-effort updates the ledger + snapshot.
-func (s *implService) BulkDismiss(ctx context.Context, ids []string, reason, note string) (err error) {
-	ctx, span := tracing.Start(ctx, "job.impl.BulkDismiss")
-	defer tracing.End(span, &err)
-
-	userID := identity.UserIDFrom(ctx)
-	if userID == "" {
-		return apperr.ErrInternal.WithMessage("user id required")
-	}
-	if len(ids) == 0 {
-		return nil
-	}
-
-	if err = s.userState.UpsertBulkDismiss(ctx, userID, ids, reason, note); err != nil {
-		return err
-	}
-	s.invalidateUserCounts(ctx, userID)
-
-	jobPostIDs, perr := s.jobs.GetJobPostIDs(ctx, ids)
-	if perr == nil && len(jobPostIDs) > 0 {
-		if err = s.ledger.UpdateSeenReasonBatch(ctx, jobPostIDs, jobcommon.SeenReasonUserDismissed); err != nil {
-			s.logger.Warn("ledger seen reason batch update failed", logger.Err(err))
-		}
-	}
-	if err = s.snapshot.UpdateSnapshotActionBatch(ctx, ids, jobmodel.StatusDismissed); err != nil {
-		s.logger.Warn("snapshot action batch update failed", logger.Err(err))
 	}
 	return nil
 }

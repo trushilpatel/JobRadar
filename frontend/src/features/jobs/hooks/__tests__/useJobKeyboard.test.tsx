@@ -30,7 +30,6 @@ function makeArgs(): UseJobKeyboardArgs {
     onGoToTab: vi.fn(),
     onSetStatus: vi.fn(),
     onToggleSave: vi.fn(),
-    onDismiss: vi.fn(),
     onUndo: vi.fn(),
     onFocusSearch: vi.fn(),
     onOpenPalette: vi.fn(),
@@ -120,11 +119,10 @@ describe('useJobKeyboard', () => {
     expect(args.onSetStatus).not.toHaveBeenCalled()
   })
 
-  it('d calls onDismiss, u calls onUndo', () => {
+  it('u calls onUndo — d is unbound (dismiss feature removed)', () => {
     renderHook(() => useJobKeyboard(args))
     fireKey({ key: 'd' })
     fireKey({ key: 'u' })
-    expect(args.onDismiss).toHaveBeenCalledTimes(1)
     expect(args.onUndo).toHaveBeenCalledTimes(1)
   })
 
@@ -177,11 +175,9 @@ describe('useJobKeyboard', () => {
     renderHook(() => useJobKeyboard({ ...args, enabled: false }))
     fireKey({ key: 'j' })
     fireKey({ key: 's' })
-    fireKey({ key: 'd' })
     fireKey({ key: 'Escape' })
     expect(args.onFocusNext).not.toHaveBeenCalled()
     expect(args.onSetStatus).not.toHaveBeenCalled()
-    expect(args.onDismiss).not.toHaveBeenCalled()
     expect(args.onEscape).not.toHaveBeenCalled()
   })
 
@@ -195,9 +191,7 @@ describe('useJobKeyboard', () => {
     input.focus()
     fireEvent.keyDown(input, { key: 'j', code: 'KeyJ' })
     fireEvent.keyDown(input, { key: 's', code: 'KeyS' })
-    fireEvent.keyDown(input, { key: 'd', code: 'KeyD' })
     expect(args.onFocusNext).not.toHaveBeenCalled()
     expect(args.onSetStatus).not.toHaveBeenCalled()
-    expect(args.onDismiss).not.toHaveBeenCalled()
   })
 })

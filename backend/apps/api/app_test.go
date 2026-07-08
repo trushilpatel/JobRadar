@@ -114,7 +114,6 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 		// Jobs
 		{http.MethodGet, "/api/jobs"},
 		{http.MethodGet, "/api/jobs/{id}"},
-		{http.MethodDelete, "/api/jobs/{id}"},
 		{http.MethodPatch, "/api/jobs/{id}/save"},
 		{http.MethodPatch, "/api/jobs/{id}/status"},
 		{http.MethodPatch, "/api/jobs/{id}/notes"},
@@ -230,13 +229,9 @@ func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _ string, _
 	return jobdto.PageResult{}, nil
 }
 func (f *fakeJobService) Get(_ context.Context, _ string) (*jobdto.JobView, error) { return nil, nil }
-func (f *fakeJobService) Dismiss(_ context.Context, _ string, _, _ string) error   { return nil }
 func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error       { return nil }
 func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error           { return nil }
 func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error            { return nil }
-func (f *fakeJobService) BulkDismiss(_ context.Context, _ []string, _, _ string) error {
-	return nil
-}
 func (f *fakeJobService) GetCounts(_ context.Context) (jobdto.Counts, error) {
 	return jobdto.Counts{}, nil
 }

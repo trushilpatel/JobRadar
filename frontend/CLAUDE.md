@@ -297,4 +297,4 @@ Run `npx shadcn@latest add <name>` to install. Do not copy-paste from shadcn doc
 
 Already installed: `alert-dialog` · `badge` · `button` · `card` · `checkbox` · `command` · `dialog` · `drawer` · `input` · `label` · `popover` · `scroll-area` · `separator` · `sheet` · `skeleton` · `switch` · `tabs` · `toggle` · `toggle-group` · `tooltip`
 
-Custom (no shadcn equivalent, stays custom): `pagination` · `data-table` · `resize-handle` · `dismiss-stripe` · `scan-history-bar` · `kbd`
+Custom (no shadcn equivalent, stays custom): `pagination` · `data-table` · `resize-handle` · `scan-history-bar` · `kbd`
