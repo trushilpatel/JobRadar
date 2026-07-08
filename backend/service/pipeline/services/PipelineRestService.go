@@ -1,9 +1,10 @@
 package services
 
 import (
-	"net/http"
+	"context"
 
-	"github.com/trushilpatel/jobradar/apps/api/handler"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
+	"github.com/trushilpatel/jobradar/apps/api/response"
 	pipelinedto "github.com/trushilpatel/jobradar/service/pipeline/dto"
 )
 
@@ -25,28 +26,32 @@ func NewRestService(next PipelineService) *PipelineRestService {
 	return &PipelineRestService{next: next}
 }
 
-// GetStats handles GET /pipeline/stats — returns a live pipeline health snapshot.
-func (h *PipelineRestService) GetStats(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.next.GetStats(r.Context())
-	if err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, stats)
+// triggerRetryInput is the Huma input for POST /pipeline/retry.
+type triggerRetryInput struct {
+	Body pipelinedto.TriggerRetryInput
 }
 
-// TriggerRetry handles POST /pipeline/retry — validates a (worker, tier)
-// redelivery request.
-func (h *PipelineRestService) TriggerRetry(w http.ResponseWriter, r *http.Request) {
-	input, ok := handler.DecodeBody[pipelinedto.TriggerRetryInput](w, r)
-	if !ok {
-		return
+// getStats handles GET /pipeline/stats — returns a live pipeline health snapshot.
+func (h *PipelineRestService) getStats(ctx context.Context, _ *struct{}) (*apihuma.SingleOutput[pipelinedto.PipelineStats], error) {
+	stats, err := h.next.GetStats(ctx)
+	if err != nil {
+		return nil, apihuma.MapError(err)
 	}
 
-	result, err := h.next.TriggerRetry(r.Context(), input)
+	out := &apihuma.SingleOutput[pipelinedto.PipelineStats]{}
+	out.Body = response.Response[pipelinedto.PipelineStats]{Data: stats}
+	return out, nil
+}
+
+// triggerRetry handles POST /pipeline/retry — validates a (worker, tier)
+// redelivery request.
+func (h *PipelineRestService) triggerRetry(ctx context.Context, in *triggerRetryInput) (*apihuma.SingleOutput[pipelinedto.TriggerRetryResult], error) {
+	result, err := h.next.TriggerRetry(ctx, in.Body)
 	if err != nil {
-		handler.HandleError(w, err)
-		return
+		return nil, apihuma.MapError(err)
 	}
-	handler.Respond(w, http.StatusOK, result)
+
+	out := &apihuma.SingleOutput[pipelinedto.TriggerRetryResult]{}
+	out.Body = response.Response[pipelinedto.TriggerRetryResult]{Data: result}
+	return out, nil
 }

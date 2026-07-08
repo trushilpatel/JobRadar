@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	atsdto "github.com/trushilpatel/jobradar/service/ats/dto"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
@@ -51,9 +52,13 @@ func (s *stubAtsService) UpdateATS(_ context.Context, _ string, _ atsdto.UpdateA
 }
 
 // newAtsTestRouter wires a chi router with the ATS RestRouter registered.
+// Uses a fresh, isolated zone config/registry per call — never
+// apispec.APIZoneConfig()/AdminZoneConfig(), which share the production
+// package-level singleton registry (see apps/api/app_test.go for why that
+// matters).
 func newAtsTestRouter(svc atssvc.AtsService) http.Handler {
 	rest := atssvc.NewRestService(svc)
-	router := atssvc.NewRestRouter(rest)
+	router := atssvc.NewRestRouter(rest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 	mux := chi.NewMux()
 	router.Register(mux)
 	return mux

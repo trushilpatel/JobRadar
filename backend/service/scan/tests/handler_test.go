@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	"github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/scan/dto"
 	svc "github.com/trushilpatel/jobradar/service/scan/services"
@@ -70,7 +71,8 @@ func (f *fakeScanService) RefreshGaugeMetrics(context.Context) error { return ni
 func newScanTestRouter(next svc.Service) *chi.Mux {
 	valid := svc.NewValidator(next)
 	handler := svc.NewRestService(valid)
-	router := svc.NewRestRouter(handler)
+	zoneCfg := apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry())
+	router := svc.NewRestRouter(handler, zoneCfg)
 	r := chi.NewRouter()
 	router.Register(r)
 	return r

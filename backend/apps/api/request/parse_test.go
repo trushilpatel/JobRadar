@@ -93,6 +93,55 @@ func TestParsePagination_EmptyValuesIgnored(t *testing.T) {
 	}
 }
 
+// TestParseLimit_MatchesParsePaginationBehavior locks the raw-string variant
+// (used by Huma input Resolvers, see apihuma) to the exact same clamp/
+// fallback semantics as ParsePagination's inline limit handling.
+func TestParseLimit_MatchesParsePaginationBehavior(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want int
+	}{
+		{"", 20},
+		{"50", 50},
+		{"999", 100},
+		{"0", 1},
+		{"-5", 1},
+		{"xyz", 20},
+		{"100", 100},
+		{"1", 1},
+	}
+	for _, c := range cases {
+		t.Run(c.raw, func(t *testing.T) {
+			if got := ParseLimit(c.raw, 20); got != c.want {
+				t.Errorf("ParseLimit(%q, 20)=%d want %d", c.raw, got, c.want)
+			}
+		})
+	}
+}
+
+// TestParsePage_MatchesParsePaginationBehavior locks the raw-string variant
+// to ParsePagination's exact page fallback semantics.
+func TestParsePage_MatchesParsePaginationBehavior(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want int
+	}{
+		{"", 1},
+		{"3", 3},
+		{"0", 1},
+		{"-3", 1},
+		{"abc", 1},
+		{"2147483647", 2147483647},
+	}
+	for _, c := range cases {
+		t.Run(c.raw, func(t *testing.T) {
+			if got := ParsePage(c.raw, 1); got != c.want {
+				t.Errorf("ParsePage(%q, 1)=%d want %d", c.raw, got, c.want)
+			}
+		})
+	}
+}
+
 func TestParsePagination_BoundaryValues(t *testing.T) {
 	// Boundary cases at the documented edges.
 	cases := []struct {

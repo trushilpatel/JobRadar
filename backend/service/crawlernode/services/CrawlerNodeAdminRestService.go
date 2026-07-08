@@ -1,10 +1,10 @@
 package services
 
 import (
-	"net/http"
+	"context"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/apps/api/handler"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
+	"github.com/trushilpatel/jobradar/service/crawlernode/dto"
 )
 
 // AdminRestService is the HTTP adapter for admin-facing crawler-node endpoints.
@@ -18,61 +18,81 @@ func NewAdminRestService(next NodeService) *AdminRestService {
 	return &AdminRestService{next: next}
 }
 
+// listNodesInput is the Huma input for GET /admin/crawler-nodes.
+type listNodesInput struct {
+	Status string `query:"status" doc:"Filter by node status"`
+}
+
+// listNodes serves GET /admin/crawler-nodes.
+func (h *AdminRestService) listNodes(ctx context.Context, in *listNodesInput) (*apihuma.SingleOutput[[]dto.NodeView], error) {
+	nodes, err := h.next.ListNodes(ctx, in.Status)
+	if err != nil {
+		return nil, apihuma.MapError(err)
+	}
+	out := &apihuma.SingleOutput[[]dto.NodeView]{}
+	out.Body.Data = nodes
+	return out, nil
+}
+
 // provisionNodeRequest is the JSON body for POST /admin/crawler-nodes.
+// required:"false" matches the pre-Huma handler's plain json.Decode — an
+// empty name reaches ValidationService.ProvisionNode's existing
+// non-empty check rather than failing at the framework layer.
 type provisionNodeRequest struct {
-	Name string `json:"name"`
+	Name string `json:"name" required:"false"`
+}
+
+// provisionNodeInput is the Huma input for POST /admin/crawler-nodes.
+type provisionNodeInput struct {
+	Body provisionNodeRequest
+}
+
+// provisionNode serves POST /admin/crawler-nodes.
+func (h *AdminRestService) provisionNode(ctx context.Context, in *provisionNodeInput) (*apihuma.SingleOutput[*dto.CreateNodeResponse], error) {
+	resp, err := h.next.ProvisionNode(ctx, in.Body.Name)
+	if err != nil {
+		return nil, apihuma.MapError(err)
+	}
+	out := &apihuma.SingleOutput[*dto.CreateNodeResponse]{}
+	out.Body.Data = resp
+	return out, nil
 }
 
 // setNodeStatusRequest is the JSON body for PATCH /admin/crawler-nodes/{id}.
+// required:"false" matches the pre-Huma handler's plain json.Decode — an
+// empty status reaches ValidationService.SetNodeStatus's existing
+// allow-list check rather than failing at the framework layer.
 type setNodeStatusRequest struct {
-	Status string `json:"status"`
+	Status string `json:"status" required:"false"`
 }
 
-// ListNodes handles GET /admin/crawler-nodes?status=<optional>
-func (h *AdminRestService) ListNodes(w http.ResponseWriter, r *http.Request) {
-	status := r.URL.Query().Get("status")
-	nodes, err := h.next.ListNodes(r.Context(), status)
-	if err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, nodes)
+// setNodeStatusInput is the Huma input for PATCH /admin/crawler-nodes/{id}.
+type setNodeStatusInput struct {
+	ID   string `path:"id"`
+	Body setNodeStatusRequest
 }
 
-// ProvisionNode handles POST /admin/crawler-nodes
-func (h *AdminRestService) ProvisionNode(w http.ResponseWriter, r *http.Request) {
-	req, ok := handler.DecodeBody[provisionNodeRequest](w, r)
-	if !ok {
-		return
+// setNodeStatus serves PATCH /admin/crawler-nodes/{id}.
+func (h *AdminRestService) setNodeStatus(ctx context.Context, in *setNodeStatusInput) (*apihuma.SingleOutput[struct{}], error) {
+	if err := h.next.SetNodeStatus(ctx, in.ID, in.Body.Status); err != nil {
+		return nil, apihuma.MapError(err)
 	}
-	resp, err := h.next.ProvisionNode(r.Context(), req.Name)
-	if err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusCreated, resp)
+	return &apihuma.SingleOutput[struct{}]{}, nil
 }
 
-// SetNodeStatus handles PATCH /admin/crawler-nodes/{id}
-func (h *AdminRestService) SetNodeStatus(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	req, ok := handler.DecodeBody[setNodeStatusRequest](w, r)
-	if !ok {
-		return
-	}
-	if err := h.next.SetNodeStatus(r.Context(), id, req.Status); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, struct{}{})
+// retireNodeInput is the Huma input for DELETE /admin/crawler-nodes/{id}.
+type retireNodeInput struct {
+	ID string `path:"id"`
 }
 
-// RetireNode handles DELETE /admin/crawler-nodes/{id}
-func (h *AdminRestService) RetireNode(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if err := h.next.RetireNode(r.Context(), id); err != nil {
-		handler.HandleError(w, err)
-		return
+// retireNodeOutput has no Body field, so Huma defaults its status to 204
+// (see huma's own op.DefaultStatus inference: no output body -> StatusNoContent).
+type retireNodeOutput struct{}
+
+// retireNode serves DELETE /admin/crawler-nodes/{id}.
+func (h *AdminRestService) retireNode(ctx context.Context, in *retireNodeInput) (*retireNodeOutput, error) {
+	if err := h.next.RetireNode(ctx, in.ID); err != nil {
+		return nil, apihuma.MapError(err)
 	}
-	w.WriteHeader(http.StatusNoContent)
+	return &retireNodeOutput{}, nil
 }

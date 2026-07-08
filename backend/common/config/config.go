@@ -69,6 +69,16 @@ func (c AuthConfig) Validate() error {
 type APIConfig struct {
 	MaxBodyBytes int64
 	DevToken     string
+	// PublicURL is this instance's externally-reachable base URL (scheme +
+	// host + port, no trailing slash) — e.g. "http://localhost:8080" locally.
+	// Used only to populate the served OpenAPI spec's `servers` entry so
+	// documentation tooling (Stoplight's "Try it" console, Postman imports)
+	// sends requests to the real API instead of defaulting to the docs
+	// page's own origin (the ops listener, a different port entirely — see
+	// apps/api/main.go). Never baked into the committed apps/api/openapi.yaml
+	// via --print-spec, which stays environment-agnostic; only injected into
+	// the live-served spec at runtime.
+	PublicURL string
 }
 
 // ObjectStorageConfig holds connection details for the S3-compatible object
@@ -355,6 +365,7 @@ func Load() *Config {
 			// near this size, so raising the ceiling here is safe.
 			MaxBodyBytes: int64(getEnvInt("API_MAX_BODY_BYTES", 3145728)),
 			DevToken:     os.Getenv("DEV_TOKEN"),
+			PublicURL:    getEnv("API_PUBLIC_URL", "http://localhost:8080"),
 		},
 		MultiUser: MultiUserConfig{
 			ClerkSecretKey:               getEnv("CLERK_SECRET_KEY", ""),

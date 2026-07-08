@@ -9,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	appcommon "github.com/trushilpatel/jobradar/service/application/common"
 	"github.com/trushilpatel/jobradar/service/application/dto"
@@ -51,10 +53,14 @@ func (f *fakeService) UpdateNote(_ context.Context, _, _ string, _ dto.UpdateNot
 // newTestRouter wires a RestService directly (bypassing validation) and
 // registers routes via RestRouter — tests below rely on the relative routes
 // declared by ApplicationRestRouter.
+func newTestZoneConfig() huma.Config {
+	return apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry())
+}
+
 func newTestRouter(next svc.ApplicationService) *chi.Mux {
 	r := chi.NewRouter()
 	h := svc.NewRestService(next)
-	rt := svc.NewRestRouter(h)
+	rt := svc.NewRestRouter(h, newTestZoneConfig())
 	rt.Register(r)
 	return r
 }
@@ -173,7 +179,7 @@ func TestHandlerCreate_BadJSON(t *testing.T) {
 	fake := &fakeServiceWithFlag{flag: &called}
 	r := chi.NewRouter()
 	h := svc.NewRestService(fake)
-	rt := svc.NewRestRouter(h)
+	rt := svc.NewRestRouter(h, newTestZoneConfig())
 	rt.Register(r)
 
 	req := httptest.NewRequest(http.MethodPost, "/jobs/j1/applications", bytes.NewReader([]byte("{not-json")))
@@ -208,7 +214,7 @@ func TestHandlerUpdateStage_BadJSON(t *testing.T) {
 	called := false
 	fake := &fakeServiceWithFlag{flag: &called}
 	r := chi.NewRouter()
-	rt := svc.NewRestRouter(svc.NewRestService(fake))
+	rt := svc.NewRestRouter(svc.NewRestService(fake), newTestZoneConfig())
 	rt.Register(r)
 
 	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/applications/1/stage", bytes.NewReader([]byte("not-json")))
@@ -258,7 +264,7 @@ func TestHandlerUpdateStageByID_BadJSON(t *testing.T) {
 	called := false
 	fake := &fakeServiceWithFlag{flag: &called}
 	r := chi.NewRouter()
-	rt := svc.NewRestRouter(svc.NewRestService(fake))
+	rt := svc.NewRestRouter(svc.NewRestService(fake), newTestZoneConfig())
 	rt.Register(r)
 
 	req := httptest.NewRequest(http.MethodPatch, "/applications/1/stage", bytes.NewReader([]byte("not-json")))
@@ -290,7 +296,7 @@ func TestHandlerUpdateNote_BadJSON(t *testing.T) {
 	called := false
 	fake := &fakeServiceWithFlag{flag: &called}
 	r := chi.NewRouter()
-	rt := svc.NewRestRouter(svc.NewRestService(fake))
+	rt := svc.NewRestRouter(svc.NewRestService(fake), newTestZoneConfig())
 	rt.Register(r)
 
 	req := httptest.NewRequest(http.MethodPatch, "/jobs/j1/applications/1/note", bytes.NewReader([]byte("not-json")))

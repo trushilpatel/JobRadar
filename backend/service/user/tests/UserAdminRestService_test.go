@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/identity"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
@@ -18,10 +19,13 @@ import (
 // newAdminTestRouter wires the AdminRestRouter onto a fresh chi mux with an
 // injectable middleware that attaches an Identity (for the grantedBy lookup in
 // setRoles). Routes are mounted under /admin so the test paths match the
-// production prefix; the AdminRestRouter itself adds the /users prefix.
+// production prefix; the AdminRestRouter itself adds the /users prefix. Uses
+// a fresh, isolated zone config/registry per call — never
+// apispec.APIZoneConfig()/AdminZoneConfig() (see apps/api/app_test.go for
+// why that matters).
 func newAdminTestRouter(svc usersvc.AdminService, ident identity.Identity) http.Handler {
 	rest := usersvc.NewAdminRestService(svc)
-	router := usersvc.NewAdminRestRouter(rest)
+	router := usersvc.NewAdminRestRouter(rest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 	mux := chi.NewMux()
 	mux.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

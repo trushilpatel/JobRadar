@@ -9,24 +9,12 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	"github.com/trushilpatel/jobradar/apps/orchestrator/nodeidentity"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/service/crawlernode/dto"
 	"github.com/trushilpatel/jobradar/service/crawlernode/services"
 )
-
-// withChiID injects a chi route param {id} = nodeID into the request context.
-func withChiID(r *http.Request, id string) *http.Request {
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", id)
-	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
-}
-
-// withNodeIdentity injects a NodeIdentity into the request context.
-func withNodeIdentity(r *http.Request, id, name string) *http.Request {
-	ctx := nodeidentity.NewContext(r.Context(), nodeidentity.NodeIdentity{ID: id, Name: name})
-	return r.WithContext(ctx)
-}
 
 // jsonBody encodes v as JSON into an *bytes.Buffer.
 func jsonBody(t *testing.T, v any) *bytes.Buffer {
@@ -38,25 +26,57 @@ func jsonBody(t *testing.T, v any) *bytes.Buffer {
 	return bytes.NewBuffer(b)
 }
 
-// --- NodeRestService ---
+// newNodeTestRouter wires the node-facing RestRouter behind a middleware
+// that injects a fixed NodeIdentity into the request context — the
+// server-side equivalent of what RequireNodeToken would set on success.
+// Uses a fresh, isolated zone config/registry per call (see
+// apps/api/app_test.go for why never apispec.APIZoneConfig()-equivalents in
+// tests).
+func newNodeTestRouter(svc services.NodeService, nodeID, nodeName string) http.Handler {
+	rest := services.NewNodeRestService(svc)
+	authMw := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := nodeidentity.NewContext(r.Context(), nodeidentity.NodeIdentity{ID: nodeID, Name: nodeName})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+	router := services.NewNodeRestRouter(rest, authMw, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
+	mux := chi.NewMux()
+	router.Register(mux)
+	return mux
+}
 
-// getWork: 200 when service returns a work response.
+// newAdminTestRouter wires the admin-facing RestRouter. Uses a fresh,
+// isolated zone config/registry per call.
+func newAdminTestRouter(svc services.NodeService) http.Handler {
+	rest := services.NewAdminRestService(svc)
+	router := services.NewAdminRestRouter(rest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
+	mux := chi.NewMux()
+	router.Register(mux)
+	return mux
+}
+
+// --- NodeRestService: GET /work ---
+
 func TestNodeRestService_GetWork_Returns200(t *testing.T) {
 	svc := &mockFullNodeService{
 		getWorkFn: func(_ context.Context, _, _ string, _ []string) (*dto.WorkResponse, error) {
 			return &dto.WorkResponse{}, nil
 		},
 	}
-	rs := services.NewNodeRestService(svc)
-	req := withNodeIdentity(httptest.NewRequest(http.MethodGet, "/node/work?adapter=greenhouse", nil), "node-1", "n1")
-	rr := httptest.NewRecorder()
-	rs.GetWork(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Errorf("GetWork status = %d, want 200", rr.Code)
+	srv := httptest.NewServer(newNodeTestRouter(svc, "node-1", "n1"))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/work?adapter=greenhouse")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("GetWork status = %d, want 200", resp.StatusCode)
 	}
 }
 
-// getWork: missing adapter query param → 200 (adapter is optional; empty means "any").
 func TestNodeRestService_GetWork_MissingAdapter_Returns200(t *testing.T) {
 	svc := &mockFullNodeService{
 		getWorkFn: func(_ context.Context, _, adapterType string, _ []string) (*dto.WorkResponse, error) {
@@ -66,16 +86,19 @@ func TestNodeRestService_GetWork_MissingAdapter_Returns200(t *testing.T) {
 			return &dto.WorkResponse{}, nil
 		},
 	}
-	rs := services.NewNodeRestService(svc)
-	req := withNodeIdentity(httptest.NewRequest(http.MethodGet, "/node/work", nil), "node-1", "n1")
-	rr := httptest.NewRecorder()
-	rs.GetWork(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Errorf("GetWork (no adapter) status = %d, want 200", rr.Code)
+	srv := httptest.NewServer(newNodeTestRouter(svc, "node-1", "n1"))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/work")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("GetWork (no adapter) status = %d, want 200", resp.StatusCode)
 	}
 }
 
-// getWork: ?holding=id1,id2 param is parsed and forwarded as holdingIDs slice.
 func TestNodeRestService_GetWork_WithHoldingParam_ForwardsHoldingIDs(t *testing.T) {
 	var gotHolding []string
 	svc := &mockFullNodeService{
@@ -84,293 +107,350 @@ func TestNodeRestService_GetWork_WithHoldingParam_ForwardsHoldingIDs(t *testing.
 			return &dto.WorkResponse{}, nil
 		},
 	}
-	rs := services.NewNodeRestService(svc)
-	req := withNodeIdentity(httptest.NewRequest(http.MethodGet, "/node/work?holding=id1,id2", nil), "node-1", "n1")
-	rr := httptest.NewRecorder()
-	rs.GetWork(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Errorf("GetWork (holding) status = %d, want 200", rr.Code)
+	srv := httptest.NewServer(newNodeTestRouter(svc, "node-1", "n1"))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/work?holding=id1,id2")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("GetWork (holding) status = %d, want 200", resp.StatusCode)
 	}
 	if len(gotHolding) != 2 || gotHolding[0] != "id1" || gotHolding[1] != "id2" {
 		t.Errorf("GetWork (holding) holdingIDs = %v, want [id1 id2]", gotHolding)
 	}
 }
 
-// getWork: service error propagates via HandleError.
 func TestNodeRestService_GetWork_ServiceError_Returns500(t *testing.T) {
 	svc := &mockFullNodeService{
 		getWorkFn: func(_ context.Context, _, _ string, _ []string) (*dto.WorkResponse, error) {
 			return nil, domainerrs.ErrInternal.WithMessage("db down")
 		},
 	}
-	rs := services.NewNodeRestService(svc)
-	req := withNodeIdentity(httptest.NewRequest(http.MethodGet, "/node/work?adapter=greenhouse", nil), "node-1", "n1")
-	rr := httptest.NewRecorder()
-	rs.GetWork(rr, req)
-	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("GetWork (service error) status = %d, want 500", rr.Code)
+	srv := httptest.NewServer(newNodeTestRouter(svc, "node-1", "n1"))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/work?adapter=greenhouse")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("GetWork (service error) status = %d, want 500", resp.StatusCode)
 	}
 }
 
-// submitResults: 200 on success.
+// --- NodeRestService: POST /results ---
+
 func TestNodeRestService_SubmitResults_Returns200(t *testing.T) {
 	svc := &mockFullNodeService{
 		submitResultsFn: func(_ context.Context, _ string, _ dto.ResultsRequest) (*dto.ResultsResponse, error) {
 			return &dto.ResultsResponse{Published: 3}, nil
 		},
 	}
-	rs := services.NewNodeRestService(svc)
+	srv := httptest.NewServer(newNodeTestRouter(svc, "node-1", "n1"))
+	defer srv.Close()
+
 	body := jsonBody(t, dto.ResultsRequest{CompanyID: "co-1", AdapterType: "greenhouse"})
-	req := withNodeIdentity(httptest.NewRequest(http.MethodPost, "/node/results", body), "node-1", "n1")
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	rs.SubmitResults(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Errorf("SubmitResults status = %d, want 200", rr.Code)
+	resp, err := http.Post(srv.URL+"/results", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("SubmitResults status = %d, want 200", resp.StatusCode)
 	}
 }
 
-// submitResults: malformed JSON → 400.
 func TestNodeRestService_SubmitResults_MalformedBody_Returns400(t *testing.T) {
 	svc := &mockFullNodeService{}
-	rs := services.NewNodeRestService(svc)
-	req := withNodeIdentity(httptest.NewRequest(http.MethodPost, "/node/results", bytes.NewBufferString("{bad json")), "node-1", "n1")
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	rs.SubmitResults(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("SubmitResults (bad JSON) status = %d, want 400", rr.Code)
+	srv := httptest.NewServer(newNodeTestRouter(svc, "node-1", "n1"))
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/results", "application/json", bytes.NewBufferString("{bad json"))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("SubmitResults (bad JSON) status = %d, want 400", resp.StatusCode)
 	}
 }
 
-// submitResults: service error propagates.
 func TestNodeRestService_SubmitResults_ServiceError_Returns500(t *testing.T) {
 	svc := &mockFullNodeService{
 		submitResultsFn: func(_ context.Context, _ string, _ dto.ResultsRequest) (*dto.ResultsResponse, error) {
 			return nil, domainerrs.ErrInternal.WithMessage("fail")
 		},
 	}
-	rs := services.NewNodeRestService(svc)
+	srv := httptest.NewServer(newNodeTestRouter(svc, "node-1", "n1"))
+	defer srv.Close()
+
 	body := jsonBody(t, dto.ResultsRequest{CompanyID: "co-1", AdapterType: "greenhouse"})
-	req := withNodeIdentity(httptest.NewRequest(http.MethodPost, "/node/results", body), "node-1", "n1")
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	rs.SubmitResults(rr, req)
-	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("SubmitResults (service error) status = %d, want 500", rr.Code)
+	resp, err := http.Post(srv.URL+"/results", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("SubmitResults (service error) status = %d, want 500", resp.StatusCode)
 	}
 }
 
-// reportError: 204 on success.
+// --- NodeRestService: POST /error ---
+
 func TestNodeRestService_ReportError_Returns204(t *testing.T) {
 	svc := &mockFullNodeService{
 		reportErrorFn: func(_ context.Context, _ string, _ dto.ErrorRequest) error { return nil },
 	}
-	rs := services.NewNodeRestService(svc)
+	srv := httptest.NewServer(newNodeTestRouter(svc, "node-1", "n1"))
+	defer srv.Close()
+
 	body := jsonBody(t, dto.ErrorRequest{AssignmentID: "q-1"})
-	req := withNodeIdentity(httptest.NewRequest(http.MethodPost, "/node/error", body), "node-1", "n1")
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	rs.ReportError(rr, req)
-	if rr.Code != http.StatusNoContent {
-		t.Errorf("ReportError status = %d, want 204", rr.Code)
+	resp, err := http.Post(srv.URL+"/error", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("ReportError status = %d, want 204", resp.StatusCode)
 	}
 }
 
-// reportError: malformed JSON → 400.
 func TestNodeRestService_ReportError_MalformedBody_Returns400(t *testing.T) {
 	svc := &mockFullNodeService{}
-	rs := services.NewNodeRestService(svc)
-	req := withNodeIdentity(httptest.NewRequest(http.MethodPost, "/node/error", bytes.NewBufferString("{bad")), "node-1", "n1")
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	rs.ReportError(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("ReportError (bad JSON) status = %d, want 400", rr.Code)
+	srv := httptest.NewServer(newNodeTestRouter(svc, "node-1", "n1"))
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/error", "application/json", bytes.NewBufferString("{bad"))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("ReportError (bad JSON) status = %d, want 400", resp.StatusCode)
 	}
 }
 
-// reportError: service error propagates.
 func TestNodeRestService_ReportError_ServiceError_Returns500(t *testing.T) {
 	svc := &mockFullNodeService{
 		reportErrorFn: func(_ context.Context, _ string, _ dto.ErrorRequest) error {
 			return domainerrs.ErrInternal.WithMessage("fail")
 		},
 	}
-	rs := services.NewNodeRestService(svc)
+	srv := httptest.NewServer(newNodeTestRouter(svc, "node-1", "n1"))
+	defer srv.Close()
+
 	body := jsonBody(t, dto.ErrorRequest{AssignmentID: "q-1"})
-	req := withNodeIdentity(httptest.NewRequest(http.MethodPost, "/node/error", body), "node-1", "n1")
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	rs.ReportError(rr, req)
-	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("ReportError (service error) status = %d, want 500", rr.Code)
+	resp, err := http.Post(srv.URL+"/error", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("ReportError (service error) status = %d, want 500", resp.StatusCode)
 	}
 }
 
-// --- AdminRestService ---
+// --- AdminRestService: GET / ---
 
-// listNodes: 200 with nodes.
 func TestAdminRestService_ListNodes_Returns200(t *testing.T) {
 	svc := &mockFullNodeService{
 		listNodesFn: func(_ context.Context, _ string) ([]dto.NodeView, error) {
 			return []dto.NodeView{{ID: "node-1"}}, nil
 		},
 	}
-	rs := services.NewAdminRestService(svc)
-	req := httptest.NewRequest(http.MethodGet, "/admin/crawler-nodes", nil)
-	rr := httptest.NewRecorder()
-	rs.ListNodes(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Errorf("ListNodes status = %d, want 200", rr.Code)
+	srv := httptest.NewServer(newAdminTestRouter(svc))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("ListNodes status = %d, want 200", resp.StatusCode)
 	}
 }
 
-// listNodes: service error propagates.
 func TestAdminRestService_ListNodes_ServiceError_Returns500(t *testing.T) {
 	svc := &mockFullNodeService{
 		listNodesFn: func(_ context.Context, _ string) ([]dto.NodeView, error) {
 			return nil, domainerrs.ErrInternal.WithMessage("db down")
 		},
 	}
-	rs := services.NewAdminRestService(svc)
-	req := httptest.NewRequest(http.MethodGet, "/admin/crawler-nodes", nil)
-	rr := httptest.NewRecorder()
-	rs.ListNodes(rr, req)
-	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("ListNodes (error) status = %d, want 500", rr.Code)
+	srv := httptest.NewServer(newAdminTestRouter(svc))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("ListNodes (error) status = %d, want 500", resp.StatusCode)
 	}
 }
 
-// provisionNode: 201 with token response.
+// --- AdminRestService: POST / ---
+
 func TestAdminRestService_ProvisionNode_Returns201(t *testing.T) {
 	svc := &mockFullNodeService{
 		provisionFn: func(_ context.Context, _ string) (*dto.CreateNodeResponse, error) {
 			return &dto.CreateNodeResponse{Token: "abc"}, nil
 		},
 	}
-	rs := services.NewAdminRestService(svc)
+	srv := httptest.NewServer(newAdminTestRouter(svc))
+	defer srv.Close()
+
 	body := jsonBody(t, map[string]string{"name": "prod-node"})
-	req := httptest.NewRequest(http.MethodPost, "/admin/crawler-nodes", body)
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	rs.ProvisionNode(rr, req)
-	if rr.Code != http.StatusCreated {
-		t.Errorf("ProvisionNode status = %d, want 201", rr.Code)
+	resp, err := http.Post(srv.URL+"/", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("ProvisionNode status = %d, want 201", resp.StatusCode)
 	}
 }
 
-// provisionNode: malformed JSON → 400.
 func TestAdminRestService_ProvisionNode_MalformedBody_Returns400(t *testing.T) {
 	svc := &mockFullNodeService{}
-	rs := services.NewAdminRestService(svc)
-	req := httptest.NewRequest(http.MethodPost, "/admin/crawler-nodes", bytes.NewBufferString("{bad"))
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	rs.ProvisionNode(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("ProvisionNode (bad JSON) status = %d, want 400", rr.Code)
+	srv := httptest.NewServer(newAdminTestRouter(svc))
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/", "application/json", bytes.NewBufferString("{bad"))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("ProvisionNode (bad JSON) status = %d, want 400", resp.StatusCode)
 	}
 }
 
-// provisionNode: service error propagates.
 func TestAdminRestService_ProvisionNode_ServiceError_Returns500(t *testing.T) {
 	svc := &mockFullNodeService{
 		provisionFn: func(_ context.Context, _ string) (*dto.CreateNodeResponse, error) {
 			return nil, domainerrs.ErrInternal.WithMessage("fail")
 		},
 	}
-	rs := services.NewAdminRestService(svc)
+	srv := httptest.NewServer(newAdminTestRouter(svc))
+	defer srv.Close()
+
 	body := jsonBody(t, map[string]string{"name": "n"})
-	req := httptest.NewRequest(http.MethodPost, "/admin/crawler-nodes", body)
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	rs.ProvisionNode(rr, req)
-	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("ProvisionNode (error) status = %d, want 500", rr.Code)
+	resp, err := http.Post(srv.URL+"/", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("ProvisionNode (error) status = %d, want 500", resp.StatusCode)
 	}
 }
 
-// setNodeStatus: 200 on success.
+// --- AdminRestService: PATCH /{id} ---
+
 func TestAdminRestService_SetNodeStatus_Returns200(t *testing.T) {
 	svc := &mockFullNodeService{
 		setStatusFn: func(_ context.Context, _, _ string) error { return nil },
 	}
-	rs := services.NewAdminRestService(svc)
+	srv := httptest.NewServer(newAdminTestRouter(svc))
+	defer srv.Close()
+
 	body := jsonBody(t, map[string]string{"status": "disabled"})
-	req := withChiID(httptest.NewRequest(http.MethodPatch, "/admin/crawler-nodes/node-1", body), "node-1")
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	rs.SetNodeStatus(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Errorf("SetNodeStatus status = %d, want 200", rr.Code)
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/node-1", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("SetNodeStatus status = %d, want 200", resp.StatusCode)
 	}
 }
 
-// setNodeStatus: malformed JSON → 400.
 func TestAdminRestService_SetNodeStatus_MalformedBody_Returns400(t *testing.T) {
 	svc := &mockFullNodeService{}
-	rs := services.NewAdminRestService(svc)
-	req := withChiID(httptest.NewRequest(http.MethodPatch, "/admin/crawler-nodes/node-1", bytes.NewBufferString("{bad")), "node-1")
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	rs.SetNodeStatus(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("SetNodeStatus (bad JSON) status = %d, want 400", rr.Code)
+	srv := httptest.NewServer(newAdminTestRouter(svc))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/node-1", bytes.NewBufferString("{bad"))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("SetNodeStatus (bad JSON) status = %d, want 400", resp.StatusCode)
 	}
 }
 
-// setNodeStatus: service error propagates.
 func TestAdminRestService_SetNodeStatus_ServiceError_Returns500(t *testing.T) {
 	svc := &mockFullNodeService{
 		setStatusFn: func(_ context.Context, _, _ string) error {
 			return domainerrs.ErrInternal.WithMessage("fail")
 		},
 	}
-	rs := services.NewAdminRestService(svc)
+	srv := httptest.NewServer(newAdminTestRouter(svc))
+	defer srv.Close()
+
 	body := jsonBody(t, map[string]string{"status": "disabled"})
-	req := withChiID(httptest.NewRequest(http.MethodPatch, "/admin/crawler-nodes/node-1", body), "node-1")
-	req.Header.Set("Content-Type", "application/json")
-	rr := httptest.NewRecorder()
-	rs.SetNodeStatus(rr, req)
-	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("SetNodeStatus (error) status = %d, want 500", rr.Code)
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/node-1", body)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("SetNodeStatus (error) status = %d, want 500", resp.StatusCode)
 	}
 }
 
-// retireNode: 204 on success.
+// --- AdminRestService: DELETE /{id} ---
+
 func TestAdminRestService_RetireNode_Returns204(t *testing.T) {
 	svc := &mockFullNodeService{
 		retireFn: func(_ context.Context, _ string) error { return nil },
 	}
-	rs := services.NewAdminRestService(svc)
-	req := withChiID(httptest.NewRequest(http.MethodDelete, "/admin/crawler-nodes/node-1", nil), "node-1")
-	rr := httptest.NewRecorder()
-	rs.RetireNode(rr, req)
-	if rr.Code != http.StatusNoContent {
-		t.Errorf("RetireNode status = %d, want 204", rr.Code)
+	srv := httptest.NewServer(newAdminTestRouter(svc))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/node-1", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("RetireNode status = %d, want 204", resp.StatusCode)
 	}
 }
 
-// retireNode: service error propagates.
 func TestAdminRestService_RetireNode_ServiceError_Returns500(t *testing.T) {
 	svc := &mockFullNodeService{
 		retireFn: func(_ context.Context, _ string) error {
 			return domainerrs.ErrInternal.WithMessage("fail")
 		},
 	}
-	rs := services.NewAdminRestService(svc)
-	req := withChiID(httptest.NewRequest(http.MethodDelete, "/admin/crawler-nodes/node-1", nil), "node-1")
-	rr := httptest.NewRecorder()
-	rs.RetireNode(rr, req)
-	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("RetireNode (error) status = %d, want 500", rr.Code)
+	srv := httptest.NewServer(newAdminTestRouter(svc))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/node-1", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("RetireNode (error) status = %d, want 500", resp.StatusCode)
 	}
 }
 
 // --- Router smoke tests ---
 
-// NodeRestRouter.Register must mount routes without panicking.
 func TestNodeRestRouter_Register_MountsRoutes(t *testing.T) {
 	svc := &mockFullNodeService{
 		getWorkFn: func(_ context.Context, _, _ string, _ []string) (*dto.WorkResponse, error) {
@@ -379,16 +459,15 @@ func TestNodeRestRouter_Register_MountsRoutes(t *testing.T) {
 	}
 	rs := services.NewNodeRestService(svc)
 	authMw := func(next http.Handler) http.Handler { return next }
-	router := services.NewNodeRestRouter(rs, authMw)
+	router := services.NewNodeRestRouter(rs, authMw, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 	r := chi.NewRouter()
 	router.Register(r) // must not panic
 }
 
-// AdminRestRouter.Register must mount routes without panicking.
 func TestAdminRestRouter_Register_MountsRoutes(t *testing.T) {
 	svc := &mockFullNodeService{}
 	rs := services.NewAdminRestService(svc)
-	router := services.NewAdminRestRouter(rs)
+	router := services.NewAdminRestRouter(rs, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 	r := chi.NewRouter()
 	router.Register(r) // must not panic
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiClient } from '@/lib/core/api-client'
+import type { components } from '@/lib/api/schema.gen'
 
 const AdminUserSchema = z.object({
   id: z.string(),
@@ -40,11 +41,16 @@ export async function fetchAdminUsers(
 }
 
 export async function setUserRoles(userId: string, roleIds: string[]): Promise<void> {
-  await apiClient.patch(`/admin/users/${userId}/roles`, { role_ids: roleIds })
+  // `satisfies` cross-checks this request body against the backend's
+  // generated OpenAPI contract at compile time — a renamed/removed field on
+  // either side fails the build instead of silently drifting.
+  const body = { role_ids: roleIds } satisfies components['schemas']['SetRolesInputBody']
+  await apiClient.patch(`/admin/users/${userId}/roles`, body)
 }
 
 export async function setUserStatus(userId: string, status: 'active' | 'suspended'): Promise<void> {
-  await apiClient.patch(`/admin/users/${userId}/status`, { status })
+  const body = { status } satisfies components['schemas']['SetStatusInputBody']
+  await apiClient.patch(`/admin/users/${userId}/status`, body)
 }
 
 export async function deleteAdminUser(userId: string): Promise<void> {

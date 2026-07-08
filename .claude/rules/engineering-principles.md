@@ -50,6 +50,7 @@ SOLID is a hard rule, not a guideline. Go-specific application is in `.claude/ru
 - Every "list of things" is a registry, config map, or enum — never a scattered set of `switch` branches or `if/else if` chains across files
 - If adding a new feature requires editing more than 2 files outside the feature's own directory, there is a seam problem — fix the seam before adding the feature
 - New behaviour via new types/functions, not by adding optional parameters to working code
+- A new REST endpoint is one Huma operation (`huma.Register` call + handler function) plus one input/output struct in the domain's own `RestRouter`/`RestService` — no router-wide switch, no manual OpenAPI doc to hand-maintain (see `apps/api/CLAUDE.md`, "Adding a new route")
 
 ---
 

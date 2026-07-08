@@ -16,6 +16,7 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	atsdto "github.com/trushilpatel/jobradar/service/ats/dto"
 	atssvc "github.com/trushilpatel/jobradar/service/ats/services"
@@ -398,7 +399,8 @@ func TestScanValidator_UpdateScanIntervalOverride_ValidOverride(t *testing.T) {
 func newScanConfigTestRouter(next svc.Service) *chi.Mux {
 	valid := svc.NewValidator(next)
 	h := svc.NewRestService(valid)
-	router := svc.NewRestRouter(h)
+	zoneCfg := apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry())
+	router := svc.NewRestRouter(h, zoneCfg)
 	r := chi.NewRouter()
 	router.Register(r)
 	return r

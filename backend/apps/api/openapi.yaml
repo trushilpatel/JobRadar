@@ -1,0 +1,3362 @@
+components:
+  schemas:
+    ATSDTO:
+      additionalProperties: false
+      properties:
+        base_url:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        display_name:
+          type: string
+        inter_company_delay_s:
+          format: int64
+          type: integer
+        is_active:
+          type: boolean
+        is_admin_creatable:
+          type: boolean
+        name:
+          type: string
+        scan_interval_min:
+          format: int64
+          type: integer
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - name
+        - display_name
+        - base_url
+        - is_active
+        - is_admin_creatable
+        - scan_interval_min
+        - inter_company_delay_s
+        - created_at
+        - updated_at
+      type: object
+    ActiveResponse:
+      additionalProperties: false
+      properties:
+        active:
+          type: boolean
+      required:
+        - active
+      type: object
+    AdminCreateRequest:
+      additionalProperties: false
+      properties:
+        careers_url:
+          type:
+            - string
+            - "null"
+        id:
+          type: string
+        logo_url:
+          type:
+            - string
+            - "null"
+        name:
+          type: string
+        scan_settings:
+          $ref: "#/components/schemas/CompanyScanSettingsInput"
+        slug:
+          type: string
+        website:
+          type:
+            - string
+            - "null"
+      type: object
+    AdminCursorPageCompanyAdminListView:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/CompanyAdminListView"
+          type:
+            - array
+            - "null"
+        limit:
+          format: int64
+          type: integer
+        next_cursor:
+          type:
+            - string
+            - "null"
+        total:
+          format: int64
+          type: integer
+        total_active:
+          format: int64
+          type: integer
+      required:
+        - data
+        - total
+        - total_active
+        - limit
+        - next_cursor
+      type: object
+    ApplicationWithJob:
+      additionalProperties: false
+      properties:
+        company_id:
+          type: string
+        company_name:
+          type: string
+        id:
+          format: int64
+          type: integer
+        job_result_id:
+          type: string
+        job_title:
+          type: string
+        note:
+          type:
+            - string
+            - "null"
+        stage:
+          type: string
+        stage_at:
+          format: date-time
+          type: string
+        user_id:
+          type: string
+      required:
+        - job_title
+        - company_id
+        - company_name
+        - id
+        - user_id
+        - job_result_id
+        - stage
+        - stage_at
+        - note
+      type: object
+    BulkDismissInput:
+      additionalProperties: false
+      properties:
+        ids:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        note:
+          type: string
+        reason:
+          type: string
+      type: object
+    Company:
+      additionalProperties: false
+      properties:
+        careers_url:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        logo_url:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+        website:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - created_at
+        - updated_at
+      type: object
+    CompanyAdminListView:
+      additionalProperties: false
+      properties:
+        careers_url:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        logo_url:
+          type: string
+        name:
+          type: string
+        queue_status:
+          type: string
+        scan_history:
+          items:
+            type: boolean
+          type:
+            - array
+            - "null"
+        scan_settings:
+          $ref: "#/components/schemas/CompanyScanSettingsListView"
+        slug:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+        website:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - created_at
+        - updated_at
+      type: object
+    CompanyAdminView:
+      additionalProperties: false
+      properties:
+        careers_url:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        logo_url:
+          type: string
+        name:
+          type: string
+        queue_status:
+          type: string
+        scan_history:
+          items:
+            type: boolean
+          type:
+            - array
+            - "null"
+        scan_settings:
+          $ref: "#/components/schemas/CompanyScanSettingsView"
+        slug:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+        website:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - created_at
+        - updated_at
+      type: object
+    CompanyAnalytics:
+      additionalProperties: false
+      properties:
+        monthly:
+          items:
+            $ref: "#/components/schemas/MonthlyJobPoint"
+          type:
+            - array
+            - "null"
+        velocity:
+          $ref: "#/components/schemas/CompanyVelocity"
+      required:
+        - monthly
+        - velocity
+      type: object
+    CompanyIDResponse:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+      required:
+        - id
+      type: object
+    CompanyPublicInput:
+      additionalProperties: false
+      properties:
+        careers_url:
+          type:
+            - string
+            - "null"
+        id:
+          type: string
+        logo_url:
+          type:
+            - string
+            - "null"
+        name:
+          type: string
+        slug:
+          type: string
+        website:
+          type:
+            - string
+            - "null"
+      type: object
+    CompanyPublicView:
+      additionalProperties: false
+      properties:
+        careers_url:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        logo_url:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+        website:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - created_at
+        - updated_at
+      type: object
+    CompanyScanSettingsInput:
+      additionalProperties: false
+      properties:
+        active:
+          type:
+            - boolean
+            - "null"
+        adapter_config:
+          contentEncoding: base64
+          type: string
+        adapter_type:
+          type:
+            - string
+            - "null"
+        auto_paused:
+          type:
+            - boolean
+            - "null"
+        scan_interval_override:
+          format: int64
+          type:
+            - integer
+            - "null"
+      type: object
+    CompanyScanSettingsListView:
+      additionalProperties: false
+      properties:
+        active:
+          type: boolean
+        adapter_type:
+          type: string
+        auto_paused:
+          type: boolean
+        company_id:
+          type: string
+        consecutive_errors:
+          format: int64
+          type: integer
+        created_at:
+          format: date-time
+          type: string
+        last_error_at:
+          format: date-time
+          type: string
+        last_error_message:
+          type: string
+        last_scan_at:
+          format: date-time
+          type: string
+        last_success_at:
+          format: date-time
+          type: string
+        scan_interval_override:
+          format: int64
+          type: integer
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - company_id
+        - adapter_type
+        - active
+        - auto_paused
+        - consecutive_errors
+        - created_at
+        - updated_at
+      type: object
+    CompanyScanSettingsView:
+      additionalProperties: false
+      properties:
+        active:
+          type: boolean
+        adapter_config:
+          contentEncoding: base64
+          type: string
+        adapter_type:
+          type: string
+        auto_paused:
+          type: boolean
+        company_id:
+          type: string
+        consecutive_errors:
+          format: int64
+          type: integer
+        created_at:
+          format: date-time
+          type: string
+        last_error_at:
+          format: date-time
+          type: string
+        last_error_message:
+          type: string
+        last_scan_at:
+          format: date-time
+          type: string
+        last_success_at:
+          format: date-time
+          type: string
+        scan_interval_override:
+          format: int64
+          type: integer
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - company_id
+        - adapter_type
+        - active
+        - auto_paused
+        - consecutive_errors
+        - created_at
+        - updated_at
+      type: object
+    CompanyVelocity:
+      additionalProperties: false
+      properties:
+        last_week:
+          format: int64
+          type: integer
+        this_week:
+          format: int64
+          type: integer
+      required:
+        - this_week
+        - last_week
+      type: object
+    Counts:
+      additionalProperties: false
+      properties:
+        applied:
+          format: int64
+          type: integer
+        dismissed:
+          format: int64
+          type: integer
+        interviewing:
+          format: int64
+          type: integer
+        new:
+          format: int64
+          type: integer
+        offer:
+          format: int64
+          type: integer
+        rejected:
+          format: int64
+          type: integer
+        saved:
+          format: int64
+          type: integer
+      required:
+        - new
+        - saved
+        - applied
+        - dismissed
+        - interviewing
+        - offer
+        - rejected
+      type: object
+    CreateApplicationInput:
+      additionalProperties: false
+      properties:
+        note:
+          type: string
+        stage:
+          type: string
+      type: object
+    CursorPageCompanyPublicView:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/CompanyPublicView"
+          type:
+            - array
+            - "null"
+        limit:
+          format: int64
+          type: integer
+        next_cursor:
+          type:
+            - string
+            - "null"
+        total:
+          format: int64
+          type: integer
+      required:
+        - data
+        - total
+        - limit
+        - next_cursor
+      type: object
+    EffectiveScanConfigDTO:
+      additionalProperties: false
+      properties:
+        adapter_scan_interval_minutes:
+          format: int64
+          type: integer
+        adapter_type:
+          type: string
+        company_id:
+          type: string
+        effective_scan_interval_minutes:
+          format: int64
+          type: integer
+        inter_company_delay_s:
+          format: int64
+          type: integer
+        scan_interval_minutes_override:
+          format: int64
+          type:
+            - integer
+            - "null"
+      required:
+        - company_id
+        - adapter_type
+        - adapter_scan_interval_minutes
+        - effective_scan_interval_minutes
+        - scan_interval_minutes_override
+        - inter_company_delay_s
+      type: object
+    Entry:
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+        actor_email:
+          type: string
+        actor_user_id:
+          type:
+            - string
+            - "null"
+        created_at:
+          format: date-time
+          type: string
+        id:
+          type: string
+        payload:
+          contentEncoding: base64
+          type: string
+        target_id:
+          type:
+            - string
+            - "null"
+        target_type:
+          type:
+            - string
+            - "null"
+      required:
+        - id
+        - actor_user_id
+        - action
+        - target_type
+        - target_id
+        - payload
+        - created_at
+      type: object
+    ErrorDetail:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required:
+        - code
+        - message
+      type: object
+    FormFile:
+      additionalProperties: false
+      properties:
+        ContentType:
+          type: string
+        Filename:
+          type: string
+        IsSet:
+          type: boolean
+        Size:
+          format: int64
+          type: integer
+      required:
+        - ContentType
+        - IsSet
+        - Size
+        - Filename
+      type: object
+    JobApplication:
+      additionalProperties: false
+      properties:
+        id:
+          format: int64
+          type: integer
+        job_result_id:
+          type: string
+        note:
+          type:
+            - string
+            - "null"
+        stage:
+          type: string
+        stage_at:
+          format: date-time
+          type: string
+        user_id:
+          type: string
+      required:
+        - id
+        - user_id
+        - job_result_id
+        - stage
+        - stage_at
+        - note
+      type: object
+    JobView:
+      additionalProperties: false
+      properties:
+        added_at:
+          format: date-time
+          type: string
+        company:
+          $ref: "#/components/schemas/Company"
+        company_id:
+          type: string
+        country:
+          type:
+            - string
+            - "null"
+        department:
+          type:
+            - string
+            - "null"
+        employ_type:
+          type:
+            - string
+            - "null"
+        experience_years:
+          format: int64
+          type:
+            - integer
+            - "null"
+        id:
+          type: string
+        job_post_id:
+          type: string
+        llm_summary:
+          type:
+            - string
+            - "null"
+        location:
+          type:
+            - string
+            - "null"
+        remote:
+          type: boolean
+        requires_citizen:
+          type: boolean
+        responsibilities:
+          contentEncoding: base64
+          type: string
+        role_brief:
+          type:
+            - string
+            - "null"
+        salary_range:
+          contentEncoding: base64
+          type: string
+        security_clearance:
+          type: boolean
+        sponsorship:
+          type: boolean
+        state:
+          type:
+            - string
+            - "null"
+        tech_stack:
+          contentEncoding: base64
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+        user_state:
+          $ref: "#/components/schemas/UserJobStateView"
+      required:
+        - user_state
+        - id
+        - job_post_id
+        - company_id
+        - title
+        - location
+        - country
+        - state
+        - remote
+        - url
+        - department
+        - employ_type
+        - experience_years
+        - tech_stack
+        - salary_range
+        - llm_summary
+        - sponsorship
+        - requires_citizen
+        - security_clearance
+        - role_brief
+        - responsibilities
+        - added_at
+        - company
+      type: object
+    MeResponse:
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+        email:
+          type: string
+        roles:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        status:
+          type: string
+        user_id:
+          type: string
+      required:
+        - user_id
+        - email
+        - roles
+        - status
+        - display_name
+      type: object
+    MonthlyJobPoint:
+      additionalProperties: false
+      properties:
+        month:
+          type: string
+        new:
+          format: int64
+          type: integer
+        removed:
+          format: int64
+          type: integer
+      required:
+        - month
+        - new
+        - removed
+      type: object
+    NoteResponse:
+      additionalProperties: false
+      properties:
+        app_id:
+          type: string
+        note:
+          type: string
+      required:
+        - app_id
+        - note
+      type: object
+    PageResult:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/JobView"
+          type:
+            - array
+            - "null"
+        next_cursor:
+          type: string
+      required:
+        - items
+        - next_cursor
+      type: object
+    PagedResponseApplicationWithJob:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/ApplicationWithJob"
+          type:
+            - array
+            - "null"
+        limit:
+          format: int64
+          type: integer
+        page:
+          format: int64
+          type: integer
+        total:
+          format: int64
+          type: integer
+      required:
+        - data
+        - total
+        - page
+        - limit
+      type: object
+    PagedResponseEntry:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/Entry"
+          type:
+            - array
+            - "null"
+        limit:
+          format: int64
+          type: integer
+        page:
+          format: int64
+          type: integer
+        total:
+          format: int64
+          type: integer
+      required:
+        - data
+        - total
+        - page
+        - limit
+      type: object
+    PagedResponseUserWithRoles:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/UserWithRoles"
+          type:
+            - array
+            - "null"
+        limit:
+          format: int64
+          type: integer
+        page:
+          format: int64
+          type: integer
+        total:
+          format: int64
+          type: integer
+      required:
+        - data
+        - total
+        - page
+        - limit
+      type: object
+    PipelineStats:
+      additionalProperties: false
+      properties:
+        active_companies:
+          format: int64
+          type: integer
+        awaiting_enrichment:
+          format: int64
+          type: integer
+        awaiting_filter:
+          format: int64
+          type: integer
+        crawling:
+          format: int64
+          type: integer
+        enricher_retries:
+          $ref: "#/components/schemas/RetryTierCounts"
+        errors_24h:
+          format: int64
+          type: integer
+        filter_retries:
+          $ref: "#/components/schemas/RetryTierCounts"
+        new_jobs_24h:
+          format: int64
+          type: integer
+        queued:
+          format: int64
+          type: integer
+        total_companies:
+          format: int64
+          type: integer
+      required:
+        - total_companies
+        - active_companies
+        - queued
+        - crawling
+        - awaiting_filter
+        - filter_retries
+        - awaiting_enrichment
+        - enricher_retries
+        - new_jobs_24h
+        - errors_24h
+      type: object
+    QueueEntryView:
+      additionalProperties: false
+      properties:
+        adapter_type:
+          type: string
+        company_id:
+          type: string
+        company_name:
+          type: string
+        id:
+          type: string
+        next_scan_at:
+          format: date-time
+          type:
+            - string
+            - "null"
+        priority:
+          format: int64
+          type: integer
+        queued_at:
+          format: date-time
+          type: string
+        source:
+          type: string
+        started_at:
+          format: date-time
+          type:
+            - string
+            - "null"
+        status:
+          type: string
+      required:
+        - id
+        - company_id
+        - company_name
+        - adapter_type
+        - status
+        - source
+        - priority
+        - queued_at
+        - started_at
+        - next_scan_at
+      type: object
+    QueueItem:
+      additionalProperties: false
+      properties:
+        added_at:
+          format: date-time
+          type: string
+        company:
+          type: string
+        job_id:
+          type: string
+        job_keywords:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        job_title:
+          type: string
+        job_url:
+          type: string
+        location:
+          type:
+            - string
+            - "null"
+        remote:
+          type: boolean
+        resume_id:
+          type:
+            - string
+            - "null"
+        resume_label:
+          type:
+            - string
+            - "null"
+        salary_range:
+          contentEncoding: base64
+          type: string
+        status:
+          type: string
+      required:
+        - job_id
+        - job_title
+        - company
+        - job_url
+        - status
+        - resume_id
+        - resume_label
+        - job_keywords
+        - location
+        - remote
+        - salary_range
+        - added_at
+      type: object
+    QueueListResult:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/QueueItem"
+          type:
+            - array
+            - "null"
+        next_cursor:
+          type: string
+      required:
+        - items
+        - next_cursor
+      type: object
+    RenameInputBody:
+      additionalProperties: false
+      properties:
+        label:
+          type: string
+      type: object
+    ResponseATSDTO:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/ATSDTO"
+      required:
+        - data
+      type: object
+    ResponseActiveResponse:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/ActiveResponse"
+      required:
+        - data
+      type: object
+    ResponseAdminCursorPageCompanyAdminListView:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/AdminCursorPageCompanyAdminListView"
+      required:
+        - data
+      type: object
+    ResponseCompanyAdminView:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/CompanyAdminView"
+      required:
+        - data
+      type: object
+    ResponseCompanyAnalytics:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/CompanyAnalytics"
+      required:
+        - data
+      type: object
+    ResponseCompanyIDResponse:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/CompanyIDResponse"
+      required:
+        - data
+      type: object
+    ResponseCompanyPublicView:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/CompanyPublicView"
+      required:
+        - data
+      type: object
+    ResponseCounts:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/Counts"
+      required:
+        - data
+      type: object
+    ResponseEffectiveScanConfigDTO:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/EffectiveScanConfigDTO"
+      required:
+        - data
+      type: object
+    ResponseJobApplication:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/JobApplication"
+      required:
+        - data
+      type: object
+    ResponseJobView:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/JobView"
+      required:
+        - data
+      type: object
+    ResponseListATSDTO:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/ATSDTO"
+          type:
+            - array
+            - "null"
+      required:
+        - data
+      type: object
+    ResponseListJobApplication:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/JobApplication"
+          type:
+            - array
+            - "null"
+      required:
+        - data
+      type: object
+    ResponseListQueueEntryView:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/QueueEntryView"
+          type:
+            - array
+            - "null"
+      required:
+        - data
+      type: object
+    ResponseListResume:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/Resume"
+          type:
+            - array
+            - "null"
+      required:
+        - data
+      type: object
+    ResponseListString:
+      additionalProperties: false
+      properties:
+        data:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      required:
+        - data
+      type: object
+    ResponseMapStringBool:
+      additionalProperties: false
+      properties:
+        data:
+          additionalProperties:
+            type: boolean
+          type: object
+      required:
+        - data
+      type: object
+    ResponseMapStringInt:
+      additionalProperties: false
+      properties:
+        data:
+          additionalProperties:
+            format: int64
+            type: integer
+          type: object
+      required:
+        - data
+      type: object
+    ResponseMapStringInterface {}:
+      additionalProperties: false
+      properties:
+        data:
+          additionalProperties: {}
+          type: object
+      required:
+        - data
+      type: object
+    ResponseMapStringString:
+      additionalProperties: false
+      properties:
+        data:
+          additionalProperties:
+            type: string
+          type: object
+      required:
+        - data
+      type: object
+    ResponseMeResponse:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/MeResponse"
+      required:
+        - data
+      type: object
+    ResponseNoteResponse:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/NoteResponse"
+      required:
+        - data
+      type: object
+    ResponsePageResult:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/PageResult"
+      required:
+        - data
+      type: object
+    ResponsePipelineStats:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/PipelineStats"
+      required:
+        - data
+      type: object
+    ResponseQueueListResult:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/QueueListResult"
+      required:
+        - data
+      type: object
+    ResponseResume:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/Resume"
+      required:
+        - data
+      type: object
+    ResponseScanStats:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/ScanStats"
+      required:
+        - data
+      type: object
+    ResponseStageResponse:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/StageResponse"
+      required:
+        - data
+      type: object
+    ResponseStatusResponse:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/StatusResponse"
+      required:
+        - data
+      type: object
+    ResponseTriggerRetryResult:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/TriggerRetryResult"
+      required:
+        - data
+      type: object
+    ResponseUserConfig:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/UserConfig"
+      required:
+        - data
+      type: object
+    ResponseUserIDResponse:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/UserIDResponse"
+      required:
+        - data
+      type: object
+    ResponseUserWithRoles:
+      additionalProperties: false
+      properties:
+        data:
+          $ref: "#/components/schemas/UserWithRoles"
+      required:
+        - data
+      type: object
+    Resume:
+      additionalProperties: false
+      properties:
+        content_type:
+          type: string
+        created_at:
+          format: date-time
+          type: string
+        extracted_text:
+          type: string
+        id:
+          type: string
+        label:
+          type: string
+        original_filename:
+          type: string
+        size_bytes:
+          format: int64
+          type: integer
+        user_id:
+          type: string
+      required:
+        - id
+        - user_id
+        - label
+        - original_filename
+        - content_type
+        - size_bytes
+        - created_at
+        - extracted_text
+      type: object
+    RetryTierCounts:
+      additionalProperties: false
+      properties:
+        10m:
+          format: int64
+          type: integer
+        1h:
+          format: int64
+          type: integer
+        1m:
+          format: int64
+          type: integer
+        dlq:
+          format: int64
+          type: integer
+      required:
+        - 1m
+        - 10m
+        - 1h
+        - dlq
+      type: object
+    ScanRun:
+      additionalProperties: false
+      properties:
+        company_id:
+          type: string
+        duration_ms:
+          format: int64
+          type:
+            - integer
+            - "null"
+        error:
+          type:
+            - string
+            - "null"
+        jobs_fetched:
+          format: int64
+          type: integer
+        jobs_new:
+          format: int64
+          type: integer
+        scanned_at:
+          format: date-time
+          type: string
+      required:
+        - company_id
+        - scanned_at
+        - jobs_fetched
+        - jobs_new
+        - error
+        - duration_ms
+      type: object
+    ScanStats:
+      additionalProperties: false
+      properties:
+        avg_duration_ms:
+          format: double
+          type:
+            - number
+            - "null"
+        error_count:
+          format: int64
+          type: integer
+        new_this_month:
+          format: int64
+          type: integer
+        new_today:
+          format: int64
+          type: integer
+        recent_runs:
+          items:
+            $ref: "#/components/schemas/ScanRun"
+          type:
+            - array
+            - "null"
+        total_fetched:
+          format: int64
+          type: integer
+        total_new:
+          format: int64
+          type: integer
+        total_scans:
+          format: int64
+          type: integer
+      required:
+        - total_scans
+        - total_fetched
+        - total_new
+        - error_count
+        - avg_duration_ms
+        - new_today
+        - new_this_month
+        - recent_runs
+      type: object
+    ServiceError:
+      additionalProperties: false
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+      required:
+        - error
+      type: object
+    SetAllActiveInputBody:
+      additionalProperties: false
+      properties:
+        active:
+          type: boolean
+      required:
+        - active
+      type: object
+    SetNotesInput:
+      additionalProperties: false
+      properties:
+        notes:
+          type: string
+      type: object
+    SetResumeInput:
+      additionalProperties: false
+      properties:
+        resume_id:
+          type:
+            - string
+            - "null"
+      type: object
+    SetRolesInputBody:
+      additionalProperties: false
+      properties:
+        role_ids:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+      type: object
+    SetSavedInputBody:
+      additionalProperties: false
+      properties:
+        saved:
+          type: boolean
+      type: object
+    SetStatusInput:
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+      type: object
+    SetStatusInputBody:
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+      required:
+        - status
+      type: object
+    StageResponse:
+      additionalProperties: false
+      properties:
+        app_id:
+          type: string
+        stage:
+          type: string
+      required:
+        - app_id
+        - stage
+      type: object
+    StatusResponse:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+      required:
+        - id
+        - status
+      type: object
+    TriggerRetryInput:
+      additionalProperties: false
+      properties:
+        tier:
+          type: string
+        worker:
+          type: string
+      type: object
+    TriggerRetryResult:
+      additionalProperties: false
+      properties:
+        drained:
+          format: int64
+          type: integer
+      required:
+        - drained
+      type: object
+    UpdateATSInput:
+      additionalProperties: false
+      properties:
+        inter_company_delay_s:
+          format: int64
+          type:
+            - integer
+            - "null"
+        is_active:
+          type:
+            - boolean
+            - "null"
+        is_admin_creatable:
+          type:
+            - boolean
+            - "null"
+        scan_interval_min:
+          format: int64
+          type:
+            - integer
+            - "null"
+      type: object
+    UpdateMeInputBody:
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+      type: object
+    UpdateNoteInput:
+      additionalProperties: false
+      properties:
+        note:
+          type: string
+      type: object
+    UpdateScanIntervalOverrideInputBody:
+      additionalProperties: false
+      properties:
+        scan_interval_minutes_override:
+          format: int64
+          type:
+            - integer
+            - "null"
+      type: object
+    UpdateStageInput:
+      additionalProperties: false
+      properties:
+        stage:
+          type: string
+      type: object
+    UserConfig:
+      additionalProperties: false
+      properties:
+        show_keyboard_shortcuts:
+          type: boolean
+      type: object
+    UserIDResponse:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+      required:
+        - id
+      type: object
+    UserJobStateView:
+      additionalProperties: false
+      properties:
+        applied_at:
+          type: string
+        dismissal_note:
+          type: string
+        dismissal_reason:
+          type: string
+        dismissed_at:
+          type: string
+        notes:
+          type: string
+        saved_at:
+          type: string
+        status:
+          type: string
+      required:
+        - status
+      type: object
+    UserWithRoles:
+      additionalProperties: false
+      properties:
+        created_at:
+          format: date-time
+          type: string
+        display_name:
+          type:
+            - string
+            - "null"
+        email:
+          type: string
+        id:
+          type: string
+        roles:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        status:
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - roles
+        - id
+        - email
+        - display_name
+        - status
+        - created_at
+        - updated_at
+      type: object
+info:
+  title: jobradar-api
+  version: 1.0.0
+openapi: 3.1.0
+paths:
+  /admin/ats:
+    get:
+      operationId: listAts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseListATSDTO"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List ATS adapters
+      tags:
+        - ats
+  /admin/ats/{name}:
+    get:
+      operationId: getAts
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseATSDTO"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get an ATS adapter by name
+      tags:
+        - ats
+    patch:
+      operationId: updateAts
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateATSInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseATSDTO"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update an ATS adapter
+      tags:
+        - ats
+  /admin/audit-log:
+    get:
+      operationId: listAuditLog
+      parameters:
+        - description: Filter by acting user ID
+          explode: false
+          in: query
+          name: actor_user_id
+          schema:
+            description: Filter by acting user ID
+            type: string
+        - description: Filter by action name
+          explode: false
+          in: query
+          name: action
+          schema:
+            description: Filter by action name
+            type: string
+        - description: Page number, default 1
+          explode: false
+          in: query
+          name: page
+          schema:
+            description: Page number, default 1
+            examples:
+              - "1"
+            type: string
+        - description: Page size 1-100, default 20
+          explode: false
+          in: query
+          name: limit
+          schema:
+            description: Page size 1-100, default 20
+            examples:
+              - "20"
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PagedResponseEntry"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List admin audit log entries
+      tags:
+        - audit
+  /admin/companies:
+    get:
+      operationId: listCompaniesAdmin
+      parameters:
+        - description: Repeatable ATS adapter type filter
+          explode: true
+          in: query
+          name: adapter_types
+          schema:
+            description: Repeatable ATS adapter type filter
+            items:
+              type: string
+            type:
+              - array
+              - "null"
+        - description: Singular adapter type filter, used when adapter_types is absent
+          explode: false
+          in: query
+          name: adapter_type
+          schema:
+            description: Singular adapter type filter, used when adapter_types is absent
+            type: string
+        - description: true or false
+          explode: false
+          in: query
+          name: active
+          schema:
+            description: true or false
+            type: string
+        - description: true or false
+          explode: false
+          in: query
+          name: has_settings
+          schema:
+            description: true or false
+            type: string
+        - description: ILIKE match on company name
+          explode: false
+          in: query
+          name: search
+          schema:
+            description: ILIKE match on company name
+            type: string
+        - explode: false
+          in: query
+          name: sort_by
+          schema:
+            type: string
+        - description: asc or desc
+          explode: false
+          in: query
+          name: sort_dir
+          schema:
+            description: asc or desc
+            type: string
+        - description: ok, error, queued, or running
+          explode: false
+          in: query
+          name: scan_status
+          schema:
+            description: ok, error, queued, or running
+            type: string
+        - description: Opaque keyset pagination cursor
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: Opaque keyset pagination cursor
+            type: string
+        - description: Page size 1-100; invalid or missing values default to 20
+          explode: false
+          in: query
+          name: limit
+          schema:
+            description: Page size 1-100; invalid or missing values default to 20
+            examples:
+              - "20"
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseAdminCursorPageCompanyAdminListView"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List companies (admin)
+      tags:
+        - companies
+    post:
+      operationId: createCompanyAdmin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseCompanyAdminView"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Create a company
+      tags:
+        - companies
+  /admin/companies/active:
+    patch:
+      operationId: setAllCompaniesActive
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetAllActiveInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseActiveResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Set active flag for all companies
+      tags:
+        - companies
+  /admin/companies/{id}:
+    delete:
+      operationId: deleteCompanyAdmin
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Delete a company
+      tags:
+        - companies
+    get:
+      operationId: getCompanyAdmin
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseCompanyAdminView"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get a company by ID (admin)
+      tags:
+        - companies
+    patch:
+      operationId: updateCompanyPublic
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanyPublicInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseCompanyIDResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update a company's public fields
+      tags:
+        - companies
+  /admin/companies/{id}/scan-settings:
+    patch:
+      operationId: updateCompanyScanSettings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanyScanSettingsInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseCompanyIDResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update a company's scan settings
+      tags:
+        - companies
+  /admin/pipeline/retry:
+    post:
+      operationId: triggerPipelineRetry
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TriggerRetryInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseTriggerRetryResult"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Trigger a retry redelivery nudge
+      tags:
+        - pipeline
+  /admin/pipeline/stats:
+    get:
+      operationId: getPipelineStats
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponsePipelineStats"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get pipeline health stats
+      tags:
+        - pipeline
+  /admin/users:
+    get:
+      operationId: listUsersAdmin
+      parameters:
+        - description: Filter by user status
+          explode: false
+          in: query
+          name: status
+          schema:
+            description: Filter by user status
+            type: string
+        - description: ILIKE match on email
+          explode: false
+          in: query
+          name: email
+          schema:
+            description: ILIKE match on email
+            type: string
+        - description: Page number, default 1
+          explode: false
+          in: query
+          name: page
+          schema:
+            description: Page number, default 1
+            examples:
+              - "1"
+            type: string
+        - description: Page size 1-100, default 20
+          explode: false
+          in: query
+          name: limit
+          schema:
+            description: Page size 1-100, default 20
+            examples:
+              - "20"
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PagedResponseUserWithRoles"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List users (admin)
+      tags:
+        - users
+  /admin/users/{id}:
+    delete:
+      operationId: deleteUserAdmin
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Delete a user (admin)
+      tags:
+        - users
+    get:
+      operationId: getUserAdmin
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseUserWithRoles"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get a user by ID (admin)
+      tags:
+        - users
+  /admin/users/{id}/roles:
+    patch:
+      operationId: setUserRoles
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetRolesInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseUserIDResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Set a user's roles
+      tags:
+        - users
+  /admin/users/{id}/status:
+    patch:
+      operationId: setUserStatus
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetStatusInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseStatusResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Set a user's status
+      tags:
+        - users
+  /api/applications:
+    get:
+      operationId: listAllApplications
+      parameters:
+        - description: Page number, default 1
+          explode: false
+          in: query
+          name: page
+          schema:
+            description: Page number, default 1
+            examples:
+              - "1"
+            type: string
+        - description: Page size 1-100, default 20
+          explode: false
+          in: query
+          name: limit
+          schema:
+            description: Page size 1-100, default 20
+            examples:
+              - "20"
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PagedResponseApplicationWithJob"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List all applications for the current user
+      tags:
+        - applications
+  /api/applications/{id}/stage:
+    patch:
+      operationId: updateApplicationStageByID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStageInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseStageResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update an application's stage by application ID
+      tags:
+        - applications
+  /api/apply-queue:
+    get:
+      operationId: listApplyQueue
+      parameters:
+        - description: all or saved; defaults to all
+          explode: false
+          in: query
+          name: filter
+          schema:
+            description: all or saved; defaults to all
+            type: string
+        - description: Opaque keyset pagination cursor
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: Opaque keyset pagination cursor
+            type: string
+        - description: Page size 1-100; invalid or missing values default to 20
+          explode: false
+          in: query
+          name: limit
+          schema:
+            description: Page size 1-100; invalid or missing values default to 20
+            examples:
+              - "20"
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseQueueListResult"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List the current user's apply queue
+      tags:
+        - apply-queue
+  /api/apply-queue/{jobId}/resume:
+    put:
+      operationId: setApplyQueueResume
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetResumeInput"
+        required: true
+      responses:
+        "200":
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Attach or clear a resume for a job in the apply queue
+      tags:
+        - apply-queue
+  /api/companies:
+    get:
+      operationId: listCompaniesPublic
+      parameters:
+        - description: ILIKE match on company name
+          explode: false
+          in: query
+          name: search
+          schema:
+            description: ILIKE match on company name
+            type: string
+        - description: Sort column (defaults to name if unrecognized)
+          explode: false
+          in: query
+          name: sort_by
+          schema:
+            description: Sort column (defaults to name if unrecognized)
+            type: string
+        - description: asc or desc
+          explode: false
+          in: query
+          name: sort_dir
+          schema:
+            description: asc or desc
+            type: string
+        - description: Opaque keyset pagination cursor
+          explode: false
+          in: query
+          name: cursor
+          schema:
+            description: Opaque keyset pagination cursor
+            type: string
+        - description: Page size 1-100; invalid or missing values default to 20
+          explode: false
+          in: query
+          name: limit
+          schema:
+            description: Page size 1-100; invalid or missing values default to 20
+            examples:
+              - "20"
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CursorPageCompanyPublicView"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List companies
+      tags:
+        - companies
+  /api/companies/queue:
+    get:
+      operationId: listScanQueue
+      parameters:
+        - explode: false
+          in: query
+          name: status
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: source
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseListQueueEntryView"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List the company scan queue
+      tags:
+        - scan
+  /api/companies/queue/{entry_id}:
+    delete:
+      operationId: removeFromScanQueue
+      parameters:
+        - in: path
+          name: entry_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringString"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Remove an entry from the scan queue
+      tags:
+        - scan
+  /api/companies/scan-all:
+    post:
+      operationId: triggerScanAll
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringInterface {}"
+          description: Accepted
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Trigger a scan for every active company
+      tags:
+        - scan
+  /api/companies/{id}:
+    get:
+      operationId: getCompanyPublic
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseCompanyPublicView"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get a company by ID
+      tags:
+        - companies
+  /api/companies/{id}/analytics:
+    get:
+      operationId: getCompanyAnalytics
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseCompanyAnalytics"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get analytics for a company
+      tags:
+        - scan
+  /api/companies/{id}/scan:
+    post:
+      operationId: triggerScan
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringString"
+          description: Accepted
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Trigger a scan for a company
+      tags:
+        - scan
+  /api/companies/{id}/scan-config:
+    get:
+      operationId: getEffectiveScanConfig
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseEffectiveScanConfigDTO"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get the effective scan config for a company
+      tags:
+        - scan
+  /api/companies/{id}/scan-interval-override:
+    patch:
+      operationId: updateScanIntervalOverride
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateScanIntervalOverrideInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringString"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Set or clear a company's scan interval override
+      tags:
+        - scan
+  /api/companies/{id}/scan-stats:
+    get:
+      operationId: getScanStats
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseScanStats"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get scan stats for a company
+      tags:
+        - scan
+  /api/jobs:
+    get:
+      operationId: listJobs
+      parameters:
+        - explode: false
+          in: query
+          name: status
+          schema:
+            type: string
+        - explode: true
+          in: query
+          name: statuses
+          schema:
+            items:
+              type: string
+            type:
+              - array
+              - "null"
+        - explode: true
+          in: query
+          name: companies
+          schema:
+            items:
+              type: string
+            type:
+              - array
+              - "null"
+        - explode: true
+          in: query
+          name: employ_types
+          schema:
+            items:
+              type: string
+            type:
+              - array
+              - "null"
+        - explode: true
+          in: query
+          name: experience_ranges
+          schema:
+            items:
+              type: string
+            type:
+              - array
+              - "null"
+        - explode: false
+          in: query
+          name: search
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: remote
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: sponsorship
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: requires_citizen
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: on_site
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: hybrid
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: no_requirements
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: days_added
+          schema:
+            type: string
+        - description: title, company, added_at, or experience_years; unrecognized values fall back to the default
+          explode: false
+          in: query
+          name: sort_by
+          schema:
+            description: title, company, added_at, or experience_years; unrecognized values fall back to the default
+            type: string
+        - description: asc or desc
+          explode: false
+          in: query
+          name: sort_dir
+          schema:
+            description: asc or desc
+            type: string
+        - explode: false
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - description: Page size; missing/invalid/non-positive values default to 20 (no upper clamp here — the validator enforces the cap)
+          explode: false
+          in: query
+          name: limit
+          schema:
+            description: Page size; missing/invalid/non-positive values default to 20 (no upper clamp here — the validator enforces the cap)
+            examples:
+              - "20"
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponsePageResult"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List jobs
+      tags:
+        - jobs
+  /api/jobs/companies:
+    get:
+      operationId: getJobCompanies
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseListString"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List distinct job company names
+      tags:
+        - jobs
+  /api/jobs/counts:
+    get:
+      operationId: getJobCounts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseCounts"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get per-status job counts for the current user
+      tags:
+        - jobs
+  /api/jobs/dismiss/bulk:
+    post:
+      operationId: bulkDismissJobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkDismissInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringInt"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Dismiss multiple jobs at once
+      tags:
+        - jobs
+  /api/jobs/{id}:
+    delete:
+      operationId: dismissJob
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Dismiss a job
+      tags:
+        - jobs
+    get:
+      operationId: getJob
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseJobView"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get a job by ID
+      tags:
+        - jobs
+  /api/jobs/{id}/applications:
+    get:
+      operationId: listApplicationsByJob
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseListJobApplication"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List applications for a job
+      tags:
+        - applications
+    post:
+      operationId: createApplication
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateApplicationInput"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseJobApplication"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Create an application for a job
+      tags:
+        - applications
+  /api/jobs/{id}/applications/{app_id}/note:
+    patch:
+      operationId: updateApplicationNote
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: app_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNoteInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseNoteResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update an application's note
+      tags:
+        - applications
+  /api/jobs/{id}/applications/{app_id}/stage:
+    patch:
+      operationId: updateApplicationStage
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: app_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStageInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseStageResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update an application's stage
+      tags:
+        - applications
+  /api/jobs/{id}/notes:
+    patch:
+      operationId: setJobNotes
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetNotesInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringString"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Set a job's notes
+      tags:
+        - jobs
+  /api/jobs/{id}/save:
+    patch:
+      operationId: setJobSaved
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetSavedInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringBool"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Save or unsave a job
+      tags:
+        - jobs
+  /api/jobs/{id}/status:
+    patch:
+      operationId: setJobStatus
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetStatusInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringString"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Set a job's status
+      tags:
+        - jobs
+  /api/me:
+    delete:
+      operationId: deleteMe
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Delete the current user's account
+      tags:
+        - me
+    get:
+      operationId: getMe
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMeResponse"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get the current user's identity bundle
+      tags:
+        - me
+    patch:
+      operationId: updateMe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseMapStringString"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update the current user's profile
+      tags:
+        - me
+  /api/me/config:
+    get:
+      operationId: getMyConfig
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseUserConfig"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Get the current user's config
+      tags:
+        - me
+    patch:
+      operationId: updateMyConfig
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserConfig"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseUserConfig"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Update the current user's config
+      tags:
+        - me
+  /api/resumes:
+    get:
+      operationId: listResumes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseListResume"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: List the current user's resumes
+      tags:
+        - resumes
+    post:
+      operationId: uploadResume
+      requestBody:
+        content:
+          multipart/form-data:
+            encoding:
+              file:
+                contentType: application/octet-stream
+              label:
+                contentType: text/plain
+            schema:
+              properties:
+                file:
+                  contentEncoding: binary
+                  contentMediaType: application/octet-stream
+                  description: The resume file (PDF or DOCX)
+                  format: binary
+                  type: string
+                label:
+                  description: Optional display label; defaults to the filename
+                  type: string
+              required:
+                - file
+              type: object
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseResume"
+          description: Created
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Upload a resume (PDF or DOCX)
+      tags:
+        - resumes
+  /api/resumes/{id}:
+    delete:
+      operationId: deleteResume
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Delete a resume
+      tags:
+        - resumes
+    patch:
+      operationId: renameResume
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenameInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseResume"
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Rename a resume
+      tags:
+        - resumes
+  /api/resumes/{id}/download:
+    get:
+      operationId: downloadResume
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+          description: Error
+      summary: Download a resume's original file
+      tags:
+        - resumes

@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/wire"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/logger"
@@ -62,7 +63,7 @@ func provideObjectStorage(cfg *config.Config) (objectstorage.Storage, error) {
 	})
 }
 
-func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, error) {
+func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCfg huma.Config, adminZoneCfg huma.Config) (*App, error) {
 	wire.Build(
 		provideScanConfig,
 		provideScanLogReader,

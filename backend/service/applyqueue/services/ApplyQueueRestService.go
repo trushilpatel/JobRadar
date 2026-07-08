@@ -1,11 +1,13 @@
 package services
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
-	"strconv"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/apps/api/handler"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
+	"github.com/trushilpatel/jobradar/apps/api/request"
 	"github.com/trushilpatel/jobradar/common/identity"
 	applyqueuecommon "github.com/trushilpatel/jobradar/service/applyqueue/common"
 	"github.com/trushilpatel/jobradar/service/applyqueue/dto"
@@ -24,51 +26,80 @@ func NewRestService(next Service) *RestService {
 	return &RestService{next: next}
 }
 
+// listInput is the Huma input for GET /api/apply-queue. Limit uses the
+// shared apps/api/request.ParseLimit — this slice's own inline limit
+// parsing (no upper clamp) was a second, independent implementation of the
+// same default that request.ParsePagination already provides; migrating it
+// onto the shared helper collapses that duplication (a deliberate,
+// pre-approved behavior tightening: an out-of-range limit is now clamped to
+// 100 instead of passed through unbounded — no existing test relied on the
+// unbounded behavior).
+type listInput struct {
+	Filter string `query:"filter" doc:"all or saved; defaults to all"`
+	Cursor string `query:"cursor" doc:"Opaque keyset pagination cursor"`
+	Limit  string `query:"limit" doc:"Page size 1-100; invalid or missing values default to 20" example:"20"`
+
+	filter string
+	limit  int
+}
+
+func (in *listInput) Resolve(_ huma.Context) []error {
+	in.filter = in.Filter
+	if in.filter == "" {
+		in.filter = applyqueuecommon.FilterAll
+	}
+	in.limit = request.ParseLimit(in.Limit, request.DefaultPagination().Limit)
+	return nil
+}
+
 // list serves GET /api/apply-queue?filter=all|saved&cursor=&limit=.
-func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
-	userID := identity.MustFromContext(r.Context()).UserID
-	q := r.URL.Query()
-
-	filter := q.Get("filter")
-	if filter == "" {
-		filter = applyqueuecommon.FilterAll
-	}
-
-	limit := 20
-	if v := q.Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			limit = n
-		}
-	}
-
-	result, err := h.next.List(r.Context(), userID, filter, q.Get("cursor"), limit)
+func (h *RestService) list(ctx context.Context, in *listInput) (*apihuma.SingleOutput[dto.QueueListResult], error) {
+	userID := identity.MustFromContext(ctx).UserID
+	result, err := h.next.List(ctx, userID, in.filter, in.Cursor, in.limit)
 	if err != nil {
-		handler.HandleError(w, err)
-		return
+		return nil, apihuma.MapError(err)
 	}
-	handler.Respond(w, http.StatusOK, result)
+	out := &apihuma.SingleOutput[dto.QueueListResult]{}
+	out.Body.Data = result
+	return out, nil
+}
+
+// setResumeInput is the Huma input for PUT /api/apply-queue/{jobId}/resume.
+type setResumeInput struct {
+	JobID string `path:"jobId"`
+	Body  dto.SetResumeInput
+}
+
+// setResumeOutput uses a Body func(huma.Context) — Huma's escape hatch for
+// fully manual response writing — because this single operation must
+// sometimes respond 200 with a JSON body (resume attached) and sometimes
+// 204 with NO body at all (attachment cleared). Huma's typed Body mechanism
+// always writes something (even "null" for a nil pointer field), which
+// would not byte-match the legacy handler's true empty 204
+// (handler.RespondNoContent). Writing the response by hand here reproduces
+// the legacy handler's exact byte output in both branches.
+type setResumeOutput struct {
+	Body func(huma.Context)
 }
 
 // setResume serves PUT /api/apply-queue/{jobId}/resume. A null resume_id
 // clears the attachment (204 No Content); a non-null resume_id attaches it
 // (200 with the resulting AttachmentView).
-func (h *RestService) setResume(w http.ResponseWriter, r *http.Request) {
-	userID := identity.MustFromContext(r.Context()).UserID
-	jobID := chi.URLParam(r, "jobId")
-
-	input, ok := handler.DecodeBody[dto.SetResumeInput](w, r)
-	if !ok {
-		return
-	}
-
-	view, err := h.next.SetResume(r.Context(), userID, jobID, input.ResumeID)
+func (h *RestService) setResume(ctx context.Context, in *setResumeInput) (*setResumeOutput, error) {
+	userID := identity.MustFromContext(ctx).UserID
+	view, err := h.next.SetResume(ctx, userID, in.JobID, in.Body.ResumeID)
 	if err != nil {
-		handler.HandleError(w, err)
-		return
+		return nil, apihuma.MapError(err)
 	}
-	if view == nil {
-		handler.RespondNoContent(w)
-		return
-	}
-	handler.Respond(w, http.StatusOK, view)
+	return &setResumeOutput{Body: func(hctx huma.Context) {
+		if view == nil {
+			hctx.SetStatus(http.StatusNoContent)
+			return
+		}
+		hctx.SetHeader("Content-Type", "application/json")
+		hctx.SetStatus(http.StatusOK)
+		body := apihuma.SingleOutput[*dto.AttachmentView]{}
+		body.Body.Data = view
+		_ = json.NewEncoder(hctx.BodyWriter()).Encode(body.Body)
+	}}, nil
 }
