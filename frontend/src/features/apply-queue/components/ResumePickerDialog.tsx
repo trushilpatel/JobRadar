@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { ChevronRight, ChevronDown } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -62,19 +61,9 @@ export function ResumePickerDialog({
   // persisted attachment (the auto-pick is display-only elsewhere in this
   // feature; see useApplyQueueResumeMatch.ts).
   const [selectedId, setSelectedId] = useState<string | null>(currentResumeId)
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
   const isOrphaned = currentResumeId !== null && !options.some((o) => o.id === currentResumeId)
   const canConfirm = selectedId !== null && options.some((o) => o.id === selectedId) && !isPending
-
-  function toggleExpand(id: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
 
   function handleConfirm() {
     if (canConfirm && selectedId) onConfirm(selectedId)
@@ -113,30 +102,13 @@ export function ResumePickerDialog({
               columns={[
                 {
                   id: 'resume',
-                  header: () => null,
+                  header: 'Resume',
                   cell: ({ row }) => {
                     const opt = row.original
-                    const isExpanded = expandedIds.has(opt.id)
                     const hasBreakdown = jobHasKeywords && opt.hasExtractedText && opt.total > 0
                     return (
                       <div className="flex flex-col gap-1.5 py-1">
                         <div className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleExpand(opt.id)
-                            }}
-                            disabled={!hasBreakdown}
-                            aria-label={
-                              isExpanded
-                                ? `Collapse ${opt.label} keyword detail`
-                                : `Expand ${opt.label} keyword detail`
-                            }
-                            className="shrink-0 text-muted hover:text-primary disabled:opacity-0"
-                          >
-                            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                          </button>
                           <span className="flex-1 truncate text-sm font-medium text-primary">
                             {opt.label}
                           </span>
@@ -153,24 +125,14 @@ export function ResumePickerDialog({
                             </>
                           )}
                         </div>
-                        {isExpanded && hasBreakdown && (
-                          <div className="flex flex-col gap-1 pl-6 text-xs">
-                            {opt.matchedKeywords.length > 0 && (
-                              <div>
-                                <span className="text-ok">✓ matched: </span>
-                                <span className="text-secondary">
-                                  {formatKeywordList(opt.matchedKeywords)}
-                                </span>
-                              </div>
-                            )}
-                            {opt.missingKeywords.length > 0 && (
-                              <div>
-                                <span className="text-muted">✗ missing: </span>
-                                <span className="text-muted">
-                                  {formatKeywordList(opt.missingKeywords)}
-                                </span>
-                              </div>
-                            )}
+                        {/* Missing keywords are always visible (not gated behind a
+                            click) so every resume can be compared at a glance. */}
+                        {hasBreakdown && opt.missingKeywords.length > 0 && (
+                          <div className="text-xs">
+                            <span className="text-muted">✗ missing: </span>
+                            <span className="text-muted">
+                              {formatKeywordList(opt.missingKeywords)}
+                            </span>
                           </div>
                         )}
                       </div>

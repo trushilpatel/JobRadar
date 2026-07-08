@@ -31,7 +31,8 @@ export type JobStatus = (typeof JOB_STATUS)[keyof typeof JOB_STATUS]
  * `user_job_state.status`. Excludes:
  *  - 'saved' (orthogonal flag — uses setJobSaved)
  *  - 'new' (synthetic — represented as status IS NULL)
- *  - 'dismissed' (uses dedicated dismiss endpoint)
+ *  - 'dismissed' (feature removed — historical-only value, no longer writable
+ *    by any UI or API; see root CLAUDE.md's Job status flow section)
  */
 export const WORKFLOW_STATUSES = [
   JOB_STATUS.APPLIED,

@@ -62,6 +62,27 @@ describe('ResumeCard', () => {
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled()
   })
 
+  it('shows a spinner and disables the button while the download is pending', () => {
+    mockActions({
+      download: {
+        mutateAsync: vi.fn().mockResolvedValue(sampleBlob),
+        isPending: true,
+      } as unknown as ReturnType<typeof actionsHook.useResumeActions>['download'],
+    })
+    render(<ResumeCard resume={sampleResume} />)
+    const button = screen.getByLabelText('Downloading')
+    expect(button).toBeDisabled()
+    expect(button.querySelector('svg')).toHaveClass('animate-spin')
+  })
+
+  it('re-enables the download button and hides the spinner once the download settles', () => {
+    mockActions()
+    render(<ResumeCard resume={sampleResume} />)
+    const button = screen.getByLabelText('Download')
+    expect(button).not.toBeDisabled()
+    expect(button.querySelector('svg')).not.toHaveClass('animate-spin')
+  })
+
   it('delete button calls remove.mutate with the resume id', () => {
     const removeMutate = vi.fn()
     mockActions({

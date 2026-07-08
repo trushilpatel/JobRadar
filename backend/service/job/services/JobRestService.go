@@ -2,14 +2,11 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"strconv"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/trushilpatel/jobradar/apps/api/apihuma"
-	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 )
 
@@ -215,69 +212,6 @@ func (h *RestService) setNotes(ctx context.Context, in *setNotesInput) (*apihuma
 	}
 	out := &apihuma.SingleOutput[map[string]string]{}
 	out.Body.Data = map[string]string{"notes": in.Body.Notes}
-	return out, nil
-}
-
-// dismissInput is the Huma input for DELETE /api/jobs/{id}. Body parsing is
-// done by hand in Resolve, bypassing both of Huma's built-in body
-// mechanisms: a typed Body field 400s on malformed JSON before this handler
-// ever runs, and a RawBody field makes Huma unconditionally require a
-// non-empty body (huma.go's initRequestBody(op, setRequestBodyRequired) has
-// no per-field override) — but the legacy handler tolerates a MISSING or
-// MALFORMED body, silently defaulting the dismissal reason in both cases.
-// humachi.Unwrap gets the raw *http.Request so Resolve can replicate that
-// exactly.
-type dismissInput struct {
-	ID string `path:"id"`
-
-	reason string
-	note   string
-}
-
-func (in *dismissInput) Resolve(ctx huma.Context) []error {
-	r, _ := humachi.Unwrap(ctx)
-	var body dto.DismissInput
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		// Missing or malformed body — default reason kicks in, same as an
-		// explicitly empty reason.
-		body.Reason = jobcommon.DismissalReasonUserDismissed
-	}
-	if body.Reason == "" {
-		body.Reason = jobcommon.DismissalReasonUserDismissed
-	}
-	in.reason = body.Reason
-	in.note = body.Note
-	return nil
-}
-
-// dismissOutput has no Body field, so Huma defaults its status to 204 (see
-// huma's own op.DefaultStatus inference: no output body -> StatusNoContent).
-type dismissOutput struct{}
-
-// dismiss serves DELETE /api/jobs/{id}.
-func (h *RestService) dismiss(ctx context.Context, in *dismissInput) (*dismissOutput, error) {
-	if err := h.next.Dismiss(ctx, in.ID, in.reason, in.note); err != nil {
-		return nil, apihuma.MapError(err)
-	}
-	return &dismissOutput{}, nil
-}
-
-// bulkDismissInput is the Huma input for POST /api/jobs/dismiss/bulk.
-type bulkDismissInput struct {
-	Body dto.BulkDismissInput
-}
-
-// bulkDismiss serves POST /api/jobs/dismiss/bulk.
-func (h *RestService) bulkDismiss(ctx context.Context, in *bulkDismissInput) (*apihuma.SingleOutput[map[string]int], error) {
-	reason := in.Body.Reason
-	if reason == "" {
-		reason = jobcommon.DismissalReasonNotRelevant
-	}
-	if err := h.next.BulkDismiss(ctx, in.Body.IDs, reason, in.Body.Note); err != nil {
-		return nil, apihuma.MapError(err)
-	}
-	out := &apihuma.SingleOutput[map[string]int]{}
-	out.Body.Data = map[string]int{"dismissed": len(in.Body.IDs)}
 	return out, nil
 }
 

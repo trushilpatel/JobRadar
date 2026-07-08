@@ -4,7 +4,6 @@ import {
   ExternalLink,
   Wifi,
   Briefcase,
-  Trash2,
   MapPin,
   ShieldAlert,
   Globe,
@@ -32,7 +31,6 @@ interface JobDetailPanelProps {
    * in its current workflow stage. Bookmarking has its own dedicated icon.
    */
   onToggleSave: (job: Job) => void
-  onDismiss: (job: Job) => void
   mode?: JobDetailMode
   /** Optional slot rendered between tech stack and notes. Pages layer injects
    *  cross-feature content (e.g. JobResumeSection) here so this component
@@ -115,7 +113,6 @@ export function JobDetailPanel({
   onClose,
   onStatusChange,
   onToggleSave,
-  onDismiss,
   mode = 'pane',
   resumeSection,
 }: JobDetailPanelProps) {
@@ -248,14 +245,6 @@ export function JobDetailPanel({
               aria-pressed={isSaved}
             >
               <Bookmark size={14} fill={isSaved ? 'currentColor' : 'none'} />
-            </button>
-            <button
-              onClick={() => onDismiss(job)}
-              className="p-1.5 text-muted hover:text-danger hover:bg-hover rounded-lg transition-colors"
-              title="Dismiss"
-              aria-label="Dismiss job"
-            >
-              <Trash2 size={14} />
             </button>
             {!isRoute && (
               <button
@@ -454,13 +443,6 @@ export function JobDetailPanel({
             className="flex-1 min-h-[44px] rounded-lg bg-subtle px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-hover border border-[var(--border-strong)]"
           >
             Applied
-          </button>
-          <button
-            type="button"
-            onClick={() => onDismiss(job)}
-            className="flex-1 min-h-[44px] rounded-lg px-4 py-2 text-sm font-semibold text-danger bg-[color-mix(in_srgb,var(--danger)_14%,transparent)] border border-[var(--border-strong)] transition-colors hover:brightness-110"
-          >
-            Dismiss
           </button>
         </div>
       )}

@@ -109,16 +109,6 @@ func (c counterChange) zero() bool {
 		c.offerDelta == 0 && c.rejectedDelta == 0 && c.dismissedDelta == 0
 }
 
-func (c counterChange) add(o counterChange) counterChange {
-	c.savedDelta += o.savedDelta
-	c.appliedDelta += o.appliedDelta
-	c.interviewingDelta += o.interviewingDelta
-	c.offerDelta += o.offerDelta
-	c.rejectedDelta += o.rejectedDelta
-	c.dismissedDelta += o.dismissedDelta
-	return c
-}
-
 // sub subtracts a snapshot's contributions from the change. Used by Delete
 // to express "row contributed +1 to bucket X; removing it deltas -1".
 func (c counterChange) sub(s counterSnapshot) counterChange {

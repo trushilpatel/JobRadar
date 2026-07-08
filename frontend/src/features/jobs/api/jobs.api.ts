@@ -116,8 +116,6 @@ const JobCountsSchema = z.object({
 
 export type JobCounts = z.infer<typeof JobCountsSchema>
 
-const BulkDismissResultSchema = z.object({ dismissed: z.number() })
-
 const JobApplicationSchema = z.object({
   id: z.number(),
   job_result_id: z.string(),
@@ -234,17 +232,6 @@ export async function fetchJobCounts(): Promise<JobCounts> {
 export async function fetchJobCompanies(): Promise<string[]> {
   const raw = await apiClient.get<unknown>('/jobs/companies')
   return z.array(z.string()).parse(raw)
-}
-
-// DELETE /jobs/:id  (dismiss)
-export async function dismissJob(id: string, reason: string, note?: string): Promise<void> {
-  await apiClient.delete<void>(`/jobs/${id}`, { reason, note: note ?? '' })
-}
-
-// POST /jobs/dismiss/bulk
-export async function bulkDismissJobs(ids: string[]): Promise<{ dismissed: number }> {
-  const raw = await apiClient.post<unknown>('/jobs/dismiss/bulk', { ids })
-  return BulkDismissResultSchema.parse(raw)
 }
 
 // GET /jobs/:id/applications

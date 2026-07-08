@@ -30,18 +30,6 @@ func (errorAppWriter) InsertAppliedApplication(_ context.Context, _ string) erro
 	return stderrors.New("app writer error")
 }
 
-// errorLedger returns errors from UpdateSeenReason and UpdateSeenReasonBatch.
-// It embeds *fakeLedgerWriter so pointer-receiver methods (MarkRemovedBatch)
-// are promoted correctly.
-type errorLedger struct{ *fakeLedgerWriter }
-
-func (errorLedger) UpdateSeenReason(_ context.Context, _ string, _ jobcommon.SeenReason) error {
-	return stderrors.New("ledger error")
-}
-func (errorLedger) UpdateSeenReasonBatch(_ context.Context, _ []string, _ jobcommon.SeenReason) error {
-	return stderrors.New("ledger batch error")
-}
-
 // TestImpl_SetSaved_SnapshotWarn — when snapshot.UpdateSnapshotAction fails on
 // SetSaved(true), a warn is logged but the call succeeds.
 func TestImpl_SetSaved_SnapshotWarn(t *testing.T) {
@@ -78,18 +66,6 @@ func TestImpl_SetStatus_Applied_SnapshotAndAppWriterWarn(t *testing.T) {
 	}
 }
 
-// TestImpl_SetStatus_Dismissed_SnapshotWarn — snapshot warn on dismissed.
-func TestImpl_SetStatus_Dismissed_SnapshotWarn(t *testing.T) {
-	log := &recordingLogger{}
-	svc := jobsvc.NewImplService(&fakeJobReader{}, &fakeUserState{}, errorSnapshot{}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil, log)
-	if err := svc.SetStatus(ctxAs("u1"), "j1", jobmodel.StatusDismissed); err != nil {
-		t.Fatalf("SetStatus err = %v", err)
-	}
-	if log.warnCount == 0 {
-		t.Error("expected warn for dismissed snapshot error")
-	}
-}
-
 // TestImpl_SetNotes_DefaultCaseSavedOnlyRow — when the row exists with nil
 // status (saved-only), SetNotes uses JobStatusNew sentinel (default switch
 // branch, line 332).
@@ -111,33 +87,6 @@ func TestImpl_SetNotes_UpsertError(t *testing.T) {
 	svc := jobsvc.NewImplService(&fakeJobReader{}, state, fakeSnapshot{}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil, nil)
 	if err := svc.SetNotes(ctxAs("u1"), "j1", "notes"); err == nil {
 		t.Fatal("expected error from Upsert failure")
-	}
-}
-
-// TestImpl_Dismiss_LedgerAndSnapshotWarn — when ledger and snapshot fail
-// inside Dismiss, both warn and the call still returns nil.
-func TestImpl_Dismiss_LedgerAndSnapshotWarn(t *testing.T) {
-	log := &recordingLogger{}
-	reader := &fakeJobReader{job: &jobmodel.Job{ID: "j1", JobPostID: "post-1"}}
-	svc := jobsvc.NewImplService(reader, &fakeUserState{}, errorSnapshot{}, &fakeAppWriter{}, errorLedger{&fakeLedgerWriter{}}, nil, log)
-	if err := svc.Dismiss(ctxAs("u1"), "j1", jobcommon.DismissalReasonNotRelevant, ""); err != nil {
-		t.Fatalf("Dismiss err = %v", err)
-	}
-	if log.warnCount < 2 {
-		t.Errorf("expected ≥2 warns (ledger + snapshot), got %d", log.warnCount)
-	}
-}
-
-// TestImpl_BulkDismiss_LedgerAndSnapshotWarn — both best-effort side effects
-// can fail without aborting the BulkDismiss call.
-func TestImpl_BulkDismiss_LedgerAndSnapshotWarn(t *testing.T) {
-	log := &recordingLogger{}
-	svc := jobsvc.NewImplService(&fakeJobReader{}, &fakeUserState{}, errorSnapshot{}, &fakeAppWriter{}, errorLedger{&fakeLedgerWriter{}}, nil, log)
-	if err := svc.BulkDismiss(ctxAs("u1"), []string{"j1", "j2"}, jobcommon.DismissalReasonNotRelevant, ""); err != nil {
-		t.Fatalf("BulkDismiss err = %v", err)
-	}
-	if log.warnCount < 2 {
-		t.Errorf("expected ≥2 warns (ledger batch + snapshot batch), got %d", log.warnCount)
 	}
 }
 

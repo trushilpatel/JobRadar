@@ -1,9 +1,7 @@
 package services_test
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
-	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
 )
@@ -30,11 +27,6 @@ type fakeRestSvc struct {
 	getResult *jobdto.JobView
 	getErr    error
 
-	bulkErr    error
-	bulkIDs    []string
-	bulkReason string
-	bulkNote   string
-
 	setSavedID    string
 	setSavedValue bool
 	setSavedErr   error
@@ -46,11 +38,6 @@ type fakeRestSvc struct {
 	setNotesID    string
 	setNotesValue string
 	setNotesErr   error
-
-	dismissID     string
-	dismissReason string
-	dismissNote   string
-	dismissErr    error
 }
 
 func (f *fakeRestSvc) List(_ context.Context, filter jobdto.JobFilter, cursor string, limit int) (jobdto.PageResult, error) {
@@ -76,18 +63,6 @@ func (f *fakeRestSvc) SetNotes(_ context.Context, id, notes string) error {
 	f.setNotesID = id
 	f.setNotesValue = notes
 	return f.setNotesErr
-}
-func (f *fakeRestSvc) Dismiss(_ context.Context, id string, reason, note string) error {
-	f.dismissID = id
-	f.dismissReason = reason
-	f.dismissNote = note
-	return f.dismissErr
-}
-func (f *fakeRestSvc) BulkDismiss(_ context.Context, ids []string, reason, note string) error {
-	f.bulkIDs = ids
-	f.bulkReason = reason
-	f.bulkNote = note
-	return f.bulkErr
 }
 func (f *fakeRestSvc) GetCounts(_ context.Context) (jobdto.Counts, error) {
 	return jobdto.Counts{}, nil
@@ -137,35 +112,6 @@ func TestRest_List_ServiceErrorMapsTo500(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", w.Code)
-	}
-}
-
-func TestRest_BulkDismiss_DefaultReason(t *testing.T) {
-	fake := &fakeRestSvc{}
-	r := newRouter(fake)
-	body, _ := json.Marshal(map[string][]string{"ids": {"j1", "j2"}})
-	req := httptest.NewRequest(http.MethodPost, "/jobs/dismiss/bulk", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", w.Code, w.Body.String())
-	}
-	if fake.bulkReason != jobcommon.DismissalReasonNotRelevant {
-		t.Errorf("default reason = %q, want %q", fake.bulkReason, jobcommon.DismissalReasonNotRelevant)
-	}
-	if len(fake.bulkIDs) != 2 {
-		t.Errorf("ids = %v, want 2 entries", fake.bulkIDs)
-	}
-}
-
-func TestRest_BulkDismiss_BadJSON(t *testing.T) {
-	r := newRouter(&fakeRestSvc{})
-	req := httptest.NewRequest(http.MethodPost, "/jobs/dismiss/bulk", strings.NewReader("not-json"))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400", w.Code)
 	}
 }
 
@@ -544,56 +490,6 @@ func TestRest_SetNotes_DecodesBody(t *testing.T) {
 	}
 }
 
-func TestRest_Dismiss_DefaultReason(t *testing.T) {
-	// DELETE without a body must default to "user_dismissed" — the most
-	// charitable per-user dismissal reason. Empty reason is also defaulted.
-	tests := []struct {
-		name       string
-		body       string
-		wantReason string
-	}{
-		{name: "no body", body: "", wantReason: jobcommon.DismissalReasonUserDismissed},
-		{name: "empty reason", body: `{"reason":""}`, wantReason: jobcommon.DismissalReasonUserDismissed},
-		{name: "explicit reason", body: `{"reason":"user_not_relevant"}`, wantReason: "user_not_relevant"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			fake := &fakeRestSvc{}
-			r := newRouter(fake)
-			var req *http.Request
-			if tc.body == "" {
-				req = httptest.NewRequest(http.MethodDelete, "/jobs/j1", nil)
-			} else {
-				req = httptest.NewRequest(http.MethodDelete, "/jobs/j1", strings.NewReader(tc.body))
-			}
-			w := httptest.NewRecorder()
-			r.ServeHTTP(w, req)
-			if w.Code != http.StatusNoContent {
-				t.Fatalf("status = %d, want 204: %s", w.Code, w.Body.String())
-			}
-			if fake.dismissReason != tc.wantReason {
-				t.Errorf("reason forwarded = %q, want %q", fake.dismissReason, tc.wantReason)
-			}
-			if fake.dismissID != "j1" {
-				t.Errorf("dismiss id = %q, want j1", fake.dismissID)
-			}
-		})
-	}
-}
-
-func TestRest_BulkDismiss_ForwardsNote(t *testing.T) {
-	fake := &fakeRestSvc{}
-	r := newRouter(fake)
-	body, _ := json.Marshal(map[string]any{"ids": []string{"j1"}, "note": "user said skip"})
-	req := httptest.NewRequest(http.MethodPost, "/jobs/dismiss/bulk", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if fake.bulkNote != "user said skip" {
-		t.Errorf("note = %q, want forwarded", fake.bulkNote)
-	}
-}
-
 // -------- Error mapping --------
 
 func TestRest_List_ValidationErrorMapsTo400(t *testing.T) {
@@ -747,18 +643,6 @@ func TestRest_SetNotes_ServiceErrorMapsToStatus(t *testing.T) {
 	}
 }
 
-// TestRest_Dismiss_ServiceErrorMapsToStatus
-func TestRest_Dismiss_ServiceErrorMapsToStatus(t *testing.T) {
-	fake := &fakeRestSvc{dismissErr: apperr.ErrNotFound.WithMessage("missing")}
-	r := newRouter(fake)
-	req := httptest.NewRequest(http.MethodDelete, "/jobs/j1", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want 404", w.Code)
-	}
-}
-
 // TestRest_List_ParsesStatusesParam verifies repeated ?statuses= query params
 // are collected into filter.Statuses — the combined multi-status view (e.g.
 // the Tracking tab). A plain ?status= request must leave Statuses empty.
@@ -815,17 +699,5 @@ func TestRest_List_HybridParam_Absent(t *testing.T) {
 	}
 	if fake.lastFilter.Hybrid {
 		t.Errorf("hybrid = true, want false when param absent")
-	}
-}
-
-// TestRest_BulkDismiss_ServiceErrorMapsToStatus
-func TestRest_BulkDismiss_ServiceErrorMapsToStatus(t *testing.T) {
-	fake := &fakeRestSvc{bulkErr: apperr.ErrInternal.WithMessage("boom")}
-	r := newRouter(fake)
-	req := httptest.NewRequest(http.MethodPost, "/jobs/dismiss/bulk", strings.NewReader(`{"ids":["j1"]}`))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500", w.Code)
 	}
 }

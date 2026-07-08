@@ -162,8 +162,7 @@ describe('ResumePickerDialog', () => {
     expect(screen.getByRole('button', { name: /saving/i })).toBeDisabled()
   })
 
-  it('expands a row to show matched and missing keywords', async () => {
-    const user = userEvent.setup()
+  it('shows missing keywords for every resume without requiring a click', () => {
     render(
       <ResumePickerDialog
         {...baseProps}
@@ -177,16 +176,23 @@ describe('ResumePickerDialog', () => {
         ]}
       />
     )
-    expect(screen.queryByText(/matched:/)).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /expand my resume keyword detail/i }))
-    expect(screen.getByText(/Go, PostgreSQL/)).toBeInTheDocument()
+    expect(screen.getByText(/missing:/)).toBeInTheDocument()
     expect(screen.getByText(/Kubernetes/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /collapse my resume keyword detail/i }))
-    expect(screen.queryByText(/matched:/)).not.toBeInTheDocument()
   })
 
-  it('truncates very long keyword lists with a "+N more" suffix', async () => {
-    const user = userEvent.setup()
+  it('omits the missing-keywords line when nothing is missing', () => {
+    render(
+      <ResumePickerDialog
+        {...baseProps}
+        options={[
+          makeOption({ matchedKeywords: ['Go', 'PostgreSQL', 'Kubernetes'], missingKeywords: [] }),
+        ]}
+      />
+    )
+    expect(screen.queryByText(/missing:/)).not.toBeInTheDocument()
+  })
+
+  it('truncates very long missing-keyword lists with a "+N more" suffix', () => {
     const many = Array.from({ length: 25 }, (_, i) => `Keyword${i}`)
     render(
       <ResumePickerDialog
@@ -194,15 +200,14 @@ describe('ResumePickerDialog', () => {
         options={[
           makeOption({
             id: 'r1',
-            matchedKeywords: many,
-            missingKeywords: [],
+            matchedKeywords: [],
+            missingKeywords: many,
             total: 25,
-            matched: 25,
+            matched: 0,
           }),
         ]}
       />
     )
-    await user.click(screen.getByRole('button', { name: /expand/i }))
     expect(screen.getByText(/\+5 more/)).toBeInTheDocument()
   })
 
@@ -228,10 +233,10 @@ describe('ResumePickerDialog', () => {
     expect(screen.getByText(/no extracted text/i)).toBeInTheDocument()
   })
 
-  it('does not allow expanding a row with no breakdown to show', () => {
+  it('shows no missing-keywords line when there is no breakdown to show', () => {
     render(
       <ResumePickerDialog {...baseProps} options={[makeOption({ hasExtractedText: false })]} />
     )
-    expect(screen.getByRole('button', { name: /expand my resume keyword detail/i })).toBeDisabled()
+    expect(screen.queryByText(/missing:/)).not.toBeInTheDocument()
   })
 })

@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test'
 import { JobsPage } from '../../pages/JobsPage'
 
-// All 5 tests below read/mutate the SAME live "new"-tab jobs feed (shared dev
+// All tests below read/mutate the SAME live "new"-tab jobs feed (shared dev
 // data — no per-test fixtures are created). Running them in true parallel
 // (Playwright's `fullyParallel: true` default) would let one test's mutation
-// (e.g. dismiss) race another test's assertion about row order/count on the
-// exact same list. `serial` mode forces them to run one at a time within this
-// file so each test starts from — and leaves behind — the same feed state.
+// (e.g. a status change) race another test's assertion about row order/count
+// on the exact same list. `serial` mode forces them to run one at a time
+// within this file so each test starts from — and leaves behind — the same
+// feed state.
 test.describe.configure({ mode: 'serial' })
 
 test.describe('Jobs feed', () => {
@@ -141,76 +142,6 @@ test.describe('Jobs feed', () => {
       })
     } finally {
       await revertSeedToNew(page, jobsPage, seed, stableRow)
-    }
-  })
-
-  test('dismissing a job shows the undo stripe, and clicking undo genuinely restores it', async ({
-    page,
-  }) => {
-    // Undo previously always failed here (a cache-shape bug in
-    // useJobActions.ts's lookupStatus/lookupSaved combined with the backend
-    // rejecting status='new') — both are fixed now:
-    //   - useJobActions.ts scans the real `{ items, next_cursor }` cache
-    //     shape instead of a non-existent `.pages` wrapper.
-    //   - JobValidationService.SetStatus allows 'new' through, matching what
-    //     UserJobStateRepositoryService.Upsert already implemented (clears
-    //     the workflow status, leaves saved_at untouched).
-    // This test now exercises the REAL, working recovery path end-to-end —
-    // no manual authenticated-fetch workaround needed, since Undo itself is
-    // the recovery mechanism.
-    //
-    // Self-seeds its own Tracking-tab job (see the previous test's comment
-    // for why) rather than dismissing whatever real job happens to be first
-    // in the live account's Tracking tab.
-    const jobsPage = new JobsPage(page)
-    const seed = await seedTrackedJob(page, jobsPage)
-    const targetRow = () =>
-      jobsPage.rows().filter({ hasText: seed.title }).filter({ hasText: seed.company })
-
-    await page.getByRole('tab', { name: /^Tracking/ }).click()
-    await page.keyboard.press('Escape') // Tracking tab doubles as a Popover trigger; close it if it opened
-    await expect(targetRow()).toHaveAttribute('aria-label', /, status applied$/, {
-      timeout: 10_000,
-    })
-    const row = targetRow()
-
-    // The dismiss + undo click are wrapped in try/finally: if undo itself
-    // ever regresses again, the finally block still fires a direct restore
-    // so this test can never leave the seeded job permanently dismissed —
-    // belt-and-suspenders even though undo is now the primary,
-    // verified-working recovery path.
-    try {
-      // Action: hover the row (reveals the dismiss button, matching real
-      // user interaction) then click "Dismiss <title>".
-      await row.hover()
-      await jobsPage.dismissButton(row, seed.title).click()
-
-      // Assertion: the DismissStripe undo toast appears and names this
-      // exact job (message "Dismissed", submessage "<title> at <company>").
-      await expect(jobsPage.dismissStripe).toBeVisible()
-      await expect(jobsPage.dismissStripe).toContainText('Dismissed')
-      await expect(jobsPage.dismissStripe).toContainText(seed.title)
-
-      // Assertion: the row is gone from the Tracking-tab feed (dismissed
-      // jobs are excluded from the 4 workflow-stage statuses).
-      await expect(targetRow()).toHaveCount(0, { timeout: 10_000 })
-
-      // Action: click Undo on the stripe (scoped to the stripe's own testid
-      // to avoid Sonner's second, generic "Undo" toast fired by the same
-      // mutation) — let the mutation's onSuccess/pushHistory land first so
-      // this isn't racing the async dismiss call itself.
-      await page.waitForTimeout(1000)
-      await jobsPage.dismissStripeUndoButton.click()
-
-      // Assertion: undo genuinely succeeds — a success toast, not "Undo
-      // failed" — and the job reappears with its exact original status.
-      // This is the real, live-verified fix: previously this always showed
-      // "Undo failed" and the row stayed absent.
-      await expect(page.getByText('Undone', { exact: true })).toBeVisible({ timeout: 10_000 })
-      await expect(targetRow()).toHaveCount(1, { timeout: 10_000 })
-      await expect(targetRow()).toHaveAttribute('aria-label', /, status applied$/)
-    } finally {
-      await revertSeedToNew(page, jobsPage, seed, targetRow)
     }
   })
 })

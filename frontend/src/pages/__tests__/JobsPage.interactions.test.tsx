@@ -137,7 +137,6 @@ beforeEach(() => {
   vi.mocked(jobsApi.fetchJobCompanies).mockResolvedValue(['Acme'])
   vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
   vi.mocked(jobsApi.setJobSaved).mockResolvedValue(undefined)
-  vi.mocked(jobsApi.dismissJob).mockResolvedValue(undefined)
 })
 
 describe('JobsPage — detail panel open/close', () => {
@@ -169,19 +168,6 @@ describe('JobsPage — keyboard handlers', () => {
 
     await waitFor(() => {
       expect(jobsApi.setJobStatus).toHaveBeenCalledWith('a', JOB_STATUS.APPLIED)
-    })
-  })
-
-  it('dismiss shortcut (d) dismisses the focused job', async () => {
-    render(wrap(<JobsPage />))
-    const row = await screen.findByRole('button', { name: /Title a at Acme/i })
-    fireEvent.click(row)
-    await screen.findByRole('region', { name: 'Job details' })
-
-    fireEvent.keyDown(document.body, { key: 'd', code: 'KeyD' })
-
-    await waitFor(() => {
-      expect(jobsApi.dismissJob).toHaveBeenCalledWith('a', 'user_dismissed', undefined)
     })
   })
 

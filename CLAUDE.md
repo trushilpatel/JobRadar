@@ -34,7 +34,7 @@ Each binary lives in `backend/apps/<name>/` (wiring + worker loop only) and depe
 | `crawler_nodes`           | Registered crawler-node registry; `token_hash` stores HMAC-SHA256 of the bearer token; `last_seen_at` drives online/offline status. Provisioned via `POST /admin/crawler-nodes`; token returned exactly once at creation                                                        |
 | `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` marks disappearance; `reason='retry'` carries `retry_count`/`next_attempt_at`, written via filter `UpdateRetryBatch`. UPDATE ops return `ErrLedgerRowMissing` on 0/partial rows — never silent nil (migrations 071/073)                 |
 | `jobs`                    | Operational feed — global rows; per-user status/notes live in `user_job_state`. `job_post_id` is **UNIQUE** (`uq_jobs_job_post_id`, migration 071); `InsertJob` is idempotent (`ON CONFLICT DO NOTHING` → `ErrJobAlreadyExists`)                                                |
-| `user_job_state`          | Per-user overlay: saved_at, applied_at, status, notes, dismissal reason/note                                                                                                                                                                                                    |
+| `user_job_state`          | Per-user overlay: saved_at, applied_at, status, notes. `dismissal_reason`/`dismissal_note`/`dismissed_at` are historical-only — the dismiss feature was removed (migration 091); the CHECK constraint blocks new `dismissed` writes but existing rows are kept                  |
 | `job_analytics`           | Append-only snapshot from analyzer; survives job dismissal                                                                                                                                                                                                                      |
 | `job_application_tracker` | Application stage tracking; `user_id NOT NULL`                                                                                                                                                                                                                                  |
 | `users`                   | Registered users (id, email citext, display_name, status, timestamps)                                                                                                                                                                                                           |
@@ -44,10 +44,11 @@ Each binary lives in `backend/apps/<name>/` (wiring + worker loop only) and depe
 
 ```
 new → saved → applied    (user advances)
-new → dismissed          (job row kept in `jobs` for FK integrity)
 ```
 
-`user_job_state` is upserted on every save/dismiss/status change. The "new" tab uses a global feed query with a per-user overlay (`GetMany` on the fetched IDs); other status tabs INNER JOIN `user_job_state → jobs` so every page returns a full limit-sized result. Historical analytics read `job_analytics` (snapshot rows never deleted); current-state aggregations (funnel counts) read `user_job_state.status`.
+`user_job_state` is upserted on every save/status change. The "new" tab uses a global feed query with a per-user overlay (`GetMany` on the fetched IDs); other status tabs INNER JOIN `user_job_state → jobs` so every page returns a full limit-sized result. Historical analytics read `job_analytics` (snapshot rows never deleted); current-state aggregations (funnel counts) read `user_job_state.status`.
+
+**Dismiss has been removed** (UI, API, and the ability to write new `dismissed` rows — migration 091). Historical `status='dismissed'` rows are intentionally left in the DB forever: migration 084 used that status to backfill-hide non-USA jobs for every user, and the "new" tab's exclusion logic is simply "status IS NULL" in application code, so deleting or reassigning those rows would resurface them. `jobcommon.JobStatusDismissed` and the `user_job_counters.dismissed_count` bucket remain in code for this reason — never remove them without re-verifying the non-USA-hiding mechanism and the "New" tab count math (`New = total - sum(workflow buckets)`) stay correct.
 
 ## Scan scheduling
 

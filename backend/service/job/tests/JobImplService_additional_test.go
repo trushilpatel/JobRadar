@@ -12,7 +12,6 @@ import (
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
-	"gorm.io/gorm"
 )
 
 // TestImpl_GetCompanies_Delegates verifies GetCompanies pass-through to the
@@ -53,7 +52,7 @@ func TestImpl_Get_ErrInternalOnGenericReadFailure(t *testing.T) {
 func TestImpl_Get_OverlayPopulatedWithTimestamps(t *testing.T) {
 	now := time.Date(2026, 2, 1, 12, 0, 0, 0, time.UTC)
 	notes := "did something"
-	dr := jobcommon.DismissalReasonNotRelevant
+	dr := "user_not_relevant"
 	dn := "stale"
 	applied := jobmodel.StatusApplied
 	state := &fakeUserState{getResult: &jobmodel.UserJobState{
@@ -162,20 +161,6 @@ func TestImpl_List_OverlayFailure_FallsBackToEmptyOverlay(t *testing.T) {
 	}
 }
 
-// TestImpl_BulkDismiss_StoreError_Propagates — when UpsertBulkDismiss fails,
-// the impl returns the underlying error without proceeding to ledger updates.
-func TestImpl_BulkDismiss_StoreError_Propagates(t *testing.T) {
-	state := &fakeUserState{}
-	state.upsertErr = stderrors.New("write fail")
-	// Wire fake state that also fails UpsertBulkDismiss — extend the fake.
-	state2 := &bulkFailUserState{fakeUserState: *state}
-	svc := jobsvc.NewImplService(&fakeJobReader{}, state2, fakeSnapshot{}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil, nil)
-	err := svc.BulkDismiss(ctxAs("u1"), []string{"j1", "j2"}, jobcommon.DismissalReasonNotRelevant, "")
-	if err == nil {
-		t.Fatal("expected BulkDismiss to surface underlying store error")
-	}
-}
-
 // TestImpl_SetSaved_StoreError_Propagates — when the repo SetSaved call
 // fails, the impl surfaces the error and skips the cache invalidation.
 func TestImpl_SetSaved_StoreError_Propagates(t *testing.T) {
@@ -197,59 +182,6 @@ func TestImpl_SetStatus_StoreError_Propagates(t *testing.T) {
 	}
 	if app.calls != 0 {
 		t.Errorf("appWriter.calls = %d, want 0 (skipped on upsert error)", app.calls)
-	}
-}
-
-// TestImpl_Dismiss_RepoUpsertError_Propagates — when the Upsert call fails
-// inside Dismiss, the error reaches the caller and side-effects are skipped.
-func TestImpl_Dismiss_RepoUpsertError_Propagates(t *testing.T) {
-	state := &fakeUserState{upsertErr: stderrors.New("upsert fail")}
-	reader := &fakeJobReader{job: &jobmodel.Job{ID: "j1", JobPostID: "post-1"}}
-	led := &fakeLedgerWriter{}
-	svc := jobsvc.NewImplService(reader, state, fakeSnapshot{}, &fakeAppWriter{}, led, nil, nil)
-	if err := svc.Dismiss(ctxAs("u1"), "j1", jobcommon.DismissalReasonUserDismissed, ""); err == nil {
-		t.Fatal("expected error propagation")
-	}
-	if led.calls != 0 {
-		t.Errorf("ledger.calls = %d, want 0 (side effects skipped)", led.calls)
-	}
-}
-
-// TestImpl_Dismiss_GenericReadFailureReturnsInternal — Dismiss must convert
-// a non-NotFound read failure into INTERNAL, not leak the raw error.
-func TestImpl_Dismiss_GenericReadFailureReturnsInternal(t *testing.T) {
-	reader := &fakeJobReader{getByIDErr: stderrors.New("boom")}
-	svc := jobsvc.NewImplService(reader, &fakeUserState{}, fakeSnapshot{}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil, nil)
-	err := svc.Dismiss(ctxAs("u1"), "j1", jobcommon.DismissalReasonUserDismissed, "")
-	var se *apperr.ServiceError
-	if !stderrors.As(err, &se) || se.Code != "INTERNAL" {
-		t.Fatalf("err = %v, want INTERNAL ServiceError", err)
-	}
-}
-
-// TestImpl_Dismiss_NotFoundFromRecordNotFound — domain.IsNotFound recognises
-// gorm.ErrRecordNotFound; Dismiss converts to NOT_FOUND.
-func TestImpl_Dismiss_NotFoundFromRecordNotFound(t *testing.T) {
-	reader := &fakeJobReader{getByIDErr: gorm.ErrRecordNotFound}
-	svc := jobsvc.NewImplService(reader, &fakeUserState{}, fakeSnapshot{}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil, nil)
-	err := svc.Dismiss(ctxAs("u1"), "missing", jobcommon.DismissalReasonUserDismissed, "")
-	var se *apperr.ServiceError
-	if !stderrors.As(err, &se) || se.Code != "NOT_FOUND" {
-		t.Fatalf("err = %v, want NOT_FOUND ServiceError", err)
-	}
-}
-
-// TestImpl_Dismiss_WithNote — when note is non-empty, it is forwarded to the
-// repository as a non-nil pointer.
-func TestImpl_Dismiss_WithNote(t *testing.T) {
-	state := &fakeUserState{}
-	reader := &fakeJobReader{job: &jobmodel.Job{ID: "j1", JobPostID: "post-1"}}
-	svc := jobsvc.NewImplService(reader, state, fakeSnapshot{}, &fakeAppWriter{}, &fakeLedgerWriter{}, nil, nil)
-	if err := svc.Dismiss(ctxAs("u1"), "j1", jobcommon.DismissalReasonNotRelevant, "stale role"); err != nil {
-		t.Fatalf("Dismiss err = %v", err)
-	}
-	if state.upsertState.DismissalNote == nil || *state.upsertState.DismissalNote != "stale role" {
-		t.Errorf("DismissalNote = %v, want \"stale role\"", state.upsertState.DismissalNote)
 	}
 }
 
@@ -335,23 +267,6 @@ func TestImpl_invalidateUserCounts_DeleteError_LoggedNotPropagated(t *testing.T)
 	}
 }
 
-// TestImpl_BulkDismiss_GetJobPostIDsError_LedgerSkipped — when the ledger
-// follow-up lookup fails, the impl skips the ledger update but does NOT
-// surface the error (best-effort).
-func TestImpl_BulkDismiss_GetJobPostIDsError_LedgerSkipped(t *testing.T) {
-	reader := &fakeJobReader{jobPostIDsErr: stderrors.New("post ids fail")}
-	state := &fakeUserState{}
-	led := &fakeLedgerWriter{}
-	svc := jobsvc.NewImplService(reader, state, fakeSnapshot{}, &fakeAppWriter{}, led, nil, nil)
-	if err := svc.BulkDismiss(ctxAs("u1"), []string{"j1"}, jobcommon.DismissalReasonNotRelevant, ""); err != nil {
-		t.Fatalf("BulkDismiss err = %v", err)
-	}
-	// Ledger update batch is gated on a successful lookup — none here.
-	if led.batchCalls != 0 {
-		t.Errorf("ledger batch updates = %d, want 0 (skipped after lookup error)", led.batchCalls)
-	}
-}
-
 // -------- helpers --------
 
 type recordingLogger struct {
@@ -365,19 +280,3 @@ func (r *recordingLogger) Warn(msg string, _ ...logger.Field)          { r.warnC
 func (r *recordingLogger) Error(_ string, _ error, _ ...logger.Field)  {}
 func (r *recordingLogger) With(_ ...logger.Field) logger.Logger        { return r }
 func (r *recordingLogger) WithContext(_ context.Context) logger.Logger { return r }
-
-// bulkFailUserState wraps fakeUserState with an UpsertBulkDismiss override
-// that returns a configured error. Used to test the BulkDismiss store-error
-// branch without touching the shared fake.
-type bulkFailUserState struct {
-	fakeUserState
-}
-
-func (b *bulkFailUserState) UpsertBulkDismiss(ctx context.Context, userID string, ids []string, reason, note string) error {
-	if userID == "" {
-		return apperr.ErrInternal.WithMessage("user id required")
-	}
-	return stderrors.New("bulk dismiss fail")
-}
-
-var _ jobsvc.UserJobStateRepository = (*bulkFailUserState)(nil)

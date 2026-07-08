@@ -136,7 +136,7 @@ router  := NewRestRouter(handler, zoneCfg) // zoneCfg: apispec.APIZoneConfig() o
 
 | Package        | Owns                                                                                                                                           |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `job/`         | Job listing: list, get, dismiss, save, set status, set notes                                                                                   |
+| `job/`         | Job listing: list, get, save, set status, set notes                                                                                            |
 | `company/`     | Company CRUD, scan trigger, scan queue reads                                                                                                   |
 | `application/` | Application tracker: insert, update stage/note                                                                                                 |
 | `scan/`        | Scan result recording — used by the crawler worker, not the API                                                                                |

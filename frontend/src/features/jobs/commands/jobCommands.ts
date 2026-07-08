@@ -32,13 +32,12 @@ export const JOB_COMMANDS = {
   'jobs.tab.go-offer': { label: 'Go to Offer', keys: ['g>o'], category: 'tabs' },
   'jobs.tab.go-rejected': { label: 'Go to Rejected', keys: ['g>r'], category: 'tabs' },
 
-  // ── Status / save / dismiss / undo ───────────────────────────────────────
+  // ── Status / save / undo ─────────────────────────────────────────────────
   'jobs.save': { label: 'Save / unsave', keys: ['s'], category: 'status' },
   'jobs.apply': { label: 'Applied', keys: ['a'], category: 'status' },
   'jobs.interviewing': { label: 'Interviewing', keys: ['i'], category: 'status' },
   'jobs.offer': { label: 'Offer', keys: ['o'], category: 'status' },
   'jobs.rejected': { label: 'Rejected', keys: ['r'], category: 'status' },
-  'jobs.dismiss': { label: 'Dismiss', keys: ['d'], category: 'status' },
   'jobs.undo': { label: 'Undo last change', keys: ['u'], category: 'status' },
 
   // ── Search / palette / help ──────────────────────────────────────────────
@@ -79,7 +78,6 @@ export interface JobsCallbacks {
   onGoToTab: (tab: TabKey) => void
   onSetStatus: (status: SettableStatus) => void
   onToggleSave: () => void
-  onDismiss: () => void
   onUndo: () => void
   onFocusSearch: () => void
   onOpenPalette: () => void
@@ -111,7 +109,6 @@ export function jobCommandHandlers(cb: JobsCallbacks): CommandHandlers<JobComman
     'jobs.interviewing': () => cb.onSetStatus('interviewing'),
     'jobs.offer': () => cb.onSetStatus('offer'),
     'jobs.rejected': () => cb.onSetStatus('rejected'),
-    'jobs.dismiss': () => cb.onDismiss(),
     'jobs.undo': () => cb.onUndo(),
     'jobs.nav.focus-search': () => cb.onFocusSearch(),
     'jobs.nav.open-palette': () => cb.onOpenPalette(),

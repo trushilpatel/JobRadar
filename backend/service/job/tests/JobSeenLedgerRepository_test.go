@@ -178,14 +178,14 @@ func TestSeenLedger_UpdateSeenReason(t *testing.T) {
 	seedLedger(t, db, "p1", "c1", "fetch")
 	store := jobsvc.NewSeenLedgerStore(db)
 
-	if err := store.UpdateSeenReason(context.Background(), "p1", jobcommon.SeenReasonUserDismissed); err != nil {
+	if err := store.UpdateSeenReason(context.Background(), "p1", jobcommon.SeenReason("user_dismissed")); err != nil {
 		t.Fatalf("UpdateSeenReason err = %v", err)
 	}
 	var got jobmodel.JobSeenLedger
 	if err := db.Where("job_id = ?", "p1").First(&got).Error; err != nil {
 		t.Fatalf("readback: %v", err)
 	}
-	if got.Reason != string(jobcommon.SeenReasonUserDismissed) {
+	if got.Reason != string(jobcommon.SeenReason("user_dismissed")) {
 		t.Errorf("reason = %q, want user_dismissed", got.Reason)
 	}
 }
@@ -306,7 +306,7 @@ func TestSeenLedger_UpdateSeenReasonBatch_AllPresent_ReturnsNil(t *testing.T) {
 func TestSeenLedger_UpdateSeenReasonBatch_Empty(t *testing.T) {
 	t.Parallel()
 	store := jobsvc.NewSeenLedgerStore(newJobTestDB(t))
-	if err := store.UpdateSeenReasonBatch(context.Background(), nil, jobcommon.SeenReasonUserDismissed); err != nil {
+	if err := store.UpdateSeenReasonBatch(context.Background(), nil, jobcommon.SeenReason("user_dismissed")); err != nil {
 		t.Errorf("empty batch should no-op: %v", err)
 	}
 }
@@ -322,7 +322,7 @@ func TestSeenLedger_UpdateSeenReasonBatch(t *testing.T) {
 	store := jobsvc.NewSeenLedgerStore(db)
 
 	if err := store.UpdateSeenReasonBatch(context.Background(),
-		[]string{"p1", "p2"}, jobcommon.SeenReasonUserDismissed); err != nil {
+		[]string{"p1", "p2"}, jobcommon.SeenReason("user_dismissed")); err != nil {
 		t.Fatalf("UpdateSeenReasonBatch err = %v", err)
 	}
 	var rows []jobmodel.JobSeenLedger
@@ -333,7 +333,7 @@ func TestSeenLedger_UpdateSeenReasonBatch(t *testing.T) {
 	for _, r := range rows {
 		got[r.JobID] = r.Reason
 	}
-	if got["p1"] != string(jobcommon.SeenReasonUserDismissed) || got["p2"] != string(jobcommon.SeenReasonUserDismissed) {
+	if got["p1"] != string(jobcommon.SeenReason("user_dismissed")) || got["p2"] != string(jobcommon.SeenReason("user_dismissed")) {
 		t.Errorf("p1+p2 not updated: %v", got)
 	}
 	if got["p3"] != string(jobcommon.SeenReasonFetch) {

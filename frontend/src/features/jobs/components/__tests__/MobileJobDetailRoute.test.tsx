@@ -30,20 +30,11 @@ vi.mock('../../hooks/useJob', () => ({
 
 const setStatusMutate = vi.fn()
 const setSavedMutate = vi.fn()
-const dismissMutate = vi.fn()
-const undoLast = vi.fn()
 vi.mock('../../hooks/useJobActions', () => ({
   useJobActions: () => ({
     setStatus: { mutate: setStatusMutate },
     setSaved: { mutate: setSavedMutate },
-    dismiss: { mutate: dismissMutate },
-    undoLast,
   }),
-}))
-
-const showDismissStripe = vi.fn()
-vi.mock('@/components/ui/dismiss-stripe', () => ({
-  showDismissStripe: (opts: unknown) => showDismissStripe(opts),
 }))
 
 vi.mock('../JobDetailPanel', () => ({
@@ -52,13 +43,11 @@ vi.mock('../JobDetailPanel', () => ({
     onClose,
     onStatusChange,
     onToggleSave,
-    onDismiss,
   }: {
     job: Job
     onClose: () => void
     onStatusChange: (j: Job, s: Exclude<JobStatus, 'dismissed' | 'saved'>) => void
     onToggleSave: (j: Job) => void
-    onDismiss: (j: Job) => void
   }) => (
     <div data-testid="detail-panel">
       <span>{job.title}</span>
@@ -70,9 +59,6 @@ vi.mock('../JobDetailPanel', () => ({
       </button>
       <button type="button" onClick={() => onToggleSave(job)}>
         toggle-save
-      </button>
-      <button type="button" onClick={() => onDismiss(job)}>
-        dismiss
       </button>
     </div>
   ),
@@ -287,42 +273,6 @@ describe('MobileJobDetailRoute — action handlers', () => {
     renderRoute()
     fireEvent.click(screen.getByText('toggle-save'))
     expect(setSavedMutate).toHaveBeenCalledWith({ id: 'j1', saved: false })
-  })
-
-  it('dismiss mutates, shows the dismiss stripe with a hide target, and navigates back', () => {
-    renderRoute({ idx: 2 })
-    fireEvent.click(screen.getByText('dismiss'))
-    expect(dismissMutate).toHaveBeenCalledWith({ id: 'j1', reason: 'user_dismissed' })
-    expect(showDismissStripe).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'Dismissed',
-        submessage: 'Software Engineer at Acme Corp',
-        hideTarget: expect.objectContaining({ category: 'companies', value: 'Acme Corp' }),
-      })
-    )
-    expect(navigateSpy).toHaveBeenCalledWith(-1)
-  })
-
-  it('dismiss with no company name omits the hide target', () => {
-    jobResult = {
-      isLoading: false,
-      isError: false,
-      data: makeJob({ company: undefined }),
-      refetch: refetchSpy,
-    }
-    renderRoute()
-    fireEvent.click(screen.getByText('dismiss'))
-    expect(showDismissStripe).toHaveBeenCalledWith(
-      expect.objectContaining({ submessage: 'Software Engineer', hideTarget: undefined })
-    )
-  })
-
-  it('dismiss stripe onUndo callback invokes undoLast', () => {
-    renderRoute()
-    fireEvent.click(screen.getByText('dismiss'))
-    const opts = showDismissStripe.mock.calls[0]?.[0] as { onUndo: () => void }
-    opts.onUndo()
-    expect(undoLast).toHaveBeenCalled()
   })
 
   it('close (onClose) triggers safeBack navigation', () => {
