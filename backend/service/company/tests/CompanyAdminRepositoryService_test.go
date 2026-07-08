@@ -1082,6 +1082,124 @@ func TestAdminRepo_List_SortBranches(t *testing.T) {
 	}
 }
 
+// TestAdminRepo_List_ScanSettingsFullyProjected verifies every scan_settings
+// field (not just adapter_type/active, which other List tests already cover
+// via filter/sort branches) survives the merged page query's ss_* column
+// projection (queryCompanies + scanSettingsListView) — the nullable fields in
+// particular, since a missed alias or wrong NullXxx type only shows up when
+// the value is actually non-NULL and compared against.
+func TestAdminRepo_List_ScanSettingsFullyProjected(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	seedAdminCompany(t, db, "a", "Alpha")
+	lastScan := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	lastSuccess := time.Date(2026, 6, 1, 12, 5, 0, 0, time.UTC)
+	lastError := time.Date(2026, 5, 30, 9, 0, 0, 0, time.UTC)
+	errMsg := "connection refused"
+	interval := 120
+	if err := db.Create(&companymodel.CompanyScanSettings{
+		CompanyID:            "a",
+		AdapterType:          companycommon.AdapterGreenhouse,
+		Active:               true,
+		AutoPaused:           true,
+		LastScanAt:           &lastScan,
+		LastSuccessAt:        &lastSuccess,
+		LastErrorAt:          &lastError,
+		LastErrorMessage:     &errMsg,
+		ConsecutiveErrors:    7,
+		ScanIntervalOverride: &interval,
+	}).Error; err != nil {
+		t.Fatalf("seed settings: %v", err)
+	}
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	res, err := repo.List(context.Background(), companydto.CompanyFilter{}, 10)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(res.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(res.Items))
+	}
+	s := res.Items[0].ScanSettings
+	if s == nil {
+		t.Fatal("expected ScanSettings populated, got nil")
+	}
+	if s.AdapterType != companycommon.AdapterGreenhouse {
+		t.Errorf("adapter_type = %q, want greenhouse", s.AdapterType)
+	}
+	if !s.Active || !s.AutoPaused {
+		t.Errorf("active/auto_paused = %v/%v, want true/true", s.Active, s.AutoPaused)
+	}
+	if s.ConsecutiveErrors != 7 {
+		t.Errorf("consecutive_errors = %d, want 7", s.ConsecutiveErrors)
+	}
+	if s.ScanIntervalOverride == nil || *s.ScanIntervalOverride != interval {
+		t.Errorf("scan_interval_override = %v, want %d", s.ScanIntervalOverride, interval)
+	}
+	if s.LastScanAt == nil || !s.LastScanAt.Equal(lastScan) {
+		t.Errorf("last_scan_at = %v, want %v", s.LastScanAt, lastScan)
+	}
+	if s.LastSuccessAt == nil || !s.LastSuccessAt.Equal(lastSuccess) {
+		t.Errorf("last_success_at = %v, want %v", s.LastSuccessAt, lastSuccess)
+	}
+	if s.LastErrorAt == nil || !s.LastErrorAt.Equal(lastError) {
+		t.Errorf("last_error_at = %v, want %v", s.LastErrorAt, lastError)
+	}
+	if s.LastErrorMessage == nil || *s.LastErrorMessage != errMsg {
+		t.Errorf("last_error_message = %v, want %q", s.LastErrorMessage, errMsg)
+	}
+}
+
+// TestAdminRepo_List_NoScanSettings_NilView verifies a company with no
+// scan_settings row projects ScanSettings as nil (not a zero-value struct) —
+// the merged query's ss_company_id NULL check in scanSettingsListView is what
+// distinguishes "no row" from "row with zero values".
+func TestAdminRepo_List_NoScanSettings_NilView(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	seedAdminCompany(t, db, "a", "Alpha")
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	res, err := repo.List(context.Background(), companydto.CompanyFilter{}, 10)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(res.Items) != 1 || res.Items[0].ScanSettings != nil {
+		t.Errorf("expected nil ScanSettings for company without a settings row, got %+v", res.Items[0].ScanSettings)
+	}
+}
+
+// TestAdminRepo_List_NoMatches_TotalAndTotalActiveZero verifies the combined
+// count+total_active query (a single COUNT(...) row, always returned even
+// when zero companies match the page filter) still reports the correct
+// zero total alongside a totalActive that reflects the (filter-independent)
+// global state — the aggregate must not simply be absent/zero-valued by
+// accident when the page itself returns no rows.
+func TestAdminRepo_List_NoMatches_TotalAndTotalActiveZero(t *testing.T) {
+	db, hist := newAdminTestDB(t)
+	seedAdminCompany(t, db, "a", "Alpha")
+	seedScanSettings(t, db, "a", companycommon.AdapterGreenhouse, true)
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	// Filter for an adapter no company uses — matches nothing. (Search can't be
+	// used here: it emits ILIKE, which sqlite — the driver this test suite runs
+	// against — doesn't support outside DryRun-captured-SQL tests.)
+	res, err := repo.List(context.Background(),
+		companydto.CompanyFilter{AdapterTypes: []string{companycommon.AdapterLever}}, 10)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if res.Total != 0 {
+		t.Errorf("Total = %d, want 0", res.Total)
+	}
+	if len(res.Items) != 0 {
+		t.Errorf("expected 0 items, got %d", len(res.Items))
+	}
+	// total_active is global/filter-independent — must still reflect the one
+	// active company that exists, even though the page matched nothing.
+	if res.TotalActive != 1 {
+		t.Errorf("TotalActive = %d, want 1 (filter-independent)", res.TotalActive)
+	}
+}
+
 func TestAdminRepo_List_QueueStatusPopulated(t *testing.T) {
 	db, hist := newAdminTestDB(t)
 	seedAdminCompany(t, db, "a", "Alpha")
