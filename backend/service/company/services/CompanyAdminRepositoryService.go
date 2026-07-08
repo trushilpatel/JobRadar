@@ -72,53 +72,47 @@ func NewAdminRepositoryService(db *gorm.DB, scanHistoryReader ScanHistoryReader,
 // field; falls back to name ASC sort by default. Pagination is keyset-based:
 // the caller supplies an opaque cursor (from a previous response's NextCursor)
 // and the limit. An empty cursor returns the first page.
+//
+// Round-trip budget: this method issues exactly 2 DB round-trips — one
+// combined count+total_active query, and one page query that already carries
+// each company's scan_settings and queue_status via the joins queryCompanies
+// needs anyway for filtering (previously 5: separate count, page, settings,
+// queue-status, and total_active queries, each paying full network latency to
+// the remote Postgres instance). GetScanHistories is a 3rd, unavoidable
+// round-trip: company_scan_log is owned by the scan domain and read only
+// through the ScanHistoryReader interface (see company/CLAUDE.md) — folding
+// it into this query would mean this package embedding scan's schema
+// directly, the exact cross-domain coupling that interface exists to prevent.
 func (r *adminRepositoryService) List(ctx context.Context, filter companydto.CompanyFilter, limit int) (_ companydto.CompanyAdminListResult, err error) {
 	ctx, span := tracing.Start(ctx, "company.admin.repo.List")
 	defer tracing.End(span, &err)
 
-	companies, total, nextCursor, err := r.queryCompanies(ctx, filter, limit)
-	if err != nil {
-		return companydto.CompanyAdminListResult{}, err
-	}
-	settingsByID, err := r.fetchSettingsForCompanies(ctx, companies)
+	rows, total, totalActive, nextCursor, err := r.queryCompanies(ctx, filter, limit)
 	if err != nil {
 		return companydto.CompanyAdminListResult{}, err
 	}
 
-	var totalActive int64
-	if err = r.db.WithContext(ctx).
-		Raw(`SELECT COUNT(*) FROM company_scan_settings WHERE active = true`).
-		Scan(&totalActive).Error; err != nil {
-		r.log.Warn("failed to count active scan settings", logger.Err(err))
-		return companydto.CompanyAdminListResult{}, apperr.ErrInternal.WithMessage("failed to count active scan settings")
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
 	}
-
-	views := make([]companydto.CompanyAdminListView, 0, len(companies))
-	ids := make([]string, 0, len(companies))
-	for _, c := range companies {
-		ids = append(ids, c.ID)
-	}
-
-	queueStatusByID, err := r.fetchQueueStatusForCompanies(ctx, companies)
-	if err != nil {
-		return companydto.CompanyAdminListResult{}, err
-	}
-
 	historiesByID, err := r.scanHistoryReader.GetScanHistories(ctx, ids)
 	if err != nil {
 		r.log.Warn("failed to fetch scan histories", logger.Err(err))
 		return companydto.CompanyAdminListResult{}, apperr.ErrInternal.WithMessage("failed to fetch scan histories")
 	}
 
-	for _, c := range companies {
-		view := companydto.CompanyAdminListView{CompanyAdminCommon: companydto.CompanyAdminCommon{Company: c}}
-		if s, ok := settingsByID[c.ID]; ok {
-			view.ScanSettings = companydto.ScanSettingsListViewFromModel(s)
+	views := make([]companydto.CompanyAdminListView, 0, len(rows))
+	for _, row := range rows {
+		view := companydto.CompanyAdminListView{
+			CompanyAdminCommon: companydto.CompanyAdminCommon{Company: row.Company},
+			ScanSettings:       row.scanSettingsListView(),
 		}
-		if qs, ok := queueStatusByID[c.ID]; ok {
-			view.QueueStatus = &qs
+		if row.QueueStatus.Valid {
+			s := row.QueueStatus.String
+			view.QueueStatus = &s
 		}
-		if h, ok := historiesByID[c.ID]; ok {
+		if h, ok := historiesByID[row.ID]; ok {
 			view.ScanHistory = h
 		}
 		views = append(views, view)
@@ -428,15 +422,25 @@ func (r *adminRepositoryService) GetAll(ctx context.Context) (_ []companydto.Com
 	return views, nil
 }
 
-// queryCompanies returns the cursor-paginated companies matching filter, plus
-// the unbounded matching total and an opaque next-page cursor (nil when no
-// next page exists). Operational filters (Active, AdapterTypes, HasSettings)
-// require joining scan_settings — handled here via Joins so the count and
-// the page share the same WHERE clause.
-func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter companydto.CompanyFilter, limit int) ([]companymodel.Company, int64, *string, error) {
+// queryCompanies returns the cursor-paginated companies matching filter, each
+// already carrying its scan_settings and queue_status (both already joined
+// for filtering — projecting them here is free), plus the unbounded matching
+// total, the global total_active, and an opaque next-page cursor (nil when no
+// next page exists).
+//
+// Both scan_settings and company_scan_queue are joined 1:1 with companies:
+// company_scan_settings.company_id is its primary key, and the queue join's
+// ON clause restricts to status IN (queued, running) — the exact set
+// uq_company_scan_queue_active enforces at most one row per company_id for —
+// so neither join can fan out a company's row. That guarantee is what makes
+// projecting their columns onto the same row (instead of N+1 follow-up
+// queries) safe.
+func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter companydto.CompanyFilter, limit int) ([]adminCompanyJoinRow, int64, int64, *string, error) {
 	q := r.db.WithContext(ctx).
 		Table("companies AS c").
-		Joins("LEFT JOIN company_scan_settings s ON s.company_id = c.id")
+		Joins("LEFT JOIN company_scan_settings s ON s.company_id = c.id").
+		Joins("LEFT JOIN company_scan_queue csq ON csq.company_id = c.id AND csq.status IN (?, ?)",
+			scancommon.QueueStatusQueued, scancommon.QueueStatusRunning)
 
 	if filter.Search != "" {
 		q = q.Where("c.name ILIKE ?", "%"+filter.Search+"%")
@@ -465,24 +469,31 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 	}
 	switch filter.ScanStatus {
 	case scancommon.QueueStatusQueued:
-		q = q.Where("EXISTS (SELECT 1 FROM company_scan_queue csq WHERE csq.company_id = c.id AND csq.status = ?)", scancommon.QueueStatusQueued)
+		q = q.Where("csq.status = ?", scancommon.QueueStatusQueued)
 	case scancommon.QueueStatusRunning:
-		q = q.Where("EXISTS (SELECT 1 FROM company_scan_queue csq WHERE csq.company_id = c.id AND csq.status = ?)", scancommon.QueueStatusRunning)
+		q = q.Where("csq.status = ?", scancommon.QueueStatusRunning)
 	case scancommon.ScanStatusError:
 		q = q.Where("s.consecutive_errors > 0")
 	case scancommon.ScanStatusOK:
 		q = q.Where("s.consecutive_errors = 0 AND s.last_scan_at IS NOT NULL")
 	}
 
-	// Session({}) clones the statement so Distinct("c.id") only applies to
-	// the count query and does not mutate q. Without this, GORM carries the
-	// DISTINCT marker into the subsequent data query, generating
-	// SELECT DISTINCT c.* ... ORDER BY s.last_scan_at which PostgreSQL
-	// rejects when the ORDER BY column is not in the SELECT list.
-	var total int64
-	if err := q.Session(&gorm.Session{}).Distinct("c.id").Count(&total).Error; err != nil {
+	// Session({}) clones the statement so this Select doesn't leak into the
+	// page query below. COUNT(...) always returns exactly one row (even when
+	// zero companies match), so pairing total_active in as an uncorrelated
+	// scalar subquery on the same row is safe regardless of match count —
+	// unlike the page query, there's no "zero rows means we lose the
+	// aggregate" edge case to worry about here.
+	var counts struct {
+		Total       int64 `gorm:"column:total"`
+		TotalActive int64 `gorm:"column:total_active"`
+	}
+	if err := q.Session(&gorm.Session{}).
+		Select("COUNT(DISTINCT c.id) AS total, " +
+			"(SELECT COUNT(*) FROM company_scan_settings WHERE active = true) AS total_active").
+		Scan(&counts).Error; err != nil {
 		r.log.Warn("failed to count companies", logger.Err(err))
-		return nil, 0, nil, apperr.ErrInternal.WithMessage("failed to count companies")
+		return nil, 0, 0, nil, apperr.ErrInternal.WithMessage("failed to count companies")
 	}
 
 	col, dir := adminSortClause(filter.SortBy, filter.SortDir)
@@ -530,26 +541,36 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 	// created_at would compare the column against an empty cursor value and
 	// skip or duplicate rows. sortVal/sortNull are scanned from the aliased
 	// projection; for the name sort they mirror c.name.
-	var rows []adminCompanyRow
-	q2 := q.Select("c.*, " + colText + " AS sort_val, (" + col + " IS NULL) AS sort_null").
+	//
+	// scan_settings and queue_status columns are aliased (ss_*, queue_status)
+	// alongside c.* here — both joins already exist above for filtering, so
+	// this is the same query that was already going to run; it just returns
+	// the columns the two now-removed follow-up queries used to fetch
+	// separately (adapter_config is deliberately excluded: the list view never
+	// exposes it, so there's no reason to pull it off the wire for every row).
+	var rows []adminCompanyJoinRow
+	q2 := q.Select("c.*, " + colText + " AS sort_val, (" + col + " IS NULL) AS sort_null, " +
+		"s.company_id AS ss_company_id, s.adapter_type AS ss_adapter_type, " +
+		"s.scan_interval_override AS ss_scan_interval_override, s.active AS ss_active, " +
+		"s.auto_paused AS ss_auto_paused, s.last_scan_at AS ss_last_scan_at, " +
+		"s.last_success_at AS ss_last_success_at, s.last_error_at AS ss_last_error_at, " +
+		"s.last_error_message AS ss_last_error_message, s.consecutive_errors AS ss_consecutive_errors, " +
+		"s.created_at AS ss_created_at, s.updated_at AS ss_updated_at, " +
+		"csq.status AS queue_status").
 		Order(col + " " + dir + " NULLS LAST").
 		Order("c.id " + dir).
 		Limit(limit + 1)
 	if err := q2.Scan(&rows).Error; err != nil {
 		r.log.Warn("failed to fetch companies", logger.Err(err))
-		return nil, 0, nil, apperr.ErrInternal.WithMessage("failed to fetch companies")
+		return nil, 0, 0, nil, apperr.ErrInternal.WithMessage("failed to fetch companies")
 	}
 
-	companies := make([]companymodel.Company, 0, len(rows))
 	hasNext := len(rows) > limit
 	if hasNext {
 		rows = rows[:limit]
 	}
-	for i := range rows {
-		companies = append(companies, rows[i].Company)
-	}
 	if !hasNext {
-		return companies, total, nil, nil
+		return rows, counts.Total, counts.TotalActive, nil, nil
 	}
 
 	// Build next-page cursor from the last projected row: encode the real sort
@@ -558,18 +579,76 @@ func (r *adminRepositoryService) queryCompanies(ctx context.Context, filter comp
 	last := rows[len(rows)-1]
 	enc := encodeAdminCursor(last.ID, sortValueString(last.SortVal), last.SortNull)
 
-	return companies, total, &enc, nil
+	return rows, counts.Total, counts.TotalActive, &enc, nil
 }
 
-// adminCompanyRow is the scan target for the paginated page query: the public
-// Company columns plus the projected sort value (SortVal) and its NULL-ness
-// (SortNull). Keeping the projection in a dedicated struct keeps cursor
-// construction correct for every sortable column without per-column GORM tags
-// leaking onto the Company model.
-type adminCompanyRow struct {
+// adminCompanyJoinRow is the scan target for the paginated page query: the
+// public Company columns, the projected sort value (SortVal) and its
+// NULL-ness (SortNull), the credential-free scan_settings columns (ss_*
+// prefix — adapter_config is intentionally never selected here, see
+// queryCompanies), and queue_status. Keeping the projection in a dedicated
+// struct keeps cursor construction correct for every sortable column without
+// per-column GORM tags leaking onto the Company model, and keeps the
+// scan_settings/companies column sets from colliding (both tables have
+// created_at/updated_at).
+type adminCompanyJoinRow struct {
 	companymodel.Company
 	SortVal  sql.NullString `gorm:"column:sort_val"`
 	SortNull bool           `gorm:"column:sort_null"`
+
+	SSCompanyID            sql.NullString `gorm:"column:ss_company_id"`
+	SSAdapterType          sql.NullString `gorm:"column:ss_adapter_type"`
+	SSScanIntervalOverride sql.NullInt64  `gorm:"column:ss_scan_interval_override"`
+	SSActive               sql.NullBool   `gorm:"column:ss_active"`
+	SSAutoPaused           sql.NullBool   `gorm:"column:ss_auto_paused"`
+	SSLastScanAt           sql.NullTime   `gorm:"column:ss_last_scan_at"`
+	SSLastSuccessAt        sql.NullTime   `gorm:"column:ss_last_success_at"`
+	SSLastErrorAt          sql.NullTime   `gorm:"column:ss_last_error_at"`
+	SSLastErrorMessage     sql.NullString `gorm:"column:ss_last_error_message"`
+	SSConsecutiveErrors    sql.NullInt64  `gorm:"column:ss_consecutive_errors"`
+	SSCreatedAt            sql.NullTime   `gorm:"column:ss_created_at"`
+	SSUpdatedAt            sql.NullTime   `gorm:"column:ss_updated_at"`
+
+	QueueStatus sql.NullString `gorm:"column:queue_status"`
+}
+
+// scanSettingsListView projects the row's ss_* columns into the list-safe DTO
+// view, or nil when the company has no scan_settings row (ss_company_id
+// NULL — the LEFT JOIN produced no match).
+func (row adminCompanyJoinRow) scanSettingsListView() *companydto.CompanyScanSettingsListView {
+	if !row.SSCompanyID.Valid {
+		return nil
+	}
+	view := &companydto.CompanyScanSettingsListView{
+		CompanyID:         row.SSCompanyID.String,
+		AdapterType:       row.SSAdapterType.String,
+		Active:            row.SSActive.Bool,
+		AutoPaused:        row.SSAutoPaused.Bool,
+		ConsecutiveErrors: int(row.SSConsecutiveErrors.Int64),
+		CreatedAt:         row.SSCreatedAt.Time,
+		UpdatedAt:         row.SSUpdatedAt.Time,
+	}
+	if row.SSScanIntervalOverride.Valid {
+		v := int(row.SSScanIntervalOverride.Int64)
+		view.ScanIntervalOverride = &v
+	}
+	if row.SSLastScanAt.Valid {
+		v := row.SSLastScanAt.Time
+		view.LastScanAt = &v
+	}
+	if row.SSLastSuccessAt.Valid {
+		v := row.SSLastSuccessAt.Time
+		view.LastSuccessAt = &v
+	}
+	if row.SSLastErrorAt.Valid {
+		v := row.SSLastErrorAt.Time
+		view.LastErrorAt = &v
+	}
+	if row.SSLastErrorMessage.Valid {
+		v := row.SSLastErrorMessage.String
+		view.LastErrorMessage = &v
+	}
+	return view
 }
 
 // sortValueString renders a scanned sort value into the cursor's string form.
@@ -606,35 +685,6 @@ func (r *adminRepositoryService) fetchSettingsForCompanies(ctx context.Context, 
 	for i := range settings {
 		s := settings[i]
 		out[s.CompanyID] = &s
-	}
-	return out, nil
-}
-
-// fetchQueueStatusForCompanies returns a {company_id → status} map for
-// companies that currently have a queued or running row in company_scan_queue.
-// Companies not in the queue are omitted from the map.
-func (r *adminRepositoryService) fetchQueueStatusForCompanies(ctx context.Context, companies []companymodel.Company) (map[string]string, error) {
-	out := map[string]string{}
-	if len(companies) == 0 {
-		return out, nil
-	}
-	ids := make([]string, 0, len(companies))
-	for _, c := range companies {
-		ids = append(ids, c.ID)
-	}
-	var rows []struct {
-		CompanyID string `gorm:"column:company_id"`
-		Status    string `gorm:"column:status"`
-	}
-	if err := r.db.WithContext(ctx).
-		Raw(`SELECT company_id, status FROM company_scan_queue WHERE company_id IN ? AND status IN ?`,
-			ids, []string{scancommon.QueueStatusQueued, scancommon.QueueStatusRunning}).
-		Scan(&rows).Error; err != nil {
-		r.log.Warn("failed to fetch queue status", logger.Err(err))
-		return nil, apperr.ErrInternal.WithMessage("failed to fetch queue status")
-	}
-	for _, row := range rows {
-		out[row.CompanyID] = row.Status
 	}
 	return out, nil
 }

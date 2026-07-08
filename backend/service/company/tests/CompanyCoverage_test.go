@@ -257,9 +257,9 @@ func TestAdminRepo_GetAll_DBError(t *testing.T) {
 	}
 }
 
-// TestAdminRepo_FetchSettings_DBError covers fetchSettingsForCompanies error
-// path via List when the scan_settings table is dropped after the companies
-// query succeeds.
+// TestAdminRepo_List_SettingsFetchError covers queryCompanies' error path when
+// company_scan_settings — LEFT JOINed for both filtering and the ss_* column
+// projection — is missing, so the join itself fails.
 func TestAdminRepo_List_SettingsFetchError(t *testing.T) {
 	db, hist := newAdminTestDB(t)
 	seedAdminCompany(t, db, "a", "Alpha")
@@ -277,10 +277,12 @@ func TestAdminRepo_List_SettingsFetchError(t *testing.T) {
 	}
 }
 
-// TestAdminRepo_List_QueueFetchError covers fetchQueueStatusForCompanies error.
-// The queue table is dropped AND replaced with an incompatible shape so the
-// raw SELECT fails (a plain drop on sqlite can yield an empty result instead
-// of an error).
+// TestAdminRepo_List_QueueFetchError covers queryCompanies' error path when
+// company_scan_queue — LEFT JOINed for both scan_status filtering and the
+// queue_status projection — has an incompatible shape (missing the `status`
+// column the join's ON clause and SELECT reference). The table is dropped AND
+// recreated rather than just dropped, since a plain drop on sqlite can yield
+// an empty result instead of an error.
 func TestAdminRepo_List_QueueFetchError(t *testing.T) {
 	db, hist := newAdminTestDB(t)
 	seedAdminCompany(t, db, "a", "Alpha")
