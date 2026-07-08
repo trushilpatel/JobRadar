@@ -161,6 +161,12 @@ export function JobsTable({
           })}
           sorting={sorting}
           onSortingChange={onSortingChange}
+          // JobsPage already owns arrow-key navigation via its global command
+          // engine (useJobKeyboard/useFocusedJob) — DataTable's own built-in
+          // handler would otherwise ALSO fire on the same keydown (it calls
+          // preventDefault but not stopPropagation), advancing the selection
+          // twice per press.
+          disableArrowKeyNav
         />
 
         {jobs.length > 0 && (hasNextPage || isFetchingMore) && (

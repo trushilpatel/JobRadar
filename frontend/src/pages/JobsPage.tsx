@@ -101,10 +101,24 @@ export function JobsPage() {
   // The bookmark column wires a one-click save toggle. Saved is an
   // ORTHOGONAL flag (saved_at on user_job_state), NOT a workflow status —
   // toggling it never moves the job out of its current tab.
+  //
+  // pendingSaveIdsRef guards against a rapid double-click: `job` is a
+  // render-time snapshot, so two clicks fired before either mutation settles
+  // both compute the SAME target boolean from the same stale saved_at
+  // (there's no re-render between them to refresh it) — the second click
+  // would silently re-send the first's value instead of toggling it back.
+  // Ignoring a click for a job that already has a save toggle in flight
+  // turns that into "first click wins" instead of a duplicate no-op.
+  const pendingSaveIdsRef = useRef<Set<string>>(new Set())
   const handleToggleSave = useCallback(
     (job: Job) => {
+      if (pendingSaveIdsRef.current.has(job.id)) return
+      pendingSaveIdsRef.current.add(job.id)
       const currentlySaved = job.user_state?.saved_at != null
-      actions.setSaved.mutate({ id: job.id, saved: !currentlySaved })
+      actions.setSaved.mutate(
+        { id: job.id, saved: !currentlySaved },
+        { onSettled: () => pendingSaveIdsRef.current.delete(job.id) }
+      )
     },
     [actions.setSaved]
   )
