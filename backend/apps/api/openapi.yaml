@@ -133,20 +133,6 @@ components:
         - stage_at
         - note
       type: object
-    BulkDismissInput:
-      additionalProperties: false
-      properties:
-        ids:
-          items:
-            type: string
-          type:
-            - array
-            - "null"
-        note:
-          type: string
-        reason:
-          type: string
-      type: object
     Company:
       additionalProperties: false
       properties:
@@ -1184,17 +1170,6 @@ components:
         data:
           additionalProperties:
             type: boolean
-          type: object
-      required:
-        - data
-      type: object
-    ResponseMapStringInt:
-      additionalProperties: false
-      properties:
-        data:
-          additionalProperties:
-            format: int64
-            type: integer
           type: object
       required:
         - data
@@ -2839,52 +2814,7 @@ paths:
       summary: Get per-status job counts for the current user
       tags:
         - jobs
-  /api/jobs/dismiss/bulk:
-    post:
-      operationId: bulkDismissJobs
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BulkDismissInput"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ResponseMapStringInt"
-          description: OK
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ServiceError"
-          description: Error
-      summary: Dismiss multiple jobs at once
-      tags:
-        - jobs
   /api/jobs/{id}:
-    delete:
-      operationId: dismissJob
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: No Content
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ServiceError"
-          description: Error
-      summary: Dismiss a job
-      tags:
-        - jobs
     get:
       operationId: getJob
       parameters:
