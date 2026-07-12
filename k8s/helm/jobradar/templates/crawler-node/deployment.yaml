@@ -41,6 +41,10 @@ spec:
                 name: jobradar-crawler-node-config
             - secretRef:
                 name: jobradar-crawler-node-secret
+            {{- if .Values.crawlerNode.otelCredsSecret }}
+            - secretRef:
+                name: {{ .Values.crawlerNode.otelCredsSecret }}
+            {{- end }}
           ports:
             - name: metrics
               containerPort: 9102

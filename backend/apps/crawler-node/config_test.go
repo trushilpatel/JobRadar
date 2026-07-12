@@ -211,6 +211,22 @@ func TestLoad_MetricsAddrFromEnv(t *testing.T) {
 	}
 }
 
+func TestLoad_OTelEndpointDefault(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+	cfg := Load()
+	if cfg.OTelEndpoint != "http://localhost:4318" {
+		t.Fatalf("want http://localhost:4318, got %q", cfg.OTelEndpoint)
+	}
+}
+
+func TestLoad_OTelEndpointFromEnv(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://obs-alloy.jobradar-local.svc.cluster.local:4318")
+	cfg := Load()
+	if cfg.OTelEndpoint != "http://obs-alloy.jobradar-local.svc.cluster.local:4318" {
+		t.Fatalf("want obs-alloy endpoint, got %q", cfg.OTelEndpoint)
+	}
+}
+
 func validConfig() *Config {
 	return &Config{
 		OrchestratorURL:       "https://orch.example.com",

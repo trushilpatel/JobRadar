@@ -1,0 +1,88 @@
+{{- if .Values.vmagent.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobradar-vmagent
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: vmagent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "jobradar.selectorLabels" (dict "component" "vmagent") | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "jobradar.labels" . | nindent 8 }}
+        component: vmagent
+      annotations:
+        deploy/vmagent-image: {{ .Values.vmagent.image | quote }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      volumes:
+        - name: config
+          configMap:
+            name: jobradar-vmagent-config
+        - name: remote-write-creds
+          secret:
+            secretName: {{ .Values.vmagent.remoteWriteCredsSecret }}
+        # WAL/persist-queue buffer for remote_write — bounded by
+        # maxDiskUsagePerURL below, not by this emptyDir's (unset) size, but an
+        # explicit sizeLimit keeps a runaway buffer from ever being able to
+        # fill the node's disk regardless of the flag.
+        - name: vmagent-data
+          emptyDir:
+            sizeLimit: 64Mi
+      containers:
+        - name: vmagent
+          image: {{ .Values.vmagent.image }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - -promscrape.config=/etc/vmagent/promscrape.yml
+            - -remoteWrite.url=$(REMOTE_WRITE_URL)
+            - -remoteWrite.basicAuth.username=$(REMOTE_WRITE_USER)
+            - -remoteWrite.basicAuth.passwordFile=/etc/vmagent-creds/password
+            - -remoteWrite.tmpDataPath=/vmagent-data
+            - -remoteWrite.maxDiskUsagePerURL=16MB
+            - -memory.allowedPercent=60
+          env:
+            # Named env: (not envFrom) — $(VAR) substitution in args above is
+            # only resolved for vars explicitly listed here, not those from an
+            # envFrom secretRef/configMapRef.
+            - name: REMOTE_WRITE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vmagent.remoteWriteCredsSecret }}
+                  key: REMOTE_WRITE_URL
+            - name: REMOTE_WRITE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vmagent.remoteWriteCredsSecret }}
+                  key: REMOTE_WRITE_USER
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vmagent
+            - name: remote-write-creds
+              mountPath: /etc/vmagent-creds
+              readOnly: true
+            - name: vmagent-data
+              mountPath: /vmagent-data
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              memory: "12Mi"
+              cpu: "10m"
+            limits:
+              memory: "32Mi"
+              cpu: "100m"
+{{- end }}

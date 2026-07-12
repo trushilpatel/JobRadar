@@ -22,6 +22,18 @@ spec:
       annotations:
         deploy/filter-sha: {{ .Values.images.filter.tag | quote }}
     spec:
+      # dnsPolicy Default (node's own resolv.conf, NOT CoreDNS): filter only
+      # talks to Supabase, NATS, and the LLM API — all external hostnames —
+      # and never resolves an in-cluster Service name. This keeps it running
+      # when CoreDNS crash-loops under CPU-steal/swap-thrash on this node
+      # (see infra/CLAUDE.md OCI failure modes) — this is the fix for the
+      # previously-observed "CoreDNS crash → LLM lookups fail" cascade.
+      # Caveat: this pod can no longer resolve *.svc.cluster.local — if it
+      # ever needs an in-cluster dependency (e.g. obs-alloy for OTel
+      # export), that lookup fails, and backend/common/tracing swallows the
+      # error as a one-time warning (silent). Remove this line if that's
+      # ever added.
+      dnsPolicy: Default
       {{- with .Values.imagePullSecret }}
       imagePullSecrets:
         - name: {{ . }}
@@ -45,6 +57,10 @@ spec:
                 name: jobradar-filter-config
             - secretRef:
                 name: jobradar-filter-secret
+            {{- if .Values.filter.otelCredsSecret }}
+            - secretRef:
+                name: {{ .Values.filter.otelCredsSecret }}
+            {{- end }}
           env:
             - name: LLM_SLOTS_CONFIG
               value: /etc/jobradar/llm-slots.yaml

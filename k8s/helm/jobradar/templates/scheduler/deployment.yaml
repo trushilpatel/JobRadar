@@ -22,6 +22,16 @@ spec:
       annotations:
         deploy/scheduler-sha: {{ .Values.images.scheduler.tag | quote }}
     spec:
+      # dnsPolicy Default (node's own resolv.conf, NOT CoreDNS): scheduler only
+      # talks to Supabase and NATS — both external hostnames — and never
+      # resolves an in-cluster Service name. This keeps it running when
+      # CoreDNS crash-loops under CPU-steal/swap-thrash on this node (see
+      # infra/CLAUDE.md OCI failure modes). Caveat: this pod can no longer
+      # resolve *.svc.cluster.local — if it ever needs an in-cluster
+      # dependency (e.g. obs-alloy for OTel export), that lookup fails, and
+      # backend/common/tracing swallows the error as a one-time warning
+      # (silent). Remove this line if that's ever added.
+      dnsPolicy: Default
       {{- with .Values.imagePullSecret }}
       imagePullSecrets:
         - name: {{ . }}
@@ -36,6 +46,10 @@ spec:
                 name: jobradar-scheduler-config
             - secretRef:
                 name: jobradar-scheduler-secret
+            {{- if .Values.scheduler.otelCredsSecret }}
+            - secretRef:
+                name: {{ .Values.scheduler.otelCredsSecret }}
+            {{- end }}
           ports:
             - containerPort: 9103
               name: metrics

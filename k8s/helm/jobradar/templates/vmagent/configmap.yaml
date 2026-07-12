@@ -1,0 +1,27 @@
+{{- if .Values.vmagent.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jobradar-vmagent-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "jobradar.labels" . | nindent 4 }}
+    component: vmagent
+data:
+  # Scrape-only config — no remote_write section here, since the remote_write
+  # target/auth are passed as vmagent CLI flags (see deployment.yaml) so the
+  # Basic-auth password can come from a mounted Secret file, never this
+  # ConfigMap. Target list is per-node (INFRA scrapes only api; APP scrapes
+  # its 5 pipeline services) via .Values.vmagent.scrapeTargets.
+  promscrape.yml: |
+    scrape_configs:
+      {{- range .Values.vmagent.scrapeTargets }}
+      - job_name: {{ .job | quote }}
+        scrape_interval: 60s
+        static_configs:
+          - targets: [{{ .target | quote }}]
+        relabel_configs:
+          - target_label: job
+            replacement: {{ .job | quote }}
+      {{- end }}
+{{- end }}

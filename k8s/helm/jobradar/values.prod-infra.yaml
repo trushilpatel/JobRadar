@@ -17,6 +17,20 @@ filter:
 enricher:
   enabled: false
 
+# Grafana Cloud OTLP endpoint, direct (no in-cluster collector on this node).
+# Auth (Basic) comes from the grafana-cloud-otel-creds Secret, created once via
+# SSH from Doppler prod's GRAFANA_CLOUD_TEMPO_AUTH — never committed here.
+api:
+  otelEndpoint: "https://otlp-gateway-prod-us-west-0.grafana.net/otlp/v1/traces"
+  otelCredsSecret: "grafana-cloud-otel-creds"
+
+vmagent:
+  enabled: true
+  remoteWriteCredsSecret: "grafana-cloud-prom-creds"
+  scrapeTargets:
+    - job: "jobradar_api"
+      target: "jobradar-api:9100"
+
 imagePullSecret: ghcr-pull-secret
 
 images:
