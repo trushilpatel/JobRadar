@@ -1,10 +1,10 @@
 package services
 
 import (
-	"net/http"
+	"context"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/apps/api/handler"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
+	"github.com/trushilpatel/jobradar/apps/api/response"
 	atsdto "github.com/trushilpatel/jobradar/service/ats/dto"
 )
 
@@ -26,40 +26,49 @@ func NewRestService(next AtsService) *AtsRestService {
 	return &AtsRestService{next: next}
 }
 
-// ListATS handles GET /ats — returns all ATS rows.
-func (h *AtsRestService) ListATS(w http.ResponseWriter, r *http.Request) {
-	items, err := h.next.ListATS(r.Context())
-	if err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, items)
+// getInput is the Huma input for GET/PATCH /ats/{name}.
+type getInput struct {
+	Name string `path:"name"`
 }
 
-// GetATS handles GET /ats/{name} — returns a single ATS row by name.
-func (h *AtsRestService) GetATS(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-	item, err := h.next.GetATS(r.Context(), name)
-	if err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, item)
+// updateInput is the Huma input for PATCH /ats/{name}.
+type updateInput struct {
+	Name string `path:"name"`
+	Body atsdto.UpdateATSInput
 }
 
-// UpdateATS handles PATCH /ats/{name} — applies a partial update to an ATS row.
-func (h *AtsRestService) UpdateATS(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-
-	input, ok := handler.DecodeBody[atsdto.UpdateATSInput](w, r)
-	if !ok {
-		return
-	}
-
-	item, err := h.next.UpdateATS(r.Context(), name, input)
+// list handles GET /ats — returns all ATS rows.
+func (h *AtsRestService) list(ctx context.Context, _ *struct{}) (*apihuma.SingleOutput[[]atsdto.ATSDTO], error) {
+	items, err := h.next.ListATS(ctx)
 	if err != nil {
-		handler.HandleError(w, err)
-		return
+		return nil, apihuma.MapError(err)
 	}
-	handler.Respond(w, http.StatusOK, item)
+
+	out := &apihuma.SingleOutput[[]atsdto.ATSDTO]{}
+	out.Body = response.Response[[]atsdto.ATSDTO]{Data: items}
+	return out, nil
+}
+
+// get handles GET /ats/{name} — returns a single ATS row by name.
+func (h *AtsRestService) get(ctx context.Context, in *getInput) (*apihuma.SingleOutput[atsdto.ATSDTO], error) {
+	item, err := h.next.GetATS(ctx, in.Name)
+	if err != nil {
+		return nil, apihuma.MapError(err)
+	}
+
+	out := &apihuma.SingleOutput[atsdto.ATSDTO]{}
+	out.Body = response.Response[atsdto.ATSDTO]{Data: item}
+	return out, nil
+}
+
+// update handles PATCH /ats/{name} — applies a partial update to an ATS row.
+func (h *AtsRestService) update(ctx context.Context, in *updateInput) (*apihuma.SingleOutput[atsdto.ATSDTO], error) {
+	item, err := h.next.UpdateATS(ctx, in.Name, in.Body)
+	if err != nil {
+		return nil, apihuma.MapError(err)
+	}
+
+	out := &apihuma.SingleOutput[atsdto.ATSDTO]{}
+	out.Body = response.Response[atsdto.ATSDTO]{Data: item}
+	return out, nil
 }

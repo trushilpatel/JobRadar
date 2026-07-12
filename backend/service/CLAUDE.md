@@ -102,9 +102,11 @@ If you're implementing a new slice's `ValidationService` by copying an existing 
 
 Has `next {Domain}Service` as its **only** dependency. Parses request → calls `next` → responds. Does **not** implement the domain interface. No routing logic — that belongs in `RestRouter`.
 
+**Every RestService in this codebase is Huma-based** (see `docs/superpowers/plans/2026-06-13-huma-migration-plan.md` — the full chi→Huma migration completed 2026-07-06). Handler methods have the shape `func(ctx context.Context, in *xInput) (*xOutput, error)`, never `func(w http.ResponseWriter, r *http.Request)`. Output types reuse `apihuma.SingleOutput[T]`/`PagedOutput[T]`/`CursorPageOutput[T]`/`AdminCursorPageOutput[T]` wherever the legacy envelope shape matches; errors return `apihuma.MapError(err)`. Full rules and the "adding a new route" checklist live in `apps/api/CLAUDE.md`.
+
 ### RestRouter — route registration
 
-Depends on `*RestService`. Only responsibility is `Register(r chi.Router)` — no business logic, no parsing, no responses.
+Depends on `*RestService` and the shared zone `huma.Config` (`apispec.APIZoneConfig()` for `/api`-zone slices, `apispec.AdminZoneConfig()` for `/admin`-zone slices), taken via its constructor. Only responsibility is `Register(r chi.Router)`, which calls `humachi.New(r, zone)` once and then `huma.Register(api, huma.Operation{...}, handlerFunc)` per operation — no business logic, no parsing, no direct response writing.
 
 ### Wire setup
 
@@ -113,7 +115,7 @@ repo    := NewRepositoryService(db)
 impl    := NewImplService(repo)
 valid   := NewValidationService(impl)
 handler := NewRestService(valid)
-router  := NewRestRouter(handler)
+router  := NewRestRouter(handler, zoneCfg) // zoneCfg: apispec.APIZoneConfig() or AdminZoneConfig()
 ```
 
 ---
@@ -134,7 +136,7 @@ router  := NewRestRouter(handler)
 
 | Package        | Owns                                                                                                                                           |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `job/`         | Job listing: list, get, dismiss, save, set status, set notes                                                                                   |
+| `job/`         | Job listing: list, get, save, set status, set notes                                                                                            |
 | `company/`     | Company CRUD, scan trigger, scan queue reads                                                                                                   |
 | `application/` | Application tracker: insert, update stage/note                                                                                                 |
 | `scan/`        | Scan result recording — used by the crawler worker, not the API                                                                                |
@@ -151,7 +153,7 @@ router  := NewRestRouter(handler)
 - All list endpoints use **keyset cursor pagination** — `filter.Cursor string` in the DTO, `next_cursor *string` in the result, tuple comparison in SQL (e.g. `(sort_col, id) > (?, ?)`). Never use `OFFSET`-based pagination. **Exception:** `audit/` and `user/admin` use page+offset because they are admin-only, operate on small result sets, and support page-jump UX in the admin console. Do not extend this exception to any new slice.
 - All service methods take `context.Context` as the first argument and use `tracing.Start` / `tracing.End` for OTel spans
 - Services return `domain.ServiceError` via sentinel `.WithMessage()` — never `fmt.Errorf` for errors handlers inspect
-- All responses use `handler.Respond`, `handler.RespondPaged`, or `handler.HandleError` — never raw `json.NewEncoder`
-- No HTTP types (`http.Request`, `http.ResponseWriter`) outside `RestService` and `RestRouter`
+- All Huma-registered handlers return `apihuma.MapError(err)` on failure — never `handler.HandleError`/raw `json.NewEncoder` for a new route (see `apps/api/CLAUDE.md`); `handler.Respond*`/`HandleError` remain only for non-Huma code (`service/crawlernode/`, `apps/orchestrator/`) and for middleware that runs before Huma routing
+- No HTTP types (`http.Request`, `http.ResponseWriter`) outside `RestService` and `RestRouter` — Huma-based handlers take `context.Context` + a typed input struct instead; the rare escape hatch (`humachi.Unwrap(ctx)`, e.g. `job`'s lenient-body `dismiss`) stays inside `RestService` too
 - GORM structs live in `RepositoryService` only — never referenced by Impl, Validation, or REST layers
 - A store UPDATE/DELETE that targets specific rows must check `result.RowsAffected` and return a sentinel (e.g. `ErrLedgerRowMissing`, `ErrQueueRowMissing`, `ErrNotFound`) when it matched fewer rows than expected — never return nil for a write that silently did nothing. GORM's `Update`/`Exec` return nil error on zero rows; a swallowed no-op here is what caused the phantom-`fetch` ledger bug. Idempotent inserts use `clause.OnConflict{DoNothing}` and surface the conflict (`ErrJobAlreadyExists`) when the caller needs to know.

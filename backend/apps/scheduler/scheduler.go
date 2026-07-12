@@ -97,18 +97,24 @@ func runCycle(ctx context.Context, log logger.Logger, svc SchedulerService, inte
 		log.Info("reclaimed stuck filtered ledger rows", logger.Int(logger.FieldCount, int(reclaimed)))
 	}
 
-	if purged, err := svc.PurgeInactive(ctx); err != nil {
-		metrics.SchedulerErrorsTotal.WithLabelValues("purge_inactive").Inc()
-		log.Error("purge inactive failed", err)
-	} else if purged > 0 {
-		log.Info("purged inactive company queue entries", logger.Int(logger.FieldPurged, purged))
-	}
-
+	// AutoPauseChronicFailures runs before PurgeInactive so a company that
+	// crosses the failure threshold this tick has its already-queued row
+	// purged in the same cycle, not left to survive until the next tick —
+	// ClaimNextForNode is the authoritative claim-time gate against a paused
+	// company, but shrinking this window still matters since PurgeInactive
+	// is the only thing that clears rows queued before the pause.
 	if n, err := svc.AutoPauseChronicFailures(ctx); err != nil {
 		metrics.SchedulerErrorsTotal.WithLabelValues("auto_pause").Inc()
 		log.Error("auto-pause chronic failures failed", err)
 	} else if n > 0 {
 		log.Info("auto-paused chronic-failing companies", logger.Int(logger.FieldCount, n))
+	}
+
+	if purged, err := svc.PurgeInactive(ctx); err != nil {
+		metrics.SchedulerErrorsTotal.WithLabelValues("purge_inactive").Inc()
+		log.Error("purge inactive failed", err)
+	} else if purged > 0 {
+		log.Info("purged inactive company queue entries", logger.Int(logger.FieldPurged, purged))
 	}
 
 	if err := svc.RefreshGaugeMetrics(ctx); err != nil {

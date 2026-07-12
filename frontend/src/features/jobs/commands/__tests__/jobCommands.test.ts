@@ -19,7 +19,6 @@ function makeCallbacks(): JobsCallbacks {
     onGoToTab: vi.fn(),
     onSetStatus: vi.fn(),
     onToggleSave: vi.fn(),
-    onDismiss: vi.fn(),
     onUndo: vi.fn(),
     onFocusSearch: vi.fn(),
     onOpenPalette: vi.fn(),
@@ -35,8 +34,8 @@ describe('JOB_COMMANDS registry', () => {
     expect(() => buildDispatch(JOB_COMMANDS)).not.toThrow()
   })
 
-  it('contains exactly 24 commands', () => {
-    expect(Object.keys(JOB_COMMANDS)).toHaveLength(24)
+  it('contains exactly 23 commands', () => {
+    expect(Object.keys(JOB_COMMANDS)).toHaveLength(23)
   })
 
   it('every command id matches the dot-kebab naming convention', () => {
@@ -102,7 +101,6 @@ describe('jobCommandHandlers', () => {
       id: 'jobs.rejected',
       assert: (cb) => expect(cb.onSetStatus).toHaveBeenCalledWith('rejected'),
     },
-    { id: 'jobs.dismiss', assert: (cb) => expect(cb.onDismiss).toHaveBeenCalled() },
     { id: 'jobs.undo', assert: (cb) => expect(cb.onUndo).toHaveBeenCalled() },
     { id: 'jobs.nav.focus-search', assert: (cb) => expect(cb.onFocusSearch).toHaveBeenCalled() },
     { id: 'jobs.nav.open-palette', assert: (cb) => expect(cb.onOpenPalette).toHaveBeenCalled() },

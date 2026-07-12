@@ -1,10 +1,11 @@
 package services
 
 import (
-	"net/http"
+	"context"
 	"strings"
 
-	"github.com/trushilpatel/jobradar/apps/api/handler"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	"github.com/trushilpatel/jobradar/apps/orchestrator/nodeidentity"
 	"github.com/trushilpatel/jobradar/service/crawlernode/dto"
 )
@@ -20,53 +21,67 @@ func NewNodeRestService(next NodeService) *NodeRestService {
 	return &NodeRestService{next: next}
 }
 
-// GetWork handles GET /node/work?adapter=<type>&holding=<id,id,...>
-// adapter is optional — when omitted the orchestrator claims any available adapter type.
-func (h *NodeRestService) GetWork(w http.ResponseWriter, r *http.Request) {
-	adapterType := r.URL.Query().Get("adapter")
+// getWorkInput is the Huma input for GET /node/work. Adapter is optional —
+// when omitted the orchestrator claims any available adapter type. Holding
+// is a raw comma-separated string, split in Resolve to match the pre-Huma
+// handler's strings.Split(raw, ",") exactly.
+type getWorkInput struct {
+	Adapter string `query:"adapter" doc:"Adapter type filter; omit to claim any available type"`
+	Holding string `query:"holding" doc:"Comma-separated lease IDs the node currently holds"`
 
-	nodeID := nodeidentity.IDFrom(r.Context())
-
-	var holdingIDs []string
-	if raw := r.URL.Query().Get("holding"); raw != "" {
-		holdingIDs = strings.Split(raw, ",")
-	}
-
-	resp, err := h.next.GetWork(r.Context(), nodeID, adapterType, holdingIDs)
-	if err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, resp)
+	holdingIDs []string
 }
 
-// SubmitResults handles POST /node/results
-func (h *NodeRestService) SubmitResults(w http.ResponseWriter, r *http.Request) {
-	req, ok := handler.DecodeBody[dto.ResultsRequest](w, r)
-	if !ok {
-		return
+func (in *getWorkInput) Resolve(_ huma.Context) []error {
+	if in.Holding != "" {
+		in.holdingIDs = strings.Split(in.Holding, ",")
 	}
-
-	nodeID := nodeidentity.IDFrom(r.Context())
-	resp, err := h.next.SubmitResults(r.Context(), nodeID, req)
-	if err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, resp)
+	return nil
 }
 
-// ReportError handles POST /node/error
-func (h *NodeRestService) ReportError(w http.ResponseWriter, r *http.Request) {
-	req, ok := handler.DecodeBody[dto.ErrorRequest](w, r)
-	if !ok {
-		return
+// getWork serves GET /node/work.
+func (h *NodeRestService) getWork(ctx context.Context, in *getWorkInput) (*apihuma.SingleOutput[*dto.WorkResponse], error) {
+	nodeID := nodeidentity.IDFrom(ctx)
+	resp, err := h.next.GetWork(ctx, nodeID, in.Adapter, in.holdingIDs)
+	if err != nil {
+		return nil, apihuma.MapError(err)
 	}
+	out := &apihuma.SingleOutput[*dto.WorkResponse]{}
+	out.Body.Data = resp
+	return out, nil
+}
 
-	nodeID := nodeidentity.IDFrom(r.Context())
-	if err := h.next.ReportError(r.Context(), nodeID, req); err != nil {
-		handler.HandleError(w, err)
-		return
+// submitResultsInput is the Huma input for POST /node/results.
+type submitResultsInput struct {
+	Body dto.ResultsRequest
+}
+
+// submitResults serves POST /node/results.
+func (h *NodeRestService) submitResults(ctx context.Context, in *submitResultsInput) (*apihuma.SingleOutput[*dto.ResultsResponse], error) {
+	nodeID := nodeidentity.IDFrom(ctx)
+	resp, err := h.next.SubmitResults(ctx, nodeID, in.Body)
+	if err != nil {
+		return nil, apihuma.MapError(err)
 	}
-	handler.RespondNoContent(w)
+	out := &apihuma.SingleOutput[*dto.ResultsResponse]{}
+	out.Body.Data = resp
+	return out, nil
+}
+
+// reportErrorInput is the Huma input for POST /node/error.
+type reportErrorInput struct {
+	Body dto.ErrorRequest
+}
+
+// reportErrorOutput has no Body field, so Huma defaults its status to 204
+// (see huma's own op.DefaultStatus inference: no output body -> StatusNoContent).
+type reportErrorOutput struct{}
+
+// reportError serves POST /node/error.
+func (h *NodeRestService) reportError(ctx context.Context, in *reportErrorInput) (*reportErrorOutput, error) {
+	nodeID := nodeidentity.IDFrom(ctx)
+	if err := h.next.ReportError(ctx, nodeID, in.Body); err != nil {
+		return nil, apihuma.MapError(err)
+	}
+	return &reportErrorOutput{}, nil
 }

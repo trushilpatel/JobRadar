@@ -23,7 +23,5 @@ export {
   setJobStatus,
   setJobSaved,
   setJobNotes,
-  dismissJob,
-  bulkDismissJobs,
 } from './api/jobs.api'
 export type { JobsPage, JobCounts, JobFilters as JobApiFilters } from './api/jobs.api'

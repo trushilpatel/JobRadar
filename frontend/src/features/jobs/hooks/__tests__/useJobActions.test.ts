@@ -86,11 +86,17 @@ function makeJob(id: string, status: Job['status'] = JOB_STATUS.NEW): Job {
   }
 }
 
+// Each `jobQueryKeys.list(...)` cache entry is a flat `JobsPage`
+// (`{ items, next_cursor }`) — useJobs.ts uses `useQuery` + explicit cursor
+// history, NOT `useInfiniteQuery`, so there is no `.pages` wrapper. Seeding
+// the wrong (`.pages`-wrapped) shape here previously let the "regression"
+// test below pass while the real production cache-scanning code was broken
+// against the real shape — see useJobActions.ts's snapshotAndPatch.
 function seedListCache(jobs: Job[]) {
   const filters = { status: JOB_STATUS.NEW } as jobsApi.JobFilters
   lastQc?.setQueryData(jobQueryKeys.list(filters, 20), {
-    pages: [{ items: jobs, next_cursor: '' }],
-    pageParams: [''],
+    items: jobs,
+    next_cursor: '',
   })
 }
 
@@ -209,52 +215,6 @@ describe('useJobActions', () => {
     })
   })
 
-  describe('dismiss', () => {
-    it('calls dismissJob with id, reason, and optional note', async () => {
-      vi.mocked(jobsApi.dismissJob).mockResolvedValue(undefined)
-      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
-      await act(async () => {
-        await result.current.dismiss.mutateAsync({
-          id: 'j1',
-          reason: 'user_dismissed',
-          note: 'Not relevant',
-        })
-      })
-      expect(jobsApi.dismissJob).toHaveBeenCalledWith('j1', 'user_dismissed', 'Not relevant')
-    })
-
-    it('calls dismissJob without note when not provided', async () => {
-      vi.mocked(jobsApi.dismissJob).mockResolvedValue(undefined)
-      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
-      await act(async () => {
-        await result.current.dismiss.mutateAsync({ id: 'j2', reason: 'user_not_relevant' })
-      })
-      expect(jobsApi.dismissJob).toHaveBeenCalledWith('j2', 'user_not_relevant', undefined)
-    })
-
-    it('shows "Job dismissed" undo toast on success', async () => {
-      vi.mocked(jobsApi.dismissJob).mockResolvedValue(undefined)
-      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
-      await act(async () => {
-        await result.current.dismiss.mutateAsync({ id: 'j1', reason: 'user_dismissed' })
-      })
-      expect(toast).toHaveBeenCalledWith('Job dismissed', expect.any(Object))
-    })
-
-    it('shows error toast when dismissJob fails', async () => {
-      vi.mocked(jobsApi.dismissJob).mockRejectedValue(new Error('Server error'))
-      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
-      await act(async () => {
-        try {
-          await result.current.dismiss.mutateAsync({ id: 'j1', reason: 'user_dismissed' })
-        } catch {
-          // expected
-        }
-      })
-      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to dismiss job'))
-    })
-  })
-
   describe('applyJob (row-level Apply action)', () => {
     beforeEach(() => {
       vi.spyOn(window, 'open').mockReturnValue(null)
@@ -340,48 +300,6 @@ describe('useJobActions', () => {
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith('Failed to update status after applying')
       )
-    })
-  })
-
-  describe('bulkDismiss', () => {
-    it('calls bulkDismissJobs with ids array', async () => {
-      vi.mocked(jobsApi.bulkDismissJobs).mockResolvedValue({ dismissed: 3 })
-      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
-      await act(async () => {
-        await result.current.bulkDismiss.mutateAsync(['j1', 'j2', 'j3'])
-      })
-      expect(jobsApi.bulkDismissJobs).toHaveBeenCalledWith(['j1', 'j2', 'j3'])
-    })
-
-    it('shows plural "jobs dismissed" undo toast when count > 1', async () => {
-      vi.mocked(jobsApi.bulkDismissJobs).mockResolvedValue({ dismissed: 3 })
-      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
-      await act(async () => {
-        await result.current.bulkDismiss.mutateAsync(['j1', 'j2', 'j3'])
-      })
-      expect(toast).toHaveBeenCalledWith('3 jobs dismissed', expect.any(Object))
-    })
-
-    it('shows singular "job dismissed" undo toast when count is 1', async () => {
-      vi.mocked(jobsApi.bulkDismissJobs).mockResolvedValue({ dismissed: 1 })
-      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
-      await act(async () => {
-        await result.current.bulkDismiss.mutateAsync(['j1'])
-      })
-      expect(toast).toHaveBeenCalledWith('1 job dismissed', expect.any(Object))
-    })
-
-    it('shows error toast when bulkDismissJobs fails', async () => {
-      vi.mocked(jobsApi.bulkDismissJobs).mockRejectedValue(new Error('Server error'))
-      const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
-      await act(async () => {
-        try {
-          await result.current.bulkDismiss.mutateAsync(['j1'])
-        } catch {
-          // expected
-        }
-      })
-      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to dismiss jobs'))
     })
   })
 
@@ -567,10 +485,10 @@ describe('useJobActions', () => {
 
       // Wait for the optimistic onMutate hook to finish patching the cache.
       await waitFor(() => {
-        const cached = lastQc!.getQueryData<{ pages: jobsApi.JobsPage[] }>(
+        const cached = lastQc!.getQueryData<jobsApi.JobsPage>(
           jobQueryKeys.list({ status: JOB_STATUS.NEW }, 20)
         )
-        expect(cached?.pages[0]?.items[0]?.status).toBe(JOB_STATUS.APPLIED)
+        expect(cached?.items[0]?.status).toBe(JOB_STATUS.APPLIED)
       })
 
       // Resolve and tidy up so the test exits cleanly.
@@ -594,10 +512,10 @@ describe('useJobActions', () => {
       })
 
       // Cache should have rolled back to NEW.
-      const cached = lastQc!.getQueryData<{ pages: jobsApi.JobsPage[] }>(
+      const cached = lastQc!.getQueryData<jobsApi.JobsPage>(
         jobQueryKeys.list({ status: JOB_STATUS.NEW }, 20)
       )
-      expect(cached?.pages[0]?.items[0]?.status).toBe(JOB_STATUS.NEW)
+      expect(cached?.items[0]?.status).toBe(JOB_STATUS.NEW)
     })
   })
 
@@ -605,8 +523,6 @@ describe('useJobActions', () => {
     it('returns all mutation handlers + undoLast', () => {
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
       expect(result.current.setStatus).toBeDefined()
-      expect(result.current.dismiss).toBeDefined()
-      expect(result.current.bulkDismiss).toBeDefined()
       expect(result.current.bulkSave).toBeDefined()
       expect(result.current.bulkApplied).toBeDefined()
       expect(typeof result.current.undoLast).toBe('function')
@@ -615,8 +531,6 @@ describe('useJobActions', () => {
     it('mutations start in idle state', () => {
       const { result } = renderHook(() => useJobActions(), { wrapper: makeWrapper() })
       expect(result.current.setStatus.isPending).toBe(false)
-      expect(result.current.dismiss.isPending).toBe(false)
-      expect(result.current.bulkDismiss.isPending).toBe(false)
       expect(result.current.bulkSave.isPending).toBe(false)
       expect(result.current.bulkApplied.isPending).toBe(false)
     })

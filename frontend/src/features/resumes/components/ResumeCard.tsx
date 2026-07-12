@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileText, Download, Trash2, Pencil } from 'lucide-react'
+import { FileText, Download, Trash2, Pencil, Loader2 } from 'lucide-react'
 import { cn, formatRelativeTime } from '@/lib/utils/utils'
 import { Input } from '@/components/ui/input'
 import { useResumeActions } from '../hooks/useResumeActions'
@@ -80,10 +80,16 @@ export function ResumeCard({ resume }: { resume: Resume }) {
           <button
             type="button"
             onClick={handleDownload}
-            aria-label="Download"
-            className="hover:text-primary"
+            disabled={download.isPending}
+            aria-label={download.isPending ? 'Downloading' : 'Download'}
+            title={download.isPending ? 'Downloading…' : 'Download'}
+            className="hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Download size={13} />
+            {download.isPending ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Download size={13} />
+            )}
           </button>
           <button
             type="button"

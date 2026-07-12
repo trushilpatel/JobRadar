@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	appdto "github.com/trushilpatel/jobradar/service/application/dto"
 	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 	appsvc "github.com/trushilpatel/jobradar/service/application/services"
@@ -31,33 +32,39 @@ import (
 func buildTestApp() *App {
 	fakeCompany := &fakeCompanyService{}
 	companyRest := companysvc.NewRestService(fakeCompany)
-	companyH := companysvc.NewRestRouter(companyRest)
+	// A fresh, isolated zone config/registry per test — NOT apispec.APIZoneConfig(),
+	// which shares apispec's package-level production registry. Reusing that
+	// singleton across independent tests risks cross-test schema pollution
+	// (e.g. a test that registers before apihuma.InstallLegacyErrorModel()
+	// runs would seed huma's default ErrorDetail/ErrorModel schemas into the
+	// same registry a later test expects to be clean).
+	companyH := companysvc.NewRestRouter(companyRest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 
 	fakeScan := &fakeScanService{}
 	scanRest := scansvc.NewRestService(fakeScan)
-	scanH := scansvc.NewRestRouter(scanRest)
+	scanH := scansvc.NewRestRouter(scanRest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 
 	fakeAts := &fakeAtsService{}
 	atsRest := atssvc.NewRestService(fakeAts)
-	atsH := atssvc.NewRestRouter(atsRest)
+	atsH := atssvc.NewRestRouter(atsRest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 
 	fakeJob := &fakeJobService{}
 	jobRest := jobsvc.NewRestService(fakeJob)
-	jobH := jobsvc.NewRestRouter(jobRest)
+	jobH := jobsvc.NewRestRouter(jobRest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 
 	fakeApp := &fakeAppService{}
 	appImpl := appsvc.NewImplService(fakeApp, fakeJob)
 	appValidation := appsvc.NewValidationService(appImpl)
 	appRest := appsvc.NewRestService(appValidation)
-	appH := appsvc.NewRestRouter(appRest)
+	appH := appsvc.NewRestRouter(appRest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 
 	fakeResume := &fakeResumeService{}
 	resumeRest := resumesvc.NewRestService(fakeResume)
-	resumeH := resumesvc.NewRestRouter(resumeRest)
+	resumeH := resumesvc.NewRestRouter(resumeRest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 
 	fakeApplyQueue := &fakeApplyQueueService{}
 	applyQueueRest := applyqueuesvc.NewRestService(fakeApplyQueue)
-	applyQueueH := applyqueuesvc.NewRestRouter(applyQueueRest)
+	applyQueueH := applyqueuesvc.NewRestRouter(applyQueueRest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 
 	return NewApp(companyH, scanH, atsH, jobH, appH, nil, resumeH, nil, applyQueueH)
 }
@@ -107,7 +114,6 @@ func TestRouter_AllRoutesMounted(t *testing.T) {
 		// Jobs
 		{http.MethodGet, "/api/jobs"},
 		{http.MethodGet, "/api/jobs/{id}"},
-		{http.MethodDelete, "/api/jobs/{id}"},
 		{http.MethodPatch, "/api/jobs/{id}/save"},
 		{http.MethodPatch, "/api/jobs/{id}/status"},
 		{http.MethodPatch, "/api/jobs/{id}/notes"},
@@ -223,13 +229,9 @@ func (f *fakeJobService) List(_ context.Context, _ jobdto.JobFilter, _ string, _
 	return jobdto.PageResult{}, nil
 }
 func (f *fakeJobService) Get(_ context.Context, _ string) (*jobdto.JobView, error) { return nil, nil }
-func (f *fakeJobService) Dismiss(_ context.Context, _ string, _, _ string) error   { return nil }
 func (f *fakeJobService) SetSaved(_ context.Context, _ string, _ bool) error       { return nil }
 func (f *fakeJobService) SetStatus(_ context.Context, _, _ string) error           { return nil }
 func (f *fakeJobService) SetNotes(_ context.Context, _, _ string) error            { return nil }
-func (f *fakeJobService) BulkDismiss(_ context.Context, _ []string, _, _ string) error {
-	return nil
-}
 func (f *fakeJobService) GetCounts(_ context.Context) (jobdto.Counts, error) {
 	return jobdto.Counts{}, nil
 }

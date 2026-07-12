@@ -34,7 +34,7 @@ Each binary lives in `backend/apps/<name>/` (wiring + worker loop only) and depe
 | `crawler_nodes`           | Registered crawler-node registry; `token_hash` stores HMAC-SHA256 of the bearer token; `last_seen_at` drives online/offline status. Provisioned via `POST /admin/crawler-nodes`; token returned exactly once at creation                                                        |
 | `job_pipeline_ledger`     | Dedup + pipeline blocking; `removed_at` marks disappearance; `reason='retry'` carries `retry_count`/`next_attempt_at`, written via filter `UpdateRetryBatch`. UPDATE ops return `ErrLedgerRowMissing` on 0/partial rows — never silent nil (migrations 071/073)                 |
 | `jobs`                    | Operational feed — global rows; per-user status/notes live in `user_job_state`. `job_post_id` is **UNIQUE** (`uq_jobs_job_post_id`, migration 071); `InsertJob` is idempotent (`ON CONFLICT DO NOTHING` → `ErrJobAlreadyExists`)                                                |
-| `user_job_state`          | Per-user overlay: saved_at, applied_at, status, notes, dismissal reason/note                                                                                                                                                                                                    |
+| `user_job_state`          | Per-user overlay: saved_at, applied_at, status, notes. `dismissal_reason`/`dismissal_note`/`dismissed_at` are historical-only — the dismiss feature was removed (migration 091); the CHECK constraint blocks new `dismissed` writes but existing rows are kept                  |
 | `job_analytics`           | Append-only snapshot from analyzer; survives job dismissal                                                                                                                                                                                                                      |
 | `job_application_tracker` | Application stage tracking; `user_id NOT NULL`                                                                                                                                                                                                                                  |
 | `users`                   | Registered users (id, email citext, display_name, status, timestamps)                                                                                                                                                                                                           |
@@ -44,10 +44,11 @@ Each binary lives in `backend/apps/<name>/` (wiring + worker loop only) and depe
 
 ```
 new → saved → applied    (user advances)
-new → dismissed          (job row kept in `jobs` for FK integrity)
 ```
 
-`user_job_state` is upserted on every save/dismiss/status change. The "new" tab uses a global feed query with a per-user overlay (`GetMany` on the fetched IDs); other status tabs INNER JOIN `user_job_state → jobs` so every page returns a full limit-sized result. Historical analytics read `job_analytics` (snapshot rows never deleted); current-state aggregations (funnel counts) read `user_job_state.status`.
+`user_job_state` is upserted on every save/status change. The "new" tab uses a global feed query with a per-user overlay (`GetMany` on the fetched IDs); other status tabs INNER JOIN `user_job_state → jobs` so every page returns a full limit-sized result. Historical analytics read `job_analytics` (snapshot rows never deleted); current-state aggregations (funnel counts) read `user_job_state.status`.
+
+**Dismiss has been removed** (UI, API, and the ability to write new `dismissed` rows — migration 091). Historical `status='dismissed'` rows are intentionally left in the DB forever: migration 084 used that status to backfill-hide non-USA jobs for every user, and the "new" tab's exclusion logic is simply "status IS NULL" in application code, so deleting or reassigning those rows would resurface them. `jobcommon.JobStatusDismissed` and the `user_job_counters.dismissed_count` bucket remain in code for this reason — never remove them without re-verifying the non-USA-hiding mechanism and the "New" tab count math (`New = total - sum(workflow buckets)`) stay correct.
 
 ## Scan scheduling
 
@@ -155,6 +156,8 @@ Every feature must ship with:
 
 **Coverage gate details.** Statement-weighted: `covered_statements / total_statements` per package. Excluded from the unit tier: `main.go`, `wire.go`, `wire_*.go`, `wire_gen.go`, `/compat/`, `/dto/`, `/models/`, `/testutil/`, plus broker/Postgres infrastructure (`common/db`, `common/jetstream`). The integration tier exists in code with `//go:build integration` but has no active CI workflow — run locally via `go test -tags=integration -race ./...` against real Postgres/NATS/Redis.
 
+**End-to-end (Playwright).** `frontend/e2e/` is a full-flow browser suite (both user and admin roles) against a live stack — see `frontend/e2e/CLAUDE.md` for conventions, known gaps, and the how-to. Gated in CI on every dev→main PR (`.github/workflows/ci.yml`'s `e2e` job — queues rather than cancels on overlap, since every run hits the same shared dev Supabase DB and Clerk test accounts). Run it locally too (`cd frontend && npm run test:e2e` with `make dev` already running) when touching a flow it covers — Jobs, Account, Resumes, Apply Queue, auth/admin-gating, or any admin page.
+
 After implementation: write a brief spec doc to `docs/superpowers/specs/` with date prefix — file-level references only, no code snippets, no filler.
 
 ## Plan execution
@@ -179,6 +182,7 @@ This file and the project's skill files evolve as the codebase is worked on. Whe
 - `.claude/rules/engineering-principles.md` — hard rules applied globally: SOLID (strict), loose coupling, no magic values, extensibility by design, test-first, formatting — _"how must the code be written?"_
 - `.claude/rules/dev-ergonomics.md` — developer-ergonomics model: friction to change, consistency, extensibility, agent-legibility — _"is it ergonomic to keep it good?"_ Audited by the `dev-ergonomics` skill (read-only, recommends; never edits) via the `dev-ergonomics-auditor` agent
 - Subdirectory `CLAUDE.md` files cover each `backend/*` and `frontend/*` area and auto-load when you work there
+- `frontend/e2e/CLAUDE.md` — Playwright E2E suite: how to run it, page-object/auth conventions, known gaps, real bugs it has surfaced
 - `.claude/skills/` — project skills; each has a self-improvement footer that invokes `skill-self-improvement` after completion
 
 ## Docs layout

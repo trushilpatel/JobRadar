@@ -110,6 +110,27 @@ describe('DataTable', () => {
     expect(onRowClick).toHaveBeenCalledWith(data[0])
   })
 
+  it('does not navigate via its own handler when disableArrowKeyNav is set', () => {
+    // Regression: a caller with its own page-level keyboard nav (e.g.
+    // JobsTable) must be able to opt out of DataTable's built-in
+    // ArrowUp/ArrowDown handling, since both firing on the same keydown
+    // advances the selection twice.
+    const onRowClick = vi.fn()
+    render(
+      <DataTable
+        columns={columns}
+        data={data}
+        onRowClick={onRowClick}
+        getRowId={(r) => r.id}
+        selectedId="1"
+        disableArrowKeyNav
+      />
+    )
+    const container = screen.getByText('Alpha').closest('div[tabindex]') as HTMLElement
+    fireEvent.keyDown(container, { key: 'ArrowDown' })
+    expect(onRowClick).not.toHaveBeenCalled()
+  })
+
   it('applies the selected highlight to the matching row', () => {
     render(<DataTable columns={columns} data={data} getRowId={(r) => r.id} selectedId="2" />)
     const selectedRow = screen.getByText('Bravo').closest('tr')

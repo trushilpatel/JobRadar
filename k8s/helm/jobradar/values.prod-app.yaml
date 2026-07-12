@@ -1,6 +1,14 @@
-# Node 2 — Pipeline only (Scheduler + Orchestrator + CrawlerNode×3 + Filter + Enricher).
+# Node 2 — Pipeline only (Scheduler + Orchestrator + CrawlerNode×1 + Filter + Enricher).
 # Serving layer is disabled so this node runs only background workers.
 # Image tags are NOT committed here — passed at deploy time via --set images.<name>.tag=<sha>
+
+# Grafana Cloud OTLP endpoint, direct (no in-cluster collector — this node's
+# pipeline services use dnsPolicy: Default and can't resolve in-cluster Service
+# names anyway; see the dnsPolicy comment in each deployment.yaml). Auth (Basic)
+# comes from the grafana-cloud-otel-creds Secret, created once via SSH from
+# Doppler prod's GRAFANA_CLOUD_TEMPO_AUTH — never committed here.
+otelGrafanaCloudEndpoint: &otelGrafanaCloudEndpoint "https://otlp-gateway-prod-us-west-0.grafana.net/otlp/v1/traces"
+otelGrafanaCloudCredsSecret: &otelGrafanaCloudCredsSecret "grafana-cloud-otel-creds"
 
 nats:
   enabled: false
@@ -24,6 +32,8 @@ migrate:
 filter:
   natsUrl: "tls://connect.ngs.global"
   natsCredsFile: "/etc/nats/jobradar.creds"
+  otelEndpoint: *otelGrafanaCloudEndpoint
+  otelCredsSecret: *otelGrafanaCloudCredsSecret
 
 enricher:
   natsUrl: "tls://connect.ngs.global"
@@ -33,10 +43,18 @@ enricher:
   # probe and restarts, dropping cluster DNS → LLM lookups fail). Keep this low on
   # this node; the base default (15) is tuned for a non-starved host.
   fetchConcurrency: "4"
+  otelEndpoint: *otelGrafanaCloudEndpoint
+  otelCredsSecret: *otelGrafanaCloudCredsSecret
+
+scheduler:
+  otelEndpoint: *otelGrafanaCloudEndpoint
+  otelCredsSecret: *otelGrafanaCloudCredsSecret
 
 orchestrator:
   natsUrl: "tls://connect.ngs.global"
   natsCredsFile: "/etc/nats/jobradar.creds"
+  otelEndpoint: *otelGrafanaCloudEndpoint
+  otelCredsSecret: *otelGrafanaCloudCredsSecret
 
 # NATS connection budget: the external NGS (Synadia Cloud) free-tier account
 # caps concurrent connections at 4. Steady-state consumers are orchestrator(1) +
@@ -49,6 +67,23 @@ crawlerNode:
   # Lowered from the base default (3) to reduce concurrent crawl CPU/memory load
   # on the starved 1-OCPU node — see the enricher.fetchConcurrency note above.
   maxConcurrent: "2"
+  otelEndpoint: *otelGrafanaCloudEndpoint
+  otelCredsSecret: *otelGrafanaCloudCredsSecret
+
+vmagent:
+  enabled: true
+  remoteWriteCredsSecret: "grafana-cloud-prom-creds"
+  scrapeTargets:
+    - job: "jobradar_scheduler"
+      target: "jobradar-scheduler:9103"
+    - job: "jobradar_orchestrator"
+      target: "jobradar-orchestrator:9104"
+    - job: "jobradar_filter"
+      target: "jobradar-filter:9101"
+    - job: "jobradar_enricher"
+      target: "jobradar-enricher:9101"
+    - job: "jobradar_crawler_node"
+      target: "jobradar-crawler-node-metrics:9102"
 
 imagePullSecret: ghcr-pull-secret
 

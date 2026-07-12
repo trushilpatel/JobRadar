@@ -99,23 +99,35 @@ func (s *assignmentRepositoryService) ClaimNextForNode(ctx context.Context, node
 func (s *assignmentRepositoryService) listClaimCandidates(ctx context.Context, adapterType string) (_ []queueCandidate, err error) {
 	var candidates []queueCandidate
 	var result *gorm.DB
+	// INNER JOIN company_scan_settings so a company that was auto-paused or
+	// deactivated after its row was queued is never claimed here — the
+	// scheduler's PurgeInactive sweep is a best-effort cleanup, not the
+	// authoritative gate. Every legitimate queue row has a matching settings
+	// row (both Enqueue and EnqueueDue require one to insert in the first
+	// place), so the INNER JOIN never spuriously excludes a valid candidate.
 	if adapterType != "" {
 		result = s.db.WithContext(ctx).Raw(`
-			SELECT id, company_id, adapter_type
-			FROM company_scan_queue
-			WHERE status = 'queued'
-			  AND adapter_type = ?
-			  AND COALESCE(next_attempt_at, '-infinity') <= NOW()
-			ORDER BY priority DESC, queued_at ASC
+			SELECT q.id, q.company_id, q.adapter_type
+			FROM company_scan_queue q
+			INNER JOIN company_scan_settings s ON s.company_id = q.company_id
+			WHERE q.status = 'queued'
+			  AND q.adapter_type = ?
+			  AND COALESCE(q.next_attempt_at, '-infinity') <= NOW()
+			  AND s.active = true
+			  AND s.auto_paused = false
+			ORDER BY q.priority DESC, q.queued_at ASC
 			LIMIT ?
 		`, adapterType, claimBatchSize).Scan(&candidates)
 	} else {
 		result = s.db.WithContext(ctx).Raw(`
-			SELECT id, company_id, adapter_type
-			FROM company_scan_queue
-			WHERE status = 'queued'
-			  AND COALESCE(next_attempt_at, '-infinity') <= NOW()
-			ORDER BY priority DESC, queued_at ASC
+			SELECT q.id, q.company_id, q.adapter_type
+			FROM company_scan_queue q
+			INNER JOIN company_scan_settings s ON s.company_id = q.company_id
+			WHERE q.status = 'queued'
+			  AND COALESCE(q.next_attempt_at, '-infinity') <= NOW()
+			  AND s.active = true
+			  AND s.auto_paused = false
+			ORDER BY q.priority DESC, q.queued_at ASC
 			LIMIT ?
 		`, claimBatchSize).Scan(&candidates)
 	}

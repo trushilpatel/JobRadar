@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/trushilpatel/jobradar/common/config"
 	"github.com/trushilpatel/jobradar/common/logger"
 	"github.com/trushilpatel/jobradar/platform/cache"
@@ -27,13 +28,13 @@ import (
 
 // Injectors from wire.go:
 
-func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, error) {
+func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger, apiZoneCfg huma.Config, adminZoneCfg huma.Config) (*App, error) {
 	// ── Company (public chain) ───────────────────────────────────────────────
 	companyRepositoryService := services.NewRepositoryService(db)
 	companyImplService := services.NewImplService(companyRepositoryService)
 	companyValidationService := services.NewValidationService(companyImplService)
 	companyRestService := services.NewRestService(companyValidationService)
-	companyHandler := services.NewRestRouter(companyRestService)
+	companyHandler := services.NewRestRouter(companyRestService, apiZoneCfg)
 
 	// ── Company (admin chain — needed by scan service + /admin/companies) ──────
 	scanSettingsRepository := services.NewScanSettingsRepositoryService(db)
@@ -45,7 +46,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	atsCacheService := atssvc.NewCacheService(atsImplService, atsMemoryCache, 5*time.Minute)
 	atsValidationService := atssvc.NewValidationService(atsCacheService)
 	atsRestService := atssvc.NewRestService(atsValidationService)
-	atsRestRouter := atssvc.NewRestRouter(atsRestService)
+	atsRestRouter := atssvc.NewRestRouter(atsRestService, adminZoneCfg)
 
 	scanLogStoreForCompany := services2.NewLogStore(db)
 	scanHistoryReader := provideScanHistoryReader(scanLogStoreForCompany)
@@ -56,7 +57,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	companyAdminImplService := services.NewAdminImplService(companyAdminRepositoryService, nil, nil)
 	companyAdminValidationService := services.NewAdminValidationService(companyAdminImplService, atsValidationService)
 	companyAdminRestService := services.NewAdminRestService(companyAdminValidationService)
-	companyAdminRouter := services.NewAdminRestRouter(companyAdminRestService)
+	companyAdminRouter := services.NewAdminRestRouter(companyAdminRestService, adminZoneCfg)
 
 	// ── Scan ─────────────────────────────────────────────────────────────────
 	scanLogStore := services2.NewLogStore(db)
@@ -67,7 +68,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	scanImplService := services2.NewService(scanRepositoryService, scanSettingsRepository, companyAdminValidationService, servicesConfig)
 	scanValidationService := services2.NewValidator(scanImplService)
 	scanRestService := services2.NewRestService(scanValidationService)
-	scanRestRouter := services2.NewRestRouter(scanRestService)
+	scanRestRouter := services2.NewRestRouter(scanRestService, apiZoneCfg)
 
 	// ── Job ──────────────────────────────────────────────────────────────────
 	jobStore := jobsvc.NewJobStore(db)
@@ -80,14 +81,14 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	jobImplService := jobsvc.NewImplService(jobStore, userJobStateRepository, snapshotWriter, applicationWriter, seenLedgerWriter, nil, log)
 	jobValidationService := jobsvc.NewValidationService(jobImplService)
 	jobRestService := jobsvc.NewRestService(jobValidationService)
-	jobHandler := jobsvc.NewRestRouter(jobRestService)
+	jobHandler := jobsvc.NewRestRouter(jobRestService, apiZoneCfg)
 
 	// ── Application ──────────────────────────────────────────────────────────
 	applicationRepositoryService := services3.NewRepositoryService(db)
 	applicationImplService := services3.NewImplService(applicationRepositoryService, jobImplService)
 	applicationValidationService := services3.NewValidationService(applicationImplService)
 	applicationRestService := services3.NewRestService(applicationValidationService)
-	applicationRestRouter := services3.NewRestRouter(applicationRestService)
+	applicationRestRouter := services3.NewRestRouter(applicationRestService, apiZoneCfg)
 
 	// ── Resume ───────────────────────────────────────────────────────────────
 	objectStorage, err := provideObjectStorage(cfg)
@@ -98,7 +99,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	resumeImplService := services4.NewImplService(resumeRepositoryService, objectStorage, log)
 	resumeValidationService := services4.NewValidationService(resumeImplService)
 	resumeRestService := services4.NewRestService(resumeValidationService)
-	resumeHandler := services4.NewRestRouter(resumeRestService)
+	resumeHandler := services4.NewRestRouter(resumeRestService, apiZoneCfg)
 
 	// ── Pipeline ─────────────────────────────────────────────────────────────
 	pipelineStore := pipelinesvc.NewPipelineStore(db)
@@ -106,7 +107,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	pipelineImplService := pipelinesvc.NewImplService(pipelineRepositoryService)
 	pipelineValidationService := pipelinesvc.NewValidationService(pipelineImplService)
 	pipelineRestService := pipelinesvc.NewRestService(pipelineValidationService)
-	pipelineRestRouter := pipelinesvc.NewRestRouter(pipelineRestService)
+	pipelineRestRouter := pipelinesvc.NewRestRouter(pipelineRestService, adminZoneCfg)
 
 	// ── Apply Queue ──────────────────────────────────────────────────────────
 	applyQueueRepositoryService := services5.NewRepositoryService(db)
@@ -115,7 +116,7 @@ func InitializeApp(db *gorm.DB, cfg *config.Config, log logger.Logger) (*App, er
 	applyQueueImplService := services5.NewImplService(applyQueueRepositoryService)
 	applyQueueValidationService := services5.NewValidationService(applyQueueImplService, applyQueueEngagementChecker, applyQueueResumeOwnershipChecker)
 	applyQueueRestService := services5.NewRestService(applyQueueValidationService)
-	applyQueueHandler := services5.NewRestRouter(applyQueueRestService)
+	applyQueueHandler := services5.NewRestRouter(applyQueueRestService, apiZoneCfg)
 
 	app := NewApp(companyHandler, scanRestRouter, atsRestRouter, jobHandler, applicationRestRouter, companyAdminRouter, resumeHandler, pipelineRestRouter, applyQueueHandler)
 	return app, nil

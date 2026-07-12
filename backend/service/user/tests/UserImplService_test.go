@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
+	"github.com/trushilpatel/jobradar/platform/clerkadmin"
 	userdto "github.com/trushilpatel/jobradar/service/user/dto"
 	usermodel "github.com/trushilpatel/jobradar/service/user/models"
 	usersvc "github.com/trushilpatel/jobradar/service/user/services"
@@ -99,6 +100,25 @@ func TestImplService_DeleteAbortsOnClerkFailure(t *testing.T) {
 	}
 	if repo.deleteCalled {
 		t.Fatal("repo Delete must not run when clerk delete fails")
+	}
+}
+
+// Same tolerance as the admin delete path: if the Clerk account is already
+// gone (e.g. a prior delete attempt's Clerk call succeeded but the DB delete
+// step afterward failed), clerkadmin.ErrUserNotFound must not abort the
+// chain — otherwise self-service account deletion is permanently broken for
+// that user (every retry 500s forever with no way to actually delete).
+func TestImplService_DeleteProceedsWhenClerkUserAlreadyGone(t *testing.T) {
+	t.Parallel()
+	repo := &fakeUserRepo{}
+	sb := &fakeClerk{err: clerkadmin.ErrUserNotFound}
+	s := usersvc.NewImplService(repo, sb)
+
+	if err := s.Delete(context.Background(), "user-1"); err != nil {
+		t.Fatalf("Delete must succeed when the Clerk user is already gone: %v", err)
+	}
+	if !repo.deleteCalled {
+		t.Fatal("expected repo Delete to still run when Clerk returns ErrUserNotFound")
 	}
 }
 

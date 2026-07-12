@@ -17,6 +17,7 @@ type Config struct {
 	RetryMaxAttempts      int
 	LogLevel              string
 	MetricsAddr           string
+	OTelEndpoint          string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -31,6 +32,7 @@ func Load() *Config {
 		RetryMaxAttempts:      envInt("RETRY_MAX_ATTEMPTS", 3),
 		LogLevel:              envStr("LOG_LEVEL", "info"),
 		MetricsAddr:           envStr("METRICS_ADDR", ":9102"),
+		OTelEndpoint:          envStr("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 	}
 }
 

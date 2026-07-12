@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/identity"
 	userdto "github.com/trushilpatel/jobradar/service/user/dto"
@@ -69,20 +70,24 @@ func (s *stubService) PatchConfig(_ context.Context, _ string, partial userdto.U
 	return &partial, nil
 }
 
-// newTestRouter wires the user RestRouter behind an injectable identity
-// middleware so tests can attach an Identity to ctx without a full JWT.
+// newTestRouter wires the user RestRouter, then wraps it in an identity-
+// attaching middleware so tests can inject an Identity onto ctx without a
+// full JWT — UserRestRouter itself no longer accepts middlewares (see its
+// doc comment); it relies purely on the caller having already applied
+// RequireIdentity, exactly like every other /api-zone slice. Wrapping the
+// returned handler from the outside reproduces the same test capability
+// with zero changes needed to the tests below.
 func newTestRouter(svc usersvc.Service, ident identity.Identity) http.Handler {
 	rest := usersvc.NewRestService(svc)
-	attach := func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := identity.NewContext(r.Context(), ident)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
-	router := usersvc.NewRestRouter(rest, attach)
+	zoneCfg := apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry())
+	router := usersvc.NewRestRouter(rest, zoneCfg)
 	mux := chi.NewMux()
 	router.Register(mux)
-	return mux
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := identity.NewContext(r.Context(), ident)
+		mux.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func TestGetMeReturnsIdentityBundle(t *testing.T) {
@@ -97,7 +102,7 @@ func TestGetMeReturnsIdentityBundle(t *testing.T) {
 	srv := httptest.NewServer(newTestRouter(&stubService{}, ident))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/me/")
+	resp, err := http.Get(srv.URL + "/me")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -133,7 +138,7 @@ func TestPatchMeUpdatesProfile(t *testing.T) {
 	defer srv.Close()
 
 	body := strings.NewReader(`{"display_name":"Alice"}`)
-	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/me/", body)
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/me", body)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PATCH: %v", err)
@@ -157,7 +162,7 @@ func TestPatchMeRejectsMalformedBody(t *testing.T) {
 	srv := httptest.NewServer(newTestRouter(svc, ident))
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/me/", strings.NewReader("not json"))
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/me", strings.NewReader("not json"))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PATCH: %v", err)
@@ -175,7 +180,7 @@ func TestDeleteMeReturns204(t *testing.T) {
 	srv := httptest.NewServer(newTestRouter(svc, ident))
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/me/", nil)
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/me", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE: %v", err)
@@ -199,7 +204,7 @@ func TestDeleteMeServiceError(t *testing.T) {
 	srv := httptest.NewServer(newTestRouter(svc, ident))
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/me/", nil)
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/me", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE: %v", err)
@@ -220,7 +225,7 @@ func TestPatchMeServiceError(t *testing.T) {
 	defer srv.Close()
 
 	body := strings.NewReader(`{"display_name":"Alice"}`)
-	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/me/", body)
+	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/me", body)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PATCH: %v", err)
@@ -241,7 +246,7 @@ func TestGetMeNilRolesBecomesEmptyArray(t *testing.T) {
 	srv := httptest.NewServer(newTestRouter(&stubService{}, ident))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/me/")
+	resp, err := http.Get(srv.URL + "/me")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}

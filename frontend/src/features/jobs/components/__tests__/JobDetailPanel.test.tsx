@@ -66,7 +66,6 @@ describe('JobDetailPanel', () => {
           onClose={() => {}}
           onStatusChange={() => {}}
           onToggleSave={() => {}}
-          onDismiss={() => {}}
         />
       )
     )
@@ -83,7 +82,6 @@ describe('JobDetailPanel', () => {
           onClose={() => {}}
           onStatusChange={() => {}}
           onToggleSave={() => {}}
-          onDismiss={() => {}}
         />
       )
     )
@@ -99,7 +97,6 @@ describe('JobDetailPanel', () => {
           onClose={onClose}
           onStatusChange={() => {}}
           onToggleSave={() => {}}
-          onDismiss={() => {}}
           mode="pane"
         />
       )
@@ -117,7 +114,6 @@ describe('JobDetailPanel', () => {
           onClose={onClose}
           onStatusChange={() => {}}
           onToggleSave={() => {}}
-          onDismiss={() => {}}
           mode="route"
         />
       )
@@ -126,7 +122,7 @@ describe('JobDetailPanel', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('shows sticky action bar in route mode with Save, Applied, Dismiss', () => {
+  it('shows sticky action bar in route mode with Save, Applied', () => {
     render(
       wrap(
         <JobDetailPanel
@@ -134,14 +130,12 @@ describe('JobDetailPanel', () => {
           onClose={() => {}}
           onStatusChange={() => {}}
           onToggleSave={() => {}}
-          onDismiss={() => {}}
           mode="route"
         />
       )
     )
     expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^applied$/i })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /dismiss/i }).length).toBeGreaterThan(0)
   })
 
   it('clicking Save in route mode calls onToggleSave (orthogonal flag, not status)', async () => {
@@ -154,7 +148,6 @@ describe('JobDetailPanel', () => {
           onClose={() => {}}
           onStatusChange={onStatusChange}
           onToggleSave={onToggleSave}
-          onDismiss={() => {}}
           mode="route"
         />
       )
@@ -174,7 +167,6 @@ describe('JobDetailPanel', () => {
             onClose={() => {}}
             onStatusChange={() => {}}
             onToggleSave={() => {}}
-            onDismiss={() => {}}
             mode="route"
           />
         )
@@ -194,7 +186,6 @@ describe('JobDetailPanel', () => {
             onClose={() => {}}
             onStatusChange={onStatusChange}
             onToggleSave={() => {}}
-            onDismiss={() => {}}
           />
         )
       )
@@ -210,7 +201,6 @@ describe('JobDetailPanel', () => {
             onClose={() => {}}
             onStatusChange={() => {}}
             onToggleSave={() => {}}
-            onDismiss={() => {}}
           />
         )
       )
@@ -228,7 +218,6 @@ describe('JobDetailPanel', () => {
             onClose={() => {}}
             onStatusChange={() => {}}
             onToggleSave={() => {}}
-            onDismiss={() => {}}
           />
         )
       )
@@ -244,7 +233,6 @@ describe('JobDetailPanel', () => {
             onClose={() => {}}
             onStatusChange={() => {}}
             onToggleSave={() => {}}
-            onDismiss={() => {}}
           />
         )
       )
@@ -265,7 +253,6 @@ describe('JobDetailPanel', () => {
             onClose={() => {}}
             onStatusChange={() => {}}
             onToggleSave={() => {}}
-            onDismiss={() => {}}
           />
         )
       )
@@ -284,7 +271,6 @@ describe('JobDetailPanel', () => {
             onClose={() => {}}
             onStatusChange={() => {}}
             onToggleSave={() => {}}
-            onDismiss={() => {}}
           />
         )
       )
@@ -304,7 +290,6 @@ describe('JobDetailPanel', () => {
             onClose={() => {}}
             onStatusChange={() => {}}
             onToggleSave={() => {}}
-            onDismiss={() => {}}
             mode="route"
           />
         )

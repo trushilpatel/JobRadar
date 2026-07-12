@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/common/identity"
 	resumemodel "github.com/trushilpatel/jobradar/service/resume/models"
@@ -18,6 +19,15 @@ import (
 
 func withUser(r *http.Request, userID string) *http.Request {
 	return r.WithContext(identity.WithTestIdentity(r.Context(), userID))
+}
+
+func newTestRouter(fake *fakeService) *chi.Mux {
+	h := resumesvc.NewRestService(fake)
+	zoneCfg := apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry())
+	router := resumesvc.NewRestRouter(h, zoneCfg)
+	mux := chi.NewRouter()
+	router.Register(mux)
+	return mux
 }
 
 func multipartBody(t *testing.T, label, filename string, content []byte) (*bytes.Buffer, string) {
@@ -40,10 +50,7 @@ func multipartBody(t *testing.T, label, filename string, content []byte) (*bytes
 
 func TestResumeRest_UploadReturns201OnSuccess(t *testing.T) {
 	fake := &fakeService{uploadResult: &resumemodel.Resume{ID: "r1", Label: "My resume"}}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	body, contentType := multipartBody(t, "My resume", "resume.pdf", []byte("%PDF-1.4"))
 	req := httptest.NewRequest(http.MethodPost, "/resumes", body)
@@ -61,10 +68,7 @@ func TestResumeRest_UploadReturns400OnValidationFailure(t *testing.T) {
 	fake := &fakeService{uploadErr: domainerrs.ValidationErrors{{
 		Field: "file", Code: "UNSUPPORTED_TYPE", Message: "only PDF and DOCX files are supported",
 	}}}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	body, contentType := multipartBody(t, "", "resume.pdf", []byte(""))
 	req := httptest.NewRequest(http.MethodPost, "/resumes", body)
@@ -86,10 +90,7 @@ func TestResumeRest_DownloadStreamsFileWithHeaders(t *testing.T) {
 			SizeBytes: 22,
 		},
 	}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	req := withUser(httptest.NewRequest(http.MethodGet, "/resumes/r1/download", nil), "u1")
 	rec := httptest.NewRecorder()
@@ -114,10 +115,7 @@ func TestResumeRest_DownloadStreamsFileWithHeaders(t *testing.T) {
 
 func TestResumeRest_DownloadReturns404ForMissingResume(t *testing.T) {
 	fake := &fakeService{downloadErr: domainerrs.ErrNotFound.WithMessage("resume not found")}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	req := withUser(httptest.NewRequest(http.MethodGet, "/resumes/missing/download", nil), "u1")
 	rec := httptest.NewRecorder()
@@ -130,10 +128,7 @@ func TestResumeRest_DownloadReturns404ForMissingResume(t *testing.T) {
 
 func TestResumeRest_RenameReturns200OnSuccess(t *testing.T) {
 	fake := &fakeService{}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	body, _ := json.Marshal(map[string]string{"label": "New label"})
 	req := withUser(httptest.NewRequest(http.MethodPatch, "/resumes/r1", bytes.NewReader(body)), "u1")
@@ -150,10 +145,7 @@ func TestResumeRest_RenameReturns200OnSuccess(t *testing.T) {
 
 func TestResumeRest_RenameReturns400OnInvalidBody(t *testing.T) {
 	fake := &fakeService{}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	req := withUser(httptest.NewRequest(http.MethodPatch, "/resumes/r1", bytes.NewReader([]byte("not json"))), "u1")
 	rec := httptest.NewRecorder()
@@ -166,10 +158,7 @@ func TestResumeRest_RenameReturns400OnInvalidBody(t *testing.T) {
 
 func TestResumeRest_DeleteReturns204OnSuccess(t *testing.T) {
 	fake := &fakeService{}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	req := withUser(httptest.NewRequest(http.MethodDelete, "/resumes/r1", nil), "u1")
 	rec := httptest.NewRecorder()
@@ -181,10 +170,7 @@ func TestResumeRest_DeleteReturns204OnSuccess(t *testing.T) {
 
 func TestResumeRest_DeleteReturns404ForMissingResume(t *testing.T) {
 	fake := &fakeService{deleteErr: domainerrs.ErrNotFound.WithMessage("resume not found")}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	req := withUser(httptest.NewRequest(http.MethodDelete, "/resumes/missing", nil), "u1")
 	rec := httptest.NewRecorder()
@@ -196,10 +182,7 @@ func TestResumeRest_DeleteReturns404ForMissingResume(t *testing.T) {
 
 func TestResumeRest_ListReturns200(t *testing.T) {
 	fake := &fakeService{}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	req := withUser(httptest.NewRequest(http.MethodGet, "/resumes", nil), "u1")
 	rec := httptest.NewRecorder()
@@ -211,10 +194,7 @@ func TestResumeRest_ListReturns200(t *testing.T) {
 
 func TestResumeRest_ListReturns500OnServiceError(t *testing.T) {
 	fake := &fakeService{listErr: domainerrs.ErrInternal.WithMessage("db down")}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	req := withUser(httptest.NewRequest(http.MethodGet, "/resumes", nil), "u1")
 	rec := httptest.NewRecorder()
@@ -226,10 +206,7 @@ func TestResumeRest_ListReturns500OnServiceError(t *testing.T) {
 
 func TestResumeRest_RenameReturns404ForMissingResume(t *testing.T) {
 	fake := &fakeService{renameErr: domainerrs.ErrNotFound.WithMessage("resume not found")}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	body, _ := json.Marshal(map[string]string{"label": "New label"})
 	req := withUser(httptest.NewRequest(http.MethodPatch, "/resumes/missing", bytes.NewReader(body)), "u1")
@@ -242,10 +219,7 @@ func TestResumeRest_RenameReturns404ForMissingResume(t *testing.T) {
 
 func TestResumeRest_UploadReturns400OnMalformedMultipartBody(t *testing.T) {
 	fake := &fakeService{}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	req := httptest.NewRequest(http.MethodPost, "/resumes", bytes.NewReader([]byte("not multipart")))
 	req.Header.Set("Content-Type", "multipart/form-data; boundary=x")
@@ -259,10 +233,7 @@ func TestResumeRest_UploadReturns400OnMalformedMultipartBody(t *testing.T) {
 
 func TestResumeRest_UploadReturns400WhenFileFieldMissing(t *testing.T) {
 	fake := &fakeService{}
-	h := resumesvc.NewRestService(fake)
-	router := resumesvc.NewRestRouter(h)
-	mux := chi.NewRouter()
-	router.Register(mux)
+	mux := newTestRouter(fake)
 
 	buf := &bytes.Buffer{}
 	w := multipart.NewWriter(buf)

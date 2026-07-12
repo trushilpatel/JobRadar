@@ -21,12 +21,6 @@ func (noopJobService) Get(_ context.Context, _ string) (*jobdto.JobView, error) 
 func (noopJobService) SetSaved(_ context.Context, _ string, _ bool) error       { return nil }
 func (noopJobService) SetStatus(_ context.Context, _, _ string) error           { return nil }
 func (noopJobService) SetNotes(_ context.Context, _, _ string) error            { return nil }
-func (noopJobService) Dismiss(_ context.Context, _ string, _ string, _ string) error {
-	return nil
-}
-func (noopJobService) BulkDismiss(_ context.Context, _ []string, _ string, _ string) error {
-	return nil
-}
 func (noopJobService) GetCounts(_ context.Context) (jobdto.Counts, error) {
 	return jobdto.Counts{}, nil
 }
@@ -53,6 +47,7 @@ func TestValidate_List(t *testing.T) {
 		{name: "valid offer status", filter: jobdto.JobFilter{Status: jobcommon.JobStatusOffer}, limit: 20},
 		{name: "valid rejected status", filter: jobdto.JobFilter{Status: jobcommon.JobStatusRejected}, limit: 20},
 		{name: "invalid status", filter: jobdto.JobFilter{Status: "pending"}, limit: 20, wantErr: true},
+		{name: "dismissed rejected — feature removed", filter: jobdto.JobFilter{Status: jobcommon.JobStatusDismissed}, limit: 20, wantErr: true},
 		{name: "negative limit", filter: jobdto.JobFilter{}, limit: -1, wantErr: true},
 		{name: "limit 101", filter: jobdto.JobFilter{}, limit: 101, wantErr: true},
 		{name: "experience max <= min", filter: jobdto.JobFilter{ExperienceRanges: []jobdto.ExperienceRange{{Min: 5, Max: ptrInt(3)}}}, limit: 20, wantErr: true},
@@ -100,24 +95,14 @@ func TestValidate_List_StatusesFilter(t *testing.T) {
 	}
 }
 
-func TestValidate_SetStatus_RejectsNew(t *testing.T) {
+// TestValidate_SetStatus_AllowsNew — 'new' clears the workflow status
+// (UserJobStateRepositoryService.Upsert sets status = NULL, leaving saved_at
+// untouched); it is a writable value, not merely a list-filter synonym for
+// "no row".
+func TestValidate_SetStatus_AllowsNew(t *testing.T) {
 	v := newValidator()
-	if err := v.SetStatus(context.Background(), "j1", jobcommon.JobStatusNew); err == nil {
-		t.Fatal("'new' must be rejected — delete the row instead")
-	}
-}
-
-func TestValidate_Dismiss_BadReason(t *testing.T) {
-	v := newValidator()
-	if err := v.Dismiss(context.Background(), "j1", "garbage", ""); err == nil {
-		t.Fatal("invalid reason must be rejected")
-	}
-}
-
-func TestValidate_BulkDismiss_Empty(t *testing.T) {
-	v := newValidator()
-	if err := v.BulkDismiss(context.Background(), nil, jobcommon.DismissalReasonNotRelevant, ""); err == nil {
-		t.Fatal("empty ids must be rejected")
+	if err := v.SetStatus(context.Background(), "j1", jobcommon.JobStatusNew); err != nil {
+		t.Fatalf("'new' must be allowed through to clear workflow status: %v", err)
 	}
 }
 
@@ -140,7 +125,6 @@ func TestValidate_List_Boundaries(t *testing.T) {
 		{name: "search 201 chars", filter: jobdto.JobFilter{Search: strings.Repeat("a", 201)}, limit: 20, wantErr: true},
 		{name: "empty status allowed for list filter", filter: jobdto.JobFilter{Status: ""}, limit: 20},
 		{name: "new status allowed as list filter", filter: jobdto.JobFilter{Status: jobcommon.JobStatusNew}, limit: 20},
-		{name: "dismissed allowed as list filter", filter: jobdto.JobFilter{Status: jobcommon.JobStatusDismissed}, limit: 20},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -179,14 +163,14 @@ func TestValidate_List_ExperienceRanges(t *testing.T) {
 	}
 }
 
-// TestValidate_SetStatus_AllValidStatuses asserts every writable workflow
-// status passes. 'saved' and 'new' are NOT writable workflow statuses and
-// are rejected by the validator (saved goes through SetSaved instead).
+// TestValidate_SetStatus_AllValidStatuses asserts every writable status
+// passes, including 'new' (clears workflow status). 'saved' is NOT writable
+// via this path — it is orthogonal and goes through SetSaved instead.
 func TestValidate_SetStatus_AllValidStatuses(t *testing.T) {
 	v := newValidator()
 	allowed := []string{
+		jobcommon.JobStatusNew,
 		jobcommon.JobStatusApplied,
-		jobcommon.JobStatusDismissed,
 		jobcommon.JobStatusInterviewing,
 		jobcommon.JobStatusOffer,
 		jobcommon.JobStatusRejected,
@@ -198,7 +182,7 @@ func TestValidate_SetStatus_AllValidStatuses(t *testing.T) {
 			}
 		})
 	}
-	rejected := []string{"", "garbage", "NEW", "Saved", jobcommon.JobStatusSaved, jobcommon.JobStatusNew}
+	rejected := []string{"", "garbage", "NEW", "Saved", jobcommon.JobStatusSaved, jobcommon.JobStatusDismissed}
 	for _, s := range rejected {
 		t.Run("reject "+s, func(t *testing.T) {
 			if err := v.SetStatus(context.Background(), "j1", s); err == nil {
@@ -223,62 +207,5 @@ func TestValidate_List_AcceptsSavedFilter(t *testing.T) {
 	v := newValidator()
 	if _, err := v.List(context.Background(), jobdto.JobFilter{Status: jobcommon.JobStatusSaved}, "", 20); err != nil {
 		t.Fatalf("saved must be a valid list filter: %v", err)
-	}
-}
-
-// TestValidate_Dismiss_Reasons covers the dismissal-reason whitelist.
-func TestValidate_Dismiss_Reasons(t *testing.T) {
-	v := newValidator()
-	allowed := []string{jobcommon.DismissalReasonUserDismissed, jobcommon.DismissalReasonNotRelevant}
-	for _, r := range allowed {
-		t.Run("allow "+r, func(t *testing.T) {
-			if err := v.Dismiss(context.Background(), "j1", r, ""); err != nil {
-				t.Errorf("reason=%q: %v", r, err)
-			}
-		})
-	}
-	rejected := []string{"", "spam", "irrelevant", "USER_DISMISSED"}
-	for _, r := range rejected {
-		t.Run("reject "+r, func(t *testing.T) {
-			if err := v.Dismiss(context.Background(), "j1", r, ""); err == nil {
-				t.Errorf("reason=%q must be rejected", r)
-			}
-		})
-	}
-}
-
-// TestValidate_BulkDismiss_Boundaries covers the IDs slice size invariants
-// and reason-empty-allowed semantics. Empty reason is OK at the validator
-// (the handler defaults it before this layer); 100 entries OK; 101 rejected.
-func TestValidate_BulkDismiss_Boundaries(t *testing.T) {
-	v := newValidator()
-	idsN := func(n int) []string {
-		out := make([]string, n)
-		for i := range n {
-			out[i] = "j"
-		}
-		return out
-	}
-
-	tests := []struct {
-		name    string
-		ids     []string
-		reason  string
-		wantErr bool
-	}{
-		{name: "1 id, valid reason", ids: idsN(1), reason: jobcommon.DismissalReasonUserDismissed},
-		{name: "100 ids OK (boundary)", ids: idsN(100), reason: jobcommon.DismissalReasonNotRelevant},
-		{name: "101 ids rejected", ids: idsN(101), reason: jobcommon.DismissalReasonNotRelevant, wantErr: true},
-		{name: "empty reason allowed", ids: idsN(1), reason: ""},
-		{name: "garbage reason rejected", ids: idsN(1), reason: "garbage", wantErr: true},
-		{name: "0 ids rejected", ids: idsN(0), reason: jobcommon.DismissalReasonNotRelevant, wantErr: true},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			err := v.BulkDismiss(context.Background(), tc.ids, tc.reason, "")
-			if (err != nil) != tc.wantErr {
-				t.Errorf("err = %v, wantErr = %v", err, tc.wantErr)
-			}
-		})
 	}
 }

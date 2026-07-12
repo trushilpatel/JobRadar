@@ -5,10 +5,13 @@ Base URL: `http://localhost:8080`
 
 **Auth middleware:**
 
-- All routes under `/api/*` — `RequireIdentity` + `RateLimit`. `RequireIdentity` performs JWT verification, DB-backed identity enrichment, cache-aside lookup, lazy provisioning into `users`/`user_roles`, and suspended-user 403. Admin grants are managed directly in the `user_roles` table.
+- All routes under `/api/*` — `RequireIdentity` + `RateLimit`. `RequireIdentity` performs JWT verification, DB-backed identity enrichment, cache-aside lookup, and lazy provisioning into `users`. Roles come from the Clerk JWT `publicMetadata.role` claim, never a DB table — grant admin via the Clerk dashboard.
 - All routes under `/admin/*` — additionally require `RequireRole("admin")` + `AuditAdminMutation`.
 
-Operational endpoints served on `:9090` — no auth required: `GET /health`, `GET /ready`, `GET /metrics`.
+Operational endpoints served on the ops listener (`127.0.0.1:9100` by default, `METRICS_ADDR` env var) — no auth required:
+
+- `GET /health`, `GET /ready`, `GET /metrics`
+- `GET /openapi.json`, `GET /openapi.yaml`, `GET /docs` — combined OpenAPI 3.1 spec + Stoplight Elements docs UI for every `/api` and `/admin` route (see `docs/superpowers/plans/2026-06-13-huma-migration-plan.md`). Locally: `http://localhost:9100/docs`
 
 ---
 

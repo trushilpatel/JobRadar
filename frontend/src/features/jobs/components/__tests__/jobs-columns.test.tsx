@@ -57,7 +57,6 @@ const baseJob: Job = {
 function defaultActions(overrides: Partial<JobTableActions> = {}): JobTableActions {
   return {
     onToggleSave: vi.fn(),
-    onDismiss: vi.fn(),
     onApply: vi.fn(),
     ...overrides,
   }
@@ -223,15 +222,5 @@ describe('buildJobColumns — apply column', () => {
     renderCell(column, baseJob)
     screen.getByRole('button', { name: `Apply to ${baseJob.title}` }).click()
     expect(onApply).toHaveBeenCalledWith(baseJob)
-  })
-})
-
-describe('buildJobColumns — dismiss column', () => {
-  it('calls onDismiss with the job when clicked', () => {
-    const onDismiss = vi.fn()
-    const column = columnById(defaultActions({ onDismiss }), 'dismiss')
-    renderCell(column, baseJob)
-    screen.getByRole('button', { name: `Dismiss ${baseJob.title}` }).click()
-    expect(onDismiss).toHaveBeenCalledWith(baseJob)
   })
 })

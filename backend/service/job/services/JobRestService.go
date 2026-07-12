@@ -1,14 +1,12 @@
 package services
 
 import (
-	"encoding/json"
-	"net/http"
+	"context"
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/apps/api/handler"
-	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	"github.com/trushilpatel/jobradar/service/job/dto"
 )
 
@@ -24,207 +22,217 @@ func NewRestService(next JobService) *RestService {
 	return &RestService{next: next}
 }
 
-// list serves GET /api/jobs with keyset pagination via ?cursor=... .
-// Limit is clamped to [1,100]; defaults to 20. Filter parsing mirrors the
-// previous offset-paginated handler so existing query strings remain
-// compatible (except `page=` is now ignored).
-func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+// listInput is the Huma input for GET /api/jobs. Every field is read as a
+// raw string (or, for repeated params, []string with the "explode" tag
+// modifier so repeated ?key=a&key=b query keys are collected — Huma's
+// default array style is comma-separated, which would silently break every
+// existing frontend URL) and resolved manually in Resolve, replicating the
+// legacy handler's exact silent-fallback/whitelist/coercion behavior. Using
+// native typed (int/bool) fields would make Huma reject values the legacy
+// handler tolerates (e.g. a non-clamped over-limit value forwarded to the
+// validator, or a non-"true"/"false" boolean token) with a 400 instead of
+// silently coercing or dropping — a real behavior change this migration
+// must not introduce.
+type listInput struct {
+	Status           string   `query:"status"`
+	Statuses         []string `query:"statuses,explode"`
+	Companies        []string `query:"companies,explode"`
+	EmployTypes      []string `query:"employ_types,explode"`
+	ExperienceRanges []string `query:"experience_ranges,explode"`
+	Search           string   `query:"search"`
+	Remote           string   `query:"remote"`
+	Sponsorship      string   `query:"sponsorship"`
+	RequiresCitizen  string   `query:"requires_citizen"`
+	OnSite           string   `query:"on_site"`
+	Hybrid           string   `query:"hybrid"`
+	NoRequirements   string   `query:"no_requirements"`
+	DaysAdded        string   `query:"days_added"`
+	SortBy           string   `query:"sort_by" doc:"title, company, added_at, or experience_years; unrecognized values fall back to the default"`
+	SortDir          string   `query:"sort_dir" doc:"asc or desc"`
+	Cursor           string   `query:"cursor"`
+	Limit            string   `query:"limit" doc:"Page size; missing/invalid/non-positive values default to 20 (no upper clamp here — the validator enforces the cap)" example:"20"`
 
+	filter dto.JobFilter
+	limit  int
+}
+
+// Resolve replicates JobRestService.list's exact pre-Huma parsing.
+func (in *listInput) Resolve(_ huma.Context) []error {
 	limit := 20
-	if v := q.Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			limit = n
-		}
+	if n, err := strconv.Atoi(in.Limit); err == nil && n > 0 {
+		limit = n
 	}
+	in.limit = limit
 
 	var expRanges []dto.ExperienceRange
-	for _, raw := range q["experience_ranges"] {
+	for _, raw := range in.ExperienceRanges {
 		if rng, ok := parseExperienceRange(raw); ok {
 			expRanges = append(expRanges, rng)
 		}
 	}
 
 	filter := dto.JobFilter{
-		Status:           q.Get("status"),
-		Statuses:         q["statuses"],
-		Companies:        q["companies"],
-		EmployTypes:      q["employ_types"],
+		Status:           in.Status,
+		Statuses:         in.Statuses,
+		Companies:        in.Companies,
+		EmployTypes:      in.EmployTypes,
 		ExperienceRanges: expRanges,
-		Search:           q.Get("search"),
+		Search:           in.Search,
 	}
-	if v := q.Get("remote"); v != "" {
-		b := v == "true"
+	if in.Remote != "" {
+		b := in.Remote == "true"
 		filter.Remote = &b
 	}
-	if v := q.Get("sponsorship"); v != "" {
-		b := v == "true"
+	if in.Sponsorship != "" {
+		b := in.Sponsorship == "true"
 		filter.Sponsorship = &b
 	}
-	if v := q.Get("requires_citizen"); v != "" {
-		b := v == "true"
+	if in.RequiresCitizen != "" {
+		b := in.RequiresCitizen == "true"
 		filter.RequiresCitizen = &b
 	}
-	if q.Get("on_site") == "true" {
+	if in.OnSite == "true" {
 		filter.OnSite = true
 	}
-	if q.Get("hybrid") == "true" {
+	if in.Hybrid == "true" {
 		filter.Hybrid = true
 	}
-	if q.Get("no_requirements") == "true" {
+	if in.NoRequirements == "true" {
 		filter.NoRequirements = true
 	}
-	if v := q.Get("days_added"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			filter.DaysAdded = &n
-		}
+	if n, err := strconv.Atoi(in.DaysAdded); err == nil && n > 0 {
+		filter.DaysAdded = &n
 	}
 	// Whitelist sort_by values to prevent raw column injection.
-	if v := q.Get("sort_by"); v == "title" || v == "company" || v == "added_at" || v == "experience_years" {
+	if v := in.SortBy; v == "title" || v == "company" || v == "added_at" || v == "experience_years" {
 		filter.SortBy = v
 	}
-	if v := q.Get("sort_dir"); v == "asc" || v == "desc" {
+	if v := in.SortDir; v == "asc" || v == "desc" {
 		filter.SortDir = v
 	}
+	in.filter = filter
+	return nil
+}
 
-	page, err := h.next.List(r.Context(), filter, q.Get("cursor"), limit)
+// list serves GET /api/jobs with keyset pagination via ?cursor=... .
+func (h *RestService) list(ctx context.Context, in *listInput) (*apihuma.SingleOutput[dto.PageResult], error) {
+	page, err := h.next.List(ctx, in.filter, in.Cursor, in.limit)
 	if err != nil {
-		handler.HandleError(w, err)
-		return
+		return nil, apihuma.MapError(err)
 	}
-	handler.Respond(w, http.StatusOK, page)
+	out := &apihuma.SingleOutput[dto.PageResult]{}
+	out.Body.Data = page
+	return out, nil
 }
 
 // companies serves GET /api/jobs/companies — distinct company names in the jobs table.
-func (h *RestService) companies(w http.ResponseWriter, r *http.Request) {
-	names, err := h.next.GetCompanies(r.Context())
+func (h *RestService) companies(ctx context.Context, _ *struct{}) (*apihuma.SingleOutput[[]string], error) {
+	names, err := h.next.GetCompanies(ctx)
 	if err != nil {
-		handler.HandleError(w, err)
-		return
+		return nil, apihuma.MapError(err)
 	}
-	handler.Respond(w, http.StatusOK, names)
+	out := &apihuma.SingleOutput[[]string]{}
+	out.Body.Data = names
+	return out, nil
 }
 
 // counts serves GET /api/jobs/counts.
-func (h *RestService) counts(w http.ResponseWriter, r *http.Request) {
-	c, err := h.next.GetCounts(r.Context())
+func (h *RestService) counts(ctx context.Context, _ *struct{}) (*apihuma.SingleOutput[dto.Counts], error) {
+	c, err := h.next.GetCounts(ctx)
 	if err != nil {
-		handler.HandleError(w, err)
-		return
+		return nil, apihuma.MapError(err)
 	}
-	handler.Respond(w, http.StatusOK, c)
+	out := &apihuma.SingleOutput[dto.Counts]{}
+	out.Body.Data = c
+	return out, nil
+}
+
+// getInput is the Huma input for GET /api/jobs/{id}.
+type getInput struct {
+	ID string `path:"id"`
 }
 
 // get serves GET /api/jobs/{id}.
-func (h *RestService) get(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	job, err := h.next.Get(r.Context(), id)
+func (h *RestService) get(ctx context.Context, in *getInput) (*apihuma.SingleOutput[dto.JobView], error) {
+	job, err := h.next.Get(ctx, in.ID)
 	if err != nil {
-		handler.HandleError(w, err)
-		return
+		return nil, apihuma.MapError(err)
 	}
-	handler.Respond(w, http.StatusOK, job)
+	out := &apihuma.SingleOutput[dto.JobView]{}
+	out.Body.Data = *job
+	return out, nil
 }
 
-// setSavedRequest is the PATCH /api/jobs/{id}/save body envelope.
-type setSavedRequest struct {
-	Saved bool `json:"saved"`
+// setSavedInput is the Huma input for PATCH /api/jobs/{id}/save.
+type setSavedInput struct {
+	ID   string `path:"id"`
+	Body struct {
+		// required:"false" — an absent "saved" field defaults to false,
+		// matching the pre-Huma json.Decode-into-zero-value behavior.
+		Saved bool `json:"saved" required:"false"`
+	}
 }
 
 // setSaved serves PATCH /api/jobs/{id}/save.
-func (h *RestService) setSaved(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	body, ok := handler.DecodeBody[setSavedRequest](w, r)
-	if !ok {
-		return
+func (h *RestService) setSaved(ctx context.Context, in *setSavedInput) (*apihuma.SingleOutput[map[string]bool], error) {
+	if err := h.next.SetSaved(ctx, in.ID, in.Body.Saved); err != nil {
+		return nil, apihuma.MapError(err)
 	}
-	if err := h.next.SetSaved(r.Context(), id, body.Saved); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, map[string]bool{"saved": body.Saved})
+	out := &apihuma.SingleOutput[map[string]bool]{}
+	out.Body.Data = map[string]bool{"saved": in.Body.Saved}
+	return out, nil
+}
+
+// setStatusInput is the Huma input for PATCH /api/jobs/{id}/status.
+type setStatusInput struct {
+	ID   string `path:"id"`
+	Body dto.SetStatusInput
 }
 
 // setStatus serves PATCH /api/jobs/{id}/status.
-func (h *RestService) setStatus(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	input, ok := handler.DecodeBody[dto.SetStatusInput](w, r)
-	if !ok {
-		return
+func (h *RestService) setStatus(ctx context.Context, in *setStatusInput) (*apihuma.SingleOutput[map[string]string], error) {
+	if err := h.next.SetStatus(ctx, in.ID, in.Body.Status); err != nil {
+		return nil, apihuma.MapError(err)
 	}
-	if err := h.next.SetStatus(r.Context(), id, input.Status); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, map[string]string{"status": input.Status})
+	out := &apihuma.SingleOutput[map[string]string]{}
+	out.Body.Data = map[string]string{"status": in.Body.Status}
+	return out, nil
+}
+
+// setNotesInput is the Huma input for PATCH /api/jobs/{id}/notes.
+type setNotesInput struct {
+	ID   string `path:"id"`
+	Body dto.SetNotesInput
 }
 
 // setNotes serves PATCH /api/jobs/{id}/notes.
-func (h *RestService) setNotes(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	input, ok := handler.DecodeBody[dto.SetNotesInput](w, r)
-	if !ok {
-		return
+func (h *RestService) setNotes(ctx context.Context, in *setNotesInput) (*apihuma.SingleOutput[map[string]string], error) {
+	if err := h.next.SetNotes(ctx, in.ID, in.Body.Notes); err != nil {
+		return nil, apihuma.MapError(err)
 	}
-	if err := h.next.SetNotes(r.Context(), id, input.Notes); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, map[string]string{"notes": input.Notes})
-}
-
-// dismiss serves DELETE /api/jobs/{id}.
-func (h *RestService) dismiss(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	var input dto.DismissInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		// DELETE may have empty body — default reason kicks in.
-		input.Reason = jobcommon.DismissalReasonUserDismissed
-	}
-	if input.Reason == "" {
-		input.Reason = jobcommon.DismissalReasonUserDismissed
-	}
-	if err := h.next.Dismiss(r.Context(), id, input.Reason, input.Note); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.RespondNoContent(w)
-}
-
-// bulkDismiss serves POST /api/jobs/dismiss/bulk.
-func (h *RestService) bulkDismiss(w http.ResponseWriter, r *http.Request) {
-	input, ok := handler.DecodeBody[dto.BulkDismissInput](w, r)
-	if !ok {
-		return
-	}
-	if input.Reason == "" {
-		input.Reason = jobcommon.DismissalReasonNotRelevant
-	}
-	if err := h.next.BulkDismiss(r.Context(), input.IDs, input.Reason, input.Note); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-	handler.Respond(w, http.StatusOK, map[string]int{"dismissed": len(input.IDs)})
+	out := &apihuma.SingleOutput[map[string]string]{}
+	out.Body.Data = map[string]string{"notes": in.Body.Notes}
+	return out, nil
 }
 
 // parseExperienceRange parses "0-2" or "5+" into an ExperienceRange.
 // Invalid strings return ok=false so callers can drop them silently.
 func parseExperienceRange(s string) (dto.ExperienceRange, bool) {
 	if rest, ok := strings.CutSuffix(s, "+"); ok {
-		min, err := strconv.Atoi(rest)
-		if err != nil || min < 0 {
+		minVal, err := strconv.Atoi(rest)
+		if err != nil || minVal < 0 {
 			return dto.ExperienceRange{}, false
 		}
-		return dto.ExperienceRange{Min: min}, true
+		return dto.ExperienceRange{Min: minVal}, true
 	}
 	parts := strings.SplitN(s, "-", 2)
 	if len(parts) != 2 {
 		return dto.ExperienceRange{}, false
 	}
-	min, err1 := strconv.Atoi(parts[0])
-	max, err2 := strconv.Atoi(parts[1])
-	if err1 != nil || err2 != nil || min < 0 || max <= min {
+	minVal, err1 := strconv.Atoi(parts[0])
+	maxVal, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil || minVal < 0 || maxVal <= minVal {
 		return dto.ExperienceRange{}, false
 	}
-	return dto.ExperienceRange{Min: min, Max: &max}, true
+	return dto.ExperienceRange{Min: minVal, Max: &maxVal}, true
 }

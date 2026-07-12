@@ -1,0 +1,182 @@
+{
+  "title": "JobRadar — Backend Tier (api + scheduler + orchestrator)",
+  "uid": "jobradar-backend",
+  "tags": ["jobradar", "backend"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "description": "Rollup of the three backend-tier binaries (api, scheduler, orchestrator). Deep-dive on each is linked below; full pipeline including crawler/filter/enricher/companies is the Pipeline Overview.",
+  "links": [
+    {
+      "title": "Pipeline Overview",
+      "type": "link",
+      "url": "/d/jobradar-pipeline-overview",
+      "targetBlank": false
+    },
+    { "title": "API detail", "type": "link", "url": "/d/jobradar-api", "targetBlank": false },
+    {
+      "title": "Scheduler detail",
+      "type": "link",
+      "url": "/d/jobradar-scheduler",
+      "targetBlank": false
+    },
+    {
+      "title": "Orchestrator detail",
+      "type": "link",
+      "url": "/d/jobradar-orchestrator",
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Combined Request Rate (api + orchestrator)",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_requests_total{job=~\"jobradar_api|jobradar_orchestrator\"}[5m]))",
+          "legendFormat": "req/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Combined 5xx Rate",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_requests_total{job=~\"jobradar_api|jobradar_orchestrator\", status=~\"5..\"}[5m]))",
+          "legendFormat": "5xx/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Queue Pending (scheduler)",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jobradar_scheduler_queue_pending{job=\"jobradar_scheduler\"}",
+          "legendFormat": "pending"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Scheduler Errors Rate",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(scheduler_errors_total{job=\"jobradar_scheduler\"}[5m]))",
+          "legendFormat": "errors/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "API — Rate / Errors / Duration p95",
+      "gridPos": { "x": 0, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_requests_total{job=\"jobradar_api\"}[5m]))",
+          "legendFormat": "req/s"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(http_requests_total{job=\"jobradar_api\", status=~\"5..\"}[5m]))",
+          "legendFormat": "5xx/s"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"jobradar_api\"}[5m])) by (le))",
+          "legendFormat": "p95 (s)"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Scheduler — Enqueue Rate / Errors / Run Duration p95",
+      "gridPos": { "x": 8, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(scheduler_companies_enqueued_total{job=\"jobradar_scheduler\"}[5m])",
+          "legendFormat": "companies/s"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(scheduler_errors_total{job=\"jobradar_scheduler\"}[5m]))",
+          "legendFormat": "errors/s"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.95, sum(rate(scheduler_run_duration_seconds_bucket{job=\"jobradar_scheduler\"}[5m])) by (le))",
+          "legendFormat": "p95 (s)"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Orchestrator — Rate / Errors / Duration p95",
+      "gridPos": { "x": 16, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_requests_total{job=\"jobradar_orchestrator\"}[5m]))",
+          "legendFormat": "req/s"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(http_requests_total{job=\"jobradar_orchestrator\", status=~\"5..\"}[5m]))",
+          "legendFormat": "5xx/s"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"jobradar_orchestrator\"}[5m])) by (le))",
+          "legendFormat": "p95 (s)"
+        }
+      ]
+    }
+  ]
+}

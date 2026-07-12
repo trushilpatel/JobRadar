@@ -10,25 +10,12 @@ type UpsertState struct {
 	DismissalNote   *string
 }
 
-// DismissInput is the request payload for dismissing a single job.
-type DismissInput struct {
-	Reason string `json:"reason"`
-	Note   string `json:"note"`
-}
-
-// BulkDismissInput is the request payload for dismissing multiple jobs.
-type BulkDismissInput struct {
-	IDs    []string `json:"ids"`
-	Reason string   `json:"reason"`
-	Note   string   `json:"note"`
-}
-
 // SetStatusInput is the body for PATCH /api/jobs/{id}/status.
 type SetStatusInput struct {
-	Status string `json:"status"`
+	Status string `json:"status" required:"false"`
 }
 
 // SetNotesInput is the body for PATCH /api/jobs/{id}/notes.
 type SetNotesInput struct {
-	Notes string `json:"notes"`
+	Notes string `json:"notes" required:"false"`
 }

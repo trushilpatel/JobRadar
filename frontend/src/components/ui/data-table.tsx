@@ -66,6 +66,14 @@ interface DataTableProps<TData> {
    * In server-side mode, use this to update your query params and reset to page 1.
    */
   onSortingChange?: (sorting: SortingState) => void
+  /**
+   * Opt out of this table's own ArrowUp/ArrowDown → onRowClick handling.
+   * Set this when the caller already owns a page-level keyboard navigation
+   * system (e.g. JobsTable's global command engine) — otherwise the same
+   * keydown reaches BOTH this handler and the caller's, each independently
+   * advancing the selection, so a single press skips a row.
+   */
+  disableArrowKeyNav?: boolean
 }
 
 const SKELETON_ROWS = 8
@@ -86,6 +94,7 @@ export function DataTable<TData>({
   serverPagination,
   sorting: controlledSorting,
   onSortingChange,
+  disableArrowKeyNav = false,
 }: DataTableProps<TData>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([])
   const isControlled = controlledSorting !== undefined
@@ -128,7 +137,7 @@ export function DataTable<TData>({
   }, [selectedId])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!onRowClick) return
+    if (!onRowClick || disableArrowKeyNav) return
     const rows = table.getRowModel().rows
     if (rows.length === 0) return
 

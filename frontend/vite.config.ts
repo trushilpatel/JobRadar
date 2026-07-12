@@ -66,6 +66,17 @@ export default defineConfig(({ mode }) => {
       },
       setupFiles: ['./src/test/setup.ts'],
       globals: true,
+      // e2e/ holds Playwright specs (own test runner, own `test`/`describe`
+      // globals) — Vitest's default include glob would otherwise also pick
+      // them up and collide with Playwright's globals.
+      exclude: [
+        '**/node_modules/**',
+        '**/dist/**',
+        '**/cypress/**',
+        '**/.{idea,git,cache,output,temp}/**',
+        '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*',
+        'e2e/**',
+      ],
       // Emit a JUnit report in CI (GitHub sets CI=true) for Codecov Test
       // Analytics; locally we keep the default reporter only — no stray files.
       reporters: process.env.CI ? ['default', 'junit'] : ['default'],

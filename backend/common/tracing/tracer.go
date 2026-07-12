@@ -2,6 +2,7 @@ package tracing
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/trushilpatel/jobradar/common/logger"
@@ -14,7 +15,14 @@ import (
 )
 
 // Init bootstraps the global OTel tracer provider and W3C propagator.
-// endpoint is the OTLP HTTP endpoint, e.g. "http://obs-alloy.jobradar-local.svc.cluster.local:4318".
+// endpoint is the OTLP HTTP endpoint — either a plain-HTTP in-cluster collector
+// (e.g. "http://obs-alloy.jobradar-local.svc.cluster.local:4318", used by local
+// k3d) or Grafana Cloud's public OTLP gateway directly (e.g.
+// "https://otlp-gateway-prod-us-west-0.grafana.net/otlp", used by prod, which
+// has no in-cluster collector). TLS is used automatically for "https://"
+// endpoints; auth for a direct Grafana Cloud endpoint comes from the standard
+// OTEL_EXPORTER_OTLP_HEADERS env var (e.g. "Authorization=Basic <base64>"),
+// which the SDK reads natively — no code-level header wiring needed here.
 // If endpoint is empty, a no-op tracer is used and no export errors occur.
 // Export failures are logged as structured warnings via log — never fatal.
 // Returns a shutdown function that flushes pending spans — call with defer.
@@ -32,10 +40,12 @@ func Init(serviceName, endpoint string, log logger.Logger) func() {
 
 	ctx := context.Background()
 
-	exp, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithEndpointURL(endpoint),
-		otlptracehttp.WithInsecure(),
-	)
+	opts := []otlptracehttp.Option{otlptracehttp.WithEndpointURL(endpoint)}
+	if strings.HasPrefix(endpoint, "http://") {
+		opts = append(opts, otlptracehttp.WithInsecure())
+	}
+
+	exp, err := otlptracehttp.New(ctx, opts...)
 	if err != nil {
 		panic("tracing: failed to create OTLP exporter: " + err.Error())
 	}

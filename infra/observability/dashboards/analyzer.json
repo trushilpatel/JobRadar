@@ -1,0 +1,237 @@
+{
+  "title": "JobRadar — Enricher (Analyzer)",
+  "uid": "jobradar-analyzer",
+  "tags": ["jobradar", "enricher", "analyzer"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "links": [
+    {
+      "title": "Pipeline Overview",
+      "type": "link",
+      "url": "/d/jobradar-pipeline-overview",
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Jobs Processed Rate",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(enricher_jobs_total{job=\"jobradar_enricher\"}[5m]))",
+          "legendFormat": "jobs/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "p95 LLM Duration",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(enricher_llm_duration_seconds_bucket{job=\"jobradar_enricher\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "DLQ Publish Rate",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(enricher_dlq_publishes_total{job=\"jobradar_enricher\"}[5m]))",
+          "legendFormat": "dlq/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 0.001, "color": "red" }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "LLM Exhaustion Rate",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(jobradar_analyzer_llm_exhaustion_total[5m])",
+          "legendFormat": "exhaustion/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Jobs by Outcome",
+      "gridPos": { "x": 0, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(enricher_jobs_total{job=\"jobradar_enricher\"}[5m])) by (outcome)",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "LLM Duration Percentiles",
+      "gridPos": { "x": 8, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(enricher_llm_duration_seconds_bucket{job=\"jobradar_enricher\"}[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(enricher_llm_duration_seconds_bucket{job=\"jobradar_enricher\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Group Duration by Outcome",
+      "gridPos": { "x": 16, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(enricher_group_duration_seconds_bucket{job=\"jobradar_enricher\"}[5m])) by (le, outcome))",
+          "legendFormat": "p95 {{outcome}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Retry Publishes by Tier + Stage",
+      "gridPos": { "x": 0, "y": 12, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(enricher_retry_publishes_total{job=\"jobradar_enricher\"}[5m])) by (tier, stage)",
+          "legendFormat": "{{tier}}/{{stage}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(enricher_retry_publish_failures_total{job=\"jobradar_enricher\"}[5m])) by (tier, stage)",
+          "legendFormat": "{{tier}}/{{stage}} failures"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "DLQ Publishes by Cause",
+      "gridPos": { "x": 8, "y": 12, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(enricher_dlq_publishes_total{job=\"jobradar_enricher\"}[5m])) by (cause)",
+          "legendFormat": "{{cause}}"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Ledger Missing/Failures + Commit Failures",
+      "gridPos": { "x": 16, "y": 12, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(enricher_ledger_missing_total{job=\"jobradar_enricher\"}[5m])) by (reason)",
+          "legendFormat": "ledger missing: {{reason}}"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(enricher_retry_ledger_failures_total{job=\"jobradar_enricher\"}[5m])",
+          "legendFormat": "retry ledger failures/s"
+        },
+        {
+          "refId": "C",
+          "expr": "rate(enricher_commit_failures_total{job=\"jobradar_enricher\"}[5m])",
+          "legendFormat": "commit failures/s"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Groups per Fetch (p50/p95) + Duplicate Jobs by Adapter",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(enricher_groups_per_fetch_bucket{job=\"jobradar_enricher\"}[5m])) by (le))",
+          "legendFormat": "p50 groups/fetch"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(enricher_groups_per_fetch_bucket{job=\"jobradar_enricher\"}[5m])) by (le))",
+          "legendFormat": "p95 groups/fetch"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rate(enricher_jobs_duplicate_total{job=\"jobradar_enricher\"}[5m])) by (adapter)",
+          "legendFormat": "duplicates: {{adapter}}"
+        }
+      ]
+    }
+  ]
+}

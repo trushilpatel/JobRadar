@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
 	"github.com/trushilpatel/jobradar/apps/api/handler"
 	"github.com/trushilpatel/jobradar/apps/api/middleware"
@@ -21,6 +22,11 @@ import (
 // /api/me RestRouter, and builds the /admin/* subtree with all admin handlers
 // behind RequireIdentity + RequireRole("admin") + RateLimit +
 // AuditAdminMutation middleware. Pure wiring; equivalent to wire_gen.go.
+// apiZoneCfg is the same /api-zone Huma config every other /api-zone
+// RestRouter shares — meRouter no longer self-applies identityMW/rateLimitMW
+// (see UserRestRouter's doc comment for why that was redundant). adminZoneCfg
+// is the equivalent shared /admin-zone config (see apispec.AdminZoneConfig)
+// for the admin routers built here (userAdminRouter, auditAdminRouter).
 func buildMultiUser(
 	db *gorm.DB,
 	cfg *config.Config,
@@ -31,6 +37,8 @@ func buildMultiUser(
 	companyAdminRouter handler.RouteGroup,
 	atsRouter handler.RouteGroup,
 	pipelineRouter handler.RouteGroup,
+	apiZoneCfg huma.Config,
+	adminZoneCfg huma.Config,
 ) *multiUser {
 	userRepo := usersvc.NewRepositoryService(db)
 	userImpl := usersvc.NewImplService(userRepo, clerkClient)
@@ -45,10 +53,10 @@ func buildMultiUser(
 	userAdminImpl := usersvc.NewAdminImplService(userAdminRepo, clerkClient, c)
 	userAdminValid := usersvc.NewAdminValidationService(userAdminImpl)
 	userAdminRest := usersvc.NewAdminRestService(userAdminValid)
-	userAdminRouter := usersvc.NewAdminRestRouter(userAdminRest)
+	userAdminRouter := usersvc.NewAdminRestRouter(userAdminRest, adminZoneCfg)
 
 	auditAdminRest := auditsvc.NewAdminRestService(auditImpl)
-	auditAdminRouter := auditsvc.NewAdminRestRouter(auditAdminRest)
+	auditAdminRouter := auditsvc.NewAdminRestRouter(auditAdminRest, adminZoneCfg)
 
 	identityMW := middleware.RequireIdentity(
 		userValid,
@@ -58,7 +66,7 @@ func buildMultiUser(
 	)
 	rateLimitMW := middleware.RateLimit(limiter, log)
 
-	meRouter := usersvc.NewRestRouter(userRest, identityMW, rateLimitMW)
+	meRouter := usersvc.NewRestRouter(userRest, apiZoneCfg)
 
 	requireAdminMW := middleware.RequireRole("admin")
 	auditMW := middleware.AuditAdminMutation(auditImpl, log)

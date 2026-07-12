@@ -9,16 +9,18 @@ import "gorm.io/datatypes"
 // All fields are optional pointers so partial-patch semantics work cleanly:
 // a nil field is left untouched on update. On Create, the admin chain treats
 // a fully-zero input as "no scan_settings row yet — admin will set it later".
+// required:"false" on every field matches the pre-Huma handler's plain
+// json.Decode — Huma marks Body fields required by default.
 type CompanyScanSettingsInput struct {
-	AdapterType          *string         `json:"adapter_type"`
-	AdapterConfig        *datatypes.JSON `json:"adapter_config"`
-	ScanIntervalOverride *int            `json:"scan_interval_override"`
-	Active               *bool           `json:"active"`
+	AdapterType          *string         `json:"adapter_type" required:"false"`
+	AdapterConfig        *datatypes.JSON `json:"adapter_config" required:"false"`
+	ScanIntervalOverride *int            `json:"scan_interval_override" required:"false"`
+	Active               *bool           `json:"active" required:"false"`
 	// AutoPaused is admin-clearable: setting it to false re-enables scanning for
 	// a company the scheduler auto-paused. Clearing it also resets
 	// consecutive_errors to 0 (see scanSettingsInputToFields) so the company does
 	// not immediately re-pause on the next scheduler sweep (AC1.9).
-	AutoPaused *bool `json:"auto_paused"`
+	AutoPaused *bool `json:"auto_paused" required:"false"`
 }
 
 // IsEmpty reports whether every field of the input is nil. Used by Create

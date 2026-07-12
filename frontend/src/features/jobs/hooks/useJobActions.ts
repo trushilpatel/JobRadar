@@ -1,13 +1,7 @@
 import { useCallback, useRef } from 'react'
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import {
-  setJobStatus,
-  setJobSaved,
-  dismissJob,
-  bulkDismissJobs,
-  type JobsPage,
-} from '../api/jobs.api'
+import { setJobStatus, setJobSaved, type JobsPage } from '../api/jobs.api'
 import type { Job, JobStatus } from '@/types'
 import { JOB_STATUS } from '@/config/constants/jobStatus'
 import { useUndoToast } from '@/lib/hooks/use-undo-toast'
@@ -16,7 +10,7 @@ import { isJobListKey, jobMutationInvalidationRoots } from '../queryKeys'
 /**
  * Statuses settable via the workflow `setStatus` mutation. Excludes:
  *  - 'saved'    — orthogonal flag; use the dedicated `setSaved` mutation
- *  - 'dismissed'— uses the dedicated `dismiss` mutation
+ *  - 'dismissed'— historical-only value; the dismiss feature has been removed
  */
 type SettableStatus = Exclude<JobStatus, 'saved' | 'dismissed'>
 
@@ -37,13 +31,6 @@ interface SingleSavedEntry {
   priorSaved: boolean
 }
 
-interface SingleDismissEntry {
-  kind: 'dismiss'
-  id: string
-  priorStatus: JobStatus
-  priorSaved: boolean
-}
-
 interface BulkStatusEntry {
   kind: 'bulkStatus'
   items: { id: string; priorStatus: JobStatus }[]
@@ -54,18 +41,7 @@ interface BulkSavedEntry {
   items: { id: string; priorSaved: boolean }[]
 }
 
-interface BulkDismissEntry {
-  kind: 'bulkDismiss'
-  items: { id: string; priorStatus: JobStatus; priorSaved: boolean }[]
-}
-
-type HistoryEntry =
-  | SingleStatusEntry
-  | SingleSavedEntry
-  | SingleDismissEntry
-  | BulkStatusEntry
-  | BulkSavedEntry
-  | BulkDismissEntry
+type HistoryEntry = SingleStatusEntry | SingleSavedEntry | BulkStatusEntry | BulkSavedEntry
 
 const UNDO_STACK_CAP = 20
 const BULK_CONCURRENCY = 5
@@ -78,6 +54,11 @@ const BULK_CONCURRENCY = 5
  * 'saved' should never be a stored status under the sparse model, but it's
  * still in the JobStatus union (as a TAB key). Treat it as 'new' if
  * encountered — saved-revert is handled by setJobSaved separately.
+ *
+ * 'dismissed' is historical-only (the dismiss feature was removed) and is no
+ * longer a settable status — a dismissed job never appears in an active list
+ * cache the user can undo from, but guard defensively rather than attempt an
+ * impossible revert the backend would reject.
  */
 async function revertStatus(id: string, priorStatus: JobStatus): Promise<void> {
   if (priorStatus === JOB_STATUS.DISMISSED) {
@@ -139,35 +120,31 @@ interface OptimisticSavedContext extends Snapshots {
   priorSaved: boolean
 }
 
-interface OptimisticDismissContext extends Snapshots {
-  priorStatus: JobStatus
-  priorSaved: boolean
-}
-
 /**
- * Snapshot every jobs-list cache and patch each matching row via `patch`.
+ * Snapshot every jobs-list cache and patch the matching row via `patch`.
  * Used for optimistic updates with rollback on mutation error.
+ *
+ * Each `jobQueryKeys.list(...)` cache entry is a flat `JobsPage`
+ * (`{ items, next_cursor }`, one page per cursor — see `useJobs.ts`, which
+ * uses `useQuery` + explicit cursor history, NOT `useInfiniteQuery`). There
+ * is no `.pages` wrapper anywhere in the real cache.
  */
 function snapshotAndPatch(
   queryClient: QueryClient,
   id: string,
   patch: (job: Job) => Job
 ): Snapshots {
-  const entries = queryClient.getQueriesData<{ pages: JobsPage[] }>({
+  const entries = queryClient.getQueriesData<JobsPage>({
     predicate: (q) => isJobListKey(q.queryKey),
   })
   const snapshots: { queryKey: readonly unknown[]; data: unknown }[] = []
   for (const [key, data] of entries) {
-    if (!data?.pages) continue
+    if (!data?.items?.some((j) => j.id === id)) continue
     snapshots.push({ queryKey: key, data })
-    const nextPages = data.pages.map((page) => {
-      if (!page.items.some((j: Job) => j.id === id)) return page
-      return {
-        ...page,
-        items: page.items.map((j: Job) => (j.id === id ? patch(j) : j)),
-      }
+    queryClient.setQueryData(key, {
+      ...data,
+      items: data.items.map((j) => (j.id === id ? patch(j) : j)),
     })
-    queryClient.setQueryData(key, { ...data, pages: nextPages })
   }
   return { snapshots }
 }
@@ -187,20 +164,18 @@ export function useJobActions() {
 
   /**
    * Find the current workflow status of a job by scanning every jobs list
-   * cache. Returns NEW as a last-resort fallback for first-paint races where
-   * a mutation lands before any list query has populated the cache.
+   * cache (each cache entry is a flat `JobsPage` — see `snapshotAndPatch`).
+   * Returns NEW as a last-resort fallback for first-paint races where a
+   * mutation lands before any list query has populated the cache.
    */
   const lookupStatus = useCallback(
     (id: string): JobStatus => {
-      const caches = queryClient.getQueriesData<{ pages: JobsPage[] }>({
+      const caches = queryClient.getQueriesData<JobsPage>({
         predicate: (q) => isJobListKey(q.queryKey),
       })
       for (const [, data] of caches) {
-        if (!data?.pages) continue
-        for (const page of data.pages) {
-          const match = page.items.find((j: Job) => j.id === id)
-          if (match) return match.status
-        }
+        const match = data?.items.find((j) => j.id === id)
+        if (match) return match.status
       }
       return JOB_STATUS.NEW
     },
@@ -210,15 +185,12 @@ export function useJobActions() {
   /** Find the current saved flag of a job from cache. Defaults to false. */
   const lookupSaved = useCallback(
     (id: string): boolean => {
-      const caches = queryClient.getQueriesData<{ pages: JobsPage[] }>({
+      const caches = queryClient.getQueriesData<JobsPage>({
         predicate: (q) => isJobListKey(q.queryKey),
       })
       for (const [, data] of caches) {
-        if (!data?.pages) continue
-        for (const page of data.pages) {
-          const match = page.items.find((j: Job) => j.id === id)
-          if (match) return match.user_state?.saved_at != null
-        }
+        const match = data?.items.find((j) => j.id === id)
+        if (match) return match.user_state?.saved_at != null
       }
       return false
     },
@@ -246,11 +218,6 @@ export function useJobActions() {
         case 'saved':
           await setJobSaved(entry.id, entry.priorSaved)
           break
-        case 'dismiss':
-          await revertStatus(entry.id, entry.priorStatus)
-          // Saved is orthogonal — restore separately if it had been set.
-          await setJobSaved(entry.id, entry.priorSaved)
-          break
         case 'bulkStatus':
           await runWithLimit(entry.items, BULK_CONCURRENCY, (i) =>
             revertStatus(i.id, i.priorStatus)
@@ -258,12 +225,6 @@ export function useJobActions() {
           break
         case 'bulkSaved':
           await runWithLimit(entry.items, BULK_CONCURRENCY, (i) => setJobSaved(i.id, i.priorSaved))
-          break
-        case 'bulkDismiss':
-          await runWithLimit(entry.items, BULK_CONCURRENCY, async (i) => {
-            await revertStatus(i.id, i.priorStatus)
-            await setJobSaved(i.id, i.priorSaved)
-          })
           break
       }
       toast.success('Undone')
@@ -376,64 +337,6 @@ export function useJobActions() {
     },
   })
 
-  const dismiss = useMutation({
-    mutationFn: async ({ id, reason, note }: { id: string; reason: string; note?: string }) => {
-      await dismissJob(id, reason, note)
-      return { id }
-    },
-    onMutate: async ({ id }) => {
-      await queryClient.cancelQueries({ predicate: (q) => isJobListKey(q.queryKey) })
-      const priorStatus = lookupStatus(id)
-      const priorSaved = lookupSaved(id)
-      const { snapshots } = snapshotAndPatch(queryClient, id, (job) => ({
-        ...job,
-        status: JOB_STATUS.DISMISSED,
-        user_state: {
-          ...job.user_state,
-          status: JOB_STATUS.DISMISSED,
-          dismissed_at: new Date().toISOString(),
-        },
-      }))
-      return { snapshots, priorStatus, priorSaved }
-    },
-    onSuccess: ({ id }, _vars, ctx) => {
-      const c = ctx as OptimisticDismissContext | undefined
-      pushHistory({
-        kind: 'dismiss',
-        id,
-        priorStatus: c?.priorStatus ?? JOB_STATUS.NEW,
-        priorSaved: c?.priorSaved ?? false,
-      })
-      showUndoToast('Job dismissed', undoLast)
-      invalidateJobs()
-    },
-    onError: (_err, _vars, ctx) => {
-      if (ctx) restoreSnapshots(queryClient, ctx as OptimisticDismissContext)
-      toast.error('Failed to dismiss job')
-    },
-  })
-
-  const bulkDismiss = useMutation({
-    mutationFn: async (ids: string[]) => {
-      const items = ids.map((id) => ({
-        id,
-        priorStatus: lookupStatus(id),
-        priorSaved: lookupSaved(id),
-      }))
-      const result = await bulkDismissJobs(ids)
-      return { result, items }
-    },
-    onSuccess: ({ result, items }) => {
-      pushHistory({ kind: 'bulkDismiss', items })
-      showUndoToast(
-        `${result.dismissed} job${result.dismissed !== 1 ? 's' : ''} dismissed`,
-        undoLast
-      )
-      invalidateJobs()
-    },
-    onError: () => toast.error('Failed to dismiss jobs'),
-  })
-
   // ── bulkSave — orthogonal saved flag, never touches workflow status ───────
   const bulkSave = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -477,5 +380,5 @@ export function useJobActions() {
     onError: () => toast.error('Failed to bulk mark applied'),
   })
 
-  return { setStatus, setSaved, dismiss, applyJob, bulkDismiss, bulkSave, bulkApplied, undoLast }
+  return { setStatus, setSaved, applyJob, bulkSave, bulkApplied, undoLast }
 }

@@ -291,7 +291,7 @@ func clearConfigEnv(t *testing.T) {
 		"SCAN_INTERVAL_MINUTES", "SCHEDULER_STUCK_TIMEOUT_MINUTES", "SCHEDULER_CHECK_INTERVAL_SECONDS",
 		"METRICS_ADDR", "OTEL_EXPORTER_OTLP_ENDPOINT",
 		"CLERK_JWKS_URL", "CLERK_ISSUER_URL", "CLERK_SECRET_KEY",
-		"API_MAX_BODY_BYTES", "DEV_TOKEN",
+		"API_MAX_BODY_BYTES", "DEV_TOKEN", "API_PUBLIC_URL",
 		"RATE_LIMIT_READ_RPM", "RATE_LIMIT_WRITE_RPM", "RATE_LIMIT_ADMIN_RPM",
 		"CACHE_TTL_USER_SECONDS", "CACHE_TTL_COMPANY_SECONDS",
 	}
@@ -354,7 +354,7 @@ func TestLoad_DefaultsApplied(t *testing.T) {
 	if cfg.Auth.ClerkJWKSURL != "" || cfg.Auth.ClerkIssuerURL != "" {
 		t.Errorf("Auth defaults should be empty strings: %+v", cfg.Auth)
 	}
-	if cfg.API.MaxBodyBytes != 3145728 || cfg.API.DevToken != "" {
+	if cfg.API.MaxBodyBytes != 3145728 || cfg.API.DevToken != "" || cfg.API.PublicURL != "http://localhost:8080" {
 		t.Errorf("API defaults wrong: %+v", cfg.API)
 	}
 	if cfg.MultiUser.RateLimitReadRPM != 30 || cfg.MultiUser.RateLimitWriteRPM != 20 ||
@@ -415,6 +415,7 @@ func TestLoad_OverridesApplied(t *testing.T) {
 	t.Setenv("CLERK_SECRET_KEY", "sk_test_abc123")
 	t.Setenv("API_MAX_BODY_BYTES", "2000000")
 	t.Setenv("DEV_TOKEN", "devtoken")
+	t.Setenv("API_PUBLIC_URL", "https://api.example.com")
 	t.Setenv("RATE_LIMIT_READ_RPM", "31")
 	t.Setenv("RATE_LIMIT_WRITE_RPM", "32")
 	t.Setenv("RATE_LIMIT_ADMIN_RPM", "33")
@@ -462,7 +463,7 @@ func TestLoad_OverridesApplied(t *testing.T) {
 	if cfg.Auth.ClerkIssuerURL != "https://x.clerk.accounts.dev" {
 		t.Errorf("Auth issuer URL override wrong: %+v", cfg.Auth)
 	}
-	if cfg.API.MaxBodyBytes != 2000000 || cfg.API.DevToken != "devtoken" {
+	if cfg.API.MaxBodyBytes != 2000000 || cfg.API.DevToken != "devtoken" || cfg.API.PublicURL != "https://api.example.com" {
 		t.Errorf("API overrides wrong: %+v", cfg.API)
 	}
 	if cfg.MultiUser.ClerkSecretKey != "sk_test_abc123" {

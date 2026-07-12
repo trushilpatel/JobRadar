@@ -6,7 +6,6 @@ import (
 
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	"github.com/trushilpatel/jobradar/platform/cache"
-	jobcommon "github.com/trushilpatel/jobradar/service/job/common"
 	jobdto "github.com/trushilpatel/jobradar/service/job/dto"
 	jobmodel "github.com/trushilpatel/jobradar/service/job/models"
 	jobsvc "github.com/trushilpatel/jobradar/service/job/services"
@@ -196,9 +195,6 @@ func TestImpl_Mutations_InvalidateCountsCache(t *testing.T) {
 		{name: "SetStatus applied", mutate: func(svc jobsvc.JobService, ctx context.Context) error {
 			return svc.SetStatus(ctx, "j1", jobmodel.StatusApplied)
 		}},
-		{name: "BulkDismiss", mutate: func(svc jobsvc.JobService, ctx context.Context) error {
-			return svc.BulkDismiss(ctx, []string{"j1"}, jobcommon.DismissalReasonNotRelevant, "")
-		}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -225,31 +221,6 @@ func TestImpl_Mutations_InvalidateCountsCache(t *testing.T) {
 				t.Errorf("got.Saved = %d, want 99 (cache should have been invalidated)", got.Saved)
 			}
 		})
-	}
-}
-
-// TestImpl_Dismiss_InvalidatesCountsCache covers single Dismiss separately
-// because it requires the job to exist (jobsReader.job is populated).
-func TestImpl_Dismiss_InvalidatesCountsCache(t *testing.T) {
-	state := &fakeUserState{countsResult: jobdto.Counts{Dismissed: 1}}
-	reader := &fakeJobReader{job: &jobmodel.Job{ID: "j1", JobPostID: "post-1"}}
-	c := cache.NewMemoryCache()
-	svc := newSvc(reader, state, &fakeAppWriter{}, &fakeLedgerWriter{}, c)
-	ctx := ctxAs("u1")
-
-	if _, err := svc.GetCounts(ctx); err != nil {
-		t.Fatalf("prime: %v", err)
-	}
-	state.countsResult = jobdto.Counts{Dismissed: 99}
-	if err := svc.Dismiss(ctx, "j1", jobcommon.DismissalReasonUserDismissed, ""); err != nil {
-		t.Fatalf("Dismiss: %v", err)
-	}
-	got, err := svc.GetCounts(ctx)
-	if err != nil {
-		t.Fatalf("post: %v", err)
-	}
-	if got.Dismissed != 99 {
-		t.Errorf("Dismissed = %d, want 99 (cache invalidated)", got.Dismissed)
 	}
 }
 

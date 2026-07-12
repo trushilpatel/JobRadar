@@ -19,9 +19,6 @@ import {
   JobShortcutSheet,
 } from '@/features/jobs'
 import { useIsMobile } from '@/lib/hooks/use-media-query'
-import { useHiddenItems } from '@/lib/hooks/hidden-items'
-import { showDismissStripe } from '@/components/ui/dismiss-stripe'
-import { HIDDEN_COMPANIES_CATEGORY } from '@/config/constants/hiddenItems'
 
 type SettableStatus = Exclude<JobStatus, 'dismissed' | 'new' | 'saved'>
 
@@ -33,32 +30,17 @@ export function JobsPage() {
   const actions = useJobActions()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
-  const hiddenCompanies = useHiddenItems(HIDDEN_COMPANIES_CATEGORY)
 
   // Local UI state — overlay flags. None of these survive a refresh by design.
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
-  // User can dismiss the always-open detail panel; honored until they click a
+  // User can close the always-open detail panel; honored until they click a
   // row or change tabs.
   const [panelClosedByUser, setPanelClosedByUser] = useState(false)
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH)
 
-  // ── Hide-list filtering ────────────────────────────────────────────────────
-  // Jobs from a hidden company are pruned at the page level (after fetch).
-  // Server-side filtering would be ideal but localStorage-backed hides are
-  // client-only by design — a single user, opt-out blocks they can manage
-  // themselves without a backend round-trip.
-  const visibleJobs = useMemo(
-    () =>
-      hiddenCompanies.items.length === 0
-        ? jobs.jobs
-        : jobs.jobs.filter((j) => {
-            const co = j.company?.name ?? ''
-            return !hiddenCompanies.has(co)
-          }),
-    [jobs.jobs, hiddenCompanies]
-  )
+  const visibleJobs = jobs.jobs
 
   // Focused-row tracking. Keyed by tab+filter+page so deliberate context
   // switches reset focus to the first item; otherwise focus follows the
@@ -116,39 +98,27 @@ export function JobsPage() {
     [actions.setStatus, jobs]
   )
 
-  // Single-action dismiss with zero-friction toast. Reason defaults to the
-  // existing 'user_dismissed' enum value — preserves the schema for future
-  // richer reason-collection without making the user think about it now.
-  const handleDismiss = useCallback(
-    (job: Job) => {
-      const companyName = job.company?.name ?? ''
-      actions.dismiss.mutate({ id: job.id, reason: 'user_dismissed' })
-      if (jobs.openJobId === job.id) jobs.setOpenJobId(null)
-
-      // Sonner's default `useUndoToast` is replaced for the dismiss flow by
-      // the richer DismissStripe (adds optional "Don't show X again"). The
-      // underlying mutation's own undo toast (via useUndoToast in
-      // useJobActions) still fires — we'd ideally suppress it, but for now
-      // it's accepted that the user sees both briefly.
-      showDismissStripe({
-        message: 'Dismissed',
-        submessage: `${job.title}${companyName ? ` at ${companyName}` : ''}`,
-        onUndo: () => actions.undoLast(),
-        hideTarget: companyName
-          ? { category: HIDDEN_COMPANIES_CATEGORY, value: companyName, label: companyName }
-          : undefined,
-      })
-    },
-    [actions, jobs]
-  )
-
   // The bookmark column wires a one-click save toggle. Saved is an
   // ORTHOGONAL flag (saved_at on user_job_state), NOT a workflow status —
   // toggling it never moves the job out of its current tab.
+  //
+  // pendingSaveIdsRef guards against a rapid double-click: `job` is a
+  // render-time snapshot, so two clicks fired before either mutation settles
+  // both compute the SAME target boolean from the same stale saved_at
+  // (there's no re-render between them to refresh it) — the second click
+  // would silently re-send the first's value instead of toggling it back.
+  // Ignoring a click for a job that already has a save toggle in flight
+  // turns that into "first click wins" instead of a duplicate no-op.
+  const pendingSaveIdsRef = useRef<Set<string>>(new Set())
   const handleToggleSave = useCallback(
     (job: Job) => {
+      if (pendingSaveIdsRef.current.has(job.id)) return
+      pendingSaveIdsRef.current.add(job.id)
       const currentlySaved = job.user_state?.saved_at != null
-      actions.setSaved.mutate({ id: job.id, saved: !currentlySaved })
+      actions.setSaved.mutate(
+        { id: job.id, saved: !currentlySaved },
+        { onSettled: () => pendingSaveIdsRef.current.delete(job.id) }
+      )
     },
     [actions.setSaved]
   )
@@ -205,11 +175,6 @@ export function JobsPage() {
     handleToggleSave(focus.focusedJob)
   }, [focus.focusedJob, handleToggleSave])
 
-  const handleKeyboardDismiss = useCallback(() => {
-    if (!focus.focusedJob) return
-    handleDismiss(focus.focusedJob)
-  }, [focus.focusedJob, handleDismiss])
-
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const handleFocusSearch = useCallback(() => {
     searchInputRef.current?.focus()
@@ -229,7 +194,6 @@ export function JobsPage() {
     onGoToTab: handleGoToTab,
     onSetStatus: handleKeyboardSetStatus,
     onToggleSave: handleKeyboardToggleSave,
-    onDismiss: handleKeyboardDismiss,
     onUndo: actions.undoLast,
     onFocusSearch: handleFocusSearch,
     onOpenPalette: () => setPaletteOpen(true),
@@ -343,7 +307,6 @@ export function JobsPage() {
                 }
               }}
               onToggleSave={handleToggleSave}
-              onDismiss={handleDismiss}
               onApply={handleApply}
               getAttachmentState={() => null}
               onLoadMore={jobs.loadMore}
@@ -367,7 +330,6 @@ export function JobsPage() {
                   }}
                   onStatusChange={handleStatusChange}
                   onToggleSave={handleToggleSave}
-                  onDismiss={handleDismiss}
                 />
               </aside>
             </>

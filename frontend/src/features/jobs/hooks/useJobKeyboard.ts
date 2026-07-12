@@ -26,11 +26,10 @@ export interface UseJobKeyboardArgs {
   // ── Tabs ───────────────────────────────────────────────────────────────────
   onGoToTab: (tab: TabKey) => void
 
-  // ── Status / save / dismiss / undo ─────────────────────────────────────────
+  // ── Status / save / undo ────────────────────────────────────────────────────
   onSetStatus: (status: SettableStatus) => void
   /** Toggle the orthogonal saved flag on the focused row (bound to `s`). */
   onToggleSave: () => void
-  onDismiss: () => void
   onUndo: () => void
 
   // ── Search / palette / help ────────────────────────────────────────────────

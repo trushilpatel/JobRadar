@@ -132,7 +132,7 @@ describe('AccountPage', () => {
   it('renders the reference table even when config is loading (static registry)', () => {
     mockUserConfig(false, false, true)
     render(<AccountPage />, { wrapper: makeWrapper() })
-    expect(screen.getByText(JOB_COMMANDS['jobs.dismiss'].label)).toBeInTheDocument()
+    expect(screen.getByText(JOB_COMMANDS['jobs.undo'].label)).toBeInTheDocument()
   })
 
   it('renders the current email', () => {

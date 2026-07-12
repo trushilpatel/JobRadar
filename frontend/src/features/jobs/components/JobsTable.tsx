@@ -24,7 +24,6 @@ interface JobsTableProps {
   focusedIndex?: number
   onRowClick: (job: Job) => void
   onToggleSave: (job: Job) => void
-  onDismiss: (job: Job) => void
   onApply: (job: Job) => void
   /** Optional callback injected by the pages layer to provide cross-feature
    *  data (e.g. resume attachment state) without creating a cross-feature
@@ -59,7 +58,6 @@ export function JobsTable({
   focusedIndex,
   onRowClick,
   onToggleSave,
-  onDismiss,
   onApply,
   getAttachmentState,
   onLoadMore,
@@ -67,8 +65,8 @@ export function JobsTable({
   onSortingChange,
 }: JobsTableProps) {
   const columns = useMemo(
-    () => buildJobColumns({ onToggleSave, onDismiss, onApply, getAttachmentState }),
-    [onToggleSave, onDismiss, onApply, getAttachmentState]
+    () => buildJobColumns({ onToggleSave, onApply, getAttachmentState }),
+    [onToggleSave, onApply, getAttachmentState]
   )
 
   // Scroll the focused row into view whenever the focused index changes.
@@ -138,9 +136,6 @@ export function JobsTable({
             const isFocused = focusedJobId !== null && job.id === focusedJobId
             const isActive = activeJobId === job.id
             return cn(
-              // `group/row` enables Tailwind named-group hover for child cells
-              // (the hover-revealed Dismiss button in jobs-columns.tsx).
-              'group/row',
               isActive ? 'bg-[var(--accent-dim)]' : isFocused ? 'bg-hover' : 'hover:bg-hover'
             )
           }}
@@ -166,6 +161,12 @@ export function JobsTable({
           })}
           sorting={sorting}
           onSortingChange={onSortingChange}
+          // JobsPage already owns arrow-key navigation via its global command
+          // engine (useJobKeyboard/useFocusedJob) — DataTable's own built-in
+          // handler would otherwise ALSO fire on the same keydown (it calls
+          // preventDefault but not stopPropagation), advancing the selection
+          // twice per press.
+          disableArrowKeyNav
         />
 
         {jobs.length > 0 && (hasNextPage || isFetchingMore) && (

@@ -2,15 +2,18 @@ package dto
 
 import "github.com/trushilpatel/jobradar/common/ats/core"
 
-// ResultsRequest is the body of POST /node/results.
+// ResultsRequest is the body of POST /node/results. required:"false" on
+// AssignmentID/CompanyID/AdapterType matches the pre-Huma handler's plain
+// json.Decode — an absent field reaches ValidationService's existing
+// non-empty checks rather than failing at the framework layer.
 type ResultsRequest struct {
-	AssignmentID string            `json:"assignment_id"`
-	CompanyID    string            `json:"company_id"`
-	AdapterType  string            `json:"adapter_type"`
-	Jobs         []core.JobSummary `json:"jobs"`
-	FetchedCount int               `json:"fetched_count"`
-	DurationMs   int64             `json:"duration_ms"`
-	Final        bool              `json:"final"`
+	AssignmentID string            `json:"assignment_id" required:"false"`
+	CompanyID    string            `json:"company_id" required:"false"`
+	AdapterType  string            `json:"adapter_type" required:"false"`
+	Jobs         []core.JobSummary `json:"jobs" required:"false"`
+	FetchedCount int               `json:"fetched_count" required:"false"`
+	DurationMs   int64             `json:"duration_ms" required:"false"`
+	Final        bool              `json:"final" required:"false"`
 }
 
 // ResultsResponse is returned by POST /node/results.

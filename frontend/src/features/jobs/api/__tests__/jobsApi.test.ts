@@ -8,8 +8,6 @@ import {
   setJobStatus,
   setJobSaved,
   setJobNotes,
-  dismissJob,
-  bulkDismissJobs,
   fetchApplications,
   createApplication,
 } from '@/features/jobs/api/jobs.api'
@@ -376,55 +374,6 @@ describe('jobs API', () => {
       vi.mocked(apiClient.patch).mockResolvedValue(undefined)
       await setJobNotes('job-1', '')
       expect(apiClient.patch).toHaveBeenCalledWith('/jobs/job-1/notes', { notes: '' })
-    })
-  })
-
-  // ── dismissJob ──────────────────────────────────────────────────────────────
-
-  describe('dismissJob', () => {
-    it('calls DELETE /jobs/:id with reason', async () => {
-      vi.mocked(apiClient.delete).mockResolvedValue(undefined)
-      await dismissJob('job-1', 'user_dismissed')
-      expect(apiClient.delete).toHaveBeenCalledWith('/jobs/job-1', {
-        reason: 'user_dismissed',
-        note: '',
-      })
-    })
-
-    it('calls DELETE /jobs/:id with reason and note', async () => {
-      vi.mocked(apiClient.delete).mockResolvedValue(undefined)
-      await dismissJob('job-1', 'user_dismissed', 'Too far away')
-      expect(apiClient.delete).toHaveBeenCalledWith('/jobs/job-1', {
-        reason: 'user_dismissed',
-        note: 'Too far away',
-      })
-    })
-
-    it('defaults note to empty string when not provided', async () => {
-      vi.mocked(apiClient.delete).mockResolvedValue(undefined)
-      await dismissJob('job-2', 'user_not_relevant')
-      const call = vi.mocked(apiClient.delete).mock.calls[0]!
-      expect((call[1] as { note: string }).note).toBe('')
-    })
-  })
-
-  // ── bulkDismissJobs ─────────────────────────────────────────────────────────
-
-  describe('bulkDismissJobs', () => {
-    it('calls POST /jobs/dismiss/bulk with ids array', async () => {
-      vi.mocked(apiClient.post).mockResolvedValue({ dismissed: 3 })
-      const result = await bulkDismissJobs(['j1', 'j2', 'j3'])
-      expect(apiClient.post).toHaveBeenCalledWith('/jobs/dismiss/bulk', {
-        ids: ['j1', 'j2', 'j3'],
-      })
-      expect(result.dismissed).toBe(3)
-    })
-
-    it('handles empty ids array', async () => {
-      vi.mocked(apiClient.post).mockResolvedValue({ dismissed: 0 })
-      const result = await bulkDismissJobs([])
-      expect(apiClient.post).toHaveBeenCalledWith('/jobs/dismiss/bulk', { ids: [] })
-      expect(result.dismissed).toBe(0)
     })
   })
 

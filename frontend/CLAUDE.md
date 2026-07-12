@@ -28,6 +28,8 @@ export async function fetchTechStack(limit = 15): Promise<TechCount[]> {
 }
 ```
 
+**Generated backend types (`src/lib/api/schema.gen.ts`):** auto-generated from `backend/apps/api/openapi.yaml` via `npm run gen:api-types` (`openapi-typescript`) — never hand-edit it; CI regenerates and diffs it against the committed file (drift fails the build, mirroring the backend's own stale-spec guard). This does **not** replace the zod-schema-per-endpoint pattern for _response_ parsing — zod stays the runtime source of truth for anything coming back over the wire, since the generated types are compile-time only and openapi-typescript doesn't validate at runtime. Use it for **request bodies**: build the body as a normal object, then `satisfies components['schemas']['SomeInputBody']` on it so a renamed/removed backend field fails the frontend build instead of silently drifting (see `setUserRoles`/`setUserStatus` in `features/auth/api/adminUsers.api.ts`, `triggerRetry` in `lib/api/pipeline.ts` for the pattern). Not yet rolled out to every `.api.ts` file — apply it opportunistically when touching a file with an untyped request body, don't do a blanket rewrite pass.
+
 ### 2. Query key factories (`src/features/<domain>/queryKeys.ts`)
 
 Every domain owns its `queryKeys.ts` with typed `as const` tuples. Components and hooks **never** inline strings — always import from the factory.
@@ -164,6 +166,23 @@ const setStatus = useMutation({
 
 90% statement coverage per file. Run: `cd frontend && npx vitest run --coverage`.
 
+### End-to-end (Playwright)
+
+`frontend/e2e/` is a separate, full-flow browser suite — a distinct tier from the
+unit tests above, not a replacement. Covers every page except the mobile-only
+`/jobs/:id` route, for both a regular user and an admin. See `frontend/e2e/CLAUDE.md`
+for the full runbook, conventions (Page Object Model, auth via cached `storageState`,
+data-safety rules), and known gaps.
+
+```bash
+make dev                    # start the local stack first (frontend/e2e/ doesn't manage it)
+cd frontend && npm run test:e2e         # full suite, headless
+npm run test:e2e:ui                     # Playwright's interactive UI mode
+npm run test:e2e:report                 # open the last HTML report
+```
+
+Gated in CI on every dev→main PR (the `e2e` job in `.github/workflows/ci.yml`) — also run it manually when touching a flow it covers, since it's not required on every dev-branch PR.
+
 ### ResizeObserver mock (required for Recharts)
 
 ```ts
@@ -278,4 +297,4 @@ Run `npx shadcn@latest add <name>` to install. Do not copy-paste from shadcn doc
 
 Already installed: `alert-dialog` · `badge` · `button` · `card` · `checkbox` · `command` · `dialog` · `drawer` · `input` · `label` · `popover` · `scroll-area` · `separator` · `sheet` · `skeleton` · `switch` · `tabs` · `toggle` · `toggle-group` · `tooltip`
 
-Custom (no shadcn equivalent, stays custom): `pagination` · `data-table` · `resize-handle` · `dismiss-stripe` · `scan-history-bar` · `kbd`
+Custom (no shadcn equivalent, stays custom): `pagination` · `data-table` · `resize-handle` · `scan-history-bar` · `kbd`

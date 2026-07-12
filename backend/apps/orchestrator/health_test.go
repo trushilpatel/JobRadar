@@ -89,3 +89,20 @@ func TestHealthRoutes_RouterRegistration(t *testing.T) {
 		}
 	}
 }
+
+// TestHealthRoutes_RouterRegistration_NonNilConn exercises the nc != nil
+// branch of registerHealthRoutes — a zero-value *nats.Conn is never
+// connected (Status() reads a zero-value field, no network I/O), so /readyz
+// still 503s, but through the "wrap nc in natsConnStatus" path rather than
+// the nil-interface short-circuit TestHealthRoutes_RouterRegistration covers.
+func TestHealthRoutes_RouterRegistration_NonNilConn(t *testing.T) {
+	r := chi.NewRouter()
+	registerHealthRoutes(r, &nats.Conn{})
+
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503 for a never-connected *nats.Conn", rec.Code)
+	}
+}

@@ -137,7 +137,6 @@ beforeEach(() => {
   vi.mocked(jobsApi.fetchJobCompanies).mockResolvedValue(['Acme'])
   vi.mocked(jobsApi.setJobStatus).mockResolvedValue(undefined)
   vi.mocked(jobsApi.setJobSaved).mockResolvedValue(undefined)
-  vi.mocked(jobsApi.dismissJob).mockResolvedValue(undefined)
 })
 
 describe('JobsPage — detail panel open/close', () => {
@@ -169,19 +168,6 @@ describe('JobsPage — keyboard handlers', () => {
 
     await waitFor(() => {
       expect(jobsApi.setJobStatus).toHaveBeenCalledWith('a', JOB_STATUS.APPLIED)
-    })
-  })
-
-  it('dismiss shortcut (d) dismisses the focused job', async () => {
-    render(wrap(<JobsPage />))
-    const row = await screen.findByRole('button', { name: /Title a at Acme/i })
-    fireEvent.click(row)
-    await screen.findByRole('region', { name: 'Job details' })
-
-    fireEvent.keyDown(document.body, { key: 'd', code: 'KeyD' })
-
-    await waitFor(() => {
-      expect(jobsApi.dismissJob).toHaveBeenCalledWith('a', 'user_dismissed', undefined)
     })
   })
 
@@ -217,6 +203,66 @@ describe('JobsPage — keyboard handlers', () => {
     fireEvent.keyDown(document.body, { key: '/', code: 'Slash' })
 
     expect(document.activeElement).toBe(screen.getByPlaceholderText('Search jobs…'))
+  })
+})
+
+describe('JobsPage — arrow key navigation', () => {
+  it('advances focus by exactly one row per ArrowDown press after a row click', async () => {
+    vi.mocked(jobsApi.fetchJobs).mockResolvedValue({
+      items: [makeJob('a'), makeJob('b'), makeJob('c')],
+      next_cursor: '',
+    })
+    render(wrap(<JobsPage />))
+    const row = await screen.findByRole('button', { name: /Title a at Acme/i })
+    fireEvent.click(row)
+    await screen.findByRole('region', { name: 'Job details' })
+
+    // The table container receives DOM focus on row click (DataTable's own
+    // click handler). Firing the keydown on the actually-focused element
+    // reproduces a real browser keypress, which bubbles through both
+    // DataTable's own arrow-key handler AND the document-level global
+    // command engine — the two must not BOTH advance focus.
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: 'ArrowDown',
+      code: 'ArrowDown',
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Title b' })).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('heading', { name: 'Title c' })).not.toBeInTheDocument()
+  })
+})
+
+describe('JobsPage — save toggle', () => {
+  it('ignores a second rapid click on the same job while the first save is in flight', async () => {
+    render(wrap(<JobsPage />))
+    const btn = await screen.findByRole('button', { name: 'Save Title a' })
+
+    // Two clicks fired before either mutation settles — both read the same
+    // pre-mutation `job` prop. Without the in-flight guard, both would send
+    // `saved: true` (a duplicate), rather than the second toggling it back.
+    fireEvent.click(btn)
+    fireEvent.click(btn)
+
+    await waitFor(() => {
+      expect(jobsApi.setJobSaved).toHaveBeenCalledTimes(1)
+    })
+    expect(jobsApi.setJobSaved).toHaveBeenCalledWith('a', true)
+  })
+
+  it('allows toggling again once the previous save settles (guard is not permanent)', async () => {
+    render(wrap(<JobsPage />))
+    const btn = await screen.findByRole('button', { name: 'Save Title a' })
+
+    fireEvent.click(btn)
+    await waitFor(() => expect(jobsApi.setJobSaved).toHaveBeenCalledTimes(1))
+
+    // Same physical button — whatever its current label, a second, separate
+    // click after the first mutation has settled must not be swallowed by
+    // the in-flight guard.
+    fireEvent.click(screen.getByRole('button', { name: /^(Save|Remove) Title a/i }))
+    await waitFor(() => expect(jobsApi.setJobSaved).toHaveBeenCalledTimes(2))
   })
 })
 

@@ -1,10 +1,12 @@
 package services
 
 import (
-	"net/http"
+	"context"
 
-	"github.com/trushilpatel/jobradar/apps/api/handler"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	"github.com/trushilpatel/jobradar/apps/api/request"
+	"github.com/trushilpatel/jobradar/apps/api/response"
 	auditmodel "github.com/trushilpatel/jobradar/service/audit/models"
 )
 
@@ -23,31 +25,54 @@ func NewAdminRestService(next Service) *AdminRestService {
 	return &AdminRestService{next: next}
 }
 
-// list handles GET /admin/audit-log. Accepts optional query params:
-// actor_user_id, action, page, limit.
-func (h *AdminRestService) list(w http.ResponseWriter, r *http.Request) {
-	p := request.ParsePagination(r)
-	q := r.URL.Query()
+// listInput is the Huma input for GET /admin/audit-log. Page/Limit are raw
+// strings resolved via request.ParsePage/ParseLimit, matching
+// request.ParsePagination's exact clamp/fallback semantics — this endpoint
+// uses classic page+offset pagination (the documented admin-only exception
+// in service/CLAUDE.md), not keyset cursors.
+type listInput struct {
+	ActorUserID string `query:"actor_user_id" doc:"Filter by acting user ID"`
+	Action      string `query:"action" doc:"Filter by action name"`
+	Page        string `query:"page" doc:"Page number, default 1" example:"1"`
+	Limit       string `query:"limit" doc:"Page size 1-100, default 20" example:"20"`
 
-	filter := ListFilter{
-		Limit:  p.Limit,
-		Offset: (p.Page - 1) * p.Limit,
-	}
-	if v := q.Get("actor_user_id"); v != "" {
-		filter.ActorUserID = &v
-	}
-	if v := q.Get("action"); v != "" {
-		filter.Action = &v
-	}
+	filter ListFilter
+	page   int
+	limit  int
+}
 
-	entries, total, err := h.next.List(r.Context(), filter)
+func (in *listInput) Resolve(_ huma.Context) []error {
+	def := request.DefaultPagination()
+	in.page = request.ParsePage(in.Page, def.Page)
+	in.limit = request.ParseLimit(in.Limit, def.Limit)
+
+	in.filter = ListFilter{Limit: in.limit, Offset: (in.page - 1) * in.limit}
+	if in.ActorUserID != "" {
+		in.filter.ActorUserID = &in.ActorUserID
+	}
+	if in.Action != "" {
+		in.filter.Action = &in.Action
+	}
+	return nil
+}
+
+// list handles GET /admin/audit-log.
+func (h *AdminRestService) list(ctx context.Context, in *listInput) (*apihuma.PagedOutput[auditmodel.Entry], error) {
+	entries, total, err := h.next.List(ctx, in.filter)
 	if err != nil {
-		handler.HandleError(w, err)
-		return
+		return nil, apihuma.MapError(err)
 	}
 
 	if entries == nil {
 		entries = []auditmodel.Entry{}
 	}
-	handler.RespondPaged(w, http.StatusOK, entries, int(total), p.Page, p.Limit)
+
+	out := &apihuma.PagedOutput[auditmodel.Entry]{}
+	out.Body = response.PagedResponse[auditmodel.Entry]{
+		Data:  entries,
+		Total: int(total),
+		Page:  in.page,
+		Limit: in.limit,
+	}
+	return out, nil
 }

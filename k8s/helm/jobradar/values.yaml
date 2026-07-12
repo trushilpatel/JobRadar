@@ -56,6 +56,7 @@ api:
   logLevel: info
   logFormat: json
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  otelCredsSecret: ""  # k8s Secret name providing OTEL_EXPORTER_OTLP_HEADERS (Basic auth) for a direct Grafana Cloud endpoint; empty = no auth header added (local in-cluster Alloy needs none)
   dbSslmode: require
   dbPort: "5432"
   rateLimitReadRpm: "300"
@@ -87,6 +88,7 @@ filter:
   logFormat: json
   metricsAddr: ":9101"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  otelCredsSecret: ""  # k8s Secret name providing OTEL_EXPORTER_OTLP_HEADERS (Basic auth) for a direct Grafana Cloud endpoint; empty = no auth header added (local in-cluster Alloy needs none)
   dbSslmode: require
   dbPort: "5432"
 
@@ -115,6 +117,7 @@ enricher:
   logFormat: json
   metricsAddr: ":9101"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  otelCredsSecret: ""  # k8s Secret name providing OTEL_EXPORTER_OTLP_HEADERS (Basic auth) for a direct Grafana Cloud endpoint; empty = no auth header added (local in-cluster Alloy needs none)
   dbSslmode: require
   dbPort: "5432"
 
@@ -127,6 +130,7 @@ scheduler:
   logFormat: json
   metricsAddr: ":9103"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  otelCredsSecret: ""  # k8s Secret name providing OTEL_EXPORTER_OTLP_HEADERS (Basic auth) for a direct Grafana Cloud endpoint; empty = no auth header added (local in-cluster Alloy needs none)
   dbSslmode: require
   dbPort: "5432"
 
@@ -138,6 +142,7 @@ orchestrator:
   logFormat: json
   metricsAddr: ":9104"
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  otelCredsSecret: ""  # k8s Secret name providing OTEL_EXPORTER_OTLP_HEADERS (Basic auth) for a direct Grafana Cloud endpoint; empty = no auth header added (local in-cluster Alloy needs none)
   dbSslmode: require
   dbPort: "5432"
 
@@ -155,6 +160,18 @@ crawlerNode:
   retryMaxAttempts: "3"
   logLevel: info
   otelEndpoint: "http://obs-alloy.jobradar-local.svc.cluster.local:4318"
+  otelCredsSecret: ""  # k8s Secret name providing OTEL_EXPORTER_OTLP_HEADERS (Basic auth) for a direct Grafana Cloud endpoint; empty = no auth header added (local in-cluster Alloy needs none)
+
+# vmagent: minimal scrape+remote_write-only metrics forwarder. Disabled by
+# default (local k3d gets metrics from Alloy via the observability chart
+# instead). Prod OCI nodes enable it — see values.prod-{app,infra}.yaml — since
+# their pipeline pods use dnsPolicy: Default and can't reach an in-cluster
+# Alloy anyway, and a full Alloy DaemonSet is too heavy for their 1GB RAM.
+vmagent:
+  enabled: false
+  image: "victoriametrics/vmagent:v1.102.1"
+  remoteWriteCredsSecret: "grafana-cloud-prom-creds"
+  scrapeTargets: []
 
 nats:
   enabled: true

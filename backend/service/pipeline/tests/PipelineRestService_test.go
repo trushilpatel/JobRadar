@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	domainerrs "github.com/trushilpatel/jobradar/common/errors"
 	pipelinedto "github.com/trushilpatel/jobradar/service/pipeline/dto"
 	pipelinesvc "github.com/trushilpatel/jobradar/service/pipeline/services"
@@ -33,10 +34,13 @@ func (s *stubPipelineService) TriggerRetry(
 	return s.retryResult, s.retryErr
 }
 
-// newPipelineTestRouter wires a chi router with the pipeline RestRouter registered.
+// newPipelineTestRouter wires a chi router with the pipeline RestRouter
+// registered. Uses a fresh, isolated zone config/registry per call — never
+// apispec.APIZoneConfig()/AdminZoneConfig() (see apps/api/app_test.go for
+// why that matters).
 func newPipelineTestRouter(svc pipelinesvc.PipelineService) http.Handler {
 	rest := pipelinesvc.NewRestService(svc)
-	router := pipelinesvc.NewRestRouter(rest)
+	router := pipelinesvc.NewRestRouter(rest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 	mux := chi.NewMux()
 	router.Register(mux)
 	return mux

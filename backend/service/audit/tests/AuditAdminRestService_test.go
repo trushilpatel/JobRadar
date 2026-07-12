@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	apperr "github.com/trushilpatel/jobradar/common/errors"
 	auditmodel "github.com/trushilpatel/jobradar/service/audit/models"
 	auditsvc "github.com/trushilpatel/jobradar/service/audit/services"
@@ -36,11 +37,13 @@ var _ auditsvc.Service = (*fakeListService)(nil)
 
 // newAuditRouter builds a chi router that mounts the admin audit REST under
 // /admin so test requests hit the real Router → RestService wiring rather
-// than the handler in isolation.
+// than the handler in isolation. Uses a fresh, isolated zone config/registry
+// per call — never apispec.APIZoneConfig()/AdminZoneConfig() (see
+// apps/api/app_test.go for why that matters).
 func newAuditRouter(next auditsvc.Service) *chi.Mux {
 	r := chi.NewRouter()
 	rest := auditsvc.NewAdminRestService(next)
-	router := auditsvc.NewAdminRestRouter(rest)
+	router := auditsvc.NewAdminRestRouter(rest, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry()))
 	r.Route("/admin", router.Register)
 	return r
 }
@@ -266,7 +269,7 @@ func TestRestList_OnlyGetRegistered(t *testing.T) {
 func TestNewAdminRestRouter_Construction(t *testing.T) {
 	t.Parallel()
 	h := auditsvc.NewAdminRestService(&fakeListService{})
-	if got := auditsvc.NewAdminRestRouter(h); got == nil {
+	if got := auditsvc.NewAdminRestRouter(h, apihuma.NewZoneConfig("test", "0.0.0", apihuma.NewSharedRegistry())); got == nil {
 		t.Fatal("NewAdminRestRouter returned nil")
 	}
 }

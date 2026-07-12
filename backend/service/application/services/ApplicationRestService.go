@@ -1,17 +1,18 @@
 package services
 
 import (
-	"net/http"
+	"context"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/trushilpatel/jobradar/apps/api/handler"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/trushilpatel/jobradar/apps/api/apihuma"
 	"github.com/trushilpatel/jobradar/apps/api/request"
 	"github.com/trushilpatel/jobradar/service/application/dto"
+	appmodel "github.com/trushilpatel/jobradar/service/application/models"
 )
 
 // RestService handles HTTP requests for the application domain. It owns
 // no business logic — it parses the request, calls next, and writes the
-// response via handler.Respond / handler.RespondPaged / handler.HandleError.
+// response.
 type RestService struct {
 	next ApplicationService
 }
@@ -21,99 +22,128 @@ func NewRestService(next ApplicationService) *RestService {
 	return &RestService{next: next}
 }
 
-// GET /jobs/{id}/applications
-func (h *RestService) list(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "id")
+// listByJobInput is the Huma input for GET /api/jobs/{id}/applications.
+type listByJobInput struct {
+	ID string `path:"id"`
+}
 
-	apps, err := h.next.ListByJob(r.Context(), jobID)
+// list serves GET /api/jobs/{id}/applications.
+func (h *RestService) list(ctx context.Context, in *listByJobInput) (*apihuma.SingleOutput[[]appmodel.JobApplication], error) {
+	apps, err := h.next.ListByJob(ctx, in.ID)
 	if err != nil {
-		handler.HandleError(w, err)
-		return
+		return nil, apihuma.MapError(err)
 	}
-
-	handler.Respond(w, http.StatusOK, apps)
+	out := &apihuma.SingleOutput[[]appmodel.JobApplication]{}
+	out.Body.Data = apps
+	return out, nil
 }
 
-// POST /jobs/{id}/applications
-func (h *RestService) create(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "id")
+// createInput is the Huma input for POST /api/jobs/{id}/applications.
+type createInput struct {
+	ID   string `path:"id"`
+	Body dto.CreateApplicationInput
+}
 
-	input, ok := handler.DecodeBody[dto.CreateApplicationInput](w, r)
-	if !ok {
-		return
-	}
-
-	app, err := h.next.Create(r.Context(), jobID, input)
+// create serves POST /api/jobs/{id}/applications.
+func (h *RestService) create(ctx context.Context, in *createInput) (*apihuma.SingleOutput[*appmodel.JobApplication], error) {
+	app, err := h.next.Create(ctx, in.ID, in.Body)
 	if err != nil {
-		handler.HandleError(w, err)
-		return
+		return nil, apihuma.MapError(err)
 	}
-
-	handler.Respond(w, http.StatusCreated, app)
+	out := &apihuma.SingleOutput[*appmodel.JobApplication]{}
+	out.Body.Data = app
+	return out, nil
 }
 
-// GET /applications
-func (h *RestService) listAll(w http.ResponseWriter, r *http.Request) {
-	p := request.ParsePagination(r)
+// listAllInput is the Huma input for GET /api/applications. Page/Limit are
+// raw strings resolved via apps/api/request.ParsePage/ParseLimit, matching
+// request.ParsePagination's exact clamp/fallback semantics.
+type listAllInput struct {
+	Page  string `query:"page" doc:"Page number, default 1" example:"1"`
+	Limit string `query:"limit" doc:"Page size 1-100, default 20" example:"20"`
 
-	apps, total, err := h.next.ListAll(r.Context(), p.Page, p.Limit)
+	page  int
+	limit int
+}
+
+func (in *listAllInput) Resolve(_ huma.Context) []error {
+	def := request.DefaultPagination()
+	in.page = request.ParsePage(in.Page, def.Page)
+	in.limit = request.ParseLimit(in.Limit, def.Limit)
+	return nil
+}
+
+// listAll serves GET /api/applications.
+func (h *RestService) listAll(ctx context.Context, in *listAllInput) (*apihuma.PagedOutput[ApplicationWithJob], error) {
+	apps, total, err := h.next.ListAll(ctx, in.page, in.limit)
 	if err != nil {
-		handler.HandleError(w, err)
-		return
+		return nil, apihuma.MapError(err)
 	}
-
-	handler.RespondPaged(w, http.StatusOK, apps, total, p.Page, p.Limit)
+	out := &apihuma.PagedOutput[ApplicationWithJob]{}
+	out.Body.Data = apps
+	out.Body.Total = total
+	out.Body.Page = in.page
+	out.Body.Limit = in.limit
+	return out, nil
 }
 
-// PATCH /jobs/{id}/applications/{app_id}/stage
-func (h *RestService) updateStage(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "id")
-	appID := chi.URLParam(r, "app_id")
-
-	input, ok := handler.DecodeBody[dto.UpdateStageInput](w, r)
-	if !ok {
-		return
-	}
-
-	if err := h.next.UpdateStage(r.Context(), jobID, appID, input); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	handler.Respond(w, http.StatusOK, map[string]string{"app_id": appID, "stage": input.Stage})
+// updateStageInput is the Huma input for PATCH /api/jobs/{id}/applications/{app_id}/stage.
+type updateStageInput struct {
+	ID    string `path:"id"`
+	AppID string `path:"app_id"`
+	Body  dto.UpdateStageInput
 }
 
-// PATCH /applications/{id}/stage — top-level shortcut used by the dashboard interview tracker.
-func (h *RestService) updateStageByID(w http.ResponseWriter, r *http.Request) {
-	appID := chi.URLParam(r, "id")
-
-	input, ok := handler.DecodeBody[dto.UpdateStageInput](w, r)
-	if !ok {
-		return
-	}
-
-	if err := h.next.UpdateStageByID(r.Context(), appID, input); err != nil {
-		handler.HandleError(w, err)
-		return
-	}
-
-	handler.Respond(w, http.StatusOK, map[string]string{"app_id": appID, "stage": input.Stage})
+type stageResponse struct {
+	AppID string `json:"app_id"`
+	Stage string `json:"stage"`
 }
 
-// PATCH /jobs/{id}/applications/{app_id}/note
-func (h *RestService) updateNote(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "id")
-	appID := chi.URLParam(r, "app_id")
-
-	input, ok := handler.DecodeBody[dto.UpdateNoteInput](w, r)
-	if !ok {
-		return
+// updateStage serves PATCH /api/jobs/{id}/applications/{app_id}/stage.
+func (h *RestService) updateStage(ctx context.Context, in *updateStageInput) (*apihuma.SingleOutput[stageResponse], error) {
+	if err := h.next.UpdateStage(ctx, in.ID, in.AppID, in.Body); err != nil {
+		return nil, apihuma.MapError(err)
 	}
+	out := &apihuma.SingleOutput[stageResponse]{}
+	out.Body.Data = stageResponse{AppID: in.AppID, Stage: in.Body.Stage}
+	return out, nil
+}
 
-	if err := h.next.UpdateNote(r.Context(), jobID, appID, input); err != nil {
-		handler.HandleError(w, err)
-		return
+// updateStageByIDInput is the Huma input for PATCH /api/applications/{id}/stage.
+type updateStageByIDInput struct {
+	ID   string `path:"id"`
+	Body dto.UpdateStageInput
+}
+
+// updateStageByID serves PATCH /api/applications/{id}/stage — top-level
+// shortcut used by the dashboard interview tracker.
+func (h *RestService) updateStageByID(ctx context.Context, in *updateStageByIDInput) (*apihuma.SingleOutput[stageResponse], error) {
+	if err := h.next.UpdateStageByID(ctx, in.ID, in.Body); err != nil {
+		return nil, apihuma.MapError(err)
 	}
+	out := &apihuma.SingleOutput[stageResponse]{}
+	out.Body.Data = stageResponse{AppID: in.ID, Stage: in.Body.Stage}
+	return out, nil
+}
 
-	handler.Respond(w, http.StatusOK, map[string]string{"app_id": appID, "note": input.Note})
+// updateNoteInput is the Huma input for PATCH /api/jobs/{id}/applications/{app_id}/note.
+type updateNoteInput struct {
+	ID    string `path:"id"`
+	AppID string `path:"app_id"`
+	Body  dto.UpdateNoteInput
+}
+
+type noteResponse struct {
+	AppID string `json:"app_id"`
+	Note  string `json:"note"`
+}
+
+// updateNote serves PATCH /api/jobs/{id}/applications/{app_id}/note.
+func (h *RestService) updateNote(ctx context.Context, in *updateNoteInput) (*apihuma.SingleOutput[noteResponse], error) {
+	if err := h.next.UpdateNote(ctx, in.ID, in.AppID, in.Body); err != nil {
+		return nil, apihuma.MapError(err)
+	}
+	out := &apihuma.SingleOutput[noteResponse]{}
+	out.Body.Data = noteResponse{AppID: in.AppID, Note: in.Body.Note}
+	return out, nil
 }
