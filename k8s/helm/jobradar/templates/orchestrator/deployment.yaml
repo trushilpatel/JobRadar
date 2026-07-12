@@ -26,6 +26,18 @@ spec:
       annotations:
         deploy/orchestrator-sha: {{ .Values.images.orchestrator.tag | quote }}
     spec:
+      # dnsPolicy Default (node's own resolv.conf, NOT CoreDNS): orchestrator
+      # only talks to Supabase and NATS — both external hostnames. It's
+      # called BY crawler-node (via kube-proxy Service routing, which needs
+      # no DNS on this side) but never calls another pod itself, so it never
+      # needs CoreDNS. This keeps it running when CoreDNS crash-loops under
+      # CPU-steal/swap-thrash on this node (see infra/CLAUDE.md OCI failure
+      # modes). Caveat: this pod can no longer resolve *.svc.cluster.local —
+      # if it ever needs an in-cluster dependency (e.g. obs-alloy for OTel
+      # export), that lookup fails, and backend/common/tracing swallows the
+      # error as a one-time warning (silent). Remove this line if that's
+      # ever added.
+      dnsPolicy: Default
       {{- with .Values.imagePullSecret }}
       imagePullSecrets:
         - name: {{ . }}
@@ -46,6 +58,10 @@ spec:
                 name: jobradar-orchestrator-config
             - secretRef:
                 name: jobradar-orchestrator-secret
+            {{- if .Values.orchestrator.otelCredsSecret }}
+            - secretRef:
+                name: {{ .Values.orchestrator.otelCredsSecret }}
+            {{- end }}
           {{- if .Values.orchestrator.natsCredsFile }}
           volumeMounts:
             - name: nats-creds

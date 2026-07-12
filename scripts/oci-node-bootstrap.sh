@@ -9,6 +9,11 @@
 # Optional env overrides (skip interactive prompts):
 #   GH_USER=<github-username> GH_PAT=<read:packages PAT> bash oci-node-bootstrap.sh
 #
+# Optional zram (compressed RAM swap): off by default since only the APP
+# (pipeline) node has shown measured memory/iowait pressure — see
+# infra/CLAUDE.md "Why swap is required". Opt in per node at bootstrap time:
+#   ENABLE_ZRAM=true bash oci-node-bootstrap.sh
+#
 # Idempotent — safe to re-run on the same node at any time.
 set -euo pipefail
 
@@ -195,27 +200,63 @@ else
   ok "Namespace '$NS' created"
 fi
 
-# ── 6. Harden CoreDNS against CPU-steal spikes ───────────────────────────────
-# The 1-OCPU OCI free-tier nodes run at high CPU steal + swap pressure. With the
-# stock liveness probe (failureThreshold 5 / period 15s ≈ 75s) CoreDNS misses
-# probes during a starvation spike and the kubelet restarts it — dropping cluster
-# DNS so workers can't resolve external endpoints (the Gemini API), which breaks
-# the filter/enricher. Widen the probe to ~200s so a transient spike no longer
-# kills DNS. Idempotent: re-applying the same values is a no-op (no rollout).
-step "[6/7] Harden CoreDNS liveness probe"
-if kubectl -n kube-system get deploy coredns >/dev/null 2>&1; then
-  kubectl -n kube-system patch deploy coredns --type=json -p '[
-    {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/failureThreshold","value":10},
-    {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/periodSeconds","value":20},
-    {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/timeoutSeconds","value":10}
-  ]' >/dev/null 2>&1 && ok "CoreDNS liveness probe widened (failureThreshold=10, period=20s, timeout=10s)" \
-    || ok "CoreDNS already hardened (no change)"
-else
-  ok "CoreDNS not present yet — skipping (re-run bootstrap after k3s settles)"
-fi
-# NOTE: k3s re-applies its bundled CoreDNS addon on k3s restart/upgrade, which
-# reverts this patch. Re-run this script (idempotent) after any k3s restart, or
-# promote this to a systemd oneshot if restarts become frequent.
+# ── 6. Harden CoreDNS against CPU-steal spikes (self-healing) ───────────────
+# The 1-OCPU OCI free-tier nodes run at high CPU steal + swap pressure. With
+# the stock probes (liveness timeout 1s/period 10s, readiness timeout
+# 1s/period 2s) CoreDNS misses probes during a starvation spike, gets
+# kubelet-restarted or pulled from Service endpoints, and cluster DNS drops —
+# breaking external lookups (Supabase, NATS, the Gemini API) for every pod
+# still on the ClusterFirst dnsPolicy, which used to cascade into
+# filter/enricher failures. Widen both probes.
+#
+# This used to be a one-off `kubectl patch` run only at bootstrap time, but
+# k3s re-applies its bundled CoreDNS addon on every k3s restart/upgrade,
+# silently reverting it — that's exactly what happened in production (the
+# patch was applied once, reverted on a later k3s restart, and nobody
+# re-ran bootstrap). Installed as a systemd timer instead so it self-heals
+# without depending on a human noticing.
+step "[6/7] Harden CoreDNS liveness/readiness probes (self-healing via timer)"
+
+sudo tee /usr/local/bin/jobradar-coredns-harden.sh >/dev/null <<'SCRIPT'
+#!/usr/bin/env bash
+# Idempotent — re-applying the same values is a no-op (no rollout, no
+# restart). Safe to run every few minutes indefinitely.
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+kubectl -n kube-system get deploy coredns >/dev/null 2>&1 || exit 0
+kubectl -n kube-system patch deploy coredns --type=json -p '[
+  {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/failureThreshold","value":10},
+  {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/periodSeconds","value":20},
+  {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/timeoutSeconds","value":10},
+  {"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/failureThreshold","value":10},
+  {"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/periodSeconds","value":10},
+  {"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/timeoutSeconds","value":5}
+]' >/dev/null 2>&1 || true
+SCRIPT
+sudo chmod +x /usr/local/bin/jobradar-coredns-harden.sh
+
+sudo tee /etc/systemd/system/jobradar-coredns-harden.service >/dev/null <<'SVC'
+[Unit]
+Description=Widen CoreDNS liveness/readiness probe timeouts (idempotent)
+After=k3s.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/jobradar-coredns-harden.sh
+SVC
+
+sudo tee /etc/systemd/system/jobradar-coredns-harden.timer >/dev/null <<'TMR'
+[Unit]
+Description=Periodically re-apply CoreDNS probe hardening (k3s reverts it on every restart/upgrade)
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=3min
+[Install]
+WantedBy=timers.target
+TMR
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now jobradar-coredns-harden.timer
+sudo systemctl start jobradar-coredns-harden.service
+ok "CoreDNS hardening installed as a self-healing systemd timer (re-applies every 3 min)"
 
 # ── 7. GHCR imagePullSecret ───────────────────────────────────────────────────
 step "[7/7] GHCR imagePullSecret"

@@ -22,7 +22,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	shutdown := tracing.Init("jobradar-crawler-node", "", log)
+	shutdown := tracing.Init("jobradar-crawler-node", cfg.OTelEndpoint, log)
 	defer shutdown()
 
 	go metrics.Serve(cfg.MetricsAddr, nil)

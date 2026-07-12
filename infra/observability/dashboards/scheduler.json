@@ -1,0 +1,204 @@
+{
+  "title": "JobRadar — Scheduler",
+  "uid": "jobradar-scheduler",
+  "tags": ["jobradar", "scheduler"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "links": [
+    {
+      "title": "Pipeline Overview",
+      "type": "link",
+      "url": "/d/jobradar-pipeline-overview",
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Queue Pending",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jobradar_scheduler_queue_pending{job=\"jobradar_scheduler\"}",
+          "legendFormat": "pending"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Oldest Pending Age",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jobradar_scheduler_queue_oldest_pending_age_seconds{job=\"jobradar_scheduler\"}",
+          "legendFormat": "age"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 86400, "color": "orange" },
+              { "value": 172800, "color": "red" }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Crawler Nodes Online",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jobradar_crawler_nodes_online{job=\"jobradar_scheduler\"}",
+          "legendFormat": "online"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Companies Auto-Paused (current)",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jobradar_scheduler_companies_auto_paused_current{job=\"jobradar_scheduler\"}",
+          "legendFormat": "auto-paused"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Companies Enqueued Rate",
+      "gridPos": { "x": 0, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(scheduler_companies_enqueued_total{job=\"jobradar_scheduler\"}[5m])",
+          "legendFormat": "companies/s"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Errors by Reason",
+      "gridPos": { "x": 8, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(scheduler_errors_total{job=\"jobradar_scheduler\"}[5m])) by (reason)",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Run Duration",
+      "gridPos": { "x": 16, "y": 4, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(scheduler_run_duration_seconds_bucket{job=\"jobradar_scheduler\"}[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(scheduler_run_duration_seconds_bucket{job=\"jobradar_scheduler\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Self-Healing — Stuck Row Reclaims",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(scheduler_stuck_checks_total{job=\"jobradar_scheduler\"}[5m])",
+          "legendFormat": "stuck checks/s"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(scheduler_stuck_rows_reset_total{job=\"jobradar_scheduler\"}[5m])",
+          "legendFormat": "stuck rows reset/s"
+        },
+        {
+          "refId": "C",
+          "expr": "rate(jobradar_scheduler_stuck_fetch_reclaimed_total{job=\"jobradar_scheduler\"}[5m])",
+          "legendFormat": "fetch reclaimed/s"
+        },
+        {
+          "refId": "D",
+          "expr": "rate(jobradar_scheduler_stuck_filtered_reclaimed_total{job=\"jobradar_scheduler\"}[5m])",
+          "legendFormat": "filtered reclaimed/s"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Auto-Pause Events + Retry Ledger Backlog",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(jobradar_scheduler_companies_auto_paused_total{job=\"jobradar_scheduler\"}[5m])",
+          "legendFormat": "auto-pause events/s"
+        },
+        {
+          "refId": "B",
+          "expr": "jobradar_job_pipeline_ledger_retry_count{job=\"jobradar_scheduler\"}",
+          "legendFormat": "retry ledger backlog (current)"
+        }
+      ]
+    }
+  ]
+}

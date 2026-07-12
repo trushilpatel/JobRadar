@@ -1,0 +1,222 @@
+{
+  "title": "JobRadar — Companies (Scan Health)",
+  "uid": "jobradar-companies",
+  "tags": ["jobradar", "companies"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "links": [
+    {
+      "title": "Pipeline Overview",
+      "type": "link",
+      "url": "/d/jobradar-pipeline-overview",
+      "targetBlank": false
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Scope note",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
+      "options": {
+        "mode": "markdown",
+        "content": "Fleet-wide company scan health, sourced from existing scheduler/crawler-node Prometheus metrics — no per-company breakdown yet, since no metric here carries a `company` label (adding one would multiply cardinality by company count with no bound). A true per-company drill-down (which company is failing, which is slow) needs either a Grafana Postgres datasource reading `company_scan_log` directly, or a deliberately bounded per-company label — neither has been added; this is a scoping call worth its own discussion, not something to bolt on silently."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Companies Enqueued Rate",
+      "gridPos": { "x": 0, "y": 3, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(scheduler_companies_enqueued_total{job=\"jobradar_scheduler\"}[1h])",
+          "legendFormat": "companies/s (1h avg)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Auto-Paused Companies (current)",
+      "gridPos": { "x": 6, "y": 3, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jobradar_scheduler_companies_auto_paused_current{job=\"jobradar_scheduler\"}",
+          "legendFormat": "auto-paused"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1, "color": "orange" },
+              { "value": 5, "color": "red" }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Queue Backlog / Oldest Pending",
+      "gridPos": { "x": 12, "y": 3, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jobradar_scheduler_queue_pending{job=\"jobradar_scheduler\"}",
+          "legendFormat": "pending"
+        },
+        {
+          "refId": "B",
+          "expr": "jobradar_scheduler_queue_oldest_pending_age_seconds{job=\"jobradar_scheduler\"}",
+          "legendFormat": "oldest age"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": [
+          {
+            "matcher": { "id": "byFrameRefID", "options": "B" },
+            "properties": [{ "id": "unit", "value": "s" }]
+          }
+        ]
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Crawler Nodes Online",
+      "gridPos": { "x": 18, "y": 3, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "jobradar_crawler_nodes_online{job=\"jobradar_scheduler\"}",
+          "legendFormat": "online"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Scan Outcomes (success vs failure)",
+      "gridPos": { "x": 0, "y": 7, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(crawler_scans_total{job=\"jobradar_crawler_node\"}[30m])) by (status)",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Jobs Found per Scan (fetched rate)",
+      "gridPos": { "x": 12, "y": 7, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(crawler_jobs_fetched_total{job=\"jobradar_crawler_node\"}[30m])",
+          "legendFormat": "jobs fetched/s"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(crawler_jobs_non_usa_dropped_total{job=\"jobradar_crawler_node\"}[30m])) by (adapter)",
+          "legendFormat": "non-USA dropped: {{adapter}}"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Raw → Filtered → Analyzed Funnel Rate",
+      "gridPos": { "x": 0, "y": 15, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(crawler_jobs_fetched_total{job=\"jobradar_crawler_node\"}[30m])",
+          "legendFormat": "raw fetched/s"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(filter_jobs_total{job=\"jobradar_filter\", outcome=\"relevant\"}[30m]))",
+          "legendFormat": "filtered relevant/s"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rate(enricher_jobs_total{job=\"jobradar_enricher\", outcome=\"saved\"}[30m]))",
+          "legendFormat": "analyzed saved/s"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Auto-Pause Events Rate",
+      "gridPos": { "x": 0, "y": 23, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(jobradar_scheduler_companies_auto_paused_total{job=\"jobradar_scheduler\"}[1h])",
+          "legendFormat": "auto-pause events/s"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Scan Duration Percentiles",
+      "gridPos": { "x": 12, "y": 23, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(crawler_scan_duration_seconds_bucket{job=\"jobradar_crawler_node\"}[30m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(crawler_scan_duration_seconds_bucket{job=\"jobradar_crawler_node\"}[30m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    }
+  ]
+}

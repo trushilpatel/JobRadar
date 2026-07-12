@@ -39,6 +39,10 @@ spec:
                 name: jobradar-api-config
             - secretRef:
                 name: jobradar-api-secret
+            {{- if .Values.api.otelCredsSecret }}
+            - secretRef:
+                name: {{ .Values.api.otelCredsSecret }}
+            {{- end }}
           ports:
             - containerPort: 8080
               name: http

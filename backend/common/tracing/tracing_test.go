@@ -299,6 +299,24 @@ func TestInit_ErrorHandlerLogsExportFailureOnce(t *testing.T) {
 	}
 }
 
+func TestInit_HTTPSEndpointSkipsInsecureOption(t *testing.T) {
+	// Grafana Cloud's public OTLP gateway is https:// with no in-cluster
+	// collector in front of it — Init must not force WithInsecure() for it.
+	prevProvider := otel.GetTracerProvider()
+	prevPropagator := otel.GetTextMapPropagator()
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevProvider)
+		otel.SetTextMapPropagator(prevPropagator)
+	})
+
+	shutdown := tracing.Init("svc", "https://otlp-gateway.example.com/otlp/v1/traces", logger.NewNoop())
+	t.Cleanup(shutdown)
+
+	if otel.GetTracerProvider() == prevProvider {
+		t.Fatal("Init: expected global TracerProvider to be replaced for https endpoint")
+	}
+}
+
 // Ensure HTTP transport in otlptracehttp builds against a real-looking endpoint URL.
 // This indirectly exercises the resource.Merge / NewTracerProvider path during Init.
 func TestInit_AcceptsHTTPTestServerEndpoint(t *testing.T) {
