@@ -334,14 +334,21 @@ func (r *adminRepositoryService) UpdateScanSettings(ctx context.Context, id stri
 	return nil
 }
 
-// Delete removes the company row. ON DELETE CASCADE removes the matching
-// scan_settings row.
+// Delete removes the company row. ON DELETE CASCADE removes every dependent
+// row that declares it (scan_settings, scan_log, scan_queue, jobs, ...). A
+// dependent table that lacks a cascade still blocks the delete with a raw FK
+// violation — classify that as CONFLICT rather than a generic 500 so callers
+// get an actionable status instead of "failed to delete company".
 func (r *adminRepositoryService) Delete(ctx context.Context, id string) (err error) {
 	ctx, span := tracing.Start(ctx, "company.admin.repo.Delete")
 	defer tracing.End(span, &err)
 
 	res := r.db.WithContext(ctx).Delete(&companymodel.Company{}, "id = ?", id)
 	if res.Error != nil {
+		if isForeignKeyViolation(res.Error) {
+			r.log.Warn("company delete FK violation", logger.Str(logger.FieldCompany, id), logger.Err(res.Error))
+			return apperr.ErrConflict.WithMessage("company has dependent records and cannot be deleted")
+		}
 		r.log.Warn("failed to delete company", logger.Str(logger.FieldCompany, id), logger.Err(res.Error))
 		return apperr.ErrInternal.WithMessage("failed to delete company")
 	}

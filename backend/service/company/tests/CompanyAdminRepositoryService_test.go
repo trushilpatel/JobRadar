@@ -801,6 +801,60 @@ func TestAdminRepo_Delete_FoundAndMissing(t *testing.T) {
 	}
 }
 
+// TestAdminRepo_Delete_FKViolationIsConflict covers the "Failed to delete
+// company" bug: a dependent row referencing companies(id) without ON DELETE
+// CASCADE (job_tech_tags before migration 093) makes DELETE fail with a raw
+// FK violation. Delete must classify that as CONFLICT, not a generic 500 —
+// mirrors the Create FK classification already covered by
+// TestAdminRepo_Create_FKViolationIsBadRequest. The hand-rolled schema below
+// deliberately omits ON DELETE CASCADE on the dependent table's FK so the
+// violation fires regardless of whether job_tech_tags itself has since been
+// fixed — this proves the repository's error classification, not the schema.
+func TestAdminRepo_Delete_FKViolationIsConflict(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file::memory:?_foreign_keys=on"), &gorm.Config{
+		Logger:         gormlogger.Default.LogMode(gormlogger.Silent),
+		TranslateError: true,
+	})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	stmts := []string{
+		`CREATE TABLE companies (
+			id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE,
+			website TEXT, careers_url TEXT, logo_url TEXT,
+			created_at DATETIME, updated_at DATETIME)`,
+		// No ON DELETE CASCADE here — mirrors the pre-093 job_tech_tags gap.
+		`CREATE TABLE dependent_no_cascade (
+			company_id TEXT NOT NULL REFERENCES companies(id))`,
+		`INSERT INTO companies (id, name, slug) VALUES ('bah', 'Booz Allen Hamilton', 'bah')`,
+		`INSERT INTO dependent_no_cascade (company_id) VALUES ('bah')`,
+	}
+	for _, s := range stmts {
+		if err := db.Exec(s).Error; err != nil {
+			t.Fatalf("schema setup: %v", err)
+		}
+	}
+
+	hist := &fakeScanHistory{}
+	repo := companysvc.NewAdminRepositoryService(db, hist, logger.NewNoop())
+
+	err = repo.Delete(context.Background(), "bah")
+	if err == nil {
+		t.Fatal("expected FK violation error, got nil")
+	}
+	var se *apperr.ServiceError
+	if !errors.As(err, &se) || se.Code != "CONFLICT" {
+		t.Errorf("expected CONFLICT, got %T %v", err, err)
+	}
+
+	// The company row must survive an FK-blocked delete.
+	var n int64
+	_ = db.Table("companies").Where("id = ?", "bah").Count(&n).Error
+	if n != 1 {
+		t.Errorf("company row should remain after blocked delete, count=%d", n)
+	}
+}
+
 func TestAdminRepo_SetAllActive(t *testing.T) {
 	db, hist := newAdminTestDB(t)
 	seedAdminCompany(t, db, "a", "A")
